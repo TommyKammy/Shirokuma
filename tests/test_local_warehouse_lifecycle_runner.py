@@ -1,6 +1,10 @@
 import copy
+from contextlib import contextmanager
+import io
 import json
+import os
 import socket
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -284,6 +288,69 @@ class LifecycleRunnerTests(unittest.TestCase):
             result = R.recover(self.token, self.kube)
         self.assertTrue(result['cleanup']['verified'])
         self.assertEqual((dest / 'receipt.json').read_bytes(), original)
+
+    def test_closed_session_recovery_rejected_before_lock_or_cluster_access(self):
+        self.execute()
+        R.C.write(self.output / 'plan.json', self.plan)
+        receipt=self.saved()
+        receipt['session']={'phase':'closed'}
+        R.C.write(self.output / 'receipt.json', receipt)
+        root=self.output.parent / 'state'
+        root.mkdir(mode=0o700)
+        (root/'runs').mkdir(mode=0o700)
+        dest=root/'runs'/self.token
+        self.output.rename(dest)
+        original=(dest/'receipt.json').read_bytes()
+        self.assertFalse((dest/'run.lock').exists())
+        with patch.object(R.C,'STATE',root),patch.object(R.C,'run_lock',side_effect=AssertionError('must not lock')):
+            with self.assertRaisesRegex(R.C.ExperimentError,'RECOVERY_CLOSED_SESSION'):
+                R.recover(self.token,self.kube)
+            with patch.object(sys,'argv',['run.py','recover','--run-token',self.token]),\
+                 patch.object(R,'check_context',side_effect=AssertionError('must not contact cluster')),\
+                 patch('sys.stdout',new_callable=io.StringIO) as out:
+                self.assertEqual(R.main(),1)
+            result=json.loads(out.getvalue())
+            self.assertEqual(result['failure_code'],'RECOVERY_CLOSED_SESSION')
+            with patch.dict(os.environ,{'WAREHOUSE_LIFECYCLE_RUN_TOKEN':self.token}),\
+                 patch.object(sys,'argv',['run.py','recover','--run-token-from-env']),\
+                 patch.object(R,'check_context',side_effect=AssertionError('must not contact cluster')),\
+                 patch('sys.stdout',new_callable=io.StringIO) as out:
+                self.assertEqual(R.main(),1)
+            self.assertEqual(json.loads(out.getvalue())['failure_code'],'RECOVERY_CLOSED_SESSION')
+            with patch.dict(os.environ,{'WAREHOUSE_LIFECYCLE_RUN_TOKEN':'../invalid'}),\
+                 patch.object(sys,'argv',['run.py','recover','--run-token-from-env']),\
+                 patch.object(R,'check_context',side_effect=AssertionError('must not contact cluster')),\
+                 patch('sys.stdout',new_callable=io.StringIO) as out:
+                self.assertEqual(R.main(),1)
+            self.assertEqual(json.loads(out.getvalue())['failure_code'],'INVALID_RUN_TOKEN')
+        self.assertEqual((dest/'receipt.json').read_bytes(),original)
+        self.assertFalse((dest/'run.lock').exists())
+        self.assertFalse((dest/'recovery.json').exists())
+        self.assertFalse((dest/'recovery-attempts').exists())
+
+    def test_recovery_rechecks_session_after_acquiring_lock(self):
+        self.execute()
+        R.C.write(self.output/'plan.json',self.plan)
+        receipt=self.saved()
+        receipt.update(result='failed',session={'phase':'failed'})
+        R.C.write(self.output/'receipt.json',receipt)
+        root=self.output.parent/'state'
+        root.mkdir(mode=0o700)
+        (root/'runs').mkdir(mode=0o700)
+        dest=root/'runs'/self.token
+        self.output.rename(dest)
+        @contextmanager
+        def close_during_lock(output):
+            self.assertEqual(output,dest)
+            receipt['result']='passed'
+            receipt['session']['phase']='closed'
+            R.C.write(dest/'receipt.json',receipt)
+            yield
+        with patch.object(R.C,'STATE',root),patch.object(R.C,'run_lock',side_effect=close_during_lock):
+            with self.assertRaisesRegex(R.C.ExperimentError,'RECOVERY_CLOSED_SESSION'):
+                R.recover(self.token,self.kube)
+        self.assertFalse((dest/'recovery.json').exists())
+        self.assertFalse((dest/'recovery-attempts').exists())
 
     def test_late_pod_keeps_shared_config_and_isolation_policies(self):
         original_delete = self.kube.delete

@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "4.0"
+version: "4.1"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: refuse recovery of archived closed XS sessions
+
+WP-L3-VW-002の汎用recoverで完了済みsessionの保持runへの余分なlock/recovery記録を防止。receiptのsessionが`passed`または`closed`ならcluster check前・run lock前に`RECOVERY_CLOSED_SESSION`、lock取得後も再検査。Make tokenのshell recipe埋込みを廃止し、環境変数→固定検証経由へ変更。実archived2 sessionのMake入口は非0・固定拒否で、元files集合/SHA/inode/mode不変。初回smokeは正常なMake失敗stderrを誤って拒否したため検証だけ失敗、期待値修正後の再実行で通過。不正tokenのshell commandは未実行。専用Colima/SQL/scale/保持backup変更なし。汎用runと失敗sessionのcleanup回復は引き続き別契約、現backendや独立cleanup実証・owner再起動後のSQL要求回復は未達。WP local-partial。private証拠は`tmp/local-experiment/warehouse-recover-closed-guard-checks/20260927/`。
+
+warehouse focused5 suites/167件PASS、全回帰121 suites/3798実行＝3790PASS＋8skip、87.669秒、log SHA256 `da220f2e37f331de36e43be5d23acac6054273beaade1e8dd6d231730a3949e8`。design-context/secret scan PASS、専用Colima Stopped、完了済みarchived2 sessionにlock/recovery file追加なし。
 
 ## 2026-09-27: saved completion requires final RPC replies
 

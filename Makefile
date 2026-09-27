@@ -706,7 +706,7 @@ local-warehouse-session-completion:
 local-warehouse-session-request-status:
 	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/status.py --request-id-from-env
 local-warehouse-lifecycle-recover:
-	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/run.py recover --run-token "$(WAREHOUSE_LIFECYCLE_RUN_TOKEN)"
+	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/run.py recover --run-token-from-env
 test-local-warehouse-lifecycle:
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_warehouse_lifecycle*.py'
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_warehouse_session*.py'

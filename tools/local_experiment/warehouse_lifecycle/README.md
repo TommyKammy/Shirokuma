@@ -50,8 +50,15 @@ After wake it keeps a short replay-only grace period before closing. A new chill
 request when already chilled, or wake before chilling, returns a verified no-op
 after fresh ownership and routing checks. A CLI timeout or disconnect does not
 cancel an operation already running in the owner. Inspect the private session
-receipt for the final outcome if the owner has closed. Recovery uses the same
-`local-warehouse-lifecycle-recover` target and the session ID as the run token.
+receipt for the final outcome if the owner has closed. Only incomplete cleanup
+uses `local-warehouse-lifecycle-recover` with the session ID as run token.
+An archived session whose receipt is already `passed` or `closed` is rejected
+with `RECOVERY_CLOSED_SESSION` **before** cluster access or opening/creating its
+run lock; it is rechecked after the lock for a race. Make passes the token via
+the environment, not shell interpolation. This does not replay lost requests
+or independently attest that saved cleanup actually occurred. Inspect uncertain
+cleanup and owned resources before recovery; never regenerate an archived
+successful session's evidence by invoking recovery.
 
 ### Archived RPC status (read-only)
 

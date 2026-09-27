@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.12"
+version: "0.13"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,12 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-27 closed session recovery guard — retained-run protection
+
+従来の汎用`local-warehouse-lifecycle-recover`は、保存済みXS sessionが`closed/passed`でもlockを開いて`recovery.json`を書き得た。既存完了sessionのread-only receiptをVM/cluster check・lock・回収より前に確認し、`RECOVERY_CLOSED_SESSION`で拒否。lock取得後にも再読して状態変化を拒否する。汎用runの従来回収・失敗runのretry経路は保持。Make recipeのtokenをシェル補間から環境変数渡しへ変更し、PythonでID検証する。実archived2 sessionはMakeから非0/固定codeで拒否され、保持ファイル集合・SHA/inode/modeは不変。不正なtokenを介したシェルcommandも実行しない。初回smokeはMakeが失敗時に出す通常stderrを誤って空と期待し検証側が失敗、期待値を修正して再実行成功。専用Colimaは停止のまま、実cluster回収/バックアップ復元/現backend確認は未実施。保存receiptの`passed/closed`も独立した現cleanup証明ではなく、owner再起動後のrequest再POST/回復は未実装。WP local-partial。private証拠は`tmp/local-experiment/warehouse-recover-closed-guard-checks/20260927/`。
+
+warehouse focused5 suites/167件PASS、全回帰121 suites/3798実行＝3790PASS＋8skip、87.669秒、log SHA256 `da220f2e37f331de36e43be5d23acac6054273beaade1e8dd6d231730a3949e8`。design-context/secret scan PASS、専用Colima Stopped。保持archived2 sessionはlock/recovery file追加なし。
 
 ## 2026-09-27 saved completion requires exact final replies — offline
 

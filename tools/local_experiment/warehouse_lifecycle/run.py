@@ -595,10 +595,27 @@ def execute(plan, material, output, *, kube=None, forwarders=None, client_factor
     return receipt
 
 
+def _require_recoverable_session(receipt):
+    session = receipt.get('session') if type(receipt) is dict else None
+    C.require(not (type(session) is dict and
+                   (receipt.get('result') == 'passed' or session.get('phase') == 'closed')),
+              'RECOVERY_CLOSED_SESSION')
+
+
+def _preflight_recovery(run_token):
+    # A successful short-lived session already owns and verified its cleanup.
+    # Refuse it before contacting the cluster or creating a lock in its archive.
+    output = C.STATE / 'runs' / C.token(run_token)
+    _require_recoverable_session(json.loads(C.read(output / 'receipt.json')))
+
+
 def recover(run_token, kube=None):
     output = C.STATE / 'runs' / C.token(run_token)
+    _preflight_recovery(run_token)
     with C.run_lock(output):
-        plan, original = json.loads(C.read(output / 'plan.json')), json.loads(C.read(output / 'receipt.json'))
+        original = json.loads(C.read(output / 'receipt.json'))
+        _require_recoverable_session(original)  # Recheck after acquiring the owner lock.
+        plan = json.loads(C.read(output / 'plan.json'))
         C.require(plan['run_token'] == original['run_token'] == run_token and plan['build_token'] == original['build_token']
                   and original['images'] == plan['images'] and original['plan_sha256'] == C.digest(plan), 'RECOVERY_IDENTITY_MISMATCH')
         objects = M.validate_plan(plan)
@@ -685,17 +702,20 @@ def main():
     parser.add_argument('command', choices=('plan', 'run', 'recover'))
     parser.add_argument('--build-token')
     parser.add_argument('--run-token')
+    parser.add_argument('--run-token-from-env', action='store_true')
     args = parser.parse_args()
     run_token = None
     try:
         if args.command == 'recover':
-            C.require(args.run_token and not args.build_token, 'RECOVERY_ARGUMENTS')
-            run_token = C.token(args.run_token)
+            provided = os.environ.get('WAREHOUSE_LIFECYCLE_RUN_TOKEN') if args.run_token_from_env else args.run_token
+            C.require(provided and not args.build_token and not (args.run_token and args.run_token_from_env), 'RECOVERY_ARGUMENTS')
+            run_token = C.token(provided)
+            _preflight_recovery(run_token)
             check_context()
             with C.interruption_handlers():
                 recover(run_token)
         else:
-            C.require(args.build_token and not args.run_token, 'RUN_ARGUMENTS')
+            C.require(args.build_token and not args.run_token and not args.run_token_from_env, 'RUN_ARGUMENTS')
             images = build.load_build(args.build_token)['images']
             run_token, output = C.new_output('runs')
             with C.run_lock(output), C.interruption_handlers():
