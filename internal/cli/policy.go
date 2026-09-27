@@ -31,6 +31,7 @@ type policyEvent struct {
 	Execution            string   `json:"execution"`
 	Verification         string   `json:"verification"`
 	Admission            string   `json:"admission"`
+	ResponseContentCheck string   `json:"response_content_check"`
 	ExpectedViolationIDs []string `json:"expected_violation_ids"`
 	ReportedViolationIDs []string `json:"reported_violation_ids"`
 	AuthorityGranted     bool     `json:"authority_granted"`
@@ -222,14 +223,14 @@ func decodePolicyEvent(line []byte, request dataChildRequest) (policyEvent, erro
 	}
 	keys := []string{"schema_version", "event", "command", "evidence_token"}
 	if kind == "result" {
-		keys = append(keys, "workflow_token", "result", "execution", "verification", "admission", "expected_violation_ids", "reported_violation_ids", "authority_granted", "persisted_workloads", "error_code", "evidence")
+		keys = append(keys, "workflow_token", "result", "execution", "verification", "admission", "response_content_check", "expected_violation_ids", "reported_violation_ids", "authority_granted", "persisted_workloads", "error_code", "evidence")
 	} else if kind != "allocated" {
 		return value, invalid
 	}
 	if !warehouseKeys(fields, keys...) {
 		return value, invalid
 	}
-	for _, key := range []string{"schema_version", "event", "command", "evidence_token", "result", "execution", "verification", "admission", "authority_granted", "persisted_workloads"} {
+	for _, key := range []string{"schema_version", "event", "command", "evidence_token", "result", "execution", "verification", "admission", "response_content_check", "authority_granted", "persisted_workloads"} {
 		if raw, ok := fields[key]; ok && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return value, invalid
 		}
@@ -246,6 +247,7 @@ func decodePolicyEvent(line []byte, request dataChildRequest) (policyEvent, erro
 		!dataOneOf(value.Execution, "not-started", "invoked", "read-only") ||
 		!dataOneOf(value.Verification, "not-checked", "journal-only", "saved-evidence") ||
 		!dataOneOf(value.Admission, "not-observed", "unknown", "allowed", "denied") ||
+		!dataOneOf(value.ResponseContentCheck, "unknown", "legacy-unrecorded", "producer-checked", "not-applicable") ||
 		value.AuthorityGranted || value.PersistedWorkloads != 0 ||
 		!policyRules(value.ExpectedViolationIDs) || !policyRules(value.ReportedViolationIDs) {
 		return value, invalid
@@ -274,11 +276,12 @@ func decodePolicyEvent(line []byte, request dataChildRequest) (policyEvent, erro
 		}
 		switch value.Admission {
 		case "allowed":
-			if len(value.ExpectedViolationIDs) != 0 || len(value.ReportedViolationIDs) != 0 {
+			if len(value.ExpectedViolationIDs) != 0 || len(value.ReportedViolationIDs) != 0 ||
+				!dataOneOf(value.ResponseContentCheck, "legacy-unrecorded", "producer-checked") {
 				return value, invalid
 			}
 		case "denied":
-			if len(value.ExpectedViolationIDs) == 0 || len(value.ReportedViolationIDs) == 0 {
+			if len(value.ExpectedViolationIDs) == 0 || len(value.ReportedViolationIDs) == 0 || value.ResponseContentCheck != "not-applicable" {
 				return value, invalid
 			}
 			for _, reported := range value.ReportedViolationIDs {
@@ -289,6 +292,8 @@ func decodePolicyEvent(line []byte, request dataChildRequest) (policyEvent, erro
 		default:
 			return value, invalid
 		}
+	} else if value.ResponseContentCheck != "unknown" {
+		return value, invalid
 	}
 	return value, nil
 }

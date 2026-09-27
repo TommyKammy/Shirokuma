@@ -4,13 +4,19 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-09-27
-version: "4.5"
+updated: 2026-09-28
+version: "4.6"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-28: saved Policy response-check coverage by producer revision
+
+WP-L2-POL-001の旧`passed/allowed`を、新producerの応答内容照合済みと誤表示しない。verification receipt v2にproducer markerを保存し、read-only Python/Go statusの限定coverageを`producer-checked`/`legacy-unrecorded`/`not-applicable`/`unknown`へ分離。旧保存3件（allowed/unknown/denied）の結果を変えず、旧allowedのみ`legacy-unrecorded`と明示。保存原本変更なし。markerは同じownerの自己記録で、以前のAPI応答の再採点、現cluster再観測、独立証明、本番受入ではない。専用Colima Stopped、保持run/backup変更なし。WP local-partial。private記録は`tmp/local-experiment/policy-saved-coverage-checks/20260928/`。
+
+policy focused103件PASS、Go全663件PASS・policy race20件PASS・vet PASS、全回帰121 suites/3808実行＝3800PASS＋8skip、89.609秒、log SHA256 `1a789397c3165da69a4c86798209ac4d995cb16fb0a683e4d881c73b11cb5845`。design-context/secret scan PASS。Go初回は旧fake応答の新必須field欠損1件で失敗、fixtureを修正し全件通過。最後のassertion追加後に全回帰を再実行した。
 
 ## 2026-09-27: pin policy candidate evidence writes to owned directory
 

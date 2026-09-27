@@ -131,6 +131,16 @@ raise SystemExit(code)
 			if final.Result != wantResult || final.Admission != wantAdmission || final.AuthorityGranted || final.PersistedWorkloads != 0 {
 				t.Fatalf("incorrect result: %+v", final)
 			}
+			wantCoverage := "unknown"
+			if wantResult == "passed" {
+				wantCoverage = "producer-checked"
+				if wantAdmission == "denied" {
+					wantCoverage = "not-applicable"
+				}
+			}
+			if final.ResponseContentCheck != wantCoverage {
+				t.Fatalf("incorrect response coverage: %+v", final)
+			}
 			for _, private := range []string{"PRIVATE", "private-pod", "private-container", "private.example/workload", state} {
 				if strings.Contains(out.String(), private) || err != nil && strings.Contains(err.Error(), private) {
 					t.Fatal("private input or child error was exposed")
@@ -168,12 +178,13 @@ func policyTestLines(request dataChildRequest, admission string) [][]byte {
 	allocated, _ := json.Marshal(map[string]any{"schema_version": 1, "event": "allocated", "command": request.Action, "evidence_token": request.Token})
 	value := policyEvent{SchemaVersion: 1, Event: "result", Command: request.Action, EvidenceToken: request.Token,
 		WorkflowToken: warehouseString(strings.Repeat("b", 32)), Result: "passed", Execution: "invoked", Verification: "saved-evidence",
-		Admission: admission, ExpectedViolationIDs: []string{}, ReportedViolationIDs: []string{},
+		Admission: admission, ResponseContentCheck: "producer-checked", ExpectedViolationIDs: []string{}, ReportedViolationIDs: []string{},
 		Evidence: warehouseString("tmp/local-experiment/policy-candidate-bear/" + request.Token)}
 	if request.Action == "status" {
 		value.Execution = "read-only"
 	}
 	if admission == "denied" {
+		value.ResponseContentCheck = "not-applicable"
 		value.ExpectedViolationIDs, value.ReportedViolationIDs = []string{"P01", "P05"}, []string{"P01"}
 	}
 	final, _ := json.Marshal(value)
@@ -362,12 +373,22 @@ func TestPolicyStrictProtocolRejectsLeaksAuthorityAndFalseAdmission(t *testing.T
 	good := policyTestLines(request, "allowed")[1]
 	var base map[string]any
 	_ = json.Unmarshal(good, &base)
+	legacy := make(map[string]any)
+	for key, value := range base {
+		legacy[key] = value
+	}
+	legacy["response_content_check"] = "legacy-unrecorded"
+	legacyRaw, _ := json.Marshal(legacy)
+	if event, err := decodePolicyEvent(legacyRaw, request); err != nil || event.ResponseContentCheck != "legacy-unrecorded" {
+		t.Fatal("historical saved allow was not distinguishable")
+	}
 	for key, values := range map[string][]any{
 		"raw_pod": {"PRIVATE"}, "schema_version": {nil, "1", true}, "command": {"status"},
 		"evidence_token": {strings.Repeat("c", 32)}, "workflow_token": {nil, "workflow-" + strings.Repeat("b", 32)},
 		"authority_granted": {true, nil, "false", 0}, "persisted_workloads": {1, -1, nil, false, "0", 0.5},
 		"admission": {nil, "approved", "unknown", "not-observed"}, "execution": {"not-started"},
-		"verification": {"journal-only"}, "expected_violation_ids": {nil, []any{"P01"}, []any{true}},
+		"response_content_check": {nil, "matched", "unknown", "not-applicable", true},
+		"verification":           {"journal-only"}, "expected_violation_ids": {nil, []any{"P01"}, []any{true}},
 		"reported_violation_ids": {nil, []any{"P01"}, []any{nil}}, "error_code": {"PRIVATE"}, "evidence": {nil, "/private/path"},
 	} {
 		for _, bad := range values {
@@ -471,7 +492,8 @@ func TestPolicyUnknownFailureAndNotStartedDoNotBecomeDeniedSuccess(t *testing.T)
 			}
 			request := dataChildRequest{Action: action, Token: testWarehouseSession}
 			value := policyEvent{SchemaVersion: 1, Event: "result", Command: action, EvidenceToken: request.Token,
-				Result: state, Execution: "invoked", Verification: "journal-only", Admission: "unknown", ErrorCode: warehouseString("POLICY_CHECK_FAILED")}
+				Result: state, Execution: "invoked", Verification: "journal-only", Admission: "unknown",
+				ResponseContentCheck: "unknown", ErrorCode: warehouseString("POLICY_CHECK_FAILED")}
 			if action == "status" {
 				value.Execution = "read-only"
 			}

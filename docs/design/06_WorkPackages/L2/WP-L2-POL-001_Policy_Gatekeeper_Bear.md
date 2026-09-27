@@ -4,13 +4,19 @@ doc_id: "WP-L2-POL-001"
 title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-27
-version: "0.9"
+updated: 2026-09-28
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-09-28: saved allowed-response coverage is revision-scoped
+
+新しく強化したallowed応答内容照合を、以前の`passed`保存物へ遡及した証拠として扱わない。新producerのverification receipt v2に`response_content_check`を保存し、新規passed/allowedに限り`matched`、deniedは`not-applicable`、未完了・失敗は`not-checked`。read-only status/Go CLIは`producer-checked`、旧v1のpassed/allowedは`legacy-unrecorded`、passed/deniedは`not-applicable`、その他は`unknown`と区別。producerが自分で残したmarkerの内部相関であり、旧raw API応答の再評価や第三者認証ではない。旧保存3件の結果・file集合/SHA/inode/mode不変を確認し、旧passed/allowedを新判定へ自動昇格させない。保存receipt・保持run・backupの移行/書換えなし。Colima起動・live admission再試行なし、WP local-partial。復旧は新入口が不適ならGo/Python protocolを対で戻す。旧保存証拠を削除・再作成しない。private記録は`tmp/local-experiment/policy-saved-coverage-checks/20260928/`。
+
+policy focused103件PASS、Go全663件PASS・policy race20件PASS・vet PASS、全回帰121 suites/3808実行＝3800PASS＋8skip、89.609秒、log SHA256 `1a789397c3165da69a4c86798209ac4d995cb16fb0a683e4d881c73b11cb5845`。design-context/secret scan PASS、専用Colima Stopped。Go protocol初回テストは旧fake応答の必須field欠損1件で失敗、fixture修正後全件通過。最後の負例assertion追加後に全回帰を再実行した。
 
 ## 2026-09-27: pin workflow evidence writes to owned output fd
 

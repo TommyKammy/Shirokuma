@@ -146,9 +146,10 @@ class CandidateObserver:
         self._observe_attempted = False
         self._items = None
         self._sources = None
-        self._receipt = dict(schema_version=1, result='not-started', server_dry_run=True,
+        self._receipt = dict(schema_version=2, result='not-started', server_dry_run=True,
             authority_granted=False, persisted_workloads=0, request_count=0, pending=None,
-            admission='not-observed', expected_violation_ids=copy.deepcopy(self._truth['candidates'][0]['violation_ids']),
+            admission='not-observed', response_content_check='not-checked',
+            expected_violation_ids=copy.deepcopy(self._truth['candidates'][0]['violation_ids']),
             reported_violation_ids=[], matched_host_expectation=False, absence_before=None,
             absence_after=None, baseline_stable=None, error_code=None, body_sha256=self._body_sha,
             baseline_before=None, baseline_after=None, policy_sources=None)
@@ -254,7 +255,9 @@ class CandidateObserver:
                 reported = reported_denials(response.stderr, self._body['metadata']['name'], self._items)
                 if reported and set(reported) <= set(expected):
                     admission = 'denied'
-            self._receipt.update(admission=admission, reported_violation_ids=reported)
+            self._receipt.update(admission=admission, reported_violation_ids=reported,
+                response_content_check='matched' if admission == 'allowed' else
+                    'not-applicable' if admission == 'denied' else 'not-checked')
             self._receipt['absence_after'] = self._absent()
             self._receipt['baseline_after'] = self._guard()
             self._receipt['baseline_stable'] = True
@@ -265,6 +268,7 @@ class CandidateObserver:
         except BaseException as error:
             self._receipt.update(result='interrupted' if not isinstance(error, Exception) else 'failed',
                 matched_host_expectation=False,
+                response_content_check='not-checked',
                 error_code=error.code if isinstance(error, CandidateObservationError) else 'DRY_RUN_OBSERVATION_FAILED')
             if self._receipt['pending'] is not None:
                 self._receipt['admission'] = 'unknown'

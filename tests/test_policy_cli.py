@@ -56,6 +56,7 @@ class PolicyCLITests(CandidateRuntimeFixture,unittest.TestCase):
         self.assertEqual(final['evidence_token'],TOKEN);self.assertNotEqual(final['workflow_token'],TOKEN)
         self.assertFalse(final['authority_granted']);self.assertEqual(final['persisted_workloads'],0)
         self.assertEqual(final['expected_violation_ids'],[]);self.assertEqual(final['reported_violation_ids'],[])
+        self.assertEqual(final['response_content_check'],'producer-checked')
         before=self.files();code,rows=self.main();self.assertEqual(code,1)
         self.assertEqual(rows[-1]['error_code'],'POLICY_ALREADY_EXISTS');self.assertEqual(rows[-1]['execution'],'not-started')
         self.assertEqual(self.runner.run.call_count,1);self.assertEqual(self.files(),before)
@@ -65,7 +66,33 @@ class PolicyCLITests(CandidateRuntimeFixture,unittest.TestCase):
         self.kube.respond=lambda body:self.kube.denial(body,['P01'])
         code,rows=self.main();self.assertEqual(code,2);self.assertEqual(rows[-1]['result'],'passed')
         self.assertEqual(rows[-1]['admission'],'denied');self.assertEqual(rows[-1]['expected_violation_ids'],['P01'])
+        self.assertEqual(rows[-1]['response_content_check'],'not-applicable')
         self.assertEqual(self.main('status')[0],0)
+
+    def test_legacy_saved_allow_is_not_retroactively_producer_checked(self):
+        self.assertEqual(self.main()[0],0)
+        raw=self.raw_documents()
+        for name in ('result.json','verification-progress.json','verification.json'):
+            value=json.loads(raw[name])
+            receipt=value['verification'] if name=='result.json' else value
+            receipt['schema_version']=1
+            receipt.pop('response_content_check',None)
+            raw[name]=json.dumps(value).encode()
+        view=CLI.verify_documents(raw)
+        self.assertEqual(view['result'],'passed')
+        self.assertEqual(view['response_content_check'],'legacy-unrecorded')
+
+    def test_v2_saved_allow_without_matched_response_marker_is_rejected(self):
+        self.assertEqual(self.main()[0],0)
+        original=self.raw_documents()
+        for marker in ('not-checked','not-applicable','invented'):
+            with self.subTest(marker=marker):
+                raw=copy.deepcopy(original)
+                for name in ('result.json','verification-progress.json','verification.json'):
+                    value=json.loads(raw[name]);receipt=value['verification'] if name=='result.json' else value
+                    receipt['response_content_check']=marker
+                    raw[name]=json.dumps(value).encode()
+                with self.assertRaises((ValueError,KeyError,TypeError)):CLI.verify_documents(raw)
 
     def test_invalid_stdin_precedes_configuration_and_durable_intent(self):
         for raw in (b'',b'{}',b'[]',b'{"secret":"private"}',b'x'*(16384+1),b'\xff'):

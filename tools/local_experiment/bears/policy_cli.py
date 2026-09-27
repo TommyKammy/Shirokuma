@@ -37,7 +37,7 @@ ERROR_CODES = frozenset({"ARGUMENTS_INVALID", "EVIDENCE_TOKEN_INVALID", "ENVIRON
 RESULTS = frozenset({"passed", "failed", "unknown", "not_started", "not_found", "busy"})
 FINAL_KEYS = frozenset({"schema_version", "event", "command", "evidence_token", "workflow_token",
     "result", "execution", "verification", "admission", "expected_violation_ids", "reported_violation_ids",
-    "authority_granted", "persisted_workloads", "error_code", "evidence"})
+    "response_content_check", "authority_granted", "persisted_workloads", "error_code", "evidence"})
 ACTIONS = ("bear.policy_candidate.observe", "llm.policy_candidate.classify",
            "bear.policy_candidate.verify", "bear.policy_candidate.assess")
 
@@ -70,11 +70,12 @@ def snapshot(directory):
 
 
 def projection(command, identity, *, result="unknown", execution="not-started", verification="not-checked",
-               workflow_token=None, admission="not-observed", expected_violation_ids=None,
-               reported_violation_ids=None, error_code=None, has_evidence=False):
+                workflow_token=None, admission="not-observed", expected_violation_ids=None,
+                reported_violation_ids=None, response_content_check="unknown", error_code=None, has_evidence=False):
     return validate_projection(dict(schema_version=1, event="result", command=command, evidence_token=identity,
         workflow_token=workflow_token, result=result, execution=execution, verification=verification,
-        admission=admission, expected_violation_ids=expected_violation_ids, reported_violation_ids=reported_violation_ids,
+         admission=admission, expected_violation_ids=expected_violation_ids, reported_violation_ids=reported_violation_ids,
+         response_content_check=response_content_check,
         authority_granted=False, persisted_workloads=0, error_code=error_code,
         evidence="tmp/local-experiment/policy-candidate-bear/" + identity if has_evidence else None))
 
@@ -91,6 +92,7 @@ def validate_projection(value):
         and value["result"] in RESULTS and value["execution"] in ("not-started", "invoked", "read-only")
         and value["verification"] in ("not-checked", "journal-only", "saved-evidence")
         and value["admission"] in ("not-observed", "unknown", "allowed", "denied")
+        and value["response_content_check"] in ("unknown", "legacy-unrecorded", "producer-checked", "not-applicable")
         and value["authority_granted"] is False and type(value["persisted_workloads"]) is int
         and value["persisted_workloads"] == 0 and (value["error_code"] is None or value["error_code"] in ERROR_CODES))
     for key in ("evidence_token", "workflow_token"):
@@ -105,6 +107,8 @@ def validate_projection(value):
         expected, reported = value["expected_violation_ids"], value["reported_violation_ids"]
         require(value["admission"] == "allowed" and expected == [] and reported == [] or
             value["admission"] == "denied" and bool(expected) and bool(reported) and set(reported) <= set(expected))
+        require(value["response_content_check"] in ("legacy-unrecorded", "producer-checked")
+            if value["admission"] == "allowed" else value["response_content_check"] == "not-applicable")
     if value["result"] == "failed":
         require(value["workflow_token"] is not None and value["verification"] == "saved-evidence")
     return value
@@ -163,12 +167,13 @@ def baseline(value):
 
 
 def verification(value, receipt):
-    C.keys(value, ("schema_version", "result", "server_dry_run", "authority_granted", "persisted_workloads",
+    require(type(value) is dict and type(value.get("schema_version")) is int and value["schema_version"] in (1, 2))
+    keys = ("schema_version", "result", "server_dry_run", "authority_granted", "persisted_workloads",
         "request_count", "pending", "admission", "expected_violation_ids", "reported_violation_ids",
         "matched_host_expectation", "absence_before", "absence_after", "baseline_stable", "error_code",
-        "body_sha256", "baseline_before", "baseline_after", "policy_sources"))
-    require(type(value["schema_version"]) is int and value["schema_version"] == 1
-        and value["result"] in ("not-started", "ready", "running", "passed", "failed", "interrupted")
+        "body_sha256", "baseline_before", "baseline_after", "policy_sources")
+    C.keys(value, keys + (("response_content_check",) if value["schema_version"] == 2 else ()))
+    require(value["result"] in ("not-started", "ready", "running", "passed", "failed", "interrupted")
         and value["server_dry_run"] is True and value["authority_granted"] is False
         and type(value["persisted_workloads"]) is int and value["persisted_workloads"] == 0
         and type(value["request_count"]) is int and value["request_count"] in (0,1)
@@ -183,6 +188,9 @@ def verification(value, receipt):
     for key in ("baseline_before", "baseline_after"):
         if value[key] is not None: baseline(value[key])
     if value["policy_sources"] is not None: sources(value["policy_sources"])
+    if value["schema_version"] == 2:
+        require(value["response_content_check"] in ("not-checked", "matched", "not-applicable"))
+        if value["result"] != "passed": require(value["response_content_check"] == "not-checked")
     require(value["error_code"] is None or type(value["error_code"]) is str and
         re.fullmatch("[A-Z_]{1,80}", value["error_code"]))
     if value["result"] == "passed":
@@ -193,6 +201,8 @@ def verification(value, receipt):
         expected, reported = value["expected_violation_ids"], value["reported_violation_ids"]
         require(value["admission"] == "allowed" and expected == [] and reported == [] or
             value["admission"] == "denied" and bool(expected) and bool(reported) and set(reported) <= set(expected))
+        if value["schema_version"] == 2:
+            require(value["response_content_check"] == ("matched" if value["admission"] == "allowed" else "not-applicable"))
 
 
 def metrics(value):
@@ -240,7 +250,7 @@ def verify_documents(raw):
     docs = {name: ([loads(line) for line in data.splitlines() if line] if name == "spans.jsonl" else loads(data))
             for name,data in raw.items()}
     empty = dict(result="unknown", verification="journal-only", workflow_token=None, admission="not-observed",
-                 expected_violation_ids=None, reported_violation_ids=None)
+                  expected_violation_ids=None, reported_violation_ids=None, response_content_check="unknown")
     receipt = docs.get("candidate.json")
     if receipt is None:
         require(not docs); return empty
@@ -294,13 +304,16 @@ def verify_documents(raw):
             and type(result.get("saved_otel_spans_verified")) is int and result["saved_otel_spans_verified"] == 4
             and all(same(result["model_metrics"][k],rows[1].get(k)) for k in result["model_metrics"]))
         return dict(result="passed",verification="saved-evidence",workflow_token=inner,admission=v["admission"],
-            expected_violation_ids=v["expected_violation_ids"],reported_violation_ids=v["reported_violation_ids"])
+            expected_violation_ids=v["expected_violation_ids"],reported_violation_ids=v["reported_violation_ids"],
+            response_content_check=("not-applicable" if v["admission"] == "denied" else
+                "producer-checked" if v["schema_version"] == 2 else "legacy-unrecorded"))
     require(result["workflow_complete"] is False)
     if result["result"] == "failed" and root is not None and result.get("finished_at") is not None:
         require(result.get("error_code") in ("POLICY_CANDIDATE_OBSERVATION_MODEL_DRYRUN_OR_AUDIT_FAILED",
                                             "POLICY_CANDIDATE_SAVED_TRACE_VERIFICATION_FAILED"))
         return dict(result="failed",verification="saved-evidence",workflow_token=inner,admission=v["admission"],
-            expected_violation_ids=v["expected_violation_ids"],reported_violation_ids=v["reported_violation_ids"])
+            expected_violation_ids=v["expected_violation_ids"],reported_violation_ids=v["reported_violation_ids"],
+            response_content_check="unknown")
     return dict(empty,workflow_token=inner,admission="unknown" if v["pending"] is not None else v["admission"])
 
 def persist(directory, journal):

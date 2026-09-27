@@ -88,6 +88,8 @@ class ObserverTests(unittest.TestCase):
             receipts.append(value)
         actual=self.observer.verify(progress=save)
         self.assertEqual(self.kube.requests,[self.input.body()]);self.assertEqual(actual['result'],'passed')
+        self.assertEqual(actual['schema_version'],2)
+        self.assertEqual(actual['response_content_check'],'matched')
         self.assertTrue(actual['absence_before'] and actual['absence_after'] and actual['baseline_stable'])
         self.assertEqual(actual['baseline_before'],actual['baseline_after'])
         self.assertEqual(len(actual['baseline_before']['resources']),16)
@@ -115,6 +117,7 @@ class ObserverTests(unittest.TestCase):
                 with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
                 receipt=observer.receipt()
                 self.assertEqual(receipt['admission'],'unknown')
+                self.assertEqual(receipt['response_content_check'],'not-checked')
                 self.assertIsNotNone(receipt['pending'])
                 self.assertEqual(receipt['request_count'],1)
                 self.assertFalse(receipt['matched_host_expectation'])
@@ -137,6 +140,7 @@ class ObserverTests(unittest.TestCase):
         actual=self.observer.verify(progress=lambda v:None)
         self.assertEqual(actual['expected_violation_ids'],['P01','P02'])
         self.assertEqual(actual['reported_violation_ids'],['P01']);self.assertEqual(actual['admission'],'denied')
+        self.assertEqual(actual['response_content_check'],'not-applicable')
 
     def test_exact_multiple_owned_denials(self):
         value=pod(privileged=True);value['spec']['hostPID']=True

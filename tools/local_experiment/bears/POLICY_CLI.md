@@ -64,6 +64,11 @@ The host answer and hashes are not passed to the model.
 features, classifications, typed admission evidence, audit/span correlation and
 sealed file hashes. It cannot reconstruct the original manifest, re-observe
 admission or independently prove that the retained hashes represent that input.
+`response_content_check` distinguishes a new producer's saved allowed-response
+check (`producer-checked`) from old successful evidence lacking that check
+(`legacy-unrecorded`). Denials are `not-applicable`; failures and unresolved
+outcomes are `unknown`. The new marker is a producer claim correlated within
+its receipt, not an independent attestation of the server response.
 There is no fallback to the separate historical fixed 15-case corpus.
 
 For `check`, exit 0 means verified admission allowed; exit 2 means the workflow
