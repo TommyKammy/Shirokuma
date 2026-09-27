@@ -44,11 +44,13 @@ Only denials naming the exact current policy, binding and message are accepted.
 The evidence token names `tmp/local-experiment/policy-candidate-bear/TOKEN`;
 invocation intent and lock are separate under `policy-cli/TOKEN`. The workflow
 token identifies the audit task. Allocation alone is not proof of invocation.
-Standalone workflow creation checks existing output ancestors for symlinks
-**before** creating its private directory as well as afterward; a rejected
-linked ancestor must not cause writes through the link. Do not remove linked
-or retained paths to recover from a rejection. This is not an atomic defense
-against another actor changing the path between the checks and `mkdir`.
+Do not remove linked or retained paths to recover from a rejected output path.
+Output directory creation traverses components with `O_NOFOLLOW` and uses
+parent descriptors for each `mkdir`, rejecting symlink redirection even if a
+parent is swapped after preflight. It rechecks pathname identity before using
+the new directory. Later evidence writes still use pathnames, so continuous
+adversarial swaps *after* this check are not covered; do not treat directory
+creation as a full race-proof transaction.
 Raw input, names, images, API responses, model text and exception messages are
 not retained. Private receipts contain hashes, transforms, safe features, the
 host answer, validated plan, admission result and four local audit spans.

@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "4.3"
+version: "4.4"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: descriptor-bound policy output creation
+
+policy focused98件PASS、全回帰121 suites/3803実行＝3795PASS＋8skip、87.595秒、log SHA256 `f84bca0f904bc6e8f1ee5302a962b20394cf707c4adc4a42b65fdb7fc9e80ab7`。design-context/secret scan PASS、専用Colima Stopped。private記録は`tmp/local-experiment/policy-candidate-fd-output-checks/20260927/`。
+
+WP-L2-POL-001で親pathのprecheck後にsymlinkへ差し替えた隔離temp負例は、旧`mkdir(parents=True)`でリンク先へdirectoryを作った。全componentを`O_NOFOLLOW`で開いた親fdから欠損階層とtoken directoryを相対作成し、終了直前にparent/childのpathとfd inodeを照合。修正後はリンク先に新dirを残さず拒否、通常のprivate nested creationも維持。作成後のpath-based evidence writerの再差し替え防御は未完で、完全な同時敵対者モデルは受入に昇格しない。専用Colima/保持run/backup変更なし。WP local-partial。
 
 ## 2026-09-27: policy candidate output ancestor preflight
 

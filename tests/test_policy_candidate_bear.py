@@ -3,6 +3,7 @@ import asyncio
 import copy
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -96,6 +97,32 @@ class CandidateBearTests(CandidateRuntimeFixture, unittest.TestCase):
             R.create_output(link/'created-by-workflow'/TOKEN)
         self.assertFalse(outside.exists())
         self.assertEqual(list(retained.iterdir()),[])
+
+    def test_output_missing_parents_are_created_privately_without_following_links(self):
+        target=Path(self.temp.name).resolve()/'new'/'nested'/TOKEN
+        R.create_output(target)
+        self.assertEqual([p.stat().st_mode & 0o777 for p in (target.parent.parent,target.parent,target)],
+                         [0o700]*3)
+        with self.assertRaises(R.PolicyCandidateError):R.create_output(target)
+        self.assertTrue(target.is_dir())
+
+    def test_output_ancestor_swap_between_check_and_mkdir_never_creates_through_link(self):
+        base=Path(self.temp.name).resolve()
+        parent=base/'holding';parent.mkdir(mode=0o700)
+        retained=base/'retained';retained.mkdir(mode=0o700)
+        target=parent/'fresh'/TOKEN
+        original=R.os.mkdir
+        swapped=[]
+        def swap_then_mkdir(path,*args,**kwargs):
+            if not swapped and os.fspath(path) in (str(target.parent),'fresh'):
+                swapped.append(True)
+                parent.rename(base/'detached')
+                parent.symlink_to(retained, target_is_directory=True)
+            return original(path,*args,**kwargs)
+        with patch.object(R.os,'mkdir',swap_then_mkdir):
+            with self.assertRaises(R.PolicyCandidateError):R.create_output(target)
+        self.assertEqual(swapped,[True])
+        self.assertFalse((retained/'fresh').exists())
 
     def test_bad_baseline_prevents_model_and_dryrun(self):
         self.kube.namespace['metadata']['labels']={}

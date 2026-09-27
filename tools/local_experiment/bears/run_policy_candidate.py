@@ -58,17 +58,37 @@ def persist(path, value):
 def create_output(output):
     if not re.fullmatch('[0-9a-f]{32}', output.name) or output.exists() or output.is_symlink():
         raise PolicyCandidateError('OUTPUT_NOT_FRESH')
-    # Checking only after mkdir can create directories through an existing
-    # symlink into an unrelated (possibly retained) tree before refusing it.
-    if any(path.is_symlink() for path in [output.parent, *output.parent.parents]):
+    if not output.is_absolute() or '..' in output.parts:
         raise PolicyCandidateError('OUTPUT_PARENT_INVALID')
-    output.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-    if any(path.is_symlink() for path in [output.parent, *output.parent.parents]):
-        raise PolicyCandidateError('OUTPUT_PARENT_INVALID')
-    output.mkdir(mode=0o700)
-    fd = os.open(output.parent, os.O_RDONLY | os.O_DIRECTORY)
-    try: os.fsync(fd)
-    finally: os.close(fd)
+    # Bind every component to its opened parent. A pathname check followed by
+    # Path.mkdir can be redirected if an ancestor is replaced with a symlink.
+    fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in output.parent.parts[1:]:
+            try:
+                try: os.mkdir(part, mode=0o700, dir_fd=fd)
+                except FileExistsError: pass
+                next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            except OSError:
+                raise PolicyCandidateError('OUTPUT_PARENT_INVALID') from None
+            os.close(fd); fd = next_fd
+        try:
+            os.mkdir(output.name, mode=0o700, dir_fd=fd)
+        except FileExistsError:
+            raise PolicyCandidateError('OUTPUT_NOT_FRESH') from None
+        # A renamed/unlinked parent must not be handed to the path-based writer.
+        try:
+            parent = os.stat(output.parent, follow_symlinks=False)
+            child = os.stat(output, follow_symlinks=False)
+            anchored = os.stat(output.name, dir_fd=fd, follow_symlinks=False)
+        except OSError:
+            raise PolicyCandidateError('OUTPUT_PARENT_INVALID') from None
+        if (parent.st_dev, parent.st_ino) != (os.fstat(fd).st_dev, os.fstat(fd).st_ino) or \
+                (child.st_dev, child.st_ino) != (anchored.st_dev, anchored.st_ino):
+            raise PolicyCandidateError('OUTPUT_PARENT_INVALID')
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 async def run(config, output, raw):

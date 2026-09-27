@@ -5,12 +5,18 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-09-27: descriptor-bound output creation
+
+policy focused98件PASS、全回帰121 suites/3803実行＝3795PASS＋8skip、87.595秒、log SHA256 `f84bca0f904bc6e8f1ee5302a962b20394cf707c4adc4a42b65fdb7fc9e80ab7`。design-context/secret scan PASS、専用Colima Stopped。private記録は`tmp/local-experiment/policy-candidate-fd-output-checks/20260927/`。
+
+既存の作成前symlink検査と`Path.mkdir`の間に隔離tempの親をsymlinkへ入れ替えると、旧実装は拒否しつつリンク先に新ディレクトリを作った。親の各componentを`O_DIRECTORY|O_NOFOLLOW`で開き、欠けた階層と最終token directoryを開いた親fd相対で作成。最後にpathが同じ親/子inodeを指すことを再確認し、差し替え時は`OUTPUT_PARENT_INVALID`で拒否。隔離tempの模擬保持treeでは差し替え先への新規directoryなし、通常のprivate nested creationと既存token拒否も確認。作成後にpathベースで続く保存処理までfdに固定したわけではなく、作成終了後の別actorによる継続的な差し替えは未防御。拒否されたpathや保持物は自動削除しない。Kubernetes/モデル/保持run/backup変更なし、Colima起動なし。WP local-partial。
 
 ## 2026-09-27: reject linked output ancestor before mkdir
 
