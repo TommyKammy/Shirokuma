@@ -156,6 +156,28 @@ are published. A Colima SSH boot-ID read can outlive a killed host client;
 this metadata-only operation does not establish the verified remote-worker
 cleanup required before any volume traversal.
 
+## 2026-09-27 offline VM-side source bundle correlation
+
+`linux_volume_source_bundle.py` reads **only** the three fixed local Python
+sources `linux_openat2.py`, `linux_volume_worker.py` and
+`linux_volume_supervisor.py` through a pinned, no-follow directory. It requires
+current-user ownership, single-link regular files, no group/other write bits,
+bounded lengths and two equal metadata/content-hash passes; missing, changing,
+linked or special sources fail closed. It returns a domain-separated digest and
+fixed private manifest, not source contents or a public report row. The local
+manifest is reproducible for identical bytes and changes if a source changes.
+
+This is **correlation of local source bytes only**. `worker_digest` in the
+existing supervisor, receipt and wire remains caller-controlled: none of those
+modules import/execute the pinned files through this descriptor, and they do
+not verify the remote VM's interpreter, import graph or actual executed bytes.
+Future trusted VM transport must deliver and pin the precise source, establish
+VM-side execution provenance, correlate the receipt with that *same* execution,
+and prove the independent cleanup and writer/topology gates. A local SHA or
+matching caller-supplied field is not remote attestation or permission to scan.
+No SSH, VM boot or retained-volume access occurs in this increment; public
+AgentHouse bytes stay `NOT_MEASURED`.
+
 ## 2026-09-27 openat2 / supervisor fixture boundary
 
 The unconnected Linux worker now uses `openat2` with `RESOLVE_BENEATH |

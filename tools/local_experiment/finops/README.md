@@ -126,6 +126,12 @@ receipt transport or the public collector. Caller-supplied evidence is not
 proof of VM worker termination.
 The versioned receipt wire and strict SSH argument builder are offline
 contracts, not a live connection: no host key has been enrolled by this work.
+An unlinked descriptor snapshot is fixture-tested against known-hosts pathname
+replacement, but not against real OpenSSH connection-time reads. A separate
+offline source-bundle checker now hashes two agreeing bounded reads of the
+three fixed local VM-side Python sources. Its digest is **not** a proof that a
+remote worker executed those bytes; the supervisor still accepts a caller-
+supplied correlation digest. Neither offline check enables volume traversal.
 
 ## Fixed host directory references (v5)
 

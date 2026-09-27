@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.18"
+version: "0.19"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse worker source bundle相関（2026-09-27・offline）
+
+`linux_volume_source_bundle.py`でVM側予定の固定3 Python source（`linux_openat2.py`・`linux_volume_worker.py`・`linux_volume_supervisor.py`）をno-followなroot descriptorから2回限定readし、owner・mode・link・size・前後identity/内容hash一致を条件にprivate manifestとdomain-separated SHA256を作成。欠損・symlink/hardlink・特殊file・別内容/途中変更・過大fileをfixtureで拒否。実checkoutのlocal sourceは3件・bundle digest `113e05272aef1fd0d5e4f02aa9cc5b86105b1d3c6c6a0d099ec43ebab4c7ab40`。これは**local sourceの相関値のみ**で、今のsupervisor/wireは呼出元が自由に`worker_digest`を渡せる。VMへの転送・そこでのimport/実行、Python interpreter/依存source、receiptと実行bytesの同定を証明せず、公開レポートには含めない。専用Colima起動/SSH/保持volume走査なし。AgentHouseは`null / NOT_MEASURED`、WPはlocal-partial。設計境界は`tools/local_experiment/finops/AGENTHOUSE_VOLUME_MEASUREMENT_PLAN.md`。
+
+focused154件＝147PASS＋Linux専用7skip、全回帰121suites/3769実行＝3761PASS＋8skip、log SHA256 `252e7430b006432e53c58d816f6b5dacdf48bfe9d20a40ada3d9f67fa5adae26`。design-context/secret scan PASS。独立SHA計算も一致し、保存v7原本不変。限定private証拠は`tmp/local-experiment/finops-source-bundle-checks/20260927/`。
 
 ## AgentHouse known-hosts descriptor snapshot（2026-09-27・offline fixture）
 

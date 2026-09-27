@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.88"
+version: "3.89"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse local VM-source bundle correlation
+
+WP-L6-FIN-001で固定3 Python sourceを所有/root/single-link/no-follow/size上限付きで二走査し、manifestとprivate digestを計算するoffline契約を追加。symlink/hardlink/特殊file・変更と不正scopeはdigestを出さず拒否。実checkoutのlocal digest `113e05272aef1fd0d5e4f02aa9cc5b86105b1d3c6c6a0d099ec43ebab4c7ab40`はlocal source bytesの相関値であり、VM実行sourceやremote codeのattestationではない。`worker_digest`は引き続きcaller-supplied。Colimaは停止のままSSH/volume走査なし、公開report変更なし、AgentHouse `null / NOT_MEASURED`。私有証拠は`tmp/local-experiment/finops-source-bundle-checks/20260927/`。worker sourceのVM側pin/実行同定、host sleep/boot、trusted SSH key、VM writer/topology/probe/cleanup、backupは未達。WP local-partial。
+
+focused154件＝147PASS＋Linux専用7skip、全回帰121suites/3769実行＝3761PASS＋8skip（既存1＋Linux専用7）、86.685秒、log SHA256 `252e7430b006432e53c58d816f6b5dacdf48bfe9d20a40ada3d9f67fa5adae26`。design-context/secret scan PASS、独立SHA計算一致。保存v7原本SHA `b21ff1ec38ee62029aa128a7ff15b7d4388381ffc95b917c736eecc81e08e824`不変。
 
 ## 2026-09-27: AgentHouse known-hosts snapshot fixture boundary
 
