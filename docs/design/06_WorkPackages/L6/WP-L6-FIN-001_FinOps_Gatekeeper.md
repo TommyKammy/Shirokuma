@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.17"
+version: "0.18"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse known-hosts descriptor snapshot（2026-09-27・offline fixture）
+
+既存のpathname検査→SSH再openの競合を小さくするため、**独立してenroll済みのkeyをcallerが既に持つことを前提**にした`pinned_ssh_prefix`を追加。検証済みknown-hosts/identity fileを必要とし、一致するfixture key entryをunlinked read-only descriptorに固定して、子processへ`pass_fds`と`UserKnownHostsFile=/dev/fd/N`の候補を渡す。元pathnameの差替え後にもfixture子processが固定entryを読めること、`ssh -G`によるoffline option解釈、失敗時にsnapshotを作らないことを検証。保持volume、既存VMの鍵やcredential内容、SSH接続には触れていない。OpenSSHが実接続でdescriptorを保持/複数回readする挙動は未検証で、same-user攻撃者への分離やserver keyの真正なenrollmentも未証明。認証済みreceipt取得の受入・走査許可ではなく、AgentHouseのbytesは`null / NOT_MEASURED`、WPはlocal-partial。境界と残余は`tools/local_experiment/finops/AGENTHOUSE_VOLUME_MEASUREMENT_PLAN.md`。
+
+focused151件＝144PASS＋Linux専用7skip、全回帰121suites/3766実行＝3758PASS＋8skip、log SHA256 `3dc8cce81b9bc0e228efc7c69d9db536aa2eba319fde0aa13a00125af1062bed`。design-context/secret scan PASS。private証拠は`tmp/local-experiment/finops-known-hosts-snapshot-checks/20260927/`。
 
 ## Model Serving HOMEの限定論理bytes（2026-09-27・v8 local増分）
 

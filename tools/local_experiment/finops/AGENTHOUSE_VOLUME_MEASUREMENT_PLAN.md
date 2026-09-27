@@ -189,6 +189,25 @@ start before launching the worker and securely reconnect to the same VM. A
 fabricated probe, host reboot, stale operation ID or unverified worker source
 must never be used as positive evidence. No report schema or saved bytes change.
 
+## 2026-09-27 offline known-hosts descriptor snapshot (fixture only)
+
+`pinned_ssh_prefix` adds a scoped, unlinked, read-only descriptor holding the
+**caller-supplied, independently enrolled** exact ed25519 entry. It first checks
+the preexisting private known-hosts file and identity file with the same strict
+contract as `strict_ssh_prefix`. The anonymous descriptor is handed to a child
+by `pass_fds`, with `UserKnownHostsFile=/dev/fd/N`, and closed when the scope
+ends. In local fixture tests a child can read the pinned entry even after the
+original enrollment pathname is replaced; only fixture material is used.
+OpenSSH `ssh -G` verifies option parsing, not connection-time host-key lookup.
+The descriptor shares an offset with `/dev/fd/N`; whether OpenSSH retains it
+and how often it reads it during a **real authenticated connection** is still
+unverified. There is deliberately no SSH invocation against the VM, nor any
+server-key enrollment. A same-user hostile process is not isolated by this
+local file mechanism. A future runner must own the child lifecycle through
+exit and prove the pinned file is actually used on a trusted connection before
+calling it an authenticated receipt channel. This offline boundary does not
+authorize retained-volume traversal or change `NOT_MEASURED`.
+
 ## 2026-09-27 offline receipt wire / SSH configuration contract
 
 `linux_volume_receipt_wire.py` validates a bounded (16 KiB), duplicate-key-free
@@ -203,10 +222,10 @@ agent, forwarding or interactive authentication. Literal paths, ancestor
 permissions and a bounded no-follow read are checked. Offline OpenSSH `ssh -G`
 tests confirm the relevant parsed options without making a connection.
 
-Neither module makes an SSH call or enrolls a VM host key. The argv builder
-cannot preserve its known-hosts validation through SSH reopening that pathname
-later; a future runner needs an immutable, protected trust-file snapshot held
-through process completion. The bundle digest is still caller-supplied
+Neither module makes an SSH call or enrolls a VM host key. The original
+pathname-based argv builder cannot preserve its known-hosts validation through
+SSH reopening that pathname later; the fixture-only descriptor snapshot above
+does not yet establish a live OpenSSH trust channel. The bundle digest is still caller-supplied
 correlation, not executed-source attestation. Host sleep/reboot clocks, VM
 procfs visibility, authenticated source bundle, worker-writer quiescence and
 blocked-I/O cleanup remain unproven. These structural checks **do not** grant

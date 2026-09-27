@@ -7,10 +7,13 @@ creating the exact known-hosts file. A file generated from an untrusted
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import re
 import stat
+import tempfile
+from typing import NamedTuple
 
 ALIAS = 'shirokuma-finops-mac-studio-solo'
 
@@ -66,9 +69,13 @@ def strict_ssh_prefix(*, port, user, known_hosts, identity_file, enrolled_key):
     raw=_private_file(known_hosts,secret=False)
     _private_file(identity_file,secret=True)
     require(len(raw)<=1024 and raw==f'{ALIAS} ssh-ed25519 {enrolled_key}\n'.encode())
+    return _prefix(port,user,str(known_hosts),identity_file)
+
+
+def _prefix(port,user,known_hosts,identity_file):
     return ['ssh','-F','/dev/null','-p',str(port),'-i',str(identity_file),
             '-o','StrictHostKeyChecking=yes',
-            '-o','UserKnownHostsFile='+str(known_hosts),
+             '-o','UserKnownHostsFile='+known_hosts,
             '-o','GlobalKnownHostsFile=/dev/null',
             '-o','HostKeyAlias='+ALIAS,
             '-o','UpdateHostKeys=no',
@@ -86,4 +93,49 @@ def strict_ssh_prefix(*, port, user, known_hosts, identity_file, enrolled_key):
             '-o','RequestTTY=no',
             '-o','ConnectTimeout=3',
             '-o','ConnectionAttempts=1',
-            user+'@127.0.0.1']
+             user+'@127.0.0.1']
+
+
+class PinnedSSH(NamedTuple):
+    argv: list[str]
+    pass_fds: tuple[int, ...]
+
+
+@contextmanager
+def pinned_ssh_prefix(*, port, user, known_hosts, identity_file, enrolled_key):
+    """Pin a fixture trust-file snapshot for one subprocess lifetime; never connect.
+
+    The caller must already have authenticated the server key independently.
+    Keep this context open until the child exits and pass exactly `pass_fds` to
+    subprocess. OpenSSH's connection-time handling of /dev/fd is not proven.
+    """
+    # Reuse all existing path, key, owner and option validation. Reading the
+    # enrolled file is not enrollment and cannot validate the key's provenance.
+    strict_ssh_prefix(port=port,user=user,known_hosts=known_hosts,
+                      identity_file=identity_file,enrolled_key=enrolled_key)
+    raw=f'{ALIAS} ssh-ed25519 {enrolled_key}\n'.encode()
+    fd=None
+    with tempfile.TemporaryDirectory(prefix='finops-ssh-',dir=known_hosts.parent) as directory:
+        try:
+            try:
+                path=Path(directory)/'hosts'
+                writer=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
+                try:
+                    require(os.write(writer,raw)==len(raw))
+                    os.fsync(writer)
+                    written=os.fstat(writer)
+                    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+                    reader=os.fstat(fd)
+                    require(stat.S_ISREG(reader.st_mode) and reader.st_uid==os.getuid() and
+                            stat.S_IMODE(reader.st_mode)==0o600 and reader.st_nlink==1 and
+                            (written.st_dev,written.st_ino)==(reader.st_dev,reader.st_ino))
+                finally:
+                    os.close(writer)
+                os.unlink(path)
+                require(os.fstat(fd).st_nlink==0 and os.read(fd,1025)==raw)
+                os.lseek(fd,0,os.SEEK_SET)
+            except OSError:
+                raise EndpointUntrusted('ENDPOINT_UNTRUSTED') from None
+            yield PinnedSSH(_prefix(port,user,f'/dev/fd/{fd}',identity_file),(fd,))
+        finally:
+            if fd is not None:os.close(fd)

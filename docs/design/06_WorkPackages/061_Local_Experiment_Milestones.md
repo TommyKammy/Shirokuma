@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.87"
+version: "3.88"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse known-hosts snapshot fixture boundary
+
+WP-L6-FIN-001のprivate SSH設定候補に、既存の独立したenrollmentを**前提**とするread-only/unlinked FD snapshotと`pass_fds`候補を追加。fixture childは元pathname置換後も固定key entryを読め、`ssh -G`はoffline設定解釈のみ確認。FD共有offset、OpenSSHの実接続時のFD保持・host-key lookup、同一user攻撃、VM server key真正性は未検証。Colimaは起動せずlive SSHなし、保持AgentHouse volume未読。worker source、host sleep/reboot、VM procfs/topology/writer/blocked-I/O cleanupとbackup復旧も未達。public schema/report不変、AgentHouse `null / NOT_MEASURED`、WP local-partial。限定private証拠は`tmp/local-experiment/finops-known-hosts-snapshot-checks/20260927/`。
+
+focused151件＝144PASS＋Linux専用7skip。全回帰121suites/3766実行＝3758PASS＋8skip（既存1＋Linux専用7）、87.516秒、log SHA256 `3dc8cce81b9bc0e228efc7c69d9db536aa2eba319fde0aa13a00125af1062bed`。design-context/secret scan PASS。fixtureで失敗後の成功修正（共有FD offsetをテストで明示）を反映。
 
 ## 2026-09-27: FinOps Model Serving HOME separate logical bytes (v8)
 
