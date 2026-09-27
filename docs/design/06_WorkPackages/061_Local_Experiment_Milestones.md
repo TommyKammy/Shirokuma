@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "4.1"
+version: "4.2"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: bounded Pod success-response correlation
+
+WP-L2-POL-001のcaller Pod候補はserver dry-runの成功応答を名前/namespaceだけで通していた。同名でimage/container/resources/host featureが食い違うfake responseを修正前に6件再現し、修正後は`unknown`＋pending（自動再送なし）に固定。等価quantity・安全defaultは通す。モデル権限・namespace scope・policy manifestは変更なし。offline検証だけでlive admission/全mutation同一性/現cluster状態/本番受入は主張しない。専用Colimaは停止のまま、保持run/backup変更なし。復旧は未知結果を成功扱いせず、新規候補・新規dry-runで検証する。WP local-partial。
+
+policy focused95件PASS、全回帰121 suites/3800実行＝3792PASS＋8skip、88.253秒、log SHA256 `b617aac864ae427ee0af592fe8de8f519578078d4a3616a8e61b4a2d7959f73d`。design-context/secret scan PASS。システムPythonでの初回横断テストはMCP依存の収集失敗（2件）であり、プロジェクトvenvで再実行後95件PASS。private記録は`tmp/local-experiment/policy-candidate-response-checks/20260927/`。
 
 ## 2026-09-27: refuse recovery of archived closed XS sessions
 

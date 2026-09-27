@@ -7,7 +7,7 @@ import json
 import re
 import uuid
 
-from . import gatekeeper as G
+from . import candidate as P, gatekeeper as G
 
 M = G.MANAGE
 MAX_RESPONSE = 2 * 1024 * 1024
@@ -83,6 +83,55 @@ def reported_denials(stderr, name, items):
             if not rest:
                 return []
     return sorted(found)
+
+
+def allowed_pod_matches(value, body):
+    """Check the effective dry-run Pod, not just its name; allow API defaults.
+
+    This is deliberately not a claim that no other admission mutation occurred.
+    Unsupported changes to the constrained policy features fail closed.
+    """
+    if type(value) is not dict or value.get('apiVersion') != 'v1' or value.get('kind') != 'Pod':
+        return False
+    meta, spec = value.get('metadata'), value.get('spec')
+    if type(meta) is not dict or type(spec) is not dict or any(
+            meta.get(key) != body['metadata'][key] for key in ('name', 'namespace')):
+        return False
+    original = body['spec']; containers = spec.get('containers')
+    if (type(containers) is not list or len(containers) != 1 or
+            any(spec.get(key) not in (None, []) for key in ('initContainers', 'ephemeralContainers', 'volumes')) or
+            any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostIPC', 'hostPID')) or
+            spec.get('automountServiceAccountToken') is not False or spec.get('restartPolicy') != 'Never'):
+        return False
+    container, submitted = containers[0], original['containers'][0]
+    if type(container) is not dict or any(container.get(key) != submitted[key] for key in ('name', 'image', 'imagePullPolicy')):
+        return False
+    context, resources = container.get('securityContext', {}), container.get('resources', {})
+    if type(context) is not dict or type(resources) is not dict or context.get('privileged', False) is not False:
+        return False
+    if (any(context.get(key) != raw for key, raw in submitted.get('securityContext', {}).items()) or
+            any(container.get(key) not in (None, []) for key in ('env', 'envFrom', 'command', 'args', 'volumeMounts'))):
+        return False
+    requests, limits = resources.get('requests'), resources.get('limits')
+    if type(requests) is not dict or type(limits) is not dict:
+        return False
+    expected = submitted['resources']
+    try:
+        for kind, observed in (('requests', requests), ('limits', limits)):
+            if set(observed) != set(expected[kind]) or any(
+                    P._quantity(observed[key], key) != P._quantity(raw, key)
+                    for key, raw in expected[kind].items()):
+                return False
+    except (P.CandidateError, KeyError, TypeError, ValueError):
+        return False
+    ports = container.get('ports', [])
+    if type(ports) is not list or len(ports) != len(submitted.get('ports', [])):
+        return False
+    for current, source in zip(ports, submitted.get('ports', [])):
+        if (type(current) is not dict or current.get('containerPort') != source['containerPort'] or
+                current.get('hostPort', 0) != source.get('hostPort', 0)):
+            return False
+    return True
 
 
 class CandidateObserver:
@@ -199,9 +248,7 @@ class CandidateObserver:
                     value = json.loads(response.stdout)
                 except (TypeError, ValueError):
                     value = None
-                if (type(value) is dict and value.get('apiVersion') == 'v1' and value.get('kind') == 'Pod'
-                        and value.get('metadata', {}).get('name') == self._body['metadata']['name']
-                        and value['metadata'].get('namespace') == M.NAMESPACE and not response.stderr.strip()):
+                if not response.stderr.strip() and allowed_pod_matches(value, self._body):
                     admission = 'allowed'
             elif type(response.returncode) is int and response.returncode > 0:
                 reported = reported_denials(response.stderr, self._body['metadata']['name'], self._items)

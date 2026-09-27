@@ -26,6 +26,14 @@ and verification rather than a blind apply over existing state.
 The rules reject privileged containers, host namespaces, hostPath, missing
 CPU/memory requests or limits, hostPort, mutable image references, public
 Services and Ingresses. Both policy and binding select only `shirokuma-dev`.
+
+For a caller-supplied Pod candidate, an allowed server dry-run response must
+also represent the submitted candidate's bounded policy features: one matching
+container and image, no injected init/ephemeral containers or hostPath, stable
+CPU/memory resource quantities and ports, and the fixed safe defaults. Harmless
+API defaults and equivalent quantity spellings are accepted. A mismatch stays
+`unknown` with pending intent, not an authorization or a retry. This does not
+attest every possible admission mutation or current cluster state.
 Smoke cases exercise allowed and rejected requests through the API server and
 verify that each rejection identifies its expected local policy and binding.
 They create no persisted Pod, Service or Ingress. Evidence is stored in private

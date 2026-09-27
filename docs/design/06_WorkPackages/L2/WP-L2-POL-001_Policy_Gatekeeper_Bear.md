@@ -4,13 +4,19 @@ doc_id: "WP-L2-POL-001"
 title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-18
-version: "0.5"
+updated: 2026-09-27
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-09-27: candidate allowed response content guard (offline)
+
+`--pod-stdin`のserver dry-runでexit 0のJSONを名前・namespaceだけで`allowed`にしていた。fake APIで同名別image、sidecar/init container、CPU request欠損、hostNetwork、hostPathを返すと誤通過することを修正前に再現。修正後は応答Podの限定policy featuresと送信したcontainer名/image、CPU・memory request/limitの意味値、ports、固定安全defaultを照合し、不一致は`unknown`とpendingを維持する。安全側のAPI defaultや等価quantity表現は受理する。生のPod/responseは保存しない。この照合は応答に含まれないcluster状態、すべてのmutation、任意のPod field、admission webhook不在の独立証明ではない。今回はColimaを起動せず、live admission受入の更新なし、WP local-partial。回復は新しいdry-run/保存証拠で行い、未知結果をallowに再分類・自動再送しない。
+
+policy focused95件PASS、全回帰121 suites/3800実行＝3792PASS＋8skip、88.253秒、log SHA256 `b617aac864ae427ee0af592fe8de8f519578078d4a3616a8e61b4a2d7959f73d`。design-context/secret scan PASS。private検証記録は`tmp/local-experiment/policy-candidate-response-checks/20260927/`。
 
 ## Summary
 

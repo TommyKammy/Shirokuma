@@ -96,6 +96,40 @@ class ObserverTests(unittest.TestCase):
         with self.assertRaises(O.CandidateObservationError):self.observer.verify(progress=save)
         self.assertEqual(len(self.kube.requests),1)
 
+    def test_allowed_response_must_represent_the_submitted_pod(self):
+        changes = (
+            lambda body: body['spec']['containers'][0].update(image='private.example/other@sha256:'+'c'*64),
+            lambda body: body['spec']['containers'].append(copy.deepcopy(body['spec']['containers'][0])),
+            lambda body: body['spec'].update(initContainers=[copy.deepcopy(body['spec']['containers'][0])]),
+            lambda body: body['spec']['containers'][0]['resources']['requests'].pop('cpu'),
+            lambda body: body['spec'].update(hostNetwork=True),
+            lambda body: body['spec'].update(volumes=[{'name':'mount','hostPath':{'path':'/tmp'}}]),
+        )
+        for change in changes:
+            with self.subTest(change=change):
+                kube=FakeKube(); observer=O.CandidateObserver(self.input,kube); observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);change(altered)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+                self.assertFalse(receipt['matched_host_expectation'])
+
+    def test_allowed_response_accepts_harmless_server_defaults_and_equivalent_quantities(self):
+        self.ready()
+        def respond(body):
+            effective=copy.deepcopy(body)
+            effective['spec'].update(hostNetwork=False, volumes=[])
+            effective['spec']['containers'][0]['resources']['requests']['cpu']='0.01'
+            effective['spec']['containers'][0]['resources']['limits']['memory']='33554432'
+            return SimpleNamespace(returncode=0,stdout=json.dumps(effective),stderr='')
+        self.kube.respond=respond
+        self.assertEqual(self.observer.verify(progress=lambda v:None)['result'],'passed')
+
     def test_denial_reports_subset_without_claiming_complete_actual_violations(self):
         value=pod(privileged=True);value['spec']['hostNetwork']=True
         self.observer=O.CandidateObserver(prepared(value),self.kube);self.ready()
