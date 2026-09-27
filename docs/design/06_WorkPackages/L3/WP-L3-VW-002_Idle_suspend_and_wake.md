@@ -4,8 +4,8 @@ doc_id: "WP-L3-VW-002"
 title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-27
-version: "0.13"
+updated: 2026-09-28
+version: "0.14"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,14 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-28 descriptor-bound session journal writes — offline
+
+短命ownerの`SessionRPC._persist()`はjournal directoryのpath identity確認後、path指定の`mkstemp`/`replace`/fsyncを再実行していた。同UID actorが確認と書込みの間にjournal親pathを別treeへ差し替える境界を、隔離tempのopen前/直後の差し替え試験で固定した。新実装はdirectoryを`O_DIRECTORY|O_NOFOLLOW`で開き、owner/mode/inodeを照合し、`journal.json`既存fileのno-follow metadata、exclusive temp作成、atomic replace、directory fsync、temp cleanupを同fd相対に限定。成功replace後はtempを再削除せず、失敗時も作成した同一inodeに限ってcleanup（別actorが置換したtempは残す）。open前差し替えは保存前に拒否、open後差し替えは元directoryへだけ書き現path identity不一致で拒否、模擬保持先は空。元directoryや差し替えたpathは自動削除しない。これは同UID actorによる元dir内の改変、保存物の独立認証、owner再起動後の未知request回復・現在backend/最終cleanupの確認を証明しない。実archived session/backup・Colima/SQLには触れずWP local-partial。private記録は`tmp/local-experiment/warehouse-journal-fd-checks/20260928/`。
+
+復旧は新しいsession ownerの起動を止めたうえでコードだけを以前のローカルrevisionへ戻し、既存のunknown requestを再POSTせず保存runをそのまま残す。fd失敗時に残る元dir/別actorのtempも自動削除せずoperatorが個別確認する。
+
+Warehouse focused139件PASS、全回帰121 suites/3811実行＝3803PASS＋8skip、89.685秒、log SHA256 `5c73e804e69dca32c85856ba2d51e9b924d58e6924c41374158466c6ff62c472`。design-context/secret scanとdiff check PASS。最初の負例はopen後の正当な`UNSAFE_PATH`拒否を旧期待codeにして1件失敗し、期待を修正して再実行。最後の置換temp負例追加後にも全回帰を再実行した。専用Colima Stopped。
 
 ## 2026-09-27 closed session recovery guard — retained-run protection
 

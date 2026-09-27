@@ -14,7 +14,6 @@ import re
 import socket
 import stat
 import struct
-import tempfile
 import threading
 import time
 import uuid
@@ -238,29 +237,53 @@ class SessionRPC:
     def _persist(self):
         require(_identity(self.journal_directory, stat.S_ISDIR, 0o700) == self._journal_identity,
                 'JOURNAL_IDENTITY_CHANGED')
-        if self.journal_path.exists() or self.journal_path.is_symlink():
-            _identity(self.journal_path, stat.S_ISREG, 0o600)
-            require(self.journal_path.lstat().st_nlink == 1, 'UNSAFE_JOURNAL')
-        value = {'schema_version': 1, 'session_id': self.session_id,
-                 'requests': deepcopy(list(self._entries.values())), 'replies': deepcopy(self._replies),
-                 'error_codes': list(self._error_codes)}
-        raw = json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() + b'\n'
-        descriptor, temporary = tempfile.mkstemp(prefix='.journal-', dir=str(self.journal_directory))
         try:
-            with os.fdopen(descriptor, 'wb') as stream:
-                os.fchmod(stream.fileno(), 0o600)
-                stream.write(raw)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, self.journal_path)
-            descriptor = os.open(str(self.journal_directory), os.O_RDONLY)
+            directory = os.open(self.journal_directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        except OSError:
+            raise RPCError('JOURNAL_IDENTITY_CHANGED') from None
+        try:
+            state = os.fstat(directory)
+            require((state.st_dev, state.st_ino) == self._journal_identity and
+                    state.st_uid == os.getuid() and stat.S_IMODE(state.st_mode) == 0o700,
+                    'JOURNAL_IDENTITY_CHANGED')
             try:
-                os.fsync(descriptor)
+                current = os.stat('journal.json', dir_fd=directory, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                require(stat.S_ISREG(current.st_mode) and current.st_uid == os.getuid() and
+                        stat.S_IMODE(current.st_mode) == 0o600 and current.st_nlink == 1,
+                        'UNSAFE_JOURNAL')
+            value = {'schema_version': 1, 'session_id': self.session_id,
+                     'requests': deepcopy(list(self._entries.values())), 'replies': deepcopy(self._replies),
+                     'error_codes': list(self._error_codes)}
+            raw = json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() + b'\n'
+            temporary = '.journal-' + uuid.uuid4().hex
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                 0o600, dir_fd=directory)
+            created = os.fstat(descriptor)
+            replaced = False
+            try:
+                with os.fdopen(descriptor, 'wb') as stream:
+                    stream.write(raw)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, 'journal.json', src_dir_fd=directory, dst_dir_fd=directory)
+                replaced = True
+                os.fsync(directory)
             finally:
-                os.close(descriptor)
+                if not replaced:
+                    try:
+                        current = os.stat(temporary, dir_fd=directory, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        if (current.st_dev, current.st_ino) == (created.st_dev, created.st_ino):
+                            os.unlink(temporary, dir_fd=directory)
+            require(_identity(self.journal_directory, stat.S_ISDIR, 0o700) == self._journal_identity,
+                    'JOURNAL_IDENTITY_CHANGED')
         finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+            os.close(directory)
 
     def _read_request(self, connection):
         deadline, buffered = time.monotonic() + READ_TIMEOUT_SECONDS, bytearray()

@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-28
-version: "4.7"
+version: "4.8"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-28: Warehouse session journal stays on opened directory
+
+WP-L3-VW-002の短命ownerがjournal directoryのpath確認後にpathベースでtempを作成・置換していた境界を、開いたfd相対のexclusive temp・atomic replace・fsync・cleanupへ変更。隔離tempでopen前の親path差し替えは拒否、open後の差し替えでは元dirにのみ保存し現path identity不一致で拒否、模擬保持先は空。失敗時に別actorが置換したtempを削除しない負例も確認。Warehouse focused139件PASS。実保持session/backup、VM/SQLには接続しない。同UID actorによる元dir内改変や保存物独立証明・owner再起動要求回復・現在状態/最終cleanupは未達。WP local-partial。private記録は`tmp/local-experiment/warehouse-journal-fd-checks/20260928/`。
+
+全回帰121 suites/3811実行＝3803PASS＋8skip、89.685秒、log SHA256 `5c73e804e69dca32c85856ba2d51e9b924d58e6924c41374158466c6ff62c472`。design-context/secret scan・diff check PASS。初回の負例はopen後の正当な`UNSAFE_PATH`拒否を旧期待codeにして失敗し、修正後通過。最後の置換temp負例追加後に全回帰を再実行した。専用Colima Stopped。
 
 ## 2026-09-28: bounded live Policy candidate response check
 

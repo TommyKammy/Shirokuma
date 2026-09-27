@@ -76,6 +76,82 @@ class SessionRPCTest(unittest.TestCase):
         self.thread.start()
         return self.rpc
 
+    def test_journal_directory_swap_after_open_never_writes_into_replacement(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        original = self.output / 'original-journal'
+        replacement = self.output / 'replacement'
+        replacement.mkdir(mode=0o700)
+        actual_open = os.open
+        swapped = False
+
+        def swap_after_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            descriptor = actual_open(path, flags, *args, **kwargs)
+            if not swapped and str(path) == str(self.rpc.journal_directory):
+                swapped = True
+                self.rpc.journal_directory.rename(original)
+                self.rpc.journal_directory.symlink_to(replacement, target_is_directory=True)
+            return descriptor
+
+        self.rpc._error_codes.append('TEST_MARKER')
+        with mock.patch.object(R.os, 'open', side_effect=swap_after_open):
+            with self.assertRaisesRegex(R.RPCError, 'UNSAFE_PATH|JOURNAL_IDENTITY_CHANGED'):
+                self.rpc._persist()
+        self.assertTrue(swapped)
+        self.assertEqual(list(replacement.iterdir()), [])
+        self.assertEqual(json.loads((original / 'journal.json').read_text())['error_codes'], ['TEST_MARKER'])
+
+    def test_journal_directory_swap_before_open_does_not_write(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        original = self.output / 'original-journal'
+        replacement = self.output / 'replacement'
+        replacement.mkdir(mode=0o700)
+        before = self.rpc.journal_path.read_bytes()
+        actual_open = os.open
+        swapped = False
+
+        def swap_before_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if not swapped and str(path) == str(self.rpc.journal_directory):
+                swapped = True
+                self.rpc.journal_directory.rename(original)
+                self.rpc.journal_directory.symlink_to(replacement, target_is_directory=True)
+            return actual_open(path, flags, *args, **kwargs)
+
+        self.rpc._error_codes.append('TEST_MARKER')
+        with mock.patch.object(R.os, 'open', side_effect=swap_before_open):
+            with self.assertRaisesRegex(R.RPCError, 'JOURNAL_IDENTITY_CHANGED'):
+                self.rpc._persist()
+        self.assertTrue(swapped)
+        self.assertEqual((original / 'journal.json').read_bytes(), before)
+        self.assertEqual(list(replacement.iterdir()), [])
+
+    def test_failed_journal_replace_does_not_delete_a_replaced_temp(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        original = self.rpc.journal_path.read_bytes()
+        replacement = b'OTHER ACTOR FILE'
+        replaced_name = []
+        actual_unlink = os.unlink
+
+        def replace_with_other_file(source, target, *, src_dir_fd, dst_dir_fd):
+            self.assertEqual(target, 'journal.json')
+            self.assertEqual(src_dir_fd, dst_dir_fd)
+            actual_unlink(source, dir_fd=src_dir_fd)
+            with os.fdopen(os.open(source, os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                                   0o600, dir_fd=src_dir_fd), 'wb') as stream:
+                stream.write(replacement)
+            replaced_name.append(source)
+            raise OSError('injected replace failure')
+
+        with mock.patch.object(R.os, 'replace', side_effect=replace_with_other_file):
+            with self.assertRaises(OSError):
+                self.rpc._persist()
+        self.assertEqual(self.rpc.journal_path.read_bytes(), original)
+        self.assertEqual((self.rpc.journal_directory / replaced_name[0]).read_bytes(), replacement)
+
     def wire(self, body, headers=None, request_line=b'POST /v1/transition HTTP/1.1\r\n'):
         if isinstance(body, dict):
             body = json.dumps(body).encode()
