@@ -70,3 +70,23 @@ def accept(record, probe, *, operation_id, worker_digest, boot_id,
             all(type(result[field]) is int and 0 <= result[field] <= 10_000
                 for field in ('regular_file_count','directory_count')))
     return dict(result)
+
+
+def accept_with_clock(record, probe, *, operation_id, worker_digest, boot_id,
+                      start_sample, probe_sample, now_sample):
+    """Offline candidate requiring matching Darwin clock observations.
+
+    Samples must be taken by the trusted host sampler; injected structures do
+    not prove provenance, and this function never contacts a VM.
+    """
+    from tools.local_experiment.finops import host_clock as H
+    try:window=H.validate(start_sample,probe_sample,now_sample)
+    except H.ClockError:
+        raise ReceiptError('CLEANUP_UNVERIFIED') from None
+    require(type(probe) is dict and type(probe.get('observed_monotonic')) in (int,float) and
+            math.isfinite(probe['observed_monotonic']) and
+            abs(probe['observed_monotonic']-window['probe_monotonic'])<=0.001)
+    return accept(record,probe,operation_id=operation_id,worker_digest=worker_digest,
+                  boot_id=boot_id,host_boot_id=window['host_boot_id'],
+                  operation_started_monotonic=window['start_monotonic'],
+                  now_monotonic=window['now_monotonic'])

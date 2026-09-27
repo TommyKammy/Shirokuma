@@ -132,6 +132,11 @@ offline source-bundle checker now hashes two agreeing bounded reads of the
 three fixed local VM-side Python sources. Its digest is **not** a proof that a
 remote worker executed those bytes; the supervisor still accepts a caller-
 supplied correlation digest. Neither offline check enables volume traversal.
+The separate Darwin host-clock fixture gate compares boot session UUID,
+awake Mach time and sleep-inclusive Mach time across operation/probe/end
+samples. It rejects substantial suspend, reboot, clock regression and stale
+samples before a private receipt is accepted. It is not a live VM read, and
+its finite tolerance does not prove the absence of brief host sleeps.
 
 ## Fixed host directory references (v5)
 

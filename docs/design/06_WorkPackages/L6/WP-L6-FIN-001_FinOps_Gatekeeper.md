@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.19"
+version: "0.20"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse host sleep/boot時刻境界（2026-09-27・offline fixture）
+
+`host_clock.py`でDarwin boot session UUID、sleepを除く`mach_absolute_time`と含む`mach_continuous_time`を同一timebaseで読取り。boot読取を両時計で挟むlocal sampleと、operation開始・probe・終了の3 sampleを照合するprivate契約を追加。boot変化、逆行、30秒operation/10秒probe age超、両時計の経過差50ms超、probe側のhost時刻不一致を拒否してから、従来のreceipt gateを適用する。synthetic sleep/reboot/逆行/古いprobeをnegative試験し、macOS時計をread-only smoke。**実際のhost sleep/rebootは誘発していない。** 50ms許容差内の短いsleep・不真正な注入sample・VM側実行/cleanupを排除できず、live採用にはrunner自身が操作全期間のclockとbootを取得する必要がある。専用Colima起動/SSH/保持volume走査なし。AgentHouse `used_bytes=null / NOT_MEASURED`、WP local-partial。
+
+focused159件＝152PASS＋Linux専用7skip、全回帰121suites/3774実行＝3766PASS＋8skip、log SHA256 `e16315604b12d387cca9b0e936bb391b46344c16be10135a9672be16a6c862b7`。design-context/secret scan PASS。限定private証拠は`tmp/local-experiment/finops-host-clock-checks/20260927/`。ColimaはStopped、保存v7原本SHA不変。
 
 ## AgentHouse worker source bundle相関（2026-09-27・offline）
 

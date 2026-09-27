@@ -197,6 +197,25 @@ Before a retained scan, pin and verify the VM-side worker source and establish
 an independent reconnect/reap check. Neither the current Linux fixture nor
 the Docker metadata transport grants scan permission.
 
+## 2026-09-27 host boot / sleep-sensitive clock fixture gate
+
+`host_clock.py` reads the Darwin `kern.bootsessionuuid` and pairs
+`mach_absolute_time` (awake) with `mach_continuous_time` (sleep-inclusive)
+using the kernel timebase. Sampling brackets the boot reads and rejects a
+long/inconsistent sample. A pure three-sample validator fails closed if boot
+IDs change, a clock regresses, the operation/probe ages exceed the existing
+30/10-second bounds, or awake and continuous elapsed times differ by over
+50 ms. `accept_with_clock` also binds the receipt probe's host timestamp to
+its supplied clock sample before invoking the existing private receipt gate.
+Synthetic sleep/reboot/reset/stale/mismatched-probe cases are rejected and a
+local read-only macOS smoke obtains the native clocks. **No actual host sleep
+or reboot was induced.** The 50 ms tolerance and sampling gaps cannot prove
+the total absence of short sleeps or that injected samples came from the
+trusted host. A future runner must collect the samples itself, spanning the
+whole operation and probe without unobserved gaps, and separately authenticate
+the VM/worker/cleanup. A receipt plus this offline fixture is not scan
+authorization. AgentHouse bytes remain `NOT_MEASURED`.
+
 ## 2026-09-27 offline host receipt gate
 
 `linux_volume_receipt_gate.py` adds a pure acceptance boundary for a terminal

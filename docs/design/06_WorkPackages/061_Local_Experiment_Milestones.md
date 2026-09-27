@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.89"
+version: "3.90"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse host sleep/boot offline clock gate
+
+WP-L6-FIN-001にDarwin `kern.bootsessionuuid`とMach awake/continuous二時計を用いたread-only host sample、および開始/probe/終了3点のprivate receipt前置gateを追加。boot変更・逆行・30秒/10秒超・差分50ms超・probe時刻不一致をfixtureで拒否、現hostの時計は短いread-only smokeのみ。実host sleep/reboot・VM接続・保持volume走査は行わず、50ms未満のsleepやhost sample真正性、VM source/cleanupの証明ではない。public report変更なし、AgentHouse `null / NOT_MEASURED`、WP local-partial。限定証拠は`tmp/local-experiment/finops-host-clock-checks/20260927/`。
+
+focused159件＝152PASS＋Linux専用7skip、全回帰121suites/3774実行＝3766PASS＋8skip（既存1＋Linux専用7）、86.95秒、log SHA256 `e16315604b12d387cca9b0e936bb391b46344c16be10135a9672be16a6c862b7`。design-context/secret scan PASS。Colima Stopped、保存v7原本SHA `b21ff1ec38ee62029aa128a7ff15b7d4388381ffc95b917c736eecc81e08e824`不変。
 
 ## 2026-09-27: AgentHouse local VM-source bundle correlation
 
