@@ -107,13 +107,13 @@ func newWarehouseCommand(action string, client warehouseTransitionClient) *cobra
 		},
 	}
 	command.Flags().StringVar(&sessionID, "session", "", "bounded local session ID (32 lowercase hexadecimal characters)")
-	command.Flags().StringVar(&requestID, "request-id", "", "request UUID; reuse the same ID to check an unconfirmed operation")
+	command.Flags().StringVar(&requestID, "request-id", "", "request UUID; reuse only with the same live owner (inspect saved-request after loss)")
 	command.Flags().StringVar(&profile, "profile", localExperimentProfile, "warehouse profile: local-experiment")
 	return command
 }
 
 func warehouseUnconfirmed(request warehouseTransitionRequest) error {
-	return fmt.Errorf("warehouse transition not confirmed; session=%s request_id=%s; check again with the same --request-id %s", request.SessionID, request.RequestID, request.RequestID)
+	return fmt.Errorf("warehouse transition not confirmed; session=%s request_id=%s; inspect saved journal with warehouse saved-request --session %s --request-id %s (read-only); retry only with this ID while the same owner is alive or in replay grace; never resubmit after owner exit or under a new session", request.SessionID, request.RequestID, request.SessionID, request.RequestID)
 }
 
 func newWarehouseRequestID(reader io.Reader) (string, error) {

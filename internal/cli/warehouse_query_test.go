@@ -96,9 +96,23 @@ func TestWarehouseQueryLostReplyNeverRetriesAndRetainsIdentity(t *testing.T) {
 		out, err := warehouseQueryCommand(t, client, "query", "XS", "--session", testWarehouseSession, "--request-id", testWarehouseRequest)
 		if err == nil || len(client.requests) != 1 || out != "" || strings.Contains(err.Error(), "PRIVATE") ||
 			!strings.Contains(err.Error(), testWarehouseRequest) || !strings.Contains(err.Error(), testWarehouseSession) ||
+			!strings.Contains(err.Error(), "warehouse saved-request --session "+testWarehouseSession+" --request-id "+testWarehouseRequest) ||
+			!strings.Contains(err.Error(), "read-only") || !strings.Contains(err.Error(), "never resubmit after owner exit") ||
 			!strings.Contains(err.Error(), "15-second") {
 			t.Fatalf("uncertain reply contract lost: %v %s", err, out)
 		}
+	}
+}
+
+func TestWarehouseQueryGeneratedIDOnLostReplyCanOnlyBeLookedUpUnderOriginalSession(t *testing.T) {
+	client := &fakeWarehouseQueryClient{call: func(context.Context, warehouseTransitionRequest) (warehouseQueryResponse, error) {
+		return warehouseQueryResponse{}, context.DeadlineExceeded
+	}}
+	out, err := warehouseQueryCommand(t, client, "query", "XS", "--session", testWarehouseSession)
+	if err == nil || out != "" || len(client.requests) != 1 ||
+		!strings.Contains(err.Error(), "warehouse saved-request --session "+testWarehouseSession+" --request-id "+client.requests[0].RequestID) ||
+		!strings.Contains(err.Error(), "never resubmit after owner exit") {
+		t.Fatalf("generated query identity lost: output=%q err=%v", out, err)
 	}
 }
 

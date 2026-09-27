@@ -81,14 +81,14 @@ func newWarehouseQueryCommand(client warehouseQueryClient) *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&sessionID, "session", "", "existing query-mode session ID (32 lowercase hexadecimal characters)")
-	command.Flags().StringVar(&requestID, "request-id", "", "request UUID; reuse only this ID to check an unconfirmed request")
+	command.Flags().StringVar(&requestID, "request-id", "", "request UUID; reuse only with the same live owner (inspect saved-request after loss)")
 	command.Flags().StringVar(&profile, "profile", localExperimentProfile, "warehouse profile: local-experiment")
 	group.AddCommand(command)
 	return group
 }
 
 func warehouseQueryUnconfirmed(request warehouseTransitionRequest) error {
-	return fmt.Errorf("warehouse query not confirmed; session=%s request_id=%s; retry only the same session and --request-id while its owner is alive or in its 15-second replay grace; no automatic resubmission", request.SessionID, request.RequestID)
+	return fmt.Errorf("warehouse query not confirmed; session=%s request_id=%s; inspect saved journal with warehouse saved-request --session %s --request-id %s (read-only); retry only with this ID while the same owner is alive or in its 15-second replay grace; never resubmit after owner exit or under a new session", request.SessionID, request.RequestID, request.SessionID, request.RequestID)
 }
 
 func validateWarehouseQueryRequest(request warehouseTransitionRequest) error {

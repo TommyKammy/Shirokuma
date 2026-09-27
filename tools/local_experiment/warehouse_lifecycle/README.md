@@ -126,6 +126,13 @@ Use `--repo-root` only if running outside the checkout. Missing UUIDs still
 mean `not-recorded-in-snapshot`, **not** proof of non-execution. No owner recovery,
 SQL retry, backend observation or cleanup verification is performed.
 
+If `chill`, `wake` or `warehouse query` loses a reply, its error identifies the
+original session and UUID and points to this read-only lookup. Do not interpret
+the archived result as proof of current state or authorization to replay.
+Only the **same still-live owner** (including its bounded replay grace) can
+replay an already recorded response for the same UUID; after owner exit, do not
+send the request to a new session, even if the saved lookup is missing or pending.
+
 ## Query-triggered wake
 
 The optional query session accepts a fixed caller SELECT after XS is chilled:

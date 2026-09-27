@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.9"
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,12 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-27 lost-reply guidance across CLI paths — offline
+
+`chill/wake`の通信失敗時に旧「同じIDでもう一度確認」としか示さない誤解を修正。`chill/wake`と`warehouse query`のいずれも元session/UUIDを保持し、固定`warehouse saved-request --session ... --request-id ...`の**read-only保存照会**を先に案内する。同じUUIDのRPC再送は**同じownerが生存中（有界replay graceを含む）に限る**と明記し、owner退出後/別sessionへの再送を禁じる。保存上のpending/不在を「未実行」や再POST許可に変換しない。自動再送、live owner判定、実backend/cleanup確認、保持run変更なし。既存transport・owner・保存statusの実行契約は不変。local-partial。private検証は`tmp/local-experiment/warehouse-lost-reply-guidance-checks/20260927/`。
+
+明示UUIDと自動生成UUIDの両方でRPC failure時に元session/UUIDが診断に残り、追加呼出し0・部分stdoutなしを確認。`gofmt`、`go test ./...`、`go vet ./...` PASS。全回帰121 suites/3794実行＝3786PASS＋8skip、90.383秒、log SHA256 `c82d2efd24e8becbe18cab532e84774fdfbd755c72b8db977d693dbb3a9d1053`。design-context/secret scan PASS、Colima Stopped。
 
 ## 2026-09-27 archived request lookup in Go CLI — offline
 

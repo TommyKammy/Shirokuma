@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.97"
+version: "3.98"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: lost-reply safe lookup guidance
+
+WP-L3-VW-002の`chill/wake`と`warehouse query`の不確定な返答時に、元session/UUIDによる`warehouse saved-request`のread-only照会を案内。再送は同じ生存owner・有界grace内の同一IDに限ること、owner退出後や別sessionへ再送しないことを明記。保存上の欠損/pendingは実未実行や再POST許可ではない。CLI診断・help/READMEのみ変更し、owner/transport/保存journal/実runtimeは変更しない。private証拠は`tmp/local-experiment/warehouse-lost-reply-guidance-checks/20260927/`。WP local-partial。
+
+明示/自動生成UUIDの通信失敗で保存照会案内・元identity保持・追加RPCなし・部分stdoutなしを確認。`gofmt`、`go test ./...`、`go vet ./...` PASS、全回帰121 suites/3794実行＝3786PASS＋8skip、90.383秒、log SHA256 `c82d2efd24e8becbe18cab532e84774fdfbd755c72b8db977d693dbb3a9d1053`。design-context/secret scan PASS、Colima Stopped。
 
 ## 2026-09-27: archived warehouse request lookup from Go CLI
 

@@ -127,8 +127,23 @@ func TestWarehouseLostReplyPreservesRequestIDWithoutRawError(t *testing.T) {
 		return warehouseTransitionResponse{}, errors.New("raw Authorization private-token")
 	}}
 	output, err := warehouseCommand(t, client, "chill", "XS", "--session", testWarehouseSession, "--request-id", testWarehouseRequest)
-	if err == nil || !strings.Contains(err.Error(), "same --request-id "+testWarehouseRequest) || output != "" || strings.Contains(err.Error(), "private-token") {
+	if err == nil || len(client.requests) != 1 || output != "" || strings.Contains(err.Error(), "private-token") ||
+		!strings.Contains(err.Error(), "warehouse saved-request --session "+testWarehouseSession+" --request-id "+testWarehouseRequest) ||
+		!strings.Contains(err.Error(), "read-only") || !strings.Contains(err.Error(), "same owner is alive") ||
+		!strings.Contains(err.Error(), "never resubmit after owner exit") {
 		t.Fatalf("unsafe or ambiguous failure: output=%q err=%v", output, err)
+	}
+}
+
+func TestWarehouseGeneratedIDOnLostReplyCanOnlyBeLookedUpUnderOriginalSession(t *testing.T) {
+	client := &fakeWarehouseClient{call: func(context.Context, warehouseTransitionRequest) (warehouseTransitionResponse, error) {
+		return warehouseTransitionResponse{}, context.DeadlineExceeded
+	}}
+	output, err := warehouseCommand(t, client, "wake", "XS", "--session", testWarehouseSession)
+	if err == nil || output != "" || len(client.requests) != 1 ||
+		!strings.Contains(err.Error(), "warehouse saved-request --session "+testWarehouseSession+" --request-id "+client.requests[0].RequestID) ||
+		!strings.Contains(err.Error(), "never resubmit after owner exit") {
+		t.Fatalf("generated request identity lost: output=%q err=%v", output, err)
 	}
 }
 
