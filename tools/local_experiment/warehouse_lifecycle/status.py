@@ -74,9 +74,10 @@ def _pairs(items):
     return result
 
 
-def project(raw,token):
+def project(raw,token,request_id=None):
     require(type(raw) is bytes and 0<len(raw)<=MAX_JOURNAL_BYTES and
             type(token) is str and re.fullmatch('[0-9a-f]{32}',token) is not None)
+    require(request_id is None or RPC.canonical_uuid(request_id))
     try:
         value=json.loads(raw.decode('utf-8'),object_pairs_hook=_pairs,
                          parse_constant=lambda _:require(False))
@@ -86,7 +87,7 @@ def project(raw,token):
                 type(value['replies']) is list and len(value['replies'])<=16 and
                 type(value['error_codes']) is list and len(value['error_codes'])<=16)
         require(all(type(code) is str and re.fullmatch('[A-Z_]{1,64}',code) for code in value['error_codes']))
-        seen={};actions=[]
+        seen={};actions=[];match=None
         for entry in value['requests']:
             require(type(entry) is dict and set(entry)=={'request','state','response','error_code'})
             request=RPC.parse_request(json.dumps(entry['request']).encode(),token,allow_query=True)
@@ -102,6 +103,11 @@ def project(raw,token):
                 require(state!='unknown' or result in ('unknown','failed'))
                 require(error is None or result not in ('verified','noop'))
             actions.append({'action':request['action'],'recorded_result':result})
+            if request['request_id']==request_id:
+                match={'request_id':request_id,'observation':'recorded-in-snapshot',
+                       'recorded_action':request['action'],'recorded_result':result,
+                       'operation_id':response['operation_id'] if response is not None else None,
+                       'receipt_sha256':response['receipt_sha256'] if response is not None else None}
         for reply in value['replies']:
             require(type(reply) is dict)
             request={key:reply.get(key) for key in RPC.REQUEST_KEYS}
@@ -111,28 +117,40 @@ def project(raw,token):
             if reply['result'] in ('verified','noop'):
                 require(original['state']=='completed' and original['request']==request and
                         original['response']==reply)
-        return {'schema_version':1,'session_id':token,'journal_sha256':hashlib.sha256(raw).hexdigest(),
+        output={'schema_version':1,'session_id':token,'journal_sha256':hashlib.sha256(raw).hexdigest(),
                 'observation':'saved-journal-only','runtime_state':'unknown',
                 'recorded_actions':actions,'reply_count':len(value['replies']),
                 'recorded_error_count':len(value['error_codes'])}
+        if request_id is not None:
+            output['request_lookup']=match or {'request_id':request_id,'observation':'not-recorded-in-snapshot',
+                    'recorded_action':None,'recorded_result':None,'operation_id':None,'receipt_sha256':None}
+        return output
     except (ValueError,TypeError,KeyError,AttributeError,RecursionError,UnicodeError,RPC.RPCError):
         raise StatusError('JOURNAL_UNVERIFIED') from None
 
 
-def read(token,root=RUNS):
-    try:return project(_read(Path(root),token),token)
+def read(token,root=RUNS,request_id=None):
+    try:
+        require(request_id is None or RPC.canonical_uuid(request_id))
+        return project(_read(Path(root),token),token,request_id)
     except (OSError,ValueError,TypeError):raise StatusError('JOURNAL_UNVERIFIED') from None
 
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('session_id',nargs='?')
     parser.add_argument('--with-saved-completion',action='store_true')
+    parser.add_argument('--request-id')
+    parser.add_argument('--request-id-from-env',action='store_true')
     args=parser.parse_args(argv)
     # Make exports command-line variables as environment, avoiding token text
     # interpolation into its shell recipe. Direct CLI calls can pass an argument.
     token=args.session_id if args.session_id is not None else os.environ.get('WAREHOUSE_LIFECYCLE_RUN_TOKEN')
+    request_id=(os.environ.get('WAREHOUSE_LIFECYCLE_REQUEST_ID') if args.request_id_from_env
+                else args.request_id)
     try:
-        result=read(token,RUNS)
+        if args.request_id_from_env and (args.request_id is not None or not RPC.canonical_uuid(request_id)):
+            raise StatusError('JOURNAL_UNVERIFIED')
+        result=read(token,RUNS,request_id)
         if args.with_saved_completion:
             from tools.local_experiment.warehouse_lifecycle import status_completion as completion
             claim=completion.read(token,RUNS)

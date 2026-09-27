@@ -91,6 +91,25 @@ independent check of actual cleanup, backend state, audit delivery or execution
 provenance. `runtime_state` stays `unknown`, and nothing is restarted or replayed.
 The original journal-only status command and its output remain unchanged.
 
+To locate **one original request UUID** after its reply is lost, without
+retransmitting it:
+
+```sh
+rtk make local-warehouse-session-request-status \
+  WAREHOUSE_LIFECYCLE_RUN_TOKEN=<session-id> \
+  WAREHOUSE_LIFECYCLE_REQUEST_ID=<original-request-uuid>
+```
+
+This reads the same fixed saved journal and adds `request_lookup` for that exact
+canonical UUID. `recorded-in-snapshot` identifies the journal's stored action,
+result and optional operation/receipt correlation IDs. `pending` and `unknown`
+are never changed into success. `not-recorded-in-snapshot` has null result and
+**does not prove no operation ran** (a lost or incomplete journal is possible).
+It never connects to the owner, sends an RPC or replays SQL. Both Make values
+are passed through environment variables, not interpolated into a shell recipe.
+The old all-entries status output remains byte-identical; the optional saved
+completion claim refers to its entire session, never an absent request ID.
+
 ## Query-triggered wake
 
 The optional query session accepts a fixed caller SELECT after XS is chilled:

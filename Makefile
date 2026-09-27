@@ -701,6 +701,10 @@ local-warehouse-session-status:
 .PHONY: local-warehouse-session-completion
 local-warehouse-session-completion:
 	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/status.py --with-saved-completion
+
+.PHONY: local-warehouse-session-request-status
+local-warehouse-session-request-status:
+	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/status.py --request-id-from-env
 local-warehouse-lifecycle-recover:
 	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/run.py recover --run-token "$(WAREHOUSE_LIFECYCLE_RUN_TOKEN)"
 test-local-warehouse-lifecycle:

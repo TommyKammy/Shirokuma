@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.95"
+version: "3.96"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: archived XS request-ID lookup without replay
+
+WP-L3-VW-002の保存RPC journalを元のcanonical request UUIDで1件だけ確認するoffline入口を追加。saved entryがあれば記録上のaction/result・operation/receipt相関を返し、`pending/unknown`は未確認のまま。ID不在は`not-recorded-in-snapshot`＋nullで、未実行の証明とは呼ばない。Makeのtoken/UUIDはshell recipeへ展開せず環境で渡し、異常なUUIDはjournal読取前に拒否。実archived2 sessionでquery/wake ID一致、存在しないIDのnullと旧全件status JSONのbyte不変を確認。owner/Trino/k3s接続・SQL再送・runtime変更なし、Colima停止、WP local-partial。private証拠は`tmp/local-experiment/warehouse-session-request-checks/20260927/`。
+
+warehouse focused5 suites/163件すべてPASS、全回帰121 suites/3794実行＝3786PASS＋8skip、88.177秒、log SHA256 `ff01430e0896ba09903310dc65a9aaf0713eb94d8693de2a066983fb7cd97dc6`。design-context/secret scan PASS、元journal SHA不変。記録上の不在はネットワーク到達や実行不在の証明ではない。
 
 ## 2026-09-27: archived XS session saved completion correlation
 

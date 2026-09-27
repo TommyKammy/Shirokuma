@@ -4,8 +4,8 @@ doc_id: "WP-L3-VW-002"
 title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-18
-version: "0.7"
+updated: 2026-09-27
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,14 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-27 archived request-ID lookup without replay — offline
+
+紛失したRPC応答の**元request UUID**を1件だけ照会する`make local-warehouse-session-request-status WAREHOUSE_LIFECYCLE_RUN_TOKEN=... WAREHOUSE_LIFECYCLE_REQUEST_ID=...`を追加。既存固定private journal readerの保存値にexact UUIDで束縛し、記録上のaction/result、operation IDとreceipt相関hash（ある場合）を投影する。`pending/unknown`を成功にしない。見つからないIDは`not-recorded-in-snapshot`＋null値であり、実際に要求が**未実行だったとは証明しない**。UUID不正は読取前に拒否し、Make引数をrecipeへ展開せず環境変数経由。既存all-entries status JSON bytesを維持し、ownerへのRPC/SQL再送や新たなGo CLI child実行は追加しない。
+
+実保存2sessionの元UUIDでquery/wakeの保存結果を個別照合し、存在しないcanonical UUIDはnot-recordedと確認。元journalの内容SHA不変、現warehouseは常にunknown。前回のopt-in完了claimはsession全体の保存相関であり、欠損requestの未実行証明にはならない。Colima停止、保持run/backup変更なし、owner再起動後のlive照合・要求回復・汎用warehouse/本番受入は未達。private証拠は`tmp/local-experiment/warehouse-session-request-checks/20260927/`。WP local-partial。
+
+warehouse focused5 suites/163件すべてPASS、全回帰121 suites/3794実行＝3786PASS＋8skip、88.177秒、log SHA256 `ff01430e0896ba09903310dc65a9aaf0713eb94d8693de2a066983fb7cd97dc6`。design-context/secret scan PASS。保存journal原本SHAと旧全件status JSONのbyte不変を確認。
 
 ## 2026-09-27 saved owner completion claim correlation — offline
 
