@@ -137,6 +137,11 @@ awake Mach time and sleep-inclusive Mach time across operation/probe/end
 samples. It rejects substantial suspend, reboot, clock regression and stale
 samples before a private receipt is accepted. It is not a live VM read, and
 its finite tolerance does not prove the absence of brief host sleeps.
+The VM `/proc` visibility contract is also offline: caller-supplied fixture
+mountinfo, namespace and process-stat bytes must show an unrestricted procfs,
+visible self/PID 1 and an exact target absence before projecting a private
+probe shape. It does not open the VM's real `/proc`, authenticate that input,
+or prove that the exact worker was reaped.
 
 ## Fixed host directory references (v5)
 

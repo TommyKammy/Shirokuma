@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.90"
+version: "3.91"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse VM procfs visibility fixture contract
+
+WP-L6-FIN-001のreceipt/probe取得境界として、純粋なfixture入力からprocfs mount ID/namespace/自己・PID 1可視性とtarget `ENOENT`を厳格に照合するprivate構造契約を追加。偽`EACCES`・隠れたprocfs、別namespace/上書きmount・壊れたstat/巨大入力を拒否し、既存wireとの形状互換を確認。ただし実VM `/proc`のkernel provenance・remote child cleanup・SSH真正性は全て未証明で、VM起動・SSH接続・保持volume走査なし。AgentHouse `null / NOT_MEASURED`、WP local-partial。private証拠は`tmp/local-experiment/finops-procfs-contract-checks/20260927/`。
+
+focused163件＝156PASS＋Linux専用7skip。全回帰121suites/3778実行＝3770PASS＋8skip（既存1＋Linux専用7）、87.19秒、log SHA256 `12b19f4eba69c0c1420875a5128197d86981d09f03c24fb9edda5ede2b571468`。design-context/secret scan PASS、Colima Stopped、保存v7原本SHA `b21ff1ec38ee62029aa128a7ff15b7d4388381ffc95b917c736eecc81e08e824`不変。
 
 ## 2026-09-27: AgentHouse host sleep/boot offline clock gate
 

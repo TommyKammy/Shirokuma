@@ -249,6 +249,26 @@ exit and prove the pinned file is actually used on a trusted connection before
 calling it an authenticated receipt channel. This offline boundary does not
 authorize retained-volume traversal or change `NOT_MEASURED`.
 
+## 2026-09-27 VM procfs visibility fixture contract
+
+`linux_volume_procfs_contract.py` projects the wire's VM/probe shape from
+**caller-supplied fixture input only**. It requires a bounded unambiguous
+`/proc` mountinfo entry with procfs root, expected mount ID and no `hidepid`
+restriction or PID-path override; consistent fdinfo mount ID; visible self and
+PID 1 stat, a single self `NSpid`, matching PID namespace links and bounded
+canonical process start ticks. A missing target is a candidate only with an
+explicit `ENOENT`, not permission errors or malformed stat. The fixture feeds
+the resulting shape through the existing bounded wire parser; this tests
+structural compatibility, **not** kernel provenance or VM authentication.
+
+There is no live procfs reader, no remote probe, and no proof that a process
+hidden by policy or remount could not look absent. A future authenticated VM
+runner must pin the actual `/proc` mount descriptor, verify its filesystem and
+namespace during the entire query, distinguish absence from inaccessible PID,
+and correlate it with the exact supervised child and same-boot receipt.
+Neither a synthetic `ENOENT` nor `query_complete=True` in this fixture grants
+retained-volume scan permission; public bytes remain `NOT_MEASURED`.
+
 ## 2026-09-27 offline receipt wire / SSH configuration contract
 
 `linux_volume_receipt_wire.py` validates a bounded (16 KiB), duplicate-key-free

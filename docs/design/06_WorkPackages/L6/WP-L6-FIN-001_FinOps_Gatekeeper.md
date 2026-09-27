@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.20"
+version: "0.21"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse VM procfs visibility（2026-09-27・offline fixture）
+
+`linux_volume_procfs_contract.py`で**callerが渡した模擬値のみ**を対象に、`/proc`のmountinfo/fdinfoのmount ID、procfs root/`hidepid`・PID path overrideなし、自己PIDとPID 1のstat・単一`NSpid`、PID/mount namespace linkとstart tickを有界検査。target不在は明示された`ENOENT`だけを候補とし、`EACCES`・欠損自己可視性・別namespace/不正mount・改ざんstatを拒否。既存receipt wireへのshape接続もfixtureで確認したが、**実VMの`/proc`は未読**。模擬`ENOENT`や`query_complete=True`はkernel由来の証明でもremote child cleanupでもない。認証済みVMでdescriptorをpinし、filesystem/namespace・PID可視性を実確認するまでlive receiptと保持volume走査は保留。Colima停止、AgentHouse `used_bytes=null / NOT_MEASURED`、WP local-partial。
+
+focused163件＝156PASS＋Linux専用7skip、全回帰121suites/3778実行＝3770PASS＋8skip、log SHA256 `12b19f4eba69c0c1420875a5128197d86981d09f03c24fb9edda5ede2b571468`。design-context/secret scan PASS、保存v7原本不変。限定private証拠は`tmp/local-experiment/finops-procfs-contract-checks/20260927/`。
 
 ## AgentHouse host sleep/boot時刻境界（2026-09-27・offline fixture）
 
