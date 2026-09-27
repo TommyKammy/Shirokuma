@@ -5,12 +5,18 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-09-27: pin workflow evidence writes to owned output fd
+
+policy focused101件PASS、全回帰121 suites/3806実行＝3798PASS＋8skip、90.172秒、log SHA256 `891e4be8b0312aa866a9ddefd4e029fdabc62ec4801f4518967f26cecbafe271`。design-context/secret scan PASS、専用Colima Stopped。private記録は`tmp/local-experiment/policy-candidate-anchored-writes-checks/20260927/`。
+
+前増分は出力directoryの**作成**までfdに固定したが、その後の`candidate.json`/他receipt/OTel span append/再読込が再びpathを辿った。隔離tempで作成直後に親を模擬保持treeへのsymlinkへ差し替えると、旧workflowは`candidate.json`を模擬保持先へ書く負例を再現。今回、workflowの作成後から完了まで開いた出力fdを保持し、JSONのatomic replace、span append/chmod、保存span再読込を同fd相対へ変更。append対象のsymlink・複数linkを拒否。差し替え後の完全workflowでは模擬保持treeは空、元dirにだけcandidate/result/spansが残り、終了時のpath identity不一致を`OUTPUT_PARENT_INVALID`で拒否。元dirを自動削除しない。保存statusは従来どおり現pathのread-only検証であり、この修正は外部同UID actorによる元dir内の内容改変や、保存物の独立認証・live admissionを証明しない。Kubernetes/モデル/実保持run/backup変更なし、Colima起動なし。WP local-partial。
 
 ## 2026-09-27: descriptor-bound output creation
 

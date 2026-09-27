@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "4.4"
+version: "4.5"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: pin policy candidate evidence writes to owned directory
+
+policy focused101件PASS、全回帰121 suites/3806実行＝3798PASS＋8skip、90.172秒、log SHA256 `891e4be8b0312aa866a9ddefd4e029fdabc62ec4801f4518967f26cecbafe271`。design-context/secret scan PASS、専用Colima Stopped。private記録は`tmp/local-experiment/policy-candidate-anchored-writes-checks/20260927/`。
+
+WP-L2-POL-001の出力directory作成後に親を差し替える隔離tempの負例では、旧`candidate.json`が模擬保持treeへ書かれた。出力fdをworkflow終了まで保持し、JSON receiptのatomic replaceとOTel span append/chmod/再読込をfd相対に限定。差し替え後の全workflowで模擬保持先は空、元dirだけにreceipt/spansが残り、終了時のpath identity不一致を拒否。symlink/hardlink spanも書込みなし拒否。これは同UID actorの元dir改変を排除せず、保存statusやlive admissionの証拠を昇格させない。Kubernetes/モデル/実保持run/backup変更なし、専用Colima Stopped、WP local-partial。
 
 ## 2026-09-27: descriptor-bound policy output creation
 

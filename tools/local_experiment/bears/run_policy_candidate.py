@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import time
 import uuid
@@ -41,18 +42,91 @@ def stamp():
 
 
 def persist(path, value):
-    """Atomically record an intent before any dry-run; no raw caller object is accepted here."""
-    temporary = path.with_name('.' + path.name + '.' + uuid.uuid4().hex)
-    try:
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), 'w') as stream:
-            stream.write(json.dumps(value, sort_keys=True, ensure_ascii=True) + '\n')
-            stream.flush(); os.fsync(stream.fileno())
-        os.replace(temporary, path)
-        fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try: os.fsync(fd)
+    """Atomically record only a receipt bound to the owned output directory."""
+    if not isinstance(path, AnchoredFile):
+        raise PolicyCandidateError('OUTPUT_FILE_INVALID')
+    path.write_json(value)
+
+
+class AnchoredFile:
+    def __init__(self, directory, name):
+        self.directory, self.name = directory, name
+
+    def _open(self, flags, mode=0o600):
+        fd = os.open(self.name, flags | os.O_NOFOLLOW, mode, dir_fd=self.directory.fd)
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600):
+            os.close(fd)
+            raise PolicyCandidateError('OUTPUT_FILE_INVALID')
+        return fd
+
+    def write_json(self, value):
+        temporary = '.' + self.name + '.' + uuid.uuid4().hex
+        try:
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=self.directory.fd)
+            with os.fdopen(fd, 'w') as stream:
+                stream.write(json.dumps(value, sort_keys=True, ensure_ascii=True) + '\n')
+                stream.flush(); os.fsync(stream.fileno())
+            os.replace(temporary, self.name, src_dir_fd=self.directory.fd, dst_dir_fd=self.directory.fd)
+            os.fsync(self.directory.fd)
+        finally:
+            try: os.unlink(temporary, dir_fd=self.directory.fd)
+            except FileNotFoundError: pass
+
+    def open(self, mode):
+        if mode != 'a' or self.name != 'spans.jsonl':
+            raise PolicyCandidateError('OUTPUT_FILE_INVALID')
+        return os.fdopen(self._open(os.O_WRONLY | os.O_APPEND | os.O_CREAT), mode)
+
+    def chmod(self, mode):
+        if mode != 0o600: raise PolicyCandidateError('OUTPUT_FILE_INVALID')
+        fd = self._open(os.O_RDONLY)
+        try: os.fchmod(fd, mode)
         finally: os.close(fd)
-    finally:
-        preserve_interruption(temporary.unlink, missing_ok=True)
+
+    def is_file(self):
+        try:
+            fd = self._open(os.O_RDONLY)
+            os.close(fd)
+            return True
+        except FileNotFoundError:
+            return False
+
+    def stat(self):
+        fd = self._open(os.O_RDONLY)
+        try: return os.fstat(fd)
+        finally: os.close(fd)
+
+    def read_text(self):
+        fd = self._open(os.O_RDONLY)
+        with os.fdopen(fd, 'r') as stream:
+            if os.fstat(stream.fileno()).st_size > 1024 * 1024:
+                raise PolicyCandidateError('OUTPUT_FILE_INVALID')
+            return stream.read(1024 * 1024 + 1)
+
+
+class AnchoredOutput:
+    def __init__(self, path, fd):
+        self.path, self.fd, self.name = path, fd, path.name
+
+    def __truediv__(self, name):
+        if name not in ('candidate.json', 'result.json', 'verification-progress.json',
+                        'observation.json', 'classification.json', 'verification.json', 'spans.jsonl'):
+            raise PolicyCandidateError('OUTPUT_FILE_INVALID')
+        return AnchoredFile(self, name)
+
+    def __enter__(self): return self
+
+    def __exit__(self, *args): os.close(self.fd)
+
+    def require_current(self):
+        try: info = os.stat(self.path, follow_symlinks=False)
+        except OSError: raise PolicyCandidateError('OUTPUT_PARENT_INVALID') from None
+        pinned = os.fstat(self.fd)
+        if (info.st_dev, info.st_ino) != (pinned.st_dev, pinned.st_ino):
+            raise PolicyCandidateError('OUTPUT_PARENT_INVALID')
 
 
 def create_output(output):
@@ -86,7 +160,13 @@ def create_output(output):
         if (parent.st_dev, parent.st_ino) != (os.fstat(fd).st_dev, os.fstat(fd).st_ino) or \
                 (child.st_dev, child.st_ino) != (anchored.st_dev, anchored.st_ino):
             raise PolicyCandidateError('OUTPUT_PARENT_INVALID')
-        os.fsync(fd)
+        child_fd = os.open(output.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+        try:
+            os.fsync(fd)
+            return AnchoredOutput(output, child_fd)
+        except BaseException:
+            os.close(child_fd)
+            raise
     finally:
         os.close(fd)
 
@@ -101,7 +181,11 @@ async def run(config, output, raw):
     validate_config(config)
     if config['active_provider'] != 'local':
         raise PolicyCandidateError('LOCAL_MODEL_REQUIRED')
-    create_output(output)
+    with create_output(output) as owned:
+        return await _run_owned(config, owned, prepared, evidence, truth)
+
+
+async def _run_owned(config, output, prepared, evidence, truth):
     persist(output / 'candidate.json', prepared.receipt())
     profile = config['providers']['local']
     model = PolicyProvider(profile)
@@ -223,6 +307,7 @@ async def run(config, output, raw):
         except Exception:
             result.update(result='failed', error_code='POLICY_CANDIDATE_SAVED_TRACE_VERIFICATION_FAILED')
     result['finished_at'] = stamp(); save()
+    output.require_current()
     return result
 
 

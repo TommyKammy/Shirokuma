@@ -100,7 +100,7 @@ class CandidateBearTests(CandidateRuntimeFixture, unittest.TestCase):
 
     def test_output_missing_parents_are_created_privately_without_following_links(self):
         target=Path(self.temp.name).resolve()/'new'/'nested'/TOKEN
-        R.create_output(target)
+        with R.create_output(target): pass
         self.assertEqual([p.stat().st_mode & 0o777 for p in (target.parent.parent,target.parent,target)],
                          [0o700]*3)
         with self.assertRaises(R.PolicyCandidateError):R.create_output(target)
@@ -123,6 +123,61 @@ class CandidateBearTests(CandidateRuntimeFixture, unittest.TestCase):
             with self.assertRaises(R.PolicyCandidateError):R.create_output(target)
         self.assertEqual(swapped,[True])
         self.assertFalse((retained/'fresh').exists())
+
+    def test_swap_after_output_creation_never_writes_candidate_into_retained_tree(self):
+        base=Path(self.temp.name).resolve()
+        live=base/'live';live.mkdir(mode=0o700)
+        retained=base/'retained';retained.mkdir(mode=0o700)
+        (retained/TOKEN).mkdir(mode=0o700)
+        self.output=live/TOKEN
+        create=R.create_output;persist=R.persist
+        def swap(output):
+            handle=create(output)
+            live.rename(base/'detached')
+            live.symlink_to(retained,target_is_directory=True)
+            return handle
+        def stop_after_first_write(path,value):
+            persist(path,value)
+            raise RuntimeError('stop after candidate receipt')
+        with patch.object(R,'create_output',side_effect=swap),patch.object(R,'persist',side_effect=stop_after_first_write):
+            with self.assertRaisesRegex(RuntimeError,'stop after candidate receipt'):
+                self.run_workflow()
+        self.assertEqual(list((retained/TOKEN).iterdir()),[])
+
+    def test_swapped_output_keeps_all_receipts_and_spans_in_original_directory(self):
+        base=Path(self.temp.name).resolve()
+        live=base/'live';live.mkdir(mode=0o700)
+        retained=base/'retained';retained.mkdir(mode=0o700)
+        (retained/TOKEN).mkdir(mode=0o700)
+        self.output=live/TOKEN
+        create=R.create_output
+        def swap(output):
+            handle=create(output)
+            live.rename(base/'detached')
+            live.symlink_to(retained,target_is_directory=True)
+            return handle
+        with patch.object(R,'create_output',side_effect=swap):
+            with self.assertRaisesRegex(R.PolicyCandidateError,'OUTPUT_PARENT_INVALID'):
+                self.run_workflow()
+        self.assertEqual(list((retained/TOKEN).iterdir()),[])
+        files={p.name for p in (base/'detached'/TOKEN).iterdir()}
+        self.assertIn('candidate.json',files);self.assertIn('spans.jsonl',files)
+        self.assertIn('result.json',files)
+
+    def test_span_append_rejects_symlink_and_hardlink_without_mutating_target(self):
+        base=Path(self.temp.name).resolve()
+        retained=base/'retained-span';retained.write_text('unchanged');retained.chmod(0o600)
+        target=base/'new'/TOKEN
+        with R.create_output(target) as owned:
+            span=owned/'spans.jsonl'
+            linked=target/'spans.jsonl'
+            for link in (lambda:linked.symlink_to(retained),lambda:os.link(retained,linked)):
+                with self.subTest(link=link):
+                    link()
+                    with self.assertRaises((R.PolicyCandidateError,OSError)):
+                        with span.open('a') as stream:stream.write('unexpected')
+                    self.assertEqual(retained.read_text(),'unchanged')
+                    linked.unlink()
 
     def test_bad_baseline_prevents_model_and_dryrun(self):
         self.kube.namespace['metadata']['labels']={}

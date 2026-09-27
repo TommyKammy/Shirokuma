@@ -48,9 +48,13 @@ Do not remove linked or retained paths to recover from a rejected output path.
 Output directory creation traverses components with `O_NOFOLLOW` and uses
 parent descriptors for each `mkdir`, rejecting symlink redirection even if a
 parent is swapped after preflight. It rechecks pathname identity before using
-the new directory. Later evidence writes still use pathnames, so continuous
-adversarial swaps *after* this check are not covered; do not treat directory
-creation as a full race-proof transaction.
+the new directory. The workflow holds that directory fd while atomically
+replacing its JSON receipts, appending spans and reading spans back. Swapping
+a parent after creation cannot redirect those writes to another directory;
+a changed pathname identity prevents successful completion. The read-only
+status command still validates the *current* path, not an independently
+authenticated historical directory. Another same-UID actor changing files
+inside the owned directory is outside this guarantee.
 Raw input, names, images, API responses, model text and exception messages are
 not retained. Private receipts contain hashes, transforms, safe features, the
 host answer, validated plan, admission result and four local audit spans.
