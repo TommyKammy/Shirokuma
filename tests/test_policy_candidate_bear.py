@@ -87,6 +87,16 @@ class CandidateBearTests(CandidateRuntimeFixture, unittest.TestCase):
         with self.assertRaises(R.PolicyCandidateError):self.run_workflow()
         self.assertEqual(protected.read_text(),'retained');self.assertEqual(self.calls,[]);self.assertEqual(self.kube.reads,[])
 
+    def test_output_parent_symlink_never_creates_outside_directory(self):
+        base=Path(self.temp.name).resolve()
+        retained=base/'retained';retained.mkdir(mode=0o700)
+        link=base/'redirect';link.symlink_to(retained, target_is_directory=True)
+        outside=retained/'created-by-workflow'
+        with self.assertRaises(R.PolicyCandidateError):
+            R.create_output(link/'created-by-workflow'/TOKEN)
+        self.assertFalse(outside.exists())
+        self.assertEqual(list(retained.iterdir()),[])
+
     def test_bad_baseline_prevents_model_and_dryrun(self):
         self.kube.namespace['metadata']['labels']={}
         result=self.run_workflow()

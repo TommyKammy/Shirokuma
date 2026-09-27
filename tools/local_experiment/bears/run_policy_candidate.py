@@ -58,6 +58,10 @@ def persist(path, value):
 def create_output(output):
     if not re.fullmatch('[0-9a-f]{32}', output.name) or output.exists() or output.is_symlink():
         raise PolicyCandidateError('OUTPUT_NOT_FRESH')
+    # Checking only after mkdir can create directories through an existing
+    # symlink into an unrelated (possibly retained) tree before refusing it.
+    if any(path.is_symlink() for path in [output.parent, *output.parent.parents]):
+        raise PolicyCandidateError('OUTPUT_PARENT_INVALID')
     output.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     if any(path.is_symlink() for path in [output.parent, *output.parent.parents]):
         raise PolicyCandidateError('OUTPUT_PARENT_INVALID')

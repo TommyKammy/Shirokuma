@@ -5,12 +5,18 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-09-27: reject linked output ancestor before mkdir
+
+policy focused96件PASS、全回帰121 suites/3801実行＝3793PASS＋8skip、89.067秒、log SHA256 `ad77fdba20917904274cb424d5d4737ea9a95b7daa13b574e25b2ca161ae157a`。design-context/secret scan PASS、専用Colima Stopped。private記録は`tmp/local-experiment/policy-candidate-output-ancestor-checks/20260927/`。隔離tempの模擬保持treeのみを負例に使用し、実保持dataに変更なし。
+
+Standalone候補workflowの`create_output()`は親pathのsymlink検査より先に`mkdir(parents=True)`を呼んでいた。保存先の祖先を別の保持treeへのsymlinkにすると、拒否エラーを返しながらリンク先へ新しいディレクトリを作ることを隔離tempで再現。既存祖先のsymlinkを作成**前**に拒否し、作成後の再検査も維持した。これにより既存リンク経由の意図しない書込みを防ぐ。競合する外部actorが検査と作成の間にpathを入れ替える状況までの原子的な防御は未証明。Kubernetes/モデル/保持run/backupには接続せず、root以外へ新しいartifactは残していない。復旧は拒否されたpathを自動で掃除せず、operatorが保存先を確認して新tokenで新規試行する。WP local-partial。
 
 ## 2026-09-27: candidate allowed response content guard (offline)
 

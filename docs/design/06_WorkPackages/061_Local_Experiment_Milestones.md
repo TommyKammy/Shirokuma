@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "4.2"
+version: "4.3"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: policy candidate output ancestor preflight
+
+policy focused96件PASS、全回帰121 suites/3801実行＝3793PASS＋8skip、89.067秒、log SHA256 `ad77fdba20917904274cb424d5d4737ea9a95b7daa13b574e25b2ca161ae157a`。design-context/secret scan PASS、専用Colima Stopped。private記録は`tmp/local-experiment/policy-candidate-output-ancestor-checks/20260927/`。
+
+WP-L2-POL-001の保存workflowで親path祖先のsymlinkを`mkdir(parents=True)`後に検査していたため、拒否されてもリンク先へ新ディレクトリが残る負例をisolated tempで再現。作成前にもsymlink検査を置き、既存リンク経由では書き込まず拒否する。作成後の既存検査も残す。攻撃者による検査・mkdir間の競合までは保証しない。statusの`unknown`/pendingは再分類せず、Kubernetes/モデル/保持run/backup変更なし。Colima起動なし、WP local-partial。
 
 ## 2026-09-27: bounded Pod success-response correlation
 
