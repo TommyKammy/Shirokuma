@@ -487,10 +487,29 @@ class SessionRPC:
             require(_identity(self.socket_directory, stat.S_ISDIR, 0o700) == self._directory_identity,
                     'SOCKET_DIRECTORY_CHANGED')
             if self._socket_identity is not None:
-                require(_identity(self.socket_path, stat.S_ISSOCK, 0o600) == self._socket_identity,
-                        'SOCKET_IDENTITY_CHANGED')
-                self.socket_path.unlink()
-                self._socket_identity = None
+                try:
+                    directory = os.open(self.socket_directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                except OSError:
+                    raise RPCError('SOCKET_DIRECTORY_CHANGED') from None
+                try:
+                    state = os.fstat(directory)
+                    require((state.st_dev, state.st_ino) == self._directory_identity and
+                            state.st_uid == os.getuid() and stat.S_IMODE(state.st_mode) == 0o700,
+                            'SOCKET_DIRECTORY_CHANGED')
+                    try:
+                        current = os.stat('control.sock', dir_fd=directory, follow_symlinks=False)
+                    except OSError:
+                        raise RPCError('SOCKET_IDENTITY_CHANGED') from None
+                    require(stat.S_ISSOCK(current.st_mode) and stat.S_IMODE(current.st_mode) == 0o600
+                            and current.st_uid == os.getuid() and
+                            (current.st_dev, current.st_ino) == self._socket_identity,
+                            'SOCKET_IDENTITY_CHANGED')
+                    os.unlink('control.sock', dir_fd=directory)
+                    self._socket_identity = None
+                    require(_identity(self.socket_directory, stat.S_ISDIR, 0o700) == self._directory_identity,
+                            'SOCKET_DIRECTORY_CHANGED')
+                finally:
+                    os.close(directory)
             try:
                 self.socket_directory.rmdir()
             except OSError:

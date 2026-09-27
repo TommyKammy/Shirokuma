@@ -572,6 +572,85 @@ class SessionRPCTest(unittest.TestCase):
         finally:
             replacement.close(); path.unlink(); original.rename(path)
 
+    def test_socket_parent_swap_after_open_does_not_remove_other_socket(self):
+        self.start()
+        self.stop()
+        directory = self.rpc.socket_directory
+        moved = directory.with_name(directory.name + '-moved')
+        decoy = self.output / 'decoy'
+        decoy.mkdir(mode=0o700)
+        other = decoy / 'control.sock'
+        replacement = socket.socket(socket.AF_UNIX)
+        replacement.bind(str(other))
+        other.chmod(0o600)
+        actual_open = os.open
+        swapped = False
+
+        def swap_after_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            descriptor = actual_open(path, flags, *args, **kwargs)
+            if str(path) == str(directory) and not swapped:
+                swapped = True
+                directory.rename(moved)
+                directory.symlink_to(decoy, target_is_directory=True)
+            return descriptor
+
+        try:
+            with mock.patch.object(R.os, 'open', side_effect=swap_after_open):
+                with self.assertRaises(R.RPCError):
+                    self.rpc.close()
+            self.assertTrue(swapped)
+            self.assertTrue(other.is_socket(), 'replacement socket was deleted')
+            self.assertFalse((moved / 'control.sock').exists())
+        finally:
+            replacement.close()
+            if other.exists():
+                other.unlink()
+            if directory.is_symlink():
+                directory.unlink()
+            if moved.exists():
+                moved.rename(directory)
+            if self.rpc.socket_path.exists() and self.rpc._socket_identity is None:
+                self.rpc.socket_path.unlink()
+
+    def test_socket_parent_swap_before_open_refuses_cleanup(self):
+        self.start()
+        self.stop()
+        directory = self.rpc.socket_directory
+        moved = directory.with_name(directory.name + '-moved')
+        decoy = self.output / 'decoy'
+        decoy.mkdir(mode=0o700)
+        other = decoy / 'control.sock'
+        replacement = socket.socket(socket.AF_UNIX)
+        replacement.bind(str(other))
+        other.chmod(0o600)
+        actual_open = os.open
+        swapped = False
+
+        def swap_before_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if str(path) == str(directory) and not swapped:
+                swapped = True
+                directory.rename(moved)
+                directory.symlink_to(decoy, target_is_directory=True)
+            return actual_open(path, flags, *args, **kwargs)
+
+        try:
+            with mock.patch.object(R.os, 'open', side_effect=swap_before_open):
+                with self.assertRaisesRegex(R.RPCError, 'SOCKET_DIRECTORY_CHANGED'):
+                    self.rpc.close()
+            self.assertTrue(swapped)
+            self.assertTrue(other.is_socket())
+            self.assertTrue((moved / 'control.sock').is_socket())
+        finally:
+            replacement.close()
+            if other.exists():
+                other.unlink()
+            if directory.is_symlink():
+                directory.unlink()
+            if moved.exists():
+                moved.rename(directory)
+
     def test_symlink_output_and_socket_directory_are_rejected(self):
         link = self.output / 'link'
         link.symlink_to(self.output, target_is_directory=True)

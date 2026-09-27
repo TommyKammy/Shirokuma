@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-28
-version: "0.14"
+version: "0.15"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,14 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-28 descriptor-bound socket unlink on session close — offline
+
+終了処理の`close()`はsocket inode確認後にpathを再解決して`control.sock`をunlinkしていた。隔離tempで確認直後に所有socket directoryを移動し、現pathを模擬別socket treeへのsymlinkへ差し替えると、修正前は**別socketを削除**した（元socketは残存、後続rmdirは失敗）。新実装はsocket directoryをno-followで開き、fdのowner/mode/inodeとfd相対socketのtype/owner/mode/inodeを照合し、同fd相対でunlinkする。open前差し替えはunlink前に拒否、open後差し替えは元socketだけを除去して現pathの不一致を拒否し、模擬別socketは残る。通常の終了は従来どおりsocketと空directoryを除去。差し替えで拒否された元dirや別actorのsocketは自動削除しない。終了時の空directory `rmdir`には同UID actorによる最後のpath差し替え競合がなお残り、元dir内socketのcheck/unlink間の同UID改変も完全排除しない。保持run/backup・Colima/SQLは変更せず、owner再起動後の要求回復・現在backend/cleanupの独立証明ではない。WP local-partial。private検証は`tmp/local-experiment/warehouse-socket-close-fd-checks/20260928/`。
+
+復旧時は新session起動を止め、保存runを保持しコードのみ以前のローカルrevisionへ戻す。残った所有socket directoryは自動で消さず、個別にidentityと使用状況を確認する。未知requestは再POSTしない。
+
+Warehouse focused141件PASS、全回帰121 suites/3813実行＝3805PASS＋8skip、89.461秒、log SHA256 `8c0bb875073836ca6bc2658bbd5644231337dc79da1b43e15507c8d0f37f6720`。design-context/secret scanとdiff check PASS。修正前の負例は模擬別socketの削除と元socket残存、隔離testのteardown失敗を記録。修正中のopen後試験では元socket削除の期待値を旧値として1件失敗し、期待値修正後にfocused・全回帰通過。専用Colima Stopped。
 
 ## 2026-09-28 descriptor-bound session journal writes — offline
 

@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-28
-version: "4.8"
+version: "4.9"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-28: Warehouse session socket close is directory-bound
+
+WP-L3-VW-002の終了時socket `unlink`で、inode確認後の親path差し替えにより模擬別socketを削除する負例を隔離tempで再現。開いた元socket directory fdでidentityを確認し`control.sock`を相対unlinkへ変更。open前の差し替えは拒否、open後は元socketだけを除去して現path不一致を拒否し、模擬別socketは残る。通常終了のsocket/空directory cleanupは維持。同UID actorの元dir内改変や最後のpath-based空directory `rmdir`競合は未解消で、保存状態・最終cleanupの独立証明ではない。専用Colima停止、保持session/backup/SQL不変更。WP local-partial。private記録は`tmp/local-experiment/warehouse-socket-close-fd-checks/20260928/`。
+
+Warehouse focused141件PASS、全回帰121 suites/3813実行＝3805PASS＋8skip、89.461秒、log SHA256 `8c0bb875073836ca6bc2658bbd5644231337dc79da1b43e15507c8d0f37f6720`。design-context/secret scan・diff check PASS。修正前負例は模擬別socket削除とtest teardown失敗。修正中のopen後試験は元socket削除の旧期待値で1件失敗し、修正後に再実行通過。Colima Stopped。
 
 ## 2026-09-28: Warehouse session journal stays on opened directory
 
