@@ -563,6 +563,88 @@ class SessionRPCTest(unittest.TestCase):
         finally:
             directory.rmdir()
 
+    def test_startup_chmod_symlink_swap_does_not_change_other_file(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        decoy = self.output / 'other-file'
+        decoy.write_text('keep')
+        decoy.chmod(0o644)
+        actual_chmod = os.chmod
+        swapped = False
+
+        def swap_before_chmod(path, mode, *args, **kwargs):
+            nonlocal swapped
+            if not swapped and (str(path) == str(self.rpc.socket_path) or path == 'control.sock'):
+                swapped = True
+                self.rpc.socket_path.rename(self.rpc.socket_directory / 'original.sock')
+                self.rpc.socket_path.symlink_to(decoy)
+            return actual_chmod(path, mode, *args, **kwargs)
+
+        try:
+            with mock.patch.object(R.os, 'chmod', side_effect=swap_before_chmod):
+                with self.assertRaises((R.RPCError, OSError)):
+                    self.rpc.__enter__()
+            self.assertTrue(swapped)
+            self.assertEqual(stat.S_IMODE(decoy.stat().st_mode), 0o644)
+            self.assertEqual(decoy.read_text(), 'keep')
+        finally:
+            directory = self.rpc.socket_directory
+            if self.rpc._directory_identity is not None:
+                state = directory.lstat()
+                self.assertEqual((state.st_dev, state.st_ino), self.rpc._directory_identity)
+                if self.rpc.socket_path.is_symlink():
+                    self.rpc.socket_path.unlink()
+                original = directory / 'original.sock'
+                if original.is_socket():
+                    original.unlink()
+                self.assertEqual(list(directory.iterdir()), [])
+                directory.rmdir()  # Test-created and identity-checked only.
+                self.rpc._directory_identity = None
+
+    def test_startup_parent_swap_before_chmod_does_not_change_other_socket(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        directory = self.rpc.socket_directory
+        moved = directory.with_name(directory.name + '-moved')
+        decoy = self.output / 'decoy'
+        decoy.mkdir(mode=0o700)
+        other = decoy / 'control.sock'
+        replacement = socket.socket(socket.AF_UNIX)
+        replacement.bind(str(other))
+        other.chmod(0o644)
+        actual_chmod = os.chmod
+        swapped = False
+
+        def swap_parent(path, mode, *args, **kwargs):
+            nonlocal swapped
+            if not swapped and (str(path) == str(self.rpc.socket_path) or path == 'control.sock'):
+                swapped = True
+                directory.rename(moved)
+                directory.symlink_to(decoy, target_is_directory=True)
+            return actual_chmod(path, mode, *args, **kwargs)
+
+        try:
+            with mock.patch.object(R.os, 'chmod', side_effect=swap_parent):
+                with self.assertRaises(R.RPCError):
+                    self.rpc.__enter__()
+            self.assertTrue(swapped)
+            self.assertTrue(other.is_socket())
+            self.assertEqual(stat.S_IMODE(other.stat().st_mode), 0o644)
+        finally:
+            replacement.close()
+            if directory.is_symlink():
+                directory.unlink()
+            if moved.exists():
+                moved.rename(directory)
+            if self.rpc._directory_identity is not None:
+                state = directory.lstat()
+                self.assertEqual((state.st_dev, state.st_ino), self.rpc._directory_identity)
+                if self.rpc.socket_path.is_socket():
+                    self.rpc.socket_path.unlink()
+                self.assertEqual(list(directory.iterdir()), [])
+                directory.rmdir()  # Only this test's own disposable directory.
+                self.rpc._directory_identity = None
+            if other.exists():
+                other.unlink()
+
     def test_socket_inode_replacement_refuses_cleanup(self):
         self.start()
         self.stop()

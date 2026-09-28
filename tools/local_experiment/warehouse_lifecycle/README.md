@@ -49,6 +49,10 @@ same-UID actor replaces the directory. Unexpected entries in the opened owner
 directory fail close without deleting them. A retained empty directory prevents
 reusing that session ID. Do not treat saved cleanup receipts as proof that all
 host paths have been removed, or automatically delete an unverified directory.
+Startup checks the opened socket directory and applies `0600` without following
+socket symlinks, then checks the pathname again. Unix `bind` itself is still a
+pathname operation; these checks do not exclude a same-UID parent swap just
+before bind from creating a socket elsewhere. Do not adopt such a failed session.
 
 Every request has a UUID. If a response is lost, retry with the same
 `--request-id <uuid>` printed by the command; the owner replays its saved response

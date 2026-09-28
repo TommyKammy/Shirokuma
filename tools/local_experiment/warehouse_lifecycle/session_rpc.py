@@ -221,10 +221,31 @@ class SessionRPC:
             raise RPCError('SOCKET_COLLISION') from None
         self._directory_identity = _identity(self.socket_directory, stat.S_ISDIR, 0o700)
         try:
-            self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            self._listener.bind(str(self.socket_path))
-            os.chmod(self.socket_path, 0o600)
-            self._socket_identity = _identity(self.socket_path, stat.S_ISSOCK, 0o600)
+            try:
+                directory = os.open(self.socket_directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            except OSError:
+                raise RPCError('SOCKET_DIRECTORY_CHANGED') from None
+            try:
+                state = os.fstat(directory)
+                require((state.st_dev, state.st_ino) == self._directory_identity and
+                        state.st_uid == os.getuid() and stat.S_IMODE(state.st_mode) == 0o700,
+                        'SOCKET_DIRECTORY_CHANGED')
+                self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                self._listener.bind(str(self.socket_path))
+                current = os.stat('control.sock', dir_fd=directory, follow_symlinks=False)
+                require(stat.S_ISSOCK(current.st_mode) and current.st_uid == os.getuid(),
+                        'SOCKET_IDENTITY_CHANGED')
+                os.chmod('control.sock', 0o600, dir_fd=directory, follow_symlinks=False)
+                updated = os.stat('control.sock', dir_fd=directory, follow_symlinks=False)
+                require(stat.S_ISSOCK(updated.st_mode) and updated.st_uid == os.getuid() and
+                        stat.S_IMODE(updated.st_mode) == 0o600 and
+                        (updated.st_dev, updated.st_ino) == (current.st_dev, current.st_ino),
+                        'SOCKET_IDENTITY_CHANGED')
+                require(_identity(self.socket_directory, stat.S_ISDIR, 0o700) == self._directory_identity,
+                        'SOCKET_DIRECTORY_CHANGED')
+                self._socket_identity = updated.st_dev, updated.st_ino
+            finally:
+                os.close(directory)
             self._listener.listen(16)
             self._listener.settimeout(0.1)
             self._started = time.monotonic()

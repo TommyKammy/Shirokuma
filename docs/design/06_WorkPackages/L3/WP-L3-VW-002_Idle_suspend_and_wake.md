@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-28
-version: "0.16"
+version: "0.17"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,14 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-28 descriptor-bound socket permission update — offline
+
+開始時の`bind`後に絶対pathを辿って`os.chmod(control.sock, 0600)`していた。隔離tempでsocketを模擬別fileへのsymlinkに替えると、旧処理は別fileを`0644→0600`に変更（その後拒否）。親socket directoryのpathを模擬別socket treeへのsymlinkへ替える負例も対象にした。directoryをno-followで開きowner/mode/inodeを確認し、`bind`後のsocket type/ownerを同fd相対で照合、`follow_symlinks=False`のfd相対chmod後に同一inode/0600と現path identityを再確認する。socket entryまたは親をchmod直前に替える隔離試験では模擬先modeは不変、開始は拒否。実Unix owner/Go query integrationと通常socket closeは維持。実保持session/backup・Colima/SQLには触れず、WP local-partial。
+
+`socket.bind`自体はpathname APIでfd相対bindに対応せず、Darwinで隔離tempの`/dev/fd/<dirfd>/control.sock` bindは`ENOENT`。bind直前に親pathを差し替える同UID actorにより別treeへsocketが**作られない**ことまでは保証しない。process-global `chdir`による回避はownerの並行処理に影響するため採用しない。検査とchmodの間に同じ元dir内entryを改変できる同UID actorも排除しない。失敗時の拒否path/別actor所有物は自動削除しない。復旧は新ownerを止め、保存runを残しコードだけ以前のrevisionへ戻す。unknown要求は再POSTしない。private検証は`tmp/local-experiment/warehouse-socket-startup-permissions-checks/20260928/`。
+
+Warehouse focused145件PASS、全回帰121 suites/3817実行＝3809PASS＋8skip、90.081秒、log SHA256 `58e34c36b0fd6cb1172581a762d8f6097c5fccdbf8f1832ff94fdfe1ec3b60ec`。design-context/secret scan・diff check PASS、専用Colima Stopped。chmod前symlink負例は修正前に模擬file modeを変更して1件失敗、修正後の2負例/実Unix socket integrationと全回帰は通過。
 
 ## 2026-09-28 safe empty socket directory retention — offline
 

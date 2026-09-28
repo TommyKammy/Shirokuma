@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-28
-version: "4.10"
+version: "4.11"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-28: Warehouse socket startup chmod stays on opened directory
+
+WP-L3-VW-002でUnix socket bind後のpath-based chmodが、隔離tempの差し替えsymlink経由で模擬別fileを`0644→0600`へ変更する負例を再現。no-followで開いた元directory fd相対のsocket metadata確認・symlink非追従chmod・同一inode/modeと親identity再照合へ変更。socket entry/親pathをchmod直前に差し替える試験で模擬先mode不変と拒否を確認。bindはpathname APIのままなので、bind直前の親差し替えによる別treeへのsocket作成は未防御（`/dev/fd`経由bindはDarwin隔離tempで`ENOENT`）。同UID元dir内entry改変・現backend/cleanup/owner再起動回復も未達。Colima停止、保持session/backup/SQL不変更、WP local-partial。private記録は`tmp/local-experiment/warehouse-socket-startup-permissions-checks/20260928/`。
+
+Warehouse focused145件PASS、全回帰121 suites/3817実行＝3809PASS＋8skip、90.081秒、log SHA256 `58e34c36b0fd6cb1172581a762d8f6097c5fccdbf8f1832ff94fdfe1ec3b60ec`。design-context/secret scan・diff check PASS、専用Colima Stopped。修正前のchmod負例1件失敗を記録し、修正後の負例/実Unix socket integrationと全回帰は通過。
 
 ## 2026-09-28: retain empty Warehouse socket directory instead of unsafe rmdir
 
