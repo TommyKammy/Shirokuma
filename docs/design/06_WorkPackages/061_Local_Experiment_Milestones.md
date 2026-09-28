@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-28
-version: "4.11"
+version: "4.12"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-28: one live Policy Go CLI/Qwen/AgentHouse/admission path
+
+WP-L2-POL-001。専用Colimaを設定SHA記録後に一時起動。固定context native policy/binding 16件ready。既存loopback Qwenに期待model ID。Go CLI初回は停止中のAgentHouse/Lokiによる監査preflight失敗でmodel/API呼出0回。初回tokenを再送せず両サービスを既存設定で起動、新tokenの適合Pod候補1件でmodel 1回・dry-run 1回、model一致、4件の監査deliveryと4 spans、`passed/allowed`、producer応答照合`matched`。別Go statusは`producer-checked`、別API readで対象Pod不存在、前後16件inventory詳細一致。private記録は`tmp/local-experiment/policy-full-cli-live-checks/20260928/`。両サービスとColimaを元の停止状態に戻し、profile設定SHA不変。起動時TCP 53競合、停止時CNI busyと保持volume unmount出力があり、保持PVC/backup内容の完全不変は独立確認していない。保存statusの内部整合性、1回のlive producer照合、独立APIのPod不存在を区別。raw API応答やmodel原文は保存せず、汎用/本番受入なし、WP local-partial。
+
+全回帰121 suites/3817実行＝3809PASS＋8skip、94.1秒、log SHA256 `5f8c1b3498b3eb7aef84473f29dedf82492121710c1e39b7c94bc91013db781c`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-09-28: Warehouse socket startup chmod stays on opened directory
 
