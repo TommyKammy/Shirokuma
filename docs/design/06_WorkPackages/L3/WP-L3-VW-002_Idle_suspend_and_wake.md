@@ -4,8 +4,8 @@ doc_id: "WP-L3-VW-002"
 title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-28
-version: "0.17"
+updated: 2026-09-29
+version: "0.18"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,14 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-29: socket bind anchored by an isolated child — offline
+
+Darwin Unix `bind`はpathname APIで親fdを直接渡せないため、ownerのcwdは変えず、短命の`-I` Python子processに開いたprivate directory fdとprivate socketpairだけを渡す。子だけが`fchdir(fd)`して相対名`control.sock`をbind、listener fdを`SCM_RIGHTS`でownerへ返す。子終了・fd受領後に元directory fd相対でsocket type/owner/mode/inodeを照合してchmodし、元path identityを再確認する。子失敗・timeout・fd受領失敗は固定codeで拒否し、別pathの自動削除や再bindはしない。bind直前に元directory pathを別treeへのsymlinkへ差し替えた隔離試験では、子は開いた元directoryにのみsocketを作り、別treeは空のまま、ownerはpath不一致で拒否。元directory/socketは拒否時に自動削除せず保持。実Unix owner/Go CLI query統合も継続。private記録は`tmp/local-experiment/warehouse-fd-child-bind-checks/20260929/`。Colima/SQL・実保持session/backupには接続せず、WP `local-partial`。
+
+この境界は親path差し替えによる**別treeへのbind作成**を防ぐが、同UID actorが開いた元directory内の`control.sock` entryをbind後に改変する場合、保存物独立認証、owner再起動後の未知要求回復、現backend/最終cleanupの独立確認は未達。空private directoryの残置は継続し、socketや保持runを一括削除しない。復旧時は新ownerの起動を止め、保存runを維持し、unknown要求は再POSTしない。
+
+Warehouse focused5 suites/178件PASS、最終全回帰121 suites/3819実行＝3811PASS＋8skip、92.23秒、log SHA256 `fab2be92e1909bb913f549ea3a89bd681a56c3240528e9688b442c3624de0b9b`。初回のsocketpair context manager誤用でfocused 30件失敗、修正後通過。親差し替え負例の期待codeを実際の`UNSAFE_PATH`へ修正し再実行。最終fd受領例外処理の補強後にfocused・全回帰を再実行。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-09-28 descriptor-bound socket permission update — offline
 

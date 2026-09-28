@@ -4,13 +4,19 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-09-28
-version: "4.12"
+updated: 2026-09-29
+version: "4.13"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-29: fd-anchored child bind for Warehouse session socket
+
+WP-L3-VW-002。ownerのcwdを変えず、短命子processのみが検証済みprivate directory fdへ`fchdir`して相対Unix socketをbind、listener fdを`SCM_RIGHTS`で返す。bind直前の親path差し替え負例で模擬別treeは空、元directoryだけにsocketが作られ、ownerは現path不一致を拒否。子起動失敗も固定codeで拒否。既存socket identity/chmod/close負例と実Unix owner/Go CLI query統合を再確認。元dir内entryへの同UID actor改変は未防御、拒否時の元dir/socketは個別確認まで自動削除しない。Colima/SQL・保持session/backupは不変更、WP local-partial。private記録は`tmp/local-experiment/warehouse-fd-child-bind-checks/20260929/`。
+
+Warehouse focused5 suites/178件PASS、最終全回帰121 suites/3819実行＝3811PASS＋8skip、92.23秒、log SHA256 `fab2be92e1909bb913f549ea3a89bd681a56c3240528e9688b442c3624de0b9b`。最初のsocketpair context manager誤用の失敗と負例期待code修正後に再検証。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-09-28: one live Policy Go CLI/Qwen/AgentHouse/admission path
 

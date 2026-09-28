@@ -6,6 +6,7 @@ or that admission deadline. The owner must bound its own operations. Handlers ru
 in worker threads, one at a time; callers propagate their telemetry context.
 """
 from copy import deepcopy
+from contextlib import ExitStack, closing
 import ctypes
 import json
 import os
@@ -14,6 +15,8 @@ import re
 import socket
 import stat
 import struct
+import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -170,6 +173,41 @@ def peer_uid(connection):
     return user.value
 
 
+def bind_in_directory(directory):
+    """Use a child cwd anchored to directory; never resolve the parent path to bind."""
+    with ExitStack() as stack:
+        receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+        stack.enter_context(closing(receiver))
+        stack.enter_context(closing(sender))
+        receiver.settimeout(2)
+        try:
+            result = subprocess.run(
+                [sys.executable, '-I', str(Path(__file__).with_name('socket_bind.py')),
+                 str(directory), str(sender.fileno())],
+                pass_fds=(directory, sender.fileno()), stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, timeout=5, check=False)
+            require(result.returncode == 0, 'SOCKET_BIND_FAILED')
+            data, controls, flags, _ = receiver.recvmsg(1, socket.CMSG_SPACE(struct.calcsize('i')))
+            descriptors = [fd for level, kind, raw in controls
+                           if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS
+                           for fd in struct.unpack(f'{len(raw) // struct.calcsize("i")}i', raw)]
+            try:
+                require(data == b'B' and not flags & (socket.MSG_CTRUNC | socket.MSG_TRUNC)
+                        and len(descriptors) == 1,
+                        'SOCKET_BIND_FAILED')
+                descriptor = descriptors.pop()
+                try:
+                    return socket.socket(fileno=descriptor)
+                except BaseException:
+                    os.close(descriptor)
+                    raise
+            finally:
+                for fd in descriptors:
+                    os.close(fd)
+        except (OSError, subprocess.SubprocessError):
+            raise RPCError('SOCKET_BIND_FAILED') from None
+
+
 class SessionRPC:
     def __init__(self, session_id, output, handler, *, ttl_seconds=600, max_requests=16,
                  replay_grace_seconds=15, allow_query=False):
@@ -230,8 +268,7 @@ class SessionRPC:
                 require((state.st_dev, state.st_ino) == self._directory_identity and
                         state.st_uid == os.getuid() and stat.S_IMODE(state.st_mode) == 0o700,
                         'SOCKET_DIRECTORY_CHANGED')
-                self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                self._listener.bind(str(self.socket_path))
+                self._listener = bind_in_directory(directory)
                 current = os.stat('control.sock', dir_fd=directory, follow_symlinks=False)
                 require(stat.S_ISSOCK(current.st_mode) and current.st_uid == os.getuid(),
                         'SOCKET_IDENTITY_CHANGED')

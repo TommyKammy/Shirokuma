@@ -49,10 +49,17 @@ same-UID actor replaces the directory. Unexpected entries in the opened owner
 directory fail close without deleting them. A retained empty directory prevents
 reusing that session ID. Do not treat saved cleanup receipts as proof that all
 host paths have been removed, or automatically delete an unverified directory.
-Startup checks the opened socket directory and applies `0600` without following
-socket symlinks, then checks the pathname again. Unix `bind` itself is still a
-pathname operation; these checks do not exclude a same-UID parent swap just
-before bind from creating a socket elsewhere. Do not adopt such a failed session.
+Startup opens the private directory without following symlinks. A short-lived
+child inherits that directory descriptor, changes only its own cwd, binds the
+relative `control.sock` name, and passes the listener descriptor back to the
+owner. The owner never changes its process-wide cwd. It applies `0600` without
+following socket symlinks, then checks the original directory pathname again.
+A parent path swap just before bind cannot create a socket in the replacement
+tree; startup refuses if the original directory is no longer reachable at its
+expected path. A failed bind or displaced parent can leave a socket in the
+original private directory: preserve it for individual identity checks, not
+automatic deletion. Same-UID modifications *inside* the opened directory,
+including a `control.sock` entry swap, are not excluded by this boundary.
 
 Every request has a UUID. If a response is lost, retry with the same
 `--request-id <uuid>` printed by the command; the owner replays its saved response

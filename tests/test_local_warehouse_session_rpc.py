@@ -563,6 +563,55 @@ class SessionRPCTest(unittest.TestCase):
         finally:
             directory.rmdir()
 
+    def test_bind_parent_swap_never_creates_socket_in_decoy(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        directory = self.rpc.socket_directory
+        moved = directory.with_name(directory.name + '-moved')
+        decoy = self.output / 'decoy-bind'
+        decoy.mkdir(mode=0o700)
+        original_run = R.subprocess.run
+        cwd = os.getcwd()
+        swapped = False
+
+        def swap_before_child(*args, **kwargs):
+            nonlocal swapped
+            if not swapped:
+                swapped = True
+                directory.rename(moved)
+                directory.symlink_to(decoy, target_is_directory=True)
+            return original_run(*args, **kwargs)
+
+        try:
+            with mock.patch.object(R.subprocess, 'run', side_effect=swap_before_child):
+                with self.assertRaisesRegex(R.RPCError, 'UNSAFE_PATH'):
+                    self.rpc.__enter__()
+            self.assertTrue(swapped)
+            self.assertEqual(os.getcwd(), cwd)
+            self.assertEqual(list(decoy.iterdir()), [])
+            self.assertTrue((moved / 'control.sock').is_socket())
+        finally:
+            if directory.is_symlink():
+                directory.unlink()
+            if moved.exists():
+                moved.rename(directory)
+            if self.rpc._directory_identity is not None:
+                state = directory.lstat()
+                self.assertEqual((state.st_dev, state.st_ino), self.rpc._directory_identity)
+                if self.rpc.socket_path.is_socket():
+                    self.rpc.socket_path.unlink()
+                self.assertEqual(list(directory.iterdir()), [])
+                directory.rmdir()  # Test-owned disposable directory only.
+                self.rpc._directory_identity = None
+
+    def test_bind_child_failure_refuses_without_parent_cwd_change(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        cwd = os.getcwd()
+        with mock.patch.object(R.subprocess, 'run', side_effect=OSError('private-path')):
+            with self.assertRaisesRegex(R.RPCError, 'SOCKET_BIND_FAILED'):
+                self.rpc.__enter__()
+        self.assertEqual(os.getcwd(), cwd)
+        self.assertEqual(list(self.rpc.socket_directory.iterdir()), [])
+
     def test_startup_chmod_symlink_swap_does_not_change_other_file(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         decoy = self.output / 'other-file'
