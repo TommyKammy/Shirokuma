@@ -13,7 +13,7 @@ def main():
     directory = int(sys.argv[1])
     channel = socket.socket(fileno=int(sys.argv[2]))
     os.fchdir(directory)
-    os.umask(0o077)
+    os.umask(0o177)  # Bind creates the socket as 0600; the owner must not chmod an entry later.
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
         listener.bind('control.sock')
         channel.sendmsg([b'B'], [(socket.SOL_SOCKET, socket.SCM_RIGHTS,

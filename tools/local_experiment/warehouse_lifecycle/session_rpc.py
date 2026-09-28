@@ -270,9 +270,9 @@ class SessionRPC:
                         'SOCKET_DIRECTORY_CHANGED')
                 self._listener = bind_in_directory(directory)
                 current = os.stat('control.sock', dir_fd=directory, follow_symlinks=False)
-                require(stat.S_ISSOCK(current.st_mode) and current.st_uid == os.getuid(),
+                require(stat.S_ISSOCK(current.st_mode) and current.st_uid == os.getuid() and
+                        stat.S_IMODE(current.st_mode) == 0o600,
                         'SOCKET_IDENTITY_CHANGED')
-                os.chmod('control.sock', 0o600, dir_fd=directory, follow_symlinks=False)
                 updated = os.stat('control.sock', dir_fd=directory, follow_symlinks=False)
                 require(stat.S_ISSOCK(updated.st_mode) and updated.st_uid == os.getuid() and
                         stat.S_IMODE(updated.st_mode) == 0o600 and

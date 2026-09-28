@@ -51,15 +51,20 @@ reusing that session ID. Do not treat saved cleanup receipts as proof that all
 host paths have been removed, or automatically delete an unverified directory.
 Startup opens the private directory without following symlinks. A short-lived
 child inherits that directory descriptor, changes only its own cwd, binds the
-relative `control.sock` name, and passes the listener descriptor back to the
-owner. The owner never changes its process-wide cwd. It applies `0600` without
-following socket symlinks, then checks the original directory pathname again.
+relative `control.sock` name with a child-only `0177` umask, and passes the
+listener descriptor back to the owner. The owner never changes its process-wide
+cwd and never chmods the created socket: it requires `0600` from creation and
+checks the socket entry twice without following symlinks, then checks the
+original directory pathname again.
 A parent path swap just before bind cannot create a socket in the replacement
 tree; startup refuses if the original directory is no longer reachable at its
 expected path. A failed bind or displaced parent can leave a socket in the
 original private directory: preserve it for individual identity checks, not
 automatic deletion. Same-UID modifications *inside* the opened directory,
-including a `control.sock` entry swap, are not excluded by this boundary.
+including a `control.sock` entry swap, are not excluded by this boundary;
+an entry replaced after the last identity check can still make the listener
+unreachable or invalidate cleanup. A rejected session does not authorize
+deleting a different actor's socket.
 
 Every request has a UUID. If a response is lost, retry with the same
 `--request-id <uuid>` printed by the command; the owner replays its saved response

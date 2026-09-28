@@ -5,12 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-29
-version: "4.13"
+version: "4.14"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-29: Warehouse socket 0600 at bind creation
+
+WP-L3-VW-002。隔離Darwin tempの`umask(0177)`でUnix socket作成mode `0600`を確認。子processにのみ設定し、ownerのpost-bind chmodを削除して元fd相対の二重metadata照合/現path確認で拒否する。2回のstat間で元dirのsocket entryを別のtest-owned`0644` socketへ差し替えた負例で起動拒否、別socket mode不変。symlinkと親path差し替え負例・実Unix owner/Go CLI query integration継続。同UID actorの最終照合後の元dir entry変更やowner再起動後の未知要求・現backend/cleanup独立確認は未達。拒否時に別actorのentryを自動削除しない。Colima Stopped、保持session/backup/SQL不変更、WP local-partial。private記録は`tmp/local-experiment/warehouse-bind-create-mode-checks/20260929/`。
+
+Warehouse focused5 suites/179件PASS、log SHA256 `85302a6c6373a10db8b2845fbdbccdcec4ba80fdda2e448c4095fc6d0ed2f160`。socket swap時のcloseは余分なentryに`SOCKET_DIRECTORY_NOT_EMPTY`で拒否、別socketは変更・削除しない。
+
+全回帰121 suites/3820実行＝3812PASS＋8skip、94.22秒、log SHA256 `467c91a8e4ebacd726a7d7548adf28e44bf00a88611bed389f5586a502c729aa`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-09-29: fd-anchored child bind for Warehouse session socket
 

@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-29
-version: "0.18"
+version: "0.19"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,16 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-29: create 0600 socket without post-bind chmod — offline
+
+前増分のfd固定子processが作った`control.sock`を、ownerが一度statしてからfd相対`chmod`していた。同UID actorが元directory内のentryをこの間に別のsocketへ替えると、別socketのmodeを変更し得る。Darwin隔離tempで子processだけの`umask(0177)`によるUnix socket作成modeが`0600`であることを確認し、子のumaskを`0177`へ変更。ownerは`chmod`せず、元fd相対で`0600`/type/uid/inodeを2回照合してpath identityを確認する。隔離test-owned別socket（`0644`）へ2回のstat間でentryを置換した負例では起動を拒否し、別socketは`0644`のまま。symlink entryと親path差し替えの負例も拒否、実Unix owner/Go CLI query integrationを維持。private記録は`tmp/local-experiment/warehouse-bind-create-mode-checks/20260929/`。Colima/SQL・保持session/backup変更なし、WP `local-partial`。
+
+作成時modeの限定確認はDarwinの隔離tempと実Unix testの結果であり、任意OS/filesystemでの許可を推測しない。初期modeが`0600`でなければ修復chmodを行わず起動拒否。元directory内entryの2回の照合**後**の同UID置換は排除できず、listener到達・cleanupが失われ得る。拒否されたsocket/dirを自動削除しない。owner再起動後未知要求の回復、現在backend/最終cleanupの独立確認、保存物独立認証は未達。戻す場合は新owner起動を止め、保存runを維持してコードのみ戻し、unknown要求を再POSTしない。
+
+Warehouse focused5 suites/179件PASS（log SHA256 `85302a6c6373a10db8b2845fbdbccdcec4ba80fdda2e448c4095fc6d0ed2f160`）。socket swap負例では起動失敗時の保守的closeが余分なentryを検知し`SOCKET_DIRECTORY_NOT_EMPTY`で拒否する。別socket modeは不変で、自動削除なし。
+
+全回帰121 suites/3820実行＝3812PASS＋8skip、94.22秒、log SHA256 `467c91a8e4ebacd726a7d7548adf28e44bf00a88611bed389f5586a502c729aa`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-09-29: socket bind anchored by an isolated child — offline
 

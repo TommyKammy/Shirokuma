@@ -612,27 +612,28 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(os.getcwd(), cwd)
         self.assertEqual(list(self.rpc.socket_directory.iterdir()), [])
 
-    def test_startup_chmod_symlink_swap_does_not_change_other_file(self):
+    def test_startup_entry_swap_between_reads_does_not_change_other_file(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         decoy = self.output / 'other-file'
         decoy.write_text('keep')
         decoy.chmod(0o644)
-        actual_chmod = os.chmod
-        swapped = False
+        actual_stat = os.stat
+        reads = 0
 
-        def swap_before_chmod(path, mode, *args, **kwargs):
-            nonlocal swapped
-            if not swapped and (str(path) == str(self.rpc.socket_path) or path == 'control.sock'):
-                swapped = True
-                self.rpc.socket_path.rename(self.rpc.socket_directory / 'original.sock')
-                self.rpc.socket_path.symlink_to(decoy)
-            return actual_chmod(path, mode, *args, **kwargs)
+        def swap_before_second_read(path, *args, **kwargs):
+            nonlocal reads
+            if path == 'control.sock' and kwargs.get('dir_fd') is not None:
+                reads += 1
+                if reads == 2:
+                    self.rpc.socket_path.rename(self.rpc.socket_directory / 'original.sock')
+                    self.rpc.socket_path.symlink_to(decoy)
+            return actual_stat(path, *args, **kwargs)
 
         try:
-            with mock.patch.object(R.os, 'chmod', side_effect=swap_before_chmod):
+            with mock.patch.object(R.os, 'stat', side_effect=swap_before_second_read):
                 with self.assertRaises((R.RPCError, OSError)):
                     self.rpc.__enter__()
-            self.assertTrue(swapped)
+            self.assertEqual(reads, 2)
             self.assertEqual(stat.S_IMODE(decoy.stat().st_mode), 0o644)
             self.assertEqual(decoy.read_text(), 'keep')
         finally:
@@ -649,7 +650,49 @@ class SessionRPCTest(unittest.TestCase):
                 directory.rmdir()  # Test-created and identity-checked only.
                 self.rpc._directory_identity = None
 
-    def test_startup_parent_swap_before_chmod_does_not_change_other_socket(self):
+    def test_startup_socket_entry_swap_never_chmods_other_socket(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        directory = self.rpc.socket_directory
+        other = self.output / 'other.sock'
+        replacement = socket.socket(socket.AF_UNIX)
+        replacement.bind(str(other))
+        other.chmod(0o644)
+        actual_stat = os.stat
+        reads = 0
+
+        def replace_before_second_read(path, *args, **kwargs):
+            nonlocal reads
+            if path == 'control.sock' and kwargs.get('dir_fd') is not None:
+                reads += 1
+                if reads == 2:
+                    self.rpc.socket_path.rename(directory / 'original.sock')
+                    other.rename(self.rpc.socket_path)
+            return actual_stat(path, *args, **kwargs)
+
+        try:
+            with mock.patch.object(R.os, 'stat', side_effect=replace_before_second_read):
+                with mock.patch.object(R.os, 'chmod', side_effect=AssertionError('chmod after bind')):
+                    with self.assertRaisesRegex(R.RPCError, 'SOCKET_DIRECTORY_NOT_EMPTY'):
+                        self.rpc.__enter__()
+            self.assertEqual(reads, 2)
+            self.assertEqual(stat.S_IMODE(self.rpc.socket_path.lstat().st_mode), 0o644)
+        finally:
+            replacement.close()
+            if self.rpc._directory_identity is not None:
+                state = directory.lstat()
+                self.assertEqual((state.st_dev, state.st_ino), self.rpc._directory_identity)
+                if self.rpc.socket_path.is_socket():
+                    self.rpc.socket_path.unlink()
+                original = directory / 'original.sock'
+                if original.is_socket():
+                    original.unlink()
+                self.assertEqual(list(directory.iterdir()), [])
+                directory.rmdir()  # Test-created and identity-checked only.
+                self.rpc._directory_identity = None
+            if other.exists():
+                other.unlink()
+
+    def test_startup_parent_swap_between_reads_does_not_change_other_socket(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         directory = self.rpc.socket_directory
         moved = directory.with_name(directory.name + '-moved')
@@ -659,22 +702,23 @@ class SessionRPCTest(unittest.TestCase):
         replacement = socket.socket(socket.AF_UNIX)
         replacement.bind(str(other))
         other.chmod(0o644)
-        actual_chmod = os.chmod
-        swapped = False
+        actual_stat = os.stat
+        reads = 0
 
-        def swap_parent(path, mode, *args, **kwargs):
-            nonlocal swapped
-            if not swapped and (str(path) == str(self.rpc.socket_path) or path == 'control.sock'):
-                swapped = True
-                directory.rename(moved)
-                directory.symlink_to(decoy, target_is_directory=True)
-            return actual_chmod(path, mode, *args, **kwargs)
+        def swap_parent(path, *args, **kwargs):
+            nonlocal reads
+            if path == 'control.sock' and kwargs.get('dir_fd') is not None:
+                reads += 1
+                if reads == 2:
+                    directory.rename(moved)
+                    directory.symlink_to(decoy, target_is_directory=True)
+            return actual_stat(path, *args, **kwargs)
 
         try:
-            with mock.patch.object(R.os, 'chmod', side_effect=swap_parent):
+            with mock.patch.object(R.os, 'stat', side_effect=swap_parent):
                 with self.assertRaises(R.RPCError):
                     self.rpc.__enter__()
-            self.assertTrue(swapped)
+            self.assertEqual(reads, 2)
             self.assertTrue(other.is_socket())
             self.assertEqual(stat.S_IMODE(other.stat().st_mode), 0o644)
         finally:
