@@ -4,13 +4,21 @@ doc_id: "WP-L2-POL-001"
 title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-28
-version: "0.12"
+updated: 2026-09-29
+version: "0.13"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-09-29: bounded live full-CLI privileged denial
+
+専用`mac-studio-solo`をStoppedから設定SHA記録後に一時起動。固定contextでnative policy/binding 16件ready、既存loopback Qwenの期待model IDを確認し、既存の専用AgentHouse/Lokiだけを起動した。hostが`P01`だけを予測するprivileged Pod候補**1件**を新tokenのGo CLI `policy check --pod-stdin`に投入。model 1回でhost期待に一致し、server dry-run request_count=1、native拒否の報告も`P01`、`passed/denied`（CLI exit 2）。監査delivery4件・保存spans4件。保存Go `policy status`はread-onlyで`passed/denied`と`response_content_check=not-applicable`を示す。denyにallowed応答内容照合を誤って主張しない。別の固定context API readで対象Pod不存在、前後16件inventory詳細一致。入力manifest、API拒否原文、model原文は保存せず、private記録は`tmp/local-experiment/policy-full-cli-denied-checks/20260929/`および新tokenのprivate evidence。これは1候補のlive producerと同producer保存statusの整合であり、保存物の独立認証ではない。
+
+今回起動したAgentHouse/Lokiを停止し、Colimaを通常停止してStoppedとprofile設定SHA不変を確認。起動時TCP 53 forward競合、停止時`/var/lib/cni/` busyと保持Pod volume unmountの出力あり。保持PVC/backup内容と停止後guest状態の独立照合なし。policy apply/delete・実workload作成・外部公開なし。複数違反、任意Pod、後日のcluster状態や本番/人間受入へ昇格しない。WP `local-partial`を維持し、未知dry-runは同要求を自動再POSTしない。
+
+全回帰`make verify-local-experiment` 121 suites/3820実行＝3812PASS＋8skip、95.06秒、log SHA256 `0be1d921888b92296c1fd3c4417250fa5589aac7f637d3c372c045d4a91e79f8`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-09-28: bounded live Go CLI / Qwen / admission path
 

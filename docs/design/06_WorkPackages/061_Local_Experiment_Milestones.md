@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-29
-version: "4.14"
+version: "4.15"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-29: one live Policy privileged denial via full CLI
+
+WP-L2-POL-001。専用Colima/k3s固定contextでnative policy/binding 16件ready、loopback Qwen期待model ID。既存AgentHouse/Lokiを一時起動し、host期待`P01`のみのprivileged Pod候補を新tokenのGo CLIから1回実行。model 1回一致、監査delivery4件と4 spans、native server dry-run 1回の報告`P01`、`passed/denied`（exit 2）。別Go status read-onlyでは保存`passed/denied`と`not-applicable`。別API readでPod不存在、policy inventory前後16件詳細一致。private記録は`tmp/local-experiment/policy-full-cli-denied-checks/20260929/`。AgentHouse/LokiとColimaを元の停止状態へ戻し、profile設定SHA不変。起動時TCP 53競合と停止時CNI busy/保持volume unmount出力があり、PVC/backup内容の完全不変は独立照合していない。保存statusは現pathの内部整合性であり、raw API拒否原文・モデル原文や独立認証ではない。1候補限定で汎用/本番受入なし、WP local-partial。
+
+全回帰121 suites/3820実行＝3812PASS＋8skip、95.06秒、log SHA256 `0be1d921888b92296c1fd3c4417250fa5589aac7f637d3c372c045d4a91e79f8`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-09-29: Warehouse socket 0600 at bind creation
 
