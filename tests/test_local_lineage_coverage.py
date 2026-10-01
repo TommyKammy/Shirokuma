@@ -257,6 +257,59 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(json.loads((output / 'report.json').read_text()), report)
         self.assertIn('<html', (output / 'report.html').read_text())
 
+    def test_output_root_swap_never_writes_report_to_other_tree(self):
+        self.add_run()
+        report = self.collect()
+        root = Path(self.tmp.name) / 'reports'
+        original = Path(self.tmp.name) / 'original-reports'
+        other = Path(self.tmp.name) / 'other'
+        other.mkdir(mode=0o700)
+        real_directory = C.directory
+        swapped = False
+
+        def swap_after_validation(path, *, private=True):
+            nonlocal swapped
+            info = real_directory(path, private=private)
+            if path == root and not swapped:
+                swapped = True
+                root.rename(original)
+                root.symlink_to(other, target_is_directory=True)
+            return info
+
+        with patch.object(C, 'OUTPUT_ROOT', root), patch.object(C, 'directory', swap_after_validation):
+            with self.assertRaises((C.CoverageError, OSError)):
+                C.write_report(report)
+        self.assertTrue(swapped)
+        runs = list(original.iterdir())
+        self.assertEqual(len(runs), 1, 'pinned original did not receive the report')
+        self.assertEqual(json.loads((runs[0] / 'report.json').read_text()), report)
+        self.assertEqual(list(other.iterdir()), [], 'report escaped to a substituted tree')
+
+    def test_report_can_create_missing_private_checkout_parents_without_symlinks(self):
+        self.add_run()
+        report = self.collect()
+        project = Path(self.tmp.name) / 'project'
+        project.mkdir()
+        root = project / 'tmp/local-experiment/lineage-coverage'
+        with patch.object(C, 'ROOT', project), patch.object(C, 'OUTPUT_ROOT', root):
+            output = C.write_report(report)
+        self.assertEqual(json.loads((output / 'report.json').read_text()), report)
+        for path in (project / 'tmp', project / 'tmp/local-experiment', root, output):
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
+
+    def test_report_rejects_symlink_in_checkout_parent_without_foreign_write(self):
+        self.add_run()
+        report = self.collect()
+        project = Path(self.tmp.name) / 'project'
+        project.mkdir()
+        foreign = Path(self.tmp.name) / 'foreign'
+        foreign.mkdir()
+        (project / 'tmp').symlink_to(foreign, target_is_directory=True)
+        with patch.object(C, 'ROOT', project), patch.object(C, 'OUTPUT_ROOT', project / 'tmp/local-experiment/lineage-coverage'):
+            with self.assertRaises((C.CoverageError, OSError)):
+                C.write_report(report)
+        self.assertEqual(list(foreign.iterdir()), [])
+
 
 class Response(io.BytesIO):
     status = 200

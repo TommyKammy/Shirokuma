@@ -15,6 +15,14 @@ fixed loopback OpenMetadata server, and uses catalog GET requests. It does not
 call a model, change the catalog, rotate a password or initialize a service.
 Private JSON and self-contained HTML reports are written under
 `tmp/local-experiment/lineage-coverage/<run-token>/`.
+The writer creates any missing checkout-local parents through opened directory
+descriptors and writes the new private run directory and both files relative to
+those descriptors. It refuses symlink parents, non-private output roots, and a
+path displaced while writing. On such a refusal an already-created directory
+may remain at its original inode for manual inspection; it is not automatically
+removed or retried through a substituted path. No source/catalog/backup is
+deleted. Same-UID actors that can replace entries inside the already-open
+directory are not independently excluded by this pathname-to-fd check.
 
 ## Reading the result
 

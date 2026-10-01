@@ -4,13 +4,19 @@ doc_id: "WP-L5-LINEAGE-001"
 title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.5"
+updated: 2026-10-02
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-02: lineage report output pinned to owned directory descriptors
+
+`write_report`の従来の`directory(OUTPUT_ROOT)`確認とpathname `output.mkdir`間に親pathを差し替えると、隔離tempの模擬別treeへ新report JSON/HTMLを作成してしまうことを負例で再現。checkout内の未作成親は開いたdirectory fdから相対作成し、既存親/出力root/新runの所有・mode・inodeを照合する。新runと2固定fileはfd相対作成・fsyncし、最後に現pathと開いたfdのidentityを再照合してからreport pathを返す。差し替え後の模擬別treeは空、元inodeに作成されたreportは失敗時も消さず、手動確認に残す。既存rootへのsymlink親も書込み前に拒否。既存report・catalog・Data Plan保存物・backupは削除/再生成しない。模擬同UID actorが既に開いたprivate root内の新run entryを作成直後に改変する競合と、保存source/catalogの独立認証は未解決。
+
+実metadata API/VMは停止状態のまま使用せず、tempで生成したreportのみの機能検査。従来の歴史的分母10edge/10presentは再観測していない。既存のL5未達（全catalog・常時更新・column lineage・本番/人間受入）を残し`local-partial`。戻す場合は出力writer差分だけを以前のローカルrevisionへ戻し、差し替え負例で作ったprivate runも同一inodeを確認するまで削除しない。focused・全回帰の実測は[Milestones](../061_Local_Experiment_Milestones.md)へ記録する。
 
 ## Summary
 

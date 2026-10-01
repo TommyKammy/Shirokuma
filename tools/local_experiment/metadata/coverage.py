@@ -425,21 +425,76 @@ def collect(client, *, source_root=SOURCE_ROOT, evidence_reader=evidence.read_ev
 
 def write_report(report):
     from metadata.coverage_render import render
-    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
-    directory(OUTPUT_ROOT)
-    output = OUTPUT_ROOT / uuid.uuid4().hex
-    output.mkdir(mode=0o700)
-    fd = os.open(output / 'report.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'w') as stream:
-        stream.write(canonical(report) + '\n')
-        stream.flush()
-        os.fsync(stream.fileno())
-    fd = os.open(output / 'report.html', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'w') as stream:
-        stream.write(render(report))
-        stream.flush()
-        os.fsync(stream.fileno())
-    return output
+    json_body, html_body = canonical(report) + '\n', render(report)
+    require(OUTPUT_ROOT.is_absolute() and '..' not in OUTPUT_ROOT.parts, 'OUTPUT_BOUNDARY_INVALID')
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    parent = OUTPUT_ROOT.parent
+    # The normal checkout path may be absent on a fresh clone. Create only its
+    # relative parents from the already opened checkout, never via a pathname.
+    if parent.is_relative_to(ROOT):
+        parent_info = directory(ROOT, private=False)
+        parent_fd = os.open(ROOT, flags)
+        components = parent.relative_to(ROOT).parts
+    else:
+        parent_info = directory(parent, private=False)
+        parent_fd = os.open(parent, flags)
+        components = ()  # Test-only output roots have an existing parent.
+    try:
+        require((parent_info.st_dev, parent_info.st_ino) == (os.fstat(parent_fd).st_dev, os.fstat(parent_fd).st_ino),
+                'OUTPUT_BOUNDARY_INVALID')
+        for component in components:
+            try:
+                os.mkdir(component, mode=0o700, dir_fd=parent_fd)
+            except FileExistsError:
+                pass
+            child_fd = os.open(component, flags, dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = child_fd
+            require(os.fstat(parent_fd).st_uid == os.getuid(), 'OUTPUT_BOUNDARY_INVALID')
+        current_parent = directory(parent, private=False)
+        require((current_parent.st_dev, current_parent.st_ino) == (os.fstat(parent_fd).st_dev, os.fstat(parent_fd).st_ino),
+                'OUTPUT_BOUNDARY_INVALID')
+        try:
+            os.mkdir(OUTPUT_ROOT.name, mode=0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            pass
+        output_root_fd = os.open(OUTPUT_ROOT.name, flags, dir_fd=parent_fd)
+        try:
+            root_info = directory(OUTPUT_ROOT)
+            require((root_info.st_dev, root_info.st_ino) == (os.fstat(output_root_fd).st_dev, os.fstat(output_root_fd).st_ino),
+                    'OUTPUT_BOUNDARY_INVALID')
+            name = uuid.uuid4().hex
+            os.mkdir(name, mode=0o700, dir_fd=output_root_fd)
+            run_fd = os.open(name, flags, dir_fd=output_root_fd)
+            try:
+                run_info = os.fstat(run_fd)
+                entry_info = os.stat(name, dir_fd=output_root_fd, follow_symlinks=False)
+                require(run_info.st_uid == os.getuid() and stat.S_IMODE(run_info.st_mode) == 0o700 and
+                        (run_info.st_dev, run_info.st_ino) == (entry_info.st_dev, entry_info.st_ino),
+                        'OUTPUT_BOUNDARY_INVALID')
+                for filename, body in (('report.json', json_body), ('report.html', html_body)):
+                    fd = os.open(filename, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=run_fd)
+                    with os.fdopen(fd, 'w') as stream:
+                        stream.write(body)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                os.fsync(run_fd)
+                os.fsync(output_root_fd)
+                os.fsync(parent_fd)
+                output = OUTPUT_ROOT / name
+                current_root = directory(OUTPUT_ROOT)
+                current_run = directory(output)
+                require((current_root.st_dev, current_root.st_ino) ==
+                        (os.fstat(output_root_fd).st_dev, os.fstat(output_root_fd).st_ino) and
+                        (current_run.st_dev, current_run.st_ino) == (run_info.st_dev, run_info.st_ino),
+                        'OUTPUT_BOUNDARY_INVALID')
+                return output
+            finally:
+                os.close(run_fd)
+        finally:
+            os.close(output_root_fd)
+    finally:
+        os.close(parent_fd)
 
 
 def main():

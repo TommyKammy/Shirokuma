@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-02
-version: "4.16"
+version: "4.17"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-02: lineage report output directory stays fd-bound
+
+WP-L5-LINEAGE-001。旧`write_report`は出力root検証直後の親path差し替えで隔離tempの模擬別treeに新reportを作った。開いたcheckout/出力root/run directory fd相対のmkdir/file作成と各段階のidentity照合・最後の現path照合へ修正。修正後の負例では別treeは空、元inodeのprivate reportだけが残り、差し替えは失敗として扱う。未作成のcheckout内親directoryを安全に作る正例とsymlink親拒否負例も確認。保持catalog/metadata API/VMには接続せず、歴史的10/10edgeを今回再確認した結果とはしない。既存出力/backup削除なし。WP local-partial。
+
+lineage focused 37件PASS、log SHA256 `8cec2c1c8b8443bfa8625a7cd35f45dd005117711fb8dfeda48f09c2ba8bdbc4`。全回帰121 suites/3823実行＝3815 PASS＋8 skip、94.01秒、log SHA256 `b4134b7f890853f5484bdd95f90b219cf9e8b61752e78a7602e89096ac00b5ee`。design-context/secret scan・diff check PASS。private logは`tmp/local-experiment/lineage-coverage-writer-checks/20261002/`。VM Stopped。同UID actorの元root内entry改変、元保存物/現catalogの独立認証、全catalog・本番受入は未達。
 
 ## 2026-10-02: local doctor checks fixed Flux root source and revision shape
 
