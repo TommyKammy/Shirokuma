@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -25,6 +26,8 @@ const (
 	commandWaitDelay       = 2 * time.Second
 	maxReportedResources   = 10
 )
+
+var localFluxGitRevision = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}@sha1:[0-9a-f]{40}$`)
 
 type commandRunner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
@@ -79,8 +82,13 @@ type kubernetesResourceList struct {
 			DeletionTimestamp string `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Spec struct {
-			Suspend  bool `json:"suspend"`
-			Replicas *int `json:"replicas"`
+			Suspend   bool `json:"suspend"`
+			Replicas  *int `json:"replicas"`
+			SourceRef struct {
+				Kind      string `json:"kind"`
+				Name      string `json:"name"`
+				Namespace string `json:"namespace"`
+			} `json:"sourceRef"`
 		} `json:"spec"`
 		Status struct {
 			Replicas           int   `json:"replicas"`
@@ -88,7 +96,10 @@ type kubernetesResourceList struct {
 			ReadyReplicas      int   `json:"readyReplicas"`
 			UpdatedReplicas    int   `json:"updatedReplicas"`
 			ObservedGeneration int64 `json:"observedGeneration"`
-			Conditions         []struct {
+			Artifact           struct {
+				Revision string `json:"revision"`
+			} `json:"artifact"`
+			Conditions []struct {
 				Type               string `json:"type"`
 				Status             string `json:"status"`
 				ObservedGeneration int64  `json:"observedGeneration"`
@@ -271,12 +282,32 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was not valid JSON"}
 	}
 	kinds := map[string]int{}
-	rootPresent, rootSuspended := false, false
+	rootCount, rootSourceCount := 0, 0
+	rootSuspended := false
 	for _, resource := range resources.Items {
 		kinds[resource.Kind]++
 		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
 		isRoot := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
-		rootPresent = rootPresent || isRoot
+		isRootSource := resource.Kind == "GitRepository" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
+		if isRoot {
+			rootCount++
+			if localExperiment && resource.Metadata.Generation < 1 {
+				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
+			}
+			if localExperiment && (resource.Spec.SourceRef.Kind != "GitRepository" || resource.Spec.SourceRef.Name != "flux-system" ||
+				(resource.Spec.SourceRef.Namespace != "" && resource.Spec.SourceRef.Namespace != "flux-system")) {
+				unhealthy = append(unhealthy, resourceID+" (source reference mismatch)")
+			}
+		}
+		if isRootSource {
+			rootSourceCount++
+			if localExperiment && resource.Metadata.Generation < 1 {
+				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
+			}
+			if localExperiment && !localFluxGitRevision.MatchString(resource.Status.Artifact.Revision) {
+				unhealthy = append(unhealthy, resourceID+" (revision unverified)")
+			}
+		}
 		if localExperiment && isRoot && resource.Spec.Suspend && resource.Metadata.DeletionTimestamp == "" {
 			rootSuspended = true
 			continue
@@ -302,8 +333,11 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if kinds["GitRepository"] == 0 || kinds["Kustomization"] == 0 {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "Flux GitRepository and Kustomization resources are required"}
 	}
-	if localExperiment && !rootPresent {
-		unhealthy = append(unhealthy, "Kustomization/flux-system/flux-system (missing)")
+	if localExperiment && rootCount != 1 {
+		unhealthy = append(unhealthy, "Kustomization/flux-system/flux-system (missing or duplicated)")
+	}
+	if localExperiment && rootSourceCount != 1 {
+		unhealthy = append(unhealthy, "GitRepository/flux-system/flux-system (missing or duplicated)")
 	}
 	if len(unhealthy) > 0 {
 		sort.Strings(unhealthy)
@@ -311,10 +345,10 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		if len(reported) > maxReportedResources {
 			reported = reported[:maxReportedResources]
 		}
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("%d Flux resource(s) are suspended or not Ready; first %d: %s", len(unhealthy), len(reported), strings.Join(reported, ", "))}
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("%d Flux resource(s) failed readiness or fixed-source checks; first %d: %s", len(unhealthy), len(reported), strings.Join(reported, ", "))}
 	}
 	if rootSuspended {
-		return doctorCheck{Name: "flux", Status: "informational", Summary: fmt.Sprintf("4 controllers and %d other reconciled resource(s) are Ready; root Kustomization/flux-system/flux-system is intentionally suspended for local-experiment", len(resources.Items)-1)}
+		return doctorCheck{Name: "flux", Status: "informational", Summary: fmt.Sprintf("4 controllers and %d other reconciled resource(s) are Ready; root Kustomization/flux-system/flux-system is suspended in local-experiment (intent and source revision provenance not independently verified)", len(resources.Items)-1)}
 	}
 	return doctorCheck{Name: "flux", Status: "healthy", Summary: fmt.Sprintf("4 controllers and %d reconciled resource(s) are Ready", len(resources.Items))}
 }

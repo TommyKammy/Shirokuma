@@ -2,15 +2,25 @@
 project: Shirokuma
 doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
-status: draft
+status: local-partial
 created: 2026-07-05
-updated: 2026-08-14
-version: "0.5"
+updated: 2026-10-02
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-02: fixed Flux source identity in read-only local doctor
+
+`shirokuma doctor --profile local-experiment`は従来4 controller・Ready条件を見たが、固定root `GitRepository/flux-system/flux-system`の不在・artifact revision欠損・root `Kustomization`の別source参照でも、別のGitRepositoryがあればFluxをinformationalと報告し得た。fake応答の負例4件で修正前誤通過を再現。local profileに限り、root GitRepositoryとroot Kustomizationがそれぞれ1件、rootのsourceRefが同namespaceの固定GitRepository、GitRepositoryが現generationでReady・非削除、artifact revisionが有界の`ref@sha1:<40 lowercase hex>`形式であることを追加検査する。欠損/重複/別namespace/不正revision/別参照は`degraded`、generic doctorの旧契約は維持。root suspendedのinformational文言は「意図・source revisionのprovenance未認証」を明示し、local profile指定だけを意図の証明にしない。revisionは**形式**のみでremoteへの独立認証・このcheckoutのHEADとの一致ではない。`doctor`はread-onlyでreconcile/applyなし。
+
+停止中の専用Colimaをprofile設定SHA記録後に一時起動し、固定contextでcompiled Go doctorをread-only実行。初回は起動後のsource-controllerと子Kustomization Ready未達で全体`degraded`、保存したまま再読した2回目は全体`healthy`・Flux `informational`（root suspended）。別API readで固定GitRepositoryは現generation Ready、artifact revision形式一致、root Kustomization sourceRef一致・suspended。取得したrevisionはprivate記録内でもhashだけ保持。専用VM・保持データ/backupは削除せず、GitHubへ書き込みなし。private記録は`tmp/local-experiment/gitops-doctor-source-checks/20261002/`。これは限定diagnosticであり、Git経由のsmoke reconcile、現checkoutのremote publication identity、strict supply-chain gate、再bootstrap/teardownの実証ではない。WP `local-partial`を維持する。
+
+通常停止後は専用profileがStoppedへ戻りhost設定SHA不変。起動時TCP 53 forward競合、停止時k3s killallの`/var/lib/cni/` busyおよび保持Pod volume unmountの出力あり。保持PVC/backupの**内容不変は独立照合していない**。本診断を戻す場合は新しいdoctor validationだけを以前のローカルrevisionへ戻し、保存run/VM/backupに復旧目的の削除や再作成を行わない。
+
+修正後Go CLI focused 674 testsと`go vet ./...`成功。最終全回帰`make verify-local-experiment`は121 suites/3820実行＝3812 PASS＋8 skip、90.39秒、private log SHA256 `a919c55e87b4c09117e93bf4fc3d9a4c7eb33563bce1a3ca4de1e301e252829a`。`make verify-design-context`、secret scan、diff check成功。実VMの診断実行後に追加したgenerationゼロ負例2件はfake応答・全回帰でのみ確認し、実VMを再起動していない。
 
 ## Summary
 

@@ -24,7 +24,60 @@ func localControllerJSON() string {
 }
 
 func localFluxJSON() string {
-	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+}
+
+func TestLocalFluxRequiresFixedSourceAndRevision(t *testing.T) {
+	cases := []struct {
+		name string
+		old  string
+		new  string
+	}{
+		{"foreign-source", `"kind":"GitRepository","metadata":{"name":"flux-system"`, `"kind":"GitRepository","metadata":{"name":"foreign"`},
+		{"foreign-source-namespace", `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system"`, `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"foreign"`},
+		{"missing-artifact", `"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},`, ``},
+		{"malformed-revision", `main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`, `main@sha1:invalid`},
+		{"wrong-root-source", `"sourceRef":{"kind":"GitRepository","name":"flux-system"}`, `"sourceRef":{"kind":"GitRepository","name":"foreign"}`},
+		{"wrong-root-source-namespace", `"sourceRef":{"kind":"GitRepository","name":"flux-system"}`, `"sourceRef":{"kind":"GitRepository","name":"flux-system","namespace":"foreign"}`},
+		{"deleted-source", `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1`, `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1,"deletionTimestamp":"2026-10-02T00:00:00Z"`},
+		{"zero-source-generation", `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1`, `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":0`},
+		{"zero-root-generation", `"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2`, `"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":0`},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			resources := strings.Replace(localFluxJSON(), test.old, test.new, 1)
+			if resources == localFluxJSON() {
+				t.Fatal("fixture replacement did not match")
+			}
+			runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}
+			if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" {
+				t.Fatalf("source ambiguity passed local doctor: %#v", check)
+			}
+			if len(runner.calls) != 2 {
+				t.Fatalf("extra runtime commands: %v", runner.calls)
+			}
+		})
+	}
+}
+
+func TestLocalFluxRejectsDuplicateRootResources(t *testing.T) {
+	for _, index := range []int{0, 1} {
+		var list struct {
+			Items []json.RawMessage `json:"items"`
+		}
+		if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+			t.Fatal(err)
+		}
+		list.Items = append(list.Items, list.Items[index])
+		output, err := json.Marshal(list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}
+		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "duplicated") {
+			t.Fatalf("duplicated root item %d passed: %#v", index, check)
+		}
+	}
 }
 
 func localWorkloadResponses() []fakeResponse {
@@ -63,7 +116,7 @@ func TestDoctorLocalExperimentReportsBoundedReadiness(t *testing.T) {
 	for _, check := range report.Checks {
 		byName[check.Name] = check
 	}
-	if byName["flux"].Status != "informational" || !strings.Contains(byName["flux"].Summary, "intentionally suspended") {
+	if byName["flux"].Status != "informational" || !strings.Contains(byName["flux"].Summary, "intent and source revision provenance not independently verified") {
 		t.Fatalf("root suspension = %#v", byName["flux"])
 	}
 	for _, name := range []string{"seaweedfs", "postgresql", "polaris", "trino"} {

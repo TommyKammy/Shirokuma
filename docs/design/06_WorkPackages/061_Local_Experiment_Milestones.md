@@ -4,13 +4,21 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-09-29
-version: "4.15"
+updated: 2026-10-02
+version: "4.16"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-02: local doctor checks fixed Flux root source and revision shape
+
+WP-L0-GITOPS-001。Go `doctor --profile local-experiment`で4 controller/Readyだけではなく固定GitRepository/root Kustomizationの一意identity、sourceRef、現generation Ready、非削除、Git artifact revisionの有界`ref@sha1:<40hex>`形式を確認。fake負例で修正前のsource別名/欠損revision/不正revision/誤参照をinformational誤通過と再現し修正後拒否。重複・別namespaceも拒否。専用Colimaをread-only診断のため一時起動、初回は起動直後のFlux未Readyを正しく`degraded`、後続の別Go doctor読取は全体`healthy`/Flux `informational`・root suspended。別API readでsource現generation Ready・revision形式とroot sourceRef/suspendを確認。raw revisionは保存せずhashのみ。rootのsuspend意図とremote revision真正性、Git reconcile/再bootstrap/strict gate/本番受入は未証明。private記録は`tmp/local-experiment/gitops-doctor-source-checks/20261002/`。WP local-partial。
+
+専用Colimaを通常停止してStopped/host設定SHA不変へ復帰。起動時TCP 53 forward競合、停止時CNI busyと保持volume unmount出力あり。PVC/backup内容の完全不変は独立照合していない。削除・再作成・GitHub書込みは行わず、diagnosticだけを変更。
+
+Go focused 674 tests・vet PASS、最終全回帰121 suites/3820実行＝3812 PASS＋8 skip、90.39秒、log SHA256 `a919c55e87b4c09117e93bf4fc3d9a4c7eb33563bce1a3ca4de1e301e252829a`。design-context/secret scan・diff check PASS。実VM診断後に追加したgenerationゼロ負例2件はfake応答と全回帰のみで検証。
 
 ## 2026-09-29: one live Policy privileged denial via full CLI
 
