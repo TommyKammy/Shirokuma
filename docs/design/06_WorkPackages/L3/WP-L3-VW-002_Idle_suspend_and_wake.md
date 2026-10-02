@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-02
-version: "0.20"
+version: "0.21"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-02: opt-in scoped live Kubernetes inventory — bounded live check
+
+保存`correlated-saved-claim`を現在backendの証明へ昇格させないため、完了済みsession向けread-only `make local-warehouse-session-runtime-status WAREHOUSE_LIFECYCLE_RUN_TOKEN=<session-id>`を追加。固定Colima context/loopback/single ARM64 k3s事前確認後、token由来の11個の明示資源名、同token owner labelの8 kind、XS/S Service由来EndpointSliceをそれぞれ2回読む。stdoutはkind/name/namespace/UID/必要なlabelのみのmetadata投影で、Secret dataやPod spec/Endpoint addressは出力しない。応答欠損、pagination未完了、異常なidentity/重複、2回の差、保存claimの前後差を固定code/部分JSONなしで拒否する。固定名を異なるownerが占めても`scoped-resources-present`、2回とも不在のときだけ`scoped-absence-observed`。backend query stateは常に`unknown`。
+
+隔離fakeの不在/存在/EndpointSlice/owner競合/UID置換/空・欠損list/不正contextと、実kubectlの`--dry-run=client`によるmetadata-only ConfigMap・Secret投影及びGo list template描画を確認。初回templateはlabelがないと失敗したため修正し、無label固定名も存在と判定。VM停止中のarchived1件への実診断は固定失敗＋stdout空。専用Colima `mac-studio-solo`を一時起動し、固定context preflight・保存completion相関は通過。しかし実`kubectl`がEndpointSlice一覧を`EndpointSliceList`ではなく`List`で表示したため、最初の2件は固定失敗/部分JSONなしで記録。item kindを`EndpointSlice`へ束縛したまま外側の両形式を受け入れて再読したところ、完了済み2件とも11固定名0・owner label一覧0・両ServiceのEndpointSlice0を**各2周**確認し、`scoped-absence-observed`/`backend_query_state=unknown`。別の直接kubectl GETで各tokenにlabelのあるDeployment/Pod/ReplicaSetを1回ずつ照会して0件。これは同じAPIに対する別呼出しでありVM独立認証ではない。
+
+検証後VMを通常停止しStoppedへ復帰。profile config SHAと保存済み2 session計10ファイルの集合・SHA/inode/mode/mtime/sizeが起動前後で一致。起動ログにはloopback TCP53 forwarding、停止ログには`/var/lib/cni/` busyと保持PodのPVC/secret volume unmount出力があり、保持PVC/backupの内容不変は独立照合していない。owner/SQL/RPC POST・保持volume scan・VM全体reset/保持backup削除は行わず、unknown要求を再POSTしていない。private記録は`tmp/local-experiment/warehouse-runtime-status-checks/20261002/`。新しい診断を使わない復旧はVMを追加起動せずopt-in readerのみ停止し、保持run・空socket dir・backupを維持する。
+
+2回の読みは原子的snapshotでもVM真正性の独立認証でもなく、保存claimの真正性、historical cleanupの実施時点、全namespace残留、現backend readiness/SQLの独立証明は未達。同UID元private dir改変・owner再起動後未知要求回復も未達。停止後の現在clusterをさらに継続観測した結果でもない。`local-partial`継続。戻すにはopt-in readerを使わずコードを以前のローカルrevisionへ戻す。archived run・残置socket directory・backupは削除せず、unknown要求を再POSTしない。
+
+最終Warehouse focused5 suites/191件PASS、log SHA256 `e51bfaa629f3b6a1243a6f812f2bc1b4b504861eaf1432999d35db78d6709306`。全回帰121 suites/3835実行＝3827 PASS＋8 skip、90.28秒、log SHA256 `5b90dff9662ac672c8ad04f44b4505e9e0cc1b6f3cc69e5ba963d47e3a629c43`。design-context/secret scan・diff check PASS。
 
 ## 2026-10-02: archived status root opened component by component — offline
 

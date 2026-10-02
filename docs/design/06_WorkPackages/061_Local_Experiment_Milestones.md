@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-02
-version: "4.18"
+version: "4.19"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-02: Warehouse saved completion vs scoped current inventory
+
+WP-L3-VW-002。archived completionの相関を条件に、固定contextの現在のKubernetes metadataを読むoptional readerを追加。11明示名・同owner labelの8 kind・2 ServiceのEndpointSliceを2周し、不在/存在・identity不一致・2周の変化・保存相関変化・kubectl失敗を区別してfail closed。実kubectlのclient-only ConfigMap/Secret投影と隔離fakeでmetadata-only stdout、無label固定名/owner異なる名の存在、子/EndpointSlice存在、欠損・pagination/UID driftを確認。停止中VMの固定失敗の後、専用Colimaを一時起動。実EndpointSlice外側kindが`List`となるため初回2件は固定失敗/部分JSONなし、修正後に完了済み2 sessionの11固定名・owner label・2 Service EndpointSliceすべて0を各2周確認。直接kubectlの別GETでも2 tokenのlabel付きDeployment/Pod/ReplicaSet各0。**観測時点の限定scopeの不在のみ**でhistorical cleanup/現SQL・readinessではない。profileをStoppedへ戻し設定SHAとarchived10 filesの集合/SHA/inode/mode/mtime/sizeは不変。停止ログには保持Pod volume unmountと`/var/lib/cni/` busyがあり、PVC/backup内容の独立不変照合はなし。private `tmp/local-experiment/warehouse-runtime-status-checks/20261002/`。RPC POST/SQL/保持volume走査/backup削除なし、unknown再POSTなし。WP local-partial。原子的snapshot/VM独立認証/保存物真正性/owner再起動回復/本番受入は未達。
+
+Warehouse focused5 suites/191件PASS、log SHA256 `e51bfaa629f3b6a1243a6f812f2bc1b4b504861eaf1432999d35db78d6709306`。全回帰121 suites/3835実行＝3827 PASS＋8 skip、90.28秒、log SHA256 `5b90dff9662ac672c8ad04f44b4505e9e0cc1b6f3cc69e5ba963d47e3a629c43`。design-context/secret scan・diff check PASS。
 
 ## 2026-10-02: archived Warehouse status stays in its opened root
 

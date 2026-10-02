@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""Read-only current-name inventory for one archived, completed XS session.
+
+Neither the saved owner's cleanup claim nor an empty current inventory proves
+when cleanup occurred. Never replay an unknown request or mutate a resource.
+"""
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import time
+import uuid
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.local_experiment.local_experiment import ExperimentError as ContextError, check_context
+from tools.local_experiment.warehouse_lifecycle import manifest as M, status as S, status_completion as C
+from tools.local_experiment.warehouse_lifecycle import support as W
+
+KINDS = {
+    'NetworkPolicy': ('networkpolicies', ('-net-deny', '-net-gateway', '-net-xs', '-net-s')),
+    'ConfigMap': ('configmaps', ('-config',)),
+    'Secret': ('secrets', ('-secret',)),
+    'Service': ('services', ('-xs', '-s')),
+    'Pod': ('pods', ('-gateway',)),
+    'Deployment': ('deployments', ('-xs', '-s')),
+}
+LABELLED = 'networkpolicies,configmaps,secrets,services,pods,deployments,replicasets,endpointslices'
+MAX_SECONDS = 90
+OWNER = M.OWNER
+# kubectl fetches objects internally, but its stdout contains *only* these
+# metadata fields: never emit Secret.data or Pod specs to this process/log.
+ROW = ('{{printf "%s\\t%s\\t%s\\t%s\\t" .kind .metadata.name '
+       '.metadata.namespace .metadata.uid}}'
+       '{{with .metadata.labels}}{{with index . "' + OWNER + '"}}{{.}}{{end}}{{end}}'
+       '{{printf "\\t"}}'
+       '{{with .metadata.labels}}{{with index . "kubernetes.io/service-name"}}{{.}}{{end}}{{end}}'
+       '{{printf "\\n"}}')
+ONE = '{{if .metadata}}' + ROW + '{{end}}'
+MANY = ('{{printf "%s\\t%d\\t" .kind (len .items)}}'
+        '{{if .metadata.continue}}TRUNCATED{{else}}COMPLETE{{end}}'
+        '{{printf "\\n"}}{{range .items}}' + ROW + '{{end}}')
+
+
+class RuntimeStatusError(ValueError):
+    pass
+
+
+def require(ok):
+    if not ok:
+        raise RuntimeStatusError('RUNTIME_OBSERVATION_UNVERIFIED')
+
+
+def identity(value, *, kind=None, name=None, label=None):
+    require(type(value) is dict and type(value.get('kind')) is str and
+            type(value.get('metadata')) is dict)
+    meta = value['metadata']
+    uid = meta.get('uid')
+    require(type(uid) is str and canonical_uuid(uid) and
+            meta.get('namespace') == W.NAMESPACE and
+            type(meta.get('name')) is str and re.fullmatch(r'[a-z0-9-]{1,63}', meta['name']) is not None and
+            type(meta.get('labels')) is dict)
+    require(kind is None or value['kind'] == kind)
+    require(name is None or meta['name'] == name)
+    require(label is None or meta['labels'].get(M.OWNER) == label)
+    return (value['kind'], meta['name'], uid)
+
+
+def canonical_uuid(value):
+    try:
+        return str(uuid.UUID(value)) == value
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def row(line):
+    fields = line.split('\t')
+    require(len(fields) == 6)
+    kind, name, namespace, uid, owner, service = fields
+    require(owner == '' or re.fullmatch(r'[0-9a-f]{32}', owner) is not None)
+    require(service == '' or re.fullmatch(r'[a-z0-9-]{1,63}', service) is not None)
+    return {'kind': kind, 'metadata': {'name': name, 'namespace': namespace,
+            'uid': uid, 'labels': {**({OWNER: owner} if owner else {}),
+                                   **({'kubernetes.io/service-name': service} if service else {})}}}
+
+
+class ReadOnlyKubernetes:
+    def _get(self, resource, *args, template):
+        raw = W.command(['kubectl', '--context', W.CONTEXT, '-n', W.NAMESPACE,
+                         '--request-timeout=10s', 'get', resource, *args,
+                         '--chunk-size=0', '-o=go-template=' + template],
+                        timeout=15, output_limit=65536)
+        require(type(raw) is str and len(raw) <= 65536)
+        return raw
+
+    def get(self, resource, name):
+        raw = self._get(resource, name, '--ignore-not-found=true', template=ONE)
+        if raw == '':
+            return None
+        require(raw.endswith('\n') and raw.count('\n') == 1)
+        return row(raw[:-1])
+
+    def _list(self, resource, selector, limit, kind):
+        raw = self._get(resource, '-l', selector, template=MANY)
+        require(raw.endswith('\n') and len(raw) <= 65536)
+        lines = raw.splitlines()
+        header = lines.pop(0).split('\t')
+        # kubectl's generic printer wraps a single-kind EndpointSlice selector
+        # in List on this client; each item is still checked as EndpointSlice.
+        expected_headers = {'List', kind} if kind == 'EndpointSliceList' else {kind}
+        require(len(header) == 3 and header[0] in expected_headers and header[2] == 'COMPLETE' and
+                re.fullmatch(r'(0|[1-9][0-9]*)', header[1]) is not None and
+                int(header[1]) == len(lines) and len(lines) <= limit)
+        return {'kind': kind, 'items': [row(line) for line in lines]}
+
+    def labelled(self, token):
+        return self._list(LABELLED, OWNER + '=' + token, 64, 'List')
+
+    def endpoints(self, service):
+        # The selector comes from the API; emit just this label, not endpoint
+        # addresses. A list selector itself is not evidence that rows match it.
+        return self._list('endpointslices', 'kubernetes.io/service-name=' + service, 4,
+                          'EndpointSliceList')
+
+
+def listed(value, limit, kind):
+    require(type(value) is dict and value.get('kind') == kind and
+            type(value.get('items')) is list and len(value['items']) <= limit)
+    return value['items']
+
+
+def snapshot(token, kube, deadline):
+    prefix = M.name(token)
+    named = []
+    for kind, (resource, suffixes) in KINDS.items():
+        for suffix in suffixes:
+            require(time.monotonic() < deadline)
+            name = prefix + suffix
+            value = kube.get(resource, name)
+            if value is not None:
+                named.append(identity(value, kind=kind, name=name))
+    require(time.monotonic() < deadline)
+    owned = [identity(value, label=token) for value in listed(kube.labelled(token), 64, 'List')]
+    require(all(kind in KINDS or kind in ('ReplicaSet', 'EndpointSlice') for kind, _, _ in owned))
+    endpoints = []
+    for suffix in ('-xs', '-s'):
+        require(time.monotonic() < deadline)
+        service = prefix + suffix
+        for value in listed(kube.endpoints(service), 4, 'EndpointSliceList'):
+            row = identity(value, kind='EndpointSlice')
+            require(value['metadata']['labels'].get('kubernetes.io/service-name') == service)
+            endpoints.append(row)
+    require(time.monotonic() < deadline)
+    require(all(len(values) == len(set(values)) for values in (named, owned, endpoints)))
+    # A hash correlates two bounded snapshots; it is not independent attestation.
+    rows = [sorted(values) for values in (named, owned, endpoints)]
+    return {'named_present': len(named), 'labelled_present': len(owned),
+            'service_endpoints_present': len(endpoints),
+            'snapshot_sha256': hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()}
+
+
+def observe(token, kube, *, deadline=None):
+    require(type(token) is str and re.fullmatch(r'[0-9a-f]{32}', token) is not None)
+    deadline = time.monotonic() + MAX_SECONDS if deadline is None else deadline
+    before = datetime.now(timezone.utc).isoformat()
+    first = snapshot(token, kube, deadline)
+    second = snapshot(token, kube, deadline)
+    require(first == second)
+    after = datetime.now(timezone.utc).isoformat()
+    return {'schema_version': 1, 'session_id': token, 'observation': 'current-kubernetes-two-reads',
+            'scope': 'fixed-names-owner-labels-and-two-service-endpoints-in-shirokuma-dev',
+            'observed_from': before, 'observed_to': after,
+            'current_state': 'scoped-absence-observed' if not any(first[key] for key in
+                             ('named_present', 'labelled_present', 'service_endpoints_present'))
+                             else 'scoped-resources-present', **first,
+            'backend_query_state': 'unknown', 'historical_cleanup_proven': False,
+            'all_namespace_resources_checked': False}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument('--session')
+    source.add_argument('--session-from-env', action='store_true')
+    args = parser.parse_args(argv)
+    try:
+        token = os.environ.get('WAREHOUSE_LIFECYCLE_RUN_TOKEN') if args.session_from_env else args.session
+        require(type(token) is str and re.fullmatch(r'[0-9a-f]{32}', token) is not None)
+        # The context preflight and metadata GETs must read the same kubeconfig.
+        require('KUBECONFIG' not in os.environ)
+        check_context()
+        saved = S.read(token)
+        completion = C.read(token)
+        require(saved['journal_sha256'] == completion['journal_sha256'] and
+                completion['recorded_completion'] == 'correlated-saved-claim')
+        report = observe(token, ReadOnlyKubernetes())
+        require(saved == S.read(token) and completion == C.read(token))
+        report['saved_completion'] = 'correlated-saved-claim'
+    except (RuntimeStatusError, S.StatusError, W.ExperimentError, ContextError,
+            OSError, TypeError, KeyError, ValueError):
+        print('RUNTIME_OBSERVATION_UNVERIFIED', file=sys.stderr)
+        return 1
+    print(json.dumps(report, sort_keys=True, separators=(',', ':')))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

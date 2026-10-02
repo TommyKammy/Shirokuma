@@ -136,6 +136,40 @@ independent check of actual cleanup, backend state, audit delivery or execution
 provenance. `runtime_state` stays `unknown`, and nothing is restarted or replayed.
 The original journal-only status command and its output remain unchanged.
 
+### Current scoped Kubernetes inventory (opt-in, read-only)
+
+With the **dedicated Colima k3s profile already running**, an archived session
+with a fully correlated saved completion can be compared to *current* resource
+metadata without invoking recovery, a socket, SQL or a new owner:
+
+```sh
+rtk make local-warehouse-session-runtime-status WAREHOUSE_LIFECYCLE_RUN_TOKEN=<session-id>
+```
+
+This command does not start the VM. It checks the configured loopback k3s
+context and single ARM64 node, rejecting an overridden `KUBECONFIG`. It reads
+11 fixed resource names, all resources bearing the session owner label across
+eight kinds, and EndpointSlices for the two generated Services, twice. kubectl
+projects only kind/name/namespace/UID/two labels to the Python process; Secret
+data, Pod specs and endpoint addresses are never emitted or logged. It rejects
+failed/blank/truncated/oversized lists, invalid identities, scope changes across
+the two passes, and changed saved completion/journal claims. A missing or
+stopped cluster produces no partial JSON and `RUNTIME_OBSERVATION_UNVERIFIED`.
+The client may wrap EndpointSlices in a generic `List`; every listed item's
+`EndpointSlice` kind, namespace and Service label is still verified.
+
+`scoped-absence-observed` means those **specific** names, owner labels and
+Service selectors were absent on both reads of that configured context.
+`scoped-resources-present` is a current conflict, including a different owner
+at one fixed name. This is not a cluster-wide inventory, a single atomic
+snapshot, an independently authenticated VM identity, historical cleanup
+attestation, proof of absence between reads, or backend/query readiness;
+`backend_query_state` stays `unknown`. The saved completion is labeled as an
+internally correlated claim, not elevated to independently verified cleanup.
+Do not retry unknown POSTs on the basis of either result. To roll back, stop
+using this optional reader; leave existing runs, empty socket directories and
+backups intact.
+
 For this stronger completion view, every saved operation must also have an
 exact final RPC reply (persisted before sending); interim `unknown` for the
 same original request is allowed. A denied same-UUID **different-action** reply
