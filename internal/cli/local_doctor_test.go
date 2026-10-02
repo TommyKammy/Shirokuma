@@ -82,6 +82,7 @@ func TestLocalFluxRejectsDuplicateRootResources(t *testing.T) {
 
 func TestLocalFluxRejectsAmbiguousNonRootResources(t *testing.T) {
 	for _, test := range []struct{ name, old, replacement, want string }{
+		{"unexpected-kind", `"kind":"Kustomization","metadata":{"name":"shirokuma-catalog"`, `"kind":"Secret","metadata":{"name":"shirokuma-catalog"`, "unexpected kind"},
 		{"zero-generation", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":0`, "generation unverified"},
 		{"missing-name", `"name":"shirokuma-catalog","namespace":"flux-system"`, `"namespace":"flux-system"`, "identity unverified"},
 		{"missing-namespace", `"name":"shirokuma-catalog","namespace":"flux-system"`, `"name":"shirokuma-catalog"`, "identity unverified"},
@@ -142,10 +143,12 @@ func TestLocalFluxRejectsWrongControllerIdentity(t *testing.T) {
 }
 
 func TestLocalFluxRejectsFailedAvailableCondition(t *testing.T) {
-	controllers := strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":1,"conditions":[{"type":"Available","status":"False"}]`, 1)
-	runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
-	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
-		t.Fatalf("failed controller condition accepted: %#v", check)
+	for _, status := range []string{"False", "Unknown", ""} {
+		controllers := strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":1,"conditions":[{"type":"Available","status":"`+status+`"}]`, 1)
+		runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
+		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+			t.Fatalf("controller condition %q accepted: %#v", status, check)
+		}
 	}
 }
 
@@ -317,6 +320,8 @@ func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 		{"replica-failure", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":"True"}],"observedGeneration":2`, "failed rollout"},
 		{"progress-failure", `"observedGeneration":2`, `"conditions":[{"type":"Progressing","status":"False"}],"observedGeneration":2`, "failed rollout"},
 		{"available-failure", `"observedGeneration":2`, `"conditions":[{"type":"Available","status":"False"}],"observedGeneration":2`, "failed rollout"},
+		{"available-unknown", `"observedGeneration":2`, `"conditions":[{"type":"Available","status":"Unknown"}],"observedGeneration":2`, "failed rollout"},
+		{"progress-unknown", `"observedGeneration":2`, `"conditions":[{"type":"Progressing","status":"Unknown"}],"observedGeneration":2`, "failed rollout"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

@@ -271,7 +271,8 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 				controller.Status.UpdatedReplicas != *controller.Spec.Replicas
 			for _, condition := range controller.Status.Conditions {
 				if (condition.Type == "ReplicaFailure" && condition.Status == "True") ||
-					((condition.Type == "Progressing" || condition.Type == "Available") && condition.Status == "False") {
+						(condition.Type == "Progressing" && condition.Status != "True") ||
+						(condition.Type == "Available" && condition.Status != "True") {
 					unready = true
 				}
 			}
@@ -300,6 +301,11 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		kinds[resource.Kind]++
 		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
 		if localExperiment {
+			switch resource.Kind {
+			case "GitRepository", "OCIRepository", "Bucket", "HelmRepository", "HelmChart", "Kustomization", "HelmRelease":
+			default:
+				unhealthy = append(unhealthy, "Flux resource (unexpected kind)")
+			}
 			if resource.Kind == "" || resource.Metadata.Namespace == "" || resource.Metadata.Name == "" {
 				unhealthy = append(unhealthy, "Flux resource (identity unverified)")
 			} else if seenResources[resourceID] {

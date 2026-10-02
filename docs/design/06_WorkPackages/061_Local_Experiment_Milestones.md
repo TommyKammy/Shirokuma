@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.32"
+version: "4.33"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline condition ambiguity and Flux kind validation
+
+WP-L0-GITOPS-001. Dedicated Colima read-only status: not running; no start. Two independent local-doctor increments reject `Available`/`Progressing` conditions other than `True` on otherwise fully replicated fixed deployments, and reject unexpected kinds in the fixed Flux resource list. Healthy fake inventories remain accepted; generic Flux doctor unchanged. `go test ./internal/cli` (706 tests), `go test ./...` (707 tests), `go vet ./...`, `make verify-local-experiment` passed. No real API/SQL read, reconciliation, retained run/backup mutation or GitHub write. Remote source authenticity, strict publication gate, runtime health and operator/production acceptance remain unverified. Rollback: only local doctor code/tests, leave retained evidence and stopped VM intact. Original Vault handoff outside this checkout remains pending synchronization.
 
 ## 2026-10-03: offline conflicting Flux readiness and empty endpoint suffixes
 
