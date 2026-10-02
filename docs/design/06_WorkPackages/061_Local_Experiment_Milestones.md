@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.29"
+version: "4.30"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline Flux non-root inventory ambiguity
+
+WP-L0-GITOPS-001。専用Colima停止の現況をread-only確認。固定local doctorで非rootも含めたFlux一覧のidentity欠損、generation=0、同kind/namespace/name重複をdegradedへ変更。fake正負例とgeneric profile非変更を`go test ./internal/cli`（696件）、`go test ./...`（696件）、`go vet ./...`で確認。live Flux/remote真正性・strict gate・本番受入は未確認。保存run/VM/backupを変更せず、rollbackは局所doctor差分のみ。原Vaultはcheckout外のため直接同期保留。
 
 ## 2026-10-03: Warehouse offline current-inventory cross-view check
 

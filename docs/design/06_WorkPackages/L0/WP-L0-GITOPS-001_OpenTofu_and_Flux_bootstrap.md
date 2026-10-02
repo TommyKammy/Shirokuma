@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: reject ambiguous non-root Flux inventory
+
+Dedicated Colima is stopped; no live API reads or reconciliation. The local-only read-only doctor now rejects missing kind/name/namespace, zero generation, and duplicate kind/namespace/name for **all** Flux resources, including non-root resources; previously a zero-generation Ready condition or duplicated non-root Kustomization could be reported as reconciled. Fake positive/negative tests and generic-profile compatibility test pass (`go test ./internal/cli`, `go test ./...`, `go vet ./...`). This verifies only the offline diagnostic, not runtime authenticity, Git revision provenance, strict admission, or WP acceptance. No retained data or backups changed. Roll back only the local diagnostic and its tests; preserve the stopped VM and saved evidence. Vault handoff direct sync remains pending because the original is outside this noninteractive checkout's permitted filesystem.
 
 ## 2026-10-03: fixed local diagnostic identity and port bounds
 

@@ -80,6 +80,43 @@ func TestLocalFluxRejectsDuplicateRootResources(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsAmbiguousNonRootResources(t *testing.T) {
+	for _, test := range []struct{ name, old, replacement, want string }{
+		{"zero-generation", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":0`, "generation unverified"},
+		{"missing-name", `"name":"shirokuma-catalog","namespace":"flux-system"`, `"namespace":"flux-system"`, "identity unverified"},
+		{"missing-namespace", `"name":"shirokuma-catalog","namespace":"flux-system"`, `"name":"shirokuma-catalog"`, "identity unverified"},
+		{"missing-kind", `"kind":"Kustomization","metadata":{"name":"shirokuma-catalog"`, `"metadata":{"name":"shirokuma-catalog"`, "identity unverified"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resources := strings.Replace(localFluxJSON(), test.old, test.replacement, 1)
+			if resources == localFluxJSON() {
+				t.Fatal("fixture replacement did not match")
+			}
+			runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}
+			if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, test.want) {
+				t.Fatalf("ambiguous resource accepted: %#v", check)
+			}
+		})
+	}
+	var list struct { Items []json.RawMessage `json:"items"` }
+	if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+		t.Fatal(err)
+	}
+	list.Items = append(list.Items, list.Items[2])
+	output, err := json.Marshal(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}
+	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "duplicated") {
+		t.Fatalf("duplicated non-root resource accepted: %#v", check)
+	}
+	generic := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}
+	if check := checkFlux(context.Background(), generic, localExperimentContext); check.Status != "degraded" || !strings.Contains(check.Summary, "suspended") || strings.Contains(check.Summary, "duplicated") {
+		t.Fatalf("generic doctor contract changed: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsWrongControllerIdentity(t *testing.T) {
 	for _, test := range []struct{ name, old, replacement string }{
 		{"kind", `"kind":"Deployment"`, `"kind":"StatefulSet"`},

@@ -292,18 +292,27 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was incomplete"}
 	}
 	kinds := map[string]int{}
+	seenResources := map[string]bool{}
 	rootCount, rootSourceCount := 0, 0
 	rootSuspended := false
 	for _, resource := range resources.Items {
 		kinds[resource.Kind]++
 		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
+		if localExperiment {
+			if resource.Kind == "" || resource.Metadata.Namespace == "" || resource.Metadata.Name == "" {
+				unhealthy = append(unhealthy, "Flux resource (identity unverified)")
+			} else if seenResources[resourceID] {
+				unhealthy = append(unhealthy, resourceID+" (duplicated)")
+			}
+			seenResources[resourceID] = true
+			if resource.Metadata.Generation < 1 {
+				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
+			}
+		}
 		isRoot := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
 		isRootSource := resource.Kind == "GitRepository" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
 		if isRoot {
 			rootCount++
-			if localExperiment && resource.Metadata.Generation < 1 {
-				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
-			}
 			if localExperiment && (resource.Spec.SourceRef.Kind != "GitRepository" || resource.Spec.SourceRef.Name != "flux-system" ||
 				(resource.Spec.SourceRef.Namespace != "" && resource.Spec.SourceRef.Namespace != "flux-system")) {
 				unhealthy = append(unhealthy, resourceID+" (source reference mismatch)")
@@ -311,9 +320,6 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if isRootSource {
 			rootSourceCount++
-			if localExperiment && resource.Metadata.Generation < 1 {
-				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
-			}
 			if localExperiment && !localFluxGitRevision.MatchString(resource.Status.Artifact.Revision) {
 				unhealthy = append(unhealthy, resourceID+" (revision unverified)")
 			}
