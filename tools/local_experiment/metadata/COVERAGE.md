@@ -79,3 +79,14 @@ A later offline source-only check found 7 eligible retained runs / 14 expected
 edges. That later check supplied a fake unavailable API, so all 14 edges were
 **unknown**, not missing or present; it did not re-observe the catalog or issue
 credentials. Never carry the historical 10/10 presence into the new denominator.
+
+On October 2, a subsequent opt-in local live run used the existing stopped
+OpenMetadata containers (no Compose recreation or migration) and an existing
+credential for a single login followed by bounded GETs. Its new private report
+`bb0ade41206241248ec0fe7e5c81cd76` recorded 7 eligible histories and
+14/14 table-level edges present, with stable source/catalog observations.
+A separate authenticated GET session checked the same 14 expected edges and
+14 generated table identities, owners, schemas and evidence markers; this is
+another read of the **same service**, not independently authenticated VM or
+database-storage provenance. The lab services were stopped afterward. The
+historical 10/10 report and the offline unknown14 result remain distinct.

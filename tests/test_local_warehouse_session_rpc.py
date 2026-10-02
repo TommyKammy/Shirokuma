@@ -509,10 +509,24 @@ class SessionRPCTest(unittest.TestCase):
                 started = time.monotonic()
                 connection.sendall(b'POST ')
                 time.sleep(0.09)
-                connection.sendall(b'/v1/')
-                reply = connection.recv(16384)
-                self.assertIn(b'400 Bad Request', reply)
-                self.assertLess(time.monotonic() - started, 0.5)
+                second_attempt = time.monotonic()
+                closed_before_second_fragment = False
+                try:
+                    connection.sendall(b'/v1/')
+                except (BrokenPipeError, ConnectionResetError):
+                    # The absolute deadline may expire while the test thread is
+                    # asleep or descheduled; closing before this fragment is safe.
+                    closed_before_second_fragment = True
+                try:
+                    reply = connection.recv(16384)
+                except ConnectionResetError:
+                    reply = b''
+                if reply:
+                    self.assertIn(b'400 Bad Request', reply)
+                else:
+                    self.assertTrue(closed_before_second_fragment)
+                # Do not mistake a delayed test-thread wake for a late server.
+                self.assertLess(time.monotonic() - started, max(0.5, second_attempt - started + 0.4))
         self.assertEqual(self.calls, [])
 
     def test_json_exact_keys_types_duplicates_and_trailing_data(self):

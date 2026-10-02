@@ -5,12 +5,18 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-02
-version: "0.21"
+version: "0.22"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-02: partial HTTP timeout test accepts an already closed peer
+
+Lineage live再観測後の全回帰がWarehouse `test_slow_partial_request_has_absolute_deadline`で1件ERROR。test threadは`READ_TIMEOUT_SECONDS=0.15`に対して最初の`POST `断片後0.09秒sleepし、2断片目`sendall`より先にownerの絶対deadlineが到来して`BrokenPipeError`。本番owner側`_read_request`は元からmonotonic deadlineを使い、不完全要求はhandlerへ渡さず400を試みて接続終了する。testだけを修正し、2断片目が既に閉じたpeerへ送れない場合と、400応答を読める場合の両方で不完全要求がhandlerへ届かず有界終了することを要求。client test threadの過剰な起床遅延をserver応答遅延と誤認しない時間上限を維持する。session owner/RPC・保存runの機能契約や実保持backendは変更しない。旧全回帰失敗logは`tmp/local-experiment/lineage-live-recheck/20261002/verify-local-experiment-initial-failed.log`に残し、通過扱いへ書換えない。実Unix focusedで当該負例を10回、Warehouse focused 5 suites/191件PASS（SHA256 `8ae3c43d089108f58bf81d54dd7529bd49be74ff243d5f757c0c77f133ab97d7`）。テストを戻す場合は差分だけ以前のrevisionへ戻し、保持session/backupやsocket directoryを削除しない。
+
+最終全回帰121 suites/3839実行＝3831 PASS＋8 skip、90.39秒、log SHA256 `158330c6b663b60b9c48bfa43878ef8421efda2f17f6636993f2c1c042e18599`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-10-02: opt-in scoped live Kubernetes inventory — bounded live check
 

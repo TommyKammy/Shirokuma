@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-02
-version: "4.20"
+version: "4.22"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-02: Warehouse partial-request test deadline race
+
+Lineage live検証後の全回帰はWarehouse focused中の1 testで中断（45 suites/1181実行＝1179 PASS＋1 skip＋1 ERROR、元log SHA256 `b1da2e49b865cba54a134495a459dce4d6cbd11288cfc59f3e61251c6f7402cd`）。0.15秒の絶対deadline前に送る前提の2断片目が、test threadのsleep/起床遅れでserver close後に`BrokenPipe`となった。テストだけを更新し、先にcloseしたpeerと400受信の両方でhandler未実行・有界終了を検査。実Unix負例10回、Warehouse focused5 suites/191件PASS（log SHA256 `8ae3c43d089108f58bf81d54dd7529bd49be74ff243d5f757c0c77f133ab97d7`）。ownerコード/現backend/保存runには変更なし。失敗logを保持。private `tmp/local-experiment/lineage-live-recheck/20261002/`。
+
+最終全回帰121 suites/3839実行＝3831 PASS＋8 skip、90.39秒、log SHA256 `158330c6b663b60b9c48bfa43878ef8421efda2f17f6636993f2c1c042e18599`。design-context/secret scan・diff check PASS、専用Colima Stopped。
+
+## 2026-10-02: Lineage 7-run current catalog reread
+
+WP-L5-LINEAGE-001。専用Colimaと既存OpenMetadata 3容器を起動（project/service label、digest/image ID、mount、127.0.0.1 portを事前照合）。Compose `up`/migration/credential rotationを使わず、元container IDだけを順に起動。新private report `tmp/local-experiment/lineage-coverage/bb0ade41206241248ec0fe7e5c81cd76/`で保存Data Plan7件・期待14 table-level edgesの`present=14`、missing/conflict/unknown0、source/metadata二重観測安定。別の認証済みGET sessionで14生成tableのUUID/owner/schema/column/evidence markerと14edgeのsource/descriptionを再照合（32 API calls）。**同一serviceへの別read**であり、独立したVM・DB真正性/全catalogの証明ではない。歴史的5run/10edgeとoffline模擬API不達14 unknownは別記録。3容器を元IDのまま停止しColima Stoppedへ復帰。profile設定hash・host Metadata状態15files（4 backup含む）・旧report3件・保存source7件は前後不変、新report private。named DB/search volumeと保持PVC内容は独立不変照合なし、停止ログに保持volume unmountと`/var/lib/cni/` busy。SQL/LLM/GitHub書込み、保持backup削除・全VM resetなし。private記録`tmp/local-experiment/lineage-live-recheck/20261002/`。WP local-partial、全catalog/column lineage/常時dashboard/本番・人間受入は未達。
+
+Lineage focused1 suite/41件PASS（log SHA256 `f2f724a31b2e70e369cf1e1424bfd7a69ad9228e03ad114f98ad10b51feaac64`）。初回全回帰はWarehouse deadline testで停止し元logを保持。testのみ修正後の最終全回帰121 suites/3839実行＝3831 PASS＋8 skip、90.39秒、log SHA256 `158330c6b663b60b9c48bfa43878ef8421efda2f17f6636993f2c1c042e18599`。design-context/secret scan・diff check PASS。
 
 ## 2026-10-02: Lineage saved-source reader stays on its original tree
 

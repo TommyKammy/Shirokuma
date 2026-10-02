@@ -5,12 +5,22 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-02
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-02: current catalog reread for seven historical Data Plans — bounded live
+
+source読取のfd固定後、停止中の専用ColimaとOpenMetadata既存Composeの状態を確認。起動前にprofile設定hash、Metadata host状態15files（`.env`/鍵/4件backupを含む）、既存report3件、保存Data Plan7件のhash・inode/mode/mtimeとsnapshotをprivate記録。VM起動後、固定Docker context/socket、3既存容器のproject/service label、固定digest=image ID、mount/loopback port、exited状態を確認。`runtime.py up`・Compose `up`・migration・credential rotationは使わず、元の3 container IDだけPostgreSQL→search→serverの順に起動。healthyになってから既存`make local-lineage-coverage`を実行した。既存credentialによる認証POST1回の後は固定GETのみで、新report `tmp/local-experiment/lineage-coverage/bb0ade41206241248ec0fe7e5c81cd76/`をprivate作成。
+
+実reportはeligible7・期待14 table-level edges、`present=14/missing=conflict=unknown=0`、分母/観測ともcomplete、sourceとmetadataの再読は安定。独立した別の認証済みGET session（32 API calls）で、保存Data Plan7件に対する生成table14件のUUID/owner/schema/column/evidence markerと、期待14edgeのlineage source/descriptionを再照合。これはcollector保存物とは別呼出しだが**同じOpenMetadata API**であり、VM/producerやDB volumeの独立認証ではない。旧2026-09-17の5run/10edge・前増分の模擬API不達14 unknownと混ぜない。現存SQL relationの実在やcolumn lineage、全catalog・常時dashboardの完成も主張しない。
+
+完了後は元の3 container IDをserver→search→PostgreSQL順に停止し専用Colimaを通常停止、全てStoppedへ復帰。profile設定hash・Metadata host状態15files・既存report3件・保存source7件の起動前後不変を確認、新reportの2file/dirはprivate。DB/search named volumeは起動中に通常書込みがあり得、内容と保持PVC/backup全体の独立不変証明はない。停止ログには保持PodのPVC/secret volume unmountと`/var/lib/cni/` busyを記録。保持data/backup削除・全VM reset・GitHub書込みなし。private実行記録は`tmp/local-experiment/lineage-live-recheck/20261002/`、WP `local-partial`。回復は3容器とVMを追加起動せず停止状態を維持し、作成したprivate reportを根拠ごと保持する（旧report・backupを消して戻さない）。
+
+Lineage focused1 suite/41件PASS（SHA256 `f2f724a31b2e70e369cf1e1424bfd7a69ad9228e03ad114f98ad10b51feaac64`）。初回全回帰はWarehouseの短いpartial-request testに`BrokenPipe`で停止し、失敗log（SHA256 `b1da2e49b865cba54a134495a459dce4d6cbd11288cfc59f3e61251c6f7402cd`）を保存。owner実装ではなくtestの期限競合を別WP-L3-VW-002増分で修正、再検証した最終全回帰121 suites/3839実行＝3831 PASS＋8 skip、90.39秒、log SHA256 `158330c6b663b60b9c48bfa43878ef8421efda2f17f6636993f2c1c042e18599`。design-context/secret scan・diff check PASS。
 
 ## 2026-10-02: saved source inventory/snapshot pinned to directory descriptors — offline
 
