@@ -183,8 +183,35 @@ class AutonomousRunnerTests(unittest.TestCase):
             attempt = directory / f'attempt-{number:03d}'
             self.assertEqual(json.loads((attempt/'result.json').read_text())['reason'], 'more_work')
             self.assertEqual(attempt.stat().st_mode & 0o777, 0o700)
-            for name in ('checkpoint.json', 'stdout.jsonl', 'stderr.log', 'result.json'):
+            for name in ('checkpoint.json', 'stdout.jsonl', 'stderr.log', 'result.json', 'handoff-snapshot.md'):
                 self.assertEqual((attempt/name).stat().st_mode & 0o777, 0o600)
+            self.assertEqual((attempt/'handoff-snapshot.md').read_text(), self.vault.read_text())
+
+    def test_snapshot_rejects_symlink_and_oversized_handoff(self):
+        attempt = Path(self.temp.name)/'snapshot-attempt'
+        attempt.mkdir(mode=0o700)
+        snapshot = R.snapshot_handoff(self.vault, attempt)
+        self.assertEqual(snapshot.read_text(), 'saved handoff')
+        self.assertEqual(snapshot.stat().st_mode & 0o777, 0o600)
+        alias = Path(self.temp.name)/'vault-alias'
+        alias.symlink_to(self.vault)
+        with self.assertRaisesRegex(R.RunnerError, 'HANDOFF_UNAVAILABLE'):
+            R.snapshot_handoff(alias, attempt)
+        self.vault.write_bytes(b'a' * (R.MAX_HANDOFF_BYTES + 1))
+        with self.assertRaisesRegex(R.RunnerError, 'HANDOFF_UNAVAILABLE'):
+            R.snapshot_handoff(self.vault, attempt)
+
+    def test_project_provider_policy_blocks_non_openai_model_selection(self):
+        config = json.loads((R.ROOT/'opencode.jsonc').read_text())
+        statements = config['experimental']['policies']
+        self.assertEqual(statements[:2], [
+            {'action': 'provider.use', 'resource': '*', 'effect': 'deny'},
+            {'action': 'provider.use', 'resource': 'openai', 'effect': 'allow'},
+        ])
+        text = R.prompt({'nonce': 'a'*32, 'iteration': 1, 'checkpoint': 'unused'},
+                        Path('tmp/runner-test/handoff-snapshot.md'), self.model)
+        self.assertIn('stop solely because a provider billing ledger', text)
+        self.assertNotIn('Stop if the subscription route or entitlement is unclear', text)
 
     def test_agent_stop_claim_never_becomes_verified_completion(self):
         with mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': 'stop'}), \

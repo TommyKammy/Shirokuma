@@ -34,7 +34,11 @@ Homebrew V1 executable is backed up in the ignored private
 the Desktop service were not reset. V2 `auth list --format json` reports one
 OpenAI OAuth connection and `opencode models` lists OpenAI model IDs, but
 neither observation proves that this account/model uses the Pro subscription
-without additional charges. No real model run has been made by this runner.
+without additional charges. The first real one-session pilot stopped at an
+agent `safety_boundary` before any WP change: it demanded an independent
+billing ledger. The owner explicitly requested continuation, so a single
+OAuth connection, explicit OpenAI model and the owner's Pro attestation are
+now the bounded experiment's routing preconditions, not a verified bill.
 
 Plan-only (zero model requests) with a model listed for this project; substitute
 an eligible model ID after checking the account's entitlement:
@@ -45,8 +49,9 @@ rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/aut
 
 `subscription_preflight` must report `openai_oauth_label_present` before
 executing; `SUBSCRIPTION_AUTH_UNVERIFIED` means **do not run**, not "Pro is
-free through this CLI". After personally confirming the selected account,
-model and subscription route, start the bounded series with the same model ID:
+free through this CLI". The owner's explicit Pro attestation and this
+OAuth-only route support the local experiment despite the billing uncertainty.
+Start the bounded series with the same model ID:
 
 ```sh
 rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --execute --use-pro-weekly-limit --model openai/SELECTED_MODEL --max-runs 96 --max-minutes 10080
@@ -59,11 +64,21 @@ pins `--model`; it rejects ambiguous OpenAI account listings and inherited
 `OPENAI_API_KEY`/`OPENAI_BASE_URL`. These checks cannot independently verify
 the active server account, that its subscription covers the selected model,
 subagents' routing, config/plugin overrides, or provider billing. If account
-routing cannot be verified, stop rather than fall back to API-key/other
+selection changes or metered API usage is observed, stop rather than fall back to API-key/other
 providers. A weekly quota error is a stop, never an automatic paid retry or a
 request to buy more capacity. No cron/launchd task, recurring subscription or
 background daemon is installed. Do not use `--dangerously-skip-permissions`.
 The project instructions and tool permissions are not an OS sandbox.
+
+The checkout's `opencode.jsonc` denies normal use of every provider except
+OpenAI. The CLI's noninteractive permission requests for the parent workspace,
+`~/.codex`, and the original Vault path auto-reject. Each attempt therefore
+copies the current Vault handoff, with identity checks, to a 0600 private file
+under the ignored checkout attempt. The agent reads that snapshot, root
+`AGENTS.md`, and current repository WPs; shell commands must use `rtk`.
+Do not bypass denied external access. If writing the original Vault is denied,
+record that sync as pending and do not claim it happened. Re-read current WP
+state on every run; the snapshot is not independent runtime evidence.
 
 One invocation can make many model/tool calls. The run/time limits are not a
 token or currency cap, and exhaustion of the weekly allowance may arrive

@@ -5,7 +5,7 @@ title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.5.0"
+version: "0.6.0"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -95,13 +95,22 @@ fresh `opencode run` sessions only with explicit execution, weekly-limit,
 OpenAI-model and run/time flags; it checks for an unambiguous OpenAI OAuth
 account label before every attempt. This label is not proof of billing or
 entitlement. Without the matching connection, stop before a model request.
+The owner subsequently asked to start the runner despite the lack of an
+independent billing ledger. For this local experiment, the owner's Pro account
+attestation plus exactly one OpenAI OAuth connection, an explicit OpenAI model
+and no API-key routing are sufficient to proceed. Do not assert that charges
+were independently excluded; stop on actual evidence of metered API use, an
+account/provider change or any new spending. Project OpenCode policy restricts
+normal model selection to OpenAI. The noninteractive CLI cannot approve reads
+outside this checkout: use the runner's private handoff snapshot and repository
+instructions, and never bypass a rejected permission.
 Merely reading these instructions or running its default plan must never start
 a model request. The runner is not the GitHub supervisor and does not authorize
 new spending, GitHub writes or publication. See
 `tools/local_experiment/AUTONOMOUS_RUNNER.md` for limits and recovery.
 
 Only when a continuation prompt supplies `CONTROL_JSON`: read the current WP,
-Milestones and matching Vault handoff; complete a coherent local increment and
+Milestones and private handoff snapshot; complete a coherent local increment and
 continue to the next independent task instead of treating a commit or passing
 tests as the end of the turn. Do not invoke the runner again from inside a
 session. Before finishing, write the requested private checkpoint with the

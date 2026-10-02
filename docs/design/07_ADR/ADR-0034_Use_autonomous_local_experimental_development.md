@@ -5,7 +5,7 @@ title: "Use autonomous local experimental development"
 status: accepted
 created: 2026-09-16
 updated: 2026-10-03
-version: "1.1"
+version: "1.2"
 area: adr
 tags: [shirokuma, adr, local, development]
 ---
@@ -79,6 +79,14 @@ local OpenCode CLI's identity or billing route. The runner therefore requires
 explicit model selection and a visible OpenAI OAuth label before each call;
 when those are missing or ambiguous it must not make a model request. This
 check is evidence of a CLI label, not independent proof of provider billing.
+The owner then expressly requested starting the runner. After a one-session
+pilot stopped before WP work solely because it could not independently read a
+billing ledger, local continuation treats the owner's Pro attestation, a
+single OpenAI OAuth connection, an explicit OpenAI model and no API-key route
+as sufficient experimental routing evidence. Do not claim independent billing
+proof. Restrict normal provider selection to OpenAI in the dedicated checkout;
+stop on actual evidence of another account/provider, metered API usage, or an
+out-of-scope action. This does not waive data retention or acceptance limits.
 
 ## Verification and completion
 

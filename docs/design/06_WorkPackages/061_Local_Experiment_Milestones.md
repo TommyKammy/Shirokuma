@@ -5,12 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.26"
+version: "4.27"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: first real OpenCode run stopped before WP; controlled continuation repair
+
+Ownerは反復開始を依頼。既存dedicated checkout clean/HEAD `de50fba`、OpenCode CLI V2.0.22、projectからのV2 `auth list --format json`でOpenAI OAuth接続1件、`OPENAI_API_KEY`/`OPENAI_BASE_URL`空、`openai/gpt-6-sol` catalog掲載をread-onlyで再確認。`--execute --use-pro-weekly-limit --model openai/gpt-6-sol --max-runs 1 --max-minutes 60`の最初の実モデルrunは正常終了したが、assistantは「OAuth表示だけでは課金元を独立証明できない」という旧runner promptを文字通り適用し、WP選択前に`stop/safety_boundary`のprivate checkpointを出した。前後HEAD同一、checkout clean、commit/保持データ/VM操作なし。private `tmp/local-experiment/autonomous-runner/run-cvgr2rp6/`（stdout SHA256 `27ad85293ea0a0032faf918aa3d9022bb634c5ae9585bcb8f1b99c385c327690`、stderr SHA256 `6fc36de22b41e9b4bcebbeca4aa1fa29a04857132f92c11839b4cd1720a28178`）。V2非対話CLIはcheckout外のparent AGENTS、RTK、Vaultへの`external_directory`要求を自動拒否した。モデル応答を受けたことはOAuth active account/Pro請求を独立証明しない。未知の業務要求の再POSTなし。
+
+Ownerの既存Pro枠全使用の表明と明示start依頼のもと、このラボではOpenAI OAuth-only接続1件/明示OpenAI model/API key env不在をbounded executionの条件とし、billing ledger不在**だけ**で停止しない。実課金証明は引き続き未達、別provider・API-key fallback・新支出の実兆候では停止。専用checkoutに`opencode.jsonc`でnormal provider選択をOpenAIだけに制限し、V2 `opencode models`からOpenAIだけ18 modelが見えることをread-only確認（console override/plugin経路等の完全なOS sandboxではない）。runnerは現Vault handoffを元file identity固定でprivate ignored `handoff-snapshot.md`（0600）へ毎attempt複写し、promptからそのsnapshotとcheckout root AGENTS/Milestonesを読む。外部権限の拒否を回避せず、Vault直接更新できなければrepositoryに未同期を記録する。これは保存資料の時点copyであり、runtime独立証明ではない。GitHub/backup/他worktreeは変更しない。rollbackはrunnerの呼出し停止・provider policyとsnapshot追加差分の局所撤回、保存run/backup/原Handoffは保持。
+
+最終runner focused15件PASS（private SHA256 `9134cf12663fa1eab7916bbcf838e9219304c2a3f6329b1125b1dc571c1a87d5`）。初回focusedはprompt大文字小文字assertionだけ1件失敗、修正後PASS。全回帰122 suites/3854実行＝3846 PASS＋8 skip、100.71秒、private log SHA256 `533a5731459de50653748fbffa444bdb65ff7210aa09e2f9c98e0809f44b3225`。design-context/secret scan/diff check PASS。限定記録 `tmp/local-experiment/autonomous-runner-start-repair/20261003/`。この段階では第二回実モデルrun、Vault snapshotの実agent read、機能WPの新受入は未実証。
 
 ## 2026-10-03: OpenCode CLI V2.0.22 installed; subscription check adapted to V2
 

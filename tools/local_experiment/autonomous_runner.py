@@ -30,6 +30,7 @@ VAULT = (Path.home() / 'Library/Mobile Documents/com~apple~CloudDocs/ObsidianVau
 BRANCH = 'local/autonomous-experiment'
 MAX_LOG_BYTES = 8 * 1024 * 1024
 MAX_CHECKPOINT_BYTES = 2048
+MAX_HANDOFF_BYTES = 512 * 1024
 MAX_RUNS = 96
 MAX_MINUTES = 7 * 24 * 60
 
@@ -108,6 +109,36 @@ def private_log(path: Path):
     return os.fdopen(fd, 'wb', buffering=0)
 
 
+def snapshot_handoff(vault: Path, attempt: Path) -> Path:
+    """Copy one stable, owned handoff into the private checkout-scoped attempt.
+
+    Noninteractive V2 clients auto-reject external_directory approval requests;
+    do not weaken tool permissions or direct the agent to an inaccessible path.
+    """
+    try:
+        before = vault.lstat()
+        require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid()
+                and 0 < before.st_size <= MAX_HANDOFF_BYTES, 'HANDOFF_UNAVAILABLE')
+        fd = os.open(vault, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            opened = os.fstat(fd)
+            require((before.st_dev, before.st_ino) == (opened.st_dev, opened.st_ino), 'HANDOFF_UNAVAILABLE')
+            raw = os.read(fd, MAX_HANDOFF_BYTES + 1)
+            after = os.fstat(fd)
+            identity = lambda s: (s.st_dev, s.st_ino, s.st_mode, s.st_uid,
+                                  s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+            require(identity(before) == identity(opened) == identity(after)
+                    and len(raw) == before.st_size
+                    and identity(vault.lstat()) == identity(before), 'HANDOFF_UNAVAILABLE')
+        finally:
+            os.close(fd)
+        path = attempt / 'handoff-snapshot.md'
+        private_file(path, raw)
+        return path
+    except OSError:
+        raise RunnerError('HANDOFF_UNAVAILABLE') from None
+
+
 def save_json(path: Path, value: dict) -> None:
     private_file(path, (json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n').encode())
 
@@ -141,19 +172,28 @@ This is not proof of provider billing. Never print the account listing.
             'SUBSCRIPTION_AUTH_UNVERIFIED')
 
 
-def prompt(control: dict, vault: Path, model: str) -> str:
+def prompt(control: dict, handoff: Path, model: str) -> str:
     return f"""Continue Shirokuma's *local* experimental development in this checkout.
-Read AGENTS.md, ../../AGENTS.md, ~/.codex/RTK.md and
-docs/design/04_Development/04B_Autonomous_Local_Development.md,
+Read AGENTS.md, docs/design/04_Development/04B_Autonomous_Local_Development.md,
 docs/design/06_WorkPackages/061_Local_Experiment_Milestones.md and the private
-Vault handoff at {vault} before selecting the next dependency-ready increment.
+Vault handoff snapshot at {handoff} before choosing work. The original Vault,
+parent workspace AGENTS.md, and ~/.codex are outside this noninteractive CLI's
+approved filesystem; do not try to bypass a permission rejection. The root
+checkout AGENTS.md and this prompt carry the relevant scope. Prefix shell
+commands with rtk. Record current work in repository WPs/Milestones; if direct
+Vault update is denied, leave it untouched and document pending sync.
 Read relevant WPs and current lab state; old notes are not fresh observations.
 Do not end at one WP/commit/test milestone: continue with other safe independent
 work in this invocation. Implement, test, record evidence and gaps, and commit
-coherent changes locally. This invocation intends to use only ChatGPT Pro's
-weekly allowance through {model}. Do not switch providers/accounts/models,
-launch nested paid runs, buy services or create recurring costs. Stop if the
-subscription route or entitlement is unclear. No GitHub writes/push or publication,
+coherent changes locally. The owner authorized using their ChatGPT Pro weekly
+allowance, including exhaustion, and requested that this runner start. An
+unambiguous OpenAI OAuth-only connection and explicit {model} are the local
+experimental routing preconditions, NOT independent proof of billing. Do not
+stop solely because a provider billing ledger cannot be independently read;
+do not claim one was verified. Do not switch providers/accounts/models, launch
+nested paid runs, buy services or create recurring costs. Stop on observed
+API-key routing, extra charges, missing OAuth, or a model/provider mismatch.
+No GitHub writes/push or publication,
 retained data/backup deletion, unknown-request replay or whole-Colima reset.
 Do not treat green tests, saved claims or a completion percentage as acceptance.
 Do not invoke this runner, launch other autonomous runs or bypass permissions.
@@ -279,11 +319,12 @@ def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int
                 subscription_preflight(binary, model, root)
                 attempt = directory / f'attempt-{number:03d}'
                 attempt.mkdir(mode=0o700)
+                handoff = snapshot_handoff(vault, attempt)
                 control = {'nonce': nonce, 'iteration': number,
                            'checkpoint': str(attempt.relative_to(root) / 'checkpoint.json')}
                 print(f'RUN_STARTED attempt={number} evidence={attempt.relative_to(root)}', flush=True)
                 summary['attempts'] = number
-                invoke(binary, root, attempt, prompt(control, vault, model), deadline, model)
+                invoke(binary, root, attempt, prompt(control, handoff.relative_to(root), model), deadline, model)
                 after = checkout_head(root, vault)
                 reason = read_checkpoint(attempt / 'checkpoint.json', control, after)
                 if after != before:

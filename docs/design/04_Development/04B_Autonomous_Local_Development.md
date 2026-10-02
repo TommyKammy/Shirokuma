@@ -5,7 +5,7 @@ title: "Autonomous Local Development"
 status: accepted
 created: 2026-09-16
 updated: 2026-10-03
-version: "1.2"
+version: "1.3"
 area: development
 tags: [shirokuma, local, development]
 ---
@@ -53,6 +53,13 @@ the owner's 2026-10-03 permission to use the Pro weekly allowance. The runner
 fails closed if it cannot see an unambiguous OpenAI OAuth account label in the
 local CLI. This is not proof of the subscription's billing route. Neither the
 checkpoint nor a test pass is 100% acceptance.
+Following the owner's request to start, the single OAuth connection and
+selected OpenAI model together with the owner's Pro attestation suffice for
+the bounded local experiment without an independent billing ledger. Provider
+policy limits normal selection to OpenAI; no API-key fallback or new charge is
+authorized. A noninteractive run reads a private checkout-scoped snapshot of
+the Vault handoff instead of bypassing external-directory permission. A denied
+Vault update remains pending rather than being silently claimed complete.
 The runner is not a daemon, scheduler, approval bypass, or hard currency cap.
 
 The retained `make verify` includes historical publication/admission gates,
