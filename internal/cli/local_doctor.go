@@ -67,8 +67,9 @@ func checkLocalExperimentScope(ctx context.Context, runner commandRunner, kubeCo
 	if err != nil {
 		return failedCheck("local-scope", err)
 	}
-	endpoint, err := url.Parse(strings.TrimSpace(string(output)))
-	if err != nil || endpoint.Scheme != "https" || endpoint.User != nil || endpoint.Host == "" || endpoint.Path != "" || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Opaque != "" {
+	rawEndpoint := strings.TrimSpace(string(output))
+	endpoint, err := url.Parse(rawEndpoint)
+	if err != nil || endpoint.Scheme != "https" || endpoint.User != nil || endpoint.Host == "" || endpoint.Path != "" || endpoint.RawQuery != "" || endpoint.ForceQuery || strings.Contains(rawEndpoint, "#") || endpoint.Opaque != "" {
 		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
 	}
 	port, portErr := strconv.Atoi(endpoint.Port())

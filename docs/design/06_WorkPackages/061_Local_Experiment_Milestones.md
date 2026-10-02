@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.31"
+version: "4.32"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline conflicting Flux readiness and empty endpoint suffixes
+
+WP-L0-GITOPS-001. Read-only dedicated Colima status returned `not running`; no VM start. In the fixed local doctor, current-generation `Ready=False` now overrides a simultaneous `Ready=True` on a non-suspended Flux resource; a terminating suspended root is explicitly reported (it was already degraded). Separately, loopback HTTPS scope rejects trailing empty query/fragment (`?`/`#`) before other Kubernetes reads. Existing duplicate-controller rejection is covered by a no-source-read regression. Fake positive/negative cases, `go test ./...` (704 tests), `go vet ./...`, `git diff --check` and `make verify-local-experiment` after both changes passed. No real API or SQL observation, retained run/backup change, GitHub write or Flux reconciliation. Remote source provenance, strict publication gate and operator/production acceptance remain unverified. Rollback is limited to local doctor code/tests; preserve VM and retained evidence. Original Vault outside checkout is not synchronized by this noninteractive run.
 
 ## 2026-10-03: offline contradictory workload availability
 

@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.9"
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: current Ready conflicts and empty URL suffixes
+
+Two offline increments in the read-only local doctor: a non-suspended Flux resource with both `Ready=True` and `Ready=False` at its current generation can no longer pass by list order; a terminating suspended root is explicitly reported as terminating (it was already degraded). The fixed loopback API endpoint now rejects empty `?` and `#` suffixes before downstream reads. A duplicate fixed controller name remains rejected by the existing missing-controller guard; a regression test verifies no source read follows. Fake positive/negative tests pass (`go test ./...`: 704, `go vet ./...`, `make verify-local-experiment`); local verification result is recorded in Milestones. Dedicated Colima was observed stopped and not started. No live API, Flux reconcile, saved run or backup mutation. These checks do not establish remote revision authenticity, actual workload/SQL readiness, strict supply-chain admission, or production acceptance. Roll back only these local diagnostic/test changes, preserving retained data. Direct Vault handoff synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: contradictory Available condition is not readiness
 

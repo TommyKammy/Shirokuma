@@ -325,6 +325,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 				unhealthy = append(unhealthy, resourceID+" (revision unverified)")
 			}
 		}
+		if localExperiment && resource.Metadata.DeletionTimestamp != "" {
+			unhealthy = append(unhealthy, resourceID+" (terminating)")
+		}
 		if localExperiment && isRoot && resource.Spec.Suspend && resource.Metadata.DeletionTimestamp == "" {
 			rootSuspended = true
 			continue
@@ -335,16 +338,16 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		ready := false
 		for _, condition := range resource.Status.Conditions {
-			if condition.Type == "Ready" && condition.Status == "True" && condition.ObservedGeneration == resource.Metadata.Generation {
-				ready = true
-				break
+			if condition.Type == "Ready" && condition.ObservedGeneration == resource.Metadata.Generation {
+				if condition.Status == "True" {
+					ready = true
+				} else if localExperiment {
+					unhealthy = append(unhealthy, resourceID+" (conflicting Ready condition)")
+				}
 			}
 		}
 		if !ready {
 			unhealthy = append(unhealthy, resourceID)
-		}
-		if localExperiment && resource.Metadata.DeletionTimestamp != "" {
-			unhealthy = append(unhealthy, resourceID+" (terminating)")
 		}
 	}
 	if kinds["GitRepository"] == 0 || kinds["Kustomization"] == 0 {
