@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: read-only doctor rejects ambiguous workload inventories and malformed local endpoints
+
+WP-L0-GITOPS-001。停止中の専用Colimaを起動せず、Go local-experiment doctorの固定Lakehouse診断で`items`欠損/continuation/重複した固定資源をdegradedへ変更。別namespaceのhealthは独立して表示し、raw continuationを公開しない。独立増分としてcontextのloopback HTTPS URLのport/余分なpath/query/fragmentを検査して、異常時は後続readを行わない。fakeの正負例とGo全package test/vet、全local回帰を確認。旧保存資料・backup/SQL/保持volumeを変更せず、live VMのidentityやAPI真正性、SQL実行、Flux source真正性・strict gate・本番受入は未検証。Vault原本はcheckout外で非対話権限がないため直接更新せず、repo WP/Milestonesの同期を保留として記録。rollbackはdoctorの局所差分だけを戻し、保持VM/backupを残す。
+
 ## 2026-10-03: first real OpenCode run stopped before WP; controlled continuation repair
 
 Ownerは反復開始を依頼。既存dedicated checkout clean/HEAD `de50fba`、OpenCode CLI V2.0.22、projectからのV2 `auth list --format json`でOpenAI OAuth接続1件、`OPENAI_API_KEY`/`OPENAI_BASE_URL`空、`openai/gpt-6-sol` catalog掲載をread-onlyで再確認。`--execute --use-pro-weekly-limit --model openai/gpt-6-sol --max-runs 1 --max-minutes 60`の最初の実モデルrunは正常終了したが、assistantは「OAuth表示だけでは課金元を独立証明できない」という旧runner promptを文字通り適用し、WP選択前に`stop/safety_boundary`のprivate checkpointを出した。前後HEAD同一、checkout clean、commit/保持データ/VM操作なし。private `tmp/local-experiment/autonomous-runner/run-cvgr2rp6/`（stdout SHA256 `27ad85293ea0a0032faf918aa3d9022bb634c5ae9585bcb8f1b99c385c327690`、stderr SHA256 `6fc36de22b41e9b4bcebbeca4aa1fa29a04857132f92c11839b4cd1720a28178`）。V2非対話CLIはcheckout外のparent AGENTS、RTK、Vaultへの`external_directory`要求を自動拒否した。モデル応答を受けたことはOAuth active account/Pro請求を独立証明しない。未知の業務要求の再POSTなし。

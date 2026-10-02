@@ -67,7 +67,10 @@ func checkLocalExperimentScope(ctx context.Context, runner commandRunner, kubeCo
 		return failedCheck("local-scope", err)
 	}
 	endpoint, err := url.Parse(strings.TrimSpace(string(output)))
-	if err != nil || endpoint.Scheme != "https" || endpoint.User != nil || endpoint.Host == "" {
+	if err != nil || endpoint.Scheme != "https" || endpoint.User != nil || endpoint.Host == "" || endpoint.Path != "" || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Opaque != "" {
+		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
+	}
+	if port := endpoint.Port(); port == "" {
 		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
 	}
 	ip := net.ParseIP(endpoint.Hostname())
@@ -94,6 +97,10 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response was not valid JSON"}
 			continue
 		}
+		if list.Items == nil || list.Metadata.Continue != "" {
+			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response was incomplete"}
+			continue
+		}
 		resources[namespace] = list
 	}
 	checks := make([]doctorCheck, 0, len(localLakehouseWorkloads))
@@ -106,10 +113,12 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 			checks = append(checks, namespaceError)
 			continue
 		}
+		matches := 0
 		for _, resource := range resources[workload.namespace].Items {
 			if resource.Kind != workload.kind || resource.Metadata.Name != workload.resource || resource.Metadata.Namespace != workload.namespace {
 				continue
 			}
+			matches++
 			desired := resource.Spec.Replicas
 			switch {
 			case resource.Metadata.DeletionTimestamp != "":
@@ -130,7 +139,10 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 					}
 				}
 			}
-			break
+		}
+		if matches > 1 {
+			check.Status = "degraded"
+			check.Summary = resourceID + " is duplicated in workload response"
 		}
 		checks = append(checks, check)
 	}

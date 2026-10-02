@@ -73,6 +73,9 @@ type doctorReport struct {
 }
 
 type kubernetesResourceList struct {
+	Metadata struct {
+		Continue string `json:"continue"`
+	} `json:"metadata"`
 	Items []struct {
 		Kind     string `json:"kind"`
 		Metadata struct {

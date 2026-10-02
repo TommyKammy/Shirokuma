@@ -152,7 +152,7 @@ func TestLocalExperimentRejectsOtherContextBeforeChecks(t *testing.T) {
 }
 
 func TestLocalExperimentScopeRejectsRemoteOrMalformedEndpoints(t *testing.T) {
-	for _, endpoint := range []string{"https://cluster.example:6443", "https://127.0.0.1.example", "http://127.0.0.1:6443", "https://user:secret@127.0.0.1", "invalid", "%"} {
+	for _, endpoint := range []string{"https://cluster.example:6443", "https://127.0.0.1.example", "http://127.0.0.1:6443", "https://user:secret@127.0.0.1", "https://127.0.0.1", "https://127.0.0.1:6443/proxy", "https://127.0.0.1:6443?redirect=remote", "https://127.0.0.1:6443#fragment", "invalid", "%"} {
 		t.Run(endpoint, func(t *testing.T) {
 			runner := &fakeRunner{responses: []fakeResponse{{output: endpoint}}}
 			report := runLocalExperimentDoctor(context.Background(), runner, localExperimentContext, time.Unix(0, 0))
@@ -226,6 +226,30 @@ func TestLocalLakehouseReportsNamespaceReadFailuresWithoutLeakingOutput(t *testi
 				t.Fatalf("unsafe or incomplete error: %#v", check)
 			}
 		}
+	}
+}
+
+func TestLocalLakehouseRejectsIncompleteAndDuplicateInventory(t *testing.T) {
+	for _, change := range []struct {
+		name, output, want string
+	}{
+		{"missing-items", `{}`, "incomplete"},
+		{"continued-list", `{"metadata":{"continue":"private-token"},"items":[]}`, "incomplete"},
+		{"duplicate", `{"items":[` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `,` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `]}`, "duplicated"},
+	} {
+		t.Run(change.name, func(t *testing.T) {
+			responses := localWorkloadResponses()
+			responses[0].output = change.output
+			checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+			if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, change.want) || strings.Contains(checks[0].Summary, "private-token") {
+				t.Fatalf("incomplete inventory accepted or leaked: %#v", checks[0])
+			}
+			for _, check := range checks[1:] {
+				if check.Status != "healthy" {
+					t.Fatalf("unrelated namespace degraded: %#v", check)
+				}
+			}
+		})
 	}
 }
 
