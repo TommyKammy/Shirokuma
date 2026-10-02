@@ -31,8 +31,7 @@ def _file(directory, name, device, limit):
 
 def _saved_files(root,token,expected_names):
     root=Path(root)
-    for path in (root,*root.parents):S.require(stat.S_ISDIR(path.lstat().st_mode))
-    base=os.open(root,S.DIRECTORY_FLAGS)
+    base=S._open_root(root)
     try:
         device=os.fstat(base).st_dev
         S.require(os.fstat(base).st_uid==os.getuid() and stat.S_IMODE(os.fstat(base).st_mode)==0o700)
@@ -45,6 +44,7 @@ def _saved_files(root,token,expected_names):
                 operations={name:_file(directory,name,device,MAX_OPERATION) for name in sorted(expected_names)}
                 S.require(set(os.listdir(directory))==expected_names)
             finally:os.close(directory)
+            S._current_root(root,base)
             return receipt,operations
         finally:os.close(run)
     finally:os.close(base)

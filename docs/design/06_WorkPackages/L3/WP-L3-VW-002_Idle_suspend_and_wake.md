@@ -4,13 +4,21 @@ doc_id: "WP-L3-VW-002"
 title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-29
-version: "0.19"
+updated: 2026-10-02
+version: "0.20"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-02: archived status root opened component by component — offline
+
+既存のread-only `status.py`と保存completion照会は、固定runs rootの祖先pathを`lstat`で検査してからrootを絶対pathで再openした。同UID actorがその間に親をsymlinkへ差し替える隔離temp負例で、旧statusは模擬別treeの`pending` journalを正当なsessionの保存状態として投影し、旧completion `_saved_files`も別treeのreceiptを読み出した。両入口を共通の`_open_root`へ変更。`/`から全componentを`O_DIRECTORY|O_NOFOLLOW`のfd相対で開き、private rootのuid/mode・現pathとのinode照合を行う。読取を終える直前にもroot pathの全祖先/identityを再照合し、open直後に親が退避された場合も拒否する。隔離負例は修正後いずれも別treeを読まず固定失敗。正当な保存照会のJSON契約は変更しない。
+
+既存完了済みsession 2件をread-onlyで新status/completionから照会し、保存上のoperation数2件/4件、`correlated-saved-claim`と`runtime_state=unknown`を確認。照会対象のjournal/receipt/operation filesは前後でSHA256/inode/mode/mtime/size・file集合が一致。session owner、SQL、cluster/Colima、保持backup/credentialには接続・書込みせず、未知要求を再POSTしていない。private記録は`tmp/local-experiment/warehouse-status-root-checks/20261002/`。保存物の内部相関はproducer真正性、現在backend/最終cleanupの独立確認ではない。元dir内部を改変可能な同UID actor、owner再起動後の未知要求回復、保持データ受入はなお未達。WP `local-partial`。取り消す場合はoffline readerのroot open差分のみ以前のローカルrevisionへ戻し、保存run/空socket dir/backupを削除しない。
+
+focused5 suites/182件PASS（log SHA256 `a3ea69ccee12146b6b2b550133827a341007306208838d4952bdf28dd96ad056`）、最終全回帰121 suites/3826実行＝3818 PASS＋8 skip、91.63秒、log SHA256 `62f1861bfbc2bca938e6d74e41b9fee806b6503301370fdc7b0ba48ae337d290`。design-context/secret scan・diff check PASS、専用Colima Stopped。試験に使ったシステムPython3.9では既存`Path.hardlink_to`試験とtests間importが失敗したため、Make指定の専用venv Pythonへ切り替え、全focused/全回帰で確認。機能失敗として隠さない。
 
 | Field | Value |
 |---|---|

@@ -111,5 +111,64 @@ class SessionStatusTests(unittest.TestCase):
             self.assertEqual(output.getvalue(),'')
             self.assertEqual(errors.getvalue().strip(),'JOURNAL_UNVERIFIED')
 
+    def test_parent_swap_before_root_open_never_reads_another_tree(self):
+        with tempfile.TemporaryDirectory(dir=S.ROOT/'tmp/local-experiment') as temp:
+            base=Path(temp)
+            original_parent=base/'original-owner'
+            owner=base/'owner'
+            foreign=base/'foreign'
+            for parent in (owner,foreign):
+                journal=parent/'runs'/TOKEN/'rpc'
+                journal.mkdir(parents=True,mode=0o700)
+                for path in (parent,parent/'runs',parent/'runs'/TOKEN):path.chmod(0o700)
+                (journal/'journal.json').write_bytes(raw([entry(state='completed' if parent==owner else 'pending')]))
+                (journal/'journal.json').chmod(0o600)
+            root=owner/'runs'
+            real_open=os.open
+            swapped=False
+            def swap_before_open(path,flags,*args,**kwargs):
+                nonlocal swapped
+                if not swapped and str(path) in (str(root),owner.name):
+                    swapped=True
+                    owner.rename(original_parent)
+                    owner.symlink_to(foreign,target_is_directory=True)
+                return real_open(path,flags,*args,**kwargs)
+            with patch.object(S.os,'open',side_effect=swap_before_open):
+                with self.assertRaisesRegex(S.StatusError,'JOURNAL_UNVERIFIED'):
+                    S.read(TOKEN,root)
+            self.assertTrue(swapped)
+            self.assertEqual(S.project((original_parent/'runs'/TOKEN/'rpc/journal.json').read_bytes(),TOKEN)
+                             ['recorded_actions'][0]['recorded_result'],'verified')
+            self.assertEqual(S.project((foreign/'runs'/TOKEN/'rpc/journal.json').read_bytes(),TOKEN)
+                             ['recorded_actions'][0]['recorded_result'],'pending')
+
+    def test_displaced_root_after_open_does_not_report_a_saved_result(self):
+        with tempfile.TemporaryDirectory(dir=S.ROOT/'tmp/local-experiment') as temp:
+            base=Path(temp)
+            owner=base/'owner';owner.mkdir(mode=0o700)
+            journal=owner/'runs'/TOKEN/'rpc';journal.mkdir(parents=True,mode=0o700)
+            for path in (owner/'runs',owner/'runs'/TOKEN):path.chmod(0o700)
+            (journal/'journal.json').write_bytes(raw([entry(state='completed')]))
+            (journal/'journal.json').chmod(0o600)
+            foreign=base/'foreign';foreign.mkdir(mode=0o700)
+            displaced=base/'displaced'
+            root=owner/'runs'
+            actual_open=os.open
+            swapped=False
+            def swap_after_open(path,flags,*args,**kwargs):
+                nonlocal swapped
+                fd=actual_open(path,flags,*args,**kwargs)
+                if not swapped and str(path) in (str(root),root.name):
+                    swapped=True
+                    owner.rename(displaced)
+                    owner.symlink_to(foreign,target_is_directory=True)
+                return fd
+            with patch.object(S.os,'open',side_effect=swap_after_open):
+                with self.assertRaisesRegex(S.StatusError,'JOURNAL_UNVERIFIED'):
+                    S.read(TOKEN,root)
+            self.assertTrue(swapped)
+            self.assertEqual((displaced/'runs'/TOKEN/'rpc/journal.json').read_bytes(),raw([entry(state='completed')]))
+            self.assertEqual(list(foreign.iterdir()),[])
+
 
 if __name__=='__main__':unittest.main()

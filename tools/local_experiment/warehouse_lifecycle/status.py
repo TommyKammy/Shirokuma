@@ -36,14 +36,41 @@ def _dir(fd, name, device):
     return child
 
 
+def _current_root(root, fd):
+    # A path returned to the caller must still name the directory we opened.
+    for path in (root, *root.parents):
+        current=path.lstat()
+        require(stat.S_ISDIR(current.st_mode))
+        if path==root:
+            pinned=os.fstat(fd)
+            require((current.st_dev,current.st_ino)==(pinned.st_dev,pinned.st_ino))
+
+
+def _open_root(root):
+    root=Path(root)
+    require(root.is_absolute() and '..' not in root.parts)
+    # O_NOFOLLOW on the final component alone does not protect an ancestor
+    # replaced between lstat and open. Walk from / with a pinned parent FD.
+    fd=os.open('/',DIRECTORY_FLAGS)
+    try:
+        for component in root.parts[1:]:
+            child=os.open(component,DIRECTORY_FLAGS,dir_fd=fd)
+            os.close(fd);fd=child
+        state=os.fstat(fd)
+        require(state.st_uid==os.getuid() and stat.S_IMODE(state.st_mode)==0o700)
+        _current_root(root,fd)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def _read(root, token):
     require(type(token) is str and re.fullmatch('[0-9a-f]{32}',token) is not None)
-    # The fixed root and all ancestors must not redirect through a symlink.
-    for path in (root, *root.parents):
-        require(stat.S_ISDIR(path.lstat().st_mode))
-    base=os.open(root,DIRECTORY_FLAGS)
+    root=Path(root)
+    base=_open_root(root)
     try:
-        s=os.fstat(base);require(s.st_uid==os.getuid() and stat.S_IMODE(s.st_mode)==0o700)
+        s=os.fstat(base)
         child=_dir(base,token,s.st_dev)
         try:
             journal=_dir(child,'rpc',s.st_dev)
@@ -58,8 +85,9 @@ def _read(root, token):
                     after=os.fstat(fd)
                     current=os.stat('journal.json',dir_fd=journal,follow_symlinks=False)
                     require(len(raw)==before.st_size and before==after and
-                            (before.st_dev,before.st_ino)==(current.st_dev,current.st_ino) and
-                            stat.S_ISREG(current.st_mode))
+                             (before.st_dev,before.st_ino)==(current.st_dev,current.st_ino) and
+                             stat.S_ISREG(current.st_mode))
+                    _current_root(root,base)
                     return raw
                 finally: os.close(fd)
             finally: os.close(journal)

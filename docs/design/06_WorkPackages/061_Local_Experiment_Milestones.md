@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-02
-version: "4.17"
+version: "4.18"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-02: archived Warehouse status stays in its opened root
+
+WP-L3-VW-002。旧journal-only statusと保存completionの固定runs rootは、祖先pathチェックとopenの間の親symlink差し替えで隔離tempの模擬別treeを読んだ。rootを`/`からfd相対で各component no-follow openし、現在pathとfdを読取前後で照合。修正後の親差し替え負例2件とopen直後の親退避負例は拒否、既存Unix owner/Go CLI統合を含むWarehouse focused 5 suites/182件PASS（log SHA256 `a3ea69ccee12146b6b2b550133827a341007306208838d4952bdf28dd96ad056`）。既存保存session2件をread-only照会し、operation2/4件・`correlated-saved-claim`/runtime unknown、journal/receipt/operationのSHA/inode/mode/mtime/sizeとfile集合が前後一致。専用ColimaはStopped、owner/SQL/cluster/保持backup変更なし。private記録`tmp/local-experiment/warehouse-status-root-checks/20261002/`。同UID元dir内改変・保存物真正性・現在backend/最終cleanup・owner再起動後未知要求回復は未達、unknownを再POSTしない。WP local-partial。
+
+最終全回帰121 suites/3826実行＝3818 PASS＋8 skip、91.63秒、log SHA256 `62f1861bfbc2bca938e6d74e41b9fee806b6503301370fdc7b0ba48ae337d290`。design-context/secret scan・diff check PASS。初回の直接システムPython3.9試験は既存`Path.hardlink_to`非対応/テスト間importで失敗し、Make指定の専用venvで再実行成功。
 
 ## 2026-10-02: lineage report output directory stays fd-bound
 

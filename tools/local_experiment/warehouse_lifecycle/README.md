@@ -103,6 +103,14 @@ query-mode commands remain unchanged. This does **not** implement owner restart
 recovery or a durable queue. To stop using the view, stop invoking this command;
 no saved run or backup needs to be removed or migrated.
 
+The fixed runs root is opened component by component from `/` with no-follow
+directory descriptors. Status and saved-completion reads both check that the
+current root path still names the opened inode before returning. A swapped
+ancestor symlink therefore cannot redirect a new read into another tree; a
+displaced root fails closed without returning a partial saved claim. This is
+not independent authentication of the original producer or protection from a
+same-UID actor who replaces contents *inside* an already-open private tree.
+
 All saved replies, including `busy`, `failed` and `unknown`, must now match
 either the exact stored response of their original request or the owner's
 evidence-free `unknown` reply for an in-flight/same-ID conflicting request.

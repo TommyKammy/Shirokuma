@@ -2,6 +2,7 @@ from copy import deepcopy
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -42,6 +43,40 @@ def raw(value):
 
 
 class SavedCompletionTests(unittest.TestCase):
+    def test_saved_completion_parent_swap_cannot_read_another_tree(self):
+        _,receipt,operation=fixture()
+        name=OPERATION_ID+'.json'
+        with tempfile.TemporaryDirectory(dir=S.ROOT/'tmp/local-experiment') as temp:
+            base=Path(temp)
+            owner=base/'owner'
+            foreign=base/'foreign'
+            displaced=base/'displaced'
+            for parent in (owner,foreign):
+                run=parent/'runs'/TOKEN
+                operations=run/'operations'
+                operations.mkdir(parents=True,mode=0o700)
+                for directory in (parent,parent/'runs',run):directory.chmod(0o700)
+                (run/'receipt.json').write_bytes(raw(receipt) if parent==owner else b'FOREIGN SAVED CLAIM')
+                (run/'receipt.json').chmod(0o600)
+                (operations/name).write_bytes(operation)
+                (operations/name).chmod(0o600)
+            root=owner/'runs'
+            actual_open=os.open
+            swapped=False
+            def swap_before_open(path,flags,*args,**kwargs):
+                nonlocal swapped
+                if not swapped and str(path) in (str(root),owner.name):
+                    swapped=True
+                    owner.rename(displaced)
+                    owner.symlink_to(foreign,target_is_directory=True)
+                return actual_open(path,flags,*args,**kwargs)
+            with patch.object(C.os,'open',side_effect=swap_before_open):
+                with self.assertRaises((OSError,S.StatusError)):
+                    C._saved_files(root,TOKEN,{name})
+            self.assertTrue(swapped)
+            self.assertEqual((displaced/'runs'/TOKEN/'receipt.json').read_bytes(),raw(receipt))
+            self.assertEqual((foreign/'runs'/TOKEN/'receipt.json').read_bytes(),b'FOREIGN SAVED CLAIM')
+
     def test_correlated_claim_does_not_claim_live_cleanup(self):
         journal,receipt,op=fixture()
         projected=C.correlate(raw(journal),raw(receipt),{OPERATION_ID+'.json':op},TOKEN)
