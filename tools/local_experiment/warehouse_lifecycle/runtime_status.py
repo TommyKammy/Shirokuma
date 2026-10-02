@@ -158,6 +158,15 @@ def snapshot(token, kube, deadline):
             endpoints.append(row)
     require(time.monotonic() < deadline)
     require(all(len(values) == len(set(values)) for values in (named, owned, endpoints)))
+    # The three API projections are separate reads. A resource present in more
+    # than one projection must retain its identity within this round as well.
+    identities = {}
+    for values in (named, owned, endpoints):
+        for kind, name, uid in values:
+            key = kind, name
+            require(key not in identities or identities[key] == uid)
+            identities[key] = uid
+        require(len({(kind, name) for kind, name, _ in values}) == len(values))
     # A hash correlates two bounded snapshots; it is not independent attestation.
     rows = [sorted(values) for values in (named, owned, endpoints)]
     return {'named_present': len(named), 'labelled_present': len(owned),

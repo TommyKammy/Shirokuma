@@ -93,6 +93,23 @@ class RuntimeStatusTests(TestCase):
         with self.assertRaises(R.RuntimeStatusError):
             R.observe(TOKEN, kube)
 
+    def test_conflicting_identity_between_projections_fails_in_one_round(self):
+        kube = FakeKube()
+        name = PREFIX + '-xs'
+        original = obj('Deployment', name, owner=TOKEN)
+        kube.names['deployments', name] = original
+        kube.owned = [copy.deepcopy(original)]
+        self.assertEqual(R.observe(TOKEN, kube)['current_state'], 'scoped-resources-present')
+
+        kube.owned[0]['metadata']['uid'] = str(uuid.uuid4())
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+
+        kube.owned = [copy.deepcopy(original), copy.deepcopy(original)]
+        kube.owned[1]['metadata']['uid'] = str(uuid.uuid4())
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+
     def test_invalid_or_incomplete_response_fails_closed(self):
         base = FakeKube()
         wrong_namespace = obj('Deployment', PREFIX + '-xs')

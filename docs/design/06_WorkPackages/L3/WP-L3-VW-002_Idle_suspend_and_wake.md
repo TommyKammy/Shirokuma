@@ -4,13 +4,19 @@ doc_id: "WP-L3-VW-002"
 title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-02
-version: "0.23"
+updated: 2026-10-03
+version: "0.24"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: scoped read-only inventory cross-projection identity
+
+全回帰`make verify-local-experiment`・design-context・diff checkも成功。private log `tmp/local-experiment/autonomous-runner/run-3au9fp_4/attempt-001/verify-warehouse.log` SHA256 `8b518e0c5f100ff4cd6a9252fcc641af6dbf0a9057aad211689af18905ecfc6d`。
+
+保存完了session用のopt-in runtime-statusで、同じkind/nameが固定名・owner label・EndpointSliceの複数GET投影に出る際、単一round内でUIDが食い違えば保守的に拒否。各list内の同名別UIDも拒否し、後続の2周同一性検査とbounded metadata-only出力を維持する。隔離fakeの一致正例/不一致負例とWarehouse focusedが成功。VMは停止したまま、実API/owner/SQL/保持run/backupに接続・変更なし。現在のcluster/cleanupや同時変更への原子的保証、owner再起動後の未知要求回復、独立認証・本番受入は依然未達。Vault原本への非対話直接同期はcheckout外権限がないため保留。戻す場合はreaderとfake testの局所差分のみ戻し、保存資料と空socket directoryを残して未知要求は再POSTしない。
 
 ## 2026-10-02: saved-requestのopt-in完了相関 — owner終了後のread-only照会
 

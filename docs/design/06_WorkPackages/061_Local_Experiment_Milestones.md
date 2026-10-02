@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.28"
+version: "4.29"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse offline current-inventory cross-view check
+
+WP-L3-VW-002。固定名・owner label・EndpointSliceの別GETで同じkind/nameが異なるUIDとして現れた場合、二周で安定してもruntime-statusは拒否する。fake正負例と`make test-local-warehouse-lifecycle`成功。専用ColimaはStopped、live API/保存run/backup/SQLを変更せず、現在の真正性・atomic snapshot・historical cleanup・unknown request回復は未証明。Vault原本はcheckout外の非対話権限がなく直接同期保留。局所reader差分だけを戻し、保持資料・未知要求をそのまま残す。
 
 ## 2026-10-03: doctor fixed endpoint port and Flux controller identity
 
