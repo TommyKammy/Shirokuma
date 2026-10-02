@@ -19,7 +19,7 @@ import (
 const warehouseSavedRequestScript = "tools/local_experiment/warehouse_lifecycle/status.py"
 
 func validWarehouseSavedRequest(request dataChildRequest) bool {
-	return request.Action == "saved-request" && warehouseSessionPattern.MatchString(request.Token) &&
+	return (request.Action == "saved-request" || request.Action == "saved-request-completion") && warehouseSessionPattern.MatchString(request.Token) &&
 		warehouseUUIDPattern.MatchString(request.Case) && request.Request == nil
 }
 
@@ -60,7 +60,11 @@ func warehouseSavedRequestCommand(request dataChildRequest) (*exec.Cmd, error) {
 	if err != nil || root != request.Root {
 		return nil, errors.New("invalid warehouse saved request checkout")
 	}
-	cmd := exec.Command(filepath.Join(root, dataPython), "-I", "-B", filepath.Join(root, warehouseSavedRequestScript), request.Token, "--request-id", request.Case)
+	args := []string{"-I", "-B", filepath.Join(root, warehouseSavedRequestScript), request.Token, "--request-id", request.Case}
+	if request.Action == "saved-request-completion" {
+		args = append(args, "--with-saved-completion")
+	}
+	cmd := exec.Command(filepath.Join(root, dataPython), args...)
 	cmd.Dir, cmd.Env = root, []string{}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd, nil
@@ -81,7 +85,11 @@ func validateWarehouseSavedOutput(raw []byte, request dataChildRequest) error {
 		return invalid
 	}
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) != nil || !warehouseKeys(fields, "schema_version", "session_id", "journal_sha256", "observation", "runtime_state", "recorded_actions", "reply_count", "recorded_error_count", "request_lookup") {
+	keys := []string{"schema_version", "session_id", "journal_sha256", "observation", "runtime_state", "recorded_actions", "reply_count", "recorded_error_count", "request_lookup"}
+	if request.Action == "saved-request-completion" {
+		keys = append(keys, "recorded_completion", "saved_receipt_sha256", "operation_count")
+	}
+	if json.Unmarshal(raw, &fields) != nil || !warehouseKeys(fields, keys...) {
 		return invalid
 	}
 	var value struct {
@@ -97,6 +105,9 @@ func validateWarehouseSavedOutput(raw []byte, request dataChildRequest) error {
 		ReplyCount         int                  `json:"reply_count"`
 		RecordedErrorCount int                  `json:"recorded_error_count"`
 		Lookup             warehouseSavedLookup `json:"request_lookup"`
+		RecordedCompletion string               `json:"recorded_completion"`
+		SavedReceiptSHA256 string               `json:"saved_receipt_sha256"`
+		OperationCount     int                  `json:"operation_count"`
 	}
 	var lookupFields map[string]json.RawMessage
 	if json.Unmarshal(raw, &value) != nil || value.SchemaVersion != 1 || value.SessionID != request.Token ||
@@ -115,10 +126,20 @@ func validateWarehouseSavedOutput(raw []byte, request dataChildRequest) error {
 		default:
 			return invalid
 		}
+		if request.Action == "saved-request-completion" &&
+			(action.Result != "verified" && action.Result != "noop" || action.Action == "query" && action.Result == "noop") {
+			return invalid
+		}
+	}
+	if request.Action == "saved-request-completion" &&
+		(value.RecordedCompletion != "correlated-saved-claim" || !warehouseHashPattern.MatchString(value.SavedReceiptSHA256) ||
+			value.OperationCount == 0 || value.OperationCount != len(value.RecordedActions) ||
+			value.ReplyCount < value.OperationCount || value.RecordedErrorCount != 0) {
+		return invalid
 	}
 	lookup := value.Lookup
 	if lookup.Observation == "not-recorded-in-snapshot" {
-		if lookup.RecordedAction == nil && lookup.RecordedResult == nil && lookup.OperationID == nil && lookup.ReceiptSHA256 == nil {
+		if request.Action == "saved-request" && lookup.RecordedAction == nil && lookup.RecordedResult == nil && lookup.OperationID == nil && lookup.ReceiptSHA256 == nil {
 			return nil
 		}
 		return invalid
@@ -143,6 +164,10 @@ func validateWarehouseSavedOutput(raw []byte, request dataChildRequest) error {
 	}
 	if (lookup.OperationID == nil) != (lookup.ReceiptSHA256 == nil) || lookup.OperationID != nil &&
 		(!warehouseUUIDPattern.MatchString(*lookup.OperationID) || !warehouseHashPattern.MatchString(*lookup.ReceiptSHA256)) {
+		return invalid
+	}
+	if request.Action == "saved-request-completion" &&
+		(*lookup.RecordedResult != "verified" && *lookup.RecordedResult != "noop" || lookup.OperationID == nil) {
 		return invalid
 	}
 	return nil
@@ -225,6 +250,7 @@ func runWarehouseSavedRequest(ctx context.Context, child dataChildRunner, reques
 
 func newWarehouseSavedRequestCommand(child dataChildRunner) *cobra.Command {
 	var sessionID, requestID, profile, root string
+	var completion bool
 	command := &cobra.Command{Use: "saved-request", Short: "Inspect one saved warehouse request without replay", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if profile != localExperimentProfile || !warehouseSessionPattern.MatchString(sessionID) || !warehouseUUIDPattern.MatchString(requestID) {
@@ -238,11 +264,16 @@ func newWarehouseSavedRequestCommand(child dataChildRunner) *cobra.Command {
 			defer stop()
 			ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
-			return runWarehouseSavedRequest(ctx, child, dataChildRequest{Root: checkout, Action: "saved-request", Token: sessionID, Case: requestID}, cmd.OutOrStdout())
+			action := "saved-request"
+			if completion {
+				action = "saved-request-completion"
+			}
+			return runWarehouseSavedRequest(ctx, child, dataChildRequest{Root: checkout, Action: action, Token: sessionID, Case: requestID}, cmd.OutOrStdout())
 		}}
 	command.Flags().StringVar(&sessionID, "session", "", "archived session ID")
 	command.Flags().StringVar(&requestID, "request-id", "", "original canonical request UUID")
 	command.Flags().StringVar(&profile, "profile", localExperimentProfile, "warehouse profile: local-experiment")
 	command.Flags().StringVar(&root, "repo-root", "", "checkout root (auto-detected from the current directory)")
+	command.Flags().BoolVar(&completion, "with-saved-completion", false, "require correlated archived receipt/operations; never proves a live backend or reply delivery")
 	return command
 }

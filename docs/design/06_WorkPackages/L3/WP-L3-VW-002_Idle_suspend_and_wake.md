@@ -5,12 +5,20 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-02
-version: "0.22"
+version: "0.23"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-02: saved-requestのopt-in完了相関 — owner終了後のread-only照会
+
+元UUIDの応答を失った場合、既存Go CLI `warehouse saved-request`のjournal-only照会と別に、明示`--with-saved-completion`で保存sessionの最終receipt・全operation fileまで相関させる。子processは固定checkoutの既存`status.py`、空environment、固定session/UUIDを一回だけ起動。Go側は出力の追加3 fieldの型/固定値・hash/operation数、元UUIDの存在/成功、`runtime_state=unknown`を検査し、CLI child失敗・欠損UUID・pending/unknown・改変・不正shape・中断では部分JSONなし。flagなし旧journal-onlyのJSON/欠損照会は維持。実際のowner再起動・RPC POST/SQL/cleanupは行わず、**同一owner由来の保存物の整合性**だけを提示する。
+
+停止中の専用Colima下で、既存閉鎖済み2 sessionの保存6要求をGo CLIからUUID毎にread-only相関し、別の既存Python completion readerによるsession全体のhash/件数・元journalのUUID/action/operation hashと一致。存在しないUUIDは非0・stdout空。保持2 session計10 filesの集合/SHA/inode/mode/mtime/sizeは前後同一。private記録 `tmp/local-experiment/warehouse-completed-request-checks/20261002/`。これはownerから元callerへのreply到達、保存producer真正性、歴史的cleanupやSQL実行、現backend/全namespaceを独立確認せず、owner終了後の未知要求を安全に再POSTできる条件にもならない。WP `local-partial`。止めるにはopt-in flagを使用せず、保持session/socket directory/backupを削除・再作成しない。
+
+Go全package test PASS（log SHA256 `c234dd9c882001898e0bee7f85636322912742f6b278a59d59665bc753e21ca9`）、`go vet ./...` PASS。Warehouse focused5 suites/191件PASS（log SHA256 `9967a32a3810f7daf1456fc8e8ceebabc1c7f975ecf5bda0ad8ad7530ef8b1ce`）。最終全回帰121 suites/3839実行＝3831 PASS＋8 skip、91.25秒、log SHA256 `3b6671cb2d78b050e196021c3ead4a3a94b5047dd237743de182dbcc82338b9d`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-10-02: partial HTTP timeout test accepts an already closed peer
 

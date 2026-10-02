@@ -134,6 +134,14 @@ class SavedCompletionTests(unittest.TestCase):
                 p.write_bytes(data);p.chmod(0o600)
             with patch.object(S,'RUNS',root):
                 self.assertEqual(C.read(TOKEN,root)['recorded_completion'],'correlated-saved-claim')
+                with patch('sys.stdout',new_callable=io.StringIO) as output:
+                    self.assertEqual(S.main(['--with-saved-completion','--request-id',REQUEST_ID,TOKEN]),0)
+                    result=json.loads(output.getvalue())
+                    self.assertEqual((result['recorded_completion'],result['request_lookup']['recorded_result'],
+                                      result['runtime_state']),('correlated-saved-claim','verified','unknown'))
+                with patch('sys.stdout',new_callable=io.StringIO) as output:
+                    self.assertEqual(S.main(['--request-id',REQUEST_ID,TOKEN]),0)
+                    self.assertNotIn('recorded_completion',json.loads(output.getvalue()))
             collision=deepcopy(journal)
             collision['replies'].insert(0,RPC._uncertain({**journal['requests'][0]['request'],'action':'chill'}))
             claimed=deepcopy(receipt)

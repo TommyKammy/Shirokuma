@@ -136,6 +136,26 @@ independent check of actual cleanup, backend state, audit delivery or execution
 provenance. `runtime_state` stays `unknown`, and nothing is restarted or replayed.
 The original journal-only status command and its output remain unchanged.
 
+For a lost reply **after an archived session has closed**, request an explicit
+saved-completion correlation for one original request UUID from the fixed Go CLI:
+
+```sh
+rtk proxy go run ./cmd/shirokuma warehouse saved-request --profile local-experiment --session <session-id> --request-id <original-uuid> --with-saved-completion
+```
+
+This opt-in flag reads the same fixed private journal, final session receipt
+and operation files through `status.py`; it never contacts the owner, Kubernetes
+or SQL. It emits a request lookup only if the *entire session* has a correlated
+closed/passed saved claim and the requested UUID is a recorded successful
+operation. A missing UUID, pending/failed result, absent/inconsistent receipt,
+or incomplete observation yields no JSON. Without the flag, the existing
+journal-only `saved-request` still reports `not-recorded-in-snapshot` where
+applicable. The additional `recorded_completion` is an internal correlation of
+files from the **same owner**: it does not prove delivery to the original
+caller, actual historical cleanup/query execution, live backend readiness or
+permission to replay after owner exit. Preserve unknown requests and retained
+records; do not create a new owner/session to repeat them.
+
 ### Current scoped Kubernetes inventory (opt-in, read-only)
 
 With the **dedicated Colima k3s profile already running**, an archived session

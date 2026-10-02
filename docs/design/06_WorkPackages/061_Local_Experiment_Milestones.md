@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-02
-version: "4.22"
+version: "4.23"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-02: archived Warehouse request completion is opt-in and read-only
+
+WP-L3-VW-002。`shirokuma warehouse saved-request --with-saved-completion`で元UUIDのjournal-only照会へ、既存Python readerのclosed/passed receipt・全operation file相関を要求する。空envの固定script＋固定argsだけを呼び、Go側も追加3 field/元UUID成功・`runtime_state=unknown`を検査する。flagなしの旧JSON/欠損UUID契約は維持し、opt-inで欠損・pending/失敗・保存相関不成立ならstdoutを出さず拒否。専用Colima Stoppedのまま保存完了2 session/6要求をGo CLIで照会し、別Python reader/元journalのhash・action・result・operation hashに一致。存在しないUUIDは非0/JSONなし。保存10files集合/SHA/inode/mode/mtime/sizeは前後一致、owner/SQL/cluster/backupに接続・書込みなし。private `tmp/local-experiment/warehouse-completed-request-checks/20261002/`。同一producerの保存内部整合に過ぎず、owner再起動後回復、元callerへのdelivery、保存producer真正性、過去cleanup・現在backend readinessの独立証明ではない。unknown要求を再POSTしない。WP local-partial。回復はflagを使わず保持資料は残す。
+
+Go全package test PASS（log SHA256 `c234dd9c882001898e0bee7f85636322912742f6b278a59d59665bc753e21ca9`）、`go vet ./...` PASS、Warehouse focused5 suites/191件PASS（log SHA256 `9967a32a3810f7daf1456fc8e8ceebabc1c7f975ecf5bda0ad8ad7530ef8b1ce`）。最終全回帰121 suites/3839実行＝3831 PASS＋8 skip、91.25秒、log SHA256 `3b6671cb2d78b050e196021c3ead4a3a94b5047dd237743de182dbcc82338b9d`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-10-02: Warehouse partial-request test deadline race
 
