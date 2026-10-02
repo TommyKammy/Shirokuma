@@ -112,42 +112,137 @@ def read_file(path, limit=MAX_FILE_BYTES):
     return raw
 
 
+SOURCE_DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+SOURCE_FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+
+
+def _current_source_path(path, fd):
+    opened = os.fstat(fd)
+    for current in (path, *path.parents):
+        info = current.lstat()
+        require(stat.S_ISDIR(info.st_mode), 'SOURCE_BOUNDARY_INVALID')
+        if current == path:
+            require((info.st_dev, info.st_ino) == (opened.st_dev, opened.st_ino), 'SOURCE_CHANGED')
+
+
+def _open_source_dir(path, *, private=True):
+    path = Path(path)
+    require(path.is_absolute() and '..' not in path.parts, 'SOURCE_BOUNDARY_INVALID')
+    # Open every component from /, rather than checking ancestors and later
+    # opening the full pathname through a substituted symlink.
+    fd = os.open('/', SOURCE_DIR_FLAGS)
+    try:
+        for component in path.parts[1:]:
+            child = os.open(component, SOURCE_DIR_FLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        info = os.fstat(fd)
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and
+                (not private or stat.S_IMODE(info.st_mode) == 0o700), 'SOURCE_PRIVACY_INVALID')
+        _current_source_path(path, fd)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _source_file_at(directory_fd, name, device, limit, *, expected=None):
+    before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid() and
+            stat.S_IMODE(before.st_mode) == 0o600 and before.st_dev == device and
+            before.st_size <= limit, 'SOURCE_FILE_INVALID')
+    if expected is not None:
+        require((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
+                (expected.st_dev, expected.st_ino, expected.st_size, expected.st_mtime_ns, expected.st_ctime_ns),
+                'SOURCE_CHANGED')
+    fd = os.open(name, SOURCE_FILE_FLAGS, dir_fd=directory_fd)
+    try:
+        opened = os.fstat(fd)
+        require((opened.st_dev, opened.st_ino) == (before.st_dev, before.st_ino) and
+                stat.S_ISREG(opened.st_mode), 'SOURCE_CHANGED')
+        chunks, size = [], 0
+        while True:
+            chunk = os.read(fd, min(65536, limit + 1 - size))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+            require(size <= limit, 'SOURCE_LIMIT_EXCEEDED')
+        raw = b''.join(chunks)
+        after = os.fstat(fd)
+        current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        require(len(raw) <= limit and (before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
+                (after.st_size, after.st_mtime_ns, after.st_ctime_ns) and
+                (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino) and
+                stat.S_ISREG(current.st_mode), 'SOURCE_CHANGED')
+        return raw
+    finally:
+        os.close(fd)
+
+
+def _bounded_names(fd, limit, code):
+    names = []
+    with os.scandir(fd) as entries:
+        for entry in entries:
+            names.append(entry.name)
+            require(len(names) <= limit, code)
+    return sorted(names)
+
+
 def source_snapshot(path):
     """Hash every retained file, including artifacts not consumed by the verifier."""
-    directory(path)
+    path = Path(path)
+    root_fd = _open_source_dir(path)
     files, total, nodes = {}, 0, 0
 
-    def visit(current, depth):
+    def visit(fd, relative, depth, device):
         nonlocal total, nodes
         require(depth <= 20, 'SOURCE_LIMIT_EXCEEDED')
-        directory(current)
-        files[str(current.relative_to(path)) + '/'] = {'directory': True}
-        for item in sorted(current.iterdir()):
+        files[relative + '/'] = {'directory': True}
+        for name in _bounded_names(fd, 1024, 'SOURCE_LIMIT_OR_SYMLINK'):
             nodes += 1
-            require(nodes <= 1024 and not item.is_symlink(), 'SOURCE_LIMIT_OR_SYMLINK')
-            info = item.lstat()
+            require(nodes <= 1024, 'SOURCE_LIMIT_OR_SYMLINK')
+            info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            require(info.st_dev == device, 'SOURCE_BOUNDARY_INVALID')
+            item = str(Path(relative) / name)
             if stat.S_ISDIR(info.st_mode):
-                visit(item, depth + 1)
+                child = os.open(name, SOURCE_DIR_FLAGS, dir_fd=fd)
+                try:
+                    opened = os.fstat(child)
+                    require((opened.st_dev, opened.st_ino) == (info.st_dev, info.st_ino) and
+                            opened.st_uid == os.getuid() and stat.S_IMODE(opened.st_mode) == 0o700,
+                            'SOURCE_CHANGED')
+                    visit(child, item, depth + 1, device)
+                    current = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                    require((opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino),
+                            'SOURCE_CHANGED')
+                finally:
+                    os.close(child)
             else:
                 require(sum('sha256' in entry for entry in files.values()) < MAX_FILES, 'SOURCE_LIMIT_EXCEEDED')
-                raw = read_file(item)
+                raw = _source_file_at(fd, name, device, MAX_FILE_BYTES, expected=info)
                 total += len(raw)
                 require(total <= MAX_RUN_BYTES, 'SOURCE_LIMIT_EXCEEDED')
-                files[str(item.relative_to(path))] = {
+                files[item] = {
                     'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw),
                     'inode': info.st_ino, 'mtime_ns': info.st_mtime_ns, 'mode': stat.S_IMODE(info.st_mode)}
-    visit(path, 0)
-    return digest(files)
+    try:
+        visit(root_fd, '.', 0, os.fstat(root_fd).st_dev)
+        _current_source_path(path, root_fd)
+        return digest(files)
+    finally:
+        os.close(root_fd)
 
 
 def listing(root):
-    directory(root, private=False)  # Existing collection root is 0755; each run is private.
-    names = []
-    with os.scandir(root) as entries:
-        for entry in entries:
-            names.append(entry.name)
-            require(len(names) <= MAX_ENTRIES, 'SOURCE_INVENTORY_LIMIT')
-    return sorted(names)
+    root = Path(root)
+    fd = _open_source_dir(root, private=False)  # Collection root is 0755; runs are private.
+    try:
+        names = _bounded_names(fd, MAX_ENTRIES, 'SOURCE_INVENTORY_LIMIT')
+        _current_source_path(root, fd)
+        return names
+    finally:
+        os.close(fd)
 
 
 def _entity_path(collection, name, owners=False):
@@ -312,21 +407,30 @@ def observe(client, projection):
 def _source(path, reader):
     status, code, projection, sha = 'invalid', 'SOURCE_INVALID', None, None
     try:
-        sha = source_snapshot(path)
-        summary_path = path / 'summary.json'
-        if not summary_path.exists():
-            return 'incomplete', 'SUMMARY_MISSING', None, sha
-        summary = decode(read_file(summary_path))
-        require(type(summary) is dict and summary.get('run_token') == path.name, 'SOURCE_IDENTITY_INVALID')
-        require(type(summary.get('result')) is str, 'SOURCE_RESULT_INVALID')
-        if summary.get('result') in {'failed', 'interrupted'}:
-            return 'failed', 'RECORDED_RUN_FAILED', None, sha
-        if summary.get('result') != 'passed':
-            return 'incomplete', 'RUN_NOT_COMPLETE', None, sha
-        projection = evidence.validate_projection(reader(path))
-        require(projection['run_token'] == path.name, 'SOURCE_IDENTITY_INVALID')
-        require(source_snapshot(path) == sha, 'SOURCE_CHANGED')
-        status, code = 'valid', 'SOURCE_VERIFIED'
+        fd = _open_source_dir(path)
+        try:
+            sha = source_snapshot(path)
+            _current_source_path(path, fd)
+            if 'summary.json' not in _bounded_names(fd, 1024, 'SOURCE_LIMIT_EXCEEDED'):
+                _current_source_path(path, fd)
+                return 'incomplete', 'SUMMARY_MISSING', None, sha
+            summary = decode(_source_file_at(fd, 'summary.json', os.fstat(fd).st_dev, MAX_FILE_BYTES))
+            require(type(summary) is dict and summary.get('run_token') == path.name, 'SOURCE_IDENTITY_INVALID')
+            require(type(summary.get('result')) is str, 'SOURCE_RESULT_INVALID')
+            if summary.get('result') in {'failed', 'interrupted'}:
+                _current_source_path(path, fd)
+                return 'failed', 'RECORDED_RUN_FAILED', None, sha
+            if summary.get('result') != 'passed':
+                _current_source_path(path, fd)
+                return 'incomplete', 'RUN_NOT_COMPLETE', None, sha
+            projection = evidence.validate_projection(reader(path))
+            _current_source_path(path, fd)
+            require(projection['run_token'] == path.name, 'SOURCE_IDENTITY_INVALID')
+            require(source_snapshot(path) == sha, 'SOURCE_CHANGED')
+            _current_source_path(path, fd)
+            status, code = 'valid', 'SOURCE_VERIFIED'
+        finally:
+            os.close(fd)
     except CoverageError as error:
         code = error.code
         if code == 'SOURCE_CHANGED':

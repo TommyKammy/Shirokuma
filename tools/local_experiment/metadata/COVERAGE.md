@@ -24,6 +24,16 @@ removed or retried through a substituted path. No source/catalog/backup is
 deleted. Same-UID actors that can replace entries inside the already-open
 directory are not independently excluded by this pathname-to-fd check.
 
+Source inventory and run snapshots also open every path component from `/` with
+no-follow directory descriptors, then list/read entries relative to those
+descriptors. The source verifier holds one run directory descriptor across its
+snapshot, summary read and evidence validation, and refuses a run path displaced
+during those steps. An injected test root must use its canonical absolute path;
+`/var`-style symlink aliases are not accepted. Source files and backup data are
+never repaired or removed on a failed observation. This closes parent-path
+redirection, **not** independent authentication of source producers or all
+same-UID changes inside the pinned directories.
+
 ## Reading the result
 
 Each eligible historical run contributes two expected table-level edges:
@@ -63,3 +73,9 @@ histories. It does not cover every catalog table, arbitrary SQL, column-level
 lineage, other platforms, or production readiness. Missing records are findings;
 this command does not repair them. Existing source evidence and retained catalog
 entities remain in place.
+
+The archived September 17 report had 5 eligible runs and 10 expected edges.
+A later offline source-only check found 7 eligible retained runs / 14 expected
+edges. That later check supplied a fake unavailable API, so all 14 edges were
+**unknown**, not missing or present; it did not re-observe the catalog or issue
+credentials. Never carry the historical 10/10 presence into the new denominator.

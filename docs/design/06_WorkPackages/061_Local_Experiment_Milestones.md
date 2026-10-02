@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-02
-version: "4.19"
+version: "4.20"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-02: Lineage saved-source reader stays on its original tree
+
+WP-L5-LINEAGE-001。旧`source_snapshot`はdirectory確認直後の親symlink差し替えで隔離test-owned別treeの保存runをhashした。source collection/listing、run snapshot/file/summaryをno-follow fd相対にし、evidence検証中も元run directory fdを保持・現pathを再確認。修正後の親差し替え・file entry差し替え負例は別treeを成功sourceへ昇格させない。VM/APIを起動せず実保存7 Data Plansを模擬API不達で読取。以前の歴史的5 run/10 edgeから分母は7 run/14 edgeへ変化しており、現catalog未読の14件は全て`unknown`、missing0・rate NULL。source snapshot hash前後一致、保持report/source/backup削除なし。private `tmp/local-experiment/lineage-source-reader-checks/20261002/`。初回smokeは過去の10を期待して失敗し、現保存7/14を確認してから成功。現catalogの独立再観測/真正性、同UID元dir内entry改変、全catalog/column lineage/常時dashboard/本番受入は未達。WP local-partial。
+
+focused1 suite/41件PASS、log SHA256 `b702b74d6db90eb41a8c8a7c9e11355b85ff1dcc54a811726ab26855e9158e7f`。全回帰121 suites/3839実行＝3831 PASS＋8 skip、91.09秒、log SHA256 `c987e1b3898ff11a2ed7666ded2add534b48d1fdae63c07e18b42500770305d6`。design-context/secret scan・diff check PASS。専用Colima Stopped。
 
 ## 2026-10-02: Warehouse saved completion vs scoped current inventory
 

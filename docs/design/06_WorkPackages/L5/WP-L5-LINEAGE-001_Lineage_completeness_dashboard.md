@@ -5,12 +5,20 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-02
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-02: saved source inventory/snapshot pinned to directory descriptors — offline
+
+前増分はreport**出力**をfd固定したが、読取側`source_snapshot`は私有runの親を検査した後に`iterdir`/`read_file`をpathで再解決していた。checkout内隔離tempで親pathを検査直後に別treeへのsymlinkへ差し替えると、旧実装が別treeの保存runをhashして戻す負例を再現。source collection列挙・run snapshot・summary file読取を`/`からcomponent毎のno-follow directory fdとfd相対の有界走査・file読取へ変更。`_source`は元run fdをevidence validatorの呼出しまで保持して現pathとのinode照合を行い、途中で親が退避されたら正常なData Planに昇格させない。入力内のfile entryをstat/open間に別inodeへ替える負例も拒否。出力writerやcatalog APIの振舞いは変えない。元directory内部の同UID actor改変、途中で元に戻す競合、producer認証や全catalog網羅は未解決。
+
+実保存Data PlanをAPI不達の**模擬client**でoffline読取すると、従来2026-09-17の5 run/10 edgeではなく、今は7 run/期待14 edgeが検証済み。14件すべて`unknown`、missing0、rate NULL、source snapshots前後一致。これを「現catalogの14/14存在」と読み替えない。metadata API/VMを起動・認証せず、現entity/lineageは未観測。credential・既存report・保存source・backupは書換え/削除しない（読取atime除外せず）。private記録は`tmp/local-experiment/lineage-source-reader-checks/20261002/`。初回smokeでは過去の分母10を期待して失敗し、実際の7/14を確認して修正した。WP `local-partial`。停止・復旧はこのsource reader差分のみ以前のローカルrevisionへ戻し、既存reportや元runは保持する。
+
+focused1 suite/41件PASS、log SHA256 `b702b74d6db90eb41a8c8a7c9e11355b85ff1dcc54a811726ab26855e9158e7f`。全回帰121 suites/3839実行＝3831 PASS＋8 skip、91.09秒、log SHA256 `c987e1b3898ff11a2ed7666ded2add534b48d1fdae63c07e18b42500770305d6`。design-context/secret scan・diff check PASS、専用Colima Stopped。
 
 ## 2026-10-02: lineage report output pinned to owned directory descriptors
 

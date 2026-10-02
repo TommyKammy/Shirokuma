@@ -28,7 +28,7 @@ class CoverageTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / 'data-plans'
+        self.root = Path(self.tmp.name).resolve() / 'data-plans'
         self.root.mkdir(mode=0o700)
         self.client = FakeClient()
         self.sources = {}
@@ -205,6 +205,98 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(report['inventory']['invalid'], 1)
         self.assertEqual(report['inventory']['eligible'], 0)
         self.assertEqual(self.client.calls, [])
+
+    def test_snapshot_parent_swap_never_reads_a_foreign_run(self):
+        with tempfile.TemporaryDirectory(dir=C.ROOT / 'tmp/local-experiment') as temp:
+            base = Path(temp).resolve()
+            owner, foreign, displaced = (base / name for name in ('owner', 'foreign', 'displaced'))
+            for parent, result in ((owner, 'original'), (foreign, 'foreign')):
+                run = parent / ('a' * 32)
+                run.mkdir(parents=True, mode=0o700)
+                parent.chmod(0o700)
+                summary = run / 'summary.json'
+                save(summary, {'result': result})
+            source = owner / ('a' * 32)
+            foreign_hash = C.source_snapshot(foreign / ('a' * 32))
+            opened = source.lstat()
+            real_scandir = os.scandir
+            swapped = False
+            def swap_before_listing(target):
+                nonlocal swapped
+                root_target = (isinstance(target, int) and
+                               (os.fstat(target).st_dev, os.fstat(target).st_ino) == (opened.st_dev, opened.st_ino))
+                if not swapped and (root_target or not isinstance(target, int) and Path(target) == source):
+                    owner.rename(displaced)
+                    owner.symlink_to(foreign, target_is_directory=True)
+                    swapped = True
+                return real_scandir(target)
+            with patch.object(C.os, 'scandir', side_effect=swap_before_listing):
+                with self.assertRaises((C.CoverageError, OSError)):
+                    C.source_snapshot(source)
+            self.assertTrue(swapped)
+            self.assertNotEqual(C.source_snapshot(displaced / ('a' * 32)), foreign_hash)
+
+    def test_collection_parent_swap_never_enumerates_a_foreign_domain(self):
+        with tempfile.TemporaryDirectory(dir=C.ROOT / 'tmp/local-experiment') as temp:
+            base = Path(temp).resolve()
+            owner, foreign, displaced = (base / name for name in ('owner', 'foreign', 'displaced'))
+            for parent in (owner, foreign):
+                (parent / 'data-plans').mkdir(parents=True, mode=0o700)
+                parent.chmod(0o700)
+            (owner / 'data-plans' / 'original').mkdir(mode=0o700)
+            (foreign / 'data-plans' / 'foreign').mkdir(mode=0o700)
+            root = owner / 'data-plans'
+            before = root.lstat()
+            actual_scandir = os.scandir
+            swapped = False
+            def replace_before_listing(target):
+                nonlocal swapped
+                original = isinstance(target, int) and (os.fstat(target).st_dev, os.fstat(target).st_ino) == (before.st_dev, before.st_ino)
+                if not swapped and (original or not isinstance(target, int) and Path(target) == root):
+                    owner.rename(displaced)
+                    owner.symlink_to(foreign, target_is_directory=True)
+                    swapped = True
+                return actual_scandir(target)
+            with patch.object(C.os, 'scandir', side_effect=replace_before_listing):
+                with self.assertRaises((C.CoverageError, OSError)):
+                    C.listing(root)
+            self.assertTrue(swapped)
+            self.assertEqual(C.listing(displaced / 'data-plans'), ['original'])
+            self.assertEqual(C.listing(foreign / 'data-plans'), ['foreign'])
+
+    def test_source_reader_cannot_validate_a_displaced_run(self):
+        path = self.add_run(curated=True)
+        original_hash = C.source_snapshot(path)
+        displaced = self.root.with_name('displaced-data-plans')
+        foreign = self.root.with_name('foreign-data-plans')
+        foreign.mkdir(mode=0o700)
+        def displaced_reader(_):
+            self.root.rename(displaced)
+            self.root.symlink_to(foreign, target_is_directory=True)
+            return copy.deepcopy(self.sources[path.name])
+        status, code, source, sha = C._source(path, displaced_reader)
+        self.assertNotEqual(status, 'valid')
+        self.assertIsNone(source)
+        self.assertEqual(sha, original_hash)
+        self.assertEqual(C.source_snapshot(displaced / path.name), original_hash)
+        self.assertEqual(list(foreign.iterdir()), [])
+
+    def test_snapshot_rejects_entry_replacement_between_stat_and_open(self):
+        path = self.add_run()
+        summary = path / 'summary.json'
+        actual_open = os.open
+        swapped = False
+        def replace_before_open(name, flags, *args, **kwargs):
+            nonlocal swapped
+            if name == 'summary.json' and kwargs.get('dir_fd') is not None and not swapped:
+                summary.rename(path / 'original.json')
+                save(summary, {'run_token': path.name, 'result': 'foreign'})
+                swapped = True
+            return actual_open(name, flags, *args, **kwargs)
+        with patch.object(C.os, 'open', side_effect=replace_before_open):
+            with self.assertRaises((C.CoverageError, OSError)):
+                C.source_snapshot(path)
+        self.assertTrue(swapped)
 
     def test_new_run_during_observation_marks_inventory_incomplete(self):
         self.add_run()
