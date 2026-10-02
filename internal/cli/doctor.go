@@ -270,7 +270,8 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 				controller.Status.ReadyReplicas != *controller.Spec.Replicas ||
 				controller.Status.UpdatedReplicas != *controller.Spec.Replicas
 			for _, condition := range controller.Status.Conditions {
-				if (condition.Type == "ReplicaFailure" && condition.Status == "True") || (condition.Type == "Progressing" && condition.Status == "False") {
+				if (condition.Type == "ReplicaFailure" && condition.Status == "True") ||
+					((condition.Type == "Progressing" || condition.Type == "Available") && condition.Status == "False") {
 					unready = true
 				}
 			}

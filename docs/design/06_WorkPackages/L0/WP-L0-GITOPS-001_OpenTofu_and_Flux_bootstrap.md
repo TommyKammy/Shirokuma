@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: contradictory Available condition is not readiness
+
+Second independent offline increment: local doctor rejects fixed Flux controller and Lakehouse workload `Available=False` even with apparently complete replica counters. Fake negative cases and normal healthy fixtures pass (`go test ./internal/cli`: 698 tests); `make verify-local-experiment` exits successfully. The generic Flux doctor contract is unchanged. Dedicated Colima remains stopped; no runtime observation, reconciler write, retained volume or backup change. This is not proof of actual service readiness or production acceptance. Roll back only the diagnostic and tests; Vault source handoff direct sync remains pending outside the permitted checkout.
 
 ## 2026-10-03: reject ambiguous non-root Flux inventory
 

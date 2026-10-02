@@ -139,6 +139,14 @@ func TestLocalFluxRejectsWrongControllerIdentity(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsFailedAvailableCondition(t *testing.T) {
+	controllers := strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":1,"conditions":[{"type":"Available","status":"False"}]`, 1)
+	runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
+	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+		t.Fatalf("failed controller condition accepted: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsPaginatedInventories(t *testing.T) {
 	for _, first := range []bool{true, false} {
 		responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
@@ -275,6 +283,7 @@ func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 		{"terminating", `"generation":2`, `"generation":2,"deletionTimestamp":"2026-09-16T00:00:00Z"`, "terminating"},
 		{"replica-failure", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":"True"}],"observedGeneration":2`, "failed rollout"},
 		{"progress-failure", `"observedGeneration":2`, `"conditions":[{"type":"Progressing","status":"False"}],"observedGeneration":2`, "failed rollout"},
+		{"available-failure", `"observedGeneration":2`, `"conditions":[{"type":"Available","status":"False"}],"observedGeneration":2`, "failed rollout"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

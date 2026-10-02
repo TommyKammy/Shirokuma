@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.30"
+version: "4.31"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline contradictory workload availability
+
+WP-L0-GITOPS-001。別の増分としてFlux固定controller/Lakehouse固定workloadの`Available=False`をreplica数がreadyでも拒否。正常fakeを維持、`go test ./internal/cli`（698件）、`make verify-local-experiment`成功。Colima Stopped、live API/保存run/backup操作なし。現API真正性・SQL/Flux source真正性・strict gate・本番受入は未検証。rollbackはdoctor局所変更を戻し保持資料は残す。Vault原本はcheckout外で直接同期保留。
 
 ## 2026-10-03: offline Flux non-root inventory ambiguity
 
