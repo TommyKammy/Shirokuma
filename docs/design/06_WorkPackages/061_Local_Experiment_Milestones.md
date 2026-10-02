@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.27"
+version: "4.28"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: doctor fixed endpoint port and Flux controller identity
+
+WP-L0-GITOPS-001。専用Colimaの停止をread-only statusで確認し、offline fake検証のみ。local doctorの固定loopback URLで0・範囲外・非数値portを拒否して後続API readを行わず、固定Flux controllerは名前だけでなくDeployment/flux-systemも照合。正常fixtureも維持。`go test ./internal/cli`、`go test ./...`、`go vet ./...`、`make verify-local-experiment`成功。runtime/保存run/backupは変更せず、live Flux/remote provenance/strict gate/本番受入は未確認。Vault原本への非対話直接同期はcheckout外権限がないため保留。rollbackはdoctorとfake testの局所差分のみを戻し保持資料を残す。
 
 ## 2026-10-03: read-only doctor rejects ambiguous workload inventories and malformed local endpoints
 

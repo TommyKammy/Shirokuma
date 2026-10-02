@@ -261,7 +261,8 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	for _, controller := range controllers.Items {
 		unready := controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas
 		if localExperiment {
-			unready = unready || controller.Metadata.DeletionTimestamp != "" ||
+			unready = unready || controller.Kind != "Deployment" || controller.Metadata.Namespace != "flux-system" ||
+				controller.Metadata.DeletionTimestamp != "" ||
 				controller.Metadata.Generation < 1 || controller.Status.ObservedGeneration != controller.Metadata.Generation ||
 				controller.Spec.Replicas == nil || *controller.Spec.Replicas < 1 ||
 				controller.Status.Replicas != *controller.Spec.Replicas ||

@@ -4,13 +4,17 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-02
-version: "0.6"
+updated: 2026-10-03
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: fixed local diagnostic identity and port bounds
+
+停止中の専用Colimaは起動せず、固定local doctorのloopback HTTPS endpointに数値port `1..65535`を要求し、0/範囲外/文字列は後続read前に拒否。別の独立増分として固定Flux controller4件は名前だけでなく`Deployment/flux-system`を要求する。fakeの正負例、`go test ./internal/cli`、`go test ./...`、`go vet ./...`、`make verify-local-experiment`は成功。汎用doctorの契約は変更しない。live API・remote revision・strict gate・Git reconciliationの受入は未検証。保持VM/backup/保存runの変更はなく、rollbackは局所doctor差分のみを戻す。非対話CLIからcheckout外Vault原本への直接同期は権限外のため保留。
 
 ## 2026-10-03: local doctor inventory and API endpoint fail-closed checks
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -70,7 +71,8 @@ func checkLocalExperimentScope(ctx context.Context, runner commandRunner, kubeCo
 	if err != nil || endpoint.Scheme != "https" || endpoint.User != nil || endpoint.Host == "" || endpoint.Path != "" || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Opaque != "" {
 		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
 	}
-	if port := endpoint.Port(); port == "" {
+	port, portErr := strconv.Atoi(endpoint.Port())
+	if portErr != nil || port < 1 || port > 65535 {
 		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
 	}
 	ip := net.ParseIP(endpoint.Hostname())

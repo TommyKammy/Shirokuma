@@ -80,6 +80,28 @@ func TestLocalFluxRejectsDuplicateRootResources(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsWrongControllerIdentity(t *testing.T) {
+	for _, test := range []struct{ name, old, replacement string }{
+		{"kind", `"kind":"Deployment"`, `"kind":"StatefulSet"`},
+		{"namespace", `"namespace":"flux-system"`, `"namespace":"other"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			controllers := strings.Replace(localControllerJSON(), test.old, test.replacement, 1)
+			if controllers == localControllerJSON() {
+				t.Fatal("fixture replacement did not match")
+			}
+			runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
+			if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+				t.Fatalf("wrong controller identity accepted: %#v", check)
+			}
+		})
+	}
+	runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}
+	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("valid controllers rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsPaginatedInventories(t *testing.T) {
 	for _, first := range []bool{true, false} {
 		responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
@@ -175,7 +197,7 @@ func TestLocalExperimentRejectsOtherContextBeforeChecks(t *testing.T) {
 }
 
 func TestLocalExperimentScopeRejectsRemoteOrMalformedEndpoints(t *testing.T) {
-	for _, endpoint := range []string{"https://cluster.example:6443", "https://127.0.0.1.example", "http://127.0.0.1:6443", "https://user:secret@127.0.0.1", "https://127.0.0.1", "https://127.0.0.1:6443/proxy", "https://127.0.0.1:6443?redirect=remote", "https://127.0.0.1:6443#fragment", "invalid", "%"} {
+	for _, endpoint := range []string{"https://cluster.example:6443", "https://127.0.0.1.example", "http://127.0.0.1:6443", "https://user:secret@127.0.0.1", "https://127.0.0.1", "https://127.0.0.1:0", "https://127.0.0.1:65536", "https://127.0.0.1:abc", "https://127.0.0.1:6443/proxy", "https://127.0.0.1:6443?redirect=remote", "https://127.0.0.1:6443#fragment", "invalid", "%"} {
 		t.Run(endpoint, func(t *testing.T) {
 			runner := &fakeRunner{responses: []fakeResponse{{output: endpoint}}}
 			report := runLocalExperimentDoctor(context.Background(), runner, localExperimentContext, time.Unix(0, 0))
