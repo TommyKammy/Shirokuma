@@ -5,12 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-02
-version: "4.23"
+version: "4.24"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-02: bounded OpenCode continuation runner — implementation, not model execution
+
+ADR-0034/DEV-04Bのローカル開発loop向けに`tools/local_experiment/autonomous_runner.py`、`AUTONOMOUS_RUNNER.md`、AGENTS継続規約とfixture testを追加。active `local/autonomous-experiment` checkout、clean tree、Vault handoffを要求し、デフォルトplanはモデル呼出0。明示`--execute --acknowledge-model-charges --max-runs N --max-minutes M`だけが固定checkoutから新しい`opencode run --format json`を順次起動する。各回のprivate checkpoint（nonce/回数/HEAD/理由）、clean tree、追加commitの祖先関係を照合してから次へ進む。dirty tree・checkpoint欠損/不正・CLI失敗/timeout・同時runnerでは停止し、ファイルをreset/cleanup/自動再試行しない。ログとcontrolはcheckout ignored `tmp/local-experiment/autonomous-runner/run-*/`にprivate保存。新しいdaemon/launchd/GitHub supervisorやpermission skipは追加しない。
+
+現在hostのCLI `opencode` 1.17.11は`run --format json`をhelpで確認したが、実モデルへの`opencode run`、実セッション間のAGENTS読取、サービス側cancel、currency上限は**未検証/未実装**。runnerの時間切れでhost process groupを止めてもshared serverの仕事停止・課金停止は証明されず、次は自動起動しない。fixture-onlyの新Git repo＋fake CLIで2回継続、stop/no-commit/dirty/欠損・symlink checkpoint、非0/期限/lockとゼロ呼出planを検証。モデル料金と本番・人間受入の権限は推測せず、追加モデル支出には将来明示実行flagと上限指定が必要。保持run/backup・Colima/SQL/metadataに接続・変更なし。WP機能完成度はこのrunnerからは上がらず、ローカル開発loopの停止・再開可能性のみを改善する。戻すならrunnerの呼出しを止め、保存ログ/保持データ/backupは削除しない。
+
+最終focused9件PASS（private log SHA256 `40e447e3e326607117e2f65543cbdef13e75030ea473a3d09bf8124fdd526f39`）。初回design-contextはroot/mirror AGENTS差分で失敗し、`docs/design/99_Project_Files/AGENTS.md`を同期して再実行PASS（89 documents/10 issues/42 references）。初回・途中の全回帰PASS logsも改変せず保持し、最終全回帰122 suites/3848実行＝3840 PASS＋8 skip、95.15秒、log SHA256 `f247d04ff960995fe8756dd21f7ce482dd96b2dd545b637d47eb9f390bb935ff`。secret scan・diff check PASS。限定記録 `tmp/local-experiment/autonomous-runner-implementation-checks/20261002/`。
 
 ## 2026-10-02: archived Warehouse request completion is opt-in and read-only
 

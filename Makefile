@@ -718,6 +718,15 @@ test-local-warehouse-lifecycle:
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_query_lifecycle_telemetry.py'
 verify-local-experiment: test-local-warehouse-lifecycle
 
+.PHONY: local-autonomous-plan test-local-autonomous-runner
+local-autonomous-plan:
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py
+
+test-local-autonomous-runner:
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_autonomous_runner.py'
+
+verify-local-experiment: test-local-autonomous-runner
+
 .PHONY: local-mlflow-sync local-mlflow-prepare local-mlflow-plan local-mlflow-import local-mlflow-start local-mlflow-status local-mlflow-stop test-local-mlflow
 local-mlflow-sync:
 	@uv sync --project tools/local_experiment/mlflow --locked --no-build

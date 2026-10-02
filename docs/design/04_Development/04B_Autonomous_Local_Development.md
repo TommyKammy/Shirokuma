@@ -4,8 +4,8 @@ doc_id: "DEV-04B"
 title: "Autonomous Local Development"
 status: accepted
 created: 2026-09-16
-updated: 2026-09-16
-version: "1.0"
+updated: 2026-10-02
+version: "1.1"
 area: development
 tags: [shirokuma, local, development]
 ---
@@ -42,6 +42,15 @@ fresh approval on an operation already inside that standing scope.
 Local completion means the recorded functional acceptance criteria passed in
 the stated lab scope. Report untested, blocked and incomplete criteria directly;
 external publication and production/operator acceptance remain separate.
+
+An optional bounded OpenCode continuation runner is documented in
+[`AUTONOMOUS_RUNNER.md`](../../../tools/local_experiment/AUTONOMOUS_RUNNER.md).
+It starts fresh sessions from this dedicated worktree using this loop and the
+current WP/Milestones/Vault handoff, then requires a clean local commit and a
+private continuation checkpoint before another call. It defaults to a zero-call
+plan; execution requires explicit run/time bounds and an acknowledgement of
+model charges. Neither the checkpoint nor a test pass is 100% acceptance.
+The runner is not a daemon, scheduler, approval bypass, or hard currency cap.
 
 The retained `make verify` includes historical publication/admission gates,
 including expired authorization and the absence of unpublished runtime inputs.

@@ -4,8 +4,8 @@ doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
-updated: 2026-09-16
-version: "0.3.0"
+updated: 2026-10-02
+version: "0.4.0"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -83,3 +83,22 @@ scope or acceptance changes. Keep durable references repository-relative.
 The GitHub supervisor path is inactive for this loop. Run
 `make supervisor-preflight` only before deliberately starting that separately
 authorized supervisor path; it is not a prerequisite for local work.
+
+## Opt-in OpenCode continuation
+
+`tools/local_experiment/autonomous_runner.py` may start a bounded series of
+fresh `opencode run` sessions only when invoked with explicit execution and
+model-charge acknowledgement flags. Merely reading these instructions or
+running its default plan must never start a model request. The runner is not
+the GitHub supervisor and does not authorize new spending, GitHub writes or
+publication. See `tools/local_experiment/AUTONOMOUS_RUNNER.md` for the limits.
+
+Only when a continuation prompt supplies `CONTROL_JSON`: read the current WP,
+Milestones and matching Vault handoff; complete a coherent local increment and
+continue to the next independent task instead of treating a commit or passing
+tests as the end of the turn. Do not invoke the runner again from inside a
+session. Before finishing, write the requested private checkpoint with the
+current full HEAD and an honest `continue` or `stop` decision. It is a control
+signal, **not** evidence of production acceptance or completion. If scope,
+permissions, retained data safety or execution state is uncertain, stop the
+dependent action and preserve the evidence rather than fabricating a checkpoint.
