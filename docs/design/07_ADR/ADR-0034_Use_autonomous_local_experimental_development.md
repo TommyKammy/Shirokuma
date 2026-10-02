@@ -4,8 +4,8 @@ doc_id: "ADR-0034"
 title: "Use autonomous local experimental development"
 status: accepted
 created: 2026-09-16
-updated: 2026-09-16
-version: "1.0"
+updated: 2026-10-03
+version: "1.1"
 area: adr
 tags: [shirokuma, adr, local, development]
 ---
@@ -70,6 +70,15 @@ environment, public service exposure, or changes to the project's purpose.
 Stop only the dependent action at such a boundary and continue independent
 work. Protected-branch, CI, CODEOWNERS and publication rules still apply if an
 external delivery is separately authorized later.
+
+On 2026-10-03 the owner separately allowed Shirokuma's local continuation runner
+to consume the whole existing ChatGPT Pro weekly allowance. That allowance is
+not an authorization for metered API credentials, paid fallback providers or
+new subscriptions. The current chat's authentication does not establish the
+local OpenCode CLI's identity or billing route. The runner therefore requires
+explicit model selection and a visible OpenAI OAuth label before each call;
+when those are missing or ambiguous it must not make a model request. This
+check is evidence of a CLI label, not independent proof of provider billing.
 
 ## Verification and completion
 

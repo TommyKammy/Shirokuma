@@ -15,8 +15,20 @@ from tools.local_experiment import autonomous_runner as R
 
 FAKE_CLI = '''#!/usr/bin/env python3
 import json,os,pathlib,re,subprocess,sys,time
-assert sys.argv[1:4]==['run','--format','json']
-match=re.search(r'^CONTROL_JSON=(.*)$',sys.argv[4],re.M)
+if sys.argv[1:]==['auth','list']:
+    mode=os.environ.get('FAKE_AUTH_MODE','oauth')
+    if mode=='expires':
+        counter=pathlib.Path.cwd()/'tmp/auth-count'
+        counter.parent.mkdir(exist_ok=True)
+        count=int(counter.read_text())+1 if counter.exists() else 1
+        counter.write_text(str(count))
+        mode='oauth' if count==1 else 'missing'
+    print({'oauth':'OpenAI OAuth','missing':'Other Provider oauth',
+           'api':'OpenAI API Key','multiple':'OpenAI OAuth\\nOpenAI API Key',
+           'untyped':'OpenAI connected'}[mode])
+    sys.exit(0)
+assert sys.argv[1:6]==['run','--model','openai/fixture','--format','json']
+match=re.search(r'^CONTROL_JSON=(.*)$',sys.argv[6],re.M)
 assert match is not None
 c=json.loads(match.group(1));root=pathlib.Path.cwd();mode=os.environ.get('FAKE_OPENCODE_MODE','continue')
 if mode=='slow':
@@ -44,6 +56,8 @@ print(json.dumps({'type':'fixture','iteration':c['iteration']}))
 
 
 class AutonomousRunnerTests(unittest.TestCase):
+    model = 'openai/fixture'
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=R.ROOT / 'tmp/local-experiment')
         self.addCleanup(self.temp.cleanup)
@@ -80,14 +94,14 @@ class AutonomousRunnerTests(unittest.TestCase):
             self.assertIn('BUDGET_REQUIRED', err.getvalue())
         self.assertFalse((self.root/'tmp').exists())
 
-    def test_execute_cli_requires_charge_ack_and_uses_private_handoff(self):
+    def test_execute_cli_requires_weekly_limit_flag_and_uses_private_handoff(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
              mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': 'stop'}), \
              contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(R.main(['--execute', '--max-runs', '2', '--max-minutes', '1']), 1)
+            self.assertEqual(R.main(['--execute', '--model', self.model, '--max-runs', '2', '--max-minutes', '1']), 1)
             self.assertIn('BUDGET_REQUIRED', err.getvalue())
-            self.assertEqual(R.main(['--execute', '--acknowledge-model-charges',
+            self.assertEqual(R.main(['--execute', '--use-pro-weekly-limit', '--model', self.model,
                                      '--max-runs', '2', '--max-minutes', '1']), 0)
         self.assertEqual(json.loads(out.getvalue().splitlines()[-1])['completion_verified'], False)
         parent = self.root/'tmp/local-experiment/autonomous-runner'
@@ -95,10 +109,67 @@ class AutonomousRunnerTests(unittest.TestCase):
         self.assertIn('fixture', output.read_text())
         self.assertFalse(list(parent.glob('run-*/attempt-002')))
 
+    def test_week_long_bound_is_allowed_but_not_unbounded(self):
+        with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
+             mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
+             contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(R.main(['--max-runs', '96', '--max-minutes', '10080']), 0)
+        plan = json.loads(out.getvalue())
+        self.assertEqual((plan['planned_max_runs'], plan['planned_max_minutes']), (96, 10080))
+        self.assertEqual(plan['subscription_preflight'], 'not_checked')
+        with self.assertRaisesRegex(R.RunnerError, 'BUDGET_INVALID'):
+            R.run(self.root, self.vault, str(self.cli), max_runs=97, max_minutes=10080, model=self.model)
+        with self.assertRaisesRegex(R.RunnerError, 'BUDGET_INVALID'):
+            R.run(self.root, self.vault, str(self.cli), max_runs=96, max_minutes=10081, model=self.model)
+
+    def test_missing_or_ambiguous_oauth_cannot_start_run(self):
+        for mode in ('missing', 'api', 'multiple', 'untyped'):
+            with self.subTest(mode=mode), mock.patch.dict(os.environ, {'FAKE_AUTH_MODE': mode}), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_AUTH_UNVERIFIED'):
+                    R.run(self.root, self.vault, str(self.cli), max_runs=96,
+                          max_minutes=10080, model=self.model)
+        parent = self.root/'tmp/local-experiment/autonomous-runner'
+        self.assertFalse(list(parent.glob('run-*/attempt-001')))
+        self.assertEqual(len(list(parent.glob('run-*/summary.json'))), 4)
+        with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_MODEL_REQUIRED'):
+            R.subscription_preflight(str(self.cli), 'openrouter/paid-model', self.root)
+        with mock.patch.dict(os.environ, {'OPENAI_API_KEY': 'redacted'}):
+            with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_ROUTE_AMBIGUOUS'):
+                R.subscription_preflight(str(self.cli), self.model, self.root)
+
+    def test_plan_reports_oauth_label_without_model_request(self):
+        with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
+             mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
+             contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(R.main(['--model', self.model]), 0)
+        self.assertEqual(json.loads(out.getvalue())['subscription_preflight'], 'openai_oauth_label_present')
+        with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
+             mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
+             mock.patch.dict(os.environ, {'FAKE_AUTH_MODE': 'api'}), \
+             contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(R.main(['--model', self.model]), 0)
+        self.assertEqual(json.loads(out.getvalue())['subscription_preflight'], 'SUBSCRIPTION_AUTH_UNVERIFIED')
+
+    def test_lost_oauth_between_commits_stops_before_second_invocation(self):
+        with mock.patch.dict(os.environ, {'FAKE_AUTH_MODE': 'expires'}), \
+             contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_AUTH_UNVERIFIED'):
+                R.run(self.root, self.vault, str(self.cli), max_runs=96,
+                      max_minutes=10080, model=self.model)
+        parent = self.root/'tmp/local-experiment/autonomous-runner'
+        directory = next(parent.glob('run-*'))
+        summary = json.loads((directory/'summary.json').read_text())
+        count = self.root/'tmp/auth-count'
+        self.assertEqual(summary['attempts'], 1,
+                         f"reason={summary['reason']} auth_count={count.read_text() if count.exists() else 'none'}")
+        self.assertEqual(json.loads((directory/'attempt-001/result.json').read_text())['reason'], 'more_work')
+        self.assertFalse((directory/'attempt-002').exists())
+
     def test_two_new_sessions_continue_only_after_new_clean_commits(self):
         initial = R.checkout_head(self.root, self.vault)
         with contextlib.redirect_stdout(io.StringIO()):
-            reason, directory = R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1)
+            reason, directory = R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
         self.assertEqual(reason, 'run_budget_reached')
         self.assertEqual(json.loads((directory/'summary.json').read_text())['attempts'], 2)
         self.assertNotEqual(initial, R.checkout_head(self.root, self.vault))
@@ -113,7 +184,7 @@ class AutonomousRunnerTests(unittest.TestCase):
     def test_agent_stop_claim_never_becomes_verified_completion(self):
         with mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': 'stop'}), \
              contextlib.redirect_stdout(io.StringIO()):
-            reason, directory = R.run(self.root, self.vault, str(self.cli), max_runs=3, max_minutes=1)
+            reason, directory = R.run(self.root, self.vault, str(self.cli), max_runs=3, max_minutes=1, model=self.model)
         self.assertEqual(reason, 'agent_no_safe_work_claim')
         self.assertEqual(json.loads((directory/'summary.json').read_text())['attempts'], 1)
         self.assertFalse((directory/'attempt-002').exists())
@@ -124,7 +195,7 @@ class AutonomousRunnerTests(unittest.TestCase):
             with self.subTest(mode=mode), mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': mode}), \
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(R.RunnerError, code):
-                    R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1)
+                    R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
         parent = self.root/'tmp/local-experiment/autonomous-runner'
         self.assertEqual(len(list(parent.glob('run-*/summary.json'))), 3)
         self.assertFalse(list(parent.glob('run-*/attempt-002')))
@@ -134,7 +205,7 @@ class AutonomousRunnerTests(unittest.TestCase):
             with self.subTest(mode=mode), mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': mode}), \
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(R.RunnerError, code):
-                    R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1)
+                    R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
             if mode == 'dirty':
                 self.assertEqual((self.root/'unfinished.txt').read_text(), 'preserve me')
                 # Clear only this test-owned disposable file for the next fixture.
@@ -158,8 +229,8 @@ class AutonomousRunnerTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': 'slow'}):
             with self.assertRaisesRegex(R.RunnerError, 'PROCESS_STOPPED_REMOTE_UNCONFIRMED'):
                 R.invoke(str(self.cli), self.root, attempt,
-                         R.prompt({'nonce': 'a'*32, 'iteration': 1, 'checkpoint': 'unused'}, self.vault),
-                         time.monotonic()+0.5)
+                         R.prompt({'nonce': 'a'*32, 'iteration': 1, 'checkpoint': 'unused'}, self.vault, self.model),
+                         time.monotonic()+0.5, self.model)
         self.assertTrue((attempt/'stdout.jsonl').exists())
 
     def test_checkpoint_rejects_duplicate_stale_and_nonprivate_entries(self):

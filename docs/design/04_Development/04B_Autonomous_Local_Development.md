@@ -4,8 +4,8 @@ doc_id: "DEV-04B"
 title: "Autonomous Local Development"
 status: accepted
 created: 2026-09-16
-updated: 2026-10-02
-version: "1.1"
+updated: 2026-10-03
+version: "1.2"
 area: development
 tags: [shirokuma, local, development]
 ---
@@ -48,8 +48,11 @@ An optional bounded OpenCode continuation runner is documented in
 It starts fresh sessions from this dedicated worktree using this loop and the
 current WP/Milestones/Vault handoff, then requires a clean local commit and a
 private continuation checkpoint before another call. It defaults to a zero-call
-plan; execution requires explicit run/time bounds and an acknowledgement of
-model charges. Neither the checkpoint nor a test pass is 100% acceptance.
+plan; execution requires explicit run/time bounds, a selected OpenAI model and
+the owner's 2026-10-03 permission to use the Pro weekly allowance. The runner
+fails closed if it cannot see an unambiguous OpenAI OAuth account label in the
+local CLI. This is not proof of the subscription's billing route. Neither the
+checkpoint nor a test pass is 100% acceptance.
 The runner is not a daemon, scheduler, approval bypass, or hard currency cap.
 
 The retained `make verify` includes historical publication/admission gates,

@@ -4,13 +4,21 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-02
-version: "4.24"
+updated: 2026-10-03
+version: "4.25"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: ChatGPT Pro weekly allowance and longer local continuation
+
+OwnerはShirokumaのローカル開発にChatGPT Proの週間枠を全量使用してよいと明示。ただし会話とhostの`opencode`は認証経路が別であり、既存CLI 1.17.11のread-only `auth list`でOpenAI接続ラベルが見えず（credentials 1件）、Pro認証/課金適用は未確認。API課金や追加subscriptionまで認めたものではない。`autonomous_runner.py`に明示`--model openai/...`・`--use-pro-weekly-limit`とOpenAI OAuthラベルの毎attempt照合を追加し、API key/environment/複数account/ラベル欠損ではfail closed。上限を1–96回・1–10080分（7日）へ拡大。上限とauth labelはbillingの証明ではなく、失敗/週間limit切れの自動再試行や有料provider fallbackはしない。`AGENTS.md` mirror、ADR-0034、DEV-04B、runner runbookにscopeを記録。CLI更新やユーザーの対話ログイン、daemon/launchd、実際のモデル要求、保持データ変更は行っていない。未達はhost CLIでのChatGPT OAuth接続・対象model・課金経路の確認と、実継続の観測。ロールバックは新flagでの実行を止め、privateログ・旧evidenceを保持する。
+
+初回全回帰はauth変化fixtureが`auth list`を対象fixture checkoutでなく呼出元checkoutから実行しており、13件中1件失敗（log SHA256 `ce58677a8508372bd96f14182bd1974d1199c010a66c9077a11b5718d9f9fdd9`、49 suites/1247実行時点で停止）。実装側の`auth list`実行cwdを対象checkoutに固定し、fixtureが誤って作成した自作`tmp/auth-count`だけを確認して削除。focused13件PASS（private log SHA256 `d2f00231c3c93dd2854b99a44c78134d2a757d6db1f9be8441214b7edb1da03b`）。初回失敗ログは`tmp/local-experiment/autonomous-runner-implementation-checks/20261003/verify-initial-failed.log`に保持。
+
+最終全回帰122 suites/3852実行＝3844 PASS＋8 skip、101.61秒、private log SHA256 `76eea7c84e520b61a14db27c006edfe607755e4319595c05b3dd5fa14fce0f59`。design-context（89 documents/10 issues/42 references）・secret scan・diff checkもPASS。実host認証照合は`SUBSCRIPTION_AUTH_UNVERIFIED`（モデル要求0）、専用Colima Stopped。ここで確認したのはrunnerの制御・fixture動作であり、Pro課金経路やShirokuma機能の100%ではない。
 
 ## 2026-10-02: bounded OpenCode continuation runner — implementation, not model execution
 

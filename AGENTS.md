@@ -4,8 +4,8 @@ doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
-updated: 2026-10-02
-version: "0.4.0"
+updated: 2026-10-03
+version: "0.5.0"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -86,12 +86,19 @@ authorized supervisor path; it is not a prerequisite for local work.
 
 ## Opt-in OpenCode continuation
 
+On 2026-10-03 the owner explicitly allowed consuming the entire ChatGPT Pro
+weekly allowance to accelerate Shirokuma's local experiments. This is **not**
+permission to use metered API-key accounts, other providers or paid services.
+The conversation's account does not authenticate the local CLI automatically.
 `tools/local_experiment/autonomous_runner.py` may start a bounded series of
-fresh `opencode run` sessions only when invoked with explicit execution and
-model-charge acknowledgement flags. Merely reading these instructions or
-running its default plan must never start a model request. The runner is not
-the GitHub supervisor and does not authorize new spending, GitHub writes or
-publication. See `tools/local_experiment/AUTONOMOUS_RUNNER.md` for the limits.
+fresh `opencode run` sessions only with explicit execution, weekly-limit,
+OpenAI-model and run/time flags; it checks for an unambiguous OpenAI OAuth
+account label before every attempt. This label is not proof of billing or
+entitlement. Without the matching connection, stop before a model request.
+Merely reading these instructions or running its default plan must never start
+a model request. The runner is not the GitHub supervisor and does not authorize
+new spending, GitHub writes or publication. See
+`tools/local_experiment/AUTONOMOUS_RUNNER.md` for limits and recovery.
 
 Only when a continuation prompt supplies `CONTROL_JSON`: read the current WP,
 Milestones and matching Vault handoff; complete a coherent local increment and

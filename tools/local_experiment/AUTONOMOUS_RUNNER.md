@@ -9,40 +9,70 @@ private Vault handoff. It should continue through safe increments in its own
 turn; the runner launches another session only after an explicit private
 checkpoint, a clean worktree and a new descendant local commit. A missing
 checkpoint, error, dirty tree or unchanged HEAD stops the runner. No failed
-operation is automatically retried.
+operation is automatically retried. On 2026-10-03 the owner allowed consuming
+the **whole ChatGPT Pro weekly allowance** for local Shirokuma development;
+this does not authorize metered API calls or extra purchases.
 
 ## Use
 
 From `worktree/local-autonomous`, with any interactive agent/editing session
-finished and with OpenCode already installed/configured:
+finished, inspect the **local CLI's** connection and model list. The Pro login
+in this chat is not automatically shared with `opencode`:
 
 ```sh
-rtk make local-autonomous-plan
-rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --max-runs 2 --max-minutes 60
+rtk proxy opencode auth list
+rtk proxy opencode models openai
 ```
 
-Both commands are **plan only** and make zero model requests. To spend model
-capacity for up to two sequential `opencode run` invocations and up to 60
-minutes of local runner time, explicitly opt in:
+Only after connecting the **OpenAI ChatGPT Pro/Plus OAuth (headless)** account
+and selecting an eligible `openai/...` model should you plan a long run. OpenCode
+V2 documents `opencode auth login openai` and `/connect` for interactive sign-in.
+The installed V1 help instead lists `opencode auth login --provider openai`;
+the user must complete the appropriate interactive OAuth login themselves.
+Do not add an API key as a shortcut.
+Neither `auth list` nor a model catalog alone proves billing or entitlement.
+This host still has `opencode` **1.17.11** (not V2), currently reports one
+credential but **no OpenAI credential label**; V2 documentation does not
+establish that the installed V1 CLI will load the same instructions or login
+method. No login, CLI upgrade, or paid model run was performed by this change.
+
+Plan-only (zero model requests) with a model **actually available to this
+account**; substitute the model ID found above:
 
 ```sh
-rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --execute --acknowledge-model-charges --max-runs 2 --max-minutes 60
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --model openai/SELECTED_MODEL --max-runs 96 --max-minutes 10080
 ```
 
-Allowed limits are 1–8 invocations and 1–360 minutes per manual launch. This
-does **not** bound USD/token charges: one invocation may make many model/tool
-calls. Check provider pricing and account-level spending limits before opting
-in. No cron/launchd task, recurring subscription or background daemon is
-installed. Do not use `--dangerously-skip-permissions`. The project instructions
-and tool permissions remain in force, but neither is an OS sandbox that makes
-model actions inherently safe.
+`subscription_preflight` must report `openai_oauth_label_present` before
+executing; `SUBSCRIPTION_AUTH_UNVERIFIED` means **do not run**, not "Pro is
+free through this CLI". After personally confirming the selected account,
+model and subscription route, start the bounded series with the same model ID:
 
-As of 2026-10-02 this host's `opencode` reports **1.17.11**, and its local help
-shows `run --format json`. OpenCode V2 documents `opencode run` for automation
-and `AGENTS.md` for project guidance, but this runner does not upgrade or
-reconfigure the installed CLI. Its first *actual* model invocation and the
-installed version's instruction-loading behavior are not verified by offline
-fixtures. The default plan never calls a model.
+```sh
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --execute --use-pro-weekly-limit --model openai/SELECTED_MODEL --max-runs 96 --max-minutes 10080
+```
+
+Allowed limits are **1–96 sequential runs and 1–10080 minutes (seven days)**
+per manual launch. Set smaller values if unattended host operation is
+undesirable. The runner rechecks the OAuth label before **each** attempt and
+pins `--model`; it rejects ambiguous OpenAI account listings and inherited
+`OPENAI_API_KEY`/`OPENAI_BASE_URL`. These checks cannot independently verify
+the active server account, that its subscription covers the selected model,
+subagents' routing, config/plugin overrides, or provider billing. If account
+routing cannot be verified, stop rather than fall back to API-key/other
+providers. A weekly quota error is a stop, never an automatic paid retry or a
+request to buy more capacity. No cron/launchd task, recurring subscription or
+background daemon is installed. Do not use `--dangerously-skip-permissions`.
+The project instructions and tool permissions are not an OS sandbox.
+
+One invocation can make many model/tool calls. The run/time limits are not a
+token or currency cap, and exhaustion of the weekly allowance may arrive
+mid-attempt. The first *actual* model invocation, account routing, and this
+installed CLI's instruction-loading behavior are not verified by fake-CLI
+tests. Stop and inspect if a real run shows a different provider or billable
+route. OpenCode V2 [provider accounts](https://opencode.ai/v2/docs/cli/providers)
+and [CLI automation](https://opencode.ai/v2/docs/cli/) document the intended
+OAuth and `run` paths; installed CLI behavior must be confirmed separately.
 
 ## Stop and evidence contract
 

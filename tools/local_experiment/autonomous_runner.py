@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in, bounded OpenCode continuation for the dedicated Shirokuma worktree.
+"""Subscription-gated OpenCode continuation for the dedicated Shirokuma worktree.
 
 No model request is made by the default plan command. Each execute attempt is a
 new session; the durable WP/Vault handoff, rather than a stale session context,
@@ -30,6 +30,8 @@ VAULT = (Path.home() / 'Library/Mobile Documents/com~apple~CloudDocs/ObsidianVau
 BRANCH = 'local/autonomous-experiment'
 MAX_LOG_BYTES = 8 * 1024 * 1024
 MAX_CHECKPOINT_BYTES = 2048
+MAX_RUNS = 96
+MAX_MINUTES = 7 * 24 * 60
 
 
 class RunnerError(RuntimeError):
@@ -110,7 +112,30 @@ def save_json(path: Path, value: dict) -> None:
     private_file(path, (json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n').encode())
 
 
-def prompt(control: dict, vault: Path) -> str:
+def subscription_preflight(binary: str, model: str, root: Path) -> None:
+    """Reject default/other-provider models and missing OpenAI OAuth labels.
+
+This is not proof of provider billing. Never print the account listing.
+"""
+    require(re.fullmatch(r'openai/[A-Za-z0-9][A-Za-z0-9._/-]*', model) is not None,
+            'SUBSCRIPTION_MODEL_REQUIRED')
+    require(not any(os.environ.get(key) for key in ('OPENAI_API_KEY', 'OPENAI_BASE_URL')),
+            'SUBSCRIPTION_ROUTE_AMBIGUOUS')
+    try:
+        result = subprocess.run([binary, 'auth', 'list'], cwd=root,
+                                capture_output=True, timeout=20, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise RunnerError('SUBSCRIPTION_AUTH_UNVERIFIED') from None
+    require(result.returncode == 0 and len(result.stdout) <= 65536,
+            'SUBSCRIPTION_AUTH_UNVERIFIED')
+    lines = re.sub(r'\x1b\[[0-9;]*m', '', result.stdout.decode('utf-8', errors='replace')).splitlines()
+    accounts = [line for line in lines if re.search(r'\bopenai\b', line, flags=re.I)]
+    require(len(accounts) == 1 and re.search(r'\boauth\b|chatgpt\s+(?:pro|plus)', accounts[0], flags=re.I)
+            and not re.search(r'api[ -]?key|environment', accounts[0], flags=re.I),
+            'SUBSCRIPTION_AUTH_UNVERIFIED')
+
+
+def prompt(control: dict, vault: Path, model: str) -> str:
     return f"""Continue Shirokuma's *local* experimental development in this checkout.
 Read AGENTS.md, ../../AGENTS.md, ~/.codex/RTK.md and
 docs/design/04_Development/04B_Autonomous_Local_Development.md,
@@ -119,14 +144,15 @@ Vault handoff at {vault} before selecting the next dependency-ready increment.
 Read relevant WPs and current lab state; old notes are not fresh observations.
 Do not end at one WP/commit/test milestone: continue with other safe independent
 work in this invocation. Implement, test, record evidence and gaps, and commit
-coherent changes locally. This invocation's model use was explicitly opted in;
-do not launch nested paid runs, buy services or create recurring costs. No
-GitHub writes/push or publication,
+coherent changes locally. This invocation intends to use only ChatGPT Pro's
+weekly allowance through {model}. Do not switch providers/accounts/models,
+launch nested paid runs, buy services or create recurring costs. Stop if the
+subscription route or entitlement is unclear. No GitHub writes/push or publication,
 retained data/backup deletion, unknown-request replay or whole-Colima reset.
 Do not treat green tests, saved claims or a completion percentage as acceptance.
 Do not invoke this runner, launch other autonomous runs or bypass permissions.
 
-This is an opt-in bounded invocation. Its run/time limits are NOT a USD cap.
+This is a bounded weekly-limit invocation. Its run/time limits are NOT a USD cap.
 Before your final answer, write ONE private
 0600 JSON checkpoint to the path below (create it with exclusive creation,
 do not follow a preexisting entry). Exact keys: schema_version (integer 1),
@@ -202,8 +228,8 @@ def terminate(process: subprocess.Popen) -> None:
             raise RunnerError('PROCESS_STOPPED_REMOTE_UNCONFIRMED') from None
 
 
-def invoke(binary: str, root: Path, directory: Path, message: str, deadline: float) -> None:
-    command = [binary, 'run', '--format', 'json', message]
+def invoke(binary: str, root: Path, directory: Path, message: str, deadline: float, model: str) -> None:
+    command = [binary, 'run', '--model', model, '--format', 'json', message]
     with private_log(directory / 'stdout.jsonl') as stdout, private_log(directory / 'stderr.log') as stderr:
         try:
             process = subprocess.Popen(command, cwd=root, stdout=stdout, stderr=stderr,
@@ -224,8 +250,8 @@ def invoke(binary: str, root: Path, directory: Path, message: str, deadline: flo
                 'OUTPUT_LIMIT_EXCEEDED')
 
 
-def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int) -> tuple[str, Path]:
-    require(1 <= max_runs <= 8 and 1 <= max_minutes <= 360, 'BUDGET_INVALID')
+def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int, model: str) -> tuple[str, Path]:
+    require(1 <= max_runs <= MAX_RUNS and 1 <= max_minutes <= MAX_MINUTES, 'BUDGET_INVALID')
     binary = shutil.which(binary)
     require(binary is not None, 'OPENCODE_UNAVAILABLE')
     require(os.environ.get('OPENCODE_DISABLE_PROJECT_CONFIG') != '1', 'PROJECT_INSTRUCTIONS_DISABLED')
@@ -244,13 +270,14 @@ def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int
                     summary['reason'] = 'time_budget_reached'
                     break
                 before = checkout_head(root, vault)
+                subscription_preflight(binary, model, root)
                 attempt = directory / f'attempt-{number:03d}'
                 attempt.mkdir(mode=0o700)
                 control = {'nonce': nonce, 'iteration': number,
                            'checkpoint': str(attempt.relative_to(root) / 'checkpoint.json')}
                 print(f'RUN_STARTED attempt={number} evidence={attempt.relative_to(root)}', flush=True)
                 summary['attempts'] = number
-                invoke(binary, root, attempt, prompt(control, vault), deadline)
+                invoke(binary, root, attempt, prompt(control, vault, model), deadline, model)
                 after = checkout_head(root, vault)
                 reason = read_checkpoint(attempt / 'checkpoint.json', control, after)
                 if after != before:
@@ -286,7 +313,9 @@ def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true', help='opt in to model requests; plan is the default')
-    parser.add_argument('--acknowledge-model-charges', action='store_true')
+    parser.add_argument('--use-pro-weekly-limit', action='store_true',
+                        help='allow repeated calls only after the OpenAI OAuth label check')
+    parser.add_argument('--model', help='explicit openai/model ID available to the ChatGPT subscription')
     parser.add_argument('--max-runs', type=int)
     parser.add_argument('--max-minutes', type=int)
     args = parser.parse_args(argv)
@@ -295,21 +324,31 @@ def main(argv: list[str] | None = None) -> int:
         binary = shutil.which('opencode')
         require(binary is not None, 'OPENCODE_UNAVAILABLE')
         if not args.execute:
-            require(not args.acknowledge_model_charges, 'BUDGET_INVALID')
+            require(not args.use_pro_weekly_limit, 'BUDGET_INVALID')
             require((args.max_runs is None and args.max_minutes is None) or
                     (args.max_runs is not None and args.max_minutes is not None and
-                     1 <= args.max_runs <= 8 and 1 <= args.max_minutes <= 360), 'BUDGET_INVALID')
+                     1 <= args.max_runs <= MAX_RUNS and 1 <= args.max_minutes <= MAX_MINUTES), 'BUDGET_INVALID')
+            preflight = 'not_checked'
+            if args.model is not None:
+                try:
+                    subscription_preflight(binary, args.model, ROOT)
+                    preflight = 'openai_oauth_label_present'
+                except RunnerError as error:
+                    preflight = str(error)
             print(json.dumps({'mode': 'plan-only', 'head': head, 'branch': BRANCH,
                               'cli': binary, 'active_calls': 0, 'planned_max_runs': args.max_runs,
-                              'planned_max_minutes': args.max_minutes,
+                              'planned_max_minutes': args.max_minutes, 'model': args.model,
+                              'subscription_preflight': preflight,
                               'cost_limit': 'not-enforced'}, sort_keys=True))
             return 0
-        require(args.acknowledge_model_charges and args.max_runs is not None and args.max_minutes is not None,
+        require(args.use_pro_weekly_limit and args.model is not None
+                and args.max_runs is not None and args.max_minutes is not None,
                 'BUDGET_REQUIRED')
         previous = signal.getsignal(signal.SIGTERM)
         signal.signal(signal.SIGTERM, lambda _signal, _frame: (_ for _ in ()).throw(KeyboardInterrupt()))
         try:
-            reason, directory = run(ROOT, VAULT, binary, max_runs=args.max_runs, max_minutes=args.max_minutes)
+            reason, directory = run(ROOT, VAULT, binary, max_runs=args.max_runs,
+                                    max_minutes=args.max_minutes, model=args.model)
         finally:
             signal.signal(signal.SIGTERM, previous)
         print(json.dumps({'mode': 'executed', 'stop_reason': reason,
