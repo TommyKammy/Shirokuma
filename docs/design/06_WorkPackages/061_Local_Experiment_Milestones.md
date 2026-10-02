@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.25"
+version: "4.26"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: OpenCode CLI V2.0.22 installed; subscription check adapted to V2
+
+Ownerの「まずCLIを最新化」に従い、既存Homebrew V1.17.11、公式V2 install/migration doc、実機配布先を確認。初回Homebrew tapの`opencode-v2`は見つからず、公式npm `@opencode/cli@2.0.22`（npm registry latest・稼働中Desktopと同版）を隔離 `tmp/local-experiment/opencode-cli-upgrade/20261003/stage/`に展開し`--version`/`run --help`を確認。V1実行fileを同private領域に保管（SHA256 `996fea55451be04cfa27c0d9dbbf0468cb611cde43075fe3dac799772d0b710f`）後、HomebrewのV1 formulaだけをuninstallし、V2をユーザーprefix `~/.local`へ公式npmで導入。`which -a opencode`はユーザーprefixのみ、CLI V2.0.22。Desktop 2.0.22は起動状態のまま、shared serviceも停止/再起動なし。CLI update中、`brew uninstall`が依存扱いの`ripgrep`15.1.0/`pcre2`10.47_1も自動削除したため、直後に現配布版15.2.0/10.49をHomebrewで復旧。旧版とのversion差とHomebrewの自動tap更新は残るが、両command復旧を確認。認証/保存session/VM/backupは削除・resetしていない。
+
+V2 `auth list --format json`は対象checkoutから`openai`にOAuth connection 1件を表示（V1の表示では見えなかった）。OpenAI catalogは19 model IDを表示。ただしactive account、Pro対象model、追加請求が無いこと、実際のモデル要求/継続は**未証明**。旧runnerの人間向けV1表示パーサはV2でfail closedだったため、`subscription_preflight`だけV2 JSONの固定`openai`/単一connection/`method=oauth`照合に変更。認証内容そのものやtokenをログに出さず、V1 text/欠損/複数/鍵は引き続き拒否。実モデルは起動せず、plan-onlyは呼出0を維持。V2移行が作業WPを完了させたと扱わない。戻す場合、runnerを起動せずprivate backupとHomebrew/npm inventoryを参照し、保持認証/データは消さない。
+
+runner focused13件PASS（log SHA256 `9ecfcc81e7ec6456f8ac79ddfa9211e74343c30385fbc6ddd9b22f4a958ab4c6`）。初回全回帰は既存Warehouse `test_peer_identity_mismatch_never_dispatches`が早期拒否socketへの`sendall`で`BrokenPipeError`となり45 suites/1181実行時点で停止（失敗log SHA256 `19caf63efff198bd884b43af8f19307682b2dd8bf4b04b3adff5bb2bba693026`）。当該focused38件も同じ1 ERROR（log SHA256 `c60f8a4ba2a7ab31db336869871f59bb43a187f6b7721d673a71b1cef4773e7e`）。テスト側に当該peer拒否時だけ早期`BrokenPipe`を許し、その後は従来どおり完全な400応答・handler非dispatchを必須とする限定修正を追加、owner/runtime処理は不変。Warehouse focused38件を3回連続PASS（SHA256 `f46ad865bcf57385b431d1db92e23af3f54453dc32fd20c9925d0863d3650f46` / `8e8c1aedbec9a69fb12d3c2f2cae212a5957723413d424252639fa5e37d2dcd7` / `e18e4333316e9e5d10fe0aa5ccef5007a57fbdb97331596c42b67bf90c5ae8ac`）。失敗原logと修正後logは同private `tmp/local-experiment/opencode-cli-upgrade/20261003/`に保持。
+
+最終全回帰122 suites/3852実行＝3844 PASS＋8 skip、100.64秒、private log SHA256 `b88e3b30bbc10888a667760c8357f53ee64bd0e1429570fe23a7e6dfee78d90b`。design-context（89 documents/10 issues/42 references）、secret scan、diff check PASS。専用Colima Stopped。V2の`opencode run --model/--format json`はCLI helpで形式確認のみ、実モデル・課金・継続結果は未検証。
 
 ## 2026-10-03: ChatGPT Pro weekly allowance and longer local continuation
 

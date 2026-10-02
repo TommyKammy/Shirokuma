@@ -21,23 +21,23 @@ in this chat is not automatically shared with `opencode`:
 
 ```sh
 rtk proxy opencode auth list
-rtk proxy opencode models openai
+rtk proxy opencode models
 ```
 
 Only after connecting the **OpenAI ChatGPT Pro/Plus OAuth (headless)** account
 and selecting an eligible `openai/...` model should you plan a long run. OpenCode
-V2 documents `opencode auth login openai` and `/connect` for interactive sign-in.
-The installed V1 help instead lists `opencode auth login --provider openai`;
-the user must complete the appropriate interactive OAuth login themselves.
-Do not add an API key as a shortcut.
-Neither `auth list` nor a model catalog alone proves billing or entitlement.
-This host still has `opencode` **1.17.11** (not V2), currently reports one
-credential but **no OpenAI credential label**; V2 documentation does not
-establish that the installed V1 CLI will load the same instructions or login
-method. No login, CLI upgrade, or paid model run was performed by this change.
+V2 documents `opencode auth login openai` and `/connect` for interactive sign-in;
+do not add an API key as a shortcut. On 2026-10-03 the host CLI was migrated
+from Homebrew V1.17.11 to the official npm V2.0.22 in the user prefix. The
+Homebrew V1 executable is backed up in the ignored private
+`tmp/local-experiment/opencode-cli-upgrade/20261003/`; existing user data and
+the Desktop service were not reset. V2 `auth list --format json` reports one
+OpenAI OAuth connection and `opencode models` lists OpenAI model IDs, but
+neither observation proves that this account/model uses the Pro subscription
+without additional charges. No real model run has been made by this runner.
 
-Plan-only (zero model requests) with a model **actually available to this
-account**; substitute the model ID found above:
+Plan-only (zero model requests) with a model listed for this project; substitute
+an eligible model ID after checking the account's entitlement:
 
 ```sh
 rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --model openai/SELECTED_MODEL --max-runs 96 --max-minutes 10080

@@ -164,12 +164,18 @@ class SessionRPCTest(unittest.TestCase):
             headers = b'Content-Type: application/json\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n'
         return request_line + headers + b'\r\n' + body
 
-    def exchange(self, request, *, raw=False):
+    def exchange(self, request, *, raw=False, allow_early_reject=False):
         connection = socket.socket(socket.AF_UNIX)
         connection.settimeout(4)
         connection.connect(str(self.rpc.socket_path))
         with connection:
-            connection.sendall(request if raw else self.wire(request))
+            try:
+                connection.sendall(request if raw else self.wire(request))
+            except BrokenPipeError:
+                # A rejected peer may close before the client finishes writing.
+                # Still require and validate the server's complete 400 response.
+                if not allow_early_reject:
+                    raise
             parts = []
             while True:
                 part = connection.recv(16385)
@@ -563,7 +569,7 @@ class SessionRPCTest(unittest.TestCase):
     def test_peer_identity_mismatch_never_dispatches(self):
         self.start()
         with mock.patch.object(R, 'peer_uid', return_value=os.getuid() + 1):
-            self.assertEqual(self.exchange(self.request())[0], 400)
+            self.assertEqual(self.exchange(self.request(), allow_early_reject=True)[0], 400)
         self.assertEqual(self.calls, [])
 
     def test_socket_directory_collision_is_not_adopted(self):

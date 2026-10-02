@@ -113,7 +113,7 @@ def save_json(path: Path, value: dict) -> None:
 
 
 def subscription_preflight(binary: str, model: str, root: Path) -> None:
-    """Reject default/other-provider models and missing OpenAI OAuth labels.
+    """Reject default/other-provider models and missing V2 OpenAI OAuth accounts.
 
 This is not proof of provider billing. Never print the account listing.
 """
@@ -122,16 +122,22 @@ This is not proof of provider billing. Never print the account listing.
     require(not any(os.environ.get(key) for key in ('OPENAI_API_KEY', 'OPENAI_BASE_URL')),
             'SUBSCRIPTION_ROUTE_AMBIGUOUS')
     try:
-        result = subprocess.run([binary, 'auth', 'list'], cwd=root,
+        result = subprocess.run([binary, 'auth', 'list', '--format', 'json'], cwd=root,
                                 capture_output=True, timeout=20, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise RunnerError('SUBSCRIPTION_AUTH_UNVERIFIED') from None
     require(result.returncode == 0 and len(result.stdout) <= 65536,
             'SUBSCRIPTION_AUTH_UNVERIFIED')
-    lines = re.sub(r'\x1b\[[0-9;]*m', '', result.stdout.decode('utf-8', errors='replace')).splitlines()
-    accounts = [line for line in lines if re.search(r'\bopenai\b', line, flags=re.I)]
-    require(len(accounts) == 1 and re.search(r'\boauth\b|chatgpt\s+(?:pro|plus)', accounts[0], flags=re.I)
-            and not re.search(r'api[ -]?key|environment', accounts[0], flags=re.I),
+    try:
+        integrations = json.loads(result.stdout)
+    except (ValueError, UnicodeError):
+        raise RunnerError('SUBSCRIPTION_AUTH_UNVERIFIED') from None
+    require(type(integrations) is list, 'SUBSCRIPTION_AUTH_UNVERIFIED')
+    accounts = [entry for entry in integrations if type(entry) is dict and entry.get('id') == 'openai']
+    require(len(accounts) == 1 and type(accounts[0].get('connections')) is list
+            and len(accounts[0]['connections']) == 1
+            and type(accounts[0]['connections'][0]) is dict
+            and accounts[0]['connections'][0].get('method') == 'oauth',
             'SUBSCRIPTION_AUTH_UNVERIFIED')
 
 

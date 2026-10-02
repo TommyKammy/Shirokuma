@@ -15,17 +15,22 @@ from tools.local_experiment import autonomous_runner as R
 
 FAKE_CLI = '''#!/usr/bin/env python3
 import json,os,pathlib,re,subprocess,sys,time
-if sys.argv[1:]==['auth','list']:
+if sys.argv[1:]==['auth','list','--format','json']:
     mode=os.environ.get('FAKE_AUTH_MODE','oauth')
+    if mode=='legacy_text':
+        print('OpenAI OAuth')
+        sys.exit(0)
     if mode=='expires':
         counter=pathlib.Path.cwd()/'tmp/auth-count'
         counter.parent.mkdir(exist_ok=True)
         count=int(counter.read_text())+1 if counter.exists() else 1
         counter.write_text(str(count))
         mode='oauth' if count==1 else 'missing'
-    print({'oauth':'OpenAI OAuth','missing':'Other Provider oauth',
-           'api':'OpenAI API Key','multiple':'OpenAI OAuth\\nOpenAI API Key',
-           'untyped':'OpenAI connected'}[mode])
+    accounts={'oauth':[{'method':'oauth'}], 'missing':[],
+              'api':[{'method':'key'}], 'multiple':[{'method':'oauth'},{'method':'key'}],
+              'untyped':[{'label':'connected'}]}[mode]
+    integrations=[{'id':'openai','connections':accounts}] if accounts else []
+    print(json.dumps(integrations))
     sys.exit(0)
 assert sys.argv[1:6]==['run','--model','openai/fixture','--format','json']
 match=re.search(r'^CONTROL_JSON=(.*)$',sys.argv[6],re.M)
@@ -123,7 +128,7 @@ class AutonomousRunnerTests(unittest.TestCase):
             R.run(self.root, self.vault, str(self.cli), max_runs=96, max_minutes=10081, model=self.model)
 
     def test_missing_or_ambiguous_oauth_cannot_start_run(self):
-        for mode in ('missing', 'api', 'multiple', 'untyped'):
+        for mode in ('missing', 'api', 'multiple', 'untyped', 'legacy_text'):
             with self.subTest(mode=mode), mock.patch.dict(os.environ, {'FAKE_AUTH_MODE': mode}), \
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_AUTH_UNVERIFIED'):
@@ -131,7 +136,7 @@ class AutonomousRunnerTests(unittest.TestCase):
                           max_minutes=10080, model=self.model)
         parent = self.root/'tmp/local-experiment/autonomous-runner'
         self.assertFalse(list(parent.glob('run-*/attempt-001')))
-        self.assertEqual(len(list(parent.glob('run-*/summary.json'))), 4)
+        self.assertEqual(len(list(parent.glob('run-*/summary.json'))), 5)
         with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_MODEL_REQUIRED'):
             R.subscription_preflight(str(self.cli), 'openrouter/paid-model', self.root)
         with mock.patch.dict(os.environ, {'OPENAI_API_KEY': 'redacted'}):
