@@ -80,6 +80,29 @@ func TestLocalFluxRejectsDuplicateRootResources(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsPaginatedInventories(t *testing.T) {
+	for _, first := range []bool{true, false} {
+		responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
+		index := 1
+		if first {
+			index = 0
+		}
+		responses[index].output = strings.Replace(responses[index].output, `{"items":`, `{"metadata":{"continue":"private-token"},"items":`, 1)
+		runner := &fakeRunner{responses: responses}
+		check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete") || strings.Contains(check.Summary, "private-token") {
+			t.Fatalf("continued inventory accepted or leaked: %#v", check)
+		}
+		wantCalls := 2
+		if first {
+			wantCalls = 1
+		}
+		if len(runner.calls) != wantCalls {
+			t.Fatalf("unexpected reads: %v", runner.calls)
+		}
+	}
+}
+
 func localWorkloadResponses() []fakeResponse {
 	return []fakeResponse{
 		{output: `{"items":[` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `]}`},

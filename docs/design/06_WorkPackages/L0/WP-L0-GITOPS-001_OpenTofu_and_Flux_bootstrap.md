@@ -14,6 +14,8 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 ## 2026-10-03: local doctor inventory and API endpoint fail-closed checks
 
+同日の独立した追加点：固定Flux controller一覧とFlux source/Kustomization一覧でも`items`欠損・`metadata.continue`ありをdegradedとして拒否する。controller一覧が不完全ならsource APIを呼ばない。fakeの途中ページ/正常一覧を検証し、汎用doctorは従来契約のまま。実Fluxのlive再観測はしていない。Vault同期保留・rollback/残余は下記と同じ。
+
 固定local profileのread-only doctorで、Lakehouseのnamespace別workload listが`items`欠損、`metadata.continue`あり、または固定kind/name/namespaceの重複を含むときは、最初のReady資源を採用してhealthyとしない。別namespaceの正常な診断は保持し、pagination tokenをsummaryへ出さない。local-scopeのloopback HTTPS API URLはport必須、path/query/fragmentを許さず、異常時は後続API readに進まない。fake応答の負例と正例、Go全package test/vet、`make verify-local-experiment`を実行。専用Colimaは停止中でlive診断なし。これはAPI真正性、Flux revisionのprovenance、SQL/保存状態、strict supply-chain gate、Git smoke/再bootstrapや本番受入を証明しない。戻す場合はdoctorの検証差分のみ戻し、保持VM/backupや既存保存結果を変更しない。Vault直接同期はこの非対話sessionのcheckout外権限がないため保留。
 
 ## 2026-10-02: fixed Flux source identity in read-only local doctor

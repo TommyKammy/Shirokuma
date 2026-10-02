@@ -237,6 +237,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if err := json.Unmarshal(controllerOutput, &controllers); err != nil {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was not valid JSON"}
 	}
+	if localExperiment && (controllers.Items == nil || controllers.Metadata.Continue != "") {
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was incomplete"}
+	}
 	if len(controllers.Items) != 4 {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("expected 4 Flux controllers, found %d", len(controllers.Items))}
 	}
@@ -283,6 +286,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	var resources kubernetesResourceList
 	if err := json.Unmarshal(resourceOutput, &resources); err != nil {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was not valid JSON"}
+	}
+	if localExperiment && (resources.Items == nil || resources.Metadata.Continue != "") {
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was incomplete"}
 	}
 	kinds := map[string]int{}
 	rootCount, rootSourceCount := 0, 0

@@ -14,6 +14,8 @@ tags: [shirokuma, local, evidence]
 
 ## 2026-10-03: read-only doctor rejects ambiguous workload inventories and malformed local endpoints
 
+追加の独立したoffline増分：固定Flux controller/source一覧にも`items`欠損・`metadata.continue`拒否を適用。controllerが途中ページなら後続Flux readを行わず、tokenをsummaryへ出さない。汎用doctorには適用せず、fake負例と正例で確認。現在のFlux API結果、remote Git revisionと厳格受入は再確認していない。
+
 WP-L0-GITOPS-001。停止中の専用Colimaを起動せず、Go local-experiment doctorの固定Lakehouse診断で`items`欠損/continuation/重複した固定資源をdegradedへ変更。別namespaceのhealthは独立して表示し、raw continuationを公開しない。独立増分としてcontextのloopback HTTPS URLのport/余分なpath/query/fragmentを検査して、異常時は後続readを行わない。fakeの正負例とGo全package test/vet、全local回帰を確認。旧保存資料・backup/SQL/保持volumeを変更せず、live VMのidentityやAPI真正性、SQL実行、Flux source真正性・strict gate・本番受入は未検証。Vault原本はcheckout外で非対話権限がないため直接更新せず、repo WP/Milestonesの同期を保留として記録。rollbackはdoctorの局所差分だけを戻し、保持VM/backupを残す。
 
 ## 2026-10-03: first real OpenCode run stopped before WP; controlled continuation repair
