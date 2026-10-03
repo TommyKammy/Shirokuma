@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.41"
+version: "0.42"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: namespace envelope aliases (offline)
+
+Separately from policy-resource metadata, four fake Namespace replies with
+conflicting case-variant top-level `Kind`, `KIND`, `ApiVersion` or `Metadata`
+were accepted before repair. The observer now rejects these before dry-run;
+the four-case negative failed first and the focused 50-test suite passed after
+repair. Dedicated Colima remains stopped; no live API/admission or retained
+data/backup changed. Fake replies do not authenticate the API, prove atomic
+inventory, clear strict admission or establish operator acceptance. Roll back
+only this Namespace guard/test if necessary; retain pending intents without
+replay. Original Vault sync pending outside the approved checkout.
 
 ## 2026-10-04: policy resource identity aliases (offline)
 

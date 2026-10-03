@@ -129,6 +129,16 @@ class ObserverTests(unittest.TestCase):
                     observer.observe()
                 self.assertEqual(kube.requests, [])
 
+    def test_namespace_envelope_aliases_cannot_hide_conflicting_type(self):
+        for key, value in (('Kind', 'Other'), ('KIND', 'Other'),
+                           ('ApiVersion', 'v2'), ('Metadata', {'name': 'other'})):
+            with self.subTest(key=key):
+                kube=FakeKube();kube.namespace[key]=value
+                observer=O.CandidateObserver(prepared(),kube)
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.observe()
+                self.assertEqual(kube.requests, [])
+
     def test_policy_resource_identity_aliases_cannot_hide_conflicting_owner(self):
         for key, value in (('Name', 'other-policy'), ('Uid', 'other-uid'),
                            ('Generation', 2), ('Labels', {'owner': 'other'}),

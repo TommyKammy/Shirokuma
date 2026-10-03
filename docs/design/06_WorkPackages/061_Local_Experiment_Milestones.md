@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.151"
+version: "5.152"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: namespace envelope aliases (offline)
+
+WP-L2-POL-001: independently of resource metadata, four conflicting
+case-variant top-level fields on fake Namespace responses were accepted as
+ready before repair. The observer now refuses them before any dry-run; the
+four-case negative failed before repair and the focused 50-test suite passed.
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed; the local
+suite's synthetic failure output is not a live result.
+Dedicated Colima remains stopped; no live admission, retained requests,
+volumes or backups changed. This cannot authenticate a producer, establish
+atomic inventory, clear strict admission or provide operator acceptance.
+Roll back only the Namespace guard/test; retain old pending intents without
+replay. Original Vault sync pending outside the checkout.
 
 ## 2026-10-04: policy resource identity aliases (offline)
 

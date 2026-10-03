@@ -298,7 +298,10 @@ class CandidateObserver:
 
     def _baseline(self):
         ns = self.kube.json_request(['get', 'namespace', M.NAMESPACE, '-o', 'json'])
-        require(type(ns) is dict and ns.get('kind') == 'Namespace' and ns.get('apiVersion') == 'v1', 'NAMESPACE_UNKNOWN')
+        require(type(ns) is dict and ns.get('kind') == 'Namespace' and ns.get('apiVersion') == 'v1'
+                and not any(type(key) is str and key.lower() in {'kind', 'apiversion', 'metadata'}
+                            and key not in {'kind', 'apiVersion', 'metadata'} for key in ns),
+                'NAMESPACE_UNKNOWN')
         metadata = ns.get('metadata', {})
         labels = metadata.get('labels')
         require(type(metadata) is dict
