@@ -181,9 +181,12 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 	// Keep omitted metadata compatible with projected fixtures, but an explicit
 	// null envelope cannot establish a complete Kubernetes list.
 	var envelope struct {
-		Metadata json.RawMessage `json:"metadata"`
+		Metadata   json.RawMessage `json:"metadata"`
+		Kind       json.RawMessage `json:"kind"`
+		APIVersion json.RawMessage `json:"apiVersion"`
 	}
-	if err := json.Unmarshal(raw, &envelope); err != nil || string(envelope.Metadata) == "null" || !localInventoryUniqueFields(raw) {
+	if err := json.Unmarshal(raw, &envelope); err != nil || string(envelope.Metadata) == "null" ||
+		string(envelope.Kind) == "null" || string(envelope.APIVersion) == "null" || !localInventoryUniqueFields(raw) {
 		return true
 	}
 	if len(envelope.Metadata) != 0 {
@@ -191,7 +194,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if err := json.Unmarshal(envelope.Metadata, &fields); err != nil {
 			return true
 		}
-		for _, key := range []string{"resourceVersion", "remainingItemCount"} {
+		for _, key := range []string{"resourceVersion", "remainingItemCount", "continue"} {
 			if string(fields[key]) == "null" {
 				return true
 			}

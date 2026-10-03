@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.32"
+version: "0.33"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: null continuation and null list identity (offline)
+
+Two independent fixed-profile response-shape checks: an explicitly null `metadata.continue` can no longer masquerade as an omitted pagination field; separately, explicitly null top-level `kind` or `apiVersion` can no longer masquerade as an omitted projected fixture field. Controller, Flux-resource and both Lakehouse namespace inventories reject these before claiming a complete inventory. Omitted optional fields and the generic doctor remain compatible. Focused negatives failed before the fix; `go test ./internal/cli -count=1` (770 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed after repair. The dedicated Colima profile reported stopped; it was not started and no API/SQL read, reconciliation, unknown-request replay, retained session or backup mutation occurred. These fake-response checks do not authenticate the API or Git, prove atomicity or historical cleanup, clear strict publication admission, or establish operator/production acceptance. Roll back only the local reader/tests; keep the VM stopped and saved evidence intact. Original Vault handoff direct synchronization remains pending outside this checkout.
 
 ## 2026-10-03: explicit null list fields (offline)
 
