@@ -85,7 +85,9 @@ class ObserverTests(unittest.TestCase):
         # A first page with no items is not evidence that the namespace has
         # no LimitRanges: the continuation token may hide a later page.
         for metadata in ({'continue': 'next-page'}, {'continue': 7},
-                         {'continue': None}):
+                         {'continue': None}, {'remainingItemCount': 1},
+                         {'remainingItemCount': True}, {'remainingItemCount': -1},
+                         {'remainingItemCount': None}):
             with self.subTest(metadata=metadata):
                 kube=FakeKube();kube.limits['metadata']=metadata
                 observer=O.CandidateObserver(prepared(),kube)
@@ -94,6 +96,10 @@ class ObserverTests(unittest.TestCase):
                 self.assertEqual(observer.receipt()['result'], 'failed')
                 self.assertEqual(kube.requests, [])
         self.kube.limits['metadata']={'continue': ''}
+        self.assertEqual(self.ready()['baseline']['limit_ranges'], [])
+
+    def test_zero_remaining_item_count_is_compatible_with_empty_inventory(self):
+        self.kube.limits['metadata']={'continue': '', 'remainingItemCount': 0}
         self.assertEqual(self.ready()['baseline']['limit_ranges'], [])
 
     def test_allowed_exact_body_one_attempt_and_all_guards(self):

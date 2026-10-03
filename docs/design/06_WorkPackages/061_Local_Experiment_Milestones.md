@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.145"
+version: "5.146"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: LimitRange remaining-count boundary and GitOps review (offline)
+
+WP-L2-POL-001: an empty list claiming `remainingItemCount: 1` could pass the
+fixed-candidate baseline despite an incomplete inventory. The observer now
+requires an absent count or integer zero and refuses malformed counts before
+dry-run. Focused observer tests (46) passed. Independently reviewed
+WP-L0-GITOPS-001's complete-list decoder: it already rejects nonzero counts;
+no GitOps behavior change justified. Dedicated Colima read-only observed
+Stopped; no admission, Git/API writes, reconciliation or retained
+request/report/volume/backup change. These fake replies cannot prove API
+authenticity, atomic inventory, strict gate or operator acceptance. Roll back
+only the policy baseline/test if needed; preserve pending intents and saved
+evidence. `go test ./internal/cli -run 'Test.*(Inventory|List)' -count=1`
+passed (83 tests); `make verify-local-experiment`, `make
+verify-design-context` (89 documents), `make check-no-secret-filenames` and
+`git diff --check` passed. The local suite contains expected synthetic failure
+output, not live runtime acceptance. Original Vault sync pending outside the
+approved checkout.
 
 ## 2026-10-04: incomplete policy inventory and independent GitOps review (offline)
 

@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.36"
+version: "0.37"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: empty LimitRange page with remaining items (offline)
+
+An empty list with no continuation token but `remainingItemCount: 1` is not
+proof of an empty namespace inventory. The candidate baseline now accepts an
+omitted count or integer zero only; nonzero, negative, boolean and null counts
+fail before dry-run. Focused observer tests (46) passed. Independently checked
+the GitOps doctor list decoder: its existing full-list checks already reject
+nonzero remaining counts, so no GitOps code change was warranted. Dedicated
+Colima was observed Stopped; no live admission, Git/API writes or retained
+request/report/volume/backup changes. Fake lists neither authenticate an API
+nor provide an atomic inventory or operator acceptance. Roll back only this
+baseline check and regression tests if necessary; preserve pending intents.
+Original Vault synchronization pending outside the approved checkout.
 
 ## 2026-10-04: incomplete LimitRange inventory refused (offline)
 

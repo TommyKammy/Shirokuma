@@ -309,7 +309,10 @@ class CandidateObserver:
                 and limits.get('kind') in {'List', 'LimitRangeList'} and limits.get('items') == []
                 and type(limits.get('metadata', {})) is dict
                 and limits.get('metadata', {}).get('continue', '') == ''
-                and type(limits.get('metadata', {}).get('continue', '')) is str,
+                and type(limits.get('metadata', {}).get('continue', '')) is str
+                and (('remainingItemCount' not in limits.get('metadata', {}))
+                     or (type(limits['metadata']['remainingItemCount']) is int
+                         and limits['metadata']['remainingItemCount'] == 0)),
                 'LIMIT_RANGE_UNSUPPORTED')
         rows = []
         for expected in self._items:
