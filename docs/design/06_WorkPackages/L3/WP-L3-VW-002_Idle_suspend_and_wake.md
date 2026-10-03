@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.05"
+version: "1.06"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: client-IP extension suffixes (offline)
+
+The fixed private Unix transition refuses `Client-IP-*` and `X-Client-IP-*`
+metadata as well as the bare IP hints. Disposable requests are refused before
+handler dispatch or journal; unrelated printable extensions remain supported.
+Focused Warehouse suites passed. Dedicated Colima was observed stopped; no
+backend/SQL, archived UUID replay, retained session/backup modification or
+GitHub write. This is not independent socket-peer authentication, caller
+receipt, restart recovery or operator acceptance. Roll back parser/test only,
+preserving saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: additional proxy client-IP hints (offline)
 

@@ -12,7 +12,8 @@ from tools.local_experiment.metadata.coverage_render import RenderError, render
 def run(number=1, statuses=('present', 'present'), *, source_status='valid', eligible=True):
     token = f'{number:032x}'
     return {'run_token': token, 'operation': 'name_lengths' if eligible else None,
-        'source_status': source_status, 'eligible': eligible, 'reason_codes': [],
+        'source_status': source_status, 'eligible': eligible,
+        'reason_codes': ['RECORDED_RUN_FAILED'] if source_status == 'failed' else [],
         'source_sha256_before': 'a' * 64 if eligible else None,
         'source_sha256_after': 'a' * 64 if eligible else None,
         'metadata_sha256_before': 'b' * 64 if eligible else None,
@@ -130,6 +131,14 @@ class CoverageRenderTests(unittest.TestCase):
             render(value)
         value['observation'].update(status='incomplete', reason_codes=['UNVERIFIED_SOURCE_RUNS'])
         self.assertIn('UNVERIFIED_SOURCE_RUNS', render(value))
+
+    def test_failed_run_requires_its_saved_failure_explanation(self):
+        value = report([run(1, source_status='failed', eligible=False)])
+        value['runs'][0]['reason_codes'] = []
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
+            render(value)
+        value['runs'][0]['reason_codes'] = ['RECORDED_RUN_FAILED']
+        self.assertIn('RECORDED_RUN_FAILED', render(value))
 
     def test_invalid_or_incomplete_source_requires_saved_observation_reason(self):
         for status in ('invalid', 'incomplete'):

@@ -248,6 +248,10 @@ def _validate(report):
         _require(not run['eligible'] or operation is not None, 'INCONSISTENT_SOURCE_ELIGIBILITY')
         sources[source] += 1
         _codes(run.get('reason_codes'))
+        # A recorded failed execution has a specific first-verification result;
+        # the aggregate unverified-run reason must not hide its missing detail.
+        _require(source != 'failed' or 'RECORDED_RUN_FAILED' in run['reason_codes'],
+                 'INCONSISTENT_SOURCE_REASON')
         for key in ('source_sha256_before', 'source_sha256_after', 'metadata_sha256_before', 'metadata_sha256_after'):
             value = run.get(key)
             _require(value is None or type(value) is str and re.fullmatch('[0-9a-f]{64}', value), 'INVALID_EVIDENCE_HASH')

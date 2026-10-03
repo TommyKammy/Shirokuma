@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.57"
+version: "1.58"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: saved failed-run explanation (offline)
+
+Direct rendering refuses a failed run without its recorded-run failure reason,
+even if the aggregate observation already names unverified source runs. The
+collector records `RECORDED_RUN_FAILED` for failed/interrupted summaries; the
+disposable contradiction and a valid failed-only report are tested. Dedicated
+Colima was read-only observed stopped. No catalog call, VM start, retained
+source/report/volume/backup mutation or unknown-request replay. This checks
+saved claims, not producer authenticity, atomicity, whole-catalog/column
+coverage or acceptance. Roll back the renderer guard/test together, preserving
+historical evidence. Original Vault sync pending outside the checkout.
 
 ## 2026-10-04: failed source cannot complete observation (offline)
 

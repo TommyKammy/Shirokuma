@@ -5,12 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.92"
+version: "5.93"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: failed-run detail in saved lineage (offline)
+
+WP-L5-LINEAGE-001: direct rendering now refuses a failed run without its
+`RECORDED_RUN_FAILED` detail despite an aggregate unverified-run explanation;
+the collector's failed/interrupted summary uses that detail. Focused lineage
+142 tests passed. Dedicated Colima read-only observed Stopped; no VM start,
+catalog, retained source/report/volume/backup mutation, request replay or
+GitHub write. This is internal saved-claim consistency, not producer identity,
+atomicity, full catalog/column coverage or operator acceptance. Roll back only
+the renderer guard/test; retain historical evidence. Original Vault sync
+pending outside the noninteractive checkout.
+
+## 2026-10-04: private Warehouse client-IP suffixes (offline)
+
+Independent WP-L3-VW-002 increment: `Client-IP-*` and `X-Client-IP-*` cannot
+label the fixed Unix transition. Focused Warehouse lifecycle suites passed
+(78 + 115 + 16 + 22 + 15 tests). No backend/SQL, archived request replay,
+retained session/backup mutation, VM start or GitHub write. Offline parser
+refusal does not prove peer authenticity, caller receipt, restart recovery or
+operator acceptance. Roll back parser/test only; preserve saved sessions and
+the stopped VM. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: failed-only lineage observation alignment (offline)
 
