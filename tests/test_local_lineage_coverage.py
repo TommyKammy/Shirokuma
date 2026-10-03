@@ -875,6 +875,28 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_catalog_cleanup_failure_cannot_return_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        for failure in (TypeError, ValueError):
+            for late in (False, True):
+                with self.subTest(failure=failure, late=late):
+                    self.client.deadline = time.monotonic() + 10
+                    client = self.client
+
+                    class BrokenClose(Response):
+                        def close(self):
+                            super().close()
+                            if late:
+                                client.deadline = time.monotonic() - 1
+                            raise failure('catalog cleanup failed')
+
+                    response = BrokenClose(b'{"id":1}')
+                    with patch.object(self.client.opener, 'open', return_value=response):
+                        with self.assertRaisesRegex(C.CoverageError,
+                                                    'API_DEADLINE' if late else 'API_RESPONSE_INVALID'):
+                            self.client.request('GET', next(iter(C.ANCHORS)))
+                    self.assertTrue(response.closed)
+
     def test_catalog_status_accessor_failure_is_bounded_and_closes_response(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

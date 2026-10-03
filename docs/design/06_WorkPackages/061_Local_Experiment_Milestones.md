@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.64"
+version: "5.65"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: returned catalog cleanup and real-identity namespace (offline)
+
+WP-L5-LINEAGE-001 bounds `TypeError`/`ValueError` from a returned response's
+context cleanup after decoding; timely invalid, late deadline, with intentional
+`CoverageError` codes unchanged. Independently WP-L3-VW-002 refuses unknown
+`X-Real-*` identity hints on the fixed Unix transition before journal/handler.
+Both test-owned negatives failed before repair. The first full lineage suite
+exposed a `CoverageError`/`ValueError` subclass catch-order regression (three
+failures); repaired and rerun: 111 lineage tests passed. Focused Warehouse,
+`make verify-local-experiment`, `make verify-design-context` and diff check
+passed. Dedicated Colima read-only observed stopped. No VM start, live catalog,
+backend/SQL, archived UUID replay, retained source/session/report/backup
+mutation or GitHub write. Offline tests cannot authenticate producers/peers,
+prove atomicity, caller receipt, restart recovery, whole-catalog/column lineage
+or operator acceptance. Roll back only these independent guards and fixtures,
+preserve prior evidence and the stopped VM. Passing private logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-028/`; failed
+negatives and the intermediate suite failure were observed but not saved.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: catalog status accessor and private proxy identity (offline)
 

@@ -5,12 +5,26 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.40"
+version: "1.41"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: returned catalog cleanup classification (offline)
+
+A returned 200 whose response context closes with `TypeError` or `ValueError`
+previously leaked the raw error after JSON decoding. Test-owned timely/late
+failures now yield `API_RESPONSE_INVALID`/`API_DEADLINE`; intentional
+`CoverageError` subclasses retain their own codes. Four negatives failed
+before repair; the initial full focused run exposed the subclass regression,
+which was fixed before the passing rerun (111 tests). Local and design checks
+passed. No live catalog, VM start, saved source/report/backup mutation or replay.
+This cannot authenticate a producer, prove atomic or whole-catalog/column
+coverage, or establish operator acceptance. Roll back only the returned-response
+guard and fixture; preserve saved evidence. Original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: returned catalog status accessor failures (offline)
 

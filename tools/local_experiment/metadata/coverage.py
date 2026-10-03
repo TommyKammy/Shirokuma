@@ -561,6 +561,16 @@ class ReadOnlyClient:
             # on-time availability observation, regardless of its exception.
             require(time.monotonic() < self.deadline, 'API_DEADLINE')
             raise CoverageError('API_UNAVAILABLE') from None
+        except CoverageError:
+            # CoverageError is itself a ValueError; keep deliberate bounded
+            # classifications (including deadline and size) unchanged.
+            raise
+        except (TypeError, ValueError):
+            # A returned response can fail while its context manager closes,
+            # after otherwise valid JSON was decoded. Never leak that failure
+            # or return the unclosed observation as catalog evidence.
+            require(time.monotonic() < self.deadline, 'API_DEADLINE')
+            raise CoverageError('API_RESPONSE_INVALID') from None
 
     def login_existing(self):
         require(not self.login_attempted, 'LOGIN_ALREADY_ATTEMPTED')

@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.94"
+version: "0.95"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: unrecognized real-identity hints (offline)
+
+Test-owned complete Unix transitions with `X-Real-Server` or `X-Real-URI`
+reached the handler before repair. All `X-Real-*` headers now fail before
+journaling or dispatch, while ordinary printable extensions and the Go client
+remain compatible. Focused Warehouse lifecycle and local/design verification
+passed. The dedicated VM stayed stopped; no archived UUID replay, live backend/
+SQL or retained session/backup mutation. This is not independent peer identity,
+caller receipt, owner restart recovery or operator acceptance. Roll back only
+the namespace guard/fixture, preserving archived sessions. Original Vault sync
+remains pending outside this checkout.
 
 ## 2026-10-04: proxy real-identity hints on private RPC (offline)
 
