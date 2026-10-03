@@ -147,6 +147,8 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 				check.Summary = resourceID + " has no positive desired replica count"
 			case resource.Status.Replicas != *desired || resource.Status.ReadyReplicas != *desired || resource.Status.UpdatedReplicas != *desired || resource.Status.AvailableReplicas != *desired:
 				check.Summary = fmt.Sprintf("%s rollout incomplete: desired=%d total=%d ready=%d updated=%d available=%d", resourceID, *desired, resource.Status.Replicas, resource.Status.ReadyReplicas, resource.Status.UpdatedReplicas, resource.Status.AvailableReplicas)
+			case resource.Status.UnavailableReplicas != nil && *resource.Status.UnavailableReplicas != 0:
+				check.Summary = resourceID + " reports unavailable replicas despite complete rollout counters"
 			default:
 				check.Status = "healthy"
 				check.Summary = fmt.Sprintf("%s current generation %d is ready (%d/%d replicas); Kubernetes readiness only", resourceID, resource.Metadata.Generation, resource.Status.ReadyReplicas, *desired)

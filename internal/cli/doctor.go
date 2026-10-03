@@ -96,6 +96,7 @@ type kubernetesResourceList struct {
 		Status struct {
 			Replicas           int    `json:"replicas"`
 			AvailableReplicas  int    `json:"availableReplicas"`
+			UnavailableReplicas *int  `json:"unavailableReplicas"`
 			ReadyReplicas      int    `json:"readyReplicas"`
 			UpdatedReplicas    int    `json:"updatedReplicas"`
 			ObservedGeneration *int64 `json:"observedGeneration"`
@@ -269,6 +270,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 				controller.Status.AvailableReplicas != *controller.Spec.Replicas ||
 				controller.Status.ReadyReplicas != *controller.Spec.Replicas ||
 				controller.Status.UpdatedReplicas != *controller.Spec.Replicas
+			if controller.Status.UnavailableReplicas != nil && *controller.Status.UnavailableReplicas != 0 {
+				unready = true
+			}
 			available := false
 			for _, condition := range controller.Status.Conditions {
 				if condition.Type == "Available" && condition.Status == "True" {
@@ -342,6 +346,15 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		if localExperiment && resource.Metadata.DeletionTimestamp != "" {
 			unhealthy = append(unhealthy, resourceID+" (terminating)")
 		}
+		// Suspension relaxes Ready freshness, not a current-generation failure.
+		if localExperiment {
+			for _, condition := range resource.Status.Conditions {
+				if condition.ObservedGeneration == resource.Metadata.Generation &&
+					(condition.Type == "Stalled" || condition.Type == "Reconciling") && condition.Status != "False" {
+					unhealthy = append(unhealthy, resourceID+" (unresolved reconciliation condition)")
+				}
+			}
+		}
 		if localExperiment && isRoot && resource.Spec.Suspend && resource.Metadata.DeletionTimestamp == "" {
 			rootSuspended = true
 			continue
@@ -352,10 +365,6 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		ready := false
 		for _, condition := range resource.Status.Conditions {
-			if localExperiment && condition.ObservedGeneration == resource.Metadata.Generation &&
-				((condition.Type == "Stalled" || condition.Type == "Reconciling") && condition.Status != "False") {
-				unhealthy = append(unhealthy, resourceID+" (unresolved reconciliation condition)")
-			}
 			if condition.Type == "Ready" && condition.ObservedGeneration == resource.Metadata.Generation {
 				if condition.Status == "True" {
 					ready = true

@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.12"
+version: "0.13"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: suspended-root failures and unavailable-replica contradictions
+
+Two independent offline fixed-profile doctor increments: a suspended root Kustomization no longer hides a current-generation `Stalled` or `Reconciling` condition other than `False`, while its intentionally stale Ready condition remains informational; separately, a fixed Flux controller or Lakehouse workload reporting nonzero `unavailableReplicas` cannot pass despite complete rollout counters. Absent or explicitly zero unavailable replicas remain valid. A new fake suspended-root case failed before the fix and passed afterward; `go test ./internal/cli` (723 tests), `go vet ./...`, `make verify-local-experiment`, and `git diff --check` passed after both changes. Dedicated Colima was observed stopped via read-only status; no start, API/SQL read, reconciliation, saved request replay, retained data or backup mutation. Runtime/source authenticity, strict gate and production/operator acceptance remain unverified. Rollback is limited to doctor code/tests, preserving retained evidence and the VM. Original Vault handoff synchronization remains pending outside the noninteractive checkout.
 
 ## 2026-10-03: offline reconciliation and unrelated inventory duplicates
 

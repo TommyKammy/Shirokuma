@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.35"
+version: "4.36"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline suspended Flux failure and unavailable replicas
+
+WP-L0-GITOPS-001. A current-generation unresolved reconciliation condition on the suspended root now degrades the fixed-profile doctor instead of being skipped; a separate check rejects a nonzero reported `unavailableReplicas` for fixed Flux controllers and Lakehouse workloads even if other counters match. Positive fake fixtures (stale/cleared conditions, absent/zero unavailable count) remain accepted; generic Flux profile unchanged. The suspended-root regression failed before the fix; afterward `go test ./internal/cli` (723 tests), `go vet ./...`, `make verify-local-experiment` and `git diff --check` passed. Read-only dedicated Colima status was stopped; no VM start, live API/SQL read, reconciliation, saved request replay, retained data or backup mutation. Actual readiness, remote revision authenticity, strict publication gate and production/operator acceptance are unverified. Roll back only doctor code/tests, retaining saved evidence and the stopped VM. Direct synchronization to the original Vault handoff remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: offline Flux reconciliation and scoped inventory duplicates
 

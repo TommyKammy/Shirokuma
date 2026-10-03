@@ -48,6 +48,48 @@ func TestLocalFluxRejectsCurrentReconciliationConditions(t *testing.T) {
 	}
 }
 
+func TestLocalFluxSuspendedRootStillReportsCurrentReconciliationFailure(t *testing.T) {
+	for _, test := range []struct {
+		condition string
+		status    string
+	}{
+		{`{"type":"Stalled","status":"True","observedGeneration":2}`, "degraded"},
+		{`{"type":"Reconciling","status":"Unknown","observedGeneration":2}`, "degraded"},
+		{`{"type":"Stalled","status":"True","observedGeneration":1}`, "informational"},
+		{`{"type":"Reconciling","status":"False","observedGeneration":2}`, "informational"},
+	} {
+		resources := strings.Replace(localFluxJSON(), `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},`+test.condition+`]}`, 1)
+		if resources == localFluxJSON() {
+			t.Fatal("fixture did not change")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+		if check.Status != test.status || (test.status == "degraded" && !strings.Contains(check.Summary, "unresolved reconciliation")) {
+			t.Fatalf("suspended root condition %s: %#v", test.condition, check)
+		}
+	}
+}
+
+func TestLocalDoctorRejectsContradictoryUnavailableReplicas(t *testing.T) {
+	controllers := strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":1,"unavailableReplicas":1`, 1)
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+		t.Fatalf("contradictory Flux controller accepted: %#v", check)
+	}
+	for _, value := range []string{"1", "-1"} {
+		responses := localWorkloadResponses()
+		responses[0].output = strings.Replace(responses[0].output, `"availableReplicas":1`, `"availableReplicas":1,"unavailableReplicas":`+value, 1)
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "unavailable replicas") || checks[1].Status != "healthy" {
+			t.Fatalf("contradictory Lakehouse status %s accepted: %#v", value, checks)
+		}
+	}
+	responses := localWorkloadResponses()
+	responses[0].output = strings.Replace(responses[0].output, `"availableReplicas":1`, `"availableReplicas":1,"unavailableReplicas":0`, 1)
+	if check := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)[0]; check.Status != "healthy" {
+		t.Fatalf("explicit zero unavailable rejected: %#v", check)
+	}
+}
+
 func TestLocalLakehouseRejectsDuplicateUnrelatedResource(t *testing.T) {
 	other := healthyLocalWorkload("Deployment", "shirokuma-dev", "unrelated")
 	for _, entries := range []string{other + `,` + other, healthyLocalWorkload("Deployment", "shirokuma-dev", "")} {
