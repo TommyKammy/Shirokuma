@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.03"
+version: "5.04"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: lineage collection membership and mode (offline)
+
+WP-L5-LINEAGE-001: collection inventory now refuses changed run membership and changed collection directory owner/mode during listing. Two disposable negatives failed before repair; `make test-local-lineage-coverage` passed (47 tests), as did `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check`. Dedicated Colima read-only list: stopped. No VM start, real API/SQL, retained source/report/backup mutation or unknown-request replay. Repeat reads cannot ensure atomicity against restored state; source provenance, whole-catalog/column lineage and operator/production acceptance remain open. Roll back reader/tests only and preserve evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: reported source locations and lineage directory membership (offline)
 

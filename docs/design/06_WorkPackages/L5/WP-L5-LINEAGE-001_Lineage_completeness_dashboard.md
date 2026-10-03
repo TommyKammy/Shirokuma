@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.9"
+version: "0.91"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: collection listing stability (offline)
+
+The open-descriptor collection inventory now re-enumerates run names before returning and refuses additions/removals during the read. Independently it compares the opened collection directory's owner/mode before and after enumeration and against its current path. Two disposable negatives (new run and mode change) failed before repair; the focused suite passes (47 tests). The fixed collection may be 0755; individual source runs remain private. No retained source, report, catalog, API, SQL, backup or VM was changed. These observations are not atomic against a same-UID actor restoring state between checks and do not establish provenance, whole-catalog/column coverage or operator acceptance. Roll back reader/tests only and preserve retained data; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: source directory membership recheck (offline)
 

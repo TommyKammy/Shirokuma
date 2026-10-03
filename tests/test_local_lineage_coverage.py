@@ -264,6 +264,41 @@ class CoverageTests(unittest.TestCase):
             self.assertEqual(C.listing(displaced / 'data-plans'), ['original'])
             self.assertEqual(C.listing(foreign / 'data-plans'), ['foreign'])
 
+    def test_collection_rejects_new_entry_during_listing(self):
+        self.add_run()
+        original = C._bounded_names
+        injected = False
+        def add_after_listing(fd, limit, code):
+            nonlocal injected
+            names = original(fd, limit, code)
+            if not injected:
+                (self.root / ('b' * 32)).mkdir(mode=0o700)
+                injected = True
+            return names
+        with patch.object(C, '_bounded_names', side_effect=add_after_listing):
+            with self.assertRaises(C.CoverageError):
+                C.listing(self.root)
+        self.assertTrue(injected)
+
+    def test_collection_rejects_mode_change_during_listing(self):
+        self.add_run()
+        original = C._bounded_names
+        calls = 0
+        def change_after_listing(fd, limit, code):
+            nonlocal calls
+            names = original(fd, limit, code)
+            calls += 1
+            if calls == 1:
+                self.root.chmod(0o755)
+            return names
+        try:
+            with patch.object(C, '_bounded_names', side_effect=change_after_listing):
+                with self.assertRaises(C.CoverageError):
+                    C.listing(self.root)
+            self.assertEqual(calls, 2)
+        finally:
+            self.root.chmod(0o700)
+
     def test_source_reader_cannot_validate_a_displaced_run(self):
         path = self.add_run(curated=True)
         original_hash = C.source_snapshot(path)

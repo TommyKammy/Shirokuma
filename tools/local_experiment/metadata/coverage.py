@@ -255,8 +255,18 @@ def listing(root):
     root = Path(root)
     fd = _open_source_dir(root, private=False)  # Collection root is 0755; runs are private.
     try:
+        initial = os.fstat(fd)
         names = _bounded_names(fd, MAX_ENTRIES, 'SOURCE_INVENTORY_LIMIT')
+        # A newly created/removed run during enumeration cannot be included in
+        # a supposedly complete denominator. This does not make the read atomic.
+        require(names == _bounded_names(fd, MAX_ENTRIES, 'SOURCE_INVENTORY_LIMIT'),
+                'SOURCE_INVENTORY_CHANGED')
         _current_source_path(root, fd)
+        final = os.fstat(fd)
+        current = root.lstat()
+        require(final.st_uid == initial.st_uid == current.st_uid and
+                stat.S_IMODE(final.st_mode) == stat.S_IMODE(initial.st_mode) == stat.S_IMODE(current.st_mode),
+                'SOURCE_CHANGED')
         return names
     finally:
         os.close(fd)
