@@ -202,6 +202,27 @@ func TestLocalInventoryRejectsNullMemberWithoutRejectingEmptyList(t *testing.T) 
 	}
 }
 
+func TestLocalInventoryRejectsContradictoryListType(t *testing.T) {
+	for _, tc := range []struct {
+		fields  string
+		invalid bool
+	}{
+		{`"kind":"Pod"`, true},
+		{`"apiVersion":"apps/v1"`, true},
+		{`"kind":"List","apiVersion":"v1"`, false},
+		{`"metadata":{},"kind":"List"`, false},
+	} {
+		raw := []byte(`{` + tc.fields + `,"items":[]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if got := localInventoryIncomplete(list, raw); got != tc.invalid {
+			t.Fatalf("incomplete=%t want %t for %s", got, tc.invalid, raw)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsLossyUnknownJSONKey(t *testing.T) {
 	for _, raw := range [][]byte{
 		[]byte(`{"items":[],"\ud800":1}`),

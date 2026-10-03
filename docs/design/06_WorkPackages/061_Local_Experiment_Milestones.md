@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.121"
+version: "5.122"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: GitOps list GVK and independent FinOps review (offline)
+
+WP-L0-GITOPS-001: a disposable fixed-profile list pins existing refusal of a
+contradictory reported List kind/API version; no doctor behavior changed.
+Focused Go CLI tests passed (832). Independently WP-L6-FIN-001 direct history
+parsing/order/digest and storage coverage were inspected without another defect;
+focused FinOps 181 tests passed (seven Linux-only skips). Dedicated Colima
+observed Stopped; no live API/Git, reconciliation, collection, retained report,
+volume or backup mutation or GitHub write. AgentHouse usage remains `null /
+NOT_MEASURED`. Fake/offline checks cannot establish producer authenticity,
+atomic inventory, current usage, Linux behavior, strict admission or operator
+acceptance. Roll back only the GitOps test if needed; retain prior evidence.
+No FinOps runtime rollback. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: separate GitOps complete-list inspection (offline)
 

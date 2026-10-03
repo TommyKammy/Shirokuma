@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.82"
+version: "0.83"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: reported list GVK regression (offline)
+
+A disposable complete-list fixture pins the existing refusal of reported
+`kind: Pod` or `apiVersion: apps/v1` on the List envelope. Canonical `List`/`v1`
+and omitted projected fields remain valid. The focused negative passed without
+a reader change; `go test ./internal/cli -count=1` passed (832). Dedicated
+Colima observed Stopped; no live API/Git, reconciliation, retained data/backup
+mutation or GitHub write. Fake-list consistency is not remote authentication,
+atomicity, strict admission or operator acceptance. Roll back only the test if
+necessary; preserve earlier evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: separate complete-list inspection after denial repair (offline)
 
