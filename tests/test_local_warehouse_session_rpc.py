@@ -413,7 +413,9 @@ class SessionRPCTest(unittest.TestCase):
         def handler(action, request_id):
             self.calls.append((action, request_id))
             entered.set()
-            self.release.wait(3)
+            # Keep the first request pending until both concurrent responses
+            # are observed; a wall-clock wait can expire under suite load.
+            self.release.wait()
             return self.response(action, request_id)
         self.start(handler)
         first, second = self.request(), self.request('wake')
@@ -422,7 +424,9 @@ class SessionRPCTest(unittest.TestCase):
         sender.start()
         try:
             self.assertTrue(entered.wait(2))
-            self.assertEqual(self.exchange(first)[1]['result'], 'unknown')
+            pending = self.exchange(first)
+            self.assertEqual((pending[0], pending[1].get('result'), pending[1].get('request_id')),
+                             (409, 'unknown', first['request_id']))
             busy = self.exchange(second)
             self.assertEqual((busy[0], busy[1]['result']), (409, 'busy'))
         finally:

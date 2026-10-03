@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.08"
+version: "5.09"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: disposable Warehouse concurrency fixture (offline)
+
+WP-L3-VW-002: independent test-only increment holds the injected first handler until both pending/busy replies are observed and asserts a complete 409/unknown response with the original request identity. Focused single test and `make test-local-warehouse-lifecycle` passed; private log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-053/warehouse-final.log`. Earlier unchanged full-suite Warehouse `KeyError` remains an unresolved intermittent failure, not a proven fix. No archived UUID replay, actual backend/API/SQL, VM start or retained journal/backup mutation. Roll back fixture only, preserving evidence and stopped VM; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: saved source and collection root metadata (offline)
 

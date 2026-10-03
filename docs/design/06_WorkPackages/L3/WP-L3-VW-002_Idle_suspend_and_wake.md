@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.56"
+version: "0.57"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: disposable busy-handler test ordering (offline)
+
+The serial-handler socket fixture now holds its test-owned first handler until both concurrent replies are observed, rather than releasing it after an arbitrary three-second wait under suite load. The assertion checks the complete 409/unknown envelope and original request identity before inspecting a result; a malformed 400 response can no longer surface only as an opaque `KeyError`. Focused test and Warehouse suite passed after the test-only change. The previous full-regression 400-like failure was not independently reproduced or established to have this cause; preserve its log and do not claim the intermittent failure is repaired. No production owner, saved journal, archived UUID, VM, API or SQL was changed. Roll back this fixture only; do not replay retained requests. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: partial reply before disposable owner exit (offline)
 
