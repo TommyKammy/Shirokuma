@@ -230,8 +230,8 @@ class RuntimeStatusTests(TestCase):
         server = PREFIX + '-xs'
         responses = [
             'Secret\t' + PREFIX + '-secret\tshirokuma-dev\t' + str(uuid.uuid4()) + '\t\t\n',
-            'v1\tList\t0\tCOMPLETE\n',
-            'discovery.k8s.io/v1\tEndpointSliceList\t1\tCOMPLETE\nEndpointSlice\t' + server + '-abcde\tshirokuma-dev\t' +
+            'v1\tList\t0\tCOMPLETE\t42\n',
+            'discovery.k8s.io/v1\tEndpointSliceList\t1\tCOMPLETE\t43\nEndpointSlice\t' + server + '-abcde\tshirokuma-dev\t' +
                 str(uuid.uuid4()) + '\t\t' + server + '\n',
         ]
         with mock.patch.object(R.W, 'command', side_effect=responses) as command:
@@ -279,9 +279,13 @@ class RuntimeStatusTests(TestCase):
         with mock.patch.object(R.W, 'command', return_value='v1\tList\t0\tINVALID\n'):
             with self.assertRaises(R.RuntimeStatusError):
                 R.ReadOnlyKubernetes().labelled(TOKEN)
-        for raw in ('', 'v1\tList\t0\tINVALID\n', 'v1\tList\t0\tTRUNCATED\n', 'v1\tList\t1\tCOMPLETE\n',
-                    'v1\tList\t0\tCOMPLETE\r\n', 'v1\tList\t0\tCOMPLETE\n\r\n',
-                    'v2\tList\t0\tCOMPLETE\n', 'discovery.k8s.io/v1\tList\t0\tCOMPLETE\n',
+        self.assertIn('.metadata.resourceVersion', R.MANY)
+        for raw in ('', 'v1\tList\t0\tINVALID\n', 'v1\tList\t0\tTRUNCATED\n', 'v1\tList\t1\tCOMPLETE\t42\n',
+                     'v1\tList\t0\tCOMPLETE\t  \n', 'v1\tList\t0\tCOMPLETE\t42 43\n',
+                     'v1\tList\t0\tCOMPLETE\t' + 'x' * 1025 + '\n',
+                     'v1\tList\t0\tCOMPLETE\t42\x00\n',
+                     'v1\tList\t0\tCOMPLETE\t42\r\n', 'v1\tList\t0\tCOMPLETE\t42\n\r\n',
+                     'v2\tList\t0\tCOMPLETE\n', 'discovery.k8s.io/v1\tList\t0\tCOMPLETE\n',
                     'v1\tPodList\t0\tCOMPLETE\n', 'v1\tList\t0\tCOMPLETE\nextra\n'):
             with self.subTest(raw=raw), mock.patch.object(R.W, 'command', return_value=raw):
                 with self.assertRaises(R.RuntimeStatusError):
@@ -294,9 +298,9 @@ class RuntimeStatusTests(TestCase):
             with self.subTest(raw=raw), mock.patch.object(R.W, 'command', return_value=raw):
                 with self.assertRaises(R.RuntimeStatusError):
                     R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')
-        with mock.patch.object(R.W, 'command', return_value='v1\tList\t0\tCOMPLETE\n'):
+        with mock.patch.object(R.W, 'command', return_value='v1\tList\t0\tCOMPLETE\t42\n'):
             self.assertEqual(R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')['items'], [])
-        with mock.patch.object(R.W, 'command', return_value='discovery.k8s.io/v1\tEndpointSliceList\t0\tCOMPLETE\n'):
+        with mock.patch.object(R.W, 'command', return_value='discovery.k8s.io/v1\tEndpointSliceList\t0\tCOMPLETE\t43\n'):
             self.assertEqual(R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')['items'], [])
 
     def test_cli_only_contacts_kubernetes_after_saved_completion_gate(self):

@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.60"
+version: "4.61"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse list version framing (offline)
+
+WP-L3-VW-002: the metadata-only scoped-list header now carries the resource version and the bounded reader refuses whitespace-only, embedded-whitespace/control or oversized versions before claiming scoped absence. Fake positive/negative lists and `make test-local-warehouse-lifecycle` passed. Dedicated Colima remains stopped; no live API/SQL, unknown-request replay, owner operation, retained session/backup mutation. Projected metadata cannot authenticate API identity, prove an atomic inventory, historical cleanup or production acceptance. Roll back the reader/template/tests only, preserving saved evidence and VM; direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: null diagnostic list metadata (offline)
 

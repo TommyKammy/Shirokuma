@@ -47,9 +47,10 @@ ROW = ('{{printf "%s\\t%s\\t%s\\t%s\\t" .kind .metadata.name '
 # absent resource. --ignore-not-found prints nothing only for a missing object.
 ONE = '{{if .}}{{if .metadata}}' + ROW + '{{else}}INVALID{{end}}{{end}}'
 MANY = ('{{printf "%s\\t%s\\t%d\\t" .apiVersion .kind (len .items)}}'
-            '{{if or (eq (printf "%T" .items) "<nil>") (eq (printf "%T" .metadata) "<nil>") (not .metadata.resourceVersion)}}INVALID{{else}}'
-          '{{if or .metadata.continue .metadata.remainingItemCount}}TRUNCATED{{else}}COMPLETE{{end}}{{end}}'
-        '{{printf "\\n"}}{{range .items}}' + ROW + '{{end}}')
+             '{{if or (eq (printf "%T" .items) "<nil>") (eq (printf "%T" .metadata) "<nil>") (not .metadata.resourceVersion)}}INVALID{{else}}'
+           '{{if or .metadata.continue .metadata.remainingItemCount}}TRUNCATED{{else}}COMPLETE{{end}}{{end}}'
+         '{{printf "\\t%s" .metadata.resourceVersion}}'
+         '{{printf "\\n"}}{{range .items}}' + ROW + '{{end}}')
 
 
 class RuntimeStatusError(ValueError):
@@ -121,8 +122,10 @@ class ReadOnlyKubernetes:
         # in List on this client; each item is still checked as EndpointSlice.
         expected_headers = ({('v1', 'List'), ('discovery.k8s.io/v1', 'EndpointSliceList')}
                             if kind == 'EndpointSliceList' else {('v1', 'List')})
-        require(len(header) == 4 and tuple(header[:2]) in expected_headers and
+        require(len(header) == 5 and tuple(header[:2]) in expected_headers and
                 header[3] == 'COMPLETE' and
+                0 < len(header[4]) <= 1024 and
+                all(not char.isspace() and ord(char) >= 33 and ord(char) != 127 for char in header[4]) and
                 re.fullmatch(r'(0|[1-9][0-9]*)', header[2]) is not None and
                 int(header[2]) == len(lines) and len(lines) <= limit)
         return {'kind': kind, 'items': [row(line) for line in lines]}

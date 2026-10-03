@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.35"
+version: "0.36"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: scoped-list resource version framing (offline)
+
+The metadata-only list template now projects the reported resource version into the bounded header, and the opt-in runtime-status reader rejects whitespace-only, whitespace-containing, control-character or oversized versions before treating an empty scoped list as absence. Valid opaque versions still pass; malformed/valid fake list cases and `make test-local-warehouse-lifecycle` passed. The dedicated Colima lab remained stopped; the template has not been rendered against a live API, and no owner request, SQL, unknown-request replay or retained backup/session mutation occurred. This only tests local parsing, not authenticated API identity, atomicity, historical cleanup or production acceptance. Roll back the projection and reader tests only; preserve saved evidence and the stopped VM. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: canonical metadata list row framing (offline)
 
