@@ -875,6 +875,25 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_catalog_content_coding_cannot_disguise_plain_json(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for coding, expected in [('gzip', 'API_RESPONSE_INVALID'),
+                                 ('identity', 'API_RESPONSE_INVALID'),
+                                 (None, None)]:
+            with self.subTest(coding=coding):
+                response = Response(b'{"id":1}')
+                response.headers = Message()
+                if coding is not None:
+                    response.headers['Content-Encoding'] = coding
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if expected:
+                        with self.assertRaisesRegex(C.CoverageError, expected):
+                            self.client.request('GET', path)
+                    else:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                self.assertTrue(response.closed)
+
     def test_late_invalid_length_is_deadline_not_timely_framing_error(self):
         self.client.login_attempted, self.client.token = True, 'token'
         client = self.client

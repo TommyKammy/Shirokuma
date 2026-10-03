@@ -395,10 +395,15 @@ class ReadOnlyClient:
                 headers = getattr(response, 'headers', None)
                 lengths = headers.get_all('Content-Length', []) if headers is not None else []
                 transfers = headers.get_all('Transfer-Encoding', []) if headers is not None else []
+                encodings = headers.get_all('Content-Encoding', []) if headers is not None else []
                 # Header access is part of the bounded observation too: a
                 # late malformed header is not an on-time framing result.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 require(type(lengths) is list and len(lengths) <= 1, 'API_RESPONSE_INVALID')
+                # urllib does not decode content codings. Even a JSON-looking
+                # body is not complete evidence when its declared representation
+                # requires a decoding step that this reader did not perform.
+                require(type(encodings) is list and not encodings, 'API_RESPONSE_INVALID')
                 # Competing length and transfer framing is ambiguous even if
                 # urllib exposes a decoded, syntactically valid JSON prefix.
                 require(type(transfers) is list and not (lengths and transfers), 'API_RESPONSE_INVALID')

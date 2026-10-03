@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-03: encoded catalog responses are not decoded evidence (offline)
+
+The bounded read-only GET refuses a declared `Content-Encoding`, including
+`identity`, rather than treating JSON-looking bytes as an already decoded
+representation. A disposable response with `gzip` or `identity` is rejected
+and closed; a plain response remains accepted. Focused lineage tests pass.
+No VM start, live catalog login/GET or retained source/report/backup change.
+This does not authenticate the catalog, provide atomic observations or establish
+whole-catalog/column lineage or operator acceptance. Roll back this header
+guard and disposable fixture only; preserve historical reports. Original Vault
+sync remains pending outside this checkout; broader checks are in Milestones.
+
 ## 2026-10-03: unsupported catalog transfer coding refused (offline)
 
 The bounded catalog reader accepts a single `chunked` transfer coding (decoded

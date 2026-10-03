@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: catalog content coding boundary (offline)
+
+WP-L5-LINEAGE-001 rejects declared content codings on a decoded-looking
+disposable response, while unencoded JSON still passes; focused lineage suite
+passed (90 tests). Read-only Colima listing showed the dedicated VM stopped.
+No live catalog, VM start, retained credential/source/report/backup mutation or
+unknown-request replay. This checks client framing only, not producer identity,
+atomicity, whole-catalog/column lineage or operator acceptance. Roll back the
+reader and fixture alone, retaining historical evidence; original Vault sync
+remains pending outside this noninteractive checkout.
+
 ## 2026-10-03: cross-kind inventory UID collision (offline)
 
 After the independent framing commit below, WP-L0-GITOPS-001 gained a
