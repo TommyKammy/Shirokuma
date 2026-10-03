@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.99"
+version: "5.00"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: bounded deletion precision and failed send exit (offline)
+
+WP-L0-GITOPS-001 refuses reported deletion timestamps exceeding nanosecond fractional precision; the focused negative failed before repair, and `go test ./internal/cli -count=1` (807 passed) and `go vet ./...` passed after. WP-L3-VW-002 added a test-owned child exit after an injected broken send, with a saved verified reply but no caller bytes; independent reader and owner process retain unknown-no-replay and collision refusal. `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. Private regression logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-045/verify.log` and `design.log`. Read-only dedicated Colima status: stopped; no VM start, actual API/SQL, reconciliation, archived UUID replay or retained data/backup mutation. Offline checks do not authenticate backend/API/Git, prove delivery, atomicity, historical cleanup, strict admission or operator/production acceptance. Roll back reader/tests only, preserve VM/evidence; direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: handler exception before disposable owner exit (offline)
 

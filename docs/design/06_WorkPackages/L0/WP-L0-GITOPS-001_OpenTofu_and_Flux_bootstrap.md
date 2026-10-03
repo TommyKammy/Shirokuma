@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.58"
+version: "0.59"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: bounded deletion-time precision (offline)
+
+Fixed-profile inventory rejects a reported deletion time with more than nine fractional-second digits: Go's RFC3339Nano parser otherwise silently discards excess precision. Omitted/empty and valid nanosecond timestamps remain compatible. The focused negative failed before the fix; `go test ./internal/cli -count=1` (807 passed), `go vet ./...`, `make verify-local-experiment` and `make verify-design-context` passed afterward. Dedicated Colima was read-only observed stopped. No live API/Git/SQL, VM start, reconciliation, replay or retained data/backup changes. This offline shape check does not authenticate API/Git, prove atomicity, historical cleanup, strict publication admission or operator acceptance. Roll back the reader/test only, preserving the VM and evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: deletion time syntax and condition/status generation (offline)
 

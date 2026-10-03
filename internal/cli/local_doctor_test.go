@@ -406,6 +406,7 @@ func TestLocalInventoryRejectsMalformedDeletionTimestamp(t *testing.T) {
 		{`"2026-10-03"`, true},
 		{`"2026-10-03T12:00:00,123Z"`, true},
 		{`"2026-10-03T12:00:00+24:00"`, true},
+		{`"2026-10-03T12:00:00.1234567890Z"`, true},
 		{`"2026-10-03T12:00:00Z"`, false},
 		{`"2026-10-03T12:00:00.123456789Z"`, false},
 		{`"2026-10-03T12:00:00+09:00"`, false},

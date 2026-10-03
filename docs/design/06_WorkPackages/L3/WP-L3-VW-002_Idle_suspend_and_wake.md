@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.54"
+version: "0.55"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: failed send after durable reply (offline)
+
+An independent ninth disposable child-process boundary injects `BrokenPipeError` on send after the durable verified reply, observes no bytes at the test caller, then exits. An independent saved reader still classifies the original and fresh UUID `unknown-no-replay` with unknown runtime state; a new owner process refuses the occupied identity without dispatch or journal mutation. `make test-local-warehouse-lifecycle`, `make verify-local-experiment` and `make verify-design-context` passed. This is injected socket failure, not archived recovery or authenticated backend state. Dedicated Colima remained stopped; no API/SQL, VM start, unknown UUID replay or retained session/backup mutation. Roll back only the disposable test, retaining VM/evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: disposable handler failure across owner exit (offline)
 

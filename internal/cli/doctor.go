@@ -33,7 +33,7 @@ const (
 
 var localFluxGitRevision = regexp.MustCompile(`^main@sha1:[0-9a-f]{40}$`)
 var localFluxDNSLabel = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
-var localDeletionTimestamp = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$`)
+var localDeletionTimestamp = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$`)
 
 func localFluxValidName(name string, maxLength int, subdomain bool) bool {
 	if len(name) == 0 || len(name) > maxLength {
@@ -300,8 +300,8 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if identity.Generation < 0 {
 			return true
 		}
-		// A reported deletion timestamp is a Kubernetes RFC3339 time, not
-		// arbitrary text. An unrelated terminating member is still part of
+		// A reported deletion timestamp is a Kubernetes nanosecond-precision
+		// RFC3339 time, not arbitrary text. An unrelated terminating member is still part of
 		// the supposedly complete inventory.
 		if rawTimestamp, ok := metadata["deletionTimestamp"]; ok {
 			var timestamp string
