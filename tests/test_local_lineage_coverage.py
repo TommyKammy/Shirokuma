@@ -53,7 +53,34 @@ class CoverageTests(unittest.TestCase):
 
     def collect(self, client=None, reader=None):
         return C.collect(client or self.client, source_root=self.root,
-                         evidence_reader=reader or (lambda path: copy.deepcopy(self.sources[path.name])))
+                          evidence_reader=reader or (lambda path: copy.deepcopy(self.sources[path.name])))
+
+    def test_credential_parent_swapped_after_open_is_not_accepted(self):
+        credential = self.root / '.env'
+        credential.write_bytes(b'original')
+        credential.chmod(0o600)
+        foreign = self.root.parent / 'foreign'
+        foreign.mkdir(mode=0o700)
+        (foreign / '.env').write_bytes(b'replaced')
+        (foreign / '.env').chmod(0o600)
+        displaced = self.root.parent / 'displaced'
+        real_open = os.open
+
+        def swap_after_open(path, *args, **kwargs):
+            fd = real_open(path, *args, **kwargs)
+            if path == credential.name and kwargs.get('dir_fd') is not None:
+                self.root.rename(displaced)
+                self.root.symlink_to(foreign, target_is_directory=True)
+            return fd
+
+        try:
+            with patch.object(C.os, 'open', swap_after_open):
+                with self.assertRaisesRegex(C.CoverageError, 'SOURCE_BOUNDARY_INVALID'):
+                    C.read_file(credential, 4096)
+        finally:
+            if self.root.is_symlink():
+                self.root.unlink()
+                displaced.rename(self.root)
 
     def test_all_runs_missing_is_complete_observation_not_complete_coverage(self):
         self.add_run()

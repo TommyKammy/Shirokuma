@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.00"
+version: "1.01"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: credential read bound to original directory (offline)
+
+The OpenMetadata read-only client now reads its existing private `.env` through a no-follow directory descriptor, and rechecks that the directory is still at its original path before using the bytes. A disposable parent-directory rename and symlink substitution after file open previously returned credential bytes without error; the negative failed before repair and passes afterward. Existing login fixtures still exercise a single login and no retry. This does not authenticate the credential producer, rule out a restoring same-UID actor, or prove catalog/API authenticity. No real credential, saved source, report, backup or VM was modified; the dedicated VM was read-only observed stopped. Revert the reader/test only if needed, preserving retained evidence. Original Vault direct sync pending outside checkout; verification and remaining boundaries are recorded in Milestones.
 
 ## 2026-10-03: metadata stability during a saved-file read (offline)
 

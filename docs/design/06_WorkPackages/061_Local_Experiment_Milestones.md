@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.18"
+version: "5.19"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: original-directory credential read (offline)
+
+WP-L5-LINEAGE-001: a disposable private `.env` read no longer accepts bytes after its parent path is redirected to a different tree. The negative failed before repair; the credential reader now pins the parent descriptor and rechecks its path after reading. Focused lineage suite (61 tests), `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Independently inspected WP-L0-GITOPS-001's deletion timestamp contract: its empty projected-field compatibility is explicit, so no unsupported behavioral change was made. Read-only `colima list` reported the dedicated VM stopped; no live login, API/SQL, VM start, reconciliation, archived request replay or retained source/credential/report/backup mutation. This does not authenticate a credential producer or catalog, guarantee atomicity against restored paths, establish whole-catalog/column lineage, clear strict admission or grant operator acceptance. Roll back reader/test only, preserving VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: saved-file read stability and object resource versions (offline)
 

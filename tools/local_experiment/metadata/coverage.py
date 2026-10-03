@@ -98,18 +98,14 @@ def directory(path, *, private=True):
 
 
 def read_file(path, limit=MAX_FILE_BYTES):
-    before = path.lstat()
-    require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid()
-            and stat.S_IMODE(before.st_mode) == 0o600 and before.st_size <= limit, 'SOURCE_FILE_INVALID')
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    with os.fdopen(fd, 'rb') as stream:
-        opened = os.fstat(stream.fileno())
-        require((opened.st_dev, opened.st_ino) == (before.st_dev, before.st_ino), 'SOURCE_CHANGED')
-        raw = stream.read(limit + 1)
-        after = os.fstat(stream.fileno())
-    require(len(raw) <= limit and (before.st_size, before.st_mtime_ns, before.st_ctime_ns)
-            == (after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'SOURCE_CHANGED')
-    return raw
+    path = Path(path)
+    parent_fd = _open_source_dir(path.parent)
+    try:
+        raw = _source_file_at(parent_fd, path.name, os.fstat(parent_fd).st_dev, limit)
+        _current_source_path(path.parent, parent_fd)
+        return raw
+    finally:
+        os.close(parent_fd)
 
 
 SOURCE_DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
