@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.01"
+version: "1.02"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: credential identity across login (offline)
+
+The private `.env` reader now compares file device/inode/mode/owner/size/mtime/ctime/link count across its two bounded reads around the one existing login, as well as the bytes. A disposable fixture touched its mtime after the POST while leaving the bytes identical; before repair the GET proceeded, now login fails closed without a GET or retry. This does not undo the already-sent login, authenticate the credential producer or detect a same-UID actor that restores metadata between observations. No real credential, retained source/report/backup or VM was changed; read-only Colima listing showed the dedicated profile stopped. Roll back only this reader/test, preserving existing evidence. Direct original Vault sync pending outside checkout; broader checks and unresolved criteria are in Milestones.
 
 ## 2026-10-03: credential read bound to original directory (offline)
 

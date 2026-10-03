@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.19"
+version: "5.20"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: credential metadata stability across login (offline)
+
+WP-L5-LINEAGE-001: a disposable `.env` changed mtime after the single login POST but kept identical bytes; previously the client proceeded to GET. The negative failed before repair; now the two private, no-follow reads compare file identity/metadata as well as bytes and reject the GET without retry. Focused lineage suite (62 tests), `make verify-local-experiment`, `make verify-design-context` and `go test ./internal/cli -count=1` passed; private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-063/{verify,design,go}.log`. Separately inspected WP-L0-GITOPS-001's fixed-list envelope (`kind`, `apiVersion`, pagination and projected resource version): omitted projected fields remain intentional, so no speculative Go behavior change was made. Read-only `colima list` showed the dedicated VM stopped; no live login, GET, API/Git/SQL, VM start, replay, reconciliation or retained source/credential/report/backup mutation. The test does not undo an already sent login, authenticate producer/catalog/API/Git, guarantee atomicity against restored metadata, establish whole-catalog/column lineage, clear strict admission or grant operator acceptance. Roll back reader/test only and retain VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: original-directory credential read (offline)
 

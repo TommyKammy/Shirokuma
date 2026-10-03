@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.68"
+version: "0.69"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: fixed-list envelope contract review (offline)
+
+Independently rechecked the current fixed-profile list reader and Go tests while the dedicated VM was stopped. Canonical `kind`/`apiVersion`, incomplete pagination and reported list resource versions already fail closed; omission of projected fields remains intentional. No behavioral change is justified by this review, and no live API/Git or reconciliation was attempted. `go test ./internal/cli -count=1` passed; full local verification and limits are recorded in Milestones. Remote provenance, atomic inventory, historical cleanup, strict admission and operator acceptance remain open. There is no runtime rollback; preserve earlier evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: reported object resource versions (offline)
 

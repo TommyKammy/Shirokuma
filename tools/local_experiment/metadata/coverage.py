@@ -97,13 +97,16 @@ def directory(path, *, private=True):
     return info
 
 
-def read_file(path, limit=MAX_FILE_BYTES):
+def read_file(path, limit=MAX_FILE_BYTES, *, with_identity=False):
     path = Path(path)
     parent_fd = _open_source_dir(path.parent)
     try:
         raw = _source_file_at(parent_fd, path.name, os.fstat(parent_fd).st_dev, limit)
+        if with_identity:
+            info = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+            identity = _source_directory_identity(info)
         _current_source_path(path.parent, parent_fd)
-        return raw
+        return (raw, identity) if with_identity else raw
     finally:
         os.close(parent_fd)
 
@@ -376,7 +379,7 @@ class ReadOnlyClient:
         self.login_attempted = True
         try:
             directory(self.state)
-            raw = read_file(self.state / '.env', 4096)
+            raw, identity = read_file(self.state / '.env', 4096, with_identity=True)
             values = {}
             for line in raw.decode('utf-8').splitlines():
                 key, sep, value = line.partition('=')
@@ -391,7 +394,8 @@ class ReadOnlyClient:
             token = result.get('accessToken') if type(result) is dict else None
             require(type(token) is str and 1 <= len(token) <= 8192 and re.fullmatch(r'[A-Za-z0-9_.~+/=-]+', token),
                     'LOGIN_RESPONSE_INVALID')
-            require(read_file(self.state / '.env', 4096) == raw, 'CREDENTIALS_CHANGED')
+            again, final_identity = read_file(self.state / '.env', 4096, with_identity=True)
+            require(again == raw and final_identity == identity, 'CREDENTIALS_CHANGED')
             self.token = token
         except Exception:
             self.login_error = 'LOGIN_UNAVAILABLE'
