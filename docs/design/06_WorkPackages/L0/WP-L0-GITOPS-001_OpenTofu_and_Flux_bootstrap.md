@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.70"
+version: "0.71"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: reported DNS name grammar (offline)
+
+The fixed-profile complete-list reader now applies the existing Kubernetes DNS subdomain/label validator to any explicitly reported item name/namespace, including unrelated members; length alone previously admitted punctuation, uppercase and overlong labels. A disposable invalid-name negative failed before repair; dotted valid resource names and valid namespace labels pass. Older resource-specific malformed-name and empty-name fixtures now fail at the earlier incomplete-list boundary; generic doctor is unchanged. Read-only Colima status was stopped; no live API/Git, VM start, reconciliation or retained data/backup mutation. This does not authenticate API/Git, provide atomic inventory or historical cleanup, clear strict admission or establish operator acceptance. Roll back inventory guard/tests only, preserving VM/evidence. Original Vault direct sync pending outside checkout; checks in Milestones.
 
 ## 2026-10-03: bounded reported Kubernetes names (offline)
 

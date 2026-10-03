@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.21"
+version: "5.22"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: non-lossy catalog JSON and reported DNS identities (offline)
+
+WP-L5-LINEAGE-001: the read-only OpenMetadata client refuses invalid UTF-8 and escaped lone surrogates even in otherwise unused response members; a multibyte Unicode positive passes. WP-L0-GITOPS-001: fixed-profile complete inventory refuses invalid Kubernetes DNS resource names/namespaces on unrelated members, using its existing name validator rather than length alone. Both disposable negatives failed before repair; older Go fixtures expecting later checks were updated to expect the earlier incomplete-list refusal. Focused lineage (65 tests), Go CLI (822 tests), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima was read-only observed stopped; no live API/Git/SQL, login, VM start, reconciliation, replay or retained credential/source/session/report/backup mutation. Offline response shape cannot authenticate remote API/Git or producers, prove atomicity or historical cleanup, clear strict admission, establish whole-catalog/column lineage or operator/production acceptance. Roll back only the readers/tests, preserving VM/evidence and historical reports. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: credential read boundary and reported name bounds (offline)
 

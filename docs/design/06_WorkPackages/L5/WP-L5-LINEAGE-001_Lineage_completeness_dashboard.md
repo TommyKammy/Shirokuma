@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.03"
+version: "1.04"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: non-lossy catalog JSON (offline)
+
+The bounded read-only catalog client now rejects raw invalid UTF-8 and escaped lone surrogates anywhere in a response, including ignored fields/keys. Previously those could be decoded with replacement or carried as invalid Unicode into the evidence comparison. Disposable HTTP negatives failed before the guard; ordinary multibyte Unicode and surrogate-pair characters remain accepted. Malformed responses cannot become present/missing evidence; the existing observation path marks unavailable catalog reads unknown. No live login/GET, VM start, saved credential/source/report or backup mutation. This is response shape validation, not authenticated API/producer provenance or atomic catalog observation; whole-catalog/column lineage and operator acceptance remain open. Roll back decoder and tests only, retaining historical reports. Direct original Vault sync pending outside checkout; checks in Milestones.
 
 ## 2026-10-03: credential read-to-identity and parent stability (offline)
 

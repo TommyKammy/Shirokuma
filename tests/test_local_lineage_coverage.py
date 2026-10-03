@@ -896,10 +896,17 @@ class ReadOnlyClientTests(unittest.TestCase):
 
     def test_malformed_and_oversized_json_are_rejected(self):
         self.client.login_attempted, self.client.token = True, 'token'
-        for body in (b'{"x":1,"x":2}', b'{"x":NaN}', b'x' * (C.MAX_RESPONSE + 1)):
+        for body in (b'{"x":1,"x":2}', b'{"x":NaN}', b'x' * (C.MAX_RESPONSE + 1),
+                     b'{"unused":"\xff"}', b'{"unused":"\\ud800"}', b'{"\\ud800":1}'):
             with self.subTest(size=len(body)), patch.object(self.client.opener, 'open', return_value=Response(body)):
                 with self.assertRaises(C.CoverageError):
                     self.client.request('GET', next(iter(C.ANCHORS)))
+
+    def test_valid_unicode_response_is_preserved(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        body = '{"unused":"雪 😀"}'.encode('utf-8')
+        with patch.object(self.client.opener, 'open', return_value=Response(body)):
+            self.assertEqual(self.client.request('GET', next(iter(C.ANCHORS))), {'unused': '雪 😀'})
 
     def test_no_proxy_redirect_and_deadline_are_enforced(self):
         client = C.ReadOnlyClient(state=self.state)

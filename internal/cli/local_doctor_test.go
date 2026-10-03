@@ -140,7 +140,12 @@ func TestLocalInventoryRejectsUnboundedReportedNames(t *testing.T) {
 		{"name", 253}, {"namespace", 63},
 	} {
 		for _, size := range []int{tc.limit, tc.limit + 1} {
-			raw := []byte(`{"items":[{"metadata":{"` + tc.field + `":"` + strings.Repeat("a", size) + `"}}]}`)
+			name := strings.Repeat("a", size)
+			if tc.field == "name" {
+				name = strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." +
+					strings.Repeat("c", 63) + "." + strings.Repeat("d", size-63*3-3)
+			}
+			raw := []byte(`{"items":[{"metadata":{"` + tc.field + `":"` + name + `"}}]}`)
 			var list kubernetesResourceList
 			if err := json.Unmarshal(raw, &list); err != nil {
 				t.Fatal(err)
@@ -148,6 +153,30 @@ func TestLocalInventoryRejectsUnboundedReportedNames(t *testing.T) {
 			if got := localInventoryIncomplete(list, raw); got != (size > tc.limit) {
 				t.Fatalf("incomplete=%t for %s length %d", got, tc.field, size)
 			}
+		}
+	}
+}
+
+func TestLocalInventoryRejectsMalformedReportedDNSNames(t *testing.T) {
+	for _, tc := range []struct {
+		field, value string
+		invalid      bool
+	}{
+		{"name", "a.b", false},
+		{"name", "a_b", true},
+		{"name", "A", true},
+		{"name", strings.Repeat("a", 64) + ".b", true},
+		{"namespace", "a", false},
+		{"namespace", "a.b", true},
+		{"namespace", "a-", true},
+	} {
+		raw := []byte(`{"items":[{"metadata":{"` + tc.field + `":"` + tc.value + `"}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if got := localInventoryIncomplete(list, raw); got != tc.invalid {
+			t.Fatalf("incomplete=%t for %s=%q, want %t", got, tc.field, tc.value, tc.invalid)
 		}
 	}
 }
@@ -441,7 +470,7 @@ func TestLocalInventoryRejectsInvalidUTF8(t *testing.T) {
 			t.Fatal("invalid UTF-8 inventory accepted")
 		}
 	}
-	for _, raw := range [][]byte{[]byte(`{"items":[{"metadata":{"name":"café"}}]}`), []byte(`{"items":[]}`)} {
+	for _, raw := range [][]byte{[]byte(`{"items":[{"metadata":{"name":"cafe","annotation":"café"}}]}`), []byte(`{"items":[]}`)} {
 		var list kubernetesResourceList
 		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
 			t.Fatalf("valid UTF-8 rejected: %s (%v)", raw, err)
@@ -1243,7 +1272,7 @@ func TestLocalFluxDiagnosticDoesNotEchoInvalidResourceIdentity(t *testing.T) {
 		}
 		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}, localExperimentContext, true)
 		expected := "identity unverified"
-		if strings.Contains(test.value, "\n") {
+		if test.field != "kind" {
 			expected = "resource response was incomplete"
 		}
 		if check.Status != "degraded" || !strings.Contains(check.Summary, expected) || strings.Contains(check.Summary, test.value) || strings.Contains(check.Summary, "token-secret") {
@@ -1257,10 +1286,7 @@ func TestLocalLakehouseRejectsMalformedUnrelatedNames(t *testing.T) {
 		responses := localWorkloadResponses()
 		responses[0].output = strings.TrimSuffix(responses[0].output, `]}`) + `,{"kind":"Deployment","metadata":{"name":` + fmt.Sprintf("%q", name) + `,"namespace":"shirokuma-storage"}}]}`
 		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
-		expected := "out-of-scope"
-		if strings.Contains(name, "\n") {
-			expected = "workload response was incomplete"
-		}
+		expected := "workload response was incomplete"
 		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, expected) || strings.Contains(checks[0].Summary, name) || checks[1].Status != "healthy" {
 			t.Fatalf("malformed unrelated workload name %q accepted or leaked: %#v", name, checks)
 		}
@@ -1608,7 +1634,11 @@ func TestLocalLakehouseRejectsDuplicateUnrelatedResource(t *testing.T) {
 			t.Fatalf("unaffected namespace rejected: %#v", checks[0])
 		}
 		for _, check := range checks[1:] {
-			if check.Status != "degraded" || !strings.Contains(check.Summary, "out-of-scope or duplicated") {
+			expected := "out-of-scope or duplicated"
+			if strings.Contains(entries, `"name":""`) {
+				expected = "workload response was incomplete"
+			}
+			if check.Status != "degraded" || !strings.Contains(check.Summary, expected) {
 				t.Fatalf("ambiguous list accepted: %#v", check)
 			}
 		}

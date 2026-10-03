@@ -315,10 +315,12 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		for _, bounded := range []struct {
 			key   string
 			limit int
-		}{{"name", 253}, {"namespace", 63}} {
+			subdomain bool
+		}{{"name", 253, true}, {"namespace", 63, false}} {
 			if rawName, ok := metadata[bounded.key]; ok {
 				var name string
-				if err := json.Unmarshal(rawName, &name); err != nil || len(name) > bounded.limit {
+				if err := json.Unmarshal(rawName, &name); err != nil ||
+					!localFluxValidName(name, bounded.limit, bounded.subdomain) {
 					return true
 				}
 			}

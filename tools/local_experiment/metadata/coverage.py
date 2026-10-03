@@ -77,8 +77,13 @@ def decode(raw):
             result[key] = value
         return result
     try:
-        return json.loads(raw, object_pairs_hook=pairs,
-                          parse_constant=lambda _: (_ for _ in ()).throw(CoverageError('INVALID_JSON')))
+        value = json.loads(raw.decode('utf-8') if isinstance(raw, bytes) else raw,
+                           object_pairs_hook=pairs,
+                           parse_constant=lambda _: (_ for _ in ()).throw(CoverageError('INVALID_JSON')))
+        # JSON permits escaped lone surrogates in some decoders; neither those
+        # nor lossy raw UTF-8 can be trusted as catalog identity or evidence.
+        json.dumps(value, ensure_ascii=False).encode('utf-8')
+        return value
     except (ValueError, UnicodeError, RecursionError):
         raise CoverageError('INVALID_JSON') from None
 
