@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.56"
+version: "5.57"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: returned mapping headers and private RPC method override (offline)
+
+WP-L5-LINEAGE-001 inspects case-varied plain-dict headers on a returned fixed
+catalog response instead of leaking `AttributeError`; WP-L3-VW-002 independently
+refuses method override metadata on its one-request Unix transition. Disposable
+negatives failed before repair; focused lineage and Warehouse suites passed after
+repair. `make verify-local-experiment`, `make verify-design-context` (89 documents)
+and `git diff --check` passed; private logs under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-019/` retain the
+failed negatives and passing checks. Read-only `colima list` showed the dedicated
+VM stopped. No VM start,
+live catalog/backend/SQL, archived UUID replay, retained source/session/report/
+backup mutation or GitHub write. These offline guards do not prove producer/peer
+authenticity, atomicity, caller receipt, restart recovery, full catalog/column
+lineage or operator acceptance. Roll back only the two guards/fixtures, preserving
+historical evidence and the stopped VM. Original Vault synchronization pending
+outside this noninteractive checkout.
 
 ## 2026-10-04: rewritten private RPC target and partial catalog 404 (offline)
 

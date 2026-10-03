@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.87"
+version: "0.88"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: HTTP method override metadata on private RPC (offline)
+
+Complete test-owned POST transitions with `X-HTTP-Method-Override` or
+`X-Method-Override` previously reached the handler. The one-request Unix owner
+now refuses these method-relabeling hints before journaling/dispatch, leaving
+ordinary printable extension headers supported. The isolated negative failed
+before repair; focused Warehouse checks passed after repair. No VM start, saved
+UUID replay, backend/SQL or retained session/backup mutation. This does not
+authenticate the peer beyond the existing UID check or prove caller receipt,
+restart recovery or operator acceptance. Roll back only the guard/test; preserve
+saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: rewritten target metadata on private RPC (offline)
 

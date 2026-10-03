@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.32"
+version: "1.33"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: mapping headers on returned catalog responses (offline)
+
+An injected successful fixed-path response with plain-dict headers raised a raw
+`AttributeError` rather than inspecting case-varied `Content-Range`, `Location`
+and `Content-Length`. The returned-response reader now folds dict field names,
+preserves duplicate-case detection and rejects uninspectable header containers;
+ordinary HTTPMessage and a valid mapping still work. The disposable negative
+failed before repair; focused lineage checks passed after repair. No live
+catalog/VM start or retained report/source/backup change. This cannot establish
+catalog authenticity, atomicity or whole-column coverage. Roll back only the
+header reader and fixture, retaining saved evidence. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-04: partial-representation metadata on thrown 404 (offline)
 

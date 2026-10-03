@@ -875,6 +875,24 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_mapping_catalog_headers_are_inspected_case_insensitively(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for headers, valid in [({'content-type': 'application/json', 'content-length': '8'}, True),
+                               ({'cOnTeNt-RaNgE': 'bytes 0-7/20'}, False),
+                               ({'location': '/other'}, False),
+                               ({'CONTENT-LENGTH': '9'}, False)]:
+            with self.subTest(headers=headers):
+                response = Response(b'{"id":1}')
+                response.headers = headers
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if valid:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                    else:
+                        with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                            self.client.request('GET', path)
+                self.assertTrue(response.closed)
+
     def test_catalog_response_final_url_must_match_requested_path(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

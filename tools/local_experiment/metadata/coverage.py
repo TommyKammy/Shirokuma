@@ -402,14 +402,23 @@ class ReadOnlyClient:
                 # but syntactically valid JSON prefix is not complete evidence
                 # when the peer promised additional bytes.
                 headers = getattr(response, 'headers', None)
-                lengths = headers.get_all('Content-Length', []) if headers is not None else []
-                transfers = headers.get_all('Transfer-Encoding', []) if headers is not None else []
-                encodings = headers.get_all('Content-Encoding', []) if headers is not None else []
-                media_types = headers.get_all('Content-Type', []) if headers is not None else []
-                ranges = headers.get_all('Content-Range', []) if headers is not None else []
-                locations = headers.get_all('Content-Location', []) if headers is not None else []
-                redirects = headers.get_all('Location', []) if headers is not None else []
-                refreshes = headers.get_all('Refresh', []) if headers is not None else []
+                def field(name):
+                    if headers is None:
+                        return []
+                    if type(headers) is dict:
+                        require(all(type(key) is str for key in headers), 'API_RESPONSE_INVALID')
+                        return [value for key, value in headers.items() if key.lower() == name.lower()]
+                    require(callable(getattr(headers, 'get_all', None)), 'API_RESPONSE_INVALID')
+                    return headers.get_all(name, [])
+
+                lengths = field('Content-Length')
+                transfers = field('Transfer-Encoding')
+                encodings = field('Content-Encoding')
+                media_types = field('Content-Type')
+                ranges = field('Content-Range')
+                locations = field('Content-Location')
+                redirects = field('Location')
+                refreshes = field('Refresh')
                 # Header access is part of the bounded observation too: a
                 # late malformed header is not an on-time framing result.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
