@@ -241,6 +241,49 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(report['coverage']['unknown'], 2)
         self.assertIsNone(report['coverage']['rate'])
 
+    def test_empty_directory_metadata_change_between_reads_is_unknown(self):
+        path = self.add_run(curated=True)
+        empty = path / 'empty'
+        empty.mkdir(mode=0o700)
+        before = C.source_snapshot(path)
+        request = self.client.request
+        changed = False
+        def change(*args, **kwargs):
+            nonlocal changed
+            if not changed:
+                info = empty.stat()
+                os.utime(empty, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
+                changed = True
+            return request(*args, **kwargs)
+        self.client.request = change
+        report = self.collect()
+        self.assertTrue(changed)
+        self.assertNotEqual(before, C.source_snapshot(path))
+        self.assertEqual(report['coverage']['unknown'], 2)
+        self.assertIsNone(report['coverage']['rate'])
+
+    def test_file_metadata_change_between_reads_is_unknown(self):
+        path = self.add_run(curated=True)
+        target = path / 'summary.json'
+        before = C.source_snapshot(path)
+        request = self.client.request
+        changed = False
+        def change(*args, **kwargs):
+            nonlocal changed
+            if not changed:
+                # Restore the original mtime and bytes, but not the change time.
+                info = target.stat()
+                os.utime(target, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
+                os.utime(target, ns=(info.st_atime_ns, info.st_mtime_ns))
+                changed = True
+            return request(*args, **kwargs)
+        self.client.request = change
+        report = self.collect()
+        self.assertTrue(changed)
+        self.assertNotEqual(before, C.source_snapshot(path))
+        self.assertEqual(report['coverage']['unknown'], 2)
+        self.assertIsNone(report['coverage']['rate'])
+
     def test_unavailable_final_inventory_cannot_leave_present_edges(self):
         self.add_run(curated=True)
         original = C.listing

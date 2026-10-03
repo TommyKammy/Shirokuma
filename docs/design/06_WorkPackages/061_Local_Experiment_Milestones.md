@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.12"
+version: "5.13"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: source metadata bound across separate observations (offline)
+
+WP-L5-LINEAGE-001: separate source reads now disagree when an empty directory's metadata changes, or when a saved file is touched and its mtime restored while bytes remain unchanged. Two disposable negatives failed before repair and passed afterward (focused 59 tests). `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed; private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-057/{verify,design}.log`. Read-only Colima listing showed the dedicated profile stopped. The digest format changes; old saved reports remain untouched and historical digests must not be compared across reader versions. No live API/SQL, archived UUID replay, VM start, retained source/report/backup mutation or cleanup. These checks cannot exclude metadata restoration between reads, authenticate producer/catalog, establish atomicity or whole-catalog/column coverage, or grant operator acceptance. Roll back the reader/tests only and preserve evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: artifact URL inventory shape (offline)
 

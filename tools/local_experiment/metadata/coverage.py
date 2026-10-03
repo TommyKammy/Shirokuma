@@ -211,8 +211,12 @@ def source_snapshot(path):
         # Include the opened directory identity, including empty directories:
         # replacing one between the two source reads must invalidate stability.
         opened_dir = os.fstat(fd)
-        files[relative + '/'] = {'directory': True, 'device': opened_dir.st_dev,
-                                 'inode': opened_dir.st_ino}
+        files[relative + '/'] = {
+            'directory': True, 'device': opened_dir.st_dev, 'inode': opened_dir.st_ino,
+            'mode': stat.S_IMODE(opened_dir.st_mode), 'owner': opened_dir.st_uid,
+            'size': opened_dir.st_size, 'mtime_ns': opened_dir.st_mtime_ns,
+            'ctime_ns': opened_dir.st_ctime_ns, 'links': opened_dir.st_nlink,
+        }
         names = _bounded_names(fd, 1024, 'SOURCE_LIMIT_OR_SYMLINK')
         identities = {}
         for name in names:
@@ -249,7 +253,10 @@ def source_snapshot(path):
                 require(total <= MAX_RUN_BYTES, 'SOURCE_LIMIT_EXCEEDED')
                 files[item] = {
                     'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw),
-                    'inode': info.st_ino, 'mtime_ns': info.st_mtime_ns, 'mode': stat.S_IMODE(info.st_mode)}
+                    'device': info.st_dev, 'inode': info.st_ino,
+                    'mtime_ns': info.st_mtime_ns, 'ctime_ns': info.st_ctime_ns,
+                    'mode': stat.S_IMODE(info.st_mode), 'owner': info.st_uid,
+                    'links': info.st_nlink}
         # A new or removed sibling after enumeration would otherwise yield a
         # plausible hash of an incomplete directory. This is not an atomic
         # snapshot against an actor that restores the original entries.

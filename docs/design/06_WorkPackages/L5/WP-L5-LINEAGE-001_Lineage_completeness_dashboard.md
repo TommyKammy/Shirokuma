@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.98"
+version: "0.99"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: bind source metadata across separate reads (offline)
+
+The saved-source digest now includes directory owner/mode/size/mtime/ctime/link count and file device/owner/ctime/link count, in addition to existing identities and file bytes. Two disposable negatives showed that changing an empty directory's mtime, or changing a file's metadata and restoring its mtime without changing its bytes, previously produced the same digest across separate source reads; both now yield unknown edges with no coverage rate. Intra-read metadata checks remain in place. This is a digest format change: do not compare new digests to historical report hashes or rewrite retained reports. Focused (59 tests), full local verification and design-context checks passed; see Milestones. Dedicated Colima was read-only observed stopped; no live API/SQL, retained source/report/backup mutation or request replay. Metadata restoration between observations and independent producer/API provenance remain unproved; whole-catalog/column lineage and operator acceptance are still open. Roll back only the reader and disposable tests while preserving retained evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: inventory drift and empty-directory replacement (offline)
 
