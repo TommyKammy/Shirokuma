@@ -17,7 +17,10 @@ tags: [shirokuma, local, evidence]
 WP-L5-LINEAGE-001 refuses `Refresh` on a returned fixed-path catalog response;
 WP-L3-VW-002 separately refuses `Keep-Alive` on the one-request Unix RPC.
 Both disposable negatives failed before repair. Focused lineage (96 tests)
-and Warehouse (78 + 102 + 16 + 22 + 15 tests) passed. The dedicated Colima
+and Warehouse (78 + 102 + 16 + 22 + 15 tests) passed; `make
+verify-local-experiment`, `make verify-design-context` and `git diff --check`
+passed. Full private logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-012/`. The dedicated Colima
 profile was read-only observed stopped; no VM start, live catalog/backend/SQL,
 archived request replay, retained source/credential/session/report/backup
 mutation or GitHub write. Offline checks cannot authenticate producers, prove
