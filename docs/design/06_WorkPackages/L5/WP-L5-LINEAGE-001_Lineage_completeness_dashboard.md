@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.20"
+version: "1.21"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: unsupported catalog transfer coding refused (offline)
+
+The bounded catalog reader accepts a single `chunked` transfer coding (decoded
+by urllib), but rejects unsupported and repeated codings without a declared
+length before treating JSON as evidence. Disposable decoded responses cover
+identity, repeated and compound codings plus the valid chunked case. No live
+login/GET, VM start or retained source/credential/report/backup modification.
+This framing check cannot authenticate the catalog or establish atomicity,
+whole-catalog/column lineage or operator acceptance. Roll back only the reader
+guard and fixture, keeping saved reports. Original Vault sync pending outside
+checkout; broader verification is in Milestones.
 
 ## 2026-10-03: conflicting catalog HTTP framing refused (offline)
 

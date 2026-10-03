@@ -5,12 +5,25 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.74"
+version: "0.75"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: reject ambiguous RPC header whitespace (offline)
+
+The bounded single-request Unix parser no longer strips whitespace from all
+header values before validating framing. It requires one space after the colon
+and no extra surrounding whitespace or tabs, so a padded `Content-Length`
+cannot be normalized into an accepted transition. Disposable socket negatives
+return 400 without dispatch; the real Unix/Go fixture and focused suite pass.
+The dedicated VM remained stopped; no archived UUID replay, backend/SQL or
+retained session/backup mutation. This cannot prove caller receipt, backend
+authenticity or restart recovery. Roll back only the parser and test additions,
+preserving archived sessions. Original Vault sync pending outside checkout;
+broader verification is recorded in Milestones.
 
 ## 2026-10-03: buffered trailing request bytes refused (offline)
 

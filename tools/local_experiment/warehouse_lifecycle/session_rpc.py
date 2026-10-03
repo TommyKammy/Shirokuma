@@ -378,7 +378,12 @@ class SessionRPC:
             require(re.fullmatch(rb'[A-Za-z0-9-]+', name) is not None, 'INVALID_HTTP')
             name = name.lower()
             require(name not in headers and name not in (b'transfer-encoding', b'expect'), 'INVALID_HTTP')
-            headers[name] = value.strip()
+            # Do not normalize ambiguous framing: a peer and a proxy may
+            # interpret whitespace around a length differently.
+            require(value.startswith(b' ') and value[1:] and
+                    value[1:] == value[1:].strip(b' \t') and
+                    b'\t' not in value, 'INVALID_HTTP')
+            headers[name] = value[1:]
         else:
             raise RPCError('INVALID_HTTP')
         require(headers.get(b'content-type') == b'application/json', 'INVALID_HTTP')

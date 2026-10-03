@@ -929,6 +929,26 @@ class ReadOnlyClientTests(unittest.TestCase):
                 self.client.request('GET', next(iter(C.ANCHORS)))
         self.assertTrue(response.closed)
 
+    def test_only_single_chunked_catalog_transfer_is_supported(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for codings, expected in [(['identity'], 'API_RESPONSE_INVALID'),
+                                  (['chunked', 'chunked'], 'API_RESPONSE_INVALID'),
+                                  (['gzip, chunked'], 'API_RESPONSE_INVALID'),
+                                  (['chunked'], None)]:
+            with self.subTest(codings=codings):
+                response = Response(b'{"id":1}')  # opener exposes decoded bytes
+                response.headers = Message()
+                for coding in codings:
+                    response.headers['Transfer-Encoding'] = coding
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if expected:
+                        with self.assertRaisesRegex(C.CoverageError, expected):
+                            self.client.request('GET', path)
+                    else:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                self.assertTrue(response.closed)
+
     def test_deadline_cannot_be_disabled_by_invalid_timeout(self):
         for timeout in (float('inf'), float('nan'), -1, 0, 301, True):
             with self.subTest(timeout=timeout), self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):

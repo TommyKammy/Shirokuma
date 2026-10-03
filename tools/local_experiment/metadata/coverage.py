@@ -402,6 +402,11 @@ class ReadOnlyClient:
                 # Competing length and transfer framing is ambiguous even if
                 # urllib exposes a decoded, syntactically valid JSON prefix.
                 require(type(transfers) is list and not (lengths and transfers), 'API_RESPONSE_INVALID')
+                # urllib decodes chunked bodies before exposing them. Other or
+                # repeated transfer codings cannot be trusted as complete JSON.
+                require(not transfers or (len(transfers) == 1 and
+                        type(transfers[0]) is str and transfers[0].lower() == 'chunked'),
+                        'API_RESPONSE_INVALID')
                 declared = None
                 if lengths:
                     length = lengths[0]

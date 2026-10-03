@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.41"
+version: "5.42"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: strict RPC header values and catalog transfer coding (offline)
+
+WP-L3-VW-002 refuses padded or tab-prefixed request length rather than
+normalizing it; the disposable socket returns 400 without dispatch. Independently
+WP-L5-LINEAGE-001 refuses unsupported/repeated catalog transfer codings while
+retaining a single decoded chunked response. Focused Warehouse (78 + 99 + 16
++ 22 + 15 tests), lineage (89 tests), `make verify-local-experiment`,
+`make verify-design-context` (89 documents) and `git diff --check` passed.
+Read-only `colima list` showed the dedicated VM stopped. No VM start, live
+backend/catalog/SQL, archived replay, retained session/source/credential/
+report/backup mutation or GitHub write. These offline checks cannot establish
+remote authenticity, caller receipt, restart recovery, atomic reads,
+whole-catalog/column lineage or operator acceptance. Roll back only these
+guards/tests; retain historical evidence and stopped VM. Direct original Vault
+sync remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: buffered Warehouse suffix and conflicting catalog framing (offline)
 
