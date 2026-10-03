@@ -300,6 +300,25 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		var spec, status map[string]json.RawMessage
 		_ = json.Unmarshal(item["spec"], &spec)
 		_ = json.Unmarshal(item["status"], &status)
+		// Replica counts cannot be negative even on unrelated list members.
+		// Without this check a complete inventory can contain contradictory
+		// workloads while the expected objects alone appear healthy.
+		for _, fields := range []struct {
+			object map[string]json.RawMessage
+			keys   []string
+		}{
+			{spec, []string{"replicas"}},
+			{status, []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas"}},
+		} {
+			for _, key := range fields.keys {
+				if rawCount, ok := fields.object[key]; ok && string(rawCount) != "null" {
+					var count int64
+					if err := json.Unmarshal(rawCount, &count); err != nil || count < 0 {
+						return true
+					}
+				}
+			}
+		}
 		var observed struct {
 			Generation *int64 `json:"observedGeneration"`
 		}

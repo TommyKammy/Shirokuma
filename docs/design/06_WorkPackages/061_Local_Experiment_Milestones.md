@@ -5,12 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.83"
+version: "4.85"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: unrelated negative replica counts (offline)
+
+WP-L0-GITOPS-001: fixed-profile complete inventories refuse negative declared/reported replica counts even on unrelated members; the isolated negative failed before repair. Zero/omitted counters remain compatible. One existing target-negative fixture now fails earlier at the incomplete-list boundary. `go test ./internal/cli -count=1` (797 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima read-only status: stopped; no live API/SQL, reconciliation, unknown UUID replay or retained data/backup mutation. Fake inventory is not authenticated/atomic API evidence, historical cleanup, strict admission or operator/production acceptance. Roll back reader/tests only; preserve VM/evidence. Original Vault sync pending outside checkout.
+
+## 2026-10-03: Warehouse reply journal before send (offline)
+
+WP-L3-VW-002: isolated socket/handler fault injection interrupted after durable reply append but before send; verified saved response and reply remained `runtime_state=unknown`. Fresh owner with the same test identity refused journal collision without another handler call. `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. Dedicated Colima read-only status: stopped. No real restart, API/SQL, archived UUID replay, retained data/backup mutation or cleanup. Delivery, backend authenticity, historical cleanup and operator/production acceptance remain unproved. Roll back test only; retain evidence/VM. Original Vault sync pending outside checkout.
 
 ## 2026-10-03: unrelated duplicate inventory conditions (offline)
 

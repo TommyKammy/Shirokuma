@@ -54,6 +54,28 @@ class SessionRPCTest(unittest.TestCase):
                 self.output.mkdir(mode=0o700)
                 self.calls.clear()
 
+    def test_recorded_reply_before_send_does_not_allow_session_restart(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        request = self.request()
+        server, client = socket.socketpair()
+        with client, mock.patch.object(R, 'peer_uid', return_value=os.getuid()), \
+                mock.patch.object(self.rpc, '_read_request', return_value=request), \
+                mock.patch.object(self.rpc, '_send', side_effect=KeyboardInterrupt('before send')):
+            with self.assertRaises(KeyboardInterrupt):
+                self.rpc._connection(server)
+        saved = S.project(self.rpc.journal_path.read_bytes(), self.token, request['request_id'])
+        self.assertEqual(saved['request_lookup']['recorded_result'], 'verified')
+        self.assertEqual(saved['reply_count'], 1)
+        self.assertEqual(saved['runtime_state'], 'unknown')
+        self.assertEqual(self.calls, [('chill', request['request_id'])])
+        # Do not remove the original journal or replay the UUID. Even though
+        # the socket has closed, a fresh owner cannot adopt this session ID.
+        with self.assertRaisesRegex(R.RPCError, 'JOURNAL_COLLISION'):
+            R.SessionRPC(self.token, self.output, self.handler).__enter__()
+        self.assertEqual(self.calls, [('chill', request['request_id'])])
+        self.assertEqual(S.project(self.rpc.journal_path.read_bytes(), self.token, request['request_id']), saved)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.output = Path(self.temp.name).resolve()

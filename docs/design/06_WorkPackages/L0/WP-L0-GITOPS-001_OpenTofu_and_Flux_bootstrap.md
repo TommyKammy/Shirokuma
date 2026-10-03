@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.47"
+version: "0.48"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: negative replica counters on unrelated inventory members (offline)
+
+The fixed-profile complete-inventory reader now rejects negative declared `spec.replicas` and reported `status` replica counters on any member, including unrelated resources. The isolated negative failed before repair; explicit zero remains valid, omitted fields retain fixture compatibility. A pre-existing negative-unavailable-replica fixture now fails earlier at the incomplete-list boundary rather than the target rollout check. `go test ./internal/cli -count=1` (797 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed after repair. Dedicated Colima read-only status: stopped. No live API/SQL, VM start, reconciliation, archived UUID replay, retained data or backup modification. Fake response consistency cannot authenticate API/Git or establish atomicity, historical cleanup, strict publication admission or operator/production acceptance. Roll back the reader and tests only; preserve stopped VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: duplicated conditions on unrelated list members (offline)
 

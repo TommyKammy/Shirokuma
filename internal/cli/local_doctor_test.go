@@ -299,6 +299,29 @@ func TestLocalInventoryRejectsUnrelatedObservedGenerationContradictions(t *testi
 	}
 }
 
+func TestLocalInventoryRejectsNegativeReplicaCountersOnUnrelatedMembers(t *testing.T) {
+	for _, field := range []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas"} {
+		raw := []byte(`{"items":[{"status":{"` + field + `":-1}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("negative %s accepted: %s (%v)", field, raw, err)
+		}
+	}
+	for _, tc := range []struct {
+		raw     string
+		invalid bool
+	}{
+		{`{"items":[{"spec":{"replicas":-1}}]}`, true},
+		{`{"items":[{"spec":{"replicas":0},"status":{"replicas":0,"availableReplicas":0,"unavailableReplicas":0,"readyReplicas":0,"updatedReplicas":0}}]}`, false},
+	} {
+		raw := []byte(tc.raw)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("replica counter classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullConditionFields(t *testing.T) {
 	for _, field := range []string{`"type":null`, `"status":null`, `"observedGeneration":null`} {
 		raw := []byte(`{"items":[{"status":{"conditions":[{` + field + `}]}}]}`)
@@ -1090,7 +1113,11 @@ func TestLocalDoctorRejectsContradictoryUnavailableReplicas(t *testing.T) {
 		responses := localWorkloadResponses()
 		responses[0].output = strings.Replace(responses[0].output, `"availableReplicas":1`, `"availableReplicas":1,"unavailableReplicas":`+value, 1)
 		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
-		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "unavailable replicas") || checks[1].Status != "healthy" {
+		summary := "unavailable replicas"
+		if value == "-1" {
+			summary = "workload response was incomplete"
+		}
+		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, summary) || checks[1].Status != "healthy" {
 			t.Fatalf("contradictory Lakehouse status %s accepted: %#v", value, checks)
 		}
 	}

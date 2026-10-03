@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.45"
+version: "0.46"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: disposable reply-journal termination boundary (offline)
+
+An isolated Unix socketpair with an injected handler now interrupts `_connection` after the exact final reply has been durably appended to the test-owned journal but before `_send`. The saved projection has one verified response and one reply, but still reports `runtime_state=unknown`: neither record attests delivery. Attempting a fresh owner with the same session ID and output refuses `JOURNAL_COLLISION` without another handler call or journal change; the interrupted UUID is never replayed. This complements the previous durable-intent and durable-handler-response fault fixtures; it is not a real process restart, backend observation or archived-session recovery. `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. Dedicated Colima was observed stopped; no live API/SQL, retained run/backup modification or cleanup. Revert this test only to roll back; preserve the saved sessions, stopped VM and unknown UUIDs. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: isolated restart-boundary fixtures and read-only classification
 
