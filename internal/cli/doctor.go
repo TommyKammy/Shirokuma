@@ -28,6 +28,7 @@ const (
 )
 
 var localFluxGitRevision = regexp.MustCompile(`^main@sha1:[0-9a-f]{40}$`)
+var localFluxDNSName = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$`)
 
 type commandRunner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
@@ -323,13 +324,19 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		kinds[resource.Kind]++
 		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
 		if localExperiment {
+			// Do not echo arbitrary API fields in a human-facing diagnostic.
+			// Even malformed resource names may contain credentials or controls.
+			validIdentity := len(resource.Metadata.Name) <= 253 && len(resource.Metadata.Namespace) <= 63 &&
+				localFluxDNSName.MatchString(resource.Metadata.Name) && localFluxDNSName.MatchString(resource.Metadata.Namespace)
 			switch resource.Kind {
 			case "GitRepository", "OCIRepository", "Bucket", "HelmRepository", "HelmChart", "Kustomization", "HelmRelease":
 			default:
 				unhealthy = append(unhealthy, "Flux resource (unexpected kind)")
+				validIdentity = false
 			}
-			if resource.Kind == "" || resource.Metadata.Namespace == "" || resource.Metadata.Name == "" {
+			if !validIdentity {
 				unhealthy = append(unhealthy, "Flux resource (identity unverified)")
+				resourceID = "Flux resource (identity unverified)"
 			} else if seenResources[resourceID] {
 				unhealthy = append(unhealthy, resourceID+" (duplicated)")
 			}

@@ -138,7 +138,7 @@ def listed(value, limit, kind):
 def snapshot(token, kube, deadline):
     prefix = M.name(token)
     named = []
-    named_labels = []
+    named_values = []
     for kind, (resource, suffixes) in KINDS.items():
         for suffix in suffixes:
             require(time.monotonic() < deadline)
@@ -147,13 +147,13 @@ def snapshot(token, kube, deadline):
             if value is not None:
                 row = identity(value, kind=kind, name=name)
                 named.append(row)
-                labels = value['metadata']['labels']
-                named_labels.append((*row, labels.get(M.OWNER, ''),
-                                     labels.get('kubernetes.io/service-name', '')))
+                named_values.append(value)
     require(time.monotonic() < deadline)
-    owned = [identity(value, label=token) for value in listed(kube.labelled(token), 64, 'List')]
+    owned_values = listed(kube.labelled(token), 64, 'List')
+    owned = [identity(value, label=token) for value in owned_values]
     require(all(kind in KINDS or kind in ('ReplicaSet', 'EndpointSlice') for kind, _, _ in owned))
     endpoints = []
+    endpoint_values = []
     for suffix in ('-xs', '-s'):
         require(time.monotonic() < deadline)
         service = prefix + suffix
@@ -161,14 +161,17 @@ def snapshot(token, kube, deadline):
             row = identity(value, kind='EndpointSlice')
             require(value['metadata']['labels'].get('kubernetes.io/service-name') == service)
             endpoints.append(row)
+            endpoint_values.append(value)
     require(time.monotonic() < deadline)
     require(all(len(values) == len(set(values)) for values in (named, owned, endpoints)))
     # The three API projections are separate reads. A resource present in more
     # than one projection must retain its identity within this round as well.
     identities = {}
     uid_owners = {}
-    for values in (named, owned, endpoints):
-        for kind, name, uid in values:
+    projected_labels = {}
+    for values in (named_values, owned_values, endpoint_values):
+        for value in values:
+            kind, name, uid = identity(value)
             key = kind, name
             require(key not in identities or identities[key] == uid)
             # Repeated projections may refer to the same object, but a UID
@@ -176,9 +179,13 @@ def snapshot(token, kube, deadline):
             require(uid not in uid_owners or uid_owners[uid] == key)
             identities[key] = uid
             uid_owners[uid] = key
-        require(len({(kind, name) for kind, name, _ in values}) == len(values))
+            labels = value['metadata']['labels']
+            projected = (labels.get(M.OWNER, ''), labels.get('kubernetes.io/service-name', ''))
+            require(key not in projected_labels or projected_labels[key] == projected)
+            projected_labels[key] = projected
+        require(len({(value['kind'], value['metadata']['name']) for value in values}) == len(values))
     # A hash correlates two bounded snapshots; it is not independent attestation.
-    rows = [sorted(values) for values in (named, owned, endpoints, named_labels)]
+    rows = [sorted(values) for values in (named, owned, endpoints)] + [sorted(projected_labels.items())]
     return {'named_present': len(named), 'labelled_present': len(owned),
             'service_endpoints_present': len(endpoints),
             'snapshot_sha256': hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()}

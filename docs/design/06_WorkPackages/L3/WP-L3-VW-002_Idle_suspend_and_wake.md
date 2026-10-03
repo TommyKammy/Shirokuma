@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.28"
+version: "0.29"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: scoped projections agree on labels (offline)
+
+The optional read-only runtime-status reader now requires the same kind/name/UID to carry the same observed owner and service-name labels across fixed-name, owner-selected and EndpointSlice projections in each round. It also includes these labels for *all* selected objects, not only fixed-name objects, in the two-round hash. Fake same-UID/different-owner and stable-UID/changing-child-service-label regressions fail closed; stable matching metadata still passes. `make test-local-warehouse-lifecycle` passed. The dedicated Colima profile was read-only observed stopped; no live API/SQL, owner request, saved-request replay, retained run, volume or backup mutation. This is not an atomic observation, independently authenticated backend, historical cleanup, unknown-request recovery or production acceptance. Roll back only the reader/tests, retaining saved sessions and backups. Original Vault handoff direct sync remains pending outside this checkout.
 
 ## 2026-10-03: fixed-name labels participate in both inventory rounds (offline)
 

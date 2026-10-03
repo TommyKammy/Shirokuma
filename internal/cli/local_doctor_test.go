@@ -31,6 +31,33 @@ func localFluxJSON() string {
 	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
 }
 
+func TestLocalFluxDiagnosticDoesNotEchoInvalidResourceIdentity(t *testing.T) {
+	for _, test := range []struct{ field, value string }{
+		{"name", "token-secret\nunsafe"},
+		{"namespace", "token-secret/unsafe"},
+		{"kind", "token-secret/unsafe"},
+	} {
+		var list map[string]interface{}
+		if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+			t.Fatal(err)
+		}
+		item := list["items"].([]interface{})[2].(map[string]interface{})
+		if test.field == "kind" {
+			item[test.field] = test.value
+		} else {
+			item["metadata"].(map[string]interface{})[test.field] = test.value
+		}
+		output, err := json.Marshal(list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "identity unverified") || strings.Contains(check.Summary, test.value) || strings.Contains(check.Summary, "token-secret") {
+			t.Fatalf("invalid %s leaked or accepted: %#v", test.field, check)
+		}
+	}
+}
+
 func TestLocalFluxDevAppliedRevisionMatchesSource(t *testing.T) {
 	for _, test := range []struct{ name, revision string }{
 		{"missing", ""},

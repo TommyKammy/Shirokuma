@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.47"
+version: "4.48"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse cross-view labels and Flux diagnostic identity (offline)
+
+WP-L3-VW-002: two-round metadata inventory now binds owner/service-name labels for all selected resources and rejects contradictory labels on the same object across projections, in addition to prior UID checks. Isolated positive/negative cases and `make test-local-warehouse-lifecycle` passed. WP-L0-GITOPS-001: fixed-profile read-only doctor no longer echoes malformed API resource identities into summaries; fake negative cases and `go test ./internal/cli` (749 passed) passed, generic profile unchanged. `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed after both increments. Dedicated Colima read-only status: stopped. No live API/SQL, reconciliation, unknown-request replay, owner operation, retained data/backup mutation. Offline reported metadata cannot establish atomicity, authenticated backend/Git identity, historical cleanup, strict publication gate, or production/operator acceptance. Roll back only these diagnostic readers and tests; preserve stopped VM and saved evidence. Direct original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: Warehouse fixed-name label stability (offline)
 

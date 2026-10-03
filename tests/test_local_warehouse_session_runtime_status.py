@@ -119,6 +119,30 @@ class RuntimeStatusTests(TestCase):
         with self.assertRaises(R.RuntimeStatusError):
             R.observe(TOKEN, kube)
 
+    def test_labelled_child_metadata_change_between_rounds_fails(self):
+        class Relabel(FakeKube):
+            def labelled(self, token):
+                result = super().labelled(token)
+                if self.calls.count(('labelled', token)) == 2:
+                    result['items'][0]['metadata']['labels']['kubernetes.io/service-name'] = PREFIX + '-s'
+                return result
+
+        kube = Relabel()
+        kube.owned = [obj('ReplicaSet', PREFIX + '-xs-child', owner=TOKEN, service=PREFIX + '-xs')]
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+
+    def test_same_uid_with_conflicting_labels_across_views_fails(self):
+        kube = FakeKube()
+        name = PREFIX + '-xs'
+        fixed = obj('Deployment', name, owner=TOKEN)
+        kube.names['deployments', name] = fixed
+        kube.owned = [copy.deepcopy(fixed)]
+        self.assertEqual(R.observe(TOKEN, kube)['current_state'], 'scoped-resources-present')
+        kube.names['deployments', name]['metadata']['labels'][R.OWNER] = 'b' * 32
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+
     def test_conflicting_identity_between_projections_fails_in_one_round(self):
         kube = FakeKube()
         name = PREFIX + '-xs'

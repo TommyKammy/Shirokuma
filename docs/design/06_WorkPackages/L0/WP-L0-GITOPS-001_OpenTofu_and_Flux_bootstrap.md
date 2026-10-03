@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.20"
+version: "0.21"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: bounded local Flux diagnostic identity (offline)
+
+The fixed-profile doctor now degrades malformed resource kind/name/namespace without echoing those untrusted fields into the human-readable failure summary. A malformed API identity could previously place control characters or arbitrary text in a reported resource ID. Fake kind, name and namespace negatives and a healthy case passed `go test ./internal/cli` (749 tests); generic-profile behavior is unchanged. Dedicated Colima remained stopped; no live API, Flux reconciliation, retained data or backup mutation. This improves the local diagnostic only; it cannot authenticate the API, remote Git or a publication identity, nor satisfy runtime/production acceptance. Revert doctor/test changes only to recover, preserving saved evidence and the stopped VM. Original Vault handoff direct sync remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: dev applied revision must match reported source (offline)
 
