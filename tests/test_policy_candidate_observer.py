@@ -564,6 +564,26 @@ class ObserverTests(unittest.TestCase):
         self.kube.respond=lambda body:self.kube.denial(body,['P01','P02'])
         self.assertEqual(self.observer.verify(progress=lambda v:None)['reported_violation_ids'],['P01','P02'])
 
+    def test_denial_with_stdout_is_unknown_and_never_retried(self):
+        for payload in ('{}', json.dumps(pod(privileged=True))):
+            with self.subTest(payload=payload):
+                kube=FakeKube();observer=O.CandidateObserver(prepared(pod(privileged=True)),kube)
+                observer.observe()
+                def respond(body):
+                    response=kube.denial(body,['P01'])
+                    response.stdout=payload
+                    return response
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.verify(progress=lambda v:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.verify(progress=lambda v:None)
+                self.assertEqual(len(kube.requests),1)
+
     def test_invalid_422_exact_single_known_cause_for_each_policy(self):
         body=self.input.body();name=body['metadata']['name']
         for rule in (f'P{i:02}' for i in range(1,7)):

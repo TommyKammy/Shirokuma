@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.119"
+version: "5.120"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: contradictory denial stdout and independent FinOps review (offline)
+
+WP-L2-POL-001: two test-owned policy denials with nonempty stdout incorrectly
+passed; mixed success/error streams now fail closed, with the original request
+unknown/pending and never replayed. The negative failed twice before repair;
+focused observer 39 and native policy 17 tests passed afterward. Independently
+reviewed WP-L6-FIN-001 direct saved-history parsing, digest/order binding and
+per-report storage presentation without establishing another defect; FinOps 181
+tests passed (seven Linux-only skips). Dedicated Colima was read-only observed
+Stopped; no live admission, new collection, retained report/request/volume/backup
+mutation or GitHub write. AgentHouse retained volume remains `null /
+NOT_MEASURED`. These offline fixtures cannot authenticate producers, exercise
+Linux fixtures, measure current usage or establish operator acceptance. Roll
+back the policy observer/test only if needed and retain pending requests and
+saved reports; no FinOps runtime rollback. Original Vault sync pending outside
+the approved checkout. `make verify-local-experiment`, `make verify-design-context`
+(89 documents), `make check-no-secret-filenames` and `git diff --check` passed;
+these are not live runtime acceptance.
 
 ## 2026-10-04: duplicate dry-run JSON keys and independent FinOps check (offline)
 

@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.27"
+version: "0.28"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: contradictory dry-run denial streams (offline)
+
+Two disposable forbidden policy responses carrying nonempty stdout (an empty
+object or a Pod) passed as denied before repair. A recognized stderr denial now
+requires empty stdout; both mixed responses remain unknown/pending and the
+original request is never retried. The observer's focused 39 tests and native
+policy 17 tests passed. Dedicated Colima was read-only observed Stopped; no
+live admission or retained request/volume/backup mutation. Fake replies do not
+authenticate the API, prove general mutation coverage or establish acceptance.
+Roll back observer/test only if necessary, preserving pending requests and old
+evidence. Original Vault sync pending outside this checkout.
 
 ## 2026-10-04: duplicate allowed-response keys (offline)
 
