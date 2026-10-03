@@ -251,6 +251,10 @@ def _validate(report):
         # A recorded failed execution has a specific first-verification result;
         # the aggregate unverified-run reason must not hide its missing detail.
         _require(source != 'failed' or 'RECORDED_RUN_FAILED' in run['reason_codes'],
+                  'INCONSISTENT_SOURCE_REASON')
+        # A valid source has passed the collector's first artifact verification;
+        # aggregate stability alone cannot substitute for that per-run evidence.
+        _require(source != 'valid' or 'SOURCE_VERIFIED' in run['reason_codes'],
                  'INCONSISTENT_SOURCE_REASON')
         for key in ('source_sha256_before', 'source_sha256_after', 'metadata_sha256_before', 'metadata_sha256_after'):
             value = run.get(key)

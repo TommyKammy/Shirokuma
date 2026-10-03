@@ -5,12 +5,23 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.58"
+version: "1.59"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: valid saved source needs per-run verification reason (offline)
+
+Direct rendering now refuses a `valid` source row with no `SOURCE_VERIFIED`
+reason, even when aggregate source digests agree. The disposable negative
+rendered before repair; the focused lineage suite passed afterward (143 tests).
+This checks internal saved claims, not producer authenticity, atomicity,
+whole-catalog/column coverage or acceptance. No VM start, catalog read or
+retained report/source/backup modification. Roll back the guard and fixture
+together, preserving historical reports. Original Vault sync pending outside
+this noninteractive checkout.
 
 ## 2026-10-04: saved failed-run explanation (offline)
 

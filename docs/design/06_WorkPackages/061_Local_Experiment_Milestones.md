@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.93"
+version: "5.94"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: valid-run lineage verification detail (offline)
+
+WP-L5-LINEAGE-001: direct rendering rejects a `valid` saved source row missing
+`SOURCE_VERIFIED`; an aggregate stability claim cannot replace the per-run
+verification detail. The disposable negative rendered before repair; focused
+lineage 143 tests passed after repair. Dedicated Colima was read-only observed
+Stopped. No VM start, catalog access, retained source/report/volume/backup
+mutation, unknown-request replay or GitHub write. This is internal claim
+consistency, not producer authenticity, atomicity, whole-catalog/column
+coverage or operator acceptance. Roll back renderer/test only; preserve saved
+evidence. Original Vault sync pending outside the approved checkout.
 
 ## 2026-10-04: failed-run detail in saved lineage (offline)
 

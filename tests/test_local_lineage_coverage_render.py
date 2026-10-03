@@ -13,7 +13,8 @@ def run(number=1, statuses=('present', 'present'), *, source_status='valid', eli
     token = f'{number:032x}'
     return {'run_token': token, 'operation': 'name_lengths' if eligible else None,
         'source_status': source_status, 'eligible': eligible,
-        'reason_codes': ['RECORDED_RUN_FAILED'] if source_status == 'failed' else [],
+        'reason_codes': ['RECORDED_RUN_FAILED'] if source_status == 'failed' else
+                        ['SOURCE_VERIFIED'] if source_status == 'valid' else [],
         'source_sha256_before': 'a' * 64 if eligible else None,
         'source_sha256_after': 'a' * 64 if eligible else None,
         'metadata_sha256_before': 'b' * 64 if eligible else None,
@@ -139,6 +140,14 @@ class CoverageRenderTests(unittest.TestCase):
             render(value)
         value['runs'][0]['reason_codes'] = ['RECORDED_RUN_FAILED']
         self.assertIn('RECORDED_RUN_FAILED', render(value))
+
+    def test_valid_run_requires_its_saved_verification_explanation(self):
+        value = report()
+        value['runs'][0]['reason_codes'] = []
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
+            render(value)
+        value['runs'][0]['reason_codes'] = ['SOURCE_VERIFIED']
+        self.assertIn('SOURCE_VERIFIED', render(value))
 
     def test_invalid_or_incomplete_source_requires_saved_observation_reason(self):
         for status in ('invalid', 'incomplete'):
@@ -422,7 +431,7 @@ class CoverageRenderTests(unittest.TestCase):
         payload = '<img src="https://foreign.invalid/x" onerror="alert(1)"><script>alert(2)</script>&'
         value = report()
         value['runs'][0]['edges'][0]['reason_code'] = payload
-        value['runs'][0]['reason_codes'] = [payload]
+        value['runs'][0]['reason_codes'] = ['SOURCE_VERIFIED', payload]
         value['limits'] = [payload]
         html = render(value)
         document = Document(html)
