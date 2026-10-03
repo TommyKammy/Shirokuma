@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.92"
+version: "0.93"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: source snapshot same-name replacement (offline)
+
+The descriptor-relative snapshot now compares no-follow entry identities and metadata after its second directory listing. A disposable source file replaced at the same name after hashing previously produced a digest; the isolated negative failed before repair and the 49-test focused suite passed afterward. Only test-owned fixtures changed; the dedicated VM remained stopped. This cannot detect a replacement restored between checks, authenticate source producers, establish an atomic catalog observation or satisfy whole-catalog/column lineage. Roll back reader/test only, retaining reports, sources and backups. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: same-name collection entry replacement (offline)
 

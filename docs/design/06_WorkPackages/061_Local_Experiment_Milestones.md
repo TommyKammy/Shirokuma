@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.05"
+version: "5.06"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: source snapshot entry identity recheck (offline)
+
+WP-L5-LINEAGE-001: a same-name file replacement after the source hash previously passed the final name listing. A disposable negative failed before repair; descriptor-relative no-follow entry metadata is now compared after the second listing, and `make test-local-lineage-coverage` passed (49 tests). Dedicated Colima read-only list: stopped; no VM start, catalog/API/SQL read, retained source/report/backup mutation or request replay. Restored entries remain undetectable; no atomicity, producer authenticity, whole-catalog coverage or operator acceptance is established. Roll back reader/test only, preserving saved evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: lineage same-name run replacement (offline)
 

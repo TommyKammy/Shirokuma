@@ -203,10 +203,13 @@ def source_snapshot(path):
         require(depth <= 20, 'SOURCE_LIMIT_EXCEEDED')
         files[relative + '/'] = {'directory': True}
         names = _bounded_names(fd, 1024, 'SOURCE_LIMIT_OR_SYMLINK')
+        identities = {}
         for name in names:
             nodes += 1
             require(nodes <= 1024, 'SOURCE_LIMIT_OR_SYMLINK')
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            identities[name] = (info.st_dev, info.st_ino, info.st_mode, info.st_uid,
+                                info.st_size, info.st_mtime_ns, info.st_ctime_ns)
             require(info.st_dev == device, 'SOURCE_BOUNDARY_INVALID')
             item = str(Path(relative) / name)
             if stat.S_ISDIR(info.st_mode):
@@ -240,6 +243,11 @@ def source_snapshot(path):
         # plausible hash of an incomplete directory. This is not an atomic
         # snapshot against an actor that restores the original entries.
         require(names == _bounded_names(fd, 1024, 'SOURCE_LIMIT_OR_SYMLINK'), 'SOURCE_CHANGED')
+        for name in names:
+            current = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            require(identities[name] == (current.st_dev, current.st_ino, current.st_mode,
+                                         current.st_uid, current.st_size, current.st_mtime_ns,
+                                         current.st_ctime_ns), 'SOURCE_CHANGED')
     try:
         visit(root_fd, '.', 0, os.fstat(root_fd).st_dev)
         _current_source_path(path, root_fd)

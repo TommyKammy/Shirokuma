@@ -427,6 +427,26 @@ class CoverageTests(unittest.TestCase):
                 C.source_snapshot(path)
         self.assertTrue(injected)
 
+    def test_snapshot_rejects_same_name_file_replacement_after_read(self):
+        path = self.add_run()
+        summary = path / 'summary.json'
+        displaced = self.root / 'displaced-summary.json'
+        actual_names = C._bounded_names
+        calls = 0
+        def replace_before_second_listing(fd, limit, code):
+            nonlocal calls
+            names = actual_names(fd, limit, code)
+            calls += 1
+            if calls == 2:
+                summary.rename(displaced)
+                save(summary, {'result': 'replacement'})
+                # Keep the exact original names, but give summary a new inode.
+            return names
+        with patch.object(C, '_bounded_names', side_effect=replace_before_second_listing):
+            with self.assertRaises(C.CoverageError):
+                C.source_snapshot(path)
+        self.assertEqual(calls, 2)
+
     def test_new_run_during_observation_marks_inventory_incomplete(self):
         self.add_run()
         real = self.client.request
