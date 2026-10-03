@@ -200,6 +200,23 @@ class ObserverTests(unittest.TestCase):
                 self.assertIsNotNone(receipt['pending'])
                 self.assertEqual(receipt['request_count'],1)
 
+    def test_allowed_response_rejects_duplicate_json_keys_at_any_depth(self):
+        for suffix in ('"kind":"Other",', '"metadata":{"uid":"persisted"},',
+                       '"spec":{"hostNetwork":true},'):
+            with self.subTest(suffix=suffix):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                kube.respond=lambda body: SimpleNamespace(returncode=0,
+                    stdout='{'+suffix+json.dumps(body)[1:],stderr='')
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        kube.respond=lambda body: SimpleNamespace(returncode=0,
+            stdout=json.dumps(body).replace('"containers": [', '"containers": [], "containers": [', 1),stderr='')
+        with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+        self.assertIsNotNone(observer.receipt()['pending'])
+
     def test_allowed_response_cannot_inject_pod_identity_or_scheduling(self):
         for changes in ({'serviceAccountName':'admin'}, {'nodeName':'other-node'},
                         {'nodeSelector':{'role':'privileged'}},

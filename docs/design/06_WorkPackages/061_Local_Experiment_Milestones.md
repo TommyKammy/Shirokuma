@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.118"
+version: "5.119"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: duplicate dry-run JSON keys and independent FinOps check (offline)
+
+WP-L2-POL-001: four disposable successful replies with duplicate top-level or
+nested JSON keys were incorrectly allowed before repair. They now fail closed
+with the original request unknown/pending and no replay; focused observer 38
+tests passed. Separately reviewed WP-L6-FIN-001 direct history parsing,
+ordering, digest binding and storage display without establishing another
+defect; focused FinOps 181 tests passed (seven Linux-only skips). Dedicated
+Colima observed Stopped; no live admission, collection, saved-request replay,
+retained report/volume/backup mutation or GitHub write. AgentHouse retained
+volume remains `null / NOT_MEASURED`. Offline checks cannot authenticate
+producers, prove full mutation coverage, measure current usage, exercise Linux
+fixtures or establish operator acceptance. Roll back policy parser/test only
+if needed; retain pending requests and saved reports. No FinOps runtime
+rollback. Original Vault sync pending outside checkout.
+
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed after the
+repair. These are offline checks, not live admission or acceptance.
 
 ## 2026-10-04: dry-run top-level envelope and separate FinOps review (offline)
 

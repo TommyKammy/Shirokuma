@@ -28,6 +28,16 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode('ascii')).hexdigest()
 
 
+def unique_object(pairs):
+    """Do not let JSON's last-key-wins decoding hide a competing Pod claim."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate response key')
+        result[key] = value
+    return result
+
+
 def identity(value):
     try:
         return type(value) is str and str(uuid.UUID(value)) == value
@@ -363,7 +373,7 @@ class CandidateObserver:
             admission, reported = 'unknown', []
             if type(response.returncode) is int and response.returncode == 0:
                 try:
-                    value = json.loads(response.stdout)
+                    value = json.loads(response.stdout, object_pairs_hook=unique_object)
                 except (TypeError, ValueError):
                     value = None
                 if not response.stderr.strip() and allowed_pod_matches(value, self._body):

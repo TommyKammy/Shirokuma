@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.26"
+version: "0.27"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: duplicate allowed-response keys (offline)
+
+Four test-owned successful JSON replies repeated a top-level Pod key or a
+nested container key with a conflicting first value. Python's last-key-wins
+decoder previously classified each as allowed; object-pair decoding now
+refuses duplicates at every depth. The single original request remains
+unknown/pending, never replayed. Focused observer suite (38 tests) passed.
+Dedicated Colima was observed Stopped; no live admission, retained request,
+volume or backup mutation. JSON ambiguity refusal does not authenticate an
+API, prove general mutation coverage or establish operator acceptance. Roll
+back parser/test only if needed, retaining pending requests and old evidence.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-04: top-level dry-run response claims (offline)
 
