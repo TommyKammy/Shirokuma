@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.31"
+version: "0.32"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: absent list items cannot project scoped absence (offline)
+
+The opt-in metadata-only kubectl list projection emits a fixed invalid marker if `.items` has nil type, instead of projecting zero items as a complete empty inventory. The bounded reader already rejects that marker, before reporting scoped absence. Fake invalid/valid list headers and `make test-local-warehouse-lifecycle` passed. Client-side kubectl rendering of a synthetic List could not run while Colima was stopped: kubectl attempted API discovery against the unavailable local endpoint; the failed attempt is not live validation. No VM start, SQL, owner operation, unknown-request replay, retained session/volume or backup mutation. The check cannot authenticate the API or prove atomicity, historical cleanup or production acceptance. Roll back projection/test only; preserve saved sessions and stopped VM. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: malformed named GET is not absence (offline)
 

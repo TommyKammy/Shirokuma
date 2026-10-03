@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.54"
+version: "4.55"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse absent list items (offline)
+
+WP-L3-VW-002: metadata-only scoped-list projection marks nil `.items` invalid; a complete zero-item list remains accepted. Fake output cases and `make test-local-warehouse-lifecycle` passed. Client-side kubectl rendering of a synthetic List failed because the stopped dedicated Colima endpoint was unavailable for discovery; this is not live validation. No VM start, API/SQL observation, unknown-request replay, owner operation or retained data/backup mutation. Offline projection is not authenticated absence, atomicity, historical cleanup or production/operator acceptance. Roll back projection/test only; retain saved evidence and stopped VM. Original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: declared Flux versions and active-root revision (offline)
 

@@ -266,7 +266,8 @@ class RuntimeStatusTests(TestCase):
         # A Kubernetes list may report remaining items even if the continuation
         # token is absent/empty; the metadata-only projection must flag it.
         self.assertIn('or .metadata.continue .metadata.remainingItemCount', R.MANY)
-        for raw in ('', 'v1\tList\t0\tTRUNCATED\n', 'v1\tList\t1\tCOMPLETE\n',
+        self.assertIn('eq (printf "%T" .items) "<nil>"', R.MANY)
+        for raw in ('', 'v1\tList\t0\tINVALID\n', 'v1\tList\t0\tTRUNCATED\n', 'v1\tList\t1\tCOMPLETE\n',
                     'v2\tList\t0\tCOMPLETE\n', 'discovery.k8s.io/v1\tList\t0\tCOMPLETE\n',
                     'v1\tPodList\t0\tCOMPLETE\n', 'v1\tList\t0\tCOMPLETE\nextra\n'):
             with self.subTest(raw=raw), mock.patch.object(R.W, 'command', return_value=raw):
