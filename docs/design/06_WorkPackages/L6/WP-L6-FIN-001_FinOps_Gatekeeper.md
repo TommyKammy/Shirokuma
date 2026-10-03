@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-04 Standalone saved HTML underflow boundary (offline)
+
+The standalone saved-report HTML parser still accepted a nonzero `1e-999`
+measurement as zero after the history parser had been fixed. A disposable
+valid report reproduced the error before repair. Both offline renderers now
+use one finite-float decoder; literal `0e-999` and normal reports still pass.
+No public schema, collector, original saved report, retained volume or backup
+changed. Focused FinOps tests (173; 7 Linux-only skips) and full local
+verification passed on rerun; the first full run failed in an unrelated
+Warehouse saved-journal fixture, whose focused suite and unchanged full rerun
+passed. Logs: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-015/`.
+This protects only offline JSON interpretation, not current usage, report
+authenticity or backup recovery. Roll back the decoder/renderer/test changes
+only; preserve saved data. Original Vault sync pending outside checkout.
+
 ## 2026-10-04 保存FinOps履歴の非ゼロ浮動小数underflow拒否（offline）
 
 保存した2–8報を読む`history.parse`はJSONの極小非ゼロ数`1e-999`をPythonの

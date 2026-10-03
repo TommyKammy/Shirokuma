@@ -96,7 +96,7 @@ def parse_report(raw):
             value[key] = item
         return value
     try:
-        value = json.loads(raw.decode('utf-8'), object_pairs_hook=pairs,
+        value = json.loads(raw.decode('utf-8'), object_pairs_hook=pairs, parse_float=C.finite_json_float,
                            parse_constant=lambda _: (_ for _ in ()).throw(RenderError()))
     except Exception: raise RenderError() from None
     return _validated(value)

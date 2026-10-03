@@ -12,6 +12,27 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: saved FinOps HTML and catalog cleanup refusal (offline)
+
+WP-L6-FIN-001's standalone saved-report renderer previously decoded a
+nonzero `1e-999` measurement as zero; a disposable valid report reproduced
+this before repair. It now shares the history decoder, retaining true exponent
+zero and ordinary saved reports. Separately, WP-L5-LINEAGE-001's injected
+exact-path 404 with failing close formerly leaked a raw exception: timely
+cleanup failure is now unavailable, late failure is deadline, neither missing.
+Both negatives failed before repair. Focused FinOps (173, 7 Linux-only skips)
+and lineage (99) passed. First `make verify-local-experiment` failed at an
+unchanged Warehouse saved-journal filesystem fixture (`JOURNAL_UNVERIFIED`);
+focused Warehouse and unchanged full rerun passed; retain both outcomes.
+`make verify-design-context` and `git diff --check` passed. Private logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-015/`.
+Dedicated Colima was read-only observed stopped. No VM start, live catalog,
+retained report/source/credential/session/volume/backup mutation or GitHub
+write. Offline checks cannot authenticate producers, prove current usage or
+atomic catalog/whole-column coverage, backup recovery or operator acceptance.
+Roll back only these independent guards/tests, preserving saved evidence and
+the stopped VM. Original Vault synchronization pending outside this checkout.
+
 ## 2026-10-04: FinOps saved-history floating underflow (offline)
 
 WP-L6-FIN-001's offline history previously turned nonzero JSON measurements

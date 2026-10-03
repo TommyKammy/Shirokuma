@@ -143,6 +143,13 @@ class RenderTests(unittest.TestCase):
                         b' '*R.MAX_INPUT_BYTES+b' ', raw+b' trailing', b'[]'):
             with self.subTest(raw=invalid[:30]), self.assertRaises(R.RenderError): R.parse_report(invalid)
 
+    def test_nonzero_underflow_is_not_displayed_as_zero(self):
+        raw = encoded(report())
+        self.assertIn(b'0.5', raw)
+        with self.assertRaises(R.RenderError):
+            R.parse_report(raw.replace(b'0.5', b'1e-999'))
+        self.assertEqual(R.parse_report(raw.replace(b'0.5', b'0e-999'))['schema_version'], 1)
+
     def test_cli_writes_html_only_for_valid_input_and_safe_error_otherwise(self):
         for raw, expected in ((encoded(report()), 0), (b'{"private":"SECRET"}', 1)):
             stdin = io.TextIOWrapper(io.BytesIO(raw), encoding='utf-8')

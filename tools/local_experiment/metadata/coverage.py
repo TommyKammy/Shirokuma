@@ -491,7 +491,13 @@ class ReadOnlyClient:
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 raise CoverageError('API_UNAVAILABLE') from None
             finally:
-                error.close()
+                try:
+                    error.close()
+                except (OSError, RuntimeError):
+                    # A failed cleanup is not a reliable missing-object read;
+                    # suppress transport details and keep the deadline first.
+                    require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                    raise CoverageError('API_UNAVAILABLE') from None
             # A late 404 is not evidence that a catalog object was absent
             # within this observation's bounded time window.
             require(time.monotonic() < self.deadline, 'API_DEADLINE')

@@ -52,6 +52,15 @@ class FinOpsError(ValueError):
     pass
 
 
+def finite_json_float(text):
+    """Do not let a saved nonzero JSON measurement decode as zero."""
+    value = float(text)
+    mantissa = re.split('[eE]', text, maxsplit=1)[0]
+    if not math.isfinite(value) or (value == 0 and re.search('[1-9]', mantissa)):
+        raise FinOpsError('SAMPLE_INVALID')
+    return value
+
+
 def require(condition, code='INFERENCE_INVALID'):
     if not condition: raise FinOpsError(code)
 

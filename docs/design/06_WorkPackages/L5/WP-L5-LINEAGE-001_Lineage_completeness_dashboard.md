@@ -12,6 +12,20 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: failed HTTP error cleanup remains unknown (offline)
+
+A test-owned exact-path 404 whose response close raises after closing formerly
+leaked the raw transport exception. The client now classifies timely cleanup
+failure as `API_UNAVAILABLE` and late cleanup failure as `API_DEADLINE`, never
+as missing-object evidence. The negative failed before repair; 99 focused
+lineage tests and local verification on rerun passed. Private logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-015/`.
+No VM start, live catalog/login, archived replay, retained source/credential/
+report/backup change or GitHub write. This does not establish producer
+authenticity, atomicity, whole-catalog/column coverage or operator acceptance.
+Roll back only the cleanup guard and fixture; preserve reports. Original Vault
+sync pending outside this checkout.
+
 ## 2026-10-04: thrown 404 closure deadline regression (offline)
 
 A disposable HTTPError with the requested URL/status but a close that crosses

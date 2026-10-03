@@ -1414,6 +1414,28 @@ class ReadOnlyClientTests(unittest.TestCase):
                 client.request('GET', path)
         self.assertTrue(error.fp is None or error.fp.closed)
 
+    def test_http_error_close_failure_does_not_expose_private_exception_or_missing(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+        path = next(iter(C.ANCHORS))
+
+        class BrokenClose(urllib.error.HTTPError):
+            def close(self):
+                super().close()
+                if self.late:
+                    client.deadline = time.monotonic() - 1
+                raise OSError('private response close failure')
+
+        for late, expected in ((False, 'API_UNAVAILABLE'), (True, 'API_DEADLINE')):
+            with self.subTest(late=late):
+                error = BrokenClose(C.URL + path, 404, 'missing', {}, io.BytesIO(b'private'))
+                error.late = late
+                client.deadline = time.monotonic() + 10
+                with patch.object(client.opener, 'open', side_effect=error):
+                    with self.assertRaisesRegex(C.CoverageError, expected):
+                        client.request('GET', path)
+                self.assertTrue(error.fp is None or error.fp.closed)
+
     def test_late_returned_http_status_is_deadline_not_response_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         client = self.client
