@@ -12,6 +12,20 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: saved reason-code claims require corresponding observations (offline)
+
+Two independent renderer checks reject a saved `UNKNOWN_EXPECTED_EDGES` reason
+when no expected edge is unknown, and `UNVERIFIED_SOURCE_RUNS` when there is
+neither an invalid nor incomplete run. Positive saved examples still render.
+Focused lineage 136 tests and the local verification passed; logs are private
+under `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-043/`.
+The dedicated VM was read-only observed stopped. No catalog access, retained
+source/report/volume/backup modification, replay or GitHub write. This is
+internal presentation consistency, not producer authenticity, atomicity,
+whole-catalog/column coverage or operator acceptance. Roll back only the
+renderer guards and tests; preserve archived reports. Original Vault sync
+pending outside the approved checkout.
+
 ## 2026-10-04: saved inventory and unknown-edge explanations (offline)
 
 Two independent direct-render claims now require the collector's saved

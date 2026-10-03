@@ -54,6 +54,17 @@ class HistoryTests(unittest.TestCase):
                 H.render([malformed, entries[1]])
         self.assertIn('保存FinOps観測履歴', H.render(entries))
 
+    def test_direct_renderer_bounds_malformed_report_fields(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        for change in (lambda value: value.pop('components'),
+                       lambda value: value['components'][0].pop('component'),
+                       lambda value: value.update(disks=[{}])):
+            changed = json.loads(json.dumps(entries[0][1][0]))
+            change(changed)
+            with self.assertRaises(H.HistoryError):
+                H.render([(entries[0][0], (changed, entries[0][1][1])), entries[1]])
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
+
     def test_direct_renderer_requires_complete_ordered_selection(self):
         first = report(); later_time = '2026-09-20T00:00:22.000Z'
         later = C.build_report(first['components'], first['disks'],

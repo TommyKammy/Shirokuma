@@ -12,6 +12,33 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: direct FinOps history malformed fields (offline)
+
+Independent WP-L6-FIN-001 increment: direct saved-history rendering now
+converts missing public report fields/nested rows into bounded `HistoryError`
+instead of leaking `KeyError`/`IndexError`. Three disposable negatives and a
+valid pair are covered; focused FinOps 180 tests and final
+`make verify-local-experiment` passed. Private logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-043/`.
+No VM start, new collection, retained reports/volumes/backups modification,
+unknown-request replay or GitHub write. Does not prove producer authenticity,
+current usage, backup recovery or operator acceptance. Roll back exception
+boundary/test only and preserve saved reports. Original Vault sync pending.
+
+## 2026-10-04: saved lineage reason-code reverse checks (offline)
+
+WP-L5-LINEAGE-001's direct renderer now refuses an unknown-edge reason with
+zero unknown edges and an unverified-source reason without invalid/incomplete
+source runs. Both are independently checked saved claims, not verification of
+the producer. Positive fixtures remain displayable; focused lineage 136 tests
+and `make verify-local-experiment` passed. Dedicated Colima profile observed
+Stopped; no live catalog, retained report/source/volume/backup changes,
+unknown-request replay or GitHub writes. Private local verification log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-043/local-verify.log`.
+This does not establish atomicity, whole-catalog/column coverage or operator
+acceptance. Roll back only renderer guards/tests, retaining historical records.
+Original Vault sync pending outside the approved noninteractive checkout.
+
 ## 2026-10-04: additional private Warehouse client-IP hints (offline)
 
 Independently of the lineage change below, WP-L3-VW-002 refuses

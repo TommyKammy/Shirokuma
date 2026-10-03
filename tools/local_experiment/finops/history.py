@@ -167,7 +167,7 @@ def render(entries):
                     saved_digest != hashlib.sha256(canonical).hexdigest(): raise HistoryError()
             if saved_digest in seen: raise HistoryError()
             seen.add(saved_digest)
-    except (TypeError, ValueError, UnicodeError, OverflowError):
+    except (TypeError, ValueError, UnicodeError, OverflowError, KeyError, IndexError):
         raise HistoryError() from None
     sections, navigation = [], []
     for order, (selected_index, (report, digest)) in enumerate(entries, 1):

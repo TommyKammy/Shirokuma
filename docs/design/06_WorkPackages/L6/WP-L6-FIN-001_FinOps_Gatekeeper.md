@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-04 Direct history malformed report fields (offline)
+
+Direct saved-history rendering now converts missing public report fields and
+malformed nested rows to bounded `HistoryError` rather than exposing Python
+index/key errors. Disposable malformed reports are rejected; legitimate
+selected reports remain displayable. Focused FinOps and local verification
+results are in Milestones; private logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-043/`.
+This is offline presentation robustness, not report provenance, current usage,
+AgentHouse retained-volume measurement or operator acceptance. No VM start,
+collection, retained report/volume/backup changes or GitHub write. Roll back
+only this exception boundary and test; preserve saved records. Original Vault
+sync pending outside the approved checkout.
+
 ## 2026-10-04 Direct history selection shape (offline)
 
 The direct saved-history renderer now refuses malformed selection envelopes

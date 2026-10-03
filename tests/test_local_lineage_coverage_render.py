@@ -100,6 +100,24 @@ class CoverageRenderTests(unittest.TestCase):
         value['observation']['reason_codes'].append('UNKNOWN_EXPECTED_EDGES')
         self.assertIn('登録率 算出しない', render(value))
 
+    def test_saved_unknown_reason_requires_unknown_edges(self):
+        value = report()
+        value['observation'].update(status='incomplete', reason_codes=['UNKNOWN_EXPECTED_EDGES'])
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_UNKNOWN_REASON'):
+            render(value)
+        value['observation'].update(status='complete', reason_codes=[])
+        self.assertIn('2 / 2 エッジ', render(value))
+
+    def test_saved_unverified_source_reason_requires_invalid_or_incomplete_run(self):
+        for runs in ([run()], [], [run(1, source_status='failed', eligible=False)]):
+            value = report(runs)
+            value['observation'].update(status='incomplete', reason_codes=['UNVERIFIED_SOURCE_RUNS'])
+            with self.subTest(runs=len(runs)), self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
+                render(value)
+        value = report([run(1, source_status='invalid', eligible=False)])
+        value['observation'].update(status='incomplete', reason_codes=['UNVERIFIED_SOURCE_RUNS'])
+        self.assertIn('UNVERIFIED_SOURCE_RUNS', render(value))
+
     def test_zero_denominator_is_not_zero_or_full_coverage(self):
         html = render(report([]))
         self.assertIn('集計対象なし', html)

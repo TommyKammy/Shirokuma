@@ -304,6 +304,9 @@ def _validate(report):
     _require(inventory['uuid_runs'] == len(runs) and inventory['eligible'] == eligible and
               inventory['entries'] == inventory['uuid_runs'] + inventory['unrecognized_entries'] and
               all(inventory[key] == value for key, value in sources.items()), 'INCONSISTENT_SOURCE_COUNTS')
+    _require('UNVERIFIED_SOURCE_RUNS' not in observation['reason_codes'] or
+             inventory['invalid'] + inventory['incomplete'] > 0,
+             'INCONSISTENT_SOURCE_REASON')
     # The collector marks an inventory incomplete when its final listing
     # changes or fails. With a complete inventory and identical saved snapshots
     # for every run, its source-stability result cannot be false.
@@ -315,6 +318,8 @@ def _validate(report):
     known = denominator - counts['unknown']
     _require(not counts['unknown'] or 'UNKNOWN_EXPECTED_EDGES' in observation['reason_codes'],
              'INCONSISTENT_UNKNOWN_REASON')
+    _require(counts['unknown'] > 0 or 'UNKNOWN_EXPECTED_EDGES' not in observation['reason_codes'],
+              'INCONSISTENT_UNKNOWN_REASON')
     # A changed catalog observation or unknown target always leaves at least
     # one expected edge unknown; it cannot yield fully known coverage.
     _require(observation['metadata_stable'] is not False or counts['unknown'] > 0,
