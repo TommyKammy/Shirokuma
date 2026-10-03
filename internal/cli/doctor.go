@@ -249,7 +249,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		}
 		// An escaped unpaired surrogate can become U+FFFD even when the raw
 		// response is valid UTF-8. Do not accept lossy object identities.
-		if localInventoryLossyStrings(item, []string{"kind", "apiVersion"}) {
+		if localInventoryInvisibleLocations(item, []string{"kind", "apiVersion"}) {
 			return true
 		}
 		// Explicit null is not an omitted field in a Kubernetes object. In
@@ -294,15 +294,10 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "deletionTimestamp"}) {
 			return true
 		}
-		// An escaped unpaired surrogate decodes to U+FFFD in Go. Neither a
-		// Kubernetes resource name nor namespace can have that lossy identity.
-		for _, key := range []string{"name", "namespace"} {
-			if value, ok := metadata[key]; ok {
-				var identity string
-				if err := json.Unmarshal(value, &identity); err != nil || strings.ContainsRune(identity, utf8.RuneError) {
-					return true
-				}
-			}
+		// Whitespace and format characters also obscure a reported resource
+		// identity, even when JSON decoding did not lose any bytes.
+		if localInventoryInvisibleLocations(metadata, []string{"name", "namespace"}) {
+			return true
 		}
 		var identity struct {
 			Generation int64 `json:"generation"`
@@ -556,18 +551,6 @@ func localInventoryNullFields(fields map[string]json.RawMessage, keys []string) 
 	for _, key := range keys {
 		if string(fields[key]) == "null" {
 			return true
-		}
-	}
-	return false
-}
-
-func localInventoryLossyStrings(fields map[string]json.RawMessage, keys []string) bool {
-	for _, key := range keys {
-		if raw, ok := fields[key]; ok {
-			var value string
-			if err := json.Unmarshal(raw, &value); err != nil || strings.ContainsRune(value, utf8.RuneError) {
-				return true
-			}
 		}
 	}
 	return false

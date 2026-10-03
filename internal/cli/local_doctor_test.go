@@ -429,6 +429,29 @@ func TestLocalInventoryRejectsInvalidUTF8(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsInvisibleReportedNamesAndKinds(t *testing.T) {
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"metadata":{"name":"hidden\nname"}}]}`),
+		[]byte(`{"items":[{"metadata":{"namespace":"hidden\u200bnamespace"}}]}`),
+		[]byte(`{"items":[{"kind":"Git\tRepository"}]}`),
+		[]byte(`{"items":[{"apiVersion":"v1\u200b"}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("invisible inventory identifier accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"metadata":{"name":"valid-name","namespace":"flux-system"},"kind":"GitRepository","apiVersion":"source.toolkit.fluxcd.io/v1"}]}`),
+		[]byte(`{"items":[{}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("visible or omitted inventory identifiers rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryCorruptionDegradesAllFixedProfileReads(t *testing.T) {
 	for _, mutate := range []func(string) string{
 		func(raw string) string {
@@ -1175,7 +1198,11 @@ func TestLocalFluxDiagnosticDoesNotEchoInvalidResourceIdentity(t *testing.T) {
 			t.Fatal(err)
 		}
 		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}, localExperimentContext, true)
-		if check.Status != "degraded" || !strings.Contains(check.Summary, "identity unverified") || strings.Contains(check.Summary, test.value) || strings.Contains(check.Summary, "token-secret") {
+		expected := "identity unverified"
+		if strings.Contains(test.value, "\n") {
+			expected = "resource response was incomplete"
+		}
+		if check.Status != "degraded" || !strings.Contains(check.Summary, expected) || strings.Contains(check.Summary, test.value) || strings.Contains(check.Summary, "token-secret") {
 			t.Fatalf("invalid %s leaked or accepted: %#v", test.field, check)
 		}
 	}
@@ -1186,7 +1213,11 @@ func TestLocalLakehouseRejectsMalformedUnrelatedNames(t *testing.T) {
 		responses := localWorkloadResponses()
 		responses[0].output = strings.TrimSuffix(responses[0].output, `]}`) + `,{"kind":"Deployment","metadata":{"name":` + fmt.Sprintf("%q", name) + `,"namespace":"shirokuma-storage"}}]}`
 		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
-		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "out-of-scope") || strings.Contains(checks[0].Summary, name) || checks[1].Status != "healthy" {
+		expected := "out-of-scope"
+		if strings.Contains(name, "\n") {
+			expected = "workload response was incomplete"
+		}
+		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, expected) || strings.Contains(checks[0].Summary, name) || checks[1].Status != "healthy" {
 			t.Fatalf("malformed unrelated workload name %q accepted or leaked: %#v", name, checks)
 		}
 	}

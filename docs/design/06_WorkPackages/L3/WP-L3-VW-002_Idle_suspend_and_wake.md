@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.61"
+version: "0.62"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: disposable concurrent reply order (offline)
+
+The serial-handler test now checks the exact durable reply sequence for a pending retry, competing busy UUID, original verified response and both completed replays; its two saved request records remain unchanged. `make test-local-warehouse-lifecycle` passed; combined verification is recorded in Milestones. This tests only one disposable owner and does not prove archived caller receipt, backend authenticity, owner restart recovery, historical cleanup or a repair for intermittent failures. No archived UUID replay, VM start, API/SQL or retained session/backup mutation. Roll back only the test assertions, preserving evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: completed disposable original UUID replay (offline)
 

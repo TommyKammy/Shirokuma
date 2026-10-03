@@ -450,6 +450,7 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(saved['requests'][0]['response'], received[0][1])
         self.assertEqual(saved['requests'][1]['request']['request_id'], second['request_id'])
         self.assertEqual(saved['requests'][1]['response'], busy[1])
+        self.assertEqual(saved['replies'][:3], [pending[1], busy[1], received[0][1]])
         # The pending retry did not pin an uncertain response: once the
         # original finishes, only this test-owned UUID replays its exact result.
         self.assertEqual(self.exchange(first), received[0])
@@ -458,6 +459,9 @@ class SessionRPCTest(unittest.TestCase):
         replayed = json.loads(self.rpc.journal_path.read_text())
         self.assertEqual(len(replayed['requests']), 2)
         self.assertEqual(replayed['requests'][0]['response'], received[0][1])
+        self.assertEqual(replayed['requests'][1]['response'], busy[1])
+        self.assertEqual(replayed['replies'], [pending[1], busy[1], received[0][1],
+                                               received[0][1], busy[1]])
 
     def test_ttl_stops_admission_but_drains_admitted_handler(self):
         entered = threading.Event()

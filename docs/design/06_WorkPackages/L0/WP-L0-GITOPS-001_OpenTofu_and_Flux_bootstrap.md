@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.66"
+version: "0.67"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: invisible reported resource identities (offline)
+
+Two independent fixed-profile inventory checks reject whitespace/control/format characters in reported item names and namespaces, and in item kinds and API versions, including escaped newline and zero-width characters on unrelated members. A disposable negative failed before repair; visible identifiers and omitted projected fields pass. Earlier newline fixtures now fail at the complete-list boundary rather than their later resource-specific checks. `go test ./internal/cli -count=1` (819 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed; private logs are under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-060/`. Read-only `colima list` reported the dedicated VM stopped; no VM start, API/Git/SQL, reconciliation, retained source/session/report/backup mutation or request replay. Fake identifier validation cannot authenticate API or Git, guarantee atomic inventory or historical cleanup, clear strict admission or grant operator/production acceptance. Roll back only the local reader/tests, preserving VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: explicit zero generation is not omission (offline)
 

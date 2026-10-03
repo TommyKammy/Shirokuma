@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.16"
+version: "5.17"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: reported resource names and kinds (offline)
+
+WP-L0-GITOPS-001: complete fixed-profile lists reject invisible characters in item name/namespace and kind/API version on unrelated members. A focused negative failed before repair; two older newline fixtures now expect the earlier incomplete-list refusal. Focused Go (819 passed) and vet passed. WP-L3-VW-002: disposable serial-handler regression now asserts the exact five durable replies across pending/busy/original completion and two replays without additional handler dispatch; `make test-local-warehouse-lifecycle` passed. Combined `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed; private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-060/{verify,design,warehouse}.log`. Read-only Colima listing showed the dedicated VM stopped; no VM start, API/Git/SQL, reconciliation, archived request replay or retained data/backup mutation. Offline identifiers and disposable socket replies do not authenticate remote/backend state, establish atomicity, historical cleanup or archived caller receipt, clear strict admission or establish operator/production acceptance. Roll back reader and disposable test only; preserve VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: explicit generation and completed disposable replay (offline)
 
