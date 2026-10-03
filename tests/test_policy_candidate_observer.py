@@ -141,6 +141,32 @@ class ObserverTests(unittest.TestCase):
         kube=FakeKube();observer=O.CandidateObserver(source,kube);observer.observe()
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_inject_pod_identity_or_scheduling(self):
+        for changes in ({'serviceAccountName':'admin'}, {'nodeName':'other-node'},
+                        {'nodeSelector':{'role':'privileged'}},
+                        {'tolerations':[{'operator':'Exists'}]},
+                        {'affinity':{'nodeAffinity':{}}},
+                        {'schedulerName':'other-scheduler'}):
+            with self.subTest(changes=changes):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['spec'].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaults(body):
+            altered=copy.deepcopy(body)
+            altered['spec'].update(serviceAccountName='default', nodeName='', nodeSelector={},
+                                   tolerations=[], schedulerName='default-scheduler')
+            return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+        kube.respond=defaults
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_cannot_inject_container_security_context(self):
         for context in ({'privileged':False,'allowPrivilegeEscalation':True},
                         {'privileged':False,'runAsUser':0},

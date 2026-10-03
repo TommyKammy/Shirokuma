@@ -12,6 +12,16 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-04 Independent storage-boundary check after policy repair
+
+Reviewed the fixed-volume preflight/receipt constraints and focused FinOps
+fixtures; no defect was established or FinOps implementation changed.
+`make test-local-finops` passed 181 tests, seven Linux-only skipped. The
+dedicated VM stayed stopped; no measurement, collection or saved report,
+volume/backup mutation. AgentHouse usage remains `null / NOT_MEASURED`;
+SSH trust, real Linux cleanup, saved producer authenticity and operator
+acceptance remain open. No FinOps rollback needed. Original Vault sync pending.
+
 ## 2026-10-04 Independent saved-history check after policy repair
 
 Reviewed direct-history digest binding, selection ordering and duplicate

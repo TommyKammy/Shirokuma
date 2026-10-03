@@ -108,6 +108,16 @@ def allowed_pod_matches(value, body):
             return False
     elif type(pod_context) is not dict or pod_context != submitted_context:
         return False
+    # The submitted subset cannot choose an identity or placement. An allowed
+    # response must not silently acquire either, even when policy CEL passes.
+    if (spec.get('serviceAccountName', 'default') != 'default' or
+            spec.get('serviceAccount', 'default') != 'default' or
+            spec.get('nodeName', '') != '' or
+            spec.get('nodeSelector') not in (None, {}) or
+            spec.get('tolerations') not in (None, []) or
+            spec.get('affinity') not in (None, {}) or
+            spec.get('schedulerName', 'default-scheduler') != 'default-scheduler'):
+        return False
     if (type(containers) is not list or len(containers) != 1 or
             any(spec.get(key) not in (None, []) for key in ('initContainers', 'ephemeralContainers', 'volumes')) or
             any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostIPC', 'hostPID')) or

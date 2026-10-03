@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.15"
+version: "0.16"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: allowed response Pod identity and placement (offline)
+
+Six disposable responses injecting a service account, node name/selector,
+toleration, affinity or alternate scheduler passed before repair. The allowed
+comparator now refuses them while accepting the empty/default API forms.
+Focused candidate CLI checks passed (70 observer/candidate and 23 CLI tests).
+An unknown result retains the original pending request; never replay it.
+Dedicated Colima was observed stopped; no live admission, retained evidence,
+volume/backup mutation or GitHub write. Fake responses cannot authenticate the
+API or prove arbitrary mutation coverage/operator acceptance. Roll back only
+the comparator and test; preserve pending requests and stopped lab. Original
+Vault sync pending outside this checkout.
 
 ## 2026-10-04: allowed response container execution defaults (offline)
 

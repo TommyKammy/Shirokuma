@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.103"
+version: "5.104"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy Pod placement and independent FinOps boundary (offline)
+
+WP-L2-POL-001: six fake allowed responses carrying an unsubmitted service
+account, node name/selector, toleration, affinity or alternate scheduler passed
+before repair; they now fail closed as unknown with the pending request retained.
+Explicit empty/default API forms still match. Candidate-focused checks passed
+(70 + 23). `make verify-local-experiment`, `make verify-design-context`
+(89 documents), `make check-no-secret-filenames`, and `git diff --check`
+passed. Private full verification log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-055/local-verification.log`
+(SHA-256 `2b95670f415a6f9661b7b3d7955ca7354a0c165cd722f6ea417021ae3afd85c4`).
+Separately reviewed WP-L6-FIN-001's fixed-volume preflight/receipt
+boundary without establishing a further defect; FinOps focused 181 tests passed
+(seven Linux-only skips). Dedicated Colima observed stopped; no admission,
+collection, retained request replay, report/volume/backup mutation or GitHub
+write. AgentHouse usage remains `null / NOT_MEASURED`. Offline fake checks do
+not authenticate a server, measure current usage, cover arbitrary mutations or
+establish operator acceptance. Roll back policy comparator/test only, keeping
+unknown requests and saved evidence. Original Vault sync pending outside the
+noninteractive checkout.
 
 ## 2026-10-04: policy response container execution fields (offline)
 
