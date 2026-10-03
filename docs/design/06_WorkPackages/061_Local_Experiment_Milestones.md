@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.75"
+version: "5.76"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: private Warehouse client-IP claims (offline)
+
+Independently of the lineage commit below, WP-L3-VW-002 refuses `Client-IP`
+and `X-Client-IP` on its fixed Unix transition. Both disposable requests
+reached the handler before repair; focused Warehouse checks passed afterward.
+`make verify-local-experiment`, `make verify-design-context` and diff check
+passed; private negative, focused and full outputs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-034/`.
+The dedicated VM was read-only observed stopped. No VM start, backend/SQL,
+archived request replay, retained session/backup modification or GitHub write.
+This offline parser check is not peer authentication, caller receipt, restart
+recovery or operator acceptance. Roll back only the parser/test, retain saved
+evidence. Original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: saved lineage catalog stability and edge explanations (offline)
 

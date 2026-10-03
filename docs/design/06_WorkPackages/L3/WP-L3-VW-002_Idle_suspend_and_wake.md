@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.98"
+version: "0.99"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: client-IP claims on the private transition (offline)
+
+Two complete disposable Unix requests with `Client-IP` and `X-Client-IP`
+reached the handler before repair. The fixed one-request parser now refuses
+both before dispatch and journal creation; ordinary extension headers remain
+permitted. Focused Warehouse checks passed. This does not independently
+authenticate the peer, prove caller receipt or owner restart recovery, or
+establish operator acceptance. No VM start, live backend/SQL, archived request
+replay or retained session/backup change. Roll back parser/test alone and keep
+saved evidence. Original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: proxy extension namespace (offline)
 
