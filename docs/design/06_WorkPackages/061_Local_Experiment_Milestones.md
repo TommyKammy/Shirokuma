@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.127"
+version: "5.128"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: separate FinOps saved-history check (offline)
+
+WP-L6-FIN-001: inspected direct history selection, digest binding and per-report
+storage display after the inventory commit. No further defect established or
+FinOps behavior changed; `make test-local-finops` passed 181 tests (seven
+Linux-only skips). Dedicated Colima remained Stopped; no collection or retained
+report/volume/backup mutation. AgentHouse usage remains `null / NOT_MEASURED`.
+Offline checks do not authenticate the producer, exercise Linux fixtures,
+measure current usage or establish acceptance. No runtime rollback; retain
+saved reports. Original Vault sync pending outside checkout.
+After both independent increments, `go test ./... -count=1` (835 tests),
+`go vet ./...`, `make verify-local-experiment`, `make verify-design-context`
+(89 documents), `make check-no-secret-filenames` and `git diff --check` passed.
+Private local verification log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-072/verify-local.log`
+(SHA-256 `014c50cda6b73b939b7f8279ae2c156ca8fcfa7a09cdb0a1095c0079b05b4467`).
+These checks are not live runtime acceptance.
 
 ## 2026-10-04: unambiguous inventory identity (offline)
 
