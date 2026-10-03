@@ -117,6 +117,14 @@ class CoverageRenderTests(unittest.TestCase):
         self.assertIn('分母を保持 / 2エッジ不明', html)
         self.assertIn('観測途中に証跡が変化', html)
 
+    def test_incomplete_eligible_source_cannot_claim_unchanged_final_snapshot(self):
+        value = report([run(1, ('unknown', 'unknown'), source_status='incomplete')])
+        value['observation'].update(status='incomplete', source_stable=False)
+        with self.assertRaises(RenderError):
+            render(value)
+        value['runs'][0]['source_sha256_after'] = None
+        self.assertIn('分母を保持 / 2エッジ不明', render(value))
+
     def test_source_status_must_match_original_eligibility(self):
         excluded_valid = report([run(1, source_status='valid', eligible=False)])
         included_invalid = report([run(1, ('unknown', 'unknown'), source_status='invalid')])

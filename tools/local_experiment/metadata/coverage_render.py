@@ -241,6 +241,13 @@ def _validate(report):
         _require(source != 'valid' or
                   run['source_sha256_before'] == run['source_sha256_after'],
                   'INCONSISTENT_SOURCE_STATUS')
+        # Initially eligible incomplete runs are the ones whose final saved
+        # evidence changed or could not be read; identical final evidence
+        # cannot explain demoting a verified run to incomplete.
+        _require(source != 'incomplete' or not run['eligible'] or
+                  run['source_sha256_after'] is None or
+                  run['source_sha256_before'] != run['source_sha256_after'],
+                  'INCONSISTENT_SOURCE_STATUS')
         if observation['source_stable']:
             _require(run['source_sha256_before'] is not None and
                      run['source_sha256_before'] == run['source_sha256_after'],

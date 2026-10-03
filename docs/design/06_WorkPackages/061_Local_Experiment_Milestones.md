@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.79"
+version: "5.80"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: eligible source demotion consistency (offline)
+
+After the independent lineage/Warehouse commit below, WP-L5-LINEAGE-001 also
+refuses an initially eligible `incomplete` source whose saved final digest
+still equals its initial digest. A disposable negative passed before repair;
+the missing-final-digest incomplete case remains displayable. Focused lineage
+passed after repair; `make verify-local-experiment`, design-context and diff
+check passed after this second increment. No VM start, catalog login, archived request replay,
+retained report/source/backup mutation or GitHub write. This renderer check
+cannot authenticate the producer, establish atomicity, whole-catalog/column
+coverage or operator acceptance. Roll back only the renderer/test, preserving
+saved evidence and the stopped VM. Original Vault sync pending outside checkout.
+Private negative and passing logs: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-036/`.
 
 ## 2026-10-04: final lineage evidence and private Envoy hints (offline)
 

@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.49"
+version: "1.50"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: eligible source demotion needs changed or unreadable evidence (offline)
+
+After the final-valid-source check, a separate disposable report still claimed
+an initially eligible run became `incomplete` while its before/after source
+digests matched. This cannot arise from the collector's final snapshot check;
+the offline renderer now refuses it. A missing final digest remains a valid
+incomplete/unknown case. The negative failed before repair and focused lineage
+passed afterward. No VM start, catalog access, retained source/report/backup
+mutation or replay. This is only internal saved-claim consistency, not source
+provenance, atomicity, whole-catalog/column coverage or operator acceptance.
+Roll back renderer/test only; retain historical evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-04: final evidence for valid saved sources (offline)
 
