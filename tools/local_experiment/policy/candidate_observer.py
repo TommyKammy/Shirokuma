@@ -135,6 +135,14 @@ def allowed_pod_matches(value, body):
     if (spec.get('shareProcessNamespace', False) is not False or
             spec.get('hostAliases') not in (None, [])):
         return False
+    # None of these scheduling/lifecycle controls is submitted by the candidate.
+    # An injected topology rule, readiness gate, runtime overhead or deadline
+    # changes the effective Pod even when the policy CEL checks still pass.
+    if (spec.get('topologySpreadConstraints') not in (None, []) or
+            spec.get('readinessGates') not in (None, []) or
+            spec.get('overhead') not in (None, {}) or
+            spec.get('activeDeadlineSeconds') is not None):
+        return False
     # The submitted Pod cannot select DNS or host identity. Allow only the
     # inert API defaults, not a resolver, service-link or FQDN mutation.
     if (spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or

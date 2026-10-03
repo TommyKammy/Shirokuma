@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-04: scheduling and lifecycle response controls (offline)
+
+Four disposable allowed dry-run responses added an unsubmitted topology spread
+constraint, readiness gate, resource overhead or active deadline. All passed
+before the guard and now fail closed as unknown with the original pending
+request retained. Empty API defaults still match. Focused observer suite passed
+(30 tests). Dedicated Colima observed Stopped; no admission, saved-request replay,
+retained report/volume/backup mutation or GitHub write. Fake responses cannot
+authenticate the API, cover arbitrary Pod mutations or establish acceptance.
+Roll back comparator/test only; preserve unknown requests and historical evidence.
+Original Vault sync pending outside the approved checkout.
+
 ## 2026-10-04: DNS and metadata response boundaries (offline)
 
 Six disposable allowed responses redirected DNS/hostname/service links and

@@ -12,6 +12,17 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-04: independent fixed-list boundary review (offline)
+
+Rechecked reported member identity, list envelope and projected-field boundaries
+in the fixed-profile doctor after the separate policy change. No new defect was
+established and no doctor behavior changed. `go test ./internal/cli -count=1`
+passed (831). Dedicated Colima observed Stopped; no API/Git read, reconciliation,
+retained data/backup mutation or GitHub write. Fake lists cannot establish
+remote authenticity, atomic inventory, strict admission or acceptance. No
+runtime rollback; preserve saved evidence. Original Vault sync pending outside
+the approved checkout.
+
 ## 2026-10-04: independent inventory identity review (offline)
 
 Reviewed the current fixed-list envelope and member identity checks in

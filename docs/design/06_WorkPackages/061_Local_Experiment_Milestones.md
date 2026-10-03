@@ -12,6 +12,26 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: policy scheduling/lifecycle and independent GitOps review (offline)
+
+WP-L2-POL-001: four disposable allowed responses with added topology spread,
+readiness gate, overhead or active deadline passed before repair and now fail
+closed with the original request pending. Empty API defaults still match;
+focused observer suite passed (30). Independently reviewed WP-L0-GITOPS-001's
+fixed-list identity/envelope boundaries without finding another defect;
+`go test ./internal/cli -count=1` passed (831). Dedicated Colima observed
+Stopped; no live API/Git/admission, reconciliation, unknown-request replay,
+retained report/volume/backup mutation or GitHub write. Offline checks cannot
+authenticate remote state, prove full Pod mutation coverage or atomic inventory,
+or establish strict admission/operator acceptance. Roll back only the policy
+comparator/test if needed, preserving pending and saved evidence. Original
+Vault sync pending outside the approved checkout. After both increments,
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. The initial
+focused command used an incorrect test class; the corrected test reproduced
+four expected failures before repair, then the full observer suite passed.
+These checks were offline, not live acceptance.
+
 ## 2026-10-04: independent GitOps fixed-inventory review (offline)
 
 WP-L0-GITOPS-001: reviewed fixed-list envelope and member identity checks

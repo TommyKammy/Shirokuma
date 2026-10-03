@@ -213,6 +213,31 @@ class ObserverTests(unittest.TestCase):
         kube.respond=defaults
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_add_scheduling_or_lifecycle_controls(self):
+        for changes in ({'topologySpreadConstraints':[{'maxSkew':1,'topologyKey':'zone',
+                            'whenUnsatisfiable':'DoNotSchedule','labelSelector':{}}]},
+                        {'readinessGates':[{'conditionType':'example.test/Ready'}]},
+                        {'overhead':{'cpu':'1'}}, {'activeDeadlineSeconds':10}):
+            with self.subTest(changes=changes):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['spec'].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaults(body):
+            altered=copy.deepcopy(body)
+            altered['spec'].update(topologySpreadConstraints=[], readinessGates=[], overhead={})
+            return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+        kube.respond=defaults
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_cannot_redirect_dns_or_hostname(self):
         for changes in ({'dnsPolicy':'None'},
                         {'dnsConfig':{'nameservers':['127.0.0.1']}},
