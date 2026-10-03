@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.136"
+version: "5.137"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: condition timestamp and independent FinOps review (offline)
+
+WP-L0-GITOPS-001: an unrelated condition's malformed/null reported transition
+time was accepted before repair; canonical reported RFC3339 timestamps are now
+required, while omission and valid offsets remain compatible. Focused and full
+Go tests (841) and vet passed. Independently reviewed WP-L6-FIN-001 direct
+history selection, digest/order, output bounds and per-report storage scope;
+no further defect or FinOps behavior change; 181 tests passed (seven Linux-only
+skips).
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed; the local
+suite's synthetic failure-path output is not a live runtime observation.
+Dedicated Colima read-only observed Stopped; no live API/Git,
+reconciliation, collection, unknown-request replay, retained report/volume/
+backup mutation or GitHub write. AgentHouse usage remains `null / NOT_MEASURED`.
+Offline fixtures cannot authenticate producers, establish atomic inventory,
+exercise Linux-only fixtures, measure current usage, clear strict admission or
+establish operator acceptance. Roll back only the GitOps reader/test if needed;
+no FinOps runtime rollback. Preserve saved evidence. Original Vault sync
+pending outside the approved checkout.
 
 ## 2026-10-04: member UID regression and separate FinOps check (offline)
 

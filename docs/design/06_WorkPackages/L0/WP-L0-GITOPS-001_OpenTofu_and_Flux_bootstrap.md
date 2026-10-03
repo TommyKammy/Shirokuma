@@ -5,12 +5,26 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.93"
+version: "0.94"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: reported condition transition time (offline)
+
+An unrelated member's condition with a null, empty or invalid reported
+`lastTransitionTime` passed the complete-list check. A disposable negative
+failed before repair. Reported times now require a canonical field and a
+parseable RFC3339 instant; omitted projected fields and valid offset times
+remain compatible. Focused CLI and full Go tests (841) and vet passed.
+Dedicated Colima was read-only observed Stopped; no live API/Git,
+reconciliation, retained data/backup change or GitHub write. This verifies
+only local response consistency, not producer identity, atomic inventory,
+strict admission or operator acceptance. Roll back the reader/test only if
+necessary, preserving historical evidence. Original Vault sync pending
+outside the approved checkout.
 
 ## 2026-10-04: obscured unrelated member UID regression (offline)
 

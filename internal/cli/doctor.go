@@ -573,13 +573,25 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			if string(condition) == "null" {
 				return true // A null entry cannot describe a condition.
 			}
-			if !localInventoryCanonicalFields(condition, []string{"type", "status", "observedGeneration"}) {
+			if !localInventoryCanonicalFields(condition, []string{"type", "status", "observedGeneration", "lastTransitionTime"}) {
 				return true
 			}
 			var fields map[string]json.RawMessage
 			if err := json.Unmarshal(condition, &fields); err != nil ||
-				localInventoryNullFields(fields, []string{"type", "status", "observedGeneration"}) {
+				localInventoryNullFields(fields, []string{"type", "status", "observedGeneration", "lastTransitionTime"}) {
 				return true
+			}
+			// Even an unrelated condition's reported transition is a lifecycle
+			// claim. Do not mistake malformed or null times for an omitted projection.
+			if rawTime, present := fields["lastTransitionTime"]; present {
+				var timestamp string
+				if err := json.Unmarshal(rawTime, &timestamp); err != nil ||
+					!localDeletionTimestamp.MatchString(timestamp) {
+					return true
+				}
+				if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
+					return true
+				}
 			}
 			var shape struct {
 				Type   string `json:"type"`
