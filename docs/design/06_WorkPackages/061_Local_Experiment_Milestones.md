@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.87"
+version: "5.88"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: offline lineage failure explanations
+
+WP-L5-LINEAGE-001 now checks two independent saved explanations: an incomplete
+inventory names its listing failure/change, and unknown edges name their unknown
+observation. Disposable negative reports rendered before repair; focused lineage
+134 tests and `make verify-local-experiment` passed after repair (the latter
+includes focused regression suites). The dedicated Colima VM was read-only
+observed stopped. No VM start, live catalog, retained report/source/volume/backup
+mutation, unknown-request replay or GitHub write. Logs including the expected
+negative failures and passing checks are private under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-042/`.
+These saved-claim checks cannot authenticate producers, prove atomicity, whole-
+catalog/column coverage or operator acceptance. Roll back renderer/tests alone,
+preserving historical evidence and the stopped VM. Original Vault sync pending
+outside the noninteractive checkout.
 
 ## 2026-10-04: offline lineage completion and FinOps selection shape
 

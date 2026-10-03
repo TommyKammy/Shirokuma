@@ -36,7 +36,8 @@ def report(runs=None, unrecognized=0):
     return {'schema_version': 1, 'observed_at': '2026-09-17T07:30:00.000000Z',
         'scope': 'verified-historical-data-plan-lineage',
         'observation': {'status': 'incomplete' if counts['unknown'] or not source_stable else 'complete',
-            'source_stable': source_stable, 'metadata_stable': None if not eligible or counts['unknown'] else True, 'reason_codes': []},
+            'source_stable': source_stable, 'metadata_stable': None if not eligible or counts['unknown'] else True,
+            'reason_codes': ['UNKNOWN_EXPECTED_EDGES'] if counts['unknown'] else []},
         'inventory': {'entries': len(runs) + unrecognized, 'uuid_runs': len(runs), 'eligible': eligible, 'complete': True,
             **{state: sum(item['source_status'] == state for item in runs)
                for state in ('valid', 'failed', 'incomplete', 'invalid')}, 'unrecognized_entries': unrecognized},
@@ -89,6 +90,16 @@ class CoverageRenderTests(unittest.TestCase):
         for status in ('登録を確認', '欠落', '競合', '不明'):
             self.assertIn(status, ''.join(document.text))
 
+    def test_unknown_edges_require_saved_observation_reason(self):
+        value = report([run(1, ('unknown', 'unknown'), source_status='incomplete')])
+        value['observation']['source_stable'] = False
+        value['runs'][0]['source_sha256_after'] = None
+        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_UNKNOWN_REASON'):
+            render(value)
+        value['observation']['reason_codes'].append('UNKNOWN_EXPECTED_EDGES')
+        self.assertIn('登録率 算出しない', render(value))
+
     def test_zero_denominator_is_not_zero_or_full_coverage(self):
         html = render(report([]))
         self.assertIn('集計対象なし', html)
@@ -105,6 +116,15 @@ class CoverageRenderTests(unittest.TestCase):
                 render(value)
             value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
             self.assertIn('観測未完了', render(value))
+
+    def test_partial_inventory_requires_saved_inventory_failure_reason(self):
+        value = report([])
+        value['inventory']['complete'] = False
+        value['observation'].update(status='incomplete', source_stable=False, reason_codes=[])
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_INVENTORY_REASON'):
+            render(value)
+        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
+        self.assertIn('保存証跡の一覧取得は未完了', render(value))
 
     def test_zero_eligible_catalog_stability_is_unobserved(self):
         for stable in (True, False):
@@ -238,6 +258,7 @@ class CoverageRenderTests(unittest.TestCase):
             edge.update(status='unknown', reason_code='SOURCE_INVENTORY_CHANGED')
         value['coverage'].update(present=0, unknown=2, known=0, rate=None,
                                  observation_rate=0.0, complete=False)
+        value['observation']['reason_codes'].append('UNKNOWN_EXPECTED_EDGES')
         self.assertIn('保存証跡の一覧取得は未完了', render(value))
 
     def test_known_edge_reason_cannot_contradict_saved_status(self):
@@ -254,7 +275,7 @@ class CoverageRenderTests(unittest.TestCase):
         value['inventory']['complete'] = False
         value['observation']['status'] = 'incomplete'
         value['observation']['source_stable'] = False
-        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_CHANGED']
+        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_CHANGED', 'UNKNOWN_EXPECTED_EDGES']
         for edge in value['runs'][0]['edges']:
             edge.update(status='unknown', reason_code='SOURCE_INVENTORY_CHANGED')
         value['coverage'].update(present=0, unknown=2, known=0, rate=None,
@@ -267,7 +288,7 @@ class CoverageRenderTests(unittest.TestCase):
     def test_incomplete_inventory_cannot_claim_stable_source_population(self):
         value = report()
         value['inventory']['complete'] = False
-        value['observation'].update(status='incomplete', reason_codes=['SOURCE_INVENTORY_CHANGED'])
+        value['observation'].update(status='incomplete', reason_codes=['SOURCE_INVENTORY_CHANGED', 'UNKNOWN_EXPECTED_EDGES'])
         for edge in value['runs'][0]['edges']:
             edge.update(status='unknown', reason_code='SOURCE_INVENTORY_CHANGED')
         value['coverage'].update(present=0, unknown=2, known=0, rate=None,

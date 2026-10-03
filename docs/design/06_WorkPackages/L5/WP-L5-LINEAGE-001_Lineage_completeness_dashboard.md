@@ -5,12 +5,29 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.53"
+version: "1.54"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: saved inventory and unknown-edge explanations (offline)
+
+Two independent direct-render claims now require the collector's saved
+explanation: an incomplete inventory needs `SOURCE_INVENTORY_CHANGED` or
+`SOURCE_INVENTORY_UNAVAILABLE`, and unknown expected edges need
+`UNKNOWN_EXPECTED_EDGES`. Disposable zero-run partial-inventory and eligible
+unknown-edge negatives rendered without those explanations before repair.
+Legitimate explained partial/unknown observations remain displayable; the
+focused lineage suite and local verification passed after fixture updates.
+The dedicated VM was observed stopped; no live catalog, saved source/report,
+volume or backup mutation, or replay. This checks saved internal consistency,
+not producer authenticity, atomicity, whole-catalog/column coverage or operator
+acceptance. Roll back these two renderer checks and tests only; preserve archived
+reports. Private test output is under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-042/`.
+Original Vault synchronization remains pending outside the approved checkout.
 
 ## 2026-10-04: incomplete saved observation needs an explanation (offline)
 

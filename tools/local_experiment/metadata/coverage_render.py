@@ -207,6 +207,10 @@ def _validate(report):
     for key in ('entries', 'uuid_runs', 'eligible', 'valid', 'failed', 'incomplete', 'invalid', 'unrecognized_entries'):
         _count(inventory.get(key))
     _require(type(inventory.get('complete')) is bool, 'INVALID_INVENTORY_COMPLETENESS')
+    _require(inventory['complete'] or
+             any(code in observation['reason_codes'] for code in
+                 ('SOURCE_INVENTORY_CHANGED', 'SOURCE_INVENTORY_UNAVAILABLE')),
+             'INCONSISTENT_INVENTORY_REASON')
     _require(inventory['complete'] or not observation['source_stable'],
              'INCONSISTENT_SOURCE_STABILITY')
     _require(inventory['eligible'] != 0 or observation['metadata_stable'] is None,
@@ -309,6 +313,8 @@ def _validate(report):
              'INCONSISTENT_SOURCE_STABILITY')
     denominator = eligible * 2
     known = denominator - counts['unknown']
+    _require(not counts['unknown'] or 'UNKNOWN_EXPECTED_EDGES' in observation['reason_codes'],
+             'INCONSISTENT_UNKNOWN_REASON')
     # A changed catalog observation or unknown target always leaves at least
     # one expected edge unknown; it cannot yield fully known coverage.
     _require(observation['metadata_stable'] is not False or counts['unknown'] > 0,
