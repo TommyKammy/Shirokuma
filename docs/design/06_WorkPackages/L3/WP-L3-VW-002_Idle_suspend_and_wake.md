@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.91"
+version: "0.92"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: bare target-hint headers on private RPC (offline)
+
+The fixed one-request Unix transition now refuses bare `X-Original` and
+`X-Rewrite`, alongside the suffixed families. Test-owned complete requests
+reached the handler before repair; after repair they receive 400 without a
+journal or handler call. The focused Warehouse lifecycle suite passed. No VM
+start, archived UUID replay, live backend/SQL or retained session/backup
+mutation. This does not authenticate the peer independently, prove caller
+receipt, restart recovery or operator acceptance. Roll back only this guard
+and fixture, preserve sessions; original Vault synchronization remains pending
+outside this checkout.
 
 ## 2026-10-04: target-hint families on private RPC (offline)
 

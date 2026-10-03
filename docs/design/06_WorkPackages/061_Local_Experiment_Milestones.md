@@ -5,12 +5,35 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.60"
+version: "5.61"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: catalog cleanup type failures and bare RPC target hints (offline)
+
+WP-L5-LINEAGE-001 bounds `TypeError`/`ValueError` from cleanup of a thrown
+exact-path 404: timely failures are unavailable, late failures deadline,
+not missing evidence. Independently WP-L3-VW-002 refuses bare `X-Original` and
+`X-Rewrite` before journal/dispatch. Both disposable negatives failed before
+repair and focused lineage (108 tests) and Warehouse suites (78 + 105 + 16 +
+22 + 15 tests) passed after repair. Read-only `colima list` showed the
+dedicated VM stopped. `make verify-local-experiment`, `make
+verify-design-context` (89 documents) and `git diff --check` passed; broader
+private logs are in the same attempt directory. An intervening formatting edit
+introduced a test import `IndentationError`; the failed log is retained, the
+indentation was corrected, and both focused Warehouse and full local checks
+passed again. No VM start, live
+catalog/backend/SQL, archived UUID
+replay, retained source/session/report/backup mutation or GitHub write. These
+offline checks do not authenticate producers or peers, prove atomicity,
+caller receipt, restart recovery, whole-catalog/column lineage or operator
+acceptance. Roll back only these independent guards/fixtures, preserving
+saved evidence and the stopped VM. Private focused output is under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-025/`.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: catalog URL value and private RPC target-hint families (offline)
 

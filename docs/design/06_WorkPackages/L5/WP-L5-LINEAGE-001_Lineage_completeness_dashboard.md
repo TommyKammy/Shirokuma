@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.36"
+version: "1.37"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: catalog error cleanup type failures (offline)
+
+An injected exact-path 404 closing with `TypeError` or `ValueError` after
+closing its stream formerly leaked a raw exception. Cleanup now reports
+`API_UNAVAILABLE` if timely, `API_DEADLINE` if late, and never promotes the
+404 to missing evidence. The disposable negatives failed before repair; 108
+focused tests passed after repair. No live catalog/login, VM start, retained
+source/report/backup change or replay. This cannot authenticate the producer,
+prove atomic or whole-catalog/column coverage, or grant operator acceptance.
+Roll back the cleanup guard/test only; preserve saved evidence. Original Vault
+sync remains pending outside this checkout.
 
 ## 2026-10-04: invalid final URL value (offline)
 

@@ -1574,17 +1574,19 @@ class ReadOnlyClientTests(unittest.TestCase):
                 super().close()
                 if self.late:
                     client.deadline = time.monotonic() - 1
-                raise OSError('private response close failure')
+                raise self.failure('private response close failure')
 
-        for late, expected in ((False, 'API_UNAVAILABLE'), (True, 'API_DEADLINE')):
-            with self.subTest(late=late):
-                error = BrokenClose(C.URL + path, 404, 'missing', {}, io.BytesIO(b'private'))
-                error.late = late
-                client.deadline = time.monotonic() + 10
-                with patch.object(client.opener, 'open', side_effect=error):
-                    with self.assertRaisesRegex(C.CoverageError, expected):
-                        client.request('GET', path)
-                self.assertTrue(error.fp is None or error.fp.closed)
+        for failure in (OSError, ValueError, TypeError):
+            for late, expected in ((False, 'API_UNAVAILABLE'), (True, 'API_DEADLINE')):
+                with self.subTest(failure=failure, late=late):
+                    error = BrokenClose(C.URL + path, 404, 'missing', {}, io.BytesIO(b'private'))
+                    error.late = late
+                    error.failure = failure
+                    client.deadline = time.monotonic() + 10
+                    with patch.object(client.opener, 'open', side_effect=error):
+                        with self.assertRaisesRegex(C.CoverageError, expected):
+                            client.request('GET', path)
+                    self.assertTrue(error.fp is None or error.fp.closed)
 
     def test_late_returned_http_status_is_deadline_not_response_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'

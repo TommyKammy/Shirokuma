@@ -383,7 +383,8 @@ class SessionRPC:
             # Refuse the whole forwarding namespace, not just the currently
             # recognized proxy fields: an unrecognized variant must not carry
             # a second authority or target alongside this fixed Unix request.
-            require(name != b'x-forwarded' and not name.startswith(b'x-forwarded-') and
+            require(name not in (b'x-forwarded', b'x-original', b'x-rewrite') and
+                    not name.startswith(b'x-forwarded-') and
                     not name.startswith((b'x-original-', b'x-rewrite-')) and
                     name not in headers and name not in
                       (b'transfer-encoding', b'expect', b'upgrade', b'trailer',

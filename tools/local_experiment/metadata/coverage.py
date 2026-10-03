@@ -530,7 +530,7 @@ class ReadOnlyClient:
             finally:
                 try:
                     error.close()
-                except (OSError, RuntimeError):
+                except (OSError, RuntimeError, TypeError, ValueError):
                     # A failed cleanup is not a reliable missing-object read;
                     # suppress transport details and keep the deadline first.
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
