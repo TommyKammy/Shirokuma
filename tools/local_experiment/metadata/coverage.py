@@ -412,7 +412,11 @@ class ReadOnlyClient:
                         require(all(type(key) is str for key in headers), 'API_RESPONSE_INVALID')
                         return [value for key, value in headers.items() if key.lower() == name.lower()]
                     require(callable(getattr(headers, 'get_all', None)), 'API_RESPONSE_INVALID')
-                    return headers.get_all(name, [])
+                    try:
+                        return headers.get_all(name, [])
+                    except TypeError:
+                        require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                        raise CoverageError('API_RESPONSE_INVALID') from None
 
                 lengths = field('Content-Length')
                 transfers = field('Transfer-Encoding')
@@ -516,6 +520,9 @@ class ReadOnlyClient:
             except (OSError, RuntimeError):
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 raise CoverageError('API_UNAVAILABLE') from None
+            except TypeError:
+                require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                raise CoverageError('API_RESPONSE_INVALID') from None
             finally:
                 try:
                     error.close()

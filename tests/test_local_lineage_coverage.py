@@ -1405,6 +1405,56 @@ class ReadOnlyClientTests(unittest.TestCase):
                 self.client.request('GET', path)
         self.assertTrue(stream.closed)
 
+    def test_catalog_header_accessor_failure_is_bounded_and_closes_response(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        client = self.client
+
+        class BrokenHeaders:
+            def get_all(self, name, default):
+                if name == 'Content-Length':
+                    raise TypeError('uninspectable header')
+                return default
+
+        for late in (False, True):
+            with self.subTest(late=late):
+                class Headers(BrokenHeaders):
+                    def get_all(self, name, default):
+                        if late:
+                            client.deadline = time.monotonic() - 1
+                        return super().get_all(name, default)
+
+                client.deadline = time.monotonic() + 10
+                response = Response(b'{"id":1}')
+                response.headers = Headers()
+                with patch.object(client.opener, 'open', return_value=response):
+                    with self.assertRaisesRegex(C.CoverageError,
+                                                'API_DEADLINE' if late else 'API_RESPONSE_INVALID'):
+                        client.request('GET', path)
+                self.assertTrue(response.closed)
+
+    def test_http_error_header_accessor_failure_is_not_missing_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        client = self.client
+
+        class BrokenHeaders:
+            def get_all(self, name, default):
+                if late:
+                    client.deadline = time.monotonic() - 1
+                raise TypeError('uninspectable header')
+
+        for late in (False, True):
+            with self.subTest(late=late):
+                client.deadline = time.monotonic() + 10
+                stream = io.BytesIO(b'private')
+                error = urllib.error.HTTPError(C.URL + path, 404, 'missing', BrokenHeaders(), stream)
+                with patch.object(client.opener, 'open', side_effect=error):
+                    with self.assertRaisesRegex(C.CoverageError,
+                                                'API_DEADLINE' if late else 'API_RESPONSE_INVALID'):
+                        client.request('GET', path)
+                self.assertTrue(stream.closed)
+
     def test_noninteger_http_status_cannot_be_catalog_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

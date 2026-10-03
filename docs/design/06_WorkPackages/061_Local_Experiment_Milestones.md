@@ -4,13 +4,32 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-03
-version: "5.57"
+updated: 2026-10-04
+version: "5.58"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: failing catalog headers and method hints (offline)
+
+WP-L5-LINEAGE-001 classifies a callable `get_all` raising `TypeError` on a
+returned response or thrown 404 as invalid (or deadline if late), closing
+both streams; it never promotes that 404 to missing evidence. Separately,
+WP-L3-VW-002 refuses `X-HTTP-Method` and `X-Original-Method` before the private
+Unix transition reaches its handler/journal. Disposable negatives failed
+before repair. Focused lineage (107 tests), Warehouse (78 + 105 + 16 + 22 + 15
+tests), `make verify-local-experiment`, `make verify-design-context` (89
+documents), and `git diff --check` passed; passing logs are private under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-022/`. Read-only
+`colima list` showed the dedicated VM stopped. No VM start, live catalog,
+backend/SQL, archived request replay, retained source/session/report/backup
+mutation or GitHub write. Offline fixtures cannot authenticate producers or
+peers, prove atomicity, caller receipt, owner restart recovery, whole-catalog/
+column lineage or operator acceptance. Roll back only these independent
+guards/tests, preserving saved evidence and the stopped VM. Original Vault
+synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-04: catalog error header accessor and legacy forwarding (offline)
 

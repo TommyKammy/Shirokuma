@@ -4,13 +4,24 @@ doc_id: "WP-L3-VW-002"
 title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-03
-version: "0.88"
+updated: 2026-10-04
+version: "0.89"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: additional private RPC method hints (offline)
+
+The fixed one-request Unix transition now refuses `X-HTTP-Method` and
+`X-Original-Method` as well as existing override fields. Two test-owned
+complete POSTs reached the handler before repair and are now rejected before
+journaling or dispatch; focused Warehouse suites passed. No VM start, archived
+UUID replay, live backend/SQL or retained session/backup mutation. This does
+not prove peer identity beyond the existing UID check, caller receipt or owner
+restart recovery. Roll back only the guard/fixture, preserve saved sessions;
+original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: legacy private forwarding field (offline)
 

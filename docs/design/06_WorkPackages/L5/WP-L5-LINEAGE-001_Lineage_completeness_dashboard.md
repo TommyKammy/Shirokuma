@@ -4,13 +4,25 @@ doc_id: "WP-L5-LINEAGE-001"
 title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-03
-version: "1.33"
+updated: 2026-10-04
+version: "1.34"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: failing catalog header accessors (offline)
+
+Callable but failing `get_all` on a returned catalog response or thrown 404
+formerly leaked `TypeError`. Test-owned timely failures now become
+`API_RESPONSE_INVALID`, late failures `API_DEADLINE`; both streams close, and a
+404 with uninspectable headers is not missing evidence. Disposable negatives
+failed before repair; 107 focused tests passed afterward. No VM start, real
+catalog/login, retained source/report/backup change or replay. This does not
+authenticate a producer or establish atomic, whole-catalog or column coverage.
+Roll back only these accessor guards/tests, keeping saved evidence. Original
+Vault sync remains pending outside this noninteractive checkout.
 
 ## 2026-10-04: unusable catalog error header accessor (offline)
 
