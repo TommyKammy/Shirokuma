@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.62"
+version: "4.63"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: explicit null inventory fields and invisible list versions (offline)
+
+Two independent read-only increments. WP-L0-GITOPS-001 rejects explicitly null list resource versions and remaining-item counts in fixed-profile controller/source and Lakehouse inventories; missing optional fields stay compatible. WP-L3-VW-002 rejects zero-width/control characters and over-1024-byte UTF-8 versions in metadata-only scoped lists. Isolated negative tests reproduced prior acceptance; `go test ./internal/cli -count=1` (770 passed), `go vet ./...`, `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed after repair. Dedicated Colima read-only status was stopped; no VM start, actual API/SQL, reconciliation, owner operation, unknown-request replay or retained data/backup mutation. These fake response checks do not authenticate API/Git identity, prove atomicity or historical cleanup, satisfy strict publication admission or establish production/operator acceptance. Roll back only the readers/tests, preserving saved evidence and stopped VM. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: duplicate inventory keys and bounded list version (offline)
 

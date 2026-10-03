@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.36"
+version: "0.37"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: bounded visible list version (offline)
+
+The opt-in metadata-only scoped-list reader now rejects Unicode format/control characters in the projected resource version (including zero-width characters) and bounds its UTF-8 byte length rather than its character count. It still accepts valid opaque versions. A zero-width negative failed before repair; fake malformed/valid cases and `make test-local-warehouse-lifecycle` passed afterward. The dedicated Colima profile was observed stopped; no live API/template rendering, SQL, owner call, unknown-request replay, retained session or backup mutation. Reported metadata does not authenticate the API, make reads atomic, prove historical cleanup or establish production acceptance. Roll back the reader/test only, retaining the stopped VM and saved evidence. Original Vault handoff direct sync pending outside checkout.
 
 ## 2026-10-03: scoped-list resource version framing (offline)
 

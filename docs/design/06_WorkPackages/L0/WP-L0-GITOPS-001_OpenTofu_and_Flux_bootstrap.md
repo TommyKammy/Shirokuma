@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.31"
+version: "0.32"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: explicit null list fields (offline)
+
+Fixed-profile controller, Flux-resource and Lakehouse inventory reads now reject explicit null `metadata.resourceVersion` or `metadata.remainingItemCount`, rather than equating null with an omitted optional field. Omitted fields and bounded values remain compatible with older fixtures; an invalid controller response stops before reading source resources. Negative tests failed before repair and `go test ./internal/cli -count=1` (770 passed), `go vet ./...` and Warehouse focused tests passed afterward. Dedicated Colima was observed stopped; no VM start, live API/SQL, reconciliation, unknown-request replay, saved session or backup mutation. This is offline response consistency, not authenticated API/Git identity, atomic inventory, strict admission or operator/production acceptance. Roll back only the diagnostic reader/tests and preserve the stopped VM and evidence. Original Vault direct handoff sync pending outside checkout.
 
 ## 2026-10-03: duplicate JSON fields and bounded inventory versions (offline)
 

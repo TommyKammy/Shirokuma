@@ -871,6 +871,21 @@ func TestLocalFluxRejectsPaginatedInventories(t *testing.T) {
 }
 
 func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
+	for _, field := range []string{`"resourceVersion":null`, `"remainingItemCount":null`} {
+		for _, first := range []bool{true, false} {
+			responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
+			index := 1
+			if first {
+				index = 0
+			}
+			responses[index].output = strings.Replace(responses[index].output, `{"items":`, `{"metadata":{`+field+`},"items":`, 1)
+			runner := &fakeRunner{responses: responses}
+			check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true)
+			if check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete") || first && len(runner.calls) != 1 {
+				t.Fatalf("explicit null %s first=%v: %#v, calls=%v", field, first, check, runner.calls)
+			}
+		}
+	}
 	for _, field := range []string{`"metadata":null,`, `"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"  "},`, `"metadata":{"resourceVersion":"1 2"},`, `"metadata":{"resourceVersion":"1\n2"},`, `"metadata":{"resourceVersion":"` + strings.Repeat("x", 1025) + `"},`, `"apiVersion":"v2",`} {
 		for _, first := range []bool{true, false} {
 			responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
@@ -944,6 +959,14 @@ func TestLocalDoctorRejectsDuplicateInventoryFields(t *testing.T) {
 }
 
 func TestLocalWorkloadRejectsEmptyReportedListResourceVersion(t *testing.T) {
+	for _, field := range []string{`"resourceVersion":null`, `"remainingItemCount":null`} {
+		responses := localWorkloadResponses()
+		responses[0].output = strings.Replace(responses[0].output, `{"items":`, `{"metadata":{`+field+`},"items":`, 1)
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "incomplete") || checks[1].Status != "healthy" {
+			t.Fatalf("explicit null %s: %#v", field, checks)
+		}
+	}
 	for _, field := range []string{`"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"rv\tother"},`, `"metadata":{"resourceVersion":"` + strings.Repeat("x", 1025) + `"},`, `"metadata":null,`} {
 		for _, index := range []int{0, 1} {
 			responses := localWorkloadResponses()

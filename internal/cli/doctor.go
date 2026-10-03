@@ -186,6 +186,17 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 	if err := json.Unmarshal(raw, &envelope); err != nil || string(envelope.Metadata) == "null" || !localInventoryUniqueFields(raw) {
 		return true
 	}
+	if len(envelope.Metadata) != 0 {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(envelope.Metadata, &fields); err != nil {
+			return true
+		}
+		for _, key := range []string{"resourceVersion", "remainingItemCount"} {
+			if string(fields[key]) == "null" {
+				return true
+			}
+		}
+	}
 	return list.Items == nil || list.Metadata.Continue != "" ||
 		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
 		(list.Metadata.ResourceVersion != nil && (len(*list.Metadata.ResourceVersion) == 0 ||

@@ -283,7 +283,10 @@ class RuntimeStatusTests(TestCase):
         for raw in ('', 'v1\tList\t0\tINVALID\n', 'v1\tList\t0\tTRUNCATED\n', 'v1\tList\t1\tCOMPLETE\t42\n',
                      'v1\tList\t0\tCOMPLETE\t  \n', 'v1\tList\t0\tCOMPLETE\t42 43\n',
                      'v1\tList\t0\tCOMPLETE\t' + 'x' * 1025 + '\n',
-                     'v1\tList\t0\tCOMPLETE\t42\x00\n',
+                      'v1\tList\t0\tCOMPLETE\t42\x00\n',
+                      'v1\tList\t0\tCOMPLETE\t42\u200b\n',
+                      'v1\tList\t0\tCOMPLETE\t42\u00a0\n',
+                      'v1\tList\t0\tCOMPLETE\t' + '\u00e9' * 513 + '\n',
                      'v1\tList\t0\tCOMPLETE\t42\r\n', 'v1\tList\t0\tCOMPLETE\t42\n\r\n',
                      'v2\tList\t0\tCOMPLETE\n', 'discovery.k8s.io/v1\tList\t0\tCOMPLETE\n',
                     'v1\tPodList\t0\tCOMPLETE\n', 'v1\tList\t0\tCOMPLETE\nextra\n'):

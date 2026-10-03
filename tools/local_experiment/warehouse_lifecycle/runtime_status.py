@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import sys
 import time
+import unicodedata
 import uuid
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -124,8 +125,8 @@ class ReadOnlyKubernetes:
                             if kind == 'EndpointSliceList' else {('v1', 'List')})
         require(len(header) == 5 and tuple(header[:2]) in expected_headers and
                 header[3] == 'COMPLETE' and
-                0 < len(header[4]) <= 1024 and
-                all(not char.isspace() and ord(char) >= 33 and ord(char) != 127 for char in header[4]) and
+                 0 < len(header[4].encode('utf-8')) <= 1024 and
+                 all(not char.isspace() and not unicodedata.category(char).startswith('C') for char in header[4]) and
                 re.fullmatch(r'(0|[1-9][0-9]*)', header[2]) is not None and
                 int(header[2]) == len(lines) and len(lines) <= limit)
         return {'kind': kind, 'items': [row(line) for line in lines]}
