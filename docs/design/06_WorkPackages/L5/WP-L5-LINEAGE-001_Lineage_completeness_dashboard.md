@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.62"
+version: "1.63"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: excluded run cannot claim source verification (offline)
+
+Direct rendering rejects an `invalid` or initially `incomplete` saved run whose
+only verification result is `SOURCE_VERIFIED`. Both disposable contradictions
+rendered before the guard; focused lineage 147 tests pass after it. The
+collector emits this code only for initially eligible runs, so an excluded row
+cannot claim that successful verification. Dedicated Colima was observed
+Stopped; no catalog read, source collection, retained report or backup change.
+This is saved-claim consistency, not independent producer authentication or
+whole-catalog/column coverage. Stop using the direct renderer or revert this
+guard/test to roll back; retain historical evidence. Original Vault sync is
+pending outside this noninteractive checkout.
 
 ## 2026-10-04: excluded source needs a recorded verification result (offline)
 

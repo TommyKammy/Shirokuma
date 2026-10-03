@@ -152,6 +152,15 @@ class CoverageRenderTests(unittest.TestCase):
             value['runs'][0]['reason_codes'] = [reason]
             self.assertIn(reason, render(value))
 
+    def test_excluded_source_cannot_use_success_as_its_only_verification_result(self):
+        for status in ('invalid', 'incomplete'):
+            value = report([run(1, source_status=status, eligible=False)])
+            value['runs'][0]['reason_codes'] = ['SOURCE_VERIFIED']
+            with self.subTest(status=status), self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
+                render(value)
+            value['runs'][0]['reason_codes'] = ['SOURCE_INVALID' if status == 'invalid' else 'SUMMARY_MISSING']
+            self.assertIn('UNVERIFIED_SOURCE_RUNS', render(value))
+
     def test_valid_run_requires_its_saved_verification_explanation(self):
         value = report()
         value['runs'][0]['reason_codes'] = []

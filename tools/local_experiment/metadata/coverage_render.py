@@ -255,7 +255,11 @@ def _validate(report):
         # First verification records a result even for excluded runs; a bare
         # invalid/incomplete label cannot explain why evidence was excluded.
         _require(source not in ('invalid', 'incomplete') or run['reason_codes'],
-                 'INCONSISTENT_SOURCE_REASON')
+                  'INCONSISTENT_SOURCE_REASON')
+        # The collector only emits SOURCE_VERIFIED for an initially eligible
+        # source. A success code cannot explain exclusion of a run.
+        _require(run['eligible'] or 'SOURCE_VERIFIED' not in run['reason_codes'],
+                  'INCONSISTENT_SOURCE_REASON')
         # A valid source has passed the collector's first artifact verification;
         # aggregate stability alone cannot substitute for that per-run evidence.
         _require(not run['eligible'] or 'SOURCE_VERIFIED' in run['reason_codes'],

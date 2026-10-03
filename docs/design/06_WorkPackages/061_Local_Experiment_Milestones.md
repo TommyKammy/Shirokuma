@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.100"
+version: "5.101"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: excluded lineage success-code contradiction (offline)
+
+WP-L5-LINEAGE-001: two disposable excluded rows (`invalid`, initially
+`incomplete`) with only `SOURCE_VERIFIED` rendered before repair; direct
+rendering now refuses both. Focused lineage 147 tests passed. Dedicated Colima
+observed Stopped; no VM start, catalog read, collection, retained source/report
+or backup change, request replay or GitHub write. Internal saved consistency
+does not establish producer authenticity, atomicity, whole-catalog/column
+coverage or acceptance. Roll back the renderer guard/test only, preserving
+saved evidence. Original Vault synchronization pending outside this checkout.
 
 ## 2026-10-04: independent FinOps saved-history review (offline)
 
