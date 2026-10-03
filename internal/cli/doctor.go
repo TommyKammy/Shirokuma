@@ -183,14 +183,75 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 	var envelope struct {
 		Metadata json.RawMessage `json:"metadata"`
 	}
-	if err := json.Unmarshal(raw, &envelope); err != nil || string(envelope.Metadata) == "null" {
+	if err := json.Unmarshal(raw, &envelope); err != nil || string(envelope.Metadata) == "null" || !localInventoryUniqueFields(raw) {
 		return true
 	}
 	return list.Items == nil || list.Metadata.Continue != "" ||
 		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
-		(list.Metadata.ResourceVersion != nil && strings.TrimSpace(*list.Metadata.ResourceVersion) == "") ||
+		(list.Metadata.ResourceVersion != nil && (len(*list.Metadata.ResourceVersion) == 0 ||
+			len(*list.Metadata.ResourceVersion) > 1024 || strings.IndexFunc(*list.Metadata.ResourceVersion, func(r rune) bool {
+			return r < 33 || r == 127
+		}) >= 0)) ||
 		(list.Kind != "" && list.Kind != "List") ||
 		(list.APIVersion != "" && list.APIVersion != "v1")
+}
+
+// encoding/json accepts duplicate object members and keeps the later value.
+// A diagnostic inventory must not interpret two conflicting versions of an
+// identity, condition, or pagination field as a complete observation.
+func localInventoryUniqueFields(raw []byte) bool {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	var value func() bool
+	value = func() bool {
+		token, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		delim, ok := token.(json.Delim)
+		if !ok {
+			return true
+		}
+		switch delim {
+		case '{':
+			seen := make(map[string]struct{})
+			for decoder.More() {
+				key, err := decoder.Token()
+				if err != nil {
+					return false
+				}
+				name, ok := key.(string)
+				if !ok {
+					return false
+				}
+				if _, exists := seen[name]; exists {
+					return false
+				}
+				seen[name] = struct{}{}
+				if !value() {
+					return false
+				}
+			}
+		case '[':
+			for decoder.More() {
+				if !value() {
+					return false
+				}
+			}
+		default:
+			return false
+		}
+		end, err := decoder.Token()
+		closing := json.Delim('}')
+		if delim == '[' {
+			closing = ']'
+		}
+		return err == nil && end == closing
+	}
+	if !value() {
+		return false
+	}
+	_, err := decoder.Token()
+	return err == io.EOF
 }
 
 func newDoctorCommand(runner commandRunner) *cobra.Command {

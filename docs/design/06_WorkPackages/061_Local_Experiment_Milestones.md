@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.61"
+version: "4.62"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: duplicate inventory keys and bounded list version (offline)
+
+Milestone regression: `make verify-local-experiment` and `make verify-design-context` (89 documents) passed.
+
+WP-L0-GITOPS-001: two independent fixed-profile reader changes reject duplicate JSON object members (including nested metadata/status and escaped names) and reject explicitly reported list resource versions with whitespace/control characters or over 1024 bytes. Valid opaque bounded versions and omitted fixture fields pass; generic doctor unchanged. Focused `go test ./internal/cli -count=1` (770 passed), `go vet ./...`, `git diff --check` passed. Dedicated Colima read-only status: stopped; no VM start, live API/SQL, reconciliation, unknown-request replay, retained data or backup changes. Neither fake response validation nor green tests establish authenticated API/Git identity, atomic inventory, historical cleanup, strict publication admission or operator/production acceptance. Roll back local reader/test changes only; preserve saved evidence and stopped VM. Original Vault handoff direct sync pending outside checkout.
 
 ## 2026-10-03: Warehouse list version framing (offline)
 

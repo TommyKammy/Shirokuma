@@ -5,12 +5,18 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.30"
+version: "0.31"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: duplicate JSON fields and bounded inventory versions (offline)
+
+Milestone regression: `make verify-local-experiment` and `make verify-design-context` (89 documents) passed after the focused checks.
+
+Two independent fixed-profile diagnostic increments: controller, Flux-resource and Lakehouse workload lists now reject duplicate JSON object keys at any depth (including nested identities/status and escaped equivalent keys), rather than accepting the later decoded value as a complete inventory. An ambiguous controller response stops before the source read; no untrusted pagination token is echoed. Separately, explicitly reported list resource versions with embedded whitespace/control bytes or more than 1024 bytes are rejected; nonempty opaque bounded versions remain valid. Missing optional versions and the generic-profile doctor retain their previous behavior. Fake positives/negatives, `go test ./internal/cli -count=1` (770 passed), `go vet ./...`, and `git diff --check` passed. Dedicated Colima was read-only observed stopped; no VM start, actual API/SQL, reconciliation, unknown-request replay, retained session/volume or backup mutation. The diagnostics check decoded response shape, not API/Git authenticity, atomic inventory, strict admission, historical cleanup or production/operator acceptance. Roll back only these local checks/tests; preserve saved evidence and stopped VM. Original Vault handoff direct sync remains pending outside checkout.
 
 ## 2026-10-03: explicitly null diagnostic list metadata (offline)
 

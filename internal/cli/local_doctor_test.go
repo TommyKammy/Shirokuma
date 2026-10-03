@@ -871,7 +871,7 @@ func TestLocalFluxRejectsPaginatedInventories(t *testing.T) {
 }
 
 func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
-	for _, field := range []string{`"metadata":null,`, `"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"  "},`, `"apiVersion":"v2",`} {
+	for _, field := range []string{`"metadata":null,`, `"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"  "},`, `"metadata":{"resourceVersion":"1 2"},`, `"metadata":{"resourceVersion":"1\n2"},`, `"metadata":{"resourceVersion":"` + strings.Repeat("x", 1025) + `"},`, `"apiVersion":"v2",`} {
 		for _, first := range []bool{true, false} {
 			responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
 			index := 1
@@ -889,7 +889,7 @@ func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
 			}
 		}
 	}
-	for _, field := range []string{`"metadata":{"remainingItemCount":0},`, `"metadata":{"resourceVersion":"1234"},`, `"apiVersion":"v1",`} {
+	for _, field := range []string{`"metadata":{"remainingItemCount":0},`, `"metadata":{"resourceVersion":"1234"},`, `"metadata":{"resourceVersion":"opaque-v2"},`, `"apiVersion":"v1",`} {
 		responses := []fakeResponse{{output: strings.Replace(localControllerJSON(), `{"items":`, `{`+field+`"items":`, 1)}, {output: strings.Replace(localFluxJSON(), `{"items":`, `{`+field+`"items":`, 1)}}
 		if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true); check.Status != "informational" {
 			t.Fatalf("valid envelope %s rejected: %#v", field, check)
@@ -901,8 +901,50 @@ func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
 	}
 }
 
+func TestLocalDoctorRejectsDuplicateInventoryFields(t *testing.T) {
+	for _, replacement := range []string{
+		`{"items":[],"items":`,
+		`{"metadata":{"continue":"private-token"},"metadata":{},"items":`,
+	} {
+		for _, first := range []bool{true, false} {
+			responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
+			index := 1
+			if first {
+				index = 0
+			}
+			responses[index].output = strings.Replace(responses[index].output, `{"items":`, replacement, 1)
+			runner := &fakeRunner{responses: responses}
+			check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true)
+			if check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete") || strings.Contains(check.Summary, "private-token") {
+				t.Fatalf("duplicate field accepted: %#v", check)
+			}
+			if first && len(runner.calls) != 1 {
+				t.Fatalf("read source after ambiguous controller list: %v", runner.calls)
+			}
+		}
+	}
+	for _, replacement := range []string{
+		`"name":"seaweedfs","name":"seaweedfs"`,
+		`"status":{},"status":{`,
+	} {
+		responses := localWorkloadResponses()
+		if strings.Contains(replacement, `"name"`) {
+			responses[0].output = strings.Replace(responses[0].output, `"name":"seaweedfs"`, replacement, 1)
+		} else {
+			responses[0].output = strings.Replace(responses[0].output, `"status":{`, replacement, 1)
+		}
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "incomplete") {
+			t.Fatalf("nested duplicate accepted: %#v", checks)
+		}
+	}
+	if !localInventoryUniqueFields([]byte(`{"a":[{"x":1},{"x":2}],"b":null}`)) || localInventoryUniqueFields([]byte(`{"a":1,"\u0061":2}`)) {
+		t.Fatal("unique object scopes or escaped duplicate key not handled")
+	}
+}
+
 func TestLocalWorkloadRejectsEmptyReportedListResourceVersion(t *testing.T) {
-	for _, field := range []string{`"metadata":{"resourceVersion":""},`, `"metadata":null,`} {
+	for _, field := range []string{`"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"rv\tother"},`, `"metadata":{"resourceVersion":"` + strings.Repeat("x", 1025) + `"},`, `"metadata":null,`} {
 		for _, index := range []int{0, 1} {
 			responses := localWorkloadResponses()
 			responses[index].output = strings.Replace(responses[index].output, `{"items":`, `{`+field+`"items":`, 1)
