@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.09"
+version: "1.10"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: client deadline cannot be disabled by constructor input (offline)
+
+The read-only catalog client now refuses nonfinite, nonpositive, boolean or above-300-second timeout inputs before a login attempt. A disposable infinite-timeout negative previously constructed an unbounded client; a small positive timeout remains valid. Focused lineage and broader verification are recorded in Milestones. The default 300-second bound and existing one-login/get-only behavior are unchanged. No live API/login, VM start, retained credential/source/report/backup mutation. A client-side deadline does not authenticate catalog producers, make reads atomic or establish whole-catalog/column lineage or operator acceptance. Roll back the constructor guard/test only while retaining historical reports. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: response completion stays inside the catalog deadline (offline)
 

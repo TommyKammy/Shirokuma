@@ -400,12 +400,21 @@ class SessionRPC:
                 return deepcopy(prior['response']) if prior['response'] is not None else _uncertain(request)
             entry = {'request': request, 'state': 'pending', 'response': None, 'error_code': None}
             self._entries[request_id] = entry
+            stop_requested = False
+            if self._stop_callback is not None:
+                try:
+                    stop_requested = bool(self._stop_callback())
+                except BaseException:
+                    # A broken owner stop check cannot leave an unjournaled
+                    # request or authorize the handler to run.
+                    stop_requested = True
+                    self._fail('STOP_CALLBACK_FAILED')
             # accept() may return just before the TTL while its worker reaches
             # dispatch afterward. The serve-loop deadline alone cannot bound
             # admission of that already accepted connection.
             if (self._replay_until is not None or
                     time.monotonic() - self._started >= self.ttl_seconds or
-                    (self._stop_callback is not None and self._stop_callback())):
+                    stop_requested):
                 entry.update(state='rejected', response=_uncertain(request))
                 try:
                     self._persist()

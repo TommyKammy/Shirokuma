@@ -362,6 +362,8 @@ class ReadOnlyClient:
     touch. Proxy environment and redirects cannot select another destination.
     """
     def __init__(self, *, opener=None, state=STATE, timeout=300):
+        require(type(timeout) in (int, float) and math.isfinite(timeout) and 0 < timeout <= 300,
+                'API_DEADLINE')
         self.opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
         self.state, self.token = state, None
         self.deadline = time.monotonic() + timeout

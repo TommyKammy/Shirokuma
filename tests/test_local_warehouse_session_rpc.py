@@ -76,6 +76,21 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [('chill', request['request_id'])])
         self.assertEqual(S.project(self.rpc.journal_path.read_bytes(), self.token, request['request_id']), saved)
 
+    def test_failing_stop_callback_rejects_new_request_without_dispatch(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        request = self.request()
+        def broken_stop():
+            raise RuntimeError('disposable callback failure')
+        self.rpc._stop_callback = broken_stop
+        response = self.rpc._dispatch(request)
+        self.assertEqual(response['result'], 'unknown')
+        self.assertEqual(self.calls, [])
+        saved = S.project(self.rpc.journal_path.read_bytes(), self.token, request['request_id'])
+        self.assertEqual(saved['request_lookup']['recorded_result'], 'unknown')
+        self.assertEqual(self.rpc._entries[request['request_id']]['state'], 'rejected')
+        self.assertIn('STOP_CALLBACK_FAILED', self.rpc._error_codes)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.output = Path(self.temp.name).resolve()

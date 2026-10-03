@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.27"
+version: "5.28"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: owner stop failure and bounded catalog timeout (offline)
+
+WP-L3-VW-002: a test-owned stop callback raising during dispatch no longer strands a new UUID before a journal write; the uncertain rejection is durable, the handler is not invoked and the owner is stopped. WP-L5-LINEAGE-001: constructor inputs can no longer disable the bounded read-only catalog deadline with an infinite or greater-than-300-second timeout; a short positive timeout is accepted. Disposable negatives failed before repairs. `make test-local-warehouse-lifecycle`, `make test-local-lineage-coverage` (73 tests), `make verify-local-experiment` (rerun), `make verify-design-context` (89 documents), and `git diff --check` passed. The initial full verification hit the previously observed unchanged Warehouse saved-completion intermittency (`SAVED_COMPLETION_UNVERIFIED`); focused Warehouse and full verification passed on rerun without changing that test. Preserve both private logs under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-073/` and do not claim the intermittent failure was repaired. Read-only `colima list` showed the dedicated VM stopped; no VM start, live login/API/SQL, archived UUID replay, retained credential/source/session/report/backup mutation or GitHub write. These offline fixtures do not authenticate producer/backend state, prove caller delivery or atomicity, establish restart recovery, whole-catalog/column lineage or operator/production acceptance. Roll back the independent guards/tests only, preserving VM and retained evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: dispatch TTL and catalog response deadline (offline)
 

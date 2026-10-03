@@ -874,6 +874,12 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_deadline_cannot_be_disabled_by_invalid_timeout(self):
+        for timeout in (float('inf'), float('nan'), -1, 0, 301, True):
+            with self.subTest(timeout=timeout), self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                C.ReadOnlyClient(timeout=timeout)
+        self.assertGreater(C.ReadOnlyClient(timeout=0.01).deadline, time.monotonic())
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)

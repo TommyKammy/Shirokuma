@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.63"
+version: "0.64"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: stop callback failure at dispatch (offline)
+
+A disposable owner with an injected stop callback exception previously let the worker exit before journaling the new request, with no handler call or durable rejection. Dispatch now records an uncertain rejected response and stops the owner on callback failure; previously admitted operations still follow their existing drain path. The isolated negative failed before repair and the focused Warehouse suite passed afterward. Full verification initially hit the unchanged intermittent saved-completion test (`SAVED_COMPLETION_UNVERIFIED`); its failed log is retained, and focused and full reruns passed. No archived UUID replay, real backend/API/SQL, VM start or retained session/backup mutation. An uncertain saved response is not proof of caller delivery or independent backend state, and this does not establish restart recovery or operator acceptance. Roll back owner guard/test only, keeping saved evidence and stopped VM. Original Vault direct sync pending outside checkout; results in Milestones.
 
 ## 2026-10-03: TTL checked again at dispatch (offline)
 
