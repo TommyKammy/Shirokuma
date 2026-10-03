@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-03: collection path identity at return (offline)
+
+The final collection inventory check now compares the pathname entry's full directory identity with the opened descriptor and initial metadata. A disposable replacement reported at the final path lookup, after the earlier path check, previously returned the old inventory when the replacement had the same owner and mode; it now refuses `SOURCE_CHANGED`. The negative failed before repair. This is a bounded offline observation, not atomicity against a restoring actor or independent source/catalog provenance. No retained source, report, credential, backup or VM was changed; direct original Vault sync remains pending outside checkout. Revert only the reader/test change and retain historical reports. Verification and other gaps are recorded in Milestones.
+
 ## 2026-10-03: non-lossy catalog JSON (offline)
 
 The bounded read-only catalog client now rejects raw invalid UTF-8 and escaped lone surrogates anywhere in a response, including ignored fields/keys. Previously those could be decoded with replacement or carried as invalid Unicode into the evidence comparison. Disposable HTTP negatives failed before the guard; ordinary multibyte Unicode and surrogate-pair characters remain accepted. Malformed responses cannot become present/missing evidence; the existing observation path marks unavailable catalog reads unknown. No live login/GET, VM start, saved credential/source/report or backup mutation. This is response shape validation, not authenticated API/producer provenance or atomic catalog observation; whole-catalog/column lineage and operator acceptance remain open. Roll back decoder and tests only, retaining historical reports. Direct original Vault sync pending outside checkout; checks in Milestones.

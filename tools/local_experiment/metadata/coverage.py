@@ -316,9 +316,8 @@ def listing(root):
         _current_source_path(root, fd)
         final = os.fstat(fd)
         current = root.lstat()
-        require(_source_directory_identity(final) == _source_directory_identity(initial) and
-                final.st_uid == current.st_uid and
-                stat.S_IMODE(final.st_mode) == stat.S_IMODE(initial.st_mode) == stat.S_IMODE(current.st_mode),
+        require(_source_directory_identity(final) == _source_directory_identity(initial) ==
+                _source_directory_identity(current) and stat.S_ISDIR(current.st_mode),
                 'SOURCE_CHANGED')
         return names
     finally:

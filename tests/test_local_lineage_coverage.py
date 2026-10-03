@@ -480,6 +480,24 @@ class CoverageTests(unittest.TestCase):
         finally:
             self.root.chmod(0o700)
 
+    def test_collection_rejects_path_replacement_after_path_check(self):
+        self.add_run()
+        alternate = self.root.with_name('alternate-data-plans')
+        alternate.mkdir(mode=0o700)
+        actual_lstat = Path.lstat
+        calls = 0
+        def path_stat(path, *args, **kwargs):
+            nonlocal calls
+            if path == self.root:
+                calls += 1
+                if calls > 2:
+                    return actual_lstat(alternate)
+            return actual_lstat(path, *args, **kwargs)
+        with patch.object(C.Path, 'lstat', path_stat):
+            with self.assertRaisesRegex(C.CoverageError, 'SOURCE_CHANGED'):
+                C.listing(self.root)
+        self.assertGreater(calls, 1)
+
     def test_collection_rejects_same_name_run_replacement(self):
         path = self.add_run()
         original = C._bounded_names

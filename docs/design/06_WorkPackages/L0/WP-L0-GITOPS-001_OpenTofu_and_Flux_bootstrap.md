@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-03: explicit null inventory regression (offline)
+
+The fixed-profile list reader already rejects `items:null` and permits an empty `items:[]` as a complete list envelope; an isolated regression now pins both behaviors without changing the diagnostic implementation. An empty list does not imply healthy fixed workloads. Go CLI tests (823 passed) and vet passed; combined verification is in Milestones. The dedicated VM was observed stopped without starting it or reading live API/Git/SQL, reconciling or changing retained data. Fake list framing cannot authenticate API/Git, establish actual rollout, strict admission or operator acceptance. Roll back only the new test if necessary, retaining VM and evidence. Direct original Vault sync pending outside checkout.
+
 ## 2026-10-03: reported DNS name grammar (offline)
 
 The fixed-profile complete-list reader now applies the existing Kubernetes DNS subdomain/label validator to any explicitly reported item name/namespace, including unrelated members; length alone previously admitted punctuation, uppercase and overlong labels. A disposable invalid-name negative failed before repair; dotted valid resource names and valid namespace labels pass. Older resource-specific malformed-name and empty-name fixtures now fail at the earlier incomplete-list boundary; generic doctor is unchanged. Read-only Colima status was stopped; no live API/Git, VM start, reconciliation or retained data/backup mutation. This does not authenticate API/Git, provide atomic inventory or historical cleanup, clear strict admission or establish operator acceptance. Roll back inventory guard/tests only, preserving VM/evidence. Original Vault direct sync pending outside checkout; checks in Milestones.
