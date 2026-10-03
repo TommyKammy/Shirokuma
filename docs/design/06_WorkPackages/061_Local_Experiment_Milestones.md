@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.144"
+version: "5.145"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: incomplete policy inventory and independent GitOps review (offline)
+
+WP-L2-POL-001: a test-owned first page of zero LimitRanges with a nonempty
+continuation token passed the fixed-candidate baseline. The negative failed
+before repair. The observer now rejects incomplete/malformed list metadata
+before sending any dry-run. Focused observer suite passed (45 tests).
+Independently reviewed WP-L0-GITOPS-001's complete-list continuation checks;
+83 focused Go inventory/list tests passed, no GitOps change justified.
+Dedicated Colima read-only observed Stopped; no live admission, Git/API read,
+reconciliation, retained request/report/volume/backup change or GitHub write.
+Offline fake responses cannot authenticate a producer, establish an atomic
+inventory or operator acceptance. Roll back only the policy baseline/test if
+needed, leaving pending intents and saved evidence untouched. Original Vault
+sync pending outside this approved checkout.
+After these increments, `make verify-local-experiment`,
+`make verify-design-context` (89 documents), `make check-no-secret-filenames` and
+`git diff --check` passed. The local suite includes synthetic failure output,
+not live admission evidence.
 
 ## 2026-10-04: fixed policy corpus progress and independent GitOps review (offline)
 

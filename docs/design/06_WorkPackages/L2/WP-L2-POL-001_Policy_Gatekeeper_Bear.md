@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.35"
+version: "0.36"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: incomplete LimitRange inventory refused (offline)
+
+A test-owned first page with zero LimitRanges and a nonempty continuation
+token was incorrectly treated as proof of an empty namespace inventory. The
+negative failed before repair. The fixed-candidate baseline now requires an
+absent or empty-string continuation token and refuses malformed metadata; no
+dry-run is sent on failure. Focused observer tests (45) passed. This only
+validates the local fake list contract, not an authenticated or atomic live
+inventory; LimitRange policy acceptance and operator acceptance remain open.
+Dedicated Colima was observed Stopped; no retained requests, volumes or backups
+were changed. Roll back the baseline check/test only if needed, preserving
+previous pending requests. Original Vault synchronization pending outside the
+approved checkout.
 
 ## 2026-10-04: fixed-corpus progress receipt failure (offline)
 

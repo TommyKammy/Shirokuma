@@ -306,7 +306,10 @@ class CandidateObserver:
                 and metadata.get('deletionTimestamp') is None, 'NAMESPACE_IDENTITY_INVALID')
         limits = self.kube.json_request(['-n', M.NAMESPACE, 'get', 'limitranges', '-o', 'json'])
         require(type(limits) is dict and limits.get('apiVersion') == 'v1'
-                and limits.get('kind') in {'List', 'LimitRangeList'} and limits.get('items') == [],
+                and limits.get('kind') in {'List', 'LimitRangeList'} and limits.get('items') == []
+                and type(limits.get('metadata', {})) is dict
+                and limits.get('metadata', {}).get('continue', '') == ''
+                and type(limits.get('metadata', {}).get('continue', '')) is str,
                 'LIMIT_RANGE_UNSUPPORTED')
         rows = []
         for expected in self._items:
