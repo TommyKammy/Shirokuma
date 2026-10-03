@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.44"
+version: "4.45"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse scoped UID uniqueness (offline)
+
+WP-L3-VW-002. Independent read-only runtime-status increment rejects contradictory metadata in which one UID denotes two different kind/name resources in a single round; overlap of the same object across projections still passes. Initial focused Warehouse suite found a misplaced existing assertion in the new test (`NameError`); corrected, focused suite and `make verify-local-experiment` passed. Dedicated Colima stayed stopped; no live API/SQL, owner operation, unknown-request replay, retained session/volume or backup change. Fake observation is not atomicity, current VM/backend authenticity, historical cleanup or production acceptance. Roll back the reader/test only; retain evidence. Vault original direct synchronization pending outside checkout.
 
 ## 2026-10-03: declared Flux origin and active source (offline)
 

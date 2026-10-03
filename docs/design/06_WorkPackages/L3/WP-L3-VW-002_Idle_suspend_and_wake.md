@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.26"
+version: "0.27"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: one UID cannot name two scoped resources (offline)
+
+The opt-in read-only runtime-status reader now rejects a UID assigned to different kind/name pairs within one inventory round, across fixed-name, owner-labelled and EndpointSlice projections. Repeated views of the *same* kind/name/UID remain valid. Stable but contradictory fake inventory previously produced `scoped-resources-present`; isolated negative tests now fail closed. First focused suite exposed a misplaced old test assertion (`NameError`), corrected without changing the reader; final `make test-local-warehouse-lifecycle`, `make verify-local-experiment` and `git diff --check` passed. Only fake API metadata were read; dedicated Colima remained stopped, with no live API/SQL read, saved-request replay, archived session or backup change. This is not atomic snapshot evidence, independent backend authenticity, historical cleanup proof, unknown-request recovery or operator/production acceptance. Roll back reader/test changes only; preserve stopped VM, archived sessions and backups. Original Vault handoff direct sync pending outside checkout.
 
 ## 2026-10-03: saved-claim reread shares the observation deadline
 

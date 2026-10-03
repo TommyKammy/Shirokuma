@@ -119,6 +119,21 @@ class RuntimeStatusTests(TestCase):
         with self.assertRaises(R.RuntimeStatusError):
             R.observe(TOKEN, kube)
 
+    def test_one_uid_cannot_identify_two_resources_in_one_round(self):
+        kube = FakeKube()
+        first = obj('Deployment', PREFIX + '-xs', owner=TOKEN)
+        kube.names['deployments', PREFIX + '-xs'] = first
+        kube.owned = [copy.deepcopy(first)]
+        self.assertEqual(R.observe(TOKEN, kube)['named_present'], 1)
+
+        for kind, name in [('Deployment', PREFIX + '-s'),
+                           ('ReplicaSet', PREFIX + '-xs-child')]:
+            with self.subTest(kind=kind):
+                kube.owned.append(obj(kind, name, owner=TOKEN, uid=first['metadata']['uid']))
+                with self.assertRaises(R.RuntimeStatusError):
+                    R.observe(TOKEN, kube)
+                kube.owned.pop()
+
     def test_invalid_or_incomplete_response_fails_closed(self):
         base = FakeKube()
         wrong_namespace = obj('Deployment', PREFIX + '-xs')

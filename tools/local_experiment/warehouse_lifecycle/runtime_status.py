@@ -161,11 +161,16 @@ def snapshot(token, kube, deadline):
     # The three API projections are separate reads. A resource present in more
     # than one projection must retain its identity within this round as well.
     identities = {}
+    uid_owners = {}
     for values in (named, owned, endpoints):
         for kind, name, uid in values:
             key = kind, name
             require(key not in identities or identities[key] == uid)
+            # Repeated projections may refer to the same object, but a UID
+            # cannot identify two different resources in one observation.
+            require(uid not in uid_owners or uid_owners[uid] == key)
             identities[key] = uid
+            uid_owners[uid] = key
         require(len({(kind, name) for kind, name, _ in values}) == len(values))
     # A hash correlates two bounded snapshots; it is not independent attestation.
     rows = [sorted(values) for values in (named, owned, endpoints)]
