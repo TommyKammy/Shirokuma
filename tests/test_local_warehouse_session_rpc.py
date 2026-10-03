@@ -310,19 +310,26 @@ class SessionRPCTest(unittest.TestCase):
     def test_query_disconnect_and_inflight_retry_do_not_repeat_owner_call(self):
         entered = threading.Event()
         def handler(action, request_id):
-            self.calls.append((action, request_id)); entered.set(); self.release.wait(3)
+            self.calls.append((action, request_id)); entered.set()
+            # Hold the disposable handler until both retries have been read;
+            # otherwise a busy suite can expire the fixture before inspection.
+            self.release.wait()
             return self.response(action, request_id)
         self.start(handler, allow_query=True)
         request = self.request('query')
         with socket.socket(socket.AF_UNIX) as connection:
             connection.connect(str(self.rpc.socket_path)); connection.sendall(self.wire(request))
-        self.assertTrue(entered.wait(2))
-        status, pending = self.exchange(request)
-        self.assertEqual((status, pending['result'], pending['query']), (409, 'unknown', None))
-        competing = self.request('query')
-        busy = self.exchange(competing)
-        self.assertEqual((busy[0], busy[1]['result'], busy[1]['query']), (409, 'busy', None))
-        self.release.set()
+        try:
+            self.assertTrue(entered.wait(2))
+            status, pending = self.exchange(request)
+            self.assertEqual((status, pending.get('result'), pending.get('request_id'), pending.get('query')),
+                             (409, 'unknown', request['request_id'], None))
+            competing = self.request('query')
+            busy = self.exchange(competing)
+            self.assertEqual((busy[0], busy[1].get('result'), busy[1].get('request_id'), busy[1].get('query')),
+                             (409, 'busy', competing['request_id'], None))
+        finally:
+            self.release.set()
         deadline = time.monotonic() + 2
         while self.rpc._active and time.monotonic() < deadline: time.sleep(0.01)
         self.assertEqual(self.exchange(request)[0], 200)

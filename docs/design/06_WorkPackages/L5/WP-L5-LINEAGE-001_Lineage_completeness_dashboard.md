@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.95"
+version: "0.96"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: collection run-entry metadata stability (offline)
+
+The descriptor-relative collection listing now compares each no-follow run entry's size, mtime, ctime and link count as well as identity/owner/mode across its two name reads. A disposable run whose mtime changed after enumeration is refused with `SOURCE_INVENTORY_CHANGED`; normal listings still pass. This conservatively rejects concurrent edits, but cannot detect restored metadata, authenticate a producer, or establish an atomic inventory. Focused lineage tests passed (53); broader verification is in Local Experiment Milestones. The dedicated VM was read-only observed stopped; no saved sources, reports, backups or catalog were mutated. Roll back only the listing and test, leaving retained evidence intact. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: source and collection root metadata stability (offline)
 

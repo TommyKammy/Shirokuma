@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.57"
+version: "0.58"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: query retry fixture holds its disposable handler (offline)
+
+The disconnected-query test now holds its injected handler through both pending and competing busy replies rather than allowing a three-second fixture timeout to release it under load. It releases the handler in `finally` and checks each complete 409 envelope's result, query field and own request UUID before inspecting successful replay. Focused Warehouse suite passed; broader verification is in Local Experiment Milestones. This is test-only and does **not** prove the prior intermittent `KeyError` was caused or fixed by the fixture. No archived UUID replay, actual backend/API/SQL, owner implementation, retained journal/backup or VM start. Roll back only this disposable test, preserving saved evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: disposable busy-handler test ordering (offline)
 

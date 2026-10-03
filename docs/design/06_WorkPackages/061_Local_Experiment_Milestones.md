@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.09"
+version: "5.10"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: lineage run-entry stability and Warehouse query retry fixture (offline)
+
+WP-L5-LINEAGE-001: a no-follow collection run entry that changes mtime between the two name reads now fails closed rather than appearing as a stable member. `make test-local-lineage-coverage` passed (53 tests). WP-L3-VW-002: the disconnected query's injected handler stays pending until both retry replies are inspected; `finally` releases it on failure, and each complete 409 reply must carry its original UUID. `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-054/{warehouse,verify,design}.log`. This does not prove that the prior intermittent Warehouse failure is fixed. Read-only `colima list` reported dedicated `mac-studio-solo` stopped; no VM start, API/SQL, archived UUID replay, retained source/session/report/backup change or cleanup. Neither bounded offline read proves atomicity, independent producer/backend authenticity, whole-catalog/column lineage or operator/production acceptance. Roll back only the reader and disposable tests, preserving retained evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: disposable Warehouse concurrency fixture (offline)
 

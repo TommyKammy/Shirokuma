@@ -317,6 +317,23 @@ class CoverageTests(unittest.TestCase):
                 C.listing(self.root)
         self.assertEqual(calls, 2)
 
+    def test_collection_rejects_run_metadata_change_during_listing(self):
+        path = self.add_run()
+        original = C._bounded_names
+        calls = 0
+        def change_after_listing(fd, limit, code):
+            nonlocal calls
+            names = original(fd, limit, code)
+            calls += 1
+            if calls == 2:
+                info = path.stat()
+                os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
+            return names
+        with patch.object(C, '_bounded_names', side_effect=change_after_listing):
+            with self.assertRaisesRegex(C.CoverageError, 'SOURCE_INVENTORY_CHANGED'):
+                C.listing(self.root)
+        self.assertEqual(calls, 2)
+
     def test_source_reader_cannot_validate_a_displaced_run(self):
         path = self.add_run(curated=True)
         original_hash = C.source_snapshot(path)

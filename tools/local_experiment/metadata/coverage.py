@@ -273,7 +273,8 @@ def listing(root):
     try:
         def identity(name):
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
-            return info.st_dev, info.st_ino, info.st_mode, info.st_uid
+            return (info.st_dev, info.st_ino, info.st_mode, info.st_uid,
+                    info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_nlink)
 
         initial = os.fstat(fd)
         names = _bounded_names(fd, MAX_ENTRIES, 'SOURCE_INVENTORY_LIMIT')
