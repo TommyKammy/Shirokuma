@@ -12,6 +12,25 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: Unix RPC credential headers and catalog 404 closure (offline)
+
+WP-L3-VW-002 rejects bearer/proxy/browser credential headers on its private
+Unix RPC: three disposable complete requests were accepted before repair and
+refused afterward without handler dispatch. Normal Go and printable extension
+headers remain supported. Independently, WP-L5-LINEAGE-001 gains regression
+coverage proving a thrown exact-path 404 whose stream closes past the deadline
+cannot become timely missing evidence; existing reader behavior already passed.
+Focused Warehouse and lineage (98 tests), `make verify-local-experiment`,
+`make verify-design-context` and diff check passed. Private logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-014/`
+(full verification SHA256 `c6b638aa301ab3f33b153d1c79088c2a8cf3226e6d63f4851ee13fdebaaf0a4f`).
+Read-only Colima status was stopped. No VM start, live catalog/backend/SQL,
+archived request replay, retained source/session/backup change or GitHub write.
+These offline guards do not establish remote authenticity, atomic observation,
+caller receipt, owner restart recovery or operator acceptance. Roll back only
+the independent parser guard/tests while preserving saved evidence. Original
+Vault synchronization pending outside the noninteractive checkout.
+
 ## 2026-10-03: catalog error URL and Unix RPC authority (offline)
 
 WP-L5-LINEAGE-001 now refuses a thrown HTTP 404 whose final URL differs from

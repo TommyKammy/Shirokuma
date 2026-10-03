@@ -1398,6 +1398,22 @@ class ReadOnlyClientTests(unittest.TestCase):
                         client.request('GET', next(iter(C.ANCHORS)))
                 self.assertTrue(stream.closed)
 
+    def test_http_error_close_after_deadline_is_not_missing_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+        path = next(iter(C.ANCHORS))
+
+        class LateClose(urllib.error.HTTPError):
+            def close(self):
+                super().close()
+                client.deadline = time.monotonic() - 1
+
+        error = LateClose(C.URL + path, 404, 'missing', {}, io.BytesIO(b'private'))
+        with patch.object(client.opener, 'open', side_effect=error):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                client.request('GET', path)
+        self.assertTrue(error.fp is None or error.fp.closed)
+
     def test_late_returned_http_status_is_deadline_not_response_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         client = self.client

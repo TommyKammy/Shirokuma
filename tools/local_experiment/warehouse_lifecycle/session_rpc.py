@@ -378,10 +378,12 @@ class SessionRPC:
             require(re.fullmatch(rb'[A-Za-z0-9-]+', name) is not None, 'INVALID_HTTP')
             name = name.lower()
             # The owner speaks a single fixed HTTP/1.1 request with no
-            # negotiation, upgrade or trailing fields.
+            # negotiation, upgrade or trailing fields. Credential headers have
+            # no meaning here: only the private socket/peer authenticates.
             require(name not in headers and name not in
-                     (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
-                       b'te', b'proxy-connection', b'keep-alive'), 'INVALID_HTTP')
+                      (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
+                        b'te', b'proxy-connection', b'keep-alive',
+                        b'authorization', b'proxy-authorization', b'cookie'), 'INVALID_HTTP')
             # Do not normalize ambiguous framing: a peer and a proxy may
             # interpret whitespace around a length differently.
             require(value.startswith(b' ') and value[1:] and

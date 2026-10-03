@@ -12,6 +12,16 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: thrown 404 closure deadline regression (offline)
+
+A disposable HTTPError with the requested URL/status but a close that crosses
+the observation deadline remains `API_DEADLINE`, not timely missing evidence.
+The existing post-close check already enforced this; the new regression fixture
+passes without a reader change (98 focused tests). No live catalog GET/login,
+VM start, retained source/credential/report/backup change or producer
+authentication. Roll back the fixture only, preserving reports; original Vault
+sync pending outside this checkout.
+
 ## 2026-10-03: HTTP error URL bound to requested catalog entity (offline)
 
 An injected 404 for a different URL previously became missing-object evidence

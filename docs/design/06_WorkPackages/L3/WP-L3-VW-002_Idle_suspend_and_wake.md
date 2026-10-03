@@ -422,6 +422,20 @@ The optional read-only runtime-status reader now requires the same kind/name/UID
 
 The read-only scoped runtime-status reader now includes the observed owner and service-name labels for each fixed-name resource in its two-round snapshot hash. A fixed-name object whose UID stays constant but whose owner label changes between rounds previously looked stable if it was not selected by the owner-label listing; a fake stable-positive and relabel-negative now pass. `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. Private regression log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-005/verify-final.log` (SHA256 `789e1067848ad3f868fa8fdf07c9b8c65eb033d0eb29897e8af5becb8c1dff64`). Dedicated Colima remained stopped: no live API/SQL, owner request, unknown-request replay, archived session or backup change. This is bounded metadata consistency, **not** an atomic snapshot, historical cleanup proof, authenticated backend observation or production acceptance. Revert only the reader/test changes, preserving retained runs/VM and unknown requests. Original Vault handoff direct synchronization remains pending outside this noninteractive checkout.
 
+## 2026-10-04: credential-bearing headers on the private Unix RPC (offline)
+
+The fixed one-request RPC does not use HTTP bearer, proxy or browser credentials;
+its authorization boundary is the private socket and peer check. Disposable
+complete requests with `Authorization`, `Proxy-Authorization` or `Cookie` were
+accepted before repair despite having no defined role. Reject all three before
+body parsing or dispatch; preserve normal Go requests and unrelated printable
+extension-header compatibility. Negative tests failed before repair; focused
+and combined local verification passed afterward (Milestones). This does not
+prove owner restart recovery, saved producer authenticity, live backend or
+historical cleanup. No VM start, archived replay or retained run/backup change.
+Roll back the parser guard/test only; preserve stored sessions and unknown
+requests. Original Vault sync pending outside this noninteractive checkout.
+
 ## 2026-10-03: one UID cannot name two scoped resources (offline)
 
 The opt-in read-only runtime-status reader now rejects a UID assigned to different kind/name pairs within one inventory round, across fixed-name, owner-labelled and EndpointSlice projections. Repeated views of the *same* kind/name/UID remain valid. Stable but contradictory fake inventory previously produced `scoped-resources-present`; isolated negative tests now fail closed. First focused suite exposed a misplaced old test assertion (`NameError`), corrected without changing the reader; final `make test-local-warehouse-lifecycle`, `make verify-local-experiment` and `git diff --check` passed. Only fake API metadata were read; dedicated Colima remained stopped, with no live API/SQL read, saved-request replay, archived session or backup change. This is not atomic snapshot evidence, independent backend authenticity, historical cleanup proof, unknown-request recovery or operator/production acceptance. Roll back reader/test changes only; preserve stopped VM, archived sessions and backups. Original Vault handoff direct sync pending outside checkout.

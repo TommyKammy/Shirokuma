@@ -894,6 +894,12 @@ class SessionRPCTest(unittest.TestCase):
         for extra in (b'Host: other.local\r\n', b'Host: warehouse.local:80\r\n'):
             with self.subTest(extra=extra), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
                 self.rpc._read_request(BufferedConnection(self.wire(body, base + extra)))
+        # This socket authenticates by its private filesystem scope, not by
+        # bearer, proxy or browser credentials supplied in HTTP headers.
+        for extra in (b'Authorization: Bearer example\r\n',
+                      b'Proxy-Authorization: Basic example\r\n', b'Cookie: session=example\r\n'):
+            with self.subTest(extra=extra), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
+                self.rpc._read_request(BufferedConnection(self.wire(body, base + extra)))
         self.assertEqual(self.rpc._read_request(BufferedConnection(
             self.wire(body, base + b'Host: warehouse.local\r\n'))), json.loads(body))
         self.assertEqual(self.rpc._read_request(BufferedConnection(
