@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.85"
+version: "5.86"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: known lineage edge catalog evidence (offline)
+
+WP-L5-LINEAGE-001 refuses saved known edges without matching non-null catalog
+digests for their run, independently of aggregate stability. Three disposable
+negatives rendered before repair; `make test-local-lineage-coverage` passed
+(130 tests) after. Dedicated Colima read-only observed stopped. No live catalog,
+retained evidence/backup mutation, unknown-request replay or GitHub write.
+Internal claims cannot establish catalog provenance, atomicity, whole-catalog/
+column coverage or operator acceptance. Roll back renderer/test only, retaining
+historical reports. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: partial lineage inventory stability claim (offline)
 

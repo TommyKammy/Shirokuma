@@ -189,6 +189,19 @@ class CoverageRenderTests(unittest.TestCase):
                 render(value)
         self.assertIn('2 / 2 エッジ', render(report()))
 
+    def test_known_edges_require_matching_catalog_snapshots_without_global_stability_claim(self):
+        for before, after in ((None, None), ('b' * 64, None), ('b' * 64, 'c' * 64)):
+            value = report()
+            value['observation'].update(status='incomplete', metadata_stable=None,
+                                        reason_codes=['SOURCE_INVENTORY_UNAVAILABLE'])
+            value['runs'][0]['metadata_sha256_before'] = before
+            value['runs'][0]['metadata_sha256_after'] = after
+            with self.subTest(before=before, after=after), self.assertRaises(RenderError):
+                render(value)
+        value['runs'][0]['metadata_sha256_before'] = 'b' * 64
+        value['runs'][0]['metadata_sha256_after'] = 'b' * 64
+        self.assertIn('2 / 2 エッジ', render(value))
+
     def test_catalog_instability_cannot_accompany_fully_known_edges(self):
         value = report()
         value['observation'].update(status='incomplete', metadata_stable=False,

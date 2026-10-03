@@ -268,6 +268,12 @@ def _validate(report):
             eligible += 1
             _require(len(edges) == 2 and {edge.get('target') for edge in edges if type(edge) is dict} == {'stg', 'mart'},
                       'ELIGIBLE_RUN_REQUIRES_TWO_EDGES')
+            # Known edges come only from matching first/final catalog reads.
+            # The aggregate stability field can be null/false for other runs.
+            if any(type(edge) is dict and edge.get('status') in ('present', 'missing', 'conflict') for edge in edges):
+                _require(run['metadata_sha256_before'] is not None and
+                         run['metadata_sha256_before'] == run['metadata_sha256_after'],
+                         'INCONSISTENT_CATALOG_EVIDENCE')
         else:
             _require(not edges, 'INELIGIBLE_RUN_HAS_EDGES')
         for edge in edges:

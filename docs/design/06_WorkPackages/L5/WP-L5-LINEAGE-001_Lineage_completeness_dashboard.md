@@ -12,6 +12,17 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: known edges require per-run catalog evidence (offline)
+
+The direct renderer rejects a known edge without matching non-null saved
+before/after catalog digests for that run, even when aggregate catalog stability
+is null because another observation was incomplete. Three disposable reports
+rendered before repair; focused lineage 130 tests passed after repair. No VM
+start, catalog access or retained source/report/backup changes. This checks
+internal consistency, not catalog authenticity or atomicity, whole-catalog/
+column coverage or operator acceptance. Roll back only renderer/test; preserve
+historical reports. Original Vault synchronization pending outside checkout.
+
 ## 2026-10-04: incomplete inventory cannot claim stable population (offline)
 
 In a separate follow-on, the renderer refuses `inventory.complete=false` with
