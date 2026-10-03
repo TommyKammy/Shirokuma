@@ -393,6 +393,7 @@ class SessionRPC:
                      b'te', b'proxy-connection', b'keep-alive', b'proxy', b'via',
                      b'authorization', b'proxy-authorization', b'cookie',
                       b'client-ip', b'x-client-ip', b'true-client-ip', b'cf-connecting-ip',
+                      b'fastly-client-ip', b'x-cluster-client-ip',
                      b'forwarded', b'x-real-ip', b'x-real-host', b'x-forwarded-host', b'x-forwarded-proto',
                      b'x-forwarded-for', b'x-forwarded-port', b'x-forwarded-prefix',
                      b'x-original-url', b'x-original-uri', b'x-original-host',

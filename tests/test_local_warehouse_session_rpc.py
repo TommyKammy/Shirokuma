@@ -999,7 +999,9 @@ class SessionRPCTest(unittest.TestCase):
         body = json.dumps(self.request()).encode()
         base = b'Content-Type: application/json\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n'
         for extra in (b'True-Client-IP: 192.0.2.1\r\n',
-                      b'CF-Connecting-IP: 192.0.2.1\r\n'):
+                      b'CF-Connecting-IP: 192.0.2.1\r\n',
+                      b'Fastly-Client-IP: 192.0.2.1\r\n',
+                      b'X-Cluster-Client-IP: 192.0.2.1\r\n'):
             with self.subTest(extra=extra):
                 self.assertEqual(self.exchange(self.wire(body, base + extra), raw=True)[0], 400)
         self.assertEqual(self.calls, [])

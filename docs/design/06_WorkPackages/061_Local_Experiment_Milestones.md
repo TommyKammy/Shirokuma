@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.88"
+version: "5.89"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: additional private Warehouse client-IP hints (offline)
+
+Independently of the lineage change below, WP-L3-VW-002 refuses
+`Fastly-Client-IP` and `X-Cluster-Client-IP` on its fixed Unix transition.
+Both test-owned requests reached the handler before repair; focused Warehouse
+checks passed afterward. No VM start, backend/SQL, archived request replay,
+retained session/backup mutation or GitHub write. This parser guard does not
+authenticate the peer or establish caller receipt, restart recovery or operator
+acceptance. Roll back parser/test alone, preserving saved evidence and the
+stopped VM. Original Vault sync pending outside checkout. Private logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-042/`.
 
 ## 2026-10-04: offline lineage failure explanations
 

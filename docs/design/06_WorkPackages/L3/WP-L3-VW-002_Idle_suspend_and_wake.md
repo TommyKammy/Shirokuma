@@ -5,12 +5,26 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.04"
+version: "1.05"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: additional proxy client-IP hints (offline)
+
+The fixed one-request Unix parser now refuses `Fastly-Client-IP` and
+`X-Cluster-Client-IP` before journaling or handler dispatch. Two disposable
+complete requests returned 200 and reached the handler before repair; the
+focused Warehouse suites passed afterward. Other printable extension headers
+remain supported. The dedicated VM was observed stopped; no backend/SQL,
+archived UUID replay, retained session/backup mutation or GitHub write. This
+does not independently authenticate the socket peer or prove caller receipt,
+restart recovery or operator acceptance. Roll back parser/test only and retain
+saved sessions. Private negative/focused logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-042/`.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-04: journal reader ignores its own access-time update (offline)
 
