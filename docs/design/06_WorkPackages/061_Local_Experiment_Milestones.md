@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.98"
+version: "4.99"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: handler exception before disposable owner exit (offline)
+
+WP-L3-VW-002: an eighth test-owned process-exit boundary now injects a handler exception; the journal records `unknown`, without a reply, and independent read/new-owner processes retain `unknown-no-replay` and refuse session adoption without dispatch. `make test-local-warehouse-lifecycle`, the subsequent `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed; private regression log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-044/verify-second.log`. No real backend/API/SQL, archived UUID replay, VM start or retained session/backup mutation; dedicated Colima was observed stopped. This is not backend authentication, historical cleanup, reply delivery or operator/production acceptance. Roll back only disposable test, retaining VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: strict deletion-time syntax and condition generation (offline)
 

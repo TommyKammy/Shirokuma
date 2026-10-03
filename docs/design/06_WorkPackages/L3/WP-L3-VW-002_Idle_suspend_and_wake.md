@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.53"
+version: "0.54"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: disposable handler failure across owner exit (offline)
+
+An eighth test-owned child process exits immediately after journaling an injected handler exception as an uncertain response, before any reply send. A separate saved reader still classifies the original and unrelated fresh UUIDs `unknown-no-replay` with unknown runtime state; independent parent and new-process owner attempts refuse the occupied session without dispatch or journal mutation. `make test-local-warehouse-lifecycle` passed. This exercises a disposable process-exit boundary, not backend authentication, caller receipt or archived UUID recovery. Read-only dedicated Colima was stopped; no VM start, actual API/SQL, retained session/backup mutation or unknown-request replay. Roll back this test boundary only while preserving archived evidence and stopped VM; original Vault direct sync remains pending outside checkout.
 
 ## 2026-10-03: disposable caller receives reply before owner exit (offline)
 

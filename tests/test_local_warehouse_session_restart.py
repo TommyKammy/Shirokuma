@@ -23,6 +23,8 @@ output = Path(root) / token
 request = {'schema_version': 1, 'session_id': token, 'request_id': request_id,
            'warehouse': 'XS', 'action': 'chill'}
 def handler(action, identity):
+    if boundary == 'handler-error':
+        raise RuntimeError('disposable injected failure')
     return {**request, 'result': 'verified', 'before': R.TARGETS['wake'],
             'after': R.TARGETS['chill'], 'operation_id': '11111111-1111-4111-8111-111111111111',
             'receipt_sha256': 'a' * 64}
@@ -36,7 +38,7 @@ def exit_after_write():
         os._exit(76)  # Handler returned, but its response was not saved.
     persist()
     writes += 1
-    if boundary in ('intent', 'handler', 'reply') and writes == {'intent': 1, 'handler': 2, 'reply': 3}[boundary]:
+    if boundary in ('intent', 'handler', 'handler-error', 'reply') and writes == {'intent': 1, 'handler': 2, 'handler-error': 2, 'reply': 3}[boundary]:
         os._exit(73)
 owner._persist = exit_after_write
 if boundary in ('reply', 'sent', 'received'):
@@ -92,7 +94,7 @@ sys.exit(1)
 
 class DisposableOwnerExitTest(unittest.TestCase):
     def test_new_process_cannot_adopt_exited_owners_unknown_request(self):
-        for boundary in ('intent', 'returned', 'handler', 'reply', 'sent', 'received', 'closed'):
+        for boundary in ('intent', 'returned', 'handler', 'handler-error', 'reply', 'sent', 'received', 'closed'):
             with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
                 root.chmod(0o700)
@@ -110,7 +112,8 @@ class DisposableOwnerExitTest(unittest.TestCase):
                 original = journal.read_bytes()
                 result = S.classify_recovery(token, root, request_id)
                 self.assertEqual(result['request_lookup']['recorded_result'],
-                                  'pending' if boundary in ('intent', 'returned') else 'verified')
+                                  'pending' if boundary in ('intent', 'returned') else
+                                  'unknown' if boundary == 'handler-error' else 'verified')
                 self.assertEqual(result['recovery_classification'], 'unknown-no-replay')
                 self.assertEqual(result['runtime_state'], 'unknown')
                 self.assertEqual(result['reply_count'], 1 if boundary in ('reply', 'sent', 'received') else 0)
