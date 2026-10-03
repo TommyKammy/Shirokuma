@@ -934,6 +934,26 @@ func TestLocalInventoryRejectsNullMembers(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsNullReplicaCounters(t *testing.T) {
+	for _, field := range []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas"} {
+		parent := "status"
+		if field == "replicas" {
+			parent = "spec"
+		}
+		raw := []byte(`{"items":[{"` + parent + `":{"` + field + `":null}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("null %s.%s accepted: %s (%v)", parent, field, raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"status":{"readyReplicas":0}}]}`), []byte(`{"items":[{"status":{}}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("replica counter boundary: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryMalformedMembersDegradeFixedProfile(t *testing.T) {
 	for _, member := range []string{
 		`null`,

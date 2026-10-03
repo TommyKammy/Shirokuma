@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.28"
+version: "5.29"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: serve-loop callback failure and explicit null counters (offline)
+
+WP-L3-VW-002: a test-owned stop callback raising at the serve-loop check previously escaped as an exception; it now stops the owner with a failed result and durable `STOP_CALLBACK_FAILED`, without dispatch. The isolated negative failed before repair. WP-L0-GITOPS-001: independently pinned the existing rejection of explicit null in all five replica counters while omission and zero remain valid; no Go reader change. Focused Warehouse (`make test-local-warehouse-lifecycle`: 78 + 86 + 16 + 22 + 15 tests), Go CLI (`go test ./internal/cli -count=1`: 829 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. Private full verification logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-074/{verify,design}.log`. Read-only `colima list`: dedicated VM stopped. No VM start, live backend/API/Git/SQL, archived UUID replay, retained session/source/report/backup mutation or GitHub write. Offline tests do not authenticate backend or remote producers, prove caller receipt, restart recovery, atomic inventory, strict admission or operator/production acceptance. Roll back the serve-loop guard and disposable tests only, preserving the stopped VM and historical evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: owner stop failure and bounded catalog timeout (offline)
 

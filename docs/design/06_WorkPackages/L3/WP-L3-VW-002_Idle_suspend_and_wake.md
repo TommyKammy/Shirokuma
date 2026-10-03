@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.64"
+version: "0.65"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: serve-loop stop callback failure returns failed (offline)
+
+A disposable stop callback throwing on the first serve-loop check previously escaped as an exception rather than returning a failed owner result. The owner now records `STOP_CALLBACK_FAILED`, stops accepting, drains existing workers, persists its journal and returns `failed`; no handler is dispatched for this fixture. The isolated negative failed before repair, then the focused Warehouse suite and local verification passed (see Milestones). This does not authenticate backend state, establish archived UUID recovery or caller receipt. No dedicated VM start, archived request replay, retained session/backup change or live API/SQL. Roll back only the serve-loop guard and disposable test; retain saved evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: stop callback failure at dispatch (offline)
 

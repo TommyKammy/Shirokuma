@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.75"
+version: "0.76"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: explicit null replica counter regression (offline)
+
+The existing fixed-profile complete-list reader already refuses explicit `null` in reported spec/status replica counters, distinguishing omission and valid zero. A new isolated disposable test covers all five reported counters and positive zero/omission; no reader or generic doctor behavior changed. Go tests, vet and local verification passed (Milestones). No live API/Git, dedicated VM start, reconciliation or retained data mutation. A fake list does not authenticate remote state, prove atomicity, clear strict admission or establish operator acceptance. Roll back only the regression test, preserving historical evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: same-GVK duplicate identity on unrelated list members (offline)
 

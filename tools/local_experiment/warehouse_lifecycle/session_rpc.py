@@ -506,8 +506,15 @@ class SessionRPC:
         try:
             while not self._stop.is_set():
                 now = time.monotonic()
-                if self._replay_until is None and stop is not None and stop():
-                    self._replay_until = now + self.replay_grace_seconds
+                if self._replay_until is None and stop is not None:
+                    try:
+                        stop_requested = bool(stop())
+                    except BaseException:
+                        self._fail('STOP_CALLBACK_FAILED')
+                        reason = 'stop_callback_failed'
+                        break
+                    if stop_requested:
+                        self._replay_until = now + self.replay_grace_seconds
                 if self._replay_until is not None and now >= self._replay_until:
                     break
                 if self._replay_until is None and now - self._started >= self.ttl_seconds:
