@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.41"
+version: "1.42"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: post-open HTTP error is not absence (offline)
+
+A disposable returned catalog stream raising an exact-path 404 after opening
+previously entered the opener's missing-object handler (and exposed an unclosed
+error stream in the negative). Only errors before response entry can describe
+missing catalog objects now; a post-open HTTP error closes both streams and is
+`API_UNAVAILABLE` (or `API_DEADLINE` if late). The initial negative failed;
+focused lineage and local verification passed after repair. No VM start or
+retained evidence/backup change. This does not authenticate the producer, prove
+atomic or whole-catalog/column coverage, or establish operator acceptance.
+Roll back only this boundary and fixture; preserve saved reports. Original Vault
+sync remains pending outside this checkout.
 
 ## 2026-10-04: returned catalog cleanup classification (offline)
 

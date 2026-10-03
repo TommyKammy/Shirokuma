@@ -875,6 +875,30 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_http_error_after_response_open_is_not_missing_catalog_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        client = self.client
+        for late in (False, True):
+            with self.subTest(late=late):
+                client.deadline = time.monotonic() + 10
+                stream_error = urllib.error.HTTPError(
+                    C.URL + path, 404, 'late stream error', Message(), io.BytesIO())
+
+                class BrokenRead(Response):
+                    def read(self, size=-1):
+                        if late:
+                            client.deadline = time.monotonic() - 1
+                        raise stream_error
+
+                response = BrokenRead(b'{"id":1}')
+                with patch.object(client.opener, 'open', return_value=response):
+                    with self.assertRaisesRegex(C.CoverageError,
+                                                'API_DEADLINE' if late else 'API_UNAVAILABLE'):
+                        client.request('GET', path)
+                self.assertTrue(response.closed)
+                self.assertTrue(stream_error.fp.closed)
+
     def test_catalog_cleanup_failure_cannot_return_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         for failure in (TypeError, ValueError):

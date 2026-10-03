@@ -5,12 +5,22 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.95"
+version: "0.96"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: bare real-identity hint (offline)
+
+The fixed Unix transition now refuses bare `X-Real` as well as `X-Real-*`.
+An isolated complete request reached its handler before repair; after repair
+the disposable request receives 400 before journal or handler. Focused Warehouse
+and local checks passed. No archived UUID replay, VM start, backend/SQL or
+retained session/backup mutation. This cannot establish peer authenticity,
+caller receipt, restart recovery or operator acceptance. Roll back only this
+guard/test; preserve saved sessions. Original Vault sync remains pending.
 
 ## 2026-10-04: unrecognized real-identity hints (offline)
 

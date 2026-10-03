@@ -379,8 +379,10 @@ class ReadOnlyClient:
             headers['Authorization'] = 'Bearer ' + self.token
         request = urllib.request.Request(URL + path, method=method, headers=headers,
                                          data=canonical(data).encode() if data is not None else None)
+        response_opened = False
         try:
             with self.opener.open(request, timeout=min(10, remaining)) as response:
+                response_opened = True
                 # An opener may return an HTTP response after the deadline
                 # without raising HTTPError. Its status is not timely evidence.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
@@ -512,6 +514,16 @@ class ReadOnlyClient:
             require(time.monotonic() < self.deadline, 'API_DEADLINE')
             return value
         except urllib.error.HTTPError as error:
+            if response_opened:
+                # Only an error from the opener can describe absence at the
+                # requested path. A later stream/accessor error is a failed
+                # observation, even if it carries an exact-path 404 label.
+                try:
+                    error.close()
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    pass
+                require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                raise CoverageError('API_UNAVAILABLE') from None
             try:
                 status = error.code
                 # A failed lookup for another URL is not proof that the

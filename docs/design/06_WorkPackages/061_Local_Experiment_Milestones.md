@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.65"
+version: "5.66"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: post-open catalog errors and bare real identity (offline)
+
+WP-L5-LINEAGE-001 distinguishes an HTTPError raised by an opened response
+from an opener 404: no false missing-object claim; both streams close and the
+bounded result is unavailable/deadline. Independently WP-L3-VW-002 refuses
+bare `X-Real` before handler/journal. Test-owned negatives failed before
+repair; focused lineage and Warehouse passed after repair. A formatting typo
+in the first Warehouse rerun caused an IndentationError; corrected and rerun.
+`make verify-local-experiment`, design-context and diff checks passed. Private
+logs are under `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-029/`.
+Read-only Colima observation: dedicated VM stopped. No VM start, live catalog,
+backend/SQL, unknown-request replay, retained evidence/backup mutation or
+GitHub write. These offline boundaries do not authenticate producers or peers,
+prove atomicity, caller receipt, restart recovery, whole-catalog/column lineage
+or operator acceptance. Roll back only the independent guards and fixtures;
+preserve saved evidence and stopped VM. Original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: returned catalog cleanup and real-identity namespace (offline)
 
