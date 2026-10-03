@@ -91,11 +91,15 @@ class StorageCoverageHistoryTests(unittest.TestCase):
         old=public(serving_usage_complete());new=public(serving_tmp_usage_complete())
         self.assertEqual(old['observed_at'],new['observed_at'])
         first=H.parse(encoded([new,old]));self.assertEqual([i for i,_ in first],[0,1])
+        reverse=row(coverage([new,old]),'Serving TMP')
+        self.assertLess(reverse.index('論理 0 bytes'),reverse.index('このschemaには含まれません'))
         before=encoded([old,new]);matrix=coverage([old,new])
         self.assertEqual(matrix,coverage([old,new]))
         self.assertEqual(encoded([old,new]),before)
         self.assertIn('#1 / v8',matrix)
         self.assertIn('#2 / v9',matrix)
+        forward=row(matrix,'Serving TMP')
+        self.assertLess(forward.index('このschemaには含まれません'),forward.index('論理 0 bytes'))
 
     def test_reordered_reports_keep_storage_scope_with_original_observation(self):
         old=public(serving_usage_complete())

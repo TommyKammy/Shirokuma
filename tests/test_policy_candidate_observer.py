@@ -352,7 +352,7 @@ class ObserverTests(unittest.TestCase):
                 self.assertEqual(observer.receipt()['request_count'],1)
 
     def test_allowed_response_cannot_claim_live_pod_status(self):
-        for status in ({'phase':'Running'}, {'conditions':[{'type':'Ready','status':'True'}]}):
+        for status in ({'phase':'Running'}, {'conditions':[{'type':'Ready','status':'True'}]}, None):
             with self.subTest(status=status):
                 kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
                 def respond(body):

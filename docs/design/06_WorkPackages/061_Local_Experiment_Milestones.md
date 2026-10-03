@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.137"
+version: "5.138"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: explicit policy status and equal-time FinOps order (offline)
+
+WP-L2-POL-001: a disposable allowed reply with explicit `status: null` passed
+before repair; it now fails closed as unknown/pending without replay. The
+negative failed before repair and the focused observer suite passed (39 tests).
+Independently, WP-L6-FIN-001 pins equal-time v8/v9 storage cells in both input
+orders (five focused tests); no renderer behavior or saved report changed.
+Dedicated Colima was read-only observed Stopped; no live API, admission,
+collection, retained request/report/volume/backup change or GitHub write.
+AgentHouse usage remains `null / NOT_MEASURED`. Offline fixtures cannot
+authenticate producers, establish complete admission coverage, measure current
+usage or establish operator acceptance. Roll back only the policy comparator
+and its test and the separate FinOps test, preserving pending requests and
+historical reports. Original Vault synchronization pending outside checkout.
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. The ignored
+private full-suite log is
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-081/verify-local.log`
+(SHA-256 `3e500f10c3e50b65e59808d7a0372093cbf980d4a62348ea1b1ac01e1cdf6ba7`).
+Its synthetic failure-path output is not a live runtime observation.
 
 ## 2026-10-04: condition chronology and independent FinOps history order (offline)
 

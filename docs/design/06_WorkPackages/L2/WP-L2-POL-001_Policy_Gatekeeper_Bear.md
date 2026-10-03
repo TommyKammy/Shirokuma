@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.28"
+version: "0.29"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: explicit null dry-run status (offline)
+
+A disposable allowed response with `status: null` passed as though the status
+field were absent. The focused negative failed before repair. The response
+comparator now permits an omitted status or an empty object, not explicit null;
+the original request remains unknown/pending and is not replayed. The focused
+observer suite passed (39 tests). Dedicated Colima was observed Stopped; no
+live admission, retained request/volume/backup change or GitHub write. Fake
+replies cannot authenticate the API or establish full mutation coverage or
+operator acceptance. Roll back only the comparator/test if needed, retaining
+pending and historical evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: contradictory dry-run denial streams (offline)
 

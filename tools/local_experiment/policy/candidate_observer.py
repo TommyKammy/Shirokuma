@@ -103,7 +103,8 @@ def allowed_pod_matches(value, body):
     """
     if (type(value) is not dict or set(value) - {'apiVersion', 'kind', 'metadata', 'spec', 'status'} or
             value.get('apiVersion') != 'v1' or
-            value.get('kind') != 'Pod' or value.get('status') not in (None, {})):
+            value.get('kind') != 'Pod' or
+            ('status' in value and value['status'] != {})):
         return False
     meta, spec = value.get('metadata'), value.get('spec')
     if type(meta) is not dict or type(spec) is not dict or any(

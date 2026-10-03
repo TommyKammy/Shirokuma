@@ -5,12 +5,22 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.48"
+version: "0.49"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: equal-time history storage order (offline)
+
+Pinned both selection orders for two distinct valid v8/v9 reports with equal
+observation times: Serving TMP's schema-absent and measured logical-zero cells
+stay attached to their original reports, in selection order. The focused five
+storage-history tests passed. No renderer, saved report, VM, volume or backup
+changed; AgentHouse remains `null / NOT_MEASURED`. This does not prove producer
+authenticity, current usage or acceptance. Roll back only this test if needed;
+preserve saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: reordered history storage scope (offline)
 
