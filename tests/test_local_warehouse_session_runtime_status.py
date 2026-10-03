@@ -113,6 +113,11 @@ class RuntimeStatusTests(TestCase):
             self.assertEqual(len(R.ReadOnlyKubernetes()._get('secrets', PREFIX + '-secret', template=R.ONE)),
                              32768)
 
+    def test_metadata_stdout_rejects_unencodable_unicode(self):
+        with mock.patch.object(R.W, 'command', return_value='\ud800'):
+            with self.assertRaisesRegex(R.RuntimeStatusError, 'RUNTIME_OBSERVATION_UNVERIFIED'):
+                R.ReadOnlyKubernetes()._get('secrets', PREFIX + '-secret', template=R.ONE)
+
     def test_same_name_even_without_owner_label_is_present(self):
         kube = FakeKube()
         kube.names['deployments', PREFIX + '-xs'] = obj('Deployment', PREFIX + '-xs')

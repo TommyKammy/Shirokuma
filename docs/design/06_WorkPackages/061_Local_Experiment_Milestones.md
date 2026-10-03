@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.79"
+version: "4.80"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: negative inventory generation and invalid metadata Unicode (offline)
+
+Two independent read-only safeguards: WP-L0-GITOPS-001 rejects negative generations on unrelated fixed-profile inventory members; WP-L3-VW-002 fails closed with its fixed error on decoded kubectl stdout containing unencodable Unicode. `go test ./internal/cli -count=1` (792 passed), `go vet ./...`, focused Warehouse rerun and `make verify-local-experiment` passed. The first Warehouse suite run failed intermittently in an unchanged RPC test (`KeyError: 'result'`); it passed on rerun without a test or RPC change. Private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-032/warehouse.log` and `verify.log`. Read-only Colima status reported stopped; no VM start, API/SQL, reconciliation, owner operation, unknown-request replay or retained data/backup mutation. Fake response checks do not establish authenticated/atomic inventory, historical cleanup, strict publication admission or operator/production acceptance. Roll back only readers/tests, preserving VM and saved evidence; direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: Warehouse forward-clock and UTF-8 output bounds (offline)
 

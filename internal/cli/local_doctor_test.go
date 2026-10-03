@@ -447,6 +447,25 @@ func TestLocalInventoryRejectsFutureUnrelatedConditionGeneration(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsNegativeUnrelatedItemGeneration(t *testing.T) {
+	foreign := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":-1}}`
+	resources := strings.Replace(localFluxJSON(), `"items":[`, `"items":[`+foreign+`,`, 1)
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+		t.Fatalf("negative unrelated Flux generation accepted: %#v", check)
+	}
+	controllers := strings.Replace(localControllerJSON(), `"items":[`, `"items":[`+foreign+`,`, 1)
+	check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+		t.Fatalf("negative unrelated controller generation accepted: %#v", check)
+	}
+	workloads := localWorkloadResponses()
+	workloads[1].output = strings.Replace(workloads[1].output, `"items":[`, `"items":[`+foreign+`,`, 1)
+	if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "incomplete") {
+		t.Fatalf("negative unrelated workload generation accepted: %#v", checks)
+	}
+}
+
 func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)

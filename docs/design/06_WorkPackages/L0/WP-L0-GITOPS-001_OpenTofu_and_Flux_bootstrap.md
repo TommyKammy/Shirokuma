@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.44"
+version: "0.45"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: negative generation on unrelated inventory members (offline)
+
+Fixed-profile controller, Flux resource and Lakehouse workload inventories now reject a negative `metadata.generation` even for an unrelated item without conditions; zero remains compatible with optional/projected fixture fields. The regression was added after the fix, so its pre-fix failure was not separately executed; focused test, full `go test ./internal/cli -count=1` (792 passed), `go vet ./...` and `make verify-local-experiment` passed. Dedicated Colima was observed stopped; no VM start, live API/SQL, reconcile, unknown-request replay or retained storage/backup mutation. This is offline shape consistency, not authenticated/atomic inventory, historical cleanup, strict publication admission or operator/production acceptance. Roll back only the local reader/test; preserve the VM and evidence. Direct original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: unrelated condition type and generation bounds (offline)
 

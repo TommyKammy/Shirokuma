@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.42"
+version: "0.43"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: invalid decoded kubectl Unicode (offline)
+
+The opt-in read-only metadata stdout reader now converts an unencodable Unicode response (such as a lone surrogate returned by a custom command boundary) into the fixed `RUNTIME_OBSERVATION_UNVERIFIED` refusal instead of raising an uncaught encoding exception. The 65536-byte UTF-8 bound and valid boundary behavior remain. The focused Warehouse suite initially had an unrelated RPC assertion failure (`KeyError: 'result'` in `test_query_same_id_returns_saved_result_and_cross_action_is_not_reused`), then passed on rerun; the first failure is not erased or claimed repaired. `make verify-local-experiment` passed. Private rerun and regression logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-032/warehouse.log` and `verify.log`. Dedicated Colima remained stopped; no live API/SQL, owner operation, unknown-request replay or retained session/backup change. Offline error framing does not authenticate an API, prove atomicity/historical cleanup or operator/production acceptance. Roll back reader/test only, preserving VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: bounded forward-clock interval and metadata bytes (offline)
 

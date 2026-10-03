@@ -273,6 +273,11 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if err := json.Unmarshal(item["metadata"], &identity); err != nil && len(item["metadata"]) != 0 {
 			return true
 		}
+		// Even an unrelated list member cannot have a negative Kubernetes
+		// generation. Zero remains compatible with projected fixture members.
+		if identity.Generation < 0 {
+			return true
+		}
 		// Nested declared fields must also be canonical: encoding/json accepts
 		// Spec.Ref.Branch or Status.Conditions as if they were Kubernetes keys.
 		for _, nested := range []struct {

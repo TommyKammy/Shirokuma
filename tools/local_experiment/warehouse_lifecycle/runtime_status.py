@@ -102,7 +102,12 @@ class ReadOnlyKubernetes:
                          '--request-timeout=10s', 'get', resource, *args,
                          '--chunk-size=0', '-o=go-template=' + template],
                         timeout=15, output_limit=65536)
-        require(type(raw) is str and len(raw) <= 65536 and len(raw.encode('utf-8')) <= 65536)
+        require(type(raw) is str and len(raw) <= 65536)
+        try:
+            size = len(raw.encode('utf-8'))
+        except UnicodeError as exc:
+            raise RuntimeStatusError('RUNTIME_OBSERVATION_UNVERIFIED') from exc
+        require(size <= 65536)
         return raw
 
     def get(self, resource, name):
