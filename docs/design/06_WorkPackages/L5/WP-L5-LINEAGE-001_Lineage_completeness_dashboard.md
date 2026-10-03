@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.94"
+version: "0.95"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: source and collection root metadata stability (offline)
+
+The saved-run snapshot and collection listing now compare the opened root directory's device, inode, mode, owner, size, mtime, ctime and link count across their respective bounded reads. Two disposable negatives changed only the root mtime after traversal/listing while leaving the entry names and privacy unchanged; both were accepted before repair and refused afterward. `make test-local-lineage-coverage` passed (52 tests). This is a conservative check: concurrent metadata updates may reject an otherwise readable run. A same-UID actor restoring metadata between observations remains undetectable; neither atomicity, producer authentication, whole-catalog/column lineage nor operator acceptance follows. The dedicated VM was read-only observed stopped; no retained source, report, backup or catalog was changed. Roll back reader/tests only, preserving evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: external hard links in saved source (offline)
 

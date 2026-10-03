@@ -411,6 +411,33 @@ class CoverageTests(unittest.TestCase):
         finally:
             path.chmod(0o700)
 
+    def test_snapshot_rejects_root_metadata_change_after_visit(self):
+        path = self.add_run()
+        original = C._current_source_path
+        calls = 0
+        def change_after_visit(target, fd):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                info = path.stat()
+                os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
+            return original(target, fd)
+        with patch.object(C, '_current_source_path', side_effect=change_after_visit):
+            with self.assertRaises(C.CoverageError):
+                C.source_snapshot(path)
+        self.assertEqual(calls, 2)
+
+    def test_collection_rejects_root_metadata_change_after_listing(self):
+        self.add_run()
+        original = C._current_source_path
+        def change_after_listing(target, fd):
+            info = self.root.stat()
+            os.utime(self.root, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
+            return original(target, fd)
+        with patch.object(C, '_current_source_path', side_effect=change_after_listing):
+            with self.assertRaises(C.CoverageError):
+                C.listing(self.root)
+
     def test_snapshot_rejects_entry_added_after_directory_listing(self):
         path = self.add_run()
         actual_names = C._bounded_names

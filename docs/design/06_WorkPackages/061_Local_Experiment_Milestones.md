@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.07"
+version: "5.08"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: saved source and collection root metadata (offline)
+
+WP-L5-LINEAGE-001: compare opened root directory metadata before and after source hashing and collection enumeration. Two disposable mtime negatives failed before repair; `make test-local-lineage-coverage` passed (52 tests). Initial `make verify-local-experiment` stopped in an unchanged Warehouse serial-handler test (`KeyError: 'result'`); `make test-local-warehouse-lifecycle` and a subsequent full `make verify-local-experiment` passed without modifying that test. `make verify-design-context` passed (89 documents) and `git diff --check` passed. Private rerun logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-053/warehouse-rerun.log` and `verify-rerun.log`. Read-only `colima list` reported dedicated `mac-studio-solo` stopped. No VM start, live API/SQL, retained source/report/backup mutation or unknown-request replay. Rechecking cannot guarantee atomicity against restored metadata, provenance, full catalog/column coverage or operator/production acceptance. Roll back reader/tests only, preserving evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: saved-run hard-link boundary (offline)
 

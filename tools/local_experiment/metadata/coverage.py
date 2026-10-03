@@ -193,10 +193,16 @@ def _bounded_names(fd, limit, code):
     return sorted(names)
 
 
+def _source_directory_identity(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_size,
+            info.st_mtime_ns, info.st_ctime_ns, info.st_nlink)
+
+
 def source_snapshot(path):
     """Hash every retained file, including artifacts not consumed by the verifier."""
     path = Path(path)
     root_fd = _open_source_dir(path)
+    initial = os.fstat(root_fd)
     files, total, nodes = {}, 0, 0
 
     def visit(fd, relative, depth, device):
@@ -253,8 +259,9 @@ def source_snapshot(path):
         visit(root_fd, '.', 0, os.fstat(root_fd).st_dev)
         _current_source_path(path, root_fd)
         final = os.fstat(root_fd)
-        require(final.st_uid == os.getuid() and stat.S_IMODE(final.st_mode) == 0o700,
-                'SOURCE_CHANGED')
+        require(_source_directory_identity(final) == _source_directory_identity(initial) and
+                final.st_uid == os.getuid() and stat.S_IMODE(final.st_mode) == 0o700,
+                 'SOURCE_CHANGED')
         return digest(files)
     finally:
         os.close(root_fd)
@@ -283,7 +290,8 @@ def listing(root):
         _current_source_path(root, fd)
         final = os.fstat(fd)
         current = root.lstat()
-        require(final.st_uid == initial.st_uid == current.st_uid and
+        require(_source_directory_identity(final) == _source_directory_identity(initial) and
+                final.st_uid == current.st_uid and
                 stat.S_IMODE(final.st_mode) == stat.S_IMODE(initial.st_mode) == stat.S_IMODE(current.st_mode),
                 'SOURCE_CHANGED')
         return names
