@@ -405,7 +405,7 @@ class ReadOnlyClient:
                 # type to catalog JSON, even when its bytes happen to parse.
                 require(type(media_types) is list and len(media_types) <= 1 and
                         (not media_types or (type(media_types[0]) is str and
-                         re.fullmatch(r'application/json(?:;[ \t]*charset=utf-8)?',
+                          re.fullmatch(r'application/json(?:;[ \t]*charset=(?:utf-8|"utf-8"))?',
                                       media_types[0], re.IGNORECASE) is not None)),
                         'API_RESPONSE_INVALID')
                 # urllib does not decode content codings. Even a JSON-looking

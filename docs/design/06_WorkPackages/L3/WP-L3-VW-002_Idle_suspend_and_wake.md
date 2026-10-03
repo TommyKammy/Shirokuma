@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.77"
+version: "0.78"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: printable extension header compatibility (offline)
+
+A disposable Unix request with one printable optional header still dispatches,
+while the same header duplicated with different casing is rejected before
+journaling or handler execution. The existing parser needed no change; focused
+Warehouse suites passed (78 + 101 + 16 + 22 + 15 tests). No VM start, live
+backend/SQL, archived UUID replay or retained session/backup change. This
+does not prove caller receipt, backend authenticity, restart recovery or operator
+acceptance. Roll back the fixture only; preserve saved sessions. Direct original
+Vault sync pending outside checkout.
 
 ## 2026-10-03: reject control bytes in optional RPC headers (offline)
 

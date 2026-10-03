@@ -879,10 +879,12 @@ class ReadOnlyClientTests(unittest.TestCase):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))
         for types, expected in [(['text/plain'], 'API_RESPONSE_INVALID'),
-                                (['application/json; charset=latin1'], 'API_RESPONSE_INVALID'),
-                                (['application/json', 'application/json'], 'API_RESPONSE_INVALID'),
-                                (['application/json'], None),
-                                (['Application/JSON; charset=UTF-8'], None)]:
+                                 (['application/json; charset=latin1'], 'API_RESPONSE_INVALID'),
+                                 (['application/json; charset="latin1"'], 'API_RESPONSE_INVALID'),
+                                 (['application/json', 'application/json'], 'API_RESPONSE_INVALID'),
+                                 (['application/json'], None),
+                                 (['Application/JSON; charset=UTF-8'], None),
+                                 (['application/json; charset="UTF-8"'], None)]:
             with self.subTest(types=types):
                 response = Response(b'{"id":1}')
                 response.headers = Message()

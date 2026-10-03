@@ -858,6 +858,22 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(self.rpc._entries, {})
 
+    def test_printable_extension_header_remains_compatible_without_duplicate_aliases(self):
+        self.start()
+        body = json.dumps(self.request()).encode()
+        length = str(len(body)).encode()
+        base = b'Content-Type: application/json\r\nContent-Length: ' + length + b'\r\n'
+        duplicate = base + b'X-Trace: printable-123\r\nx-trace: another\r\n'
+        self.assertEqual(self.exchange(self.wire(body, duplicate), raw=True)[0], 400)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.rpc._entries, {})
+        single = base + b'X-Trace: printable-123\r\n'
+        status, response = self.exchange(self.wire(body, single), raw=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(response['result'], 'verified')
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(len(self.rpc._entries), 1)
+
     def test_buffered_bytes_after_declared_body_are_refused(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         body = json.dumps(self.request()).encode()

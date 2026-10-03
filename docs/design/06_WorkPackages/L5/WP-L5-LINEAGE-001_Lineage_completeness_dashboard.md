@@ -5,12 +5,23 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.23"
+version: "1.24"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: quoted UTF-8 catalog charset (offline)
+
+The read-only JSON reader now accepts the ordinary HTTP quoted UTF-8 charset
+alongside the unquoted form; a quoted non-UTF-8 charset remains invalid.
+Disposable response fixtures and 91 focused tests passed. No VM start, live
+login/GET, retained source/credential/report/backup changes or request replay.
+The label does not authenticate the catalog or establish atomic, whole-catalog
+or column lineage or operator acceptance. Roll back only the media-type matcher
+and fixtures, preserving reports. Direct original Vault sync pending outside
+checkout.
 
 ## 2026-10-03: declared catalog media type (offline)
 

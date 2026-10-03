@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.46"
+version: "5.47"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: quoted catalog charset and printable RPC extension (offline)
+
+WP-L5-LINEAGE-001 accepts a quoted UTF-8 JSON charset without accepting a
+quoted non-UTF-8 one (91 focused tests). Independently WP-L3-VW-002 preserves
+single printable extension headers and rejects a case-folded duplicate before
+dispatch/journaling (focused 78 + 101 + 16 + 22 + 15 tests). Combined
+`make verify-local-experiment`, `make verify-design-context` (89 documents)
+and `git diff --check` passed. Read-only
+`colima list` showed the dedicated VM stopped. No VM start, live catalog/login,
+backend/SQL, archived replay, retained source/credential/report/session/backup
+mutation or GitHub write. These fixtures cannot authenticate producers, prove
+atomic reads, caller receipt, restart recovery, whole-catalog/column lineage
+or operator acceptance. Roll back these matcher/fixture changes alone, retaining
+historical evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: declared catalog media type (offline)
 
