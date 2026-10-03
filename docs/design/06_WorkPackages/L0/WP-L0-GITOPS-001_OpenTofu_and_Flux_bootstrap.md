@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.80"
+version: "0.81"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent complete-list review after dry-run repair (offline)
+
+Reviewed fixed-profile complete-list identity, pagination and reported member
+version boundaries in `internal/cli/doctor.go` after the separate policy
+increment. No additional defect established or doctor behavior changed. `go
+test ./internal/cli -count=1` passed (831). Dedicated Colima observed Stopped;
+no live API/Git read, reconciliation, retained data/backup mutation or GitHub
+write. Static review cannot authenticate remote state, prove atomic inventory,
+strict admission or operator acceptance. No runtime rollback; retain earlier
+evidence. Original Vault sync pending outside this checkout.
 
 ## 2026-10-04: independent list-identity review after policy commit (offline)
 

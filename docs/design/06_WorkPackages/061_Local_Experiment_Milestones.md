@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.116"
+version: "5.117"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: dry-run object identity and independent GitOps review (offline)
+
+WP-L2-POL-001: six fake allowed responses claiming persisted identity or
+unrecognized metadata passed before repair and now fail closed with the
+original request pending; empty API defaults still match. Focused observer
+36 and native policy 17 tests passed. Independently reviewed WP-L0-GITOPS-001
+fixed-profile complete-list identity, pagination and per-member version
+boundaries without establishing another defect; Go CLI 831 tests passed.
+Dedicated Colima observed Stopped; no live API/Git/admission, reconciliation,
+unknown-request replay, retained report/volume/backup mutation or GitHub write.
+Offline fixtures cannot authenticate a remote producer, prove atomic inventory
+or complete mutation coverage, clear strict admission or establish acceptance.
+Roll back only the policy comparator/test if needed, preserving pending requests
+and saved evidence; no GitOps runtime rollback. Original Vault sync pending
+outside the approved checkout. The six focused negatives failed as expected
+before repair; `make verify-local-experiment`, `make verify-design-context`
+(89 documents), `make check-no-secret-filenames` and `git diff --check` passed
+after repair. These are offline checks, not live acceptance.
 
 ## 2026-10-04: separate GitOps complete-list review (offline)
 

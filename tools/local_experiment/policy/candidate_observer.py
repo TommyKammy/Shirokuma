@@ -98,6 +98,17 @@ def allowed_pod_matches(value, body):
     if type(meta) is not dict or type(spec) is not dict or any(
             meta.get(key) != body['metadata'][key] for key in ('name', 'namespace')):
         return False
+    # A server dry-run must not be mistaken for a persisted Pod. Accept only
+    # empty API identity defaults, never a live UID/version or managed owner.
+    if (set(meta) - {'name', 'namespace', 'uid', 'resourceVersion', 'generation',
+                     'creationTimestamp', 'managedFields', 'ownerReferences',
+                     'labels', 'annotations', 'finalizers', 'generateName',
+                     'deletionTimestamp', 'deletionGracePeriodSeconds'} or
+            meta.get('uid', '') != '' or meta.get('resourceVersion', '') != '' or
+            type(meta.get('generation', 0)) is not int or meta.get('generation', 0) != 0 or
+            meta.get('creationTimestamp') is not None or
+            meta.get('managedFields') not in (None, [])):
+        return False
     # A controller owner can change lifecycle; an injected pull secret changes
     # the credentials used to fetch the image even when image text is unchanged.
     if (meta.get('ownerReferences') not in (None, []) or

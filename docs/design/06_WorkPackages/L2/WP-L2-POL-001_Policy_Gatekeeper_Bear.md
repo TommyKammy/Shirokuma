@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.24"
+version: "0.25"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: allowed dry-run object identity (offline)
+
+Six disposable allowed responses added a persisted UID, resource version,
+generation, creation time, managed fields or unknown metadata key. Each passed
+before repair. The response comparator now refuses these claims, while empty
+API defaults remain compatible. The pending original request is retained as
+unknown, never replayed. Focused observer 36 tests and policy 17 tests passed.
+Dedicated Colima was observed Stopped; no live admission, retained evidence,
+volume or backup mutation, or GitHub write. Fake responses cannot authenticate
+the API, prove complete mutation coverage or establish operator acceptance.
+Roll back comparator/test only if required, preserving pending requests and
+historical evidence. Original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: security boolean type in dry-run responses (offline)
 

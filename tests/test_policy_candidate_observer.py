@@ -162,6 +162,30 @@ class ObserverTests(unittest.TestCase):
                 self.assertIsNotNone(receipt['pending'])
                 self.assertEqual(receipt['request_count'],1)
 
+    def test_allowed_response_cannot_claim_persisted_identity(self):
+        for metadata in ({'uid':str(uuid.UUID(int=42))}, {'resourceVersion':'123'},
+                         {'generation':1}, {'creationTimestamp':'2026-10-04T00:00:00Z'},
+                         {'managedFields':[{'manager':'other'}]}, {'unexpected':'value'}):
+            with self.subTest(metadata=metadata):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['metadata'].update(metadata)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaults(body):
+            altered=copy.deepcopy(body)
+            altered['metadata'].update(uid='',resourceVersion='',generation=0,
+                                       creationTimestamp=None,managedFields=[])
+            return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+        kube.respond=defaults
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_cannot_inject_pod_identity_or_scheduling(self):
         for changes in ({'serviceAccountName':'admin'}, {'nodeName':'other-node'},
                         {'nodeSelector':{'role':'privileged'}},
