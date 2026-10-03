@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-04: private forwarding namespace (offline)
+
+The fixed Unix RPC now refuses all `X-Forwarded-*` names rather than only
+previously enumerated fields. Test-owned `X-Forwarded-Server` and
+`X-Forwarded-Uri` cannot reach the handler or journal; the regular Go request
+and printable non-forwarding extensions remain compatible. Focused Warehouse
+checks passed. No VM start, saved UUID replay, backend/SQL or retained session/
+backup mutation. This cannot authenticate peers beyond the existing UID check,
+prove caller receipt or owner restart recovery. Roll back only the namespace
+guard/test, keeping historical sessions. Original Vault sync pending outside
+this noninteractive checkout.
+
 ## 2026-10-04: HTTP method override metadata on private RPC (offline)
 
 Complete test-owned POST transitions with `X-HTTP-Method-Override` or

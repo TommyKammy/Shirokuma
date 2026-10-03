@@ -12,6 +12,24 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: forwarded namespace and unusable catalog URL accessor (offline)
+
+WP-L3-VW-002 refuses the full `X-Forwarded-*` namespace, including disposable
+server/URI variants, before handler or journal. Independently WP-L5-LINEAGE-001
+refuses a returned catalog response advertising a non-callable final URL
+accessor instead of silently skipping its fixed-path check. Focused Warehouse
+(78 + 105 + 16 + 22 + 15 tests) and lineage (104 tests) suites passed;
+`make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` passed. Private broader logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-020/`.
+Read-only `colima list` showed the dedicated VM stopped. No VM start, live
+backend/catalog/SQL, archived request replay, retained session/source/report/
+backup mutation or GitHub write. These offline checks cannot prove producer or
+peer authenticity, atomicity, caller receipt, restart recovery, whole-catalog/
+column coverage or operator acceptance. Roll back only the independent
+guards/tests; preserve saved evidence. Original Vault synchronization pending
+outside the noninteractive checkout.
+
 ## 2026-10-04: returned mapping headers and private RPC method override (offline)
 
 WP-L5-LINEAGE-001 inspects case-varied plain-dict headers on a returned fixed

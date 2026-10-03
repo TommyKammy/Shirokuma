@@ -393,7 +393,10 @@ class ReadOnlyClient:
                 # even when an injected opener supplies a successful 200.
                 # The normal opener also disables HTTP redirects.
                 final_url = getattr(response, 'geturl', None)
-                if callable(final_url):
+                # An advertised but unusable final-URL accessor cannot verify
+                # that the returned representation belongs to this fixed path.
+                require(final_url is None or callable(final_url), 'API_RESPONSE_INVALID')
+                if final_url is not None:
                     observed_url = final_url()
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
                     require(type(observed_url) is str and observed_url == request.full_url,

@@ -875,6 +875,16 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_unusable_catalog_final_url_accessor_is_not_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        response = Response(b'{"id":1}')
+        response.geturl = C.URL + '/tables/name/other?include=all'
+        with patch.object(self.client.opener, 'open', return_value=response):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                self.client.request('GET', path)
+        self.assertTrue(response.closed)
+
     def test_mapping_catalog_headers_are_inspected_case_insensitively(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

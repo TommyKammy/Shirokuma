@@ -12,6 +12,16 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: unusable final catalog URL accessor (offline)
+
+An injected returned response that advertises a non-callable `geturl` no longer
+silently skips the fixed-path identity check. An absent accessor remains
+compatible with simpler response fixtures. Focused lineage tests passed; no
+live catalog, VM start or saved source/report/backup change. This offline
+check does not authenticate the producer or establish atomic, whole-catalog or
+column coverage. Roll back only the accessor guard/test and preserve reports.
+Original Vault sync pending outside this checkout.
+
 ## 2026-10-04: mapping headers on returned catalog responses (offline)
 
 An injected successful fixed-path response with plain-dict headers raised a raw

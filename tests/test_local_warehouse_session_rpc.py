@@ -931,7 +931,9 @@ class SessionRPCTest(unittest.TestCase):
                        b'X-Forwarded-Host: other.local\r\n',
                        b'X-Forwarded-Proto: https\r\n',
                        b'X-Forwarded-For: 192.0.2.1\r\n',
-                       b'X-Forwarded-Port: 443\r\n'):
+                       b'X-Forwarded-Port: 443\r\n',
+                       b'X-Forwarded-Server: other.local\r\n',
+                       b'X-Forwarded-Uri: /other\r\n'):
             with self.subTest(extra=extra):
                 self.assertEqual(self.exchange(self.wire(body, base + extra), raw=True)[0], 400)
         self.assertEqual(self.calls, [])
