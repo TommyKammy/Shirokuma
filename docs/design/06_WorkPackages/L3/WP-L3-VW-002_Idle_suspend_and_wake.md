@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.59"
+version: "0.60"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: disposable concurrent responses match durable entries (offline)
+
+The serial-handler fixture now requires the original caller's complete verified response to carry its own UUID/action, and checks that both that response and the competing busy reply match their separate durable journal entries. The first focused run exposed an incorrect test assumption that the competing busy request was not saved; the corrected assertion and full focused Warehouse suite passed. This strengthens only the disposable regression and does not establish a fix for intermittent failures, backend authenticity, caller delivery in archived sessions or safe unknown-request replay. No VM start, API/SQL, retained journal/backup mutation or archived UUID replay; dedicated Colima was observed stopped. Full verification is recorded in Milestones. Roll back this test assertion only, preserving evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: concurrent busy reply correlation (offline)
 

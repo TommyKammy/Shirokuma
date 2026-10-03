@@ -442,7 +442,14 @@ class SessionRPCTest(unittest.TestCase):
             sender.join(3)
         self.assertFalse(sender.is_alive(), 'first caller did not finish after handler release')
         self.assertEqual(len(received), 1)
-        self.assertEqual(received[0][0], 200)
+        self.assertEqual((received[0][0], received[0][1].get('result'),
+                          received[0][1].get('request_id'), received[0][1].get('action')),
+                         (200, 'verified', first['request_id'], first['action']))
+        saved = json.loads(self.rpc.journal_path.read_text())
+        self.assertEqual(len(saved['requests']), 2)
+        self.assertEqual(saved['requests'][0]['response'], received[0][1])
+        self.assertEqual(saved['requests'][1]['request']['request_id'], second['request_id'])
+        self.assertEqual(saved['requests'][1]['response'], busy[1])
         self.assertEqual(self.exchange(second), busy)
         self.assertEqual(len(self.calls), 1)
 

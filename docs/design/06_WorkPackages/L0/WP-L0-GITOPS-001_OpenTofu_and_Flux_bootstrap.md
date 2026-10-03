@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.64"
+version: "0.65"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: invisible characters in reported Git refs and revisions (offline)
+
+The fixed-profile complete inventory now refuses whitespace and Unicode control/format characters in reported Git selectors, artifact revisions and applied revisions, even on unrelated members. An isolated escaped-newline branch was accepted before repair and rejected afterward; canonical revisions and omitted fields remain compatible. `go test ./internal/cli -count=1` (817 passed), `go vet ./...` and local milestone verification passed. Generic doctor is unchanged. Dedicated Colima was read-only observed stopped; no VM start, API/Git/SQL, reconciliation, archived request replay or retained data/backup mutation. This checks reported shape, not remote provenance, atomicity, historical cleanup, strict admission or operator acceptance. Roll back the local reader/test only, preserving VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: invisible characters in reported locations (offline)
 

@@ -326,6 +326,29 @@ func TestLocalInventoryRejectsInvisibleLocations(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsInvisibleRevisions(t *testing.T) {
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"spec":{"ref":{"branch":"main\nother"}}}]}`),
+		[]byte(`{"items":[{"spec":{"ref":{"tag":"v1\u200b"}}}]}`),
+		[]byte(`{"items":[{"status":{"artifact":{"revision":"main\r@sha1:abc"}}}]}`),
+		[]byte(`{"items":[{"status":{"lastAppliedRevision":"main\u200b@sha1:abc"}}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("invisible revision accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"spec":{"ref":{"branch":"main"}},"status":{"artifact":{"revision":"main@sha1:abc"},"lastAppliedRevision":"main@sha1:abc"}}]}`),
+		[]byte(`{"items":[{}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid revision rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullReferenceScalars(t *testing.T) {
 	for _, tc := range []struct{ parent, field string }{
 		{`spec":{"ref`, `branch`}, {`spec":{"ref`, `tag`}, {`spec":{"ref`, `semver`},

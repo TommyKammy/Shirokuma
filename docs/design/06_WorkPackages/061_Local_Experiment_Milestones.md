@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.14"
+version: "5.15"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: revision visibility and concurrent journal correlation (offline)
+
+WP-L0-GITOPS-001: a fixed-profile inventory rejects invisible whitespace/control/format characters in reported Git selectors, artifact revisions and applied revisions on unrelated members; an isolated branch negative failed before repair, then `go test ./internal/cli -count=1` (817 passed) and `go vet ./...` passed. WP-L3-VW-002: the disposable serial-handler test asserts complete original caller identity and both separate journaled responses; an initial incorrect one-entry fixture expectation failed, was corrected to the actual two durable entries, and `make test-local-warehouse-lifecycle` passed. Combined `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed; private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-058/{verify,design}.log`. Read-only `colima list` reported the dedicated VM stopped; no VM start, API/Git/SQL, reconciliation, archived UUID replay or retained source/session/report/backup mutation. Offline responses and disposable socket tests do not authenticate remote Git/API/backend, guarantee atomicity or caller receipt for archived sessions, prove historical cleanup, clear strict admission or grant operator/production acceptance. Roll back only reader and disposable test changes, preserving VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: reported location characters (offline)
 

@@ -439,7 +439,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			localInventoryNullFields(status, []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas", "observedGeneration", "lastAppliedRevision", "conditions"}) {
 			return true
 		}
-		if localInventoryLossyStrings(status, []string{"lastAppliedRevision"}) {
+		if localInventoryInvisibleLocations(status, []string{"lastAppliedRevision"}) {
 			return true
 		}
 		// A decoded replacement rune in the reported Git URL or Kustomization
@@ -469,7 +469,8 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			}
 		}
 		// References on unrelated members are still part of the claimed
-		// complete list. Preserve their reported identity without lossy decode.
+		// complete list. Invisible revision characters can obscure which Git
+		// ref or artifact was actually reported.
 		for _, reference := range []struct {
 			raw  json.RawMessage
 			keys []string
@@ -483,7 +484,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				continue
 			}
 			var fields map[string]json.RawMessage
-			if err := json.Unmarshal(reference.raw, &fields); err != nil || localInventoryLossyStrings(fields, reference.keys) {
+			if err := json.Unmarshal(reference.raw, &fields); err != nil || localInventoryInvisibleLocations(fields, reference.keys) {
 				return true
 			}
 		}
