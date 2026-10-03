@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.31"
+version: "5.32"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: stopped-owner dispatch and returned catalog status deadline (offline)
+
+WP-L3-VW-002: a stopped owner now refuses and journals an accepted-but-not-yet-dispatched fresh UUID even if the failing stop callback is removed; a previously completed disposable UUID still replays unchanged. WP-L5-LINEAGE-001: a late returned non-200 HTTP response is now refused at the deadline before its status is inspected; a timely non-200 still returns the previous invalid-response classification. Focused Warehouse (78 + 89 + 16 + 22 + 15 tests) and lineage (76 tests), `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed; full private logs at `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-077/{verify,design}.log`. Read-only Colima listing: dedicated VM stopped. No VM start, live catalog/backend, archived replay, retained source/credential/session/report/backup mutation or GitHub write. Offline fixtures do not prove producer/backend authenticity, atomicity, caller receipt, restart recovery, whole-catalog/column lineage or operator/production acceptance. Roll back these independent guards/tests only; preserve historical data and stopped VM. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: catalog error deadline and completed Warehouse replay (offline)
 

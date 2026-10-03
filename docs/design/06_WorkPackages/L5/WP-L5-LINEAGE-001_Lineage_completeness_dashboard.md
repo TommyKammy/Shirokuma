@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.12"
+version: "1.13"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: returned HTTP status after catalog deadline (offline)
+
+The bounded client now checks its deadline immediately after an opener returns a response, before inspecting its status. A disposable opener returning a late non-200 response is classified as `API_DEADLINE`, while an on-time non-200 response retains `API_RESPONSE_INVALID`; both streams close. This complements the thrown-HTTPError guard without a live login/GET, VM start, or retained credential/source/report/backup change. It cannot authenticate catalog state, establish atomicity or whole-catalog/column lineage, or grant operator acceptance. Roll back this guard and test only, preserving saved reports. Original Vault direct sync pending outside checkout; verification in Milestones.
 
 ## 2026-10-03: late catalog 404 is not absence evidence (offline)
 

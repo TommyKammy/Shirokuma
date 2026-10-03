@@ -381,6 +381,9 @@ class ReadOnlyClient:
                                          data=canonical(data).encode() if data is not None else None)
         try:
             with self.opener.open(request, timeout=min(10, remaining)) as response:
+                # An opener may return an HTTP response after the deadline
+                # without raising HTTPError. Its status is not timely evidence.
+                require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 require(response.status == 200, 'API_RESPONSE_INVALID')
                 chunks, count = [], 0
                 while True:

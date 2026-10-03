@@ -1033,6 +1033,28 @@ class ReadOnlyClientTests(unittest.TestCase):
         self.assertEqual(caught.exception.status, 404)
         self.assertTrue(error.fp.closed)
 
+    def test_late_returned_http_status_is_deadline_not_response_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+        class ReturnedError(Response):
+            status = 404
+
+        response = ReturnedError(b'private')
+        def late_response(request, timeout):
+            client.deadline = time.monotonic() - 1
+            return response
+        with patch.object(client.opener, 'open', side_effect=late_response):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+        self.assertTrue(response.closed)
+
+        client.deadline = time.monotonic() + 10
+        timely = ReturnedError(b'private')
+        with patch.object(client.opener, 'open', return_value=timely):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                client.request('GET', next(iter(C.ANCHORS)))
+        self.assertTrue(timely.closed)
+
     def test_login_response_finishing_after_deadline_never_sends_get(self):
         client = self.client
         class LateLogin(Response):

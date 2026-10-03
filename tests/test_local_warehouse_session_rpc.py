@@ -130,6 +130,29 @@ class SessionRPCTest(unittest.TestCase):
         saved = json.loads(self.rpc.journal_path.read_bytes())
         self.assertEqual([entry['state'] for entry in saved['requests']], ['completed', 'rejected'])
 
+    def test_failed_owner_cannot_admit_waiting_worker_after_callback_removed(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        original = self.request()
+        completed = self.rpc._dispatch(original)
+
+        def broken_stop():
+            raise RuntimeError('disposable callback failure')
+
+        self.rpc._stop_callback = broken_stop
+        self.assertEqual(self.rpc._dispatch(self.request())['result'], 'unknown')
+        self.assertTrue(self.rpc._stop.is_set())
+        # A worker already accepted by serve may reach dispatch after the
+        # callback is removed; the stopped owner must not run its handler.
+        self.rpc._stop_callback = None
+        late = self.request()
+        self.assertEqual(self.rpc._dispatch(late)['result'], 'unknown')
+        self.assertEqual(self.rpc._dispatch(original), completed)
+        self.assertEqual(self.calls, [('chill', original['request_id'])])
+        saved = json.loads(self.rpc.journal_path.read_bytes())
+        self.assertEqual([entry['state'] for entry in saved['requests']],
+                         ['completed', 'rejected', 'rejected'])
+
     def test_failing_serve_stop_callback_returns_failed_without_dispatch(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         self.rpc.__enter__()

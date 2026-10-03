@@ -416,7 +416,7 @@ class SessionRPC:
             # accept() may return just before the TTL while its worker reaches
             # dispatch afterward. The serve-loop deadline alone cannot bound
             # admission of that already accepted connection.
-            if (self._replay_until is not None or
+            if (self._stop.is_set() or self._replay_until is not None or
                     time.monotonic() - self._started >= self.ttl_seconds or
                     stop_requested):
                 entry.update(state='rejected', response=_uncertain(request))
