@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.46"
+version: "0.47"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: non-JSON Kubernetes numeric constants (offline)
+
+Three test-owned scoped API replies with nested or top-level `NaN`/`Infinity`
+passed the transport parser before repair. The reader now rejects Python's
+non-standard JSON constants before baseline interpretation; canonical numeric
+JSON remains valid. All three negatives failed before repair; focused policy
+observer/native tests passed (72). The dedicated Colima profile was read-only
+observed stopped. No live admission, pending-request replay, retained volume or
+backup mutation. Fake replies cannot authenticate the API, prove atomic
+inventory, clear strict admission or establish operator acceptance. Roll back
+only the parser/test if needed, retaining saved intents. Original Vault sync
+pending outside this checkout.
 
 ## 2026-10-04: explicit null is not a missing Pod (offline)
 

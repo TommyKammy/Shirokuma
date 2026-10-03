@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.157"
+version: "5.158"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy non-JSON constants and independent GitOps regression (offline)
+
+WP-L2-POL-001: three fake Kubernetes responses with top-level or nested
+`NaN`/`Infinity` were parsed before repair; all three negative cases failed
+first. The scoped reader now rejects non-JSON constants (focused policy
+observer/native suite: 72 tests). Separately WP-L0-GITOPS-001 pins the Go
+complete-list decoder's existing refusal of two such fake extensions; focused
+Go test and full `go test ./... -count=1` passed (849 tests). `make
+verify-local-experiment`, `make verify-design-context` (89 documents), and
+`make check-no-secret-filenames` passed. Dedicated Colima read-only observed
+Stopped; no live admission, Git/API inventory, reconciliation, retained
+request/report/volume/backup mutation or GitHub write. Offline fixtures do not
+authenticate producers, prove atomic inventory, clear strict admission or
+establish operator acceptance. Roll back the policy reader/test and separate
+GitOps test only if needed; retain pending intents and saved evidence. Direct
+original Vault sync remains pending outside this checkout. The local suite's
+expected synthetic failures are not live runtime evidence.
 
 ## 2026-10-04: explicit policy null and separate FinOps review (offline)
 

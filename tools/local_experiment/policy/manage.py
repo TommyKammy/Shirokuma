@@ -182,7 +182,10 @@ class Kubernetes:
 
         if not result.stdout.strip():
             return None  # kubectl --ignore-not-found emits no object for a missing resource.
-        value = json.loads(result.stdout, object_pairs_hook=unique_keys)
+        def invalid_constant(value):
+            raise PolicyError('scoped Kubernetes response contains non-JSON numeric constant')
+
+        value = json.loads(result.stdout, object_pairs_hook=unique_keys, parse_constant=invalid_constant)
         if value is None:
             raise PolicyError('scoped Kubernetes response contains explicit JSON null')
         return value

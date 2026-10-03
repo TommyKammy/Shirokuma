@@ -2736,6 +2736,8 @@ func TestLocalLakehouseRejectsIncompleteAndDuplicateInventory(t *testing.T) {
 		{"remaining-items", `{"metadata":{"remainingItemCount":1},"items":[]}`, "incomplete"},
 		{"boolean-remaining-items", `{"metadata":{"remainingItemCount":false},"items":[]}`, "not valid JSON"},
 		{"fractional-remaining-items", `{"metadata":{"remainingItemCount":0.5},"items":[]}`, "not valid JSON"},
+		{"non-json-list-extension", `{"items":[],"extension":{"value":NaN}}`, "not valid JSON"},
+		{"non-json-member-extension", `{"items":[{"metadata":{"name":"other"},"extension":Infinity}]}`, "not valid JSON"},
 		{"wrong-api-version", `{"apiVersion":"v2","items":[]}`, "incomplete"},
 		{"duplicate", `{"items":[` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `,` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `]}`, "duplicated"},
 	} {

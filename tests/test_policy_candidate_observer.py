@@ -107,6 +107,19 @@ class ObserverTests(unittest.TestCase):
                     returncode=0, stdout=raw)):
                 self.assertIsNone(reader.json_request(args))
 
+    def test_kubernetes_reader_refuses_non_json_numeric_constants(self):
+        reader = object.__new__(O.M.Kubernetes)
+        for raw in ('{"kind":"Namespace","extension":NaN}',
+                    '{"metadata":{"uid":Infinity}}',
+                    '{"items":[{"extension":-Infinity}]}'):
+            with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
+                    returncode=0, stdout=raw)):
+                with self.assertRaises(O.M.PolicyError):
+                    reader.json_request(['get', 'namespace'])
+        with patch.object(reader, 'request', return_value=SimpleNamespace(
+                returncode=0, stdout='{"items":[{"extension":0}]}')):
+            self.assertEqual(reader.json_request(['get', 'namespace']), {'items': [{'extension': 0}]})
+
     def test_incomplete_limitrange_inventory_never_becomes_ready(self):
         # A first page with no items is not evidence that the namespace has
         # no LimitRanges: the continuation token may hide a later page.

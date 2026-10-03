@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.101"
+version: "0.102"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent non-JSON inventory regression (offline)
+
+Two separate fake lists containing `NaN` or `Infinity` in unknown extensions
+already fail the Go complete-list JSON decoder; pinned the degraded result and
+fixed invalid-JSON diagnostic. Focused Go test passed, no doctor behavior
+change. Dedicated Colima remained stopped; no live inventory, reconciliation,
+retained data or backup mutation. Fixtures cannot authenticate the producer,
+prove atomic inventory, clear strict admission or establish operator
+acceptance. Roll back only the two test cases if needed; keep saved evidence.
+Original Vault sync pending outside this checkout.
 
 ## 2026-10-04: independent list identity review (offline)
 
