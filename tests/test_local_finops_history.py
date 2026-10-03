@@ -46,6 +46,23 @@ class HistoryTests(unittest.TestCase):
                 H.render(changed)
         self.assertIn('保存FinOps観測履歴', H.render(entries))
 
+    def test_direct_renderer_requires_complete_ordered_selection(self):
+        first = report(); later_time = '2026-09-20T00:00:22.000Z'
+        later = C.build_report(first['components'], first['disks'],
+                               C.inference([row()], end=later_time), observed_at=later_time)
+        entries = H.parse(encoded([later, first]))
+        self.assertEqual([item[0] for item in entries], [1, 0])
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
+        for invalid in ([entries[0], entries[0]], list(reversed(entries)),
+                        [(2, entries[0][1]), entries[1]]):
+            with self.subTest(indices=[item[0] for item in invalid]), self.assertRaises(H.HistoryError):
+                H.render(invalid)
+
+    def test_offline_html_declares_no_external_resources_or_script(self):
+        html = H.render(H.parse(encoded([report(), report(processes())])))
+        self.assertIn('Content-Security-Policy', html)
+        self.assertIn("default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'", html)
+
     def test_escape_model_names_and_never_collect(self):
         first = report()
         # Rebuild inference/public report with its validated public inputs rather than forge the report.

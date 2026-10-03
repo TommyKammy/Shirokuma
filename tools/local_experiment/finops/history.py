@@ -145,9 +145,14 @@ def render(entries):
     # render() is also called directly by offline tooling. Bind each displayed
     # digest to its validated report before interpolating it into HTML.
     try:
+        if {item[0] for item in entries} != set(range(len(entries))): raise HistoryError()
+        previous = None
         for selected_index, (report, saved_digest) in entries:
             if type(selected_index) is not int or not 0 <= selected_index < len(entries): raise HistoryError()
             C.validate_public(report)
+            order_key = (C.stamp(report['observed_at'])[1], selected_index)
+            if previous is not None and order_key < previous: raise HistoryError()
+            previous = order_key
             canonical = json.dumps(report, ensure_ascii=True, sort_keys=True,
                                    separators=(',', ':'), allow_nan=False).encode()
             if len(canonical) > C.MAX_PUBLIC_BYTES or type(saved_digest) is not str or \
@@ -187,6 +192,7 @@ def render(entries):
 重複windowの件数を合算・差し引きしません。</p>{H._inference(report)}
 </section>''')
     html = f'''<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer"><title>保存FinOps観測履歴 | Shirokuma</title><style>{H.STYLE}</style></head>
 <body><header><div class="inner"><p class="brand">Shirokuma · Local experiment</p><h1>保存FinOps観測履歴</h1>
 <p class="intro">明示選択した保存値のみ。並びは観測時刻の昇順で、現在の稼働や期間中の変化を示しません。</p>

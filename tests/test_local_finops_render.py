@@ -30,6 +30,11 @@ class Elements(HTMLParser):
 
 
 class RenderTests(unittest.TestCase):
+    def test_offline_html_declares_no_external_resources_or_script(self):
+        html = R.render(report())
+        self.assertIn('Content-Security-Policy', html)
+        self.assertIn("default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'", html)
+
     def test_complete_report_is_saved_snapshot_with_limited_coverage_not_live_or_wp_complete(self):
         value = report(); before = deepcopy(value)
         html = R.render(value)

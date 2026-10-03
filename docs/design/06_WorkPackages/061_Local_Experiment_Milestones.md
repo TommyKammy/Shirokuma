@@ -5,12 +5,39 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.70"
+version: "5.72"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: saved FinOps HTML browser policy (offline)
+
+WP-L6-FIN-001 standalone and history HTML now declare `default-src 'none'`,
+`style-src 'unsafe-inline'`, `base-uri 'none'`, and `form-action 'none'`.
+Both disposable negative tests failed before the change. Focused FinOps 177
+tests: 170 passed, 7 Linux-only skipped. This is static output validation, not
+a browser enforcement test, producer provenance, current usage or operator
+acceptance. No VM start, live collection, retained report/volume/backup change
+or GitHub write. Roll back only the templates/tests; keep historical evidence.
+Full `make verify-local-experiment`, design-context, secret scan and diff check
+passed. Private failed negative and final logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-032/`.
+Direct original Vault sync remains pending outside this checkout.
+
+## 2026-10-04: direct FinOps history selection order (offline)
+
+WP-L6-FIN-001 rejects direct renderer inputs with repeated/missing selection
+indices or chronology inconsistent with the saved-history page claim. The
+test-owned negatives failed before repair. Focused FinOps: 175 tests, 168
+passed and 7 Linux-only skipped. Dedicated Colima read-only observed stopped.
+Full local verification passed before the subsequent HTML policy increment;
+private log `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-032/verify-finops.log`.
+No VM start, new collection, retained report/volume/backup change or GitHub
+write. This cannot authenticate reports or establish current usage or operator
+acceptance. Revert renderer/test alone, preserve prior evidence. Original Vault
+sync remains pending outside the approved checkout.
 
 ## 2026-10-04: direct FinOps saved-history render integrity (offline)
 

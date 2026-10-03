@@ -327,6 +327,7 @@ def render(report):
     if report['schema_version'] == 9: coverage += '、Lab workspace・MLflow store・Serving HOME/TMPの個別論理bytes'
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>
 <body><header><div class="inner"><p class="brand">Shirokuma · Local experiment</p><h1>実験環境の容量と使用量</h1>
 <p class="intro">保存済みスナップショットです。このページを開いても再取得しません。</p>

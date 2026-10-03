@@ -5,12 +5,38 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.24"
+version: "0.26"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04 Saved FinOps HTML browser policy (offline)
+
+Standalone and history HTML now declare a restrictive CSP: no default network
+resources or script, with inline CSS retained for self-contained display.
+Both disposable negatives found the missing policy before repair; focused
+FinOps 177 tests passed (7 Linux-only skips). This is defense in depth for
+rendered offline pages, not proof of browser enforcement, producer authenticity,
+live usage or operator acceptance. No new collection, VM start or retained
+data/backup mutation. Roll back only the two template lines and tests, retaining
+saved reports. Full local verification, design-context, secret scan and diff
+check passed; private logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-032/`.
+Original Vault sync remains pending outside checkout.
+
+## 2026-10-04 Direct saved-history selection order (offline)
+
+Direct callers of `history.render` can no longer duplicate or omit a selected
+report index, or display reports out of observation-time order while the page
+claims chronological order. The renderer checks the exact index set and the
+same timestamp/index ordering used by the parser before producing HTML. A
+disposable negative reproduced both misleading cases before the fix; 175
+focused FinOps tests passed (7 Linux-only skips). No collection or VM start;
+stored reports, AgentHouse volume and backups were not changed. This is display
+integrity, not saved-report provenance or current usage. Roll back renderer and
+test only, retaining evidence; original Vault sync remains pending.
 
 ## 2026-10-04 Direct saved-history renderer digest binding (offline)
 
