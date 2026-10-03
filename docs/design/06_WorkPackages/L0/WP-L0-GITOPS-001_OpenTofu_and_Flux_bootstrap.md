@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-03: non-lossy reported source locations (offline)
+
+Fixed-profile inventories refuse U+FFFD in reported Git URL and Kustomization path, including Go's lossy decoding of escaped unpaired surrogates on unrelated members. The isolated URL negative failed before the repair; source location and omitted-field positives and the focused Go suite passed. Generic doctor remains unchanged. Dedicated Colima was observed stopped; no VM/API/Git read, reconciliation or retained data/backup mutation. This does not authenticate the remote Git source, establish atomic inventory or historical cleanup, clear strict admission or prove operator acceptance. Roll back the local reader/test only; preserve VM/evidence. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: non-lossy inventory envelope, references and revisions (offline)
 
 Three independent fixed-profile safeguards refuse U+FFFD after JSON decoding in reported item `kind`/`apiVersion`, nested source/secret reference identities and Git selector/artifact/applied revision strings, including escaped unpaired surrogates on unrelated list members. Omitted fields and valid reported strings remain compatible; generic doctor is unchanged. Focused negatives failed before each repair; full Go tests, vet and milestone verification are recorded in Local Experiment Milestones. Read-only dedicated Colima list: stopped. No VM start, API/Git/SQL observation, reconciliation, request replay or retained evidence/backup mutation. These offline guards cannot authenticate API or remote Git, make separate reads atomic, prove historical cleanup, clear strict admission or establish operator/production acceptance. Roll back reader/tests only and preserve VM/evidence. Direct original Vault sync pending outside checkout.

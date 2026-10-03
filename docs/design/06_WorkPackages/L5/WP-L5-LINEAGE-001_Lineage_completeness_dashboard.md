@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-03: source directory membership recheck (offline)
+
+After visiting a bounded source directory, re-enumerate its entries through the same open descriptor and reject a changed set rather than hashing an incomplete snapshot. A disposable run gained a new sibling immediately after the first listing and incorrectly returned a digest before repair; the focused suite then passed (45 tests). No saved Data Plan, catalog, API, SQL, VM, report or backup was changed. This does not detect a same-UID actor that restores entries between checks, prove atomicity or source provenance, or satisfy whole-catalog/column lineage and operator acceptance. Roll back reader/test only; preserve retained sources and reports. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: source directory privacy after traversal (offline)
 
 The source snapshot now checks both the opened descriptor and current entry for 0700 ownership/mode after visiting each nested directory, and checks the root descriptor again after the walk. Two disposable negative fixtures change a nested directory or the root to 0755 after its initial inspection; the nested fixture failed before repair. `make test-local-lineage-coverage` passed (44 tests). The first `make verify-local-experiment` stopped at an unchanged Warehouse saved-completion assertion (expected `SAVED_COMPLETION_UNVERIFIED`, observed `JOURNAL_UNVERIFIED`); focused Warehouse rerun and second full verification passed, without modifying the test or claiming to repair its intermittency. `make verify-design-context` passed (89 documents). The dedicated Colima profile was read-only observed stopped; no saved Data Plan, catalog, SQL, backup or VM change. An actor who restores a mode between observations remains outside this guarantee; this is neither source-producer authentication nor current catalog/whole-catalog acceptance. Roll back the reader/tests only and preserve retained sources, reports and backups. Direct original Vault sync pending outside checkout.

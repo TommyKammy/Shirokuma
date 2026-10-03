@@ -358,6 +358,22 @@ class CoverageTests(unittest.TestCase):
         finally:
             path.chmod(0o700)
 
+    def test_snapshot_rejects_entry_added_after_directory_listing(self):
+        path = self.add_run()
+        actual_names = C._bounded_names
+        injected = False
+        def add_after_listing(fd, limit, code):
+            nonlocal injected
+            names = actual_names(fd, limit, code)
+            if not injected:
+                save(path / 'late.json', {'value': 1})
+                injected = True
+            return names
+        with patch.object(C, '_bounded_names', side_effect=add_after_listing):
+            with self.assertRaises(C.CoverageError):
+                C.source_snapshot(path)
+        self.assertTrue(injected)
+
     def test_new_run_during_observation_marks_inventory_incomplete(self):
         self.add_run()
         real = self.client.request

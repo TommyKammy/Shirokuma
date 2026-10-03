@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: reported source locations and lineage directory membership (offline)
+
+WP-L0-GITOPS-001: fixed-profile inventory rejects lossy U+FFFD in reported Git URL/Kustomization path. Isolated URL negative failed before repair; `go test ./internal/cli -count=1` and `go vet ./...` passed. WP-L5-LINEAGE-001: after bounded descriptor-relative traversal, a second listing refuses added/removed directory entries. A disposable new-sibling negative failed before repair, then `make test-local-lineage-coverage` (45 tests) passed. `make verify-local-experiment` and `make verify-design-context` (89 documents) passed after both repairs. Dedicated Colima read-only list reported stopped. No VM start, live API/Git/catalog/SQL, unknown-request replay, reconciliation or retained source/report/backup mutation. Rechecking cannot provide atomicity against restored entries, independent provenance, strict admission or operator/production acceptance. Roll back only reader/tests and preserve VM/evidence. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: non-lossy reported inventory identities and revisions (offline)
 
 WP-L0-GITOPS-001: fixed-profile list items now reject U+FFFD decoded from escaped unpaired surrogates in kind/API version, source/secret reference identities, Git ref selectors, artifact revision and applied revision. Three isolated negatives failed before each repair; final `go test ./... -count=1` (813 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed for the combined changes. Dedicated Colima read-only list: stopped. No VM start, API/Git/SQL, reconciliation, unknown-request replay or retained data/backup change. Offline field validation cannot authenticate API/Git, prove atomic inventory or historical cleanup, satisfy strict admission or establish operator/production acceptance. Roll back reader/tests only; preserve VM/evidence. Original Vault direct sync pending outside checkout.

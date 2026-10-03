@@ -275,6 +275,22 @@ func TestLocalInventoryRejectsLossySourceAndAppliedRevision(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsLossySourceLocation(t *testing.T) {
+	for _, field := range []string{"url", "path"} {
+		raw := []byte(`{"items":[{"spec":{"` + field + `":"source\ud800"}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("lossy source %s accepted: %s (%v)", field, raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"spec":{"url":"https://example.invalid/repo.git","path":"./clusters/local"}}]}`), []byte(`{"items":[{}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid source location rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullReferenceScalars(t *testing.T) {
 	for _, tc := range []struct{ parent, field string }{
 		{`spec":{"ref`, `branch`}, {`spec":{"ref`, `tag`}, {`spec":{"ref`, `semver`},

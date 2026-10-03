@@ -202,7 +202,8 @@ def source_snapshot(path):
         nonlocal total, nodes
         require(depth <= 20, 'SOURCE_LIMIT_EXCEEDED')
         files[relative + '/'] = {'directory': True}
-        for name in _bounded_names(fd, 1024, 'SOURCE_LIMIT_OR_SYMLINK'):
+        names = _bounded_names(fd, 1024, 'SOURCE_LIMIT_OR_SYMLINK')
+        for name in names:
             nodes += 1
             require(nodes <= 1024, 'SOURCE_LIMIT_OR_SYMLINK')
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
@@ -235,6 +236,10 @@ def source_snapshot(path):
                 files[item] = {
                     'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw),
                     'inode': info.st_ino, 'mtime_ns': info.st_mtime_ns, 'mode': stat.S_IMODE(info.st_mode)}
+        # A new or removed sibling after enumeration would otherwise yield a
+        # plausible hash of an incomplete directory. This is not an atomic
+        # snapshot against an actor that restores the original entries.
+        require(names == _bounded_names(fd, 1024, 'SOURCE_LIMIT_OR_SYMLINK'), 'SOURCE_CHANGED')
     try:
         visit(root_fd, '.', 0, os.fstat(root_fd).st_dev)
         _current_source_path(path, root_fd)

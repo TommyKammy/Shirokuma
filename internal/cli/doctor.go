@@ -442,6 +442,11 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if localInventoryLossyStrings(status, []string{"lastAppliedRevision"}) {
 			return true
 		}
+		// A decoded replacement rune in the reported Git URL or Kustomization
+		// path loses the identity of the source being diagnosed.
+		if localInventoryLossyStrings(spec, []string{"url", "path"}) {
+			return true
+		}
 		for _, nested := range []struct {
 			raw  json.RawMessage
 			keys []string
