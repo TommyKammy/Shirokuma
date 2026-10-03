@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.71"
+version: "0.72"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: serve-loop clock must follow stop callback (offline)
+
+A disposable monotonic clock advanced through TTL during a false-returning stop callback; the old pre-callback sample admitted another `accept`. The serve loop now samples time after the callback and refuses that connection with reason `ttl`. A focused negative failed before repair; the Warehouse suite passed afterward (Milestones). No VM start, live backend/SQL, archived UUID replay or retained session/backup mutation. This does not authenticate backend state, prove caller receipt, owner restart recovery or operator acceptance. Roll back only the serve-loop clock change and disposable fixture, preserving saved sessions. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: serve-loop TTL expiry inside stop callback (offline)
 

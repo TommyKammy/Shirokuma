@@ -1016,6 +1016,21 @@ class ReadOnlyClientTests(unittest.TestCase):
             with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
                 self.client.request('GET', next(iter(C.ANCHORS)))
 
+    def test_response_closing_after_deadline_cannot_be_catalog_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+
+        class SlowClose(Response):
+            def close(self):
+                super().close()
+                client.deadline = time.monotonic() - 1
+
+        response = SlowClose(b'{"id":1}')
+        with patch.object(client.opener, 'open', return_value=response):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+        self.assertTrue(response.closed)
+
     def test_invalid_json_discovered_after_deadline_is_not_timely_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         client = self.client

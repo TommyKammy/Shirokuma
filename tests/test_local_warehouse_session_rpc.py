@@ -297,6 +297,22 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(result['requests'], 0)
         self.assertEqual(self.calls, [])
 
+    def test_serve_clock_advancing_during_false_callback_never_accepts(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        clock = [self.rpc._started + self.rpc.ttl_seconds - 0.1]
+
+        def expiring_check():
+            clock[0] += 0.2
+            return False
+
+        with mock.patch.object(R.time, 'monotonic', side_effect=lambda: clock[0]), \
+                mock.patch.object(socket.socket, 'accept', side_effect=AssertionError('accepted after TTL')):
+            result = self.rpc.serve(stop=expiring_check)
+        self.assertEqual(result['reason'], 'ttl')
+        self.assertEqual(result['requests'], 0)
+        self.assertEqual(self.calls, [])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.output = Path(self.temp.name).resolve()

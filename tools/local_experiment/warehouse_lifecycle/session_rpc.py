@@ -511,7 +511,6 @@ class SessionRPC:
         reason = 'stopped'
         try:
             while not self._stop.is_set():
-                now = time.monotonic()
                 if self._replay_until is None and stop is not None:
                     try:
                         stop_requested = bool(stop())
@@ -524,7 +523,10 @@ class SessionRPC:
                     if self._stop.is_set():
                         break
                     if stop_requested:
-                        self._replay_until = now + self.replay_grace_seconds
+                        self._replay_until = time.monotonic() + self.replay_grace_seconds
+                # The callback can consume the remaining TTL (or grace); do
+                # not use a clock sampled before it to authorize accept().
+                now = time.monotonic()
                 if self._replay_until is not None and now >= self._replay_until:
                     break
                 if self._replay_until is None and now - self._started >= self.ttl_seconds:

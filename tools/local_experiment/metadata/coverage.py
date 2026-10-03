@@ -410,7 +410,10 @@ class ReadOnlyClient:
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
                     raise
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
-                return value
+            # The context manager can spend time closing the response after
+            # decoding. Do not return evidence until that boundary completes.
+            require(time.monotonic() < self.deadline, 'API_DEADLINE')
+            return value
         except urllib.error.HTTPError as error:
             try:
                 status = error.code

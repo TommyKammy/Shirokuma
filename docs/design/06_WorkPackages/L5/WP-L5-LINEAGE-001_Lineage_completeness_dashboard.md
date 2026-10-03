@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.16"
+version: "1.17"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: catalog response close must finish within deadline (offline)
+
+A disposable decoded GET response whose close crosses the observation deadline was previously returned as catalog evidence. The reader now checks time after leaving the response context, so it refuses late closure as `API_DEADLINE`; the isolated negative failed before repair and the 84-test focused suite passed afterward. No live login/API, VM start, credential/source/report/backup modification or replay. This client-side check neither authenticates the catalog nor makes separate observations atomic or establishes whole-catalog/column lineage or operator acceptance. Roll back only this deadline check and fixture, preserving historical reports. Broader verification is in Milestones; direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: non-integer catalog HTTP status is not evidence (offline)
 

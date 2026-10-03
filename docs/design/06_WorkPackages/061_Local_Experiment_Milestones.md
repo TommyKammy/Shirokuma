@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.37"
+version: "5.38"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: catalog close and Warehouse stop-clock boundaries (offline)
+
+WP-L5-LINEAGE-001: a disposable decoded response closing after the bounded observation deadline previously returned catalog evidence; the reader now checks time after response cleanup. WP-L3-VW-002 independently fixes a pre-callback serve-loop time sample that admitted another connection when a false-returning stop callback consumed the remaining TTL. Both isolated negatives failed before repair; focused lineage (84 tests) and Warehouse (78 + 97 + 16 + 22 + 15 tests) suites passed afterward. `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed; private logs at `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-084/{verify,design}.log`. Dedicated Colima read-only observed stopped; no start, live API/backend/SQL, archived request replay, retained source/credential/session/report/backup mutation or GitHub write. Offline tests do not authenticate producers/backend, make reads atomic, establish caller receipt/restart recovery, whole-catalog/column lineage or operator/production acceptance. Roll back only the two guards and disposable fixtures; preserve stopped VM and historical evidence. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: same-namespace workload UID collision (offline)
 
