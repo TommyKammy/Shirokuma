@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.82"
+version: "4.83"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: unrelated duplicate inventory conditions (offline)
+
+WP-L0-GITOPS-001: the fixed-profile complete inventory rejects duplicate condition types on unrelated list members, rather than relying only on expected-resource checks. An isolated negative failed before repair; `go test ./internal/cli -count=1`, `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed after repair. Earlier target-specific duplicate fixtures now fail earlier at the incomplete-list boundary; generic doctor unchanged. Private logs under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-034/`. Dedicated Colima remains stopped; no live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. This cannot authenticate or atomically observe the API/Git, prove historical cleanup, clear strict admission or establish operator/production acceptance. Roll back reader/tests only, preserving VM/evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: offline Warehouse restart boundaries and saved-only recovery class
 

@@ -339,6 +339,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		}
 		var conditions []json.RawMessage
 		_ = json.Unmarshal(status["conditions"], &conditions)
+		conditionTypes := make(map[string]struct{}, len(conditions))
 		for _, condition := range conditions {
 			if string(condition) == "null" {
 				return true // A null entry cannot describe a condition.
@@ -359,6 +360,10 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				(shape.Status != "True" && shape.Status != "False" && shape.Status != "Unknown") {
 				return true
 			}
+			if _, duplicate := conditionTypes[shape.Type]; duplicate {
+				return true // An unrelated member also belongs to this complete inventory.
+			}
+			conditionTypes[shape.Type] = struct{}{}
 			// A condition on an unrelated item still belongs to this claimed
 			// complete inventory. Do not accept invisible or unbounded types, or
 			// a generation that could not yet belong to its resource.

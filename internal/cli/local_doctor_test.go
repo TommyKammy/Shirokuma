@@ -218,6 +218,27 @@ func TestLocalInventoryRejectsMalformedUnrelatedConditions(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsDuplicatedUnrelatedConditionTypes(t *testing.T) {
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"},{"type":"Ready","status":"False"}]}}]}`),
+		[]byte(`{"items":[{"status":{"conditions":[{"type":"Available","status":"True"},{"type":"Available","status":"True"}]}}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("ambiguous unrelated conditions accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"},{"type":"Available","status":"False"}]}}]}`),
+		[]byte(`{"items":[{}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("distinct condition types rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsInvalidUTF8(t *testing.T) {
 	for _, raw := range [][]byte{
 		append([]byte(`{"items":[{"metadata":{"name":"other`), append([]byte{0xff}, []byte(`"}}]}`)...)...),
@@ -535,7 +556,7 @@ func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	resources := strings.Replace(localFluxJSON(), `{"type":"Ready","status":"True","observedGeneration":1}`, `{"type":"Ready","status":"True","observedGeneration":1},{"type":"Ready","status":"True","observedGeneration":1}`, 1)
 	responses := []fakeResponse{{output: localControllerJSON()}, {output: resources}}
 	check = checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
-	if check.Status != "degraded" || !strings.Contains(check.Summary, "duplicated condition type") {
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
 		t.Fatalf("duplicate source readiness accepted: %#v", check)
 	}
 	generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
@@ -1365,7 +1386,7 @@ func TestLocalFluxRejectsDuplicateControllerWithoutReadingSources(t *testing.T) 
 
 func TestLocalFluxRejectsContradictoryReadyAndTerminatingSuspendedRoot(t *testing.T) {
 	for _, test := range []struct{ name, old, replacement, want string }{
-		{"non-root-ready-conflict", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},{"type":"Ready","status":"False","observedGeneration":1}]}`, "conflicting Ready condition"},
+		{"non-root-ready-conflict", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},{"type":"Ready","status":"False","observedGeneration":1}]}`, "resource response was incomplete"},
 		{"suspended-root-terminating", `"name":"flux-system","namespace":"flux-system","generation":2}`, `"name":"flux-system","namespace":"flux-system","generation":2,"deletionTimestamp":"2026-10-03T00:00:00Z"}`, "terminating"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

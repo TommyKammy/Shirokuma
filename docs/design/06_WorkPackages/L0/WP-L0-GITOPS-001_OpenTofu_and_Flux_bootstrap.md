@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.46"
+version: "0.47"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: duplicated conditions on unrelated list members (offline)
+
+The fixed-profile complete inventory reader now refuses two conditions with the same type on *any* member, not only on the expected controller/source/workload. An unrelated contradictory or repeated Ready/Available previously passed the list-level check; the isolated negative failed before repair. Distinct types and omitted conditions still pass. Existing target-specific duplicate tests now expect the earlier incomplete-list refusal; generic doctor is unchanged. `go test ./internal/cli -count=1`, `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed after repair. Private logs under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-034/`. Dedicated Colima remained stopped; no API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. This fake-response guard does not authenticate Git/API, establish atomic observation, historical cleanup, strict publication admission or operator/production acceptance. Roll back only local reader/tests, preserving VM and evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: invalid inventory UTF-8 and unrelated observed generation (offline)
 
