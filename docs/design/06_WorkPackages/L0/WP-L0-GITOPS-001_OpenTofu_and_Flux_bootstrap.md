@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.54"
+version: "0.55"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: Flux controller/resource UID collision (offline)
+
+The fixed local Flux doctor now rejects a UID reported by both a controller Deployment and a Flux custom resource in its two separate inventories. The fake negative failed before repair; the focused Go suite (805 tests) passed afterward. Omitted UIDs remain compatible; the generic doctor is unchanged. Separate reads cannot prove an atomic/authenticated cluster snapshot or Git provenance, historical cleanup, strict admission or operator acceptance. No VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup change; dedicated Colima remained stopped. Revert reader/test only, preserving VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: workload UIDs across two namespace reads (offline)
 

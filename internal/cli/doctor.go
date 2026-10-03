@@ -775,6 +775,19 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if localExperiment && localInventoryIncomplete(resources, resourceOutput) {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was incomplete"}
 	}
+	if localExperiment {
+		controllerUIDs := make(map[string]bool)
+		for _, controller := range controllers.Items {
+			if controller.Metadata.UID != "" {
+				controllerUIDs[controller.Metadata.UID] = true
+			}
+		}
+		for _, resource := range resources.Items {
+			if resource.Metadata.UID != "" && controllerUIDs[resource.Metadata.UID] {
+				return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller and resource responses reused a resource UID"}
+			}
+		}
+	}
 	kinds := map[string]int{}
 	seenResources := map[string]bool{}
 	rootCount, rootSourceCount, devCount := 0, 0, 0

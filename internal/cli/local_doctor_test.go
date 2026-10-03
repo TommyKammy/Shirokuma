@@ -84,6 +84,18 @@ func TestLocalLakehouseRejectsUIDReusedAcrossNamespaceReads(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsControllerUIDReusedByResource(t *testing.T) {
+	controllers := strings.Replace(localControllerJSON(), `"generation":2`, `"generation":2,"uid":"shared-uid"`, 1)
+	resources := strings.Replace(localFluxJSON(), `"generation":1`, `"generation":1,"uid":"shared-uid"`, 1)
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: resources}}}, localExperimentContext, true)
+	if check.Status != "degraded" {
+		t.Fatalf("controller/resource UID collision accepted: %#v", check)
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("omitted UIDs rejected: %#v", check)
+	}
+}
+
 func TestLocalInventoryRequiresCanonicalEnvelopeKeys(t *testing.T) {
 	for _, alias := range []string{"Items", "ITEMS", "Metadata", "Kind", "APIVERSION"} {
 		controllers := strings.Replace(localControllerJSON(), `"items"`, `"`+alias+`"`, 1)

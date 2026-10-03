@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.93"
+version: "4.94"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Flux controller and resource UID collision (offline)
+
+WP-L0-GITOPS-001: local-only Flux diagnosis refuses a reported UID reused across controller Deployment and Flux resource inventories. Focused fake negative failed before repair; `go test ./internal/cli -count=1` (805 passed) afterward. Omitted UID fixtures remain compatible; generic doctor unchanged. Dedicated Colima remained stopped; no live API/SQL, reconciliation, replay or retained data/backup mutation. The two reads are not atomic/authenticated API or Git evidence, historical cleanup, strict admission or operator/production acceptance. Roll back reader/test only, preserve VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: cross-namespace workload UID collision (offline)
 
