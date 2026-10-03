@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.124"
+version: "5.125"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: bounded GitOps inventory extension depth (offline)
+
+WP-L0-GITOPS-001: a test-owned 65-level unknown member extension passed the
+recursive complete-list walk before repair. Nesting beyond 64 composite levels
+now fails closed; 16-level extensions remain compatible. `go test
+./internal/cli -count=1` (834), `go vet ./...` and `git diff --check` passed.
+Dedicated Colima was observed Stopped; no live API/Git read, reconciliation,
+retained data/backup mutation or GitHub write. This local bound does not
+authenticate the remote producer, prove atomic inventory, clear strict
+admission or establish operator acceptance. Roll back reader/test only,
+retaining prior evidence; original Vault sync pending outside checkout.
 
 ## 2026-10-04: explicitly empty GitOps member GVK (offline)
 

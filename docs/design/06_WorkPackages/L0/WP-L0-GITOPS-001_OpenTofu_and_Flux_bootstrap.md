@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.85"
+version: "0.86"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: bounded inventory extension nesting (offline)
+
+The fixed-profile complete-list reader recursively inspected unknown extension
+values without a local nesting limit. A disposable 65-level nested member was
+accepted before repair; the duplicate-key/lossy-value walk now refuses nesting
+past 64 composite levels, while a 16-level extension remains valid. Focused Go
+CLI tests (834) and vet passed. Dedicated Colima observed Stopped; no live
+API/Git read, reconciliation, retained data/backup mutation or GitHub write.
+This bounds local decoding work, not remote authenticity, atomic inventory,
+strict admission or operator acceptance. Roll back reader/test only if needed;
+preserve earlier evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: explicitly empty member GVK (offline)
 

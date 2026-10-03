@@ -832,6 +832,22 @@ func TestLocalInventoryRejectsReplacementCharacterInListVersion(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryBoundsIgnoredExtensionDepth(t *testing.T) {
+	for _, tc := range []struct {
+		depth   int
+		invalid bool
+	}{
+		{16, false},
+		{65, true},
+	} {
+		raw := []byte(`{"items":[{"extension":` + strings.Repeat(`[`, tc.depth) + `"ok"` + strings.Repeat(`]`, tc.depth) + `}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("extension depth %d classification incorrect: %v", tc.depth, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsLossyIgnoredValues(t *testing.T) {
 	for _, tc := range []struct {
 		body    string

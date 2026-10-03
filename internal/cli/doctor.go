@@ -658,8 +658,11 @@ func localInventoryCanonicalFields(raw json.RawMessage, keys []string) bool {
 // identity, condition, or pagination field as a complete observation.
 func localInventoryUniqueFields(raw []byte) bool {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
-	var value func() bool
-	value = func() bool {
+	// Unknown extensions are inspected too. Bound nesting before recursing so
+	// a malformed remote response cannot exhaust the doctor's stack.
+	const maxInventoryDepth = 64
+	var value func(int) bool
+	value = func(depth int) bool {
 		token, err := decoder.Token()
 		if err != nil {
 			return false
@@ -672,6 +675,9 @@ func localInventoryUniqueFields(raw []byte) bool {
 				return false
 			}
 			return true
+		}
+		if depth >= maxInventoryDepth {
+			return false
 		}
 		switch delim {
 		case '{':
@@ -695,13 +701,13 @@ func localInventoryUniqueFields(raw []byte) bool {
 					return false
 				}
 				seen[name] = struct{}{}
-				if !value() {
+				if !value(depth + 1) {
 					return false
 				}
 			}
 		case '[':
 			for decoder.More() {
-				if !value() {
+				if !value(depth + 1) {
 					return false
 				}
 			}
@@ -715,7 +721,7 @@ func localInventoryUniqueFields(raw []byte) bool {
 		}
 		return err == nil && end == closing
 	}
-	if !value() {
+	if !value(0) {
 		return false
 	}
 	_, err := decoder.Token()
