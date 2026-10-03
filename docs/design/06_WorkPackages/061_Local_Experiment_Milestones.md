@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.36"
+version: "5.37"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: same-namespace workload UID collision (offline)
+
+After the independent lineage/Warehouse commit below, WP-L0-GITOPS-001 gained a disposable regression for two resources in one namespace sharing a UID. The existing fixed-profile complete-list reader rejects that namespace while leaving an unrelated healthy namespace unaffected; no production Go behavior changed. Focused Go test, `go test ./... -count=1`, and `go vet ./...` passed. Combined local and design verification results and private logs are under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-083/`. Dedicated Colima last observed stopped, with no start, live Kubernetes/Git/SQL read, reconciliation, unknown request replay, retained evidence/backup mutation or GitHub write. An offline fixture cannot authenticate API/Git or backend, guarantee atomicity, clear strict admission or prove operator/production acceptance. Roll back only this fixture; preserve stopped VM and historical records. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: exact catalog HTTP status and Warehouse TTL callback (offline)
 

@@ -84,6 +84,20 @@ func TestLocalLakehouseRejectsUIDReusedAcrossNamespaceReads(t *testing.T) {
 	}
 }
 
+func TestLocalLakehouseRejectsUIDReusedWithinNamespace(t *testing.T) {
+	responses := localWorkloadResponses()
+	responses[1].output = strings.Replace(responses[1].output, `"generation":2`, `"generation":2,"uid":"same-resource-uid"`, 2)
+	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+	if checks[0].Status != "healthy" {
+		t.Fatalf("unrelated storage namespace rejected: %#v", checks)
+	}
+	for _, check := range checks[1:] {
+		if check.Status != "degraded" {
+			t.Fatalf("same-namespace UID collision accepted: %#v", checks)
+		}
+	}
+}
+
 func TestLocalFluxRejectsControllerUIDReusedByResource(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `"generation":2`, `"generation":2,"uid":"shared-uid"`, 1)
 	resources := strings.Replace(localFluxJSON(), `"generation":1`, `"generation":1,"uid":"shared-uid"`, 1)

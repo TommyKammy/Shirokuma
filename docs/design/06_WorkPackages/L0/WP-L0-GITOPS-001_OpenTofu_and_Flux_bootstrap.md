@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.76"
+version: "0.77"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: same-namespace duplicate UID regression (offline)
+
+A disposable fixed-profile workload response gives two separate resources in `shirokuma-dev` the same UID. The existing complete-list validator rejects that namespace, while an independent healthy `shirokuma-storage` list remains healthy. No Go reader change. Focused Go test, full Go suite and vet passed; broader checks are in Milestones. No VM start, live API/Git, reconciliation or retained data/backup mutation. Fake-list consistency is not remote authentication, atomic inventory, strict admission or operator acceptance. Roll back only this fixture; preserve stopped VM and earlier evidence. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: explicit null replica counter regression (offline)
 
