@@ -441,6 +441,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			progressing := false
 			conditionTypes := make(map[string]bool)
 			for _, condition := range controller.Status.Conditions {
+				if condition.Type == "" || (condition.Status != "True" && condition.Status != "False" && condition.Status != "Unknown") {
+					unready = true
+				}
 				if conditionTypes[condition.Type] {
 					unready = true
 				}
@@ -585,6 +588,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		if localExperiment {
 			conditionTypes := make(map[string]bool)
 			for _, condition := range resource.Status.Conditions {
+				if condition.Type == "" || (condition.Status != "True" && condition.Status != "False" && condition.Status != "Unknown") {
+					unhealthy = append(unhealthy, resourceID+" (incomplete condition)")
+				}
 				// Kubernetes conditions are keyed by type. A duplicated type is
 				// ambiguous even when the reported statuses happen to agree.
 				if conditionTypes[condition.Type] {

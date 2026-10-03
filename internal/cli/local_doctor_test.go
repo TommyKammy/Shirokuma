@@ -31,6 +31,45 @@ func localFluxJSON() string {
 	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
 }
 
+func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
+	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
+		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)
+		controllerCheck := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if controllerCheck.Status != "degraded" {
+			t.Fatalf("controller extra condition %s accepted: %#v", extra, controllerCheck)
+		}
+		resources := strings.Replace(localFluxJSON(), `{"type":"Ready","status":"True","observedGeneration":1}`, `{"type":"Ready","status":"True","observedGeneration":1},`+extra, 1)
+		responses := []fakeResponse{{output: localControllerJSON()}, {output: resources}}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete condition") {
+			t.Fatalf("extra condition %s accepted: %#v", extra, check)
+		}
+		generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
+		if strings.Contains(generic.Summary, "incomplete condition") {
+			t.Fatalf("generic profile inherited local check: %#v", generic)
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("complete conditions rejected: %#v", check)
+	}
+}
+
+func TestLocalLakehouseRejectsIncompleteConditions(t *testing.T) {
+	for _, extra := range []string{`null`, `{}`, `{"type":"Available"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
+		responses := localWorkloadResponses()
+		responses[1].output = strings.Replace(responses[1].output, `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		if checks[2].Status != "degraded" {
+			t.Fatalf("extra condition %s accepted: %#v", extra, checks)
+		}
+	}
+	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: localWorkloadResponses()}, localExperimentContext) {
+		if check.Status != "healthy" {
+			t.Fatalf("complete workload rejected: %#v", check)
+		}
+	}
+}
+
 func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)

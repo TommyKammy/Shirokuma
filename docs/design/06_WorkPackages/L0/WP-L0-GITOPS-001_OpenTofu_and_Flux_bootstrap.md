@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.35"
+version: "0.36"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: incomplete diagnostic conditions (offline)
+
+Two independent fixed-profile diagnostic paths now reject condition entries with an empty type or a status other than Kubernetes `True`, `False`, or `Unknown`, even when another entry claims Ready/Available. This covers Flux controller Deployments and queried Flux resources, and Lakehouse namespace workloads; `null`, `{}`, missing type/status, and an unrelated condition with an invalid status were checked with fake lists. The generic Flux profile remains unchanged. Dedicated Colima was observed stopped; no VM start, live API/SQL, reconciliation, unknown-request replay, retained data or backup mutation. These checks cannot authenticate the API or Git, prove actual readiness, clear strict admission or establish operator/production acceptance. Revert only the local diagnostic and test changes to recover, preserving the stopped VM and saved evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: duplicated condition types (offline)
 

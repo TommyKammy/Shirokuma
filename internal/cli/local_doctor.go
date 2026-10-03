@@ -158,6 +158,10 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 				progressing := workload.kind != "Deployment"
 				conditionTypes := make(map[string]bool)
 				for _, condition := range resource.Status.Conditions {
+					if condition.Type == "" || (condition.Status != "True" && condition.Status != "False" && condition.Status != "Unknown") {
+						check.Status = "degraded"
+						check.Summary = resourceID + " reports an incomplete rollout condition"
+					}
 					if conditionTypes[condition.Type] {
 						check.Status = "degraded"
 						check.Summary = resourceID + " reports duplicated rollout conditions"

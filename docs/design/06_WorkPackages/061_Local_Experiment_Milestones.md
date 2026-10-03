@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.67"
+version: "4.68"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: incomplete condition entries in local diagnostics (offline)
+
+WP-L0-GITOPS-001: fixed-profile Flux controller/resource and Lakehouse workload readers reject null, incomplete or invalid-status conditions rather than treating a different Ready/Available entry as sufficient; generic Flux diagnostics stay unchanged. Fake positives/negatives and `go test ./internal/cli -count=1` (774 passed), `go vet ./...` passed. Dedicated Colima read-only status reported stopped; no VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. No authenticated API/Git identity, atomic inventory, historical cleanup, strict publication admission or operator/production acceptance follows from offline fixtures. Revert local diagnostic/test changes only; preserve VM and evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: Warehouse report assembly deadline (offline)
 
