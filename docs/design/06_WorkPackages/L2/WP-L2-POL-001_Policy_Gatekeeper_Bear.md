@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.21"
+version: "0.22"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: container resource claims in allowed responses (offline)
+
+Two disposable fake allowed responses added an unsubmitted container resource
+`claims` field (populated or empty). Both were previously classified allowed;
+the response now requires exactly the submitted `requests` and `limits` keys,
+with their existing quantity equivalence checks unchanged. Mismatches remain
+unknown/pending and are never replayed. Focused observer suite passed (33).
+No admission, retained request/report/volume/backup mutation or VM start;
+dedicated Colima was observed stopped. Fake responses do not authenticate the
+API, prove arbitrary Pod mutation coverage or establish operator acceptance.
+Roll back the comparator and test only if needed, preserving pending requests.
+Original Vault sync pending outside this approved checkout.
 
 ## 2026-10-04: unsubmitted Pod controls and metadata lifecycle (offline)
 

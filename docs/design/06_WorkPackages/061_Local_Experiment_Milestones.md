@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.112"
+version: "5.113"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: container resource response guard and independent lineage check
+
+WP-L2-POL-001: disposable fake allowed responses injected populated and empty
+container resource claims; both passed before repair. The observer now rejects
+unsubmitted resource keys and keeps the original request unknown/pending,
+without replay. Focused observer 33 tests passed. Independently checked
+WP-L5-LINEAGE-001 saved-source/renderer boundaries; no further defect found,
+lineage suite 147 tests passed, and no lineage behavior changed. Dedicated
+Colima observed stopped; no live API, collection, retained report/volume/backup
+mutation or GitHub write. Offline checks cannot establish API/producer
+authenticity, arbitrary mutation coverage, whole-catalog lineage or operator
+acceptance. Roll back comparator/test only, preserving pending and historical
+evidence. `make verify-local-experiment`, `make verify-design-context` (89
+documents), `make check-no-secret-filenames` and `git diff --check` passed.
+Private full log: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-062/verify-local.log`
+(SHA-256 `cd384f873617e73a307c76f421bec5058dd93d94bc2c4e1854884d3b55237307`).
+Initial fake negative failed twice as expected before repair. Original Vault
+synchronization pending outside checkout.
 
 ## 2026-10-04: Pod spec extension and metadata lifecycle response guards (offline)
 

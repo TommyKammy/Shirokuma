@@ -194,7 +194,9 @@ def allowed_pod_matches(value, body):
             any(container.get(key, False) is not False for key in ('stdin', 'stdinOnce', 'tty'))):
         return False
     context, resources = container.get('securityContext', {}), container.get('resources', {})
-    if type(context) is not dict or type(resources) is not dict or context.get('privileged', False) is not False:
+    if (type(context) is not dict or type(resources) is not dict or
+            set(resources) != {'requests', 'limits'} or
+            context.get('privileged', False) is not False):
         return False
     submitted_security = submitted.get('securityContext', {})
     # Only the harmless explicit false default may appear beyond the submitted

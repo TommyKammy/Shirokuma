@@ -261,6 +261,20 @@ class ObserverTests(unittest.TestCase):
         kube.respond=defaults
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_add_container_resource_claims(self):
+        for extra in ({'claims':[{'name':'accelerator'}]}, {'claims':[]}):
+            with self.subTest(extra=extra):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body)
+                    altered['spec']['containers'][0]['resources'].update(extra)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
     def test_allowed_response_cannot_add_metadata_lifecycle_controls(self):
         for changes in ({'generateName':'different-'},
                         {'deletionTimestamp':'2026-10-04T00:00:00Z'},
