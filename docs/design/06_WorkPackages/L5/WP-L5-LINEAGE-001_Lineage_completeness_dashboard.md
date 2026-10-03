@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: case-insensitive thrown-error location metadata (offline)
+
+Plain-dict injected HTTP errors with lower/mixed-case `Location`,
+`Content-Location` or `Refresh` previously converted a fixed-path 404 into
+missing evidence. The reader now folds mapping keys as HTTP field names and
+refuses uninspectable error headers after closing the stream. Disposable
+negatives failed before repair; focused lineage and local verification passed.
+This does not authenticate a live producer or establish atomic, whole-catalog
+or column coverage. No VM start or retained report/source/backup mutation.
+Roll back only this error-header guard/test; preserve saved evidence. Original
+Vault sync pending outside checkout.
+
 ## 2026-10-04: error response alternate-location refusal (offline)
 
 An exact-path HTTP 404 advertising `Location`, `Content-Location` or `Refresh`

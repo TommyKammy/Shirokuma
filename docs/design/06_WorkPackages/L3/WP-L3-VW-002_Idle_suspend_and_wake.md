@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-04: additional forwarded RPC headers (offline)
+
+The private one-request Unix owner now refuses `X-Forwarded-For` and
+`X-Forwarded-Port` before dispatch or journaling; complete disposable
+requests previously reached the handler. The negative failed before repair;
+focused Warehouse and local verification passed. This parser boundary does
+not prove caller receipt, independent peer identity, backend state or owner
+restart recovery. No VM start, archived replay or retained session/backup
+mutation. Roll back only this header guard/fixture and keep saved evidence.
+Original Vault sync pending outside checkout.
+
 ## 2026-10-04: forwarded authority refused on private Unix RPC (offline)
 
 Complete disposable requests with `Forwarded`, `X-Forwarded-Host` or

@@ -928,8 +928,10 @@ class SessionRPCTest(unittest.TestCase):
         body = json.dumps(self.request()).encode()
         base = b'Content-Type: application/json\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n'
         for extra in (b'Forwarded: host=other.local\r\n',
-                      b'X-Forwarded-Host: other.local\r\n',
-                      b'X-Forwarded-Proto: https\r\n'):
+                       b'X-Forwarded-Host: other.local\r\n',
+                       b'X-Forwarded-Proto: https\r\n',
+                       b'X-Forwarded-For: 192.0.2.1\r\n',
+                       b'X-Forwarded-Port: 443\r\n'):
             with self.subTest(extra=extra):
                 self.assertEqual(self.exchange(self.wire(body, base + extra), raw=True)[0], 400)
         self.assertEqual(self.calls, [])

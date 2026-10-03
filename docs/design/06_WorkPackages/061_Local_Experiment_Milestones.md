@@ -12,6 +12,21 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: case-varied catalog error headers and forwarded RPC fields (offline)
+
+WP-L5-LINEAGE-001 rejects alternate-location fields in case-varied mapping
+headers on a thrown fixed-path 404; WP-L3-VW-002 separately refuses
+`X-Forwarded-For` and `X-Forwarded-Port` before private Unix RPC dispatch.
+Disposable negatives failed before repair; focused lineage and Warehouse
+suites and `make verify-local-experiment` passed afterward. Private logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-017/`.
+Read-only Colima listing showed the dedicated VM stopped; no VM start, live
+catalog/backend/SQL, unknown-request replay, retained source/session/backup
+change or GitHub write. These offline guards do not prove producer or peer
+identity, atomicity, caller receipt, restart recovery, full lineage or
+operator acceptance. Roll back only the independent guards/tests, preserving
+saved evidence. Original Vault synchronization pending outside checkout.
+
 ## 2026-10-04: catalog error-location and private RPC forwarded authority (offline)
 
 WP-L5-LINEAGE-001 rejects a thrown fixed-path 404 with alternate `Location`,

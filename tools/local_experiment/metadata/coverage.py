@@ -491,10 +491,16 @@ class ReadOnlyClient:
                 if hasattr(error_headers, 'get_all'):
                     alternate = [error_headers.get_all(name, []) for name in
                                  ('Location', 'Content-Location', 'Refresh')]
+                elif type(error_headers) is dict:
+                    # Injected HTTPError fixtures may carry a plain dict, which
+                    # unlike HTTPMessage does not fold field names by case.
+                    alternate = [[value for key, value in error_headers.items()
+                                  if type(key) is str and key.lower() == name]
+                                 for name in ('location', 'content-location', 'refresh')]
+                    if any(type(key) is not str for key in error_headers):
+                        alternate = None
                 else:
-                    # Existing injected HTTPError fixtures supply plain dicts.
-                    alternate = [[error_headers[name]] if name in error_headers else []
-                                 for name in ('Location', 'Content-Location', 'Refresh')]
+                    alternate = None
             except (OSError, RuntimeError):
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 raise CoverageError('API_UNAVAILABLE') from None
@@ -513,7 +519,7 @@ class ReadOnlyClient:
                     'API_RESPONSE_INVALID')
             # A 404 that also nominates another location is not unambiguous
             # absence evidence for the fixed requested catalog entity.
-            require(all(type(values) is list and not values for values in alternate),
+            require(type(alternate) is list and all(type(values) is list and not values for values in alternate),
                     'API_RESPONSE_INVALID')
             require(type(status) is int and 400 <= status <= 599, 'API_RESPONSE_INVALID')
             raise APIError(method, path, status) from None
