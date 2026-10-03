@@ -468,6 +468,24 @@ func TestLocalInventoryRejectsUnrelatedObservedGenerationContradictions(t *testi
 	}
 }
 
+func TestLocalInventoryDistinguishesZeroAndOmittedGeneration(t *testing.T) {
+	for _, tc := range []struct {
+		raw     string
+		invalid bool
+	}{
+		{`{"items":[{"metadata":{"generation":0},"status":{"observedGeneration":1}}]}`, true},
+		{`{"items":[{"metadata":{"generation":0},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`, true},
+		{`{"items":[{"status":{"observedGeneration":1,"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`, false},
+		{`{"items":[{"metadata":{"generation":0},"status":{"observedGeneration":0,"conditions":[{"type":"Ready","status":"True","observedGeneration":0}]}}]}`, false},
+	} {
+		raw := []byte(tc.raw)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("explicit/omitted generation classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsConditionAheadOfStatusGeneration(t *testing.T) {
 	for _, tc := range []struct {
 		observed string
@@ -1578,7 +1596,7 @@ func TestLocalFluxRejectsDuplicateRootResources(t *testing.T) {
 func TestLocalFluxRejectsAmbiguousNonRootResources(t *testing.T) {
 	for _, test := range []struct{ name, old, replacement, want string }{
 		{"unexpected-kind", `"kind":"Kustomization","metadata":{"name":"shirokuma-catalog"`, `"kind":"Secret","metadata":{"name":"shirokuma-catalog"`, "unexpected kind"},
-		{"zero-generation", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":0`, "generation unverified"},
+		{"zero-generation", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":0`, "response was incomplete"},
 		{"missing-name", `"name":"shirokuma-catalog","namespace":"flux-system"`, `"namespace":"flux-system"`, "identity unverified"},
 		{"missing-namespace", `"name":"shirokuma-catalog","namespace":"flux-system"`, `"name":"shirokuma-catalog"`, "identity unverified"},
 		{"missing-kind", `"kind":"Kustomization","metadata":{"name":"shirokuma-catalog"`, `"metadata":{"name":"shirokuma-catalog"`, "identity unverified"},

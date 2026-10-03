@@ -431,8 +431,9 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				return true
 			}
 		}
+		_, generationReported := metadata["generation"]
 		if observed.Generation != nil && (*observed.Generation < 0 ||
-			(identity.Generation > 0 && *observed.Generation > identity.Generation)) {
+			(generationReported && *observed.Generation > identity.Generation)) {
 			return true
 		}
 		if localInventoryNullFields(spec, []string{"suspend", "paused", "path", "prune", "wait", "url", "replicas"}) ||
@@ -535,7 +536,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			}
 			if err := json.Unmarshal(condition, &generation); err != nil ||
 				(generation.ObservedGeneration != nil && (*generation.ObservedGeneration < 0 ||
-					(identity.Generation > 0 && *generation.ObservedGeneration > identity.Generation) ||
+					(generationReported && *generation.ObservedGeneration > identity.Generation) ||
 					(observed.Generation != nil && *generation.ObservedGeneration > *observed.Generation))) {
 				return true
 			}

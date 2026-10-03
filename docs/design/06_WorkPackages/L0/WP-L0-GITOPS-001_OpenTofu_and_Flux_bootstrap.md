@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.65"
+version: "0.66"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: explicit zero generation is not omission (offline)
+
+Fixed-profile inventories now reject a positive status or condition observed generation when an unrelated member explicitly reports metadata generation zero. Omitted generation remains compatible with projected fixtures, and zero observed generation remains valid. The isolated negative failed before repair; a pre-existing zero-generation Flux fixture now fails earlier as an incomplete inventory. Focused Go and vet passed; broader verification is in Milestones. Dedicated Colima was observed stopped; no live API/Git/SQL, reconciliation, saved request replay or retained data/backup change. This checks only reported consistency, not API provenance, atomicity, historical cleanup, strict admission or operator acceptance. Roll back reader/tests only, retaining VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: invisible characters in reported Git refs and revisions (offline)
 

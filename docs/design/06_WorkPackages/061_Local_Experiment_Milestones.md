@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.15"
+version: "5.16"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: explicit generation and completed disposable replay (offline)
+
+WP-L0-GITOPS-001: an explicit zero metadata generation with a positive observed status or condition generation now refuses a complete fixed-profile list; omitted generation stays compatible. The isolated negative failed before repair; focused Go (818 passed) and vet passed. WP-L3-VW-002: after a pending/busy collision, the disposable original UUID replays the exact verified result while the competing UUID remains busy, with two saved request records and one handler call; focused Warehouse suite passed. `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed; private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-059/{verify,design}.log`. Read-only `colima list` showed the dedicated VM stopped; no VM start, API/Git/SQL, reconciliation, archived UUID replay or retained source/session/report/backup mutation. Offline reports and a test-owned socket cannot authenticate remote/backend state, prove atomicity or archived caller receipt, clear strict admission or grant operator/production acceptance. Roll back only the reader and disposable test, preserving VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: revision visibility and concurrent journal correlation (offline)
 
