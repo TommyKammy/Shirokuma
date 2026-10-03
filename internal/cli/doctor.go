@@ -243,6 +243,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		return true
 	}
 	seenUIDs := make(map[string]struct{})
+	seenNames := make(map[string]struct{})
 	for _, item := range items.Items {
 		if item == nil {
 			return true // A null member is not a Kubernetes resource.
@@ -313,8 +314,8 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		// Reported Kubernetes names are bounded DNS identities. An unrelated
 		// member with an impossible name cannot establish a complete list.
 		for _, bounded := range []struct {
-			key   string
-			limit int
+			key       string
+			limit     int
 			subdomain bool
 		}{{"name", 253, true}, {"namespace", 63, false}} {
 			if rawName, ok := metadata[bounded.key]; ok {
@@ -323,6 +324,31 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 					!localFluxValidName(name, bounded.limit, bounded.subdomain) {
 					return true
 				}
+			}
+		}
+		// Mixed-kind Flux lists can share a name across kinds. Only bind a
+		// fully reported GVK and object identity; fixtures may omit projections.
+		if rawName, named := metadata["name"]; named && item["kind"] != nil && item["apiVersion"] != nil {
+			if rawNamespace, scoped := metadata["namespace"]; scoped {
+				var name, namespace string
+				if err := json.Unmarshal(rawName, &name); err != nil {
+					return true
+				}
+				if err := json.Unmarshal(rawNamespace, &namespace); err != nil {
+					return true
+				}
+				var kind, apiVersion string
+				if err := json.Unmarshal(item["kind"], &kind); err != nil {
+					return true
+				}
+				if err := json.Unmarshal(item["apiVersion"], &apiVersion); err != nil {
+					return true
+				}
+				identity := apiVersion + "/" + kind + "/" + namespace + "/" + name
+				if _, exists := seenNames[identity]; exists {
+					return true
+				}
+				seenNames[identity] = struct{}{}
 			}
 		}
 		var identity struct {

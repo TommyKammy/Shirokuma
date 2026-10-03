@@ -318,6 +318,27 @@ func TestLocalInventoryRejectsLossyItemIdentity(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsDuplicateNamesWithDifferentUIDs(t *testing.T) {
+	for _, tc := range []struct {
+		items   string
+		invalid bool
+	}{
+		{`{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"other","namespace":"flux-system","uid":"one"}},{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"other","namespace":"flux-system","uid":"two"}}`, true},
+		{`{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"other","namespace":"flux-system"}},{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"other","namespace":"flux-system","uid":"two"}}`, true},
+		{`{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"other","namespace":"flux-system","uid":"one"}},{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"other","namespace":"elsewhere","uid":"two"}}`, false},
+		{`{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"other","namespace":"flux-system"}},{"apiVersion":"v1","kind":"Service","metadata":{"name":"other","namespace":"flux-system"}}`, false},
+	} {
+		raw := []byte(`{"items":[` + tc.items + `]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if got := localInventoryIncomplete(list, raw); got != tc.invalid {
+			t.Fatalf("incomplete=%t want %t for %s", got, tc.invalid, raw)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsLossyItemEnvelopeIdentity(t *testing.T) {
 	for _, field := range []string{"kind", "apiVersion"} {
 		raw := []byte(`{"items":[{"` + field + `":"apps\ud800"}]}`)

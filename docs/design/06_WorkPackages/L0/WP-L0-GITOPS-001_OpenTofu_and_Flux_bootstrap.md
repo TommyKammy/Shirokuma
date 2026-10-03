@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-03: same-GVK duplicate identity on unrelated list members (offline)
+
+Fixed-profile complete lists now refuse two fully reported objects with the same API version, kind, namespace and name even when their UIDs differ or one UID is omitted. A disposable two-member negative passed as complete before repair; different namespaces and kinds remain valid, as do projected entries missing identity fields. An initial name-only guard incorrectly rejected legitimate mixed-kind Flux fixtures; the final guard binds the whole reported GVK and the Go suite passes. No generic doctor behavior changed. No live Kubernetes/Git read, reconciliation, VM start or retained data/backup mutation; dedicated Colima was read-only observed stopped. This is list-internal consistency, not authenticated or atomic remote inventory, strict admission or operator acceptance. Revert only the reader and test if needed, preserving VM and historical evidence. Original Vault direct sync pending outside checkout; verification in Milestones.
+
 ## 2026-10-03: escaped duplicate keys in ignored inventory extensions (offline)
 
 A complete fixed-profile list already refuses nested extension keys `owner` / `ow\u006eer` after decoding, both at envelope level and on an unrelated member. A distinct-key extension stays valid. The new disposable regression pins this existing behavior; the reader and generic doctor did not change. Focused and combined verification are recorded in Milestones. Dedicated Colima was observed stopped; no live API/Git, reconciliation, VM start or retained data/backup mutation. A fake list cannot authenticate Kubernetes/Git, guarantee atomic inventory, clear strict admission or establish operator acceptance. Roll back the regression test only and preserve evidence. Direct original Vault sync pending outside checkout.
