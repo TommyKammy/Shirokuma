@@ -1001,6 +1001,25 @@ func TestLocalInventoryRejectsNullGeneration(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsObscuredMemberUID(t *testing.T) {
+	for _, tc := range []struct {
+		uid     string
+		invalid bool
+	}{
+		{`"uid":"a b"`, true},
+		{`"uid":"a\u200bb"`, true},
+		{`"uid":"a\u0000b"`, true},
+		{`"uid":"a-b"`, false},
+		{`"name":"other"`, false},
+	} {
+		raw := []byte(`{"items":[{"kind":"Service","metadata":{` + tc.uid + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("UID classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsDeletionBeforeCreation(t *testing.T) {
 	for _, tc := range []struct {
 		metadata string

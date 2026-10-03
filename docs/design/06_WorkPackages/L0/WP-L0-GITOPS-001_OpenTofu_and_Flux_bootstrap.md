@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.92"
+version: "0.93"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: obscured unrelated member UID regression (offline)
+
+A disposable complete-list Service pins the existing refusal of reported UIDs
+containing whitespace, a zero-width format character or a control character;
+an ordinary UID and an omitted projection remain compatible. No doctor reader
+behavior changed. The focused test, `go test ./... -count=1` (840 tests) and
+`go vet ./...` passed. Dedicated Colima was read-only observed Stopped; no live
+API/Git, reconciliation, retained data/backup change or GitHub write. This
+fixture cannot authenticate a producer, establish atomic inventory, clear
+strict admission or establish operator acceptance. Roll back the test only if
+needed; preserve historical evidence. Original Vault sync pending outside
+the approved checkout.
 
 ## 2026-10-04: obscured reported member GVK regression (offline)
 
