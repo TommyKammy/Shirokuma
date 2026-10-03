@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.11"
+version: "0.12"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: reported zero generation and out-of-scope workload inventory
+
+Two independent offline local-doctor increments: an explicitly reported Flux `status.observedGeneration=0` is no longer mistaken for an omitted optional field, and a namespace-scoped Lakehouse workload list containing a foreign namespace or unexpected kind now degrades that namespace, even when the fixed workloads are otherwise ready. Absent optional Flux status generation and healthy fixed inventories remain valid; generic Flux checks are unchanged. Fake positive/negative tests: `go test ./internal/cli` (719 passed), `go vet ./...`, `git diff --check`, `make verify-local-experiment` passed. Dedicated Colima read-only status returned not running; no VM start, live API/SQL read, saved request replay, reconciliation, retained data or backup mutation. This does not establish live health, remote provenance, strict publication gate or production/operator acceptance. Revert only the local doctor code/tests for rollback; preserve retained evidence and the stopped VM. Original Vault handoff is outside this noninteractive checkout; direct synchronization remains pending.
 
 ## 2026-10-03: unresolved rollout failure and contradictory Flux generation
 

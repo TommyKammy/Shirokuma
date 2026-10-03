@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.34"
+version: "4.35"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline Flux zero generation and Lakehouse list scope
+
+WP-L0-GITOPS-001. Two independent read-only local-doctor fixes reject an explicitly reported zero Flux status generation (while permitting an omitted optional field), and reject a foreign-namespace or unexpected-kind item in a namespace-scoped Lakehouse inventory. Fake positive/negative cases, `go test ./internal/cli` (719 passed), `go vet ./...`, `git diff --check` and `make verify-local-experiment` passed. Dedicated Colima read-only status reported not running; no start, live API/SQL read, reconcile, retained request replay, saved data or backup mutation. Remote source authenticity, actual readiness, strict publication gate and production/operator acceptance remain unverified. Rollback is limited to the doctor code/tests, preserving saved evidence and VM. Original Vault handoff cannot be directly synchronized from this noninteractive checkout; sync pending.
 
 ## 2026-10-03: offline rollout ambiguity and Flux generation contradiction
 

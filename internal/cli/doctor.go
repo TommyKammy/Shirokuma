@@ -94,11 +94,11 @@ type kubernetesResourceList struct {
 			} `json:"sourceRef"`
 		} `json:"spec"`
 		Status struct {
-			Replicas           int   `json:"replicas"`
-			AvailableReplicas  int   `json:"availableReplicas"`
-			ReadyReplicas      int   `json:"readyReplicas"`
-			UpdatedReplicas    int   `json:"updatedReplicas"`
-			ObservedGeneration int64 `json:"observedGeneration"`
+			Replicas           int    `json:"replicas"`
+			AvailableReplicas  int    `json:"availableReplicas"`
+			ReadyReplicas      int    `json:"readyReplicas"`
+			UpdatedReplicas    int    `json:"updatedReplicas"`
+			ObservedGeneration *int64 `json:"observedGeneration"`
 			Artifact           struct {
 				Revision string `json:"revision"`
 			} `json:"artifact"`
@@ -263,7 +263,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		if localExperiment {
 			unready = unready || controller.Kind != "Deployment" || controller.Metadata.Namespace != "flux-system" ||
 				controller.Metadata.DeletionTimestamp != "" ||
-				controller.Metadata.Generation < 1 || controller.Status.ObservedGeneration != controller.Metadata.Generation ||
+				controller.Metadata.Generation < 1 || controller.Status.ObservedGeneration == nil || *controller.Status.ObservedGeneration != controller.Metadata.Generation ||
 				controller.Spec.Replicas == nil || *controller.Spec.Replicas < 1 ||
 				controller.Status.Replicas != *controller.Spec.Replicas ||
 				controller.Status.AvailableReplicas != *controller.Spec.Replicas ||
@@ -275,8 +275,8 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 					available = true
 				}
 				if (condition.Type == "ReplicaFailure" && (condition.Status == "True" || (localExperiment && condition.Status != "False"))) ||
-						(condition.Type == "Progressing" && condition.Status != "True") ||
-						(condition.Type == "Available" && condition.Status != "True") {
+					(condition.Type == "Progressing" && condition.Status != "True") ||
+					(condition.Type == "Available" && condition.Status != "True") {
 					unready = true
 				}
 			}
@@ -320,7 +320,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			if resource.Metadata.Generation < 1 {
 				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
 			}
-			if resource.Status.ObservedGeneration != 0 && resource.Status.ObservedGeneration != resource.Metadata.Generation {
+			if resource.Status.ObservedGeneration != nil && *resource.Status.ObservedGeneration != resource.Metadata.Generation {
 				unhealthy = append(unhealthy, resourceID+" (status generation mismatch)")
 			}
 		}

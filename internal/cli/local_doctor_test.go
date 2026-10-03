@@ -128,6 +128,7 @@ func TestLocalFluxRejectsConflictingStatusGenerationWhenReported(t *testing.T) {
 	for _, test := range []struct{ name, old, replacement string }{
 		{"source", `"artifact":{"revision":"main@sha1:`, `"observedGeneration":2,"artifact":{"revision":"main@sha1:`},
 		{"child", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"observedGeneration":2,`},
+		{"explicit-zero", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"observedGeneration":0,`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			resources := strings.Replace(localFluxJSON(), test.old, test.replacement, 1)
@@ -148,6 +149,33 @@ func TestLocalFluxRejectsConflictingStatusGenerationWhenReported(t *testing.T) {
 	runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}
 	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "informational" {
 		t.Fatalf("matching reported generation rejected: %#v", check)
+	}
+}
+
+func TestLocalLakehouseRejectsOutOfScopeInventoryItems(t *testing.T) {
+	for _, test := range []struct{ name, old, replacement string }{
+		{"unexpected-kind", `"kind":"Deployment","metadata":{"name":"polaris"`, `"kind":"Secret","metadata":{"name":"polaris"`},
+		{"other-namespace", `"kind":"Deployment","metadata":{"name":"polaris","namespace":"shirokuma-dev"`, `"kind":"Deployment","metadata":{"name":"polaris","namespace":"elsewhere"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			responses := localWorkloadResponses()
+			index := 1
+			responses[index].output = strings.Replace(responses[index].output, test.old, test.replacement, 1)
+			if !strings.Contains(responses[index].output, test.replacement) {
+				t.Fatal("fixture replacement did not match")
+			}
+			runner := &fakeRunner{responses: responses}
+			checks := checkLocalLakehouse(context.Background(), runner, localExperimentContext)
+			if checks[0].Status != "healthy" || checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "out-of-scope") {
+				t.Fatalf("out-of-scope inventory accepted: %#v", checks)
+			}
+		})
+	}
+	responses := localWorkloadResponses()
+	responses[1].output = strings.TrimSuffix(responses[1].output, `]}`) + `,{"kind":"Secret","metadata":{"name":"extra","namespace":"shirokuma-dev"}}]}`
+	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+	if checks[0].Status != "healthy" || checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "out-of-scope") {
+		t.Fatalf("extra out-of-scope item accepted: %#v", checks)
 	}
 }
 
@@ -365,7 +393,7 @@ func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 	}{
 		{"missing", `"seaweedfs"`, `"unrelated"`, "is missing"},
 		{"wrong-kind", `"StatefulSet"`, `"Deployment"`, "is missing"},
-		{"wrong-namespace", `"shirokuma-storage"`, `"unrelated"`, "is missing"},
+		{"wrong-namespace", `"shirokuma-storage"`, `"unrelated"`, "out-of-scope"},
 		{"stale-generation", `"observedGeneration":2`, `"observedGeneration":1`, "current generation"},
 		{"missing-generation", `"observedGeneration":2,`, ``, "current generation"},
 		{"scaled-down", `"spec":{"replicas":1}`, `"spec":{"replicas":0}`, "positive desired replica"},

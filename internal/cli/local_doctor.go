@@ -104,6 +104,18 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response was incomplete"}
 			continue
 		}
+		// A scoped kubectl list must not silently mix in other resource types or namespaces.
+		invalid := false
+		for _, resource := range list.Items {
+			if (resource.Kind != "Deployment" && resource.Kind != "StatefulSet") || resource.Metadata.Namespace != namespace {
+				invalid = true
+				break
+			}
+		}
+		if invalid {
+			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response contained an out-of-scope resource"}
+			continue
+		}
 		resources[namespace] = list
 	}
 	checks := make([]doctorCheck, 0, len(localLakehouseWorkloads))
@@ -126,7 +138,7 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 			switch {
 			case resource.Metadata.DeletionTimestamp != "":
 				check.Summary = resourceID + " is terminating"
-			case resource.Metadata.Generation < 1 || resource.Status.ObservedGeneration != resource.Metadata.Generation:
+			case resource.Metadata.Generation < 1 || resource.Status.ObservedGeneration == nil || *resource.Status.ObservedGeneration != resource.Metadata.Generation:
 				check.Summary = resourceID + " controller has not observed the current generation"
 			case desired == nil || *desired < 1:
 				check.Summary = resourceID + " has no positive desired replica count"
