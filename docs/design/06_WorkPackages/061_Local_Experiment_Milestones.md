@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: expired disposable catalog login cannot start GET (offline)
+
+WP-L5-LINEAGE-001: an independent disposable response expiring at login EOF confirms the existing deadline refuses the POST result without assigning a token, sending a GET or touching the private fixture. No reader behavior changed. `make test-local-lineage-coverage` passed (74 tests); `make verify-local-experiment` and `make verify-design-context` passed (private logs `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-075/{lineage,verify-final,design-final}.log`). No live login/API, VM start, retained credential/source/report/backup mutation or GitHub write. The POST cannot be retracted, and this check does not authenticate the catalog, ensure atomic reads, provide whole-catalog/column lineage or grant operator acceptance. Roll back only this test and preserve historical reports; direct original Vault sync pending outside checkout.
+
 ## 2026-10-03: one-shot Warehouse stop at dispatch (offline)
 
 WP-L3-VW-002: a test-owned stop callback seen only by dispatch no longer allows a later fresh UUID through when it returns false on subsequent checks. The first stop transitions the owner into bounded replay-only grace, preserving same-owner saved-ID responses. Focused `make test-local-warehouse-lifecycle` passed (78 + 87 + 16 + 22 + 15 tests); `make verify-local-experiment` and `make verify-design-context` passed (private logs `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-075/{verify,design}.log`). Read-only Colima status: dedicated VM stopped. No live backend, archived replay, VM start, retained session/backup change or GitHub write. An offline owner signal does not authenticate a backend, prove caller receipt, provide restart recovery or operator/production acceptance. Roll back owner guard/test only, retaining stopped VM and archived evidence. Original Vault direct sync pending outside checkout.

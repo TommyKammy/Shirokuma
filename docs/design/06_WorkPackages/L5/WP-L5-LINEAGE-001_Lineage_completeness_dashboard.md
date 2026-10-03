@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-03: expired login response cannot authorize a catalog GET (offline)
+
+A disposable login response completing after the bounded client deadline is rejected before token assignment or the first GET. This independently pins the existing POST-to-GET boundary; no reader change was required. Focused lineage and combined local verification are recorded in Milestones. No live login/catalog, VM start or retained credentials/source/report/backup change. The test does not undo a sent POST, authenticate a catalog, establish atomicity, whole-catalog/column lineage or operator acceptance. Roll back only the disposable test; retain historical evidence. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: valid escaped surrogate pair remains catalog data (offline)
 
 An independent disposable HTTP response confirms the bounded decoder preserves a valid escaped surrogate pair as its Unicode scalar while continuing to reject lone surrogates; no reader behavior changed. Focused lineage and combined local verification passed (Milestones). No live login/API, VM start or retained source/credential/report/backup change. This is JSON compatibility, not catalog authentication, atomicity, whole-catalog/column lineage or operator acceptance. Roll back only the test, preserving historical evidence. Original Vault direct sync pending outside checkout.

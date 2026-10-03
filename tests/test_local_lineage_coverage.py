@@ -1016,6 +1016,25 @@ class ReadOnlyClientTests(unittest.TestCase):
             with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
                 self.client.request('GET', next(iter(C.ANCHORS)))
 
+    def test_login_response_finishing_after_deadline_never_sends_get(self):
+        client = self.client
+        class LateLogin(Response):
+            def read(self, size=-1):
+                chunk = super().read(size)
+                if not chunk:
+                    client.deadline = time.monotonic() - 1
+                return chunk
+        def open_login(request, timeout):
+            self.calls.append((request, timeout))
+            return LateLogin(b'{"accessToken":"header.payload.signature"}')
+        with patch.object(client.opener, 'open', side_effect=open_login):
+            with self.assertRaisesRegex(C.CoverageError, 'LOGIN_UNAVAILABLE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+        self.assertEqual([call[0].method for call in self.calls], ['POST'])
+        self.assertTrue(client.login_attempted)
+        self.assertIsNone(client.token)
+        self.assertEqual([p.name for p in self.state.iterdir()], ['.env'])
+
     def test_no_proxy_redirect_and_deadline_are_enforced(self):
         client = C.ReadOnlyClient(state=self.state)
         self.assertTrue(any(isinstance(item, C.NoRedirect) for item in client.opener.handlers))
