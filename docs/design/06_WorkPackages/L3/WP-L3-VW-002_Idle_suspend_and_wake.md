@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.48"
+version: "0.49"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: two more disposable process-exit boundaries (offline)
+
+Two independent additions to the test-owned child-process matrix: exit after the injected handler returns but before its response is persisted, and exit after a successful socket send. A separate reader finds the former pending with no reply and the latter verified with one recorded reply; both remain `unknown-no-replay` with `runtime_state=unknown`. A fresh owner refuses the same identity without invoking a handler or altering the journal. A successful send is **not** an acknowledgment by the original caller, and a handler return is not a saved backend result. The injected handler has no backend; no archived UUID was replayed. Focused and milestone verification are recorded in Local Experiment Milestones. Dedicated Colima was observed stopped; no API/SQL, retained run/backup modification or VM start. Roll back only the two disposable test cases, preserving saved evidence and the VM. Authenticated backend state, historical cleanup and operator/production acceptance remain open; direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: disposable process exit after reply journal (offline)
 

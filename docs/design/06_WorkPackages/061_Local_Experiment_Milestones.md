@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.87"
+version: "4.88"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: handler-return and successful-send process exits (offline)
+
+WP-L3-VW-002: separate test-owned child exits bracket the unrecorded handler response and successful socket send. A new process classifies the original UUID as `unknown-no-replay` in both cases (pending/no reply versus verified/one journaled reply); fresh owners refuse collision without dispatch or journal mutation. `make test-local-warehouse-lifecycle` and `make verify-local-experiment` passed; `git diff --check` passed. Read-only dedicated Colima status: stopped. The send has no caller acknowledgment; the handler is injected, not a backend. No live API/SQL, archived UUID replay, retained session/backup mutation or VM start. Neither saved claims nor this isolated socket send prove delivery, authenticated backend state, historical cleanup or operator/production acceptance. Roll back test cases only and preserve VM/evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: independent replica consistency and disposable reply-exit (offline)
 
