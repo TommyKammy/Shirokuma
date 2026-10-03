@@ -12,6 +12,22 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: policy response container execution fields (offline)
+
+WP-L2-POL-001: four disposable dry-run responses injecting workingDir, stdin,
+lifecycle hook or a nondefault termination path passed before repair; they now
+fail closed with a pending unknown request. Harmless explicit Kubernetes
+container defaults still match. Focused observer tests passed (23), followed
+by `make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check`. Private full log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-054/verify-execution.log`
+(SHA-256 `495b2cf6ed7f34d18af6fab99f5f20bdfa18a714a35553bec0eee35d95b13cb0`).
+The dedicated VM stayed stopped; no admission, archived-request replay,
+retained evidence/volume/backup mutation or GitHub write. This offline check
+does not authenticate responses, cover all Pod mutations or establish operator
+acceptance. Roll back only comparator/test, retaining pending requests and
+stopped lab. Original Vault sync pending outside checkout.
+
 ## 2026-10-04: policy allowed-response port attributes (offline)
 
 WP-L2-POL-001: three test-owned dry-run responses with injected UDP, host IP,

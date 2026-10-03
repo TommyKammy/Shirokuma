@@ -116,6 +116,18 @@ def allowed_pod_matches(value, body):
     container, submitted = containers[0], original['containers'][0]
     if type(container) is not dict or any(container.get(key) != submitted[key] for key in ('name', 'image', 'imagePullPolicy')):
         return False
+    # Kubernetes may spell out these inert defaults. Other container fields
+    # (including lifecycle hooks and workingDir) are not in the submitted Pod
+    # subset and must not silently gain execution semantics on an allow.
+    if (set(container) - {'name', 'image', 'imagePullPolicy', 'securityContext',
+                          'resources', 'ports', 'env', 'envFrom', 'command', 'args',
+                          'volumeMounts', 'terminationMessagePath', 'terminationMessagePolicy',
+                          'stdin', 'stdinOnce', 'tty', 'workingDir'} or
+            container.get('terminationMessagePath', '/dev/termination-log') != '/dev/termination-log' or
+            container.get('terminationMessagePolicy', 'File') != 'File' or
+            container.get('workingDir', '') != '' or
+            any(container.get(key, False) is not False for key in ('stdin', 'stdinOnce', 'tty'))):
+        return False
     context, resources = container.get('securityContext', {}), container.get('resources', {})
     if type(context) is not dict or type(resources) is not dict or context.get('privileged', False) is not False:
         return False

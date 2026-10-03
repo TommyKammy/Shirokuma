@@ -12,6 +12,17 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-04: allowed response container execution defaults (offline)
+
+Four disposable allowed responses injected a working directory, stdin, a
+post-start lifecycle hook or a different termination message path and passed
+before repair. Unsubmitted execution fields now fail closed; explicit inert
+Kubernetes defaults remain supported. Focused observer tests passed (23).
+The lab stayed stopped: no live admission or saved-request replay. No retained
+volume/backup or GitHub write. Fake responses do not prove server authenticity,
+all mutation coverage or operator acceptance. Roll back comparator/test only;
+retain pending unknown requests. Original Vault sync pending outside checkout.
+
 ## 2026-10-04: allowed response port attributes (offline)
 
 Three disposable dry-run responses injecting UDP protocol, host IP or a port

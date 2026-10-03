@@ -184,6 +184,32 @@ class ObserverTests(unittest.TestCase):
         kube.respond=defaulted
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_inject_container_execution_fields(self):
+        for changes in ({'workingDir':'/tmp'}, {'stdin':True},
+                        {'lifecycle':{'postStart':{'exec':{'command':['/bin/true']}}}},
+                        {'terminationMessagePath':'/tmp/result'}):
+            with self.subTest(changes=changes):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body)
+                    altered['spec']['containers'][0].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaulted(body):
+            effective=copy.deepcopy(body)
+            effective['spec']['containers'][0].update(
+                terminationMessagePath='/dev/termination-log', terminationMessagePolicy='File',
+                stdin=False, stdinOnce=False, tty=False, workingDir='')
+            return SimpleNamespace(returncode=0,stdout=json.dumps(effective),stderr='')
+        kube.respond=defaulted
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_accepts_harmless_server_defaults_and_equivalent_quantities(self):
         self.ready()
         def respond(body):
