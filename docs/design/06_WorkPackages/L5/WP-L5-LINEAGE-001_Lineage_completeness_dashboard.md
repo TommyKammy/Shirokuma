@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.34"
+version: "1.35"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: failing returned final-URL accessor (offline)
+
+A disposable returned catalog response whose callable `geturl` raises `TypeError`
+formerly leaked the exception. Timely failures now close the stream and yield
+`API_RESPONSE_INVALID`; failures crossing the deadline yield `API_DEADLINE`.
+Both negative cases failed before repair. Focused lineage and local verification
+passed after repair. Dedicated Colima was observed stopped; no live catalog,
+credential use, saved source/report/backup change or unknown-request replay.
+This checks client-side classification, not remote producer identity, atomic
+reads, whole-catalog/column coverage or operator acceptance. Roll back only
+this guard and disposable test; preserve historical evidence. Original Vault
+sync remains pending outside the noninteractive checkout.
 
 ## 2026-10-04: failing catalog header accessors (offline)
 

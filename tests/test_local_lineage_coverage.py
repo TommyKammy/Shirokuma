@@ -875,6 +875,26 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_catalog_final_url_accessor_failure_is_bounded_and_closes_response(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for late in (False, True):
+            with self.subTest(late=late):
+                self.client.deadline = time.monotonic() + 10
+                response = Response(b'{"id":1}')
+
+                def broken_url():
+                    if late:
+                        self.client.deadline = time.monotonic() - 1
+                    raise TypeError('uninspectable final URL')
+
+                response.geturl = broken_url
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    with self.assertRaisesRegex(C.CoverageError,
+                                                'API_DEADLINE' if late else 'API_RESPONSE_INVALID'):
+                        self.client.request('GET', path)
+                self.assertTrue(response.closed)
+
     def test_unusable_catalog_final_url_accessor_is_not_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

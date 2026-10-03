@@ -945,6 +945,8 @@ class SessionRPCTest(unittest.TestCase):
         body = json.dumps(self.request()).encode()
         base = b'Content-Type: application/json\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n'
         for extra in (b'X-Original-URL: /v1/other\r\n',
+                      b'X-Original-URI: /v1/other\r\n',
+                      b'X-Original-Host: other.local\r\n',
                       b'X-Rewrite-URL: /v1/other\r\n',
                       b'X-Forwarded-Prefix: /other\r\n'):
             with self.subTest(extra=extra):

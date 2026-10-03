@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.58"
+version: "5.59"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: failing final URL and original RPC target (offline)
+
+WP-L5-LINEAGE-001 now bounds a callable returned-response `geturl` raising
+`TypeError`: invalid when timely, deadline when late; the response is closed.
+Independently WP-L3-VW-002 refuses `X-Original-URI` and `X-Original-Host` on
+the private Unix transition before journaling/dispatch. Disposable negatives
+failed before repair. Focused lineage (108 tests), Warehouse (78 + 105 + 16 +
+22 + 15 tests), `make verify-local-experiment`, `make verify-design-context`
+and `git diff --check` passed after repair; passing logs are private under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-023/` (failed
+negative output was observed but not saved). Read-only `colima list` showed
+the dedicated VM stopped. No VM start, live catalog/backend/SQL, archived
+request replay, retained source/session/report/backup mutation or GitHub write.
+Offline fixtures cannot authenticate producers or peers, establish atomicity,
+caller receipt, restart recovery, whole-catalog/column lineage or operator
+acceptance. Roll back only these independent guards/tests, keeping saved
+evidence and the stopped VM. Original Vault synchronization remains pending
+outside this noninteractive checkout.
 
 ## 2026-10-04: failing catalog headers and method hints (offline)
 

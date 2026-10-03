@@ -397,7 +397,11 @@ class ReadOnlyClient:
                 # that the returned representation belongs to this fixed path.
                 require(final_url is None or callable(final_url), 'API_RESPONSE_INVALID')
                 if final_url is not None:
-                    observed_url = final_url()
+                    try:
+                        observed_url = final_url()
+                    except TypeError:
+                        require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                        raise CoverageError('API_RESPONSE_INVALID') from None
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
                     require(type(observed_url) is str and observed_url == request.full_url,
                             'API_RESPONSE_INVALID')

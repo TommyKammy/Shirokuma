@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.89"
+version: "0.90"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: original URI and host on private RPC (offline)
+
+Complete disposable POSTs bearing `X-Original-URI` or `X-Original-Host`
+reached the handler before repair. The fixed Unix transition now rejects both
+before journaling or dispatch; normal client and printable unrelated extension
+headers remain supported. Focused Warehouse and local verification passed
+after repair. No VM start, live backend/SQL, archived UUID replay or retained
+session/backup mutation. This parser boundary does not prove independent peer
+identity, caller receipt, owner restart recovery or operator acceptance. Roll
+back only this guard and fixture; preserve saved sessions. Original Vault sync
+remains pending outside this checkout.
 
 ## 2026-10-04: additional private RPC method hints (offline)
 

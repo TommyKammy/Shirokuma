@@ -390,7 +390,8 @@ class SessionRPC:
                           b'authorization', b'proxy-authorization', b'cookie',
                           b'forwarded', b'x-forwarded-host', b'x-forwarded-proto',
                           b'x-forwarded-for', b'x-forwarded-port', b'x-forwarded-prefix',
-                          b'x-original-url', b'x-rewrite-url',
+                          b'x-original-url', b'x-original-uri', b'x-original-host',
+                          b'x-rewrite-url',
                            b'x-http-method-override', b'x-method-override',
                            b'x-http-method', b'x-original-method'), 'INVALID_HTTP')
             # Do not normalize ambiguous framing: a peer and a proxy may
