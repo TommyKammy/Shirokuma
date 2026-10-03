@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.41"
+version: "4.42"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: declared root and dev pruning
+
+WP-L0-GITOPS-001. As a separate offline increment after reconciliation-path validation, the fixed local doctor rejects absent or disabled `spec.prune` on either declared root or dev Kustomization even when it reports Ready. Missing-prune negative failed before repair; absent/false negative and healthy fake fixtures passed after repair. `go test ./internal/cli` (732 tests), `go vet ./...`, `make verify-local-experiment` passed. Dedicated Colima remained stopped, without live API/SQL reads, reconcile, retained request replay, backup or volume mutation. Generic doctor unchanged; actual cleanup, source provenance, strict publication gate and production/operator acceptance remain unverified. Roll back only the pruning check and tests; preserve the stopped VM and saved evidence. Original Vault handoff direct sync remains pending outside the noninteractive checkout.
 
 ## 2026-10-03: fixed GitOps root and dev paths
 

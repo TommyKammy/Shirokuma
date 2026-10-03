@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.16"
+version: "0.17"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: declared root and dev pruning
+
+After the path increment, an independent fixed-profile offline check now rejects the repository-declared root or dev Kustomization when its reported `spec.prune` is absent or false despite `Ready=True`. Both declarations require `prune: true`; without it, deletions from Git need not remove obsolete resources. An isolated absent-prune test failed before repair; absent/false negative cases and healthy fake fixtures passed after repair (`go test ./internal/cli`: 732 tests; `go vet ./...`; `make verify-local-experiment`). The generic doctor profile is unchanged. This checks a reported field, not actual deletion, remote provenance, or runtime readiness. Dedicated Colima remained stopped; no VM, API/SQL, reconciliation, retained run or backup change. Revert only this diagnostic/test increment to roll back, retaining historical evidence and the stopped VM. Original Vault handoff direct sync remains pending outside this checkout.
 
 ## 2026-10-03: declared root and dev reconciliation paths
 

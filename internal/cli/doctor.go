@@ -88,6 +88,7 @@ type kubernetesResourceList struct {
 		Spec struct {
 			Suspend   bool   `json:"suspend"`
 			Path      string `json:"path"`
+			Prune     bool   `json:"prune"`
 			Replicas  *int   `json:"replicas"`
 			SourceRef struct {
 				Kind      string `json:"kind"`
@@ -335,6 +336,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		isDev := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "shirokuma-dev"
 		if isRoot {
 			rootCount++
+			if localExperiment && !resource.Spec.Prune {
+				unhealthy = append(unhealthy, resourceID+" (prune disabled)")
+			}
 			if localExperiment && resource.Spec.Path != "./deploy/gitops/clusters/local-lite" {
 				unhealthy = append(unhealthy, resourceID+" (path mismatch)")
 			}
@@ -351,6 +355,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if localExperiment && isDev {
 			devCount++
+			if !resource.Spec.Prune {
+				unhealthy = append(unhealthy, resourceID+" (prune disabled)")
+			}
 			if resource.Spec.Path != "./deploy/gitops/dev" {
 				unhealthy = append(unhealthy, resourceID+" (path mismatch)")
 			}
