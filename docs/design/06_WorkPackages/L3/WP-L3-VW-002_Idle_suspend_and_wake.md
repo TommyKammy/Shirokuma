@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-04: legacy private forwarding field (offline)
+
+The fixed Unix transition now refuses the unhyphenated legacy `X-Forwarded`
+field as well as `X-Forwarded-*`. A complete disposable request with an
+alternate host reached the handler before repair and was refused afterward;
+ordinary Go and printable extension requests remain compatible. Focused
+Warehouse tests passed. No VM start, archived UUID replay, live backend/SQL or
+retained session/backup mutation. This does not prove peer authenticity beyond
+the existing UID check, caller receipt or owner restart recovery. Roll back
+only the field guard/test and retain saved sessions. Original Vault sync
+pending outside this checkout.
+
 ## 2026-10-04: private forwarding namespace (offline)
 
 The fixed Unix RPC now refuses all `X-Forwarded-*` names rather than only

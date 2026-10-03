@@ -1391,6 +1391,20 @@ class ReadOnlyClientTests(unittest.TestCase):
                         self.client.request('GET', path)
                 self.assertTrue(stream.closed)
 
+    def test_http_error_unusable_header_accessor_is_not_missing_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+
+        class UninspectableHeaders:
+            get_all = None
+
+        stream = io.BytesIO(b'private')
+        error = urllib.error.HTTPError(C.URL + path, 404, 'missing', UninspectableHeaders(), stream)
+        with patch.object(self.client.opener, 'open', side_effect=error):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                self.client.request('GET', path)
+        self.assertTrue(stream.closed)
+
     def test_noninteger_http_status_cannot_be_catalog_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

@@ -500,7 +500,7 @@ class ReadOnlyClient:
                 # requested fixed-path catalog entity is absent.
                 observed_url = error.geturl()
                 error_headers = error.headers
-                if hasattr(error_headers, 'get_all'):
+                if callable(getattr(error_headers, 'get_all', None)):
                     alternate = [error_headers.get_all(name, []) for name in
                                  ('Location', 'Content-Location', 'Refresh', 'Content-Range')]
                 elif type(error_headers) is dict:

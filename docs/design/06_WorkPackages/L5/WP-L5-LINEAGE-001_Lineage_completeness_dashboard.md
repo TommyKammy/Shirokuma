@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: unusable catalog error header accessor (offline)
+
+An injected exact-path HTTP 404 exposing a non-callable `get_all` formerly
+leaked `TypeError` while checking for alternate-location metadata. The bounded
+reader now refuses the uninspectable headers as `API_RESPONSE_INVALID` after
+closing the stream; normal HTTPMessage and mapping headers remain supported.
+The disposable negative failed before repair, then focused tests passed. No
+live catalog, VM start, retained source/report/backup change or replay. This
+cannot authenticate the producer or establish atomic, whole-catalog or column
+coverage. Roll back only this accessor guard/test, preserving saved reports.
+Original Vault sync pending outside this checkout.
+
 ## 2026-10-04: unusable final catalog URL accessor (offline)
 
 An injected returned response that advertises a non-callable `geturl` no longer

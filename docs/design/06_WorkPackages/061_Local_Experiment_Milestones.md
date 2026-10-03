@@ -12,6 +12,25 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: catalog error header accessor and legacy forwarding (offline)
+
+WP-L5-LINEAGE-001 refuses a test-owned exact-path 404 with a non-callable
+header accessor instead of leaking `TypeError`; the error stream is closed.
+Independently WP-L3-VW-002 refuses the legacy unhyphenated `X-Forwarded`
+authority hint before private Unix transition dispatch. Both disposable
+negatives failed before repair; focused lineage and Warehouse suites passed
+afterward (105 lineage; 78 + 105 + 16 + 22 + 15 Warehouse).
+`make verify-local-experiment`, `make verify-design-context` (89 documents)
+and `git diff --check` passed. Failed negatives and passing logs remain private
+under `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-021/`.
+Read-only `colima list` observed the dedicated VM stopped. No VM
+start, live catalog/backend/SQL, archived request replay, retained source/
+session/report/backup mutation or GitHub write. These offline boundaries do
+not authenticate producers/peers, prove atomicity, caller receipt, owner
+restart recovery, full catalog/column coverage or operator acceptance. Roll
+back only the independent guards/tests; retain historical evidence and the
+stopped VM. Original Vault synchronization pending outside this checkout.
+
 ## 2026-10-04: forwarded namespace and unusable catalog URL accessor (offline)
 
 WP-L3-VW-002 refuses the full `X-Forwarded-*` namespace, including disposable
