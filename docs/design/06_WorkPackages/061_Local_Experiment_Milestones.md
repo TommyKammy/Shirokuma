@@ -12,6 +12,12 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: explicit null nested diagnostic objects (offline)
+
+WP-L0-GITOPS-001: fixed-profile inventory now rejects explicit null nested reference/artifact objects instead of interpreting them as omitted structs, including in unrelated list items. Omitted and canonical object fixtures still pass; the isolated negative failed before repair, followed by `go test ./internal/cli -count=1` (781 passed) and `go vet ./...`. Dedicated Colima remained stopped; no live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. This does not authenticate API/Git, prove atomicity or historical cleanup, clear strict admission or establish operator/production acceptance. Roll back local doctor reader/tests only; preserve stopped VM and evidence. Direct original Vault sync pending outside checkout.
+
+Both increments passed `make verify-local-experiment` after each change, `make verify-design-context` (89 documents) and `git diff --check`; private regression logs are under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-026/` (`verify.log`, `verify-second.log`, `design.log`).
+
 ## 2026-10-03: Warehouse cross-selector membership (offline)
 
 WP-L3-VW-002: two independent read-only inventory consistency checks reject an owner-labelled fixed-name object absent from the owner-selected projection, and a selected owner EndpointSlice for either fixed Service absent from its service-selected projection. Matching and unrelated-slice fixtures and `make test-local-warehouse-lifecycle` passed. Dedicated Colima read-only status reported stopped; no live API/SQL, owner operation, unknown-request replay or retained session/backup mutation. Separate API reads are not atomic or independently authenticated; historical cleanup and operator/production acceptance remain open. Roll back the reader/tests only and retain saved evidence/VM. Original Vault direct sync pending outside checkout.

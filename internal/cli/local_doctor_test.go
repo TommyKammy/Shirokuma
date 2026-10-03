@@ -133,6 +133,25 @@ func TestLocalInventoryRequiresCanonicalMetadataKeys(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsNullNestedObjects(t *testing.T) {
+	for _, field := range []string{`"spec":{"ref":null}`, `"spec":{"secretRef":null}`, `"spec":{"sourceRef":null}`, `"status":{"artifact":null}`} {
+		raw := []byte(`{"items":[{` + field + `}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if !localInventoryIncomplete(list, raw) {
+			t.Fatalf("explicit null nested object accepted: %s", field)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{}]}`), []byte(`{"items":[{"spec":{"ref":{}},"status":{"artifact":{}}}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("omitted or object field rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsAliasedItemIdentity(t *testing.T) {
 	for _, field := range []string{"name", "namespace", "generation", "deletionTimestamp"} {
 		alias := strings.ToUpper(field[:1]) + field[1:]

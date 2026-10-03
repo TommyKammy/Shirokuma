@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-03: explicit null nested inventory objects (offline)
+
+The fixed-profile doctor now refuses explicit `null` in item `spec.ref`, `spec.secretRef`, `spec.sourceRef` or `status.artifact`, rather than decoding it as an omitted struct on any inventory member. Omitted fields remain compatible with older projections; valid objects pass. A focused negative failed before repair and passed afterward. This is read-only fake-response validation, not authenticated API/Git identity, atomic inventory, live readiness, strict publication admission or operator/production acceptance. Dedicated Colima remained stopped; no live API/SQL, reconciliation, retained data/backup mutation or unknown-request replay. Roll back only this reader/test, retaining VM and evidence. Direct original Vault sync remains pending outside checkout.
+
 ## 2026-10-03: nested keys and explicit null item fields (offline)
 
 Two further fixed-profile inventory increments: nested `spec`, `status`, source-ref, artifact and condition keys now reject case-insensitive aliases (including aliases alongside canonical fields). Independently, explicitly null item `kind`, `apiVersion`, `metadata`, `spec` and `status` are not interpreted as omitted fields, even on unrelated members of a supposedly complete list. Omitted optional fields remain compatible, and generic doctor is unchanged. Fake controller, Flux resource and namespace workload negatives and canonical positives passed `go test ./internal/cli -count=1` (780 passed), `go vet ./...`, `make verify-local-experiment` and `git diff --check`. Dedicated Colima was observed stopped; no VM start, actual API/SQL, reconciliation, saved-request replay, retained data or backup mutation. Offline shape checks do not authenticate API/Git identity, establish atomic inventory or historical cleanup, clear strict publication admission or prove operator/production acceptance. Roll back only local reader/tests; preserve stopped VM and historical evidence. Direct original Vault handoff sync remains pending outside checkout.

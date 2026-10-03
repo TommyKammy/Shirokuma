@@ -286,7 +286,9 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			{spec["sourceRef"], []string{"kind", "name", "namespace"}},
 			{status["artifact"], []string{"revision"}},
 		} {
-			if !localInventoryCanonicalFields(nested.raw, nested.keys) {
+			// An explicitly null nested object decodes like an omitted struct in
+			// encoding/json. Only omission is compatible with projected fixtures.
+			if string(nested.raw) == "null" || !localInventoryCanonicalFields(nested.raw, nested.keys) {
 				return true
 			}
 		}
