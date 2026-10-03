@@ -100,7 +100,7 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response was not valid JSON"}
 			continue
 		}
-		if localInventoryIncomplete(list) {
+		if localInventoryIncomplete(list, output) {
 			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response was incomplete"}
 			continue
 		}

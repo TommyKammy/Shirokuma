@@ -871,7 +871,7 @@ func TestLocalFluxRejectsPaginatedInventories(t *testing.T) {
 }
 
 func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
-	for _, field := range []string{`"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"  "},`, `"apiVersion":"v2",`} {
+	for _, field := range []string{`"metadata":null,`, `"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"  "},`, `"apiVersion":"v2",`} {
 		for _, first := range []bool{true, false} {
 			responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
 			index := 1
@@ -902,14 +902,16 @@ func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
 }
 
 func TestLocalWorkloadRejectsEmptyReportedListResourceVersion(t *testing.T) {
-	for _, index := range []int{0, 1} {
-		responses := localWorkloadResponses()
-		responses[index].output = strings.Replace(responses[index].output, `{"items":`, `{"metadata":{"resourceVersion":""},"items":`, 1)
-		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
-		for _, check := range checks {
-			isAffected := index == 0 && check.Name == "seaweedfs" || index == 1 && check.Name != "seaweedfs"
-			if isAffected && (check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete")) || !isAffected && check.Status != "healthy" {
-				t.Fatalf("list %d: unexpected workload check %#v", index, check)
+	for _, field := range []string{`"metadata":{"resourceVersion":""},`, `"metadata":null,`} {
+		for _, index := range []int{0, 1} {
+			responses := localWorkloadResponses()
+			responses[index].output = strings.Replace(responses[index].output, `{"items":`, `{`+field+`"items":`, 1)
+			checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+			for _, check := range checks {
+				isAffected := index == 0 && check.Name == "seaweedfs" || index == 1 && check.Name != "seaweedfs"
+				if isAffected && (check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete")) || !isAffected && check.Status != "healthy" {
+					t.Fatalf("list %d: unexpected workload check %#v", index, check)
+				}
 			}
 		}
 	}

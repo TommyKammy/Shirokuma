@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.29"
+version: "0.30"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: explicitly null diagnostic list metadata (offline)
+
+The fixed-profile reader now rejects an explicit `metadata: null` on Flux controller/source and Lakehouse workload lists rather than treating it like omitted metadata in older projected fixtures. Fake negative cases cover both Flux reads and both namespace reads; omitted metadata and previously valid envelopes still pass. `go test ./internal/cli -count=1` passed (769 tests). Dedicated Colima was read-only observed stopped; no VM start or API/SQL call, reconciliation, retained request replay, backup or volume change. This only tests offline response interpretation, not authenticated inventory, remote Git provenance, strict admission or production acceptance. Roll back the local list check and tests only; preserve stopped VM and saved evidence. Original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: explicitly blank list resource versions (offline)
 

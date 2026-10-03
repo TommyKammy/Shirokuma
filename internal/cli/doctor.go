@@ -118,8 +118,8 @@ type kubernetesResourceList struct {
 	Kind       string `json:"kind"`
 	APIVersion string `json:"apiVersion"`
 	Metadata   struct {
-		Continue           string `json:"continue"`
-		RemainingItemCount *int64 `json:"remainingItemCount"`
+		Continue           string  `json:"continue"`
+		RemainingItemCount *int64  `json:"remainingItemCount"`
 		ResourceVersion    *string `json:"resourceVersion"`
 	} `json:"metadata"`
 	Items []struct {
@@ -177,7 +177,15 @@ type kubernetesResourceList struct {
 
 // A local read is a single, complete Kubernetes v1 List, not an arbitrary
 // projection that happens to include the expected objects.
-func localInventoryIncomplete(list kubernetesResourceList) bool {
+func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
+	// Keep omitted metadata compatible with projected fixtures, but an explicit
+	// null envelope cannot establish a complete Kubernetes list.
+	var envelope struct {
+		Metadata json.RawMessage `json:"metadata"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil || string(envelope.Metadata) == "null" {
+		return true
+	}
 	return list.Items == nil || list.Metadata.Continue != "" ||
 		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
 		(list.Metadata.ResourceVersion != nil && strings.TrimSpace(*list.Metadata.ResourceVersion) == "") ||
@@ -316,7 +324,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if err := json.Unmarshal(controllerOutput, &controllers); err != nil {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was not valid JSON"}
 	}
-	if localExperiment && localInventoryIncomplete(controllers) {
+	if localExperiment && localInventoryIncomplete(controllers, controllerOutput) {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was incomplete"}
 	}
 	if len(controllers.Items) != 4 {
@@ -383,7 +391,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if err := json.Unmarshal(resourceOutput, &resources); err != nil {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was not valid JSON"}
 	}
-	if localExperiment && localInventoryIncomplete(resources) {
+	if localExperiment && localInventoryIncomplete(resources, resourceOutput) {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was incomplete"}
 	}
 	kinds := map[string]int{}

@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.59"
+version: "4.60"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: null diagnostic list metadata (offline)
+
+WP-L0-GITOPS-001: fixed-profile doctor rejects explicitly null list metadata in Flux controller/source and both Lakehouse namespace inventories while preserving omitted legacy fixtures. Fake negatives and positives, `go test ./internal/cli -count=1` (769 tests) passed. Read-only dedicated Colima status was stopped; no live API/SQL, VM start, reconciliation, unknown-request replay or retained data/backup mutation. This is not authenticated inventory, historical cleanup, strict publication admission or operator/production acceptance. Roll back the local list reader/tests only and preserve the VM and evidence. Original Vault direct handoff sync pending outside checkout.
 
 ## 2026-10-03: list resource versions and Warehouse row framing (offline)
 
