@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.45"
+version: "0.46"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: explicit null is not a missing Pod (offline)
+
+The scoped kubectl JSON reader previously returned `None` for both an empty
+`--ignore-not-found` response and a literal JSON `null`. Two fake transport
+replies reproduced the ambiguity before repair. Explicit null now fails the
+reader; empty/whitespace-only output still denotes absence. The focused
+observer suite passed (54 tests). Dedicated Colima was observed stopped; no
+live admission, retained request, volume or backup changed. This offline
+transport check cannot authenticate the API, prove atomic inventory or clear
+strict admission. Roll back only the reader/test if needed; preserve pending
+intents without replay. Direct original Vault sync remains pending outside
+this checkout.
 
 ## 2026-10-04: duplicate raw Kubernetes JSON claims (offline)
 

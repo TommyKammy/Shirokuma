@@ -94,6 +94,19 @@ class ObserverTests(unittest.TestCase):
                 returncode=0, stdout='{"metadata":{"uid":"first"}}')):
             self.assertEqual(reader.json_request(['get', 'namespace']), {'metadata': {'uid': 'first'}})
 
+    def test_kubernetes_reader_distinguishes_absent_output_from_json_null(self):
+        reader = object.__new__(O.M.Kubernetes)
+        args = ['get', 'pod', 'missing', '--ignore-not-found', '-o', 'json']
+        for raw in ('null', ' null\n'):
+            with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
+                    returncode=0, stdout=raw)):
+                with self.assertRaises(O.M.PolicyError):
+                    reader.json_request(args)
+        for raw in ('', '\n'):
+            with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
+                    returncode=0, stdout=raw)):
+                self.assertIsNone(reader.json_request(args))
+
     def test_incomplete_limitrange_inventory_never_becomes_ready(self):
         # A first page with no items is not evidence that the namespace has
         # no LimitRanges: the continuation token may hide a later page.

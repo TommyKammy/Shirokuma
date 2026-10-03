@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.156"
+version: "5.157"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: explicit policy null and separate FinOps review (offline)
+
+WP-L2-POL-001: two fake successful JSON `null` responses were previously
+indistinguishable from empty `--ignore-not-found` output, allowing a false
+absence claim. Both negatives failed before repair; the scoped reader now
+refuses explicit null and still accepts empty output. Observer suite passed
+(54 tests). Separately inspected WP-L6-FIN-001's direct saved-history selection,
+digest/order and per-report storage scope without another defect or behavior
+change; 183 FinOps tests passed (seven Linux-only skips). Dedicated Colima was
+read-only observed Stopped. No live admission, collection, retained request,
+report, volume or backup mutation or GitHub write. AgentHouse usage remains
+`null / NOT_MEASURED`. Fake responses and offline reports cannot authenticate
+producers, measure current usage, clear strict admission or establish operator
+acceptance. Roll back only the policy reader/test if needed; retain pending
+intents and saved reports without replay. No FinOps runtime rollback. Direct
+original Vault sync remains pending outside this checkout.
+
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. The local suite
+includes expected synthetic failure-path output; none is live acceptance.
 
 ## 2026-10-04: policy transport duplicate keys and independent FinOps review (offline)
 

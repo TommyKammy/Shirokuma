@@ -180,7 +180,12 @@ class Kubernetes:
                 value[key] = item
             return value
 
-        return json.loads(result.stdout, object_pairs_hook=unique_keys) if result.stdout.strip() else None
+        if not result.stdout.strip():
+            return None  # kubectl --ignore-not-found emits no object for a missing resource.
+        value = json.loads(result.stdout, object_pairs_hook=unique_keys)
+        if value is None:
+            raise PolicyError('scoped Kubernetes response contains explicit JSON null')
+        return value
 
     def get(self, kind: str, name: str):
         if kind not in RESOURCES or name not in NAMES:
