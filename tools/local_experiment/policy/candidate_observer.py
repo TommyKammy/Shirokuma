@@ -331,6 +331,11 @@ class CandidateObserver:
         for expected in self._items:
             current = self.kube.get(expected['kind'], expected['metadata']['name'])
             require(type(current) is dict, 'BASELINE_RESOURCE_MISSING')
+            envelope_keys = {'apiversion', 'kind', 'metadata', 'spec', 'status'}
+            canonical_envelope = {'apiVersion', 'kind', 'metadata', 'spec', 'status'}
+            require(not any(type(key) is str and key.lower() in envelope_keys
+                            and key not in canonical_envelope for key in current),
+                    'BASELINE_IDENTITY_INVALID')
             resource_meta = current.get('metadata')
             identity_keys = {'name', 'uid', 'generation', 'labels', 'annotations', 'deletiontimestamp'}
             canonical_keys = {'name', 'uid', 'generation', 'labels', 'annotations', 'deletionTimestamp'}

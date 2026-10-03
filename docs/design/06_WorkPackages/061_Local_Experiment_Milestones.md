@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.152"
+version: "5.153"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy resource envelope and separate GitOps inspection (offline)
+
+WP-L2-POL-001: six fake case-variant top-level resource fields became ready
+before repair; all six focused negatives failed before the new guard. They now
+fail before dry-run; the observer 51-test suite and native policy 17-test suite
+passed. Independently inspected WP-L0-GITOPS-001's fixed-profile list decoder;
+86 focused inventory/list Go tests passed with no new reader defect or behavior
+change. Dedicated Colima was observed stopped; no live admission, Git/API
+inventory, reconciliation, retained request/report/volume/backup mutation or
+GitHub write. Offline fixtures cannot authenticate producers, prove atomic
+inventory, clear strict admission or establish operator acceptance. Roll back
+only the policy guard/test if needed; preserve pending intents and saved
+evidence. No GitOps runtime rollback. Direct original Vault sync remains
+pending outside this checkout. `make verify-local-experiment`, `make
+verify-design-context` (89 documents), `make check-no-secret-filenames` and
+`git diff --check` passed. The local suite includes expected synthetic failure
+output, not live runtime acceptance.
 
 ## 2026-10-04: namespace envelope aliases (offline)
 

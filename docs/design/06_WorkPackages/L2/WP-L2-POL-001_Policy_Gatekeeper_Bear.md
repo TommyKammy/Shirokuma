@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.42"
+version: "0.43"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: policy resource envelope aliases (offline)
+
+Six conflicting case-variant top-level fields on test-owned policy resources
+were accepted as ready before repair. The fixed-candidate baseline now refuses
+these aliases before any dry-run. The negative failed in all six cases before
+repair; the observer suite passed (51 tests) afterward. Dedicated Colima was
+observed stopped. No live admission, retained requests, volumes or backups
+changed. These fixtures cannot authenticate the API, prove atomic inventory,
+clear strict admission or establish operator acceptance. Roll back only this
+guard/test if needed; retain pending intents without replay. Original Vault
+handoff sync remains pending outside the approved checkout.
 
 ## 2026-10-04: namespace envelope aliases (offline)
 

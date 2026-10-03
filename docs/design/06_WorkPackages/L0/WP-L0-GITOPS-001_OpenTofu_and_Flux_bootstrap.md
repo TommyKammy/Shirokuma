@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.99"
+version: "0.100"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent complete-list reader inspection (offline)
+
+Independently inspected the fixed-profile typed list decoder's envelope,
+member aliases, reported lifecycle and pagination boundaries after the policy
+resource repair. The focused inventory/list Go tests passed (86). No additional
+defect was established and no GitOps reader or runtime behavior changed.
+Dedicated Colima remained stopped; no live inventory, reconciliation or retained
+data/backup change. These offline checks do not authenticate remote state,
+establish atomic inventory, clear strict admission or grant operator acceptance.
+No runtime rollback; preserve historical evidence. Direct original Vault sync
+remains pending outside this checkout.
 
 ## 2026-10-04: conflicting list envelope regression (offline)
 

@@ -153,6 +153,18 @@ class ObserverTests(unittest.TestCase):
                     observer.observe()
                 self.assertEqual(kube.requests, [])
 
+    def test_policy_resource_envelope_aliases_cannot_hide_conflicting_type(self):
+        for key, value in (('Kind', 'Other'), ('KIND', 'Other'),
+                           ('ApiVersion', 'v2'), ('Metadata', {'name': 'other'}),
+                           ('Spec', {'paramKind': 'other'}), ('Status', {'observedGeneration': 0})):
+            with self.subTest(key=key):
+                kube=FakeKube()
+                next(iter(kube.resources.values()))[key]=value
+                observer=O.CandidateObserver(prepared(),kube)
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.observe()
+                self.assertEqual(kube.requests, [])
+
     def test_allowed_exact_body_one_attempt_and_all_guards(self):
         observed=self.ready();receipts=[]
         def save(value):
