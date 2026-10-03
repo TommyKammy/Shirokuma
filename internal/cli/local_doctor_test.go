@@ -608,6 +608,22 @@ func TestLocalFluxRequiresAvailableConditionOnControllers(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsPausedController(t *testing.T) {
+	controllers := strings.Replace(localControllerJSON(), `"spec":{"replicas":1}`, `"spec":{"replicas":1,"paused":true}`, 1)
+	responses := []fakeResponse{{output: controllers}, {output: localFluxJSON()}}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+		t.Fatalf("paused controller accepted: %#v", check)
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false); strings.Contains(check.Summary, "source-controller") {
+		t.Fatalf("generic profile inherited fixed paused check: %#v", check)
+	}
+	check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true)
+	if check.Status != "informational" {
+		t.Fatalf("unpaused controllers rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsDuplicateControllerWithoutReadingSources(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `"name":"notification-controller"`, `"name":"source-controller"`, 1)
 	runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
@@ -836,6 +852,20 @@ func TestLocalLakehouseRequiresAvailableConditionOnlyOnDeployments(t *testing.T)
 	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
 	if checks[0].Status != "healthy" || checks[1].Status != "healthy" || checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "Available=True") || checks[3].Status != "healthy" {
 		t.Fatalf("missing deployment condition or StatefulSet condition handling: %#v", checks)
+	}
+}
+
+func TestLocalLakehouseRejectsPausedDeploymentOnly(t *testing.T) {
+	responses := localWorkloadResponses()
+	responses[1].output = strings.Replace(responses[1].output, healthyLocalWorkload("Deployment", "shirokuma-dev", "polaris"), strings.Replace(healthyLocalWorkload("Deployment", "shirokuma-dev", "polaris"), `"spec":{"replicas":1}`, `"spec":{"replicas":1,"paused":true}`, 1), 1)
+	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+	if checks[0].Status != "healthy" || checks[1].Status != "healthy" || checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "paused") || checks[3].Status != "healthy" {
+		t.Fatalf("paused deployment or unrelated workload misreported: %#v", checks)
+	}
+	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: localWorkloadResponses()}, localExperimentContext) {
+		if check.Status != "healthy" {
+			t.Fatalf("unpaused workload rejected: %#v", check)
+		}
 	}
 }
 

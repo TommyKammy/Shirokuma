@@ -90,6 +90,7 @@ type kubernetesResourceList struct {
 		} `json:"metadata"`
 		Spec struct {
 			Suspend bool   `json:"suspend"`
+			Paused  bool   `json:"paused"`
 			Path    string `json:"path"`
 			Prune   bool   `json:"prune"`
 			Wait    bool   `json:"wait"`
@@ -287,6 +288,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		unready := controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas
 		if localExperiment {
 			unready = unready || controller.Kind != "Deployment" || controller.Metadata.Namespace != "flux-system" ||
+				controller.Spec.Paused ||
 				controller.Metadata.DeletionTimestamp != "" ||
 				controller.Metadata.Generation < 1 || controller.Status.ObservedGeneration == nil || *controller.Status.ObservedGeneration != controller.Metadata.Generation ||
 				controller.Spec.Replicas == nil || *controller.Spec.Replicas < 1 ||

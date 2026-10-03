@@ -141,6 +141,8 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 			switch {
 			case resource.Metadata.DeletionTimestamp != "":
 				check.Summary = resourceID + " is terminating"
+			case workload.kind == "Deployment" && resource.Spec.Paused:
+				check.Summary = resourceID + " rollout is paused"
 			case resource.Metadata.Generation < 1 || resource.Status.ObservedGeneration == nil || *resource.Status.ObservedGeneration != resource.Metadata.Generation:
 				check.Summary = resourceID + " controller has not observed the current generation"
 			case desired == nil || *desired < 1:
