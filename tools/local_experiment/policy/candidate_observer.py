@@ -119,7 +119,13 @@ def allowed_pod_matches(value, body):
     context, resources = container.get('securityContext', {}), container.get('resources', {})
     if type(context) is not dict or type(resources) is not dict or context.get('privileged', False) is not False:
         return False
-    if (any(context.get(key) != raw for key, raw in submitted.get('securityContext', {}).items()) or
+    submitted_security = submitted.get('securityContext', {})
+    # Only the harmless explicit false default may appear beyond the submitted
+    # container context. Other injected settings can change execution identity
+    # or privileges even when the named policy checks still pass.
+    if (any(context.get(key) != raw for key, raw in submitted_security.items()) or
+            any(key not in submitted_security and (key != 'privileged' or value is not False)
+                for key, value in context.items()) or
             any(container.get(key) not in (None, []) for key in ('env', 'envFrom', 'command', 'args', 'volumeMounts'))):
         return False
     requests, limits = resources.get('requests'), resources.get('limits')

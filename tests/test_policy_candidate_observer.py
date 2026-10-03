@@ -141,6 +141,24 @@ class ObserverTests(unittest.TestCase):
         kube=FakeKube();observer=O.CandidateObserver(source,kube);observer.observe()
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_inject_container_security_context(self):
+        for context in ({'privileged':False,'allowPrivilegeEscalation':True},
+                        {'privileged':False,'runAsUser':0},
+                        {'privileged':False,'capabilities':{'add':['SYS_ADMIN']}}):
+            with self.subTest(context=context):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body)
+                    altered['spec']['containers'][0]['securityContext']=context
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertEqual(receipt['response_content_check'],'not-checked')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+
     def test_allowed_response_accepts_harmless_server_defaults_and_equivalent_quantities(self):
         self.ready()
         def respond(body):

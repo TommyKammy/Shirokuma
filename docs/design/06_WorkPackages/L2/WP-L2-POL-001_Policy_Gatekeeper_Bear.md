@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.14"
+version: "0.15"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: allowed response container security context (offline)
+
+Three test-owned allowed dry-run responses injected an unsubmitted container
+`allowPrivilegeEscalation: true`, `runAsUser: 0`, or `SYS_ADMIN` capability.
+All passed before repair. The comparator now refuses unsubmitted container
+security settings except explicit `privileged: false` (a harmless default),
+and retains the pending unknown request without replay. The focused observer
+suite passed (21 tests). Dedicated Colima was read-only observed stopped; no
+live admission, archived request replay, retained evidence/backup mutation or
+GitHub write. The fake server cannot authenticate actual admission or cover
+arbitrary Pod mutations. Stop new checks or roll back the comparator/test only;
+preserve pending unknown requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: allowed response Pod security context (offline)
 

@@ -5,12 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.102"
+version: "5.103"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy container context and independent FinOps review (offline)
+
+WP-L2-POL-001: three disposable allowed responses injecting container privilege,
+root UID or added capability passed before repair and now fail closed with the
+pending request preserved; focused observer suite passed (21 tests). Separately,
+WP-L6-FIN-001's history ordering/digest/duplicate paths were reviewed without
+a reproduced defect or code change; FinOps 181 tests passed (seven Linux-only
+skips). Dedicated Colima read-only observed Stopped. No live admission, VM
+start, collection, saved-request replay, retained report/volume/backup change
+or GitHub write. These checks cannot prove response/producer authenticity,
+current usage, Linux runtime behavior or operator acceptance. Roll back only
+the policy comparator/test if needed; preserve pending requests and saved
+reports. AgentHouse retained volume remains `null / NOT_MEASURED`. Original
+Vault synchronization pending outside this checkout.
+Final `make verify-local-experiment`, `make verify-design-context` (89
+documents), `make check-no-secret-filenames` and `git diff --check` passed.
+Private full verification output:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-053/local-verification.log`
+(SHA-256 `4bd0645f01f49bfb8053ccd2b4e6c1e06e5224e9d3a79ad3513f39d811d9ff4c`).
+The three initial expected regression failures were observed in test output
+before the repair; the full passing run does not establish live acceptance.
 
 ## 2026-10-04: independent policy allowed-response Pod context (offline)
 
