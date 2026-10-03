@@ -36,7 +36,7 @@ def report(runs=None, unrecognized=0):
     return {'schema_version': 1, 'observed_at': '2026-09-17T07:30:00.000000Z',
         'scope': 'verified-historical-data-plan-lineage',
         'observation': {'status': 'incomplete' if counts['unknown'] or not source_stable else 'complete',
-            'source_stable': source_stable, 'metadata_stable': None if counts['unknown'] else True, 'reason_codes': []},
+            'source_stable': source_stable, 'metadata_stable': None if not eligible or counts['unknown'] else True, 'reason_codes': []},
         'inventory': {'entries': len(runs) + unrecognized, 'uuid_runs': len(runs), 'eligible': eligible, 'complete': True,
             **{state: sum(item['source_status'] == state for item in runs)
                for state in ('valid', 'failed', 'incomplete', 'invalid')}, 'unrecognized_entries': unrecognized},
@@ -208,11 +208,19 @@ class CoverageRenderTests(unittest.TestCase):
     def test_complete_observation_requires_verified_source_and_no_failures(self):
         for mutate in (lambda value: value['observation'].update(source_stable=False),
                        lambda value: value['observation'].update(reason_codes=['SOURCE_INVENTORY_CHANGED']),
-                       lambda value: value['observation'].update(metadata_stable=False)):
+                       lambda value: value['observation'].update(metadata_stable=False),
+                       lambda value: value['observation'].update(metadata_stable=None)):
             value = report()
             mutate(value)
             with self.assertRaises(RenderError):
                 render(value)
+
+    def test_eligible_source_requires_saved_operation(self):
+        value = report()
+        value['runs'][0]['operation'] = None
+        with self.assertRaises(RenderError):
+            render(value)
+        self.assertIn('2 / 2 エッジ', render(report()))
 
     def test_complete_observation_cannot_hide_unverified_population(self):
         for runs, unrecognized in (([run(), run(2, source_status='failed', eligible=False)], 0),

@@ -12,6 +12,23 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: complete lineage catalog proof and eligible operation (offline)
+
+WP-L5-LINEAGE-001 refuses a saved `complete` observation with eligible runs
+when `metadata_stable` is null: complete observations require explicit true
+catalog stability; zero-eligible observations may retain null. Independently,
+an initially eligible source must name its saved supported operation. Both
+disposable negatives rendered successfully before repair; focused lineage
+(124 tests), `make verify-local-experiment` and `make verify-design-context`
+passed after repair. Read-only `colima list` showed the dedicated VM stopped.
+No live catalog/login, retained source/report/volume/backup mutation, archived
+request replay or GitHub write. Original Vault synchronization remains pending
+outside the checkout. Saved claims cannot authenticate producers or establish
+atomicity, whole-catalog/column lineage or operator acceptance. Roll back the
+renderer and fixture changes alone, retaining historical reports and stopped
+VM. Private negative/passing logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-037/`.
+
 ## 2026-10-04: eligible source demotion consistency (offline)
 
 After the independent lineage/Warehouse commit below, WP-L5-LINEAGE-001 also

@@ -205,7 +205,8 @@ def _validate(report):
     _require(type(inventory.get('complete')) is bool, 'INVALID_INVENTORY_COMPLETENESS')
     if observation['status'] == 'complete':
         _require(inventory['complete'] and observation['source_stable'] and
-                  observation['metadata_stable'] is not False and not observation['reason_codes'] and
+                  (observation['metadata_stable'] is True or inventory['eligible'] == 0 and
+                   observation['metadata_stable'] is None) and not observation['reason_codes'] and
                   not any(inventory[key] for key in ('failed', 'incomplete', 'invalid', 'unrecognized_entries')),
                   'INCONSISTENT_OBSERVATION_COMPLETION')
     for key in ('denominator', 'known', *STATUSES):
@@ -228,6 +229,7 @@ def _validate(report):
                  (source == 'incomplete') or
                  (source in ('failed', 'invalid') and not run['eligible']),
                  'INCONSISTENT_SOURCE_ELIGIBILITY')
+        _require(not run['eligible'] or operation is not None, 'INCONSISTENT_SOURCE_ELIGIBILITY')
         sources[source] += 1
         _codes(run.get('reason_codes'))
         for key in ('source_sha256_before', 'source_sha256_after', 'metadata_sha256_before', 'metadata_sha256_after'):
