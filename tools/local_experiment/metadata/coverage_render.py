@@ -39,7 +39,7 @@ REASONS = {
     'NOT_OBSERVED': 'このエッジはまだ観測していません',
     'SOURCE_INVENTORY_CHANGED': '観測中に保存証跡の一覧が変化しました',
     'SOURCE_INVENTORY_UNAVAILABLE': '保存証跡の一覧取得を完了できません',
-    'UNVERIFIED_SOURCE_RUNS': '無効または未完了の証跡があります',
+    'UNVERIFIED_SOURCE_RUNS': '失敗・無効または未完了の証跡があります',
     'UNKNOWN_EXPECTED_EDGES': '状態を確認できない期待エッジがあります',
 }
 LIMITS_JA = {
@@ -309,7 +309,7 @@ def _validate(report):
               inventory['entries'] == inventory['uuid_runs'] + inventory['unrecognized_entries'] and
               all(inventory[key] == value for key, value in sources.items()), 'INCONSISTENT_SOURCE_COUNTS')
     _require(('UNVERIFIED_SOURCE_RUNS' in observation['reason_codes']) ==
-              (inventory['invalid'] + inventory['incomplete'] > 0),
+              (inventory['failed'] + inventory['invalid'] + inventory['incomplete'] > 0),
               'INCONSISTENT_SOURCE_REASON')
     _require(('UNRECOGNIZED_SOURCE_ENTRIES' in observation['reason_codes']) ==
               (inventory['unrecognized_entries'] > 0),

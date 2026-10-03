@@ -234,6 +234,15 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(self.client.calls, [])
         self.assertNotIn('DO_NOT_COPY', json.dumps(result))
 
+    def test_failed_run_alone_cannot_claim_complete_observation(self):
+        self.add_run(result='failed')
+        result = self.collect()
+        self.assertEqual(result['inventory']['failed'], 1)
+        self.assertEqual(result['inventory']['eligible'], 0)
+        self.assertEqual(result['observation']['status'], 'incomplete')
+        self.assertIn('UNVERIFIED_SOURCE_RUNS', result['observation']['reason_codes'])
+        self.assertEqual(self.client.calls, [])
+
     def test_malformed_summary_result_is_invalid_row_not_report_exception(self):
         for result_value in ({'raw': 'private'}, ['passed'], None, 1):
             with self.subTest(result=result_value):

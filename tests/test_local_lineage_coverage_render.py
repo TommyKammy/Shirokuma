@@ -33,7 +33,7 @@ def report(runs=None, unrecognized=0):
     known = denominator - counts['unknown']
     source_stable = all(item['source_sha256_before'] is not None and
                         item['source_sha256_before'] == item['source_sha256_after'] for item in runs)
-    reasons = (['UNVERIFIED_SOURCE_RUNS'] if any(item['source_status'] in ('invalid', 'incomplete') for item in runs) else [])
+    reasons = (['UNVERIFIED_SOURCE_RUNS'] if any(item['source_status'] in ('failed', 'invalid', 'incomplete') for item in runs) else [])
     if unrecognized:
         reasons.append('UNRECOGNIZED_SOURCE_ENTRIES')
     if counts['unknown']:
@@ -113,13 +113,21 @@ class CoverageRenderTests(unittest.TestCase):
         value['observation'].update(status='complete', reason_codes=[])
         self.assertIn('2 / 2 エッジ', render(value))
 
-    def test_saved_unverified_source_reason_requires_invalid_or_incomplete_run(self):
-        for runs in ([run()], [], [run(1, source_status='failed', eligible=False)]):
+    def test_saved_unverified_source_reason_requires_failed_invalid_or_incomplete_run(self):
+        for runs in ([run()], []):
             value = report(runs)
             value['observation'].update(status='incomplete', reason_codes=['UNVERIFIED_SOURCE_RUNS'])
             with self.subTest(runs=len(runs)), self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
                 render(value)
         value = report([run(1, source_status='invalid', eligible=False)])
+        value['observation'].update(status='incomplete', reason_codes=['UNVERIFIED_SOURCE_RUNS'])
+        self.assertIn('UNVERIFIED_SOURCE_RUNS', render(value))
+
+    def test_failed_run_requires_saved_observation_reason(self):
+        value = report([run(1, source_status='failed', eligible=False)])
+        value['observation'].update(status='complete', reason_codes=[])
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_OBSERVATION_COMPLETION|INCONSISTENT_SOURCE_REASON'):
+            render(value)
         value['observation'].update(status='incomplete', reason_codes=['UNVERIFIED_SOURCE_RUNS'])
         self.assertIn('UNVERIFIED_SOURCE_RUNS', render(value))
 

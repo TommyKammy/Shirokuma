@@ -829,7 +829,7 @@ def collect(client, *, source_root=SOURCE_ROOT, evidence_reader=evidence.read_ev
                           'rate': counts['present'] / denominator if denominator and not counts['unknown'] else None,
                           'observation_rate': known / denominator if denominator else None,
                           'complete': denominator > 0 and counts['present'] == denominator}
-    if inv['invalid'] or inv['incomplete']:
+    if inv['failed'] or inv['invalid'] or inv['incomplete']:
         report['observation']['reason_codes'].append('UNVERIFIED_SOURCE_RUNS')
     if counts['unknown']:
         report['observation']['reason_codes'].append('UNKNOWN_EXPECTED_EDGES')

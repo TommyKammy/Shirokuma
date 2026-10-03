@@ -5,12 +5,26 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.56"
+version: "1.57"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: failed source cannot complete observation (offline)
+
+A stable saved run with `result=failed` previously yielded a collector
+`complete` observation, which the direct renderer already refused. A
+test-owned failed-only run reproduced this producer/renderer mismatch. The
+collector now includes failed runs in `UNVERIFIED_SOURCE_RUNS`; direct rendering
+requires the same explanation and continues to exclude failed runs from the
+eligible edge denominator. The negative and a valid failed-only saved report
+are covered by focused tests. No live catalog, VM start, retained source/report
+or backup mutation. This does not authenticate a producer, prove atomicity,
+whole-catalog/column coverage or operator acceptance. Roll back the collector
+reason, renderer alignment and tests together; preserve historical reports.
+Original Vault synchronization pending outside this noninteractive checkout.
 
 ## 2026-10-04: saved inventory failure cannot claim complete population (offline)
 

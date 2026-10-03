@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.91"
+version: "5.92"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: failed-only lineage observation alignment (offline)
+
+WP-L5-LINEAGE-001: a test-owned stable failed run claimed `complete` in the
+collector while the renderer refused complete observations with failed runs.
+The failed-only negative was reproduced before repair (focused suite: one
+failure and one renderer error), then the collector and renderer aligned on
+`UNVERIFIED_SOURCE_RUNS`; focused lineage 141 tests passed. Independent
+WP-L6-FIN-001 offline suite passed (181 tests, seven Linux-only skips) without
+changing its code or acceptance status. `make verify-local-experiment`,
+`make verify-design-context` and `git diff --check` passed. Dedicated Colima
+observed Stopped; no VM start,
+catalog call, new collection, retained report/source/volume/backup mutation,
+unknown-request replay or GitHub write. This is an internal claim alignment,
+not producer authenticity, atomicity, whole-catalog/column coverage, current
+usage or operator acceptance. Roll back the lineage collector/renderer/tests
+together, retaining historical evidence. Original Vault sync pending outside
+the noninteractive checkout.
 
 ## 2026-10-04: offline lineage inventory claim and FinOps cyclic input
 
