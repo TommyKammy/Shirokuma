@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.134"
+version: "5.135"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: member GVK regression and separate FinOps inspection (offline)
+
+WP-L0-GITOPS-001: pinned the existing refusal of whitespace and control/format
+characters in an unrelated complete-list member's reported kind/API version;
+valid and omitted projections still pass. No doctor behavior changed. Separately
+inspected WP-L6-FIN-001 direct saved-history validation, digest/ordering,
+per-report storage scope and bounded rendering without establishing another
+defect or changing FinOps behavior.
+`go test ./... -count=1` passed (839 Go tests), `make test-local-finops` passed
+181 tests (seven Linux-only skips), and `make verify-local-experiment` and
+`make verify-design-context` passed. Dedicated Colima was read-only observed
+Stopped; no live API/Git, reconciliation, collection, unknown-request replay,
+retained report/volume/backup mutation or GitHub write. AgentHouse usage remains
+`null / NOT_MEASURED`. Offline checks cannot authenticate producers, establish
+atomic inventory, exercise Linux-only fixtures, measure current usage, clear
+strict admission or establish operator acceptance. Roll back only the new
+GitOps test if needed; no FinOps runtime rollback. Original Vault sync pending
+outside the approved checkout.
 
 ## 2026-10-04: GitOps null generation and separate FinOps review (offline)
 

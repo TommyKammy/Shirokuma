@@ -246,6 +246,28 @@ func TestLocalInventoryRejectsExplicitEmptyMemberGVK(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsObscuredMemberGVK(t *testing.T) {
+	for _, tc := range []struct {
+		member  string
+		invalid bool
+	}{
+		{`{"kind":"Service ","apiVersion":"v1"}`, true},
+		{`{"kind":"Service","apiVersion":"v1\u0000"}`, true},
+		{`{"kind":"Service","apiVersion":"v1\u200b"}`, true},
+		{`{"kind":"Service","apiVersion":"v1"}`, false},
+		{`{}`, false},
+	} {
+		raw := []byte(`{"items":[` + tc.member + `]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if got := localInventoryIncomplete(list, raw); got != tc.invalid {
+			t.Fatalf("incomplete=%t want %t for %s", got, tc.invalid, raw)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsLossyUnknownJSONKey(t *testing.T) {
 	for _, raw := range [][]byte{
 		[]byte(`{"items":[],"\ud800":1}`),

@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.91"
+version: "0.92"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: obscured reported member GVK regression (offline)
+
+An unrelated member reporting whitespace or a control/format character in its
+kind/API version is already refused by the fixed-profile reader. A targeted
+test pins that behavior alongside an ordinary Service/v1 and omitted projected
+fields; it passed before any reader change. Focused test and `go test ./...
+-count=1` passed (839 Go tests). Dedicated Colima was observed
+Stopped; no live API/Git, reconciliation, retained data/backup mutation or
+GitHub write. This offline fixture does not authenticate the producer, prove
+atomic inventory, clear strict admission or establish acceptance. Roll back
+only this test if needed; keep earlier evidence. Original Vault sync pending
+outside the approved checkout.
 
 ## 2026-10-04: reported null generation regression (offline)
 
