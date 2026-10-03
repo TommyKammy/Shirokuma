@@ -121,6 +121,25 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		resources[namespace] = list
 	}
+	// The two namespace reads are not atomic, but a reported UID cannot name
+	// different objects in either snapshot. Refuse both scopes rather than
+	// presenting their expected workloads as independently healthy.
+	uidNamespace := make(map[string]string)
+	for _, namespace := range []string{"shirokuma-storage", "shirokuma-dev"} {
+		if _, failed := errors[namespace]; failed {
+			continue
+		}
+		for _, resource := range resources[namespace].Items {
+			if uid := resource.Metadata.UID; uid != "" {
+				if prior, ok := uidNamespace[uid]; ok && prior != namespace {
+					for _, affected := range []string{prior, namespace} {
+						errors[affected] = doctorCheck{Status: "degraded", Summary: "workload response reused a resource UID across namespace reads"}
+					}
+				}
+				uidNamespace[uid] = namespace
+			}
+		}
+	}
 	checks := make([]doctorCheck, 0, len(localLakehouseWorkloads))
 	for _, workload := range localLakehouseWorkloads {
 		resourceID := fmt.Sprintf("%s/%s/%s", workload.kind, workload.namespace, workload.resource)

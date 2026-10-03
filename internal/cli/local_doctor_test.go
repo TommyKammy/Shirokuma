@@ -71,6 +71,19 @@ func TestLocalLakehouseRejectsIncompleteConditions(t *testing.T) {
 	}
 }
 
+func TestLocalLakehouseRejectsUIDReusedAcrossNamespaceReads(t *testing.T) {
+	responses := localWorkloadResponses()
+	for i := range responses {
+		responses[i].output = strings.Replace(responses[i].output, `"generation":2`, `"generation":2,"uid":"same-resource-uid"`, 1)
+	}
+	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+	for _, check := range checks {
+		if check.Status != "degraded" {
+			t.Fatalf("cross-namespace UID collision accepted: %#v", checks)
+		}
+	}
+}
+
 func TestLocalInventoryRequiresCanonicalEnvelopeKeys(t *testing.T) {
 	for _, alias := range []string{"Items", "ITEMS", "Metadata", "Kind", "APIVERSION"} {
 		controllers := strings.Replace(localControllerJSON(), `"items"`, `"`+alias+`"`, 1)

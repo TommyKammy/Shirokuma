@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.53"
+version: "0.54"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: workload UIDs across two namespace reads (offline)
+
+The fixed local doctor refuses a reported UID reused by objects in its two separately read Lakehouse namespaces, degrading both scopes without exposing the UID. A focused fake collision failed before repair; the focused Go suite (804 tests) and vet passed afterward. Omitted UIDs remain compatible. These reads are not atomic or authenticated and do not establish Git provenance, historical cleanup, strict admission or operator acceptance. The dedicated Colima profile was read-only observed stopped; no live API/SQL, reconciliation, replay or retained data/backup change. Revert reader/test only, retaining VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: available and unavailable capacity cannot overlap (offline)
 

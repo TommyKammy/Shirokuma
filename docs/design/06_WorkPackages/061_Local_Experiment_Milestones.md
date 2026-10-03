@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.92"
+version: "4.93"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: cross-namespace workload UID collision (offline)
+
+WP-L0-GITOPS-001: the two fixed Lakehouse namespace lists refuse a reported UID reused across their resources. Fake collision failed before repair; `go test ./internal/cli -count=1` (804 passed) and `go vet ./...` passed after repair. Omitted UIDs remain compatible. Read-only dedicated Colima status: stopped; no live API/SQL, reconciliation, unknown UUID replay or retained data/backup mutation. Independent namespace reads are not atomic, authenticated API/Git evidence, historical cleanup, strict publication admission or operator/production acceptance. Roll back reader/tests only, preserving VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: capacity overlap and independent owner collision (offline)
 
