@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.97"
+version: "5.98"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent Warehouse proxy IP suffix refusal (offline)
+
+WP-L3-VW-002: four proxy-specific client-IP suffix requests reached the
+disposable Unix handler with 200 before repair; they now fail before dispatch
+or journaling. Focused Warehouse suites passed (78 + 115 + 16 + 22 + 15).
+Dedicated Colima remained stopped; no backend/SQL, archived UUID replay,
+retained session/backup mutation or GitHub write. The offline parser does not
+authenticate a peer or prove caller receipt, restart recovery or acceptance.
+Roll back parser/test only; preserve historical evidence. Original Vault sync
+pending outside the noninteractive checkout.
+Final `make verify-local-experiment`, `make verify-design-context` (89
+documents), `make check-no-secret-filenames` and `git diff --check` passed
+after both independent increments. These are offline checks, not live runtime
+acceptance; the earlier test-owned negative failures are preserved in the
+session's private tool output.
 
 ## 2026-10-04: eligible lineage run retains initial verification (offline)
 

@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.06"
+version: "1.07"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: proxy-specific client-IP suffixes (offline)
+
+The fixed Unix transition refuses `True-Client-IP-*`, `CF-Connecting-IP-*`,
+`Fastly-Client-IP-*` and `X-Cluster-Client-IP-*` extensions alongside their
+bare forms. Four disposable requests reached the handler with 200 before
+repair; afterward they are refused before dispatch or journaling. Focused
+Warehouse suites passed (78 + 115 + 16 + 22 + 15 tests). Dedicated Colima
+remained stopped; no backend/SQL, archived request replay, retained session/
+backup mutation or GitHub write. This does not authenticate the peer, prove
+caller receipt, restart recovery or operator acceptance. Roll back parser/test
+only and preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: client-IP extension suffixes (offline)
 

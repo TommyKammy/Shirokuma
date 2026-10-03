@@ -388,7 +388,9 @@ class SessionRPC:
                     not name.startswith(b'x-real-') and
                     not name.startswith((b'x-original-', b'x-rewrite-')) and
                     not name.startswith((b'proxy-', b'x-proxy-', b'x-envoy-', b'x-remote-', b'remote-',
-                                         b'x-client-ip-', b'client-ip-')) and
+                                          b'x-client-ip-', b'client-ip-', b'true-client-ip-',
+                                          b'cf-connecting-ip-', b'fastly-client-ip-',
+                                          b'x-cluster-client-ip-')) and
                     name not in headers and name not in
                     (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
                      b'te', b'proxy-connection', b'keep-alive', b'proxy', b'via',
