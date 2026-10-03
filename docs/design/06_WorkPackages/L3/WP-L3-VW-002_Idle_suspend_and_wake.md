@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.51"
+version: "0.52"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: clean owner shutdown cannot transfer session identity (offline)
+
+A sixth disposable child-process boundary closes the owner normally after a durable verified response, without a caller reply. A separate reader still classifies the original and a fresh UUID `unknown-no-replay` with unknown runtime state; a second process refuses the session identity without dispatch or journal changes. `make test-local-warehouse-lifecycle` passed. This uses only test-owned temporary paths and an injected handler: no archived UUID replay, backend/API/SQL, VM start, retained session or backup mutation. Clean shutdown is not caller delivery or authenticated backend recovery; historical cleanup and operator acceptance remain open. Roll back the test addition only, retaining the stopped VM and saved evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: fresh process also refuses exited owner identity (offline)
 

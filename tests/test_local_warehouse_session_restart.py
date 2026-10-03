@@ -54,6 +54,9 @@ if boundary in ('reply', 'sent'):
         owner._connection(receiver)
 else:
     owner._dispatch(request)
+if boundary == 'closed':
+    owner.close()  # A clean owner shutdown still cannot prove caller delivery.
+    sys.exit(78)
 os._exit(74)
 """
 
@@ -78,7 +81,7 @@ sys.exit(1)
 
 class DisposableOwnerExitTest(unittest.TestCase):
     def test_new_process_cannot_adopt_exited_owners_unknown_request(self):
-        for boundary in ('intent', 'returned', 'handler', 'reply', 'sent'):
+        for boundary in ('intent', 'returned', 'handler', 'reply', 'sent', 'closed'):
             with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
                 root.chmod(0o700)
@@ -90,7 +93,7 @@ class DisposableOwnerExitTest(unittest.TestCase):
                 child = subprocess.run([sys.executable, '-c', CHILD, str(root), token,
                                         request_id, boundary], cwd=Path(__file__).resolve().parent.parent,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, check=False)
-                self.assertEqual(child.returncode, {'returned': 76, 'sent': 77}.get(boundary, 73),
+                self.assertEqual(child.returncode, {'returned': 76, 'sent': 77, 'closed': 78}.get(boundary, 73),
                                  child.stderr.decode(errors='replace'))
                 journal = output / 'rpc' / 'journal.json'
                 original = journal.read_bytes()

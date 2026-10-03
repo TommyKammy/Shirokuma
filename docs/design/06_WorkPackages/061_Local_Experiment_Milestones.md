@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.95"
+version: "4.96"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: clean Warehouse owner close remains non-adoptable (offline)
+
+WP-L3-VW-002: test-owned child closes a verified owner cleanly without a reply; independent reader and fresh owner process still classify original/new UUIDs `unknown-no-replay` and refuse journal collision without dispatch or journal mutation. `make test-local-warehouse-lifecycle` passed. This is not archived recovery, caller receipt or authenticated backend state. No VM start, API/SQL, retained session/backup mutation or unknown-request replay; dedicated Colima was observed stopped. Roll back the added disposable boundary only, preserving evidence and VM. Original Vault direct sync pending outside checkout.
+
+After both increments, `make verify-local-experiment`, `make verify-design-context` (89 documents), `go vet ./...` and `git diff --check` passed. These offline checks do not establish live or operator/production acceptance.
 
 ## 2026-10-03: invisible reported UID (offline)
 
