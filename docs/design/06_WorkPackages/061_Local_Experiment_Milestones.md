@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.76"
+version: "5.77"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: saved lineage population and initial evidence (offline)
+
+WP-L5-LINEAGE-001 refuses a complete observation with excluded or unrecognized
+source entries and refuses eligible sources without initial digest or `valid`
+sources with conflicting saved digests. Disposable negatives failed before the
+guards; focused lineage suite 121 passed. No VM start, catalog call, retained
+source/report/backup change, unknown-request replay or GitHub write. These
+saved-claim checks do not prove provenance, atomicity, whole-catalog/column
+coverage or operator acceptance. Roll back renderer/tests alone, retaining
+saved evidence and the stopped dedicated VM. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-04: private Warehouse client-IP claims (offline)
 

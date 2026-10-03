@@ -5,12 +5,26 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.47"
+version: "1.48"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: complete-population and initial-evidence claims (offline)
+
+The saved HTML renderer refuses `observation.status=complete` if the inventory
+contains failed, invalid, incomplete or unrecognized source entries, even when
+all eligible edges are present. It also requires an initial source digest for
+eligible runs and refuses a `valid` source with unequal non-null before/after
+digests. An interrupted final read may still have a null final digest; this is
+not promoted to a successful observation. Disposable negatives failed before
+the guards; the focused lineage suite passed (121). No catalog access, VM start,
+saved source/report/backup mutation or unknown-request replay. This checks
+internal report claims, not producer identity, atomicity, whole-catalog/column
+coverage or operator acceptance. Roll back renderer/tests only, preserving
+historical evidence. Original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: saved catalog stability and edge explanations (offline)
 

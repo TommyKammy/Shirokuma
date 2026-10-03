@@ -132,6 +132,16 @@ class CoverageRenderTests(unittest.TestCase):
                 render(value)
         self.assertIn('2 / 2 エッジ', render(report()))
 
+    def test_eligible_run_requires_initial_evidence_and_valid_run_cannot_drift(self):
+        for before, after in ((None, None), ('a' * 64, 'c' * 64)):
+            value = report()
+            value['runs'][0]['source_sha256_before'] = before
+            value['runs'][0]['source_sha256_after'] = after
+            value['observation'].update(status='incomplete', source_stable=False,
+                                        reason_codes=['SOURCE_INVENTORY_UNAVAILABLE'])
+            with self.subTest(before=before, after=after), self.assertRaises(RenderError):
+                render(value)
+
     def test_catalog_stability_claim_requires_matching_saved_snapshots(self):
         for after in (None, 'c' * 64):
             value = report()
@@ -184,6 +194,19 @@ class CoverageRenderTests(unittest.TestCase):
             value = report()
             mutate(value)
             with self.assertRaises(RenderError):
+                render(value)
+
+    def test_complete_observation_cannot_hide_unverified_population(self):
+        for runs, unrecognized in (([run(), run(2, source_status='failed', eligible=False)], 0),
+                                   ([run(), run(2, source_status='invalid', eligible=False)], 0),
+                                   ([run(), run(2, source_status='incomplete', eligible=False)], 0),
+                                   ([run()], 1)):
+            value = report(runs, unrecognized=unrecognized)
+            for item in value['runs']:
+                item['source_sha256_before'] = item['source_sha256_after'] = 'a' * 64
+            value['observation']['status'] = 'complete'
+            value['observation']['source_stable'] = True
+            with self.subTest(runs=len(runs), unrecognized=unrecognized), self.assertRaises(RenderError):
                 render(value)
 
     def test_all_data_strings_are_text_not_active_markup(self):

@@ -205,8 +205,9 @@ def _validate(report):
     _require(type(inventory.get('complete')) is bool, 'INVALID_INVENTORY_COMPLETENESS')
     if observation['status'] == 'complete':
         _require(inventory['complete'] and observation['source_stable'] and
-                 observation['metadata_stable'] is not False and not observation['reason_codes'],
-                 'INCONSISTENT_OBSERVATION_COMPLETION')
+                  observation['metadata_stable'] is not False and not observation['reason_codes'] and
+                  not any(inventory[key] for key in ('failed', 'incomplete', 'invalid', 'unrecognized_entries')),
+                  'INCONSISTENT_OBSERVATION_COMPLETION')
     for key in ('denominator', 'known', *STATUSES):
         _count(coverage.get(key))
     _require(type(coverage.get('complete')) is bool)
@@ -232,6 +233,11 @@ def _validate(report):
         for key in ('source_sha256_before', 'source_sha256_after', 'metadata_sha256_before', 'metadata_sha256_after'):
             value = run.get(key)
             _require(value is None or type(value) is str and re.fullmatch('[0-9a-f]{64}', value), 'INVALID_EVIDENCE_HASH')
+        _require(not run['eligible'] or run['source_sha256_before'] is not None,
+                 'INCONSISTENT_SOURCE_ELIGIBILITY')
+        _require(source != 'valid' or run['source_sha256_after'] is None or
+                 run['source_sha256_before'] == run['source_sha256_after'],
+                 'INCONSISTENT_SOURCE_STATUS')
         if observation['source_stable']:
             _require(run['source_sha256_before'] is not None and
                      run['source_sha256_before'] == run['source_sha256_after'],
