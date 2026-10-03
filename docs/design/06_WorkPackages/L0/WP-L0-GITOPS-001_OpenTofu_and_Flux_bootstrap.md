@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.61"
+version: "0.62"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: non-lossy inventory envelope, references and revisions (offline)
+
+Three independent fixed-profile safeguards refuse U+FFFD after JSON decoding in reported item `kind`/`apiVersion`, nested source/secret reference identities and Git selector/artifact/applied revision strings, including escaped unpaired surrogates on unrelated list members. Omitted fields and valid reported strings remain compatible; generic doctor is unchanged. Focused negatives failed before each repair; full Go tests, vet and milestone verification are recorded in Local Experiment Milestones. Read-only dedicated Colima list: stopped. No VM start, API/Git/SQL observation, reconciliation, request replay or retained evidence/backup mutation. These offline guards cannot authenticate API or remote Git, make separate reads atomic, prove historical cleanup, clear strict admission or establish operator/production acceptance. Roll back reader/tests only and preserve VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: non-lossy item names and namespaces (offline)
 

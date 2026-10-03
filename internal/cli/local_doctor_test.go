@@ -218,6 +218,63 @@ func TestLocalInventoryRejectsLossyItemIdentity(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsLossyItemEnvelopeIdentity(t *testing.T) {
+	for _, field := range []string{"kind", "apiVersion"} {
+		raw := []byte(`{"items":[{"` + field + `":"apps\ud800"}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("lossy %s accepted: %s (%v)", field, raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"kind":"Deployment","apiVersion":"apps/v1"}]}`), []byte(`{"items":[{}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid item rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsLossyReferenceIdentity(t *testing.T) {
+	for _, tc := range []struct{ parent, field string }{
+		{`spec":{"secretRef`, "name"}, {`spec":{"sourceRef`, "kind"},
+		{`spec":{"sourceRef`, "name"}, {`spec":{"sourceRef`, "namespace"},
+	} {
+		raw := []byte(`{"items":[{"` + tc.parent + `":{"` + tc.field + `":"ref\ud800"}}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("lossy reference accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"spec":{"sourceRef":{"kind":"GitRepository","name":"git","namespace":"flux-system"},"secretRef":{"name":"deploy"}}}]}`), []byte(`{"items":[{}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid reference rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsLossySourceAndAppliedRevision(t *testing.T) {
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"spec":{"ref":{"branch":"main\ud800"}}}]}`),
+		[]byte(`{"items":[{"status":{"artifact":{"revision":"main\ud800"}}}]}`),
+		[]byte(`{"items":[{"status":{"lastAppliedRevision":"main\ud800"}}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("lossy revision accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"spec":{"ref":{"branch":"main"}},"status":{"artifact":{"revision":"main@sha1:abc"},"lastAppliedRevision":"main@sha1:abc"}}]}`),
+		[]byte(`{"items":[{}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid revision rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullReferenceScalars(t *testing.T) {
 	for _, tc := range []struct{ parent, field string }{
 		{`spec":{"ref`, `branch`}, {`spec":{"ref`, `tag`}, {`spec":{"ref`, `semver`},

@@ -247,6 +247,11 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if item == nil {
 			return true // A null member is not a Kubernetes resource.
 		}
+		// An escaped unpaired surrogate can become U+FFFD even when the raw
+		// response is valid UTF-8. Do not accept lossy object identities.
+		if localInventoryLossyStrings(item, []string{"kind", "apiVersion"}) {
+			return true
+		}
 		// Explicit null is not an omitted field in a Kubernetes object. In
 		// particular, a null spec/status on an unrelated item must not be
 		// mistaken for a valid member of a complete namespace inventory.
@@ -434,6 +439,9 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			localInventoryNullFields(status, []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas", "observedGeneration", "lastAppliedRevision", "conditions"}) {
 			return true
 		}
+		if localInventoryLossyStrings(status, []string{"lastAppliedRevision"}) {
+			return true
+		}
 		for _, nested := range []struct {
 			raw  json.RawMessage
 			keys []string
@@ -453,6 +461,25 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				if err := json.Unmarshal(nested.raw, &fields); err != nil || localInventoryNullFields(fields, nested.keys) {
 					return true
 				}
+			}
+		}
+		// References on unrelated members are still part of the claimed
+		// complete list. Preserve their reported identity without lossy decode.
+		for _, reference := range []struct {
+			raw  json.RawMessage
+			keys []string
+		}{
+			{spec["ref"], []string{"branch", "tag", "semver", "commit", "name"}},
+			{spec["secretRef"], []string{"name"}},
+			{spec["sourceRef"], []string{"kind", "name", "namespace"}},
+			{status["artifact"], []string{"revision"}},
+		} {
+			if len(reference.raw) == 0 {
+				continue
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(reference.raw, &fields); err != nil || localInventoryLossyStrings(fields, reference.keys) {
+				return true
 			}
 		}
 		var conditions []json.RawMessage
@@ -515,6 +542,18 @@ func localInventoryNullFields(fields map[string]json.RawMessage, keys []string) 
 	for _, key := range keys {
 		if string(fields[key]) == "null" {
 			return true
+		}
+	}
+	return false
+}
+
+func localInventoryLossyStrings(fields map[string]json.RawMessage, keys []string) bool {
+	for _, key := range keys {
+		if raw, ok := fields[key]; ok {
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil || strings.ContainsRune(value, utf8.RuneError) {
+				return true
+			}
 		}
 	}
 	return false

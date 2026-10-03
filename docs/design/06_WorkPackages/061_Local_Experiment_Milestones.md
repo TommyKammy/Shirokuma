@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.02"
+version: "5.03"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: non-lossy reported inventory identities and revisions (offline)
+
+WP-L0-GITOPS-001: fixed-profile list items now reject U+FFFD decoded from escaped unpaired surrogates in kind/API version, source/secret reference identities, Git ref selectors, artifact revision and applied revision. Three isolated negatives failed before each repair; final `go test ./... -count=1` (813 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed for the combined changes. Dedicated Colima read-only list: stopped. No VM start, API/Git/SQL, reconciliation, unknown-request replay or retained data/backup change. Offline field validation cannot authenticate API/Git, prove atomic inventory or historical cleanup, satisfy strict admission or establish operator/production acceptance. Roll back reader/tests only; preserve VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: non-lossy inventory resource identity (offline)
 
