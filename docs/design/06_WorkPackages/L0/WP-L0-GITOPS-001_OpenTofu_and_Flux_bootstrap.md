@@ -5,12 +5,27 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.84"
+version: "0.85"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: explicitly empty member GVK (offline)
+
+In a separate complete-list boundary, a reported empty kind/API version on an
+unrelated member previously passed as an omitted projection. Disposable
+negatives failed before repair; explicit empty values now fail closed, while
+genuinely omitted member fields and a reported `Service`/`v1` remain valid.
+The first full Go run exposed an older OCI/Bucket/Helm fixture that intentionally
+expected an explicit empty version to pass; its expectation now records the
+new incomplete-response refusal. The original failure is retained in this note.
+This is list-internal consistency only: no live remote authentication, atomic
+inventory, strict admission or operator acceptance. Dedicated Colima remained
+Stopped; no retained data/backup or GitHub write. Roll back only this reader
+and test if necessary, retaining earlier evidence. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-04: explicitly empty List GVK (offline)
 

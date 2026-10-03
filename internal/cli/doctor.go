@@ -259,6 +259,13 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if localInventoryInvisibleLocations(item, []string{"kind", "apiVersion"}) {
 			return true
 		}
+		// A reported but empty member type is not the same as an omitted
+		// projection; it cannot identify an object in a complete inventory.
+		for _, key := range []string{"kind", "apiVersion"} {
+			if string(item[key]) == `""` {
+				return true
+			}
+		}
 		// Explicit null is not an omitted field in a Kubernetes object. In
 		// particular, a null spec/status on an unrelated item must not be
 		// mistaken for a valid member of a complete namespace inventory.

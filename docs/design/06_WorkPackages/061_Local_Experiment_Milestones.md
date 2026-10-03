@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.123"
+version: "5.124"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: explicitly empty GitOps member GVK (offline)
+
+WP-L0-GITOPS-001: a reported empty kind or API version on an unrelated member
+passed as an omitted projection. Both disposable negatives failed before
+repair; fixed-profile complete lists now reject them while preserving omitted
+projected fields and canonical reported member GVK. This does not authenticate
+remote state, prove atomic inventory, clear strict admission or establish
+operator acceptance. Dedicated Colima remained Stopped; no live API/Git,
+reconciliation, retained data/backup mutation or GitHub write. Roll back only
+the reader/test if needed; retain previous evidence. Original Vault sync
+pending outside checkout.
+Initial full Go run failed in the older Flux other-kind fixture that expected
+an explicit empty version to pass; its expectation now checks incomplete-list
+refusal instead. The failed run remains part of this evidence.
 
 ## 2026-10-04: explicitly empty GitOps List GVK (offline)
 

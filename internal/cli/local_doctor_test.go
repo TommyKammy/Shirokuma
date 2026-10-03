@@ -225,6 +225,27 @@ func TestLocalInventoryRejectsContradictoryListType(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsExplicitEmptyMemberGVK(t *testing.T) {
+	for _, tc := range []struct {
+		member  string
+		invalid bool
+	}{
+		{`{"kind":""}`, true},
+		{`{"apiVersion":""}`, true},
+		{`{"kind":"Service","apiVersion":"v1"}`, false},
+		{`{}`, false}, // projected fixtures may omit member GVK entirely
+	} {
+		raw := []byte(`{"items":[` + tc.member + `]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if got := localInventoryIncomplete(list, raw); got != tc.invalid {
+			t.Fatalf("incomplete=%t want %t for %s", got, tc.invalid, raw)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsLossyUnknownJSONKey(t *testing.T) {
 	for _, raw := range [][]byte{
 		[]byte(`{"items":[],"\ud800":1}`),
@@ -1369,7 +1390,11 @@ func TestLocalOtherFluxResourceAPIVersions(t *testing.T) {
 			}
 			responses := []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}
 			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
-			if version == "wrong.example/v1" {
+			if version == "" {
+				if check.Status != "degraded" || !strings.Contains(check.Summary, "response was incomplete") {
+					t.Fatalf("%s empty reported version accepted: %#v", test.kind, check)
+				}
+			} else if version == "wrong.example/v1" {
 				if check.Status != "degraded" || !strings.Contains(check.Summary, "declared API version mismatch") || strings.Contains(check.Summary, version) {
 					t.Fatalf("%s %q accepted or echoed: %#v", test.kind, version, check)
 				}
