@@ -12,6 +12,23 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: offline lineage completion and FinOps selection shape
+
+WP-L5-LINEAGE-001 now refuses an unexplained incomplete observation with
+stable sources, including an empty inventory. Its first focused run failed at
+an older synthetic unknown-edge fixture missing the collector's reason code;
+the fixture was repaired. Independently WP-L6-FIN-001 bounds malformed direct
+history selections instead of leaking unpacking/indexing errors. Focused lineage
+and FinOps suites, `make verify-local-experiment`, and design-context passed;
+private logs are under `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-041/`.
+Read-only Colima listing found the dedicated VM stopped. No VM start, live
+catalog or collection, retained reports/sources/volumes/backups mutation,
+unknown-request replay or GitHub write. These checks establish neither saved
+producer authenticity nor atomicity, current resource usage, whole-catalog/
+column lineage, backup recovery or operator acceptance. Roll back only these
+independent guards/tests and retain historical evidence. Original Vault update
+remains pending outside the noninteractive checkout.
+
 ## 2026-10-04: malformed saved lineage targets (offline)
 
 WP-L5-LINEAGE-001's renderer now refuses unhashable saved edge targets with

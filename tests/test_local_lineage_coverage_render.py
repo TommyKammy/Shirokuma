@@ -77,6 +77,7 @@ class CoverageRenderTests(unittest.TestCase):
 
     def test_unknown_keeps_denominator_and_suppresses_success_rate(self):
         value = report([run(1, ('present', 'missing')), run(2, ('conflict', 'unknown'))])
+        value['observation']['reason_codes'] = ['UNKNOWN_EXPECTED_EDGES']
         html = render(value)
         self.assertIn('1 / 4 エッジ', html)
         self.assertIn('登録率 算出しない', html)
@@ -95,6 +96,15 @@ class CoverageRenderTests(unittest.TestCase):
         self.assertNotIn('登録率 100.0%', html)
         self.assertNotIn('登録率 0.0%', html)
         self.assertIn('集計対象の実験履歴はありません', html)
+
+    def test_incomplete_observation_needs_a_failure_or_unstable_source(self):
+        for runs in ([run()], []):
+            value = report(runs)
+            value['observation']['status'] = 'incomplete'
+            with self.subTest(runs=len(runs)), self.assertRaisesRegex(RenderError, 'INCONSISTENT_OBSERVATION_COMPLETION'):
+                render(value)
+            value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
+            self.assertIn('観測未完了', render(value))
 
     def test_zero_eligible_catalog_stability_is_unobserved(self):
         for stable in (True, False):

@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: incomplete saved observation needs an explanation (offline)
+
+Direct rendering rejects an `incomplete` observation with stable sources and
+no failure reasons: the collector marks that combination complete, including
+the zero-run case. An existing synthetic unknown-edge fixture lacked the
+collector's `UNKNOWN_EXPECTED_EDGES` reason; it was corrected after the first
+focused run failed. The focused and local verification results are in Milestones.
+No VM start, catalog call, retained report/source/backup mutation or replay.
+This is saved-claim consistency only, not producer authenticity, atomicity,
+whole-catalog/column coverage or operator acceptance. Roll back the guard and
+fixture only; retain historical reports. Original Vault sync pending.
+
 ## 2026-10-04: malformed saved edge targets (offline)
 
 Separately from the known-edge evidence check, direct rendering now returns

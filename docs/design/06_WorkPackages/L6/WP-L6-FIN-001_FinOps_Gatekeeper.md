@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-04 Direct history selection shape (offline)
+
+The direct saved-history renderer now refuses malformed selection envelopes
+with its bounded `HistoryError` before unpacking/indexing them; it still accepts
+the parsed pair format. This is offline presentation robustness, not independent
+report provenance, current usage, retained-volume measurement or operator
+acceptance. Focused and local verification results are in Milestones. No VM
+start, collection or retained report/volume/backup change. Roll back this
+preflight and test alone while preserving saved evidence. Original Vault sync
+pending outside checkout.
+
 ## 2026-10-04 Duplicate saved observation refusal (offline)
 
 The history parser and direct renderer now reject repeated canonical report

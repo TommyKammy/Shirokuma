@@ -198,6 +198,10 @@ def _validate(report):
              and type(observation.get('source_stable')) is bool
              and (observation.get('metadata_stable') is None or type(observation['metadata_stable']) is bool))
     _codes(observation.get('reason_codes'))
+    # The collector completes an observation whenever no failure reason remains
+    # and its final source inventory agrees with the initial snapshot.
+    _require(observation['status'] != 'incomplete' or observation['reason_codes'] or
+             not observation['source_stable'], 'INCONSISTENT_OBSERVATION_COMPLETION')
     inventory, coverage, runs = report.get('inventory'), report.get('coverage'), report.get('runs')
     _require(type(inventory) is dict and type(coverage) is dict and type(runs) is list and len(runs) <= 512)
     for key in ('entries', 'uuid_runs', 'eligible', 'valid', 'failed', 'incomplete', 'invalid', 'unrecognized_entries'):

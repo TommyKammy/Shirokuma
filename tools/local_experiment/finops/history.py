@@ -149,6 +149,9 @@ def render(entries):
     # render() is also called directly by offline tooling. Bind each displayed
     # digest to its validated report before interpolating it into HTML.
     try:
+        if any(type(entry) not in (tuple, list) or len(entry) != 2 or
+               type(entry[1]) not in (tuple, list) or len(entry[1]) != 2
+               for entry in entries): raise HistoryError()
         if {item[0] for item in entries} != set(range(len(entries))): raise HistoryError()
         previous = None
         seen = set()

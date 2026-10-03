@@ -46,6 +46,14 @@ class HistoryTests(unittest.TestCase):
                 H.render(changed)
         self.assertIn('保存FinOps観測履歴', H.render(entries))
 
+    def test_direct_renderer_bounds_malformed_selection_shape(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        for malformed in ((), (0,), (0, ()), (0, (entries[0][1][0],)),
+                          {'index': 0}, ([], entries[0][1])):
+            with self.subTest(malformed=str(malformed)[:40]), self.assertRaises(H.HistoryError):
+                H.render([malformed, entries[1]])
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
+
     def test_direct_renderer_requires_complete_ordered_selection(self):
         first = report(); later_time = '2026-09-20T00:00:22.000Z'
         later = C.build_report(first['components'], first['disks'],
