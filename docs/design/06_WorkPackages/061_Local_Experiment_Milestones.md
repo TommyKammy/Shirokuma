@@ -25,6 +25,17 @@ an API, prove full mutation coverage or establish acceptance. Roll back only
 comparator/tests, retaining pending requests and historical evidence. Original
 Vault synchronization pending outside the approved checkout.
 
+## 2026-10-04: independent FinOps saved-history presentation review (offline)
+
+WP-L6-FIN-001: after the policy commit, inspected direct-history selection,
+digest, output-bound and per-report storage coverage; no further defect
+established or FinOps behavior changed. `make test-local-finops` passed 181
+tests (seven Linux-only skips). Dedicated Colima remained stopped, with no
+collection or retained report/volume/backup mutation. AgentHouse usage
+remains `null / NOT_MEASURED`. No producer authenticity, Linux execution,
+current usage or operator acceptance established. No FinOps rollback; preserve
+saved evidence. Original Vault sync pending outside the checkout.
+
 ## 2026-10-04: policy scheduling/lifecycle and independent GitOps review (offline)
 
 WP-L2-POL-001: four disposable allowed responses with added topology spread,
