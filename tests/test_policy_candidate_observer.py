@@ -85,9 +85,13 @@ class ObserverTests(unittest.TestCase):
         # A first page with no items is not evidence that the namespace has
         # no LimitRanges: the continuation token may hide a later page.
         for metadata in ({'continue': 'next-page'}, {'continue': 7},
-                         {'continue': None}, {'remainingItemCount': 1},
-                         {'remainingItemCount': True}, {'remainingItemCount': -1},
-                         {'remainingItemCount': None}):
+                          {'continue': None}, {'remainingItemCount': 1},
+                          {'remainingItemCount': True}, {'remainingItemCount': -1},
+                          {'remainingItemCount': None},
+                          {'Continue': 'next-page'}, {'CONTINUE': 'next-page'},
+                          {'RemainingItemCount': 1},
+                          {'continue': '', 'Continue': 'next-page'},
+                          {'remainingItemCount': 0, 'RemainingItemCount': 1}):
             with self.subTest(metadata=metadata):
                 kube=FakeKube();kube.limits['metadata']=metadata
                 observer=O.CandidateObserver(prepared(),kube)

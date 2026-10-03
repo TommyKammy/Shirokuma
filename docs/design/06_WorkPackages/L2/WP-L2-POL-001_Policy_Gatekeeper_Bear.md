@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.37"
+version: "0.38"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: case-variant LimitRange pagination (offline)
+
+Five test-owned empty lists with case-variant `Continue` or
+`RemainingItemCount` metadata (alone or alongside canonical keys) passed the
+baseline as complete before repair. The observer now refuses pagination key
+aliases before any dry-run; omitted metadata and canonical empty/zero remain
+compatible. Focused observer 46 tests and native policy 17 tests passed.
+Dedicated Colima was observed stopped; no live admission, existing request,
+volume or backup was modified. A fake response is not an authenticated or
+atomic inventory or operator acceptance. Roll back only the baseline guard
+and its test if needed; retain pending requests without replay. Original Vault
+sync pending outside the approved checkout.
 
 ## 2026-10-04: empty LimitRange page with remaining items (offline)
 

@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.147"
+version: "5.148"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy pagination aliases and independent FinOps review (offline)
+
+WP-L2-POL-001: five fake empty LimitRange inventories with case-variant
+pagination fields incorrectly became ready. The focused negative failed five
+cases before repair; canonical-only pagination metadata is now required before
+dry-run. Focused observer 46 tests and native policy 17 tests passed.
+Independently inspected WP-L6-FIN-001 saved-history selection, digest/order,
+storage coverage and output bound without establishing another defect or
+changing FinOps behavior; 182 tests passed (seven Linux-only skips). Dedicated
+Colima was observed stopped. No live API, collection, retained request/report/
+volume/backup mutation or GitHub write. AgentHouse retained usage remains
+`null / NOT_MEASURED`. Fake/offline results cannot authenticate producers,
+prove atomic inventory, measure current usage or establish acceptance. Roll
+back only the policy guard/test if needed; retain pending intents and saved
+reports. No FinOps runtime rollback. Original Vault sync pending outside the
+approved checkout. `make verify-local-experiment`, `make
+verify-design-context` (89 documents), `make check-no-secret-filenames` and
+`git diff --check` passed. The local suite's synthetic failure output is not
+live acceptance evidence.
 
 ## 2026-10-04: separate typed GitOps pagination regression (offline)
 

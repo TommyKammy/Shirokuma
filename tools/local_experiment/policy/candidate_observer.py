@@ -305,14 +305,17 @@ class CandidateObserver:
                 and type(labels) is dict and labels.get('kubernetes.io/metadata.name') == M.NAMESPACE
                 and metadata.get('deletionTimestamp') is None, 'NAMESPACE_IDENTITY_INVALID')
         limits = self.kube.json_request(['-n', M.NAMESPACE, 'get', 'limitranges', '-o', 'json'])
+        limit_metadata = limits.get('metadata', {}) if type(limits) is dict else None
         require(type(limits) is dict and limits.get('apiVersion') == 'v1'
                 and limits.get('kind') in {'List', 'LimitRangeList'} and limits.get('items') == []
-                and type(limits.get('metadata', {})) is dict
-                and limits.get('metadata', {}).get('continue', '') == ''
-                and type(limits.get('metadata', {}).get('continue', '')) is str
-                and (('remainingItemCount' not in limits.get('metadata', {}))
-                     or (type(limits['metadata']['remainingItemCount']) is int
-                         and limits['metadata']['remainingItemCount'] == 0)),
+                and type(limit_metadata) is dict
+                and not any(type(key) is str and key.lower() in {'continue', 'remainingitemcount'}
+                            and key not in {'continue', 'remainingItemCount'} for key in limit_metadata)
+                and type(limit_metadata.get('continue', '')) is str
+                and limit_metadata.get('continue', '') == ''
+                and (('remainingItemCount' not in limit_metadata)
+                     or (type(limit_metadata['remainingItemCount']) is int
+                         and limit_metadata['remainingItemCount'] == 0)),
                 'LIMIT_RANGE_UNSUPPORTED')
         rows = []
         for expected in self._items:
