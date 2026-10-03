@@ -207,6 +207,12 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 	if _, ok := topLevel["items"]; !ok {
 		return true
 	}
+	// Omission is permitted for projected fixtures; a reported empty GVK is
+	// not an omitted field and cannot identify a Kubernetes v1 List.
+	if (topLevel["kind"] != nil && list.Kind == "") ||
+		(topLevel["apiVersion"] != nil && list.APIVersion == "") {
+		return true
+	}
 	for key := range topLevel {
 		for _, canonical := range []string{"items", "metadata", "kind", "apiVersion"} {
 			if key != canonical && strings.EqualFold(key, canonical) {

@@ -209,6 +209,8 @@ func TestLocalInventoryRejectsContradictoryListType(t *testing.T) {
 	}{
 		{`"kind":"Pod"`, true},
 		{`"apiVersion":"apps/v1"`, true},
+		{`"kind":""`, true},
+		{`"apiVersion":""`, true},
 		{`"kind":"List","apiVersion":"v1"`, false},
 		{`"metadata":{},"kind":"List"`, false},
 	} {

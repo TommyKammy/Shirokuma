@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.122"
+version: "5.123"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: explicitly empty GitOps List GVK (offline)
+
+WP-L0-GITOPS-001: the fixed-profile inventory accepted a reported empty List
+kind/API version as an omitted projection. A disposable negative failed before
+repair; explicit empty claims now fail closed while omitted fields and valid
+`List`/`v1` remain compatible. Go CLI tests and vet passed. Dedicated Colima
+observed Stopped; no live API/Git, reconciliation, retained data/backup mutation
+or GitHub write. This offline check does not authenticate remote state, prove
+an atomic inventory, clear strict admission or establish operator acceptance.
+Roll back only the reader/test if necessary; retain previous evidence. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-04: GitOps list GVK and independent FinOps review (offline)
 

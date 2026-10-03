@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.83"
+version: "0.84"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: explicitly empty List GVK (offline)
+
+The fixed-profile reader formerly treated a reported empty `kind` or
+`apiVersion` as though it were omitted. A disposable complete-list negative
+failed before repair; the reader now rejects these explicit empty claims while
+retaining omission for projected fixtures and canonical `List`/`v1`. Focused
+Go CLI suite and vet passed. Dedicated Colima observed Stopped; no live API,
+reconciliation, GitHub write or retained data/backup mutation. This does not
+authenticate the server, establish atomic inventory or clear strict admission.
+Roll back only this reader/test change if necessary; preserve saved evidence.
+Original Vault sync pending outside the approved checkout.
 
 ## 2026-10-04: reported list GVK regression (offline)
 
