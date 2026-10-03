@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.34"
+version: "0.35"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: duplicated condition types (offline)
+
+Two independent fixed-profile checks reject repeated Kubernetes condition types even when both entries claim `True`: Flux controller Deployments and Flux source/Kustomization resources, and Lakehouse Deployments/StatefulSets. Previously a repeated `Ready` or `Available` could contribute to a healthy diagnosis despite an ambiguous response. The generic Flux doctor is unchanged; a suspended root with a single stale Ready condition remains informational. Fake duplicate and healthy cases passed `go test ./internal/cli -count=1` (772 tests), `go vet ./...`, `make verify-local-experiment` and `make verify-design-context` (89 documents); an existing suspended-root fixture with two Ready conditions failed on the first focused run and was corrected to test a single condition. Dedicated Colima reported stopped; no start, live API/SQL, reconciliation, unknown-request replay, retained data or backup mutation. Offline condition consistency is not API/Git authentication, actual readiness, smoke, strict publication admission or operator/production acceptance. Roll back only the condition readers/tests and retain the stopped VM and historical evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: invisible inventory versions (offline)
 

@@ -156,7 +156,13 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 				check.Summary = fmt.Sprintf("%s current generation %d is ready (%d/%d replicas); Kubernetes readiness only", resourceID, resource.Metadata.Generation, resource.Status.ReadyReplicas, *desired)
 				available := workload.kind != "Deployment"
 				progressing := workload.kind != "Deployment"
+				conditionTypes := make(map[string]bool)
 				for _, condition := range resource.Status.Conditions {
+					if conditionTypes[condition.Type] {
+						check.Status = "degraded"
+						check.Summary = resourceID + " reports duplicated rollout conditions"
+					}
+					conditionTypes[condition.Type] = true
 					if condition.Type == "Available" && condition.Status == "True" {
 						available = true
 					}

@@ -439,7 +439,12 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			}
 			available := false
 			progressing := false
+			conditionTypes := make(map[string]bool)
 			for _, condition := range controller.Status.Conditions {
+				if conditionTypes[condition.Type] {
+					unready = true
+				}
+				conditionTypes[condition.Type] = true
 				if condition.Type == "Available" && condition.Status == "True" {
 					available = true
 				}
@@ -578,7 +583,14 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		// Suspension relaxes Ready freshness, not a current-generation failure.
 		if localExperiment {
+			conditionTypes := make(map[string]bool)
 			for _, condition := range resource.Status.Conditions {
+				// Kubernetes conditions are keyed by type. A duplicated type is
+				// ambiguous even when the reported statuses happen to agree.
+				if conditionTypes[condition.Type] {
+					unhealthy = append(unhealthy, resourceID+" (duplicated condition type)")
+				}
+				conditionTypes[condition.Type] = true
 				if condition.ObservedGeneration == resource.Metadata.Generation &&
 					(condition.Type == "Stalled" || condition.Type == "Reconciling") && condition.Status != "False" {
 					unhealthy = append(unhealthy, resourceID+" (unresolved reconciliation condition)")

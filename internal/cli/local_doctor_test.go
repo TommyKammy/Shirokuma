@@ -31,6 +31,44 @@ func localFluxJSON() string {
 	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
 }
 
+func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
+	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
+	if check.Status != "degraded" {
+		t.Fatalf("duplicate controller availability accepted: %#v", check)
+	}
+	resources := strings.Replace(localFluxJSON(), `{"type":"Ready","status":"True","observedGeneration":1}`, `{"type":"Ready","status":"True","observedGeneration":1},{"type":"Ready","status":"True","observedGeneration":1}`, 1)
+	responses := []fakeResponse{{output: localControllerJSON()}, {output: resources}}
+	check = checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "duplicated condition type") {
+		t.Fatalf("duplicate source readiness accepted: %#v", check)
+	}
+	generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
+	if strings.Contains(generic.Summary, "duplicated condition type") {
+		t.Fatalf("generic profile inherited local condition check: %#v", generic)
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("valid fixed inventory rejected: %#v", check)
+	}
+}
+
+func TestLocalLakehouseRejectsDuplicatedConditionTypes(t *testing.T) {
+	responses := localWorkloadResponses()
+	for i := range responses {
+		responses[i].output = strings.Replace(responses[i].output, `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		if i == 1 && checks[2].Status != "degraded" {
+			t.Fatalf("duplicate dev deployment condition accepted: %#v", checks)
+		}
+	}
+	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: localWorkloadResponses()}, localExperimentContext)
+	for _, check := range checks {
+		if check.Status != "healthy" {
+			t.Fatalf("valid workload rejected: %#v", check)
+		}
+	}
+}
+
 func TestLocalDeclaredSourceRejectsCompetingRevisionSelectors(t *testing.T) {
 	for _, selector := range []string{"tag", "semver", "commit", "name"} {
 		var list map[string]interface{}
@@ -515,7 +553,7 @@ func TestLocalFluxSuspendedRootRejectsCurrentReadyFailure(t *testing.T) {
 		{`{"type":"Ready","status":"False","observedGeneration":1}`, "informational"},
 		{`{"type":"Ready","status":"True","observedGeneration":2}`, "informational"},
 	} {
-		resources := strings.Replace(localFluxJSON(), `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},`+test.condition+`]}`, 1)
+		resources := strings.Replace(localFluxJSON(), `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[`+test.condition+`]}`, 1)
 		if resources == localFluxJSON() {
 			t.Fatal("fixture did not change")
 		}

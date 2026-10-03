@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.65"
+version: "4.66"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: duplicated diagnostic condition types (offline)
+
+WP-L0-GITOPS-001: fixed-profile Flux and Lakehouse diagnostics reject duplicate Kubernetes condition types rather than counting repeated `Ready` or `Available` as a clear observation; generic Flux doctor remains unchanged. Fake negatives/positives, `go test ./internal/cli -count=1` (772 passed), `go vet ./...`, `make verify-local-experiment`, and `make verify-design-context` (89 documents) passed. First package run exposed an existing suspended-root fixture with duplicated Ready conditions; fixture corrected to isolate the original single-condition test. Dedicated Colima read-only status was stopped; no VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. These offline checks cannot authenticate API/Git identity, prove runtime readiness, satisfy strict admission, or establish operator/production acceptance. Roll back the local readers/tests only, retaining VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: invisible inventory versions (offline)
 
