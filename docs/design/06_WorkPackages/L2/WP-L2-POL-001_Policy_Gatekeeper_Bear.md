@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.30"
+version: "0.31"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: typed privilege and identity defaults (offline)
+
+Pinned the existing refusal of numeric `0` as a container `privileged: false`
+default and boolean `false` as a Pod metadata generation of zero. Two isolated
+allowed-response fixtures remain unknown/pending after one request, with no
+replay. Focused observer suite passed (41 tests); no observer implementation
+changed. Dedicated Colima was observed Stopped; no admission, retained request,
+volume or backup modification. This checks local type safety, not server
+authenticity, general mutation coverage or operator acceptance. Roll back only
+the test if necessary and retain pending requests. Original Vault sync pending
+outside the approved checkout.
 
 ## 2026-10-04: numeric false defaults regression (offline)
 

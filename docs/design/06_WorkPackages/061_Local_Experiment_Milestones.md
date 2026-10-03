@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.139"
+version: "5.140"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: typed policy defaults and independent GitOps chronology (offline)
+
+WP-L2-POL-001: test-owned allowed responses pin existing rejection of numeric
+`privileged: 0` and boolean `generation: false`; both leave the original
+request unknown/pending with no replay. Focused observer suite passed (41
+tests); no policy behavior change. Independently, WP-L0-GITOPS-001 pins
+reported creation/condition chronology (including malformed creation and
+omitted projection); focused Go test passed with no doctor behavior change.
+Dedicated Colima read-only observed Stopped. No live API/Git, reconciliation,
+admission, retained request/report/volume/backup change or GitHub write.
+Offline fixtures do not authenticate producers, establish atomic inventory or
+complete mutation coverage, clear strict admission or grant operator acceptance.
+Roll back only the two regression tests if needed, preserving saved evidence.
+Original Vault synchronization pending outside the approved checkout.
+After both increments, `go test ./... -count=1` (843 tests), `go vet ./...`,
+`make verify-local-experiment`, `make verify-design-context` (89 documents)
+and `make check-no-secret-filenames` passed. The local suite includes synthetic
+failure-path output, not live runtime evidence.
 
 ## 2026-10-04: numeric policy defaults and independent FinOps review (offline)
 

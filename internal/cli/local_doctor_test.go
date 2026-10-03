@@ -630,6 +630,24 @@ func TestLocalInventoryRejectsMalformedConditionTransitionTime(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryConditionTransitionRequiresUsableCreationWhenReported(t *testing.T) {
+	for _, tc := range []struct {
+		creation string
+		invalid  bool
+	}{
+		{``, false}, // older projections can omit creation
+		{`,"creationTimestamp":"2026-10-04T01:02:03Z"`, false},
+		{`,"creationTimestamp":"2026-10-04T01:02:04Z"`, true},
+		{`,"creationTimestamp":"not-a-time"`, true},
+	} {
+		raw := []byte(`{"items":[{"metadata":{"name":"unrelated"` + tc.creation + `},"status":{"conditions":[{"type":"Ready","status":"True","lastTransitionTime":"2026-10-04T01:02:03Z"}]}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("reported condition/creation classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryConditionCannotPrecedeCreation(t *testing.T) {
 	for _, tc := range []struct {
 		creation, transition string

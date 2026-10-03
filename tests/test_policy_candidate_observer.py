@@ -181,6 +181,26 @@ class ObserverTests(unittest.TestCase):
                 self.assertIsNotNone(observer.receipt()['pending'])
                 self.assertEqual(observer.receipt()['request_count'],1)
 
+    def test_allowed_response_rejects_numeric_privilege_and_generation_defaults(self):
+        # JSON numbers must not satisfy boolean or persisted-object defaults.
+        for level in ('container-privileged', 'metadata-generation'):
+            with self.subTest(level=level):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body)
+                    if level == 'container-privileged':
+                        altered['spec']['containers'][0]['securityContext']['privileged']=0
+                    else:
+                        altered['metadata']['generation']=False
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertEqual(receipt['response_content_check'],'not-checked')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+
     def test_allowed_response_cannot_claim_persisted_identity(self):
         for metadata in ({'uid':str(uuid.UUID(int=42))}, {'resourceVersion':'123'},
                          {'generation':1}, {'creationTimestamp':'2026-10-04T00:00:00Z'},

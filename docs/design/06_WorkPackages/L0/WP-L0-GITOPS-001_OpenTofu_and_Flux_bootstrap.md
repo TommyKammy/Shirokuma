@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.94"
+version: "0.95"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: reported creation and condition regression (offline)
+
+Pinned the existing complete-list refusal of an unrelated condition transition
+before a reported creation time, or a malformed reported creation time. An
+omitted projected creation and equal timestamp remain compatible. Focused Go
+test passed; no doctor implementation changed. Dedicated Colima was observed
+Stopped; no live API/Git, reconciliation, retained data/backup or GitHub write.
+The fixture cannot authenticate the producer, establish atomic inventory,
+clear strict admission or establish acceptance. Roll back the test only if
+needed; preserve previous evidence. Original Vault sync pending outside the
+approved checkout.
 
 ## 2026-10-04: condition transition before creation (offline)
 
