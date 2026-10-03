@@ -74,9 +74,11 @@ type doctorReport struct {
 }
 
 type kubernetesResourceList struct {
-	Kind     string `json:"kind"`
-	Metadata struct {
-		Continue string `json:"continue"`
+	Kind       string `json:"kind"`
+	APIVersion string `json:"apiVersion"`
+	Metadata   struct {
+		Continue           string `json:"continue"`
+		RemainingItemCount *int64 `json:"remainingItemCount"`
 	} `json:"metadata"`
 	Items []struct {
 		Kind     string `json:"kind"`
@@ -123,6 +125,15 @@ type kubernetesResourceList struct {
 			} `json:"conditions"`
 		} `json:"status"`
 	} `json:"items"`
+}
+
+// A local read is a single, complete Kubernetes v1 List, not an arbitrary
+// projection that happens to include the expected objects.
+func localInventoryIncomplete(list kubernetesResourceList) bool {
+	return list.Items == nil || list.Metadata.Continue != "" ||
+		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
+		(list.Kind != "" && list.Kind != "List") ||
+		(list.APIVersion != "" && list.APIVersion != "v1")
 }
 
 func newDoctorCommand(runner commandRunner) *cobra.Command {
@@ -251,7 +262,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if err := json.Unmarshal(controllerOutput, &controllers); err != nil {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was not valid JSON"}
 	}
-	if localExperiment && (controllers.Items == nil || controllers.Metadata.Continue != "" || (controllers.Kind != "" && controllers.Kind != "List")) {
+	if localExperiment && localInventoryIncomplete(controllers) {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was incomplete"}
 	}
 	if len(controllers.Items) != 4 {
@@ -312,7 +323,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if err := json.Unmarshal(resourceOutput, &resources); err != nil {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was not valid JSON"}
 	}
-	if localExperiment && (resources.Items == nil || resources.Metadata.Continue != "" || (resources.Kind != "" && resources.Kind != "List")) {
+	if localExperiment && localInventoryIncomplete(resources) {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was incomplete"}
 	}
 	kinds := map[string]int{}

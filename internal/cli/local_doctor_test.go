@@ -662,6 +662,37 @@ func TestLocalFluxRejectsPaginatedInventories(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
+	for _, field := range []string{`"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"apiVersion":"v2",`} {
+		for _, first := range []bool{true, false} {
+			responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
+			index := 1
+			if first {
+				index = 0
+			}
+			responses[index].output = strings.Replace(responses[index].output, `{"items":`, `{`+field+`"items":`, 1)
+			runner := &fakeRunner{responses: responses}
+			check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true)
+			if check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete") {
+				t.Fatalf("%s first=%v: %#v", field, first, check)
+			}
+			if first && len(runner.calls) != 1 {
+				t.Fatalf("source read after incomplete controllers: %v", runner.calls)
+			}
+		}
+	}
+	for _, field := range []string{`"metadata":{"remainingItemCount":0},`, `"apiVersion":"v1",`} {
+		responses := []fakeResponse{{output: strings.Replace(localControllerJSON(), `{"items":`, `{`+field+`"items":`, 1)}, {output: strings.Replace(localFluxJSON(), `{"items":`, `{`+field+`"items":`, 1)}}
+		if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true); check.Status != "informational" {
+			t.Fatalf("valid envelope %s rejected: %#v", field, check)
+		}
+	}
+	responses := []fakeResponse{{output: localControllerJSON()}, {output: strings.Replace(localFluxJSON(), `{"items":`, `{"apiVersion":"v2","items":`, 1)}}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false); strings.Contains(check.Summary, "incomplete") {
+		t.Fatalf("generic profile inherited local envelope rule: %#v", check)
+	}
+}
+
 func localWorkloadResponses() []fakeResponse {
 	return []fakeResponse{
 		{output: `{"items":[` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `]}`},
@@ -808,6 +839,18 @@ func TestLocalLakehouseRequiresAvailableConditionOnlyOnDeployments(t *testing.T)
 	}
 }
 
+func TestLocalLakehouseAcceptsCompleteV1ListEnvelope(t *testing.T) {
+	responses := localWorkloadResponses()
+	for i := range responses {
+		responses[i].output = strings.Replace(responses[i].output, `{"items":`, `{"apiVersion":"v1","kind":"List","metadata":{"remainingItemCount":0},"items":`, 1)
+	}
+	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext) {
+		if check.Status != "healthy" {
+			t.Fatalf("valid v1 inventory rejected: %#v", check)
+		}
+	}
+}
+
 func TestLocalLakehouseReportsNamespaceReadFailuresWithoutLeakingOutput(t *testing.T) {
 	for _, response := range []fakeResponse{{output: "not JSON secret=hidden"}, {err: errors.New("credential=hidden")}} {
 		responses := localWorkloadResponses()
@@ -831,6 +874,8 @@ func TestLocalLakehouseRejectsIncompleteAndDuplicateInventory(t *testing.T) {
 	}{
 		{"missing-items", `{}`, "incomplete"},
 		{"continued-list", `{"metadata":{"continue":"private-token"},"items":[]}`, "incomplete"},
+		{"remaining-items", `{"metadata":{"remainingItemCount":1},"items":[]}`, "incomplete"},
+		{"wrong-api-version", `{"apiVersion":"v2","items":[]}`, "incomplete"},
 		{"duplicate", `{"items":[` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `,` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `]}`, "duplicated"},
 	} {
 		t.Run(change.name, func(t *testing.T) {

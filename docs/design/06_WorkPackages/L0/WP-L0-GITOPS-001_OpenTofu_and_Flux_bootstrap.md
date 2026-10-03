@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.21"
+version: "0.22"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: bounded local list envelopes (offline)
+
+Two independent response-shape checks now degrade fixed-profile controller, Flux resource and namespace workload inventories with nonzero `metadata.remainingItemCount` (including negative contradictory counts), or with an explicit `apiVersion` other than `v1`. The previous `metadata.continue` and kind checks remain. Absent optional fields and explicit v1/zero count pass, matching kubectl's v1 List envelope; the generic Flux profile remains unchanged. The controller check stops before a source read, and diagnostics never echo these untrusted fields. Fake positive/negative cases passed `go test ./internal/cli` (753 tests). Dedicated Colima status was read-only observed stopped; no live API, reconcile, retained session, backup or volume mutation. This verifies the reader's conservative handling of reported fields, not authenticated API/Git identity, actual runtime convergence, strict publication gate or production/operator acceptance. Roll back only the local reader/test changes and preserve saved evidence and the stopped VM. Direct original Vault handoff sync remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: bounded local Flux diagnostic identity (offline)
 

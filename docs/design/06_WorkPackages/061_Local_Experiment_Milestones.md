@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.48"
+version: "4.49"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: local doctor list-envelope contradictions (offline)
+
+WP-L0-GITOPS-001. Two independent fixed-profile checks reject controller/Flux resource/Lakehouse workload lists that report nonzero remaining items or an explicit non-v1 API version even if their expected items are present. Missing optional fields and v1/zero are compatible; generic Flux doctor is unchanged. Fake positive/negative cases and `go test ./internal/cli` (753 passed) passed. Dedicated Colima read-only status: stopped; no VM start, live API/SQL, reconciliation, unknown-request replay, retained data or backup mutation. Reported-field consistency is not API/source authentication, live readiness, strict publication gate or operator/production acceptance. Roll back only these reader/tests; preserve stopped VM and evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: Warehouse cross-view labels and Flux diagnostic identity (offline)
 
