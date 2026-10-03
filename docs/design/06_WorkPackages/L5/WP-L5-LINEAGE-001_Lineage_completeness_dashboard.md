@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.13"
+version: "1.14"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: late transport error respects catalog deadline (offline)
+
+A disposable opener raises `OSError` only after the bounded observation deadline. Previously it became `API_UNAVAILABLE`; the client now classifies it as `API_DEADLINE`. A timely transport error still yields `API_UNAVAILABLE`. The negative failed before repair; focused and broader results are in Milestones. No live login/API, VM start, retained credential/source/report/backup change or request replay. Both failures remain unknown catalog evidence; this does not authenticate the producer or establish atomicity, whole-catalog/column lineage or operator acceptance. Roll back the transport exception guard/test only; preserve saved reports. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: returned HTTP status after catalog deadline (offline)
 

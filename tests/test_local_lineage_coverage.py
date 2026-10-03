@@ -1055,6 +1055,20 @@ class ReadOnlyClientTests(unittest.TestCase):
                 client.request('GET', next(iter(C.ANCHORS)))
         self.assertTrue(timely.closed)
 
+    def test_late_transport_failure_is_deadline_not_availability_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+        def late_failure(request, timeout):
+            client.deadline = time.monotonic() - 1
+            raise OSError('disposable transport timeout')
+        with patch.object(client.opener, 'open', side_effect=late_failure):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+        client.deadline = time.monotonic() + 10
+        with patch.object(client.opener, 'open', side_effect=OSError('disposable transport failure')):
+            with self.assertRaisesRegex(C.CoverageError, 'API_UNAVAILABLE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+
     def test_login_response_finishing_after_deadline_never_sends_get(self):
         client = self.client
         class LateLogin(Response):

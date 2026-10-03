@@ -406,6 +406,9 @@ class ReadOnlyClient:
             require(time.monotonic() < self.deadline, 'API_DEADLINE')
             raise APIError(method, path, status) from None
         except (OSError, RuntimeError):
+            # A transport failure delivered only after expiry is no longer an
+            # on-time availability observation, regardless of its exception.
+            require(time.monotonic() < self.deadline, 'API_DEADLINE')
             raise CoverageError('API_UNAVAILABLE') from None
 
     def login_existing(self):

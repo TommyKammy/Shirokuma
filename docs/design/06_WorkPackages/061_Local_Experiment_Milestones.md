@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.32"
+version: "5.33"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: late catalog transport failure and stopped-owner callback skip (offline)
+
+WP-L5-LINEAGE-001: a test-owned opener raising `OSError` after the deadline now yields `API_DEADLINE`, not on-time `API_UNAVAILABLE`; timely transport failure remains unavailable. The isolated negative failed before repair. WP-L3-VW-002: an already stopped test-owned owner skips the attached callback for a waiting fresh dispatch, durably rejects the UUID without handler execution or false callback-failure code and preserves completed-ID replay. Focused lineage (77 tests) and Warehouse (78 + 90 + 16 + 22 + 15 tests), `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed; private broader logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-078/{verify,design}.log`. Read-only dedicated Colima listing: stopped. No VM start, live catalog/backend/SQL, archived replay, retained credential/source/session/report/backup mutation or GitHub write. Offline checks do not authenticate producers, establish atomicity, prove caller receipt/restart recovery, whole-catalog/column lineage or operator/production acceptance. Roll back these independent guards/tests only; preserve stopped VM and historical evidence. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: stopped-owner dispatch and returned catalog status deadline (offline)
 

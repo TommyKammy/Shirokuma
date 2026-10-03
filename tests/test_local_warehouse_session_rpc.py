@@ -151,7 +151,27 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [('chill', original['request_id'])])
         saved = json.loads(self.rpc.journal_path.read_bytes())
         self.assertEqual([entry['state'] for entry in saved['requests']],
-                         ['completed', 'rejected', 'rejected'])
+                          ['completed', 'rejected', 'rejected'])
+
+    def test_stopped_owner_does_not_invoke_callback_for_waiting_worker(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        original = self.request()
+        completed = self.rpc._dispatch(original)
+        self.rpc._stop.set()
+        checks = []
+        def unexpected_stop_check():
+            checks.append(True)
+            raise RuntimeError('callback should not run after owner stopped')
+        self.rpc._stop_callback = unexpected_stop_check
+        fresh = self.request()
+        self.assertEqual(self.rpc._dispatch(fresh)['result'], 'unknown')
+        self.assertEqual(self.rpc._dispatch(original), completed)
+        self.assertEqual(checks, [])
+        self.assertEqual(self.calls, [('chill', original['request_id'])])
+        self.assertNotIn('STOP_CALLBACK_FAILED', self.rpc._error_codes)
+        saved = json.loads(self.rpc.journal_path.read_bytes())
+        self.assertEqual([entry['state'] for entry in saved['requests']], ['completed', 'rejected'])
 
     def test_failing_serve_stop_callback_returns_failed_without_dispatch(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)

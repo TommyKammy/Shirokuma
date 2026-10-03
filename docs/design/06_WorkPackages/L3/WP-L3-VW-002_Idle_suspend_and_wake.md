@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.67"
+version: "0.68"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: stopped owner skips callback for waiting dispatch (offline)
+
+An already stopped disposable owner no longer invokes an attached stop callback when a previously accepted worker reaches dispatch. The fresh UUID is durably rejected without a handler call or spurious `STOP_CALLBACK_FAILED`, and a completed UUID replays unchanged. This check is distinct from the earlier callback-removal regression; focused and broader verification are in Milestones. No VM start, live backend/SQL, archived replay, retained session/backup change or caller-receipt proof. It cannot establish independent backend authenticity or restart recovery. Roll back this dispatch guard/test only, preserving historical sessions. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: stopped owner refuses a waiting fresh worker (offline)
 
