@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.68"
+version: "0.69"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: expired owner skips stop callback at dispatch (offline)
+
+After the owner TTL, a waiting disposable worker now skips the stop callback and durably rejects its fresh UUID without handler execution or a misleading callback-failure code. The isolated negative failed before repair; focused and broader checks are recorded in Milestones. This is a dispatch-boundary guard, not proof that a request accepted before TTL reached the backend or that an archived caller received a reply. No live backend/SQL, VM start, archived replay, retained session/backup change or unknown-request recovery. Roll back the TTL callback guard/test only; preserve historical sessions. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: stopped owner skips callback for waiting dispatch (offline)
 

@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.33"
+version: "5.34"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: expired owner dispatch skips callback (offline)
+
+WP-L3-VW-002: a test-owned owner already past TTL no longer invokes the stop callback at worker dispatch. The fresh UUID is durably rejected, the handler is not called, and no false `STOP_CALLBACK_FAILED` is recorded. Isolated negative failed before repair; focused `make test-local-warehouse-lifecycle` passed (78 + 91 + 16 + 22 + 15 tests). Full local/design verification recorded at `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-078/{verify-second,design-second}.log`. No dedicated VM start, backend/SQL, archived UUID replay, retained session/backup mutation or GitHub write. Offline TTL behavior does not prove archived caller receipt, backend authenticity, owner restart recovery or operator/production acceptance. Roll back the callback guard/test only, retaining all saved evidence; direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: late catalog transport failure and stopped-owner callback skip (offline)
 

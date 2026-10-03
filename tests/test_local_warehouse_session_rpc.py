@@ -173,6 +173,23 @@ class SessionRPCTest(unittest.TestCase):
         saved = json.loads(self.rpc.journal_path.read_bytes())
         self.assertEqual([entry['state'] for entry in saved['requests']], ['completed', 'rejected'])
 
+    def test_expired_owner_does_not_invoke_callback_for_waiting_worker(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        self.rpc._started = time.monotonic() - self.rpc.ttl_seconds - 1
+        checks = []
+        def unexpected_stop_check():
+            checks.append(True)
+            raise RuntimeError('callback should not run after TTL')
+        self.rpc._stop_callback = unexpected_stop_check
+        request = self.request()
+        self.assertEqual(self.rpc._dispatch(request)['result'], 'unknown')
+        self.assertEqual(checks, [])
+        self.assertEqual(self.calls, [])
+        self.assertNotIn('STOP_CALLBACK_FAILED', self.rpc._error_codes)
+        saved = json.loads(self.rpc.journal_path.read_bytes())
+        self.assertEqual(saved['requests'][0]['state'], 'rejected')
+
     def test_failing_serve_stop_callback_returns_failed_without_dispatch(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         self.rpc.__enter__()

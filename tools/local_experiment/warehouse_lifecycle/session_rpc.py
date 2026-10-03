@@ -401,7 +401,9 @@ class SessionRPC:
             entry = {'request': request, 'state': 'pending', 'response': None, 'error_code': None}
             self._entries[request_id] = entry
             stop_requested = False
-            if not self._stop.is_set() and self._replay_until is None and self._stop_callback is not None:
+            if (not self._stop.is_set() and self._replay_until is None and
+                    time.monotonic() - self._started < self.ttl_seconds and
+                    self._stop_callback is not None):
                 try:
                     stop_requested = bool(self._stop_callback())
                 except BaseException:
