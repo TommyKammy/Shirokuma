@@ -36,6 +36,16 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual([entry[0] for entry in H.parse(encoded([later, second]))], [1, 0])
         self.assertEqual([entry[0] for entry in H.parse(encoded([first, second]))], [0, 1])
 
+    def test_direct_renderer_rejects_unbound_digest_without_html(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        for digest in ('<img src=x onerror=alert(1)>', '0' * 64):
+            changed = list(entries)
+            index, (value, _) = changed[0]
+            changed[0] = (index, (value, digest))
+            with self.subTest(digest=digest), self.assertRaises(H.HistoryError):
+                H.render(changed)
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
+
     def test_escape_model_names_and_never_collect(self):
         first = report()
         # Rebuild inference/public report with its validated public inputs rather than forge the report.

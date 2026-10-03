@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.69"
+version: "5.70"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: direct FinOps saved-history render integrity (offline)
+
+Separately from the lineage report change below, WP-L6-FIN-001 now verifies
+the canonical content digest supplied to `history.render` directly. A test-owned
+forged SHA and raw HTML digest were interpolated before repair; both are
+refused before rendering afterward. Focused FinOps suite passed (private log
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-031/finops-focused.log`).
+No new collection, VM start, retained report/volume/backup change or GitHub
+write. AgentHouse volume remains `null / NOT_MEASURED`. This is an offline
+presentation contract, not producer authentication, current usage, backup
+recovery or operator acceptance. Roll back renderer/test only; preserve all
+historical evidence. Direct original Vault sync remains pending.
 
 ## 2026-10-04: offline lineage report consistency
 

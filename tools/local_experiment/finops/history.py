@@ -142,6 +142,18 @@ def _storage_coverage(entries):
 
 def render(entries):
     if type(entries) is not list or not 2 <= len(entries) <= MAX_REPORTS: raise HistoryError()
+    # render() is also called directly by offline tooling. Bind each displayed
+    # digest to its validated report before interpolating it into HTML.
+    try:
+        for selected_index, (report, saved_digest) in entries:
+            if type(selected_index) is not int or not 0 <= selected_index < len(entries): raise HistoryError()
+            C.validate_public(report)
+            canonical = json.dumps(report, ensure_ascii=True, sort_keys=True,
+                                   separators=(',', ':'), allow_nan=False).encode()
+            if len(canonical) > C.MAX_PUBLIC_BYTES or type(saved_digest) is not str or \
+                    saved_digest != hashlib.sha256(canonical).hexdigest(): raise HistoryError()
+    except (TypeError, ValueError, UnicodeError, OverflowError):
+        raise HistoryError() from None
     sections, navigation = [], []
     for order, (selected_index, (report, digest)) in enumerate(entries, 1):
         C.validate_public(report)

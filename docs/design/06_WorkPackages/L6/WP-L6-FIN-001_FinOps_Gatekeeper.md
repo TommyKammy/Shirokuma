@@ -4,13 +4,27 @@ doc_id: "WP-L6-FIN-001"
 title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-27
-version: "0.23"
+updated: 2026-10-04
+version: "0.24"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04 Direct saved-history renderer digest binding (offline)
+
+The history parser validates selected reports and calculates SHA-256, but a
+direct call to `history.render` formerly accepted an arbitrary displayed
+digest, including HTML markup. It now validates each report and binds the
+displayed digest to its canonical content before producing HTML. Disposable
+forged-digest negatives failed before repair; the focused FinOps suite passes.
+No collector/schema change or saved-report rewrite, VM start, AgentHouse
+volume scan or backup change. This guards an offline presentation boundary,
+not independent report provenance or current resource usage. Retain AgentHouse
+`null / NOT_MEASURED` and WP local-partial. Roll back only the renderer and
+fixture, preserving saved reports and backups. Direct original Vault sync is
+pending outside this noninteractive checkout.
 
 ## 2026-10-04 Standalone saved HTML underflow boundary (offline)
 
