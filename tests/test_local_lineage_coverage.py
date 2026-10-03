@@ -447,6 +447,15 @@ class CoverageTests(unittest.TestCase):
                 C.source_snapshot(path)
         self.assertEqual(calls, 2)
 
+    def test_snapshot_rejects_hardlinked_file_from_outside_run(self):
+        path = self.add_run()
+        external = self.root / 'external-source.json'
+        save(external, {'value': 'outside-run'})
+        os.link(external, path / 'linked.json')
+        with self.assertRaises(C.CoverageError):
+            C.source_snapshot(path)
+        self.assertEqual(external.read_bytes(), (path / 'linked.json').read_bytes())
+
     def test_new_run_during_observation_marks_inventory_incomplete(self):
         self.add_run()
         real = self.client.request

@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.06"
+version: "5.07"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: saved-run hard-link boundary (offline)
+
+WP-L5-LINEAGE-001: reject a multi-link file from outside the saved run rather than counting its bytes as source evidence. Disposable negative failed before repair; focused lineage suite passed (50 tests). Single-link fixtures remain accepted. `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed; private regression logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-052/verify-second.log` and `design-second.log`. Dedicated Colima last read-only observed stopped; no live API/SQL, VM start, retained source/report/backup mutation or request replay. Link count cannot prove provenance or atomicity against a restoring same-UID actor; full catalog/column coverage and operator acceptance remain open. Roll back reader/test only, retaining evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: source snapshot entry identity recheck (offline)
 

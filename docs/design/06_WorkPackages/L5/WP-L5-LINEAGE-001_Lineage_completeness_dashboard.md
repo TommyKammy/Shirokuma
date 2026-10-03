@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.93"
+version: "0.94"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: external hard links in saved source (offline)
+
+The run snapshot refuses regular files with more than one hard link, both when opening and after reading; the final entry comparison includes link count. A disposable hard link from a file outside the run was previously hashed as run evidence; the isolated negative failed before repair and the focused suite passed (50 tests). This assumes saved Data Plan artifacts are single-link files; valid single-link fixture verification still passes. It does not authenticate the producer or defeat a same-UID actor restoring state between checks. No retained source, report, backup, catalog or VM was changed. Roll back the snapshot guard/test only and preserve evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: source snapshot same-name replacement (offline)
 

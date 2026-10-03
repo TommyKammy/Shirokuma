@@ -150,7 +150,7 @@ def _source_file_at(directory_fd, name, device, limit, *, expected=None):
     before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
     require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid() and
             stat.S_IMODE(before.st_mode) == 0o600 and before.st_dev == device and
-            before.st_size <= limit, 'SOURCE_FILE_INVALID')
+            before.st_size <= limit and before.st_nlink == 1, 'SOURCE_FILE_INVALID')
     if expected is not None:
         require((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
                 (expected.st_dev, expected.st_ino, expected.st_size, expected.st_mtime_ns, expected.st_ctime_ns),
@@ -175,6 +175,7 @@ def _source_file_at(directory_fd, name, device, limit, *, expected=None):
                 (after.st_size, after.st_mtime_ns, after.st_ctime_ns) and
                 (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino) and
                 stat.S_ISREG(current.st_mode) and current.st_uid == before.st_uid and
+                after.st_nlink == current.st_nlink == 1 and
                 stat.S_IMODE(current.st_mode) == 0o600 and
                 (current.st_size, current.st_mtime_ns, current.st_ctime_ns) ==
                 (after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'SOURCE_CHANGED')
@@ -209,7 +210,7 @@ def source_snapshot(path):
             require(nodes <= 1024, 'SOURCE_LIMIT_OR_SYMLINK')
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
             identities[name] = (info.st_dev, info.st_ino, info.st_mode, info.st_uid,
-                                info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+                                info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_nlink)
             require(info.st_dev == device, 'SOURCE_BOUNDARY_INVALID')
             item = str(Path(relative) / name)
             if stat.S_ISDIR(info.st_mode):
@@ -247,7 +248,7 @@ def source_snapshot(path):
             current = os.stat(name, dir_fd=fd, follow_symlinks=False)
             require(identities[name] == (current.st_dev, current.st_ino, current.st_mode,
                                          current.st_uid, current.st_size, current.st_mtime_ns,
-                                         current.st_ctime_ns), 'SOURCE_CHANGED')
+                                         current.st_ctime_ns, current.st_nlink), 'SOURCE_CHANGED')
     try:
         visit(root_fd, '.', 0, os.fstat(root_fd).st_dev)
         _current_source_path(path, root_fd)
