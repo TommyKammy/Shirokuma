@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.37"
+version: "1.38"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: returned catalog stream read failure (offline)
+
+An injected response whose `read` raises `TypeError` or `ValueError` used to
+escape as a raw exception. The bounded reader now closes it and reports
+`API_RESPONSE_INVALID` if timely, `API_DEADLINE` if late. Four disposable
+negatives failed before repair; focused lineage and Warehouse suites passed
+after repair. No VM start, catalog login, retained source/report/backup change
+or replay. This does not authenticate the producer, prove atomic/whole-catalog
+or column coverage, or establish operator acceptance. Roll back this read guard
+and fixture only; preserve historical evidence. Original Vault sync is pending
+outside this checkout.
 
 ## 2026-10-04: catalog error cleanup type failures (offline)
 

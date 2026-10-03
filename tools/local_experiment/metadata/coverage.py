@@ -476,7 +476,13 @@ class ReadOnlyClient:
                 chunks, count = [], 0
                 while True:
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
-                    chunk = response.read(min(65536, MAX_RESPONSE + 1 - count))
+                    try:
+                        chunk = response.read(min(65536, MAX_RESPONSE + 1 - count))
+                    except (TypeError, ValueError):
+                        # An unusable returned stream is not catalog evidence;
+                        # a failure delivered after expiry is a deadline first.
+                        require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                        raise CoverageError('API_RESPONSE_INVALID') from None
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
                     require(type(chunk) is bytes, 'API_RESPONSE_INVALID')
                     if not chunk:

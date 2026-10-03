@@ -413,7 +413,9 @@ class SessionRPC:
         # HTTP authority cannot describe the same scoped transition.
         require(b'host' not in headers or headers[b'host'] == b'warehouse.local', 'INVALID_HTTP')
         length = headers.get(b'content-length', b'')
-        require(re.fullmatch(rb'[0-9]{1,4}', length) is not None, 'INVALID_HTTP')
+        # This private client emits the canonical decimal byte count. Refuse
+        # alternate spellings rather than admitting a second framing syntax.
+        require(re.fullmatch(rb'[1-9][0-9]{0,3}', length) is not None, 'INVALID_HTTP')
         length = int(length)
         require(0 < length <= MAX_BODY, 'INVALID_HTTP')
         while len(buffered) < length:

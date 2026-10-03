@@ -860,6 +860,16 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(self.rpc._entries, {})
 
+    def test_noncanonical_content_length_never_dispatches(self):
+        self.start()
+        body = json.dumps(self.request()).encode()
+        for length in (b'0' + str(len(body)).encode(), b'00' + str(len(body)).encode()):
+            with self.subTest(length=length):
+                headers = b'Content-Type: application/json\r\nContent-Length: ' + length + b'\r\n'
+                self.assertEqual(self.exchange(self.wire(body, headers), raw=True)[0], 400)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.rpc._entries, {})
+
     def test_invalid_extension_header_names_and_framing_never_dispatch(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         body = json.dumps(self.request()).encode()

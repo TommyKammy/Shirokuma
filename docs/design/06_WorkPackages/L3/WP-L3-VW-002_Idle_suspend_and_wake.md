@@ -5,12 +5,25 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.92"
+version: "0.93"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: canonical private RPC length (offline)
+
+The fixed Unix transition now accepts only a positive canonical decimal
+`Content-Length`, rejecting zero-prefixed spellings before handler or journal.
+Two complete disposable requests are refused by the new fixture; their behavior
+before repair was not separately run. Focused Warehouse and lineage suites
+passed after repair. The Go client's ordinary decimal length
+remains compatible. No VM start, archived UUID replay, backend/SQL or retained
+session/backup mutation. This parser boundary cannot prove peer identity,
+caller receipt, restart recovery or operator acceptance. Roll back only this
+length guard/test; preserve archived sessions. Original Vault sync is pending
+outside this checkout.
 
 ## 2026-10-04: bare target-hint headers on private RPC (offline)
 

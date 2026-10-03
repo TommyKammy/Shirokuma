@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.61"
+version: "5.62"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: catalog stream failures and canonical Unix RPC length (offline)
+
+WP-L5-LINEAGE-001 bounds returned stream `read` TypeError/ValueError: timely
+invalid, late deadline, with response closed. Independently WP-L3-VW-002 refuses
+zero-prefixed lengths before private transition dispatch/journal. Four lineage
+negative cases failed before repair; the two Warehouse negatives were not run
+before repair. Focused lineage and Warehouse suites and `make
+verify-local-experiment` passed after repair; private logs under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-026/`.
+Read-only `colima list` showed dedicated VM stopped. No VM start, live catalog,
+backend/SQL, archived request replay, retained source/session/report/backup
+mutation or GitHub write. Offline fixtures cannot authenticate producers/peers,
+prove atomicity, caller receipt, restart recovery, whole-catalog/column
+lineage or operator acceptance. Roll back the independent guards/fixtures only,
+preserving saved evidence and stopped VM. Original Vault sync pending outside
+this checkout.
 
 ## 2026-10-04: catalog cleanup type failures and bare RPC target hints (offline)
 
