@@ -214,14 +214,16 @@ def observe(token, kube, *, deadline=None):
     require(time.monotonic() < deadline)
     require(first == second)
     after = datetime.now(timezone.utc).isoformat()
-    return {'schema_version': 1, 'session_id': token, 'observation': 'current-kubernetes-two-reads',
+    report = {'schema_version': 1, 'session_id': token, 'observation': 'current-kubernetes-two-reads',
             'scope': 'fixed-names-owner-labels-and-two-service-endpoints-in-shirokuma-dev',
             'observed_from': before, 'observed_to': after,
             'current_state': 'scoped-absence-observed' if not any(first[key] for key in
                              ('named_present', 'labelled_present', 'service_endpoints_present'))
                              else 'scoped-resources-present', **first,
-            'backend_query_state': 'unknown', 'historical_cleanup_proven': False,
-            'all_namespace_resources_checked': False}
+             'backend_query_state': 'unknown', 'historical_cleanup_proven': False,
+             'all_namespace_resources_checked': False}
+    require(time.monotonic() < deadline)
+    return report
 
 
 def main(argv=None):

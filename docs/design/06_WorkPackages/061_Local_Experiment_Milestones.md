@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.66"
+version: "4.67"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse report assembly deadline (offline)
+
+Final regression also passed `make verify-local-experiment`, `make verify-design-context` and `git diff --check`; private logs are `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-022/verify-final.log` and `design-final.log`.
+
+WP-L3-VW-002: the opt-in scoped two-round reader rejects an observation whose report assembly crosses its 90-second deadline, before the saved-claim reread. A fake clock negative failed before repair; afterward 19 scoped reader tests and `make test-local-warehouse-lifecycle` passed. Dedicated Colima was read-only observed stopped; no VM start, live API/SQL, owner operation, unknown-request replay or retained data/backup mutation. Offline freshness cannot authenticate API identity, make the inventory atomic, prove historical cleanup or establish operator/production acceptance. Roll back only the local reader/test, preserving saved evidence and VM; original Vault direct sync remains pending outside checkout.
 
 ## 2026-10-03: duplicated diagnostic condition types (offline)
 

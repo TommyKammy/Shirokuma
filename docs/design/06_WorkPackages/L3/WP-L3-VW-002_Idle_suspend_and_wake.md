@@ -5,12 +5,18 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.37"
+version: "0.38"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: bounded report assembly (offline)
+
+Final milestone regression also passed `make verify-local-experiment`, `make verify-design-context` and `git diff --check`; private logs are under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-022/`.
+
+The opt-in two-round scoped inventory now checks its deadline again after assembling the report, before handing it to the saved-claim reread. A fake monotonic clock that crossed the deadline between the existing post-snapshot check and report return previously published the stale report; the isolated negative failed before repair and passed afterward, as did the 19 runtime-status tests and `make test-local-warehouse-lifecycle`. This is an offline freshness boundary only; the dedicated Colima profile was observed stopped, with no VM start, API/SQL, owner operation, unknown-request replay, retained session or backup mutation. It does not make separate reads atomic, authenticate a backend or prove historical cleanup, unknown-request recovery or operator/production acceptance. Revert only the scoped reader/test, retaining saved evidence, backups and the stopped VM. Direct original Vault handoff synchronization remains pending outside checkout.
 
 ## 2026-10-03: bounded visible list version (offline)
 
