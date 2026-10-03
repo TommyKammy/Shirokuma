@@ -126,6 +126,11 @@ def allowed_pod_matches(value, body):
             type(spec.get('priority', 0)) is not int or spec.get('priority', 0) != 0 or
             spec.get('preemptionPolicy', 'PreemptLowerPriority') != 'PreemptLowerPriority'):
         return False
+    # Sharing the process namespace exposes sibling processes; host aliases
+    # can silently redirect names resolved by the candidate's container.
+    if (spec.get('shareProcessNamespace', False) is not False or
+            spec.get('hostAliases') not in (None, [])):
+        return False
     if (type(containers) is not list or len(containers) != 1 or
             any(spec.get(key) not in (None, []) for key in ('initContainers', 'ephemeralContainers', 'volumes')) or
             any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostIPC', 'hostPID')) or

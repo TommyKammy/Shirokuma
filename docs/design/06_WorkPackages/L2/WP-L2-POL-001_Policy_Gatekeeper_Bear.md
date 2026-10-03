@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.18"
+version: "0.19"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: process namespace and host aliases (offline)
+
+Two disposable allowed responses added `shareProcessNamespace: true` or a
+`hostAliases` entry without submission; both passed before repair. They now
+fail closed as unknown with the original request pending; explicit inert API
+defaults still match. Focused observer 27 tests and local verification passed.
+Dedicated Colima stayed stopped; no admission, archived request replay or
+retained volume/backup change. Fake responses do not authenticate the server,
+prove full mutation coverage or establish acceptance. Roll back comparator and
+test only, preserving pending requests. Original Vault sync pending outside
+the approved checkout.
 
 ## 2026-10-04: allowed response runtime and priority (offline)
 

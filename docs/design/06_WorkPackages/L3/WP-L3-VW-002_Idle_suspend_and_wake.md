@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.07"
+version: "1.08"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: independent private RPC framing review (offline)
+
+Reviewed the fixed Unix request parser's forwarding/header rejection, framing
+and deadline boundaries after the separate policy repair; no additional defect
+was established and Warehouse behavior was not changed. Focused lifecycle
+suites passed (78 + 115 + 16 + 22 + 15 tests). Dedicated Colima remained
+stopped: no owner/backend/SQL access, archived request replay or retained
+session/backup mutation. Offline tests do not prove peer authentication,
+caller receipt, restart recovery or operator acceptance. No Warehouse rollback;
+preserve saved sessions. Original Vault synchronization pending outside checkout.
 
 ## 2026-10-04: proxy-specific client-IP suffixes (offline)
 

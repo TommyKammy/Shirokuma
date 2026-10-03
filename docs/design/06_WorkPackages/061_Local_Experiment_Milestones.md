@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.108"
+version: "5.109"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy namespace/host resolution and separate Warehouse review
+
+WP-L2-POL-001: two fake allowed responses added process-namespace sharing or
+host aliases without submission and passed before repair. They now fail closed
+with the original request pending; inert API defaults still match. Focused
+observer 27 tests and `make verify-local-experiment` passed. Separately reviewed
+WP-L3-VW-002's fixed Unix parser forwarding/framing/deadline boundaries and
+ran focused lifecycle suites (78 + 115 + 16 + 22 + 15 tests), finding no
+additional defect. Dedicated Colima was observed stopped; no live admission,
+owner/SQL request, archived replay, retained session/report/volume/backup
+change or GitHub write. Fake checks cannot establish API authenticity, full
+Pod mutation coverage, peer/caller receipt, restart recovery or acceptance.
+Roll back only the policy comparator/test if needed, retaining unknown requests
+and saved evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent lineage edge-claim review (offline)
 

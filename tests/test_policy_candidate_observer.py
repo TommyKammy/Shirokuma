@@ -190,6 +190,29 @@ class ObserverTests(unittest.TestCase):
         kube.respond=defaults
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_add_process_sharing_or_host_aliases(self):
+        for changes in ({'shareProcessNamespace':True},
+                        {'hostAliases':[{'ip':'127.0.0.1','hostnames':['metadata.internal']}]}):
+            with self.subTest(changes=changes):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['spec'].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaults(body):
+            altered=copy.deepcopy(body)
+            altered['spec'].update(shareProcessNamespace=False, hostAliases=[])
+            return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+        kube.respond=defaults
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_cannot_acquire_owner_or_image_pull_credentials(self):
         for location, changes in (('metadata', {'ownerReferences':[{'uid':str(uuid.uuid4()),
                                       'kind':'Deployment','name':'foreign','apiVersion':'apps/v1'}]}),
