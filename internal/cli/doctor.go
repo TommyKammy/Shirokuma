@@ -249,7 +249,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		return true
 	}
 	seenUIDs := make(map[string]struct{})
-	seenNames := make(map[string]struct{})
+	seenNames := make(map[[4]string]struct{})
 	for _, item := range items.Items {
 		if item == nil {
 			return true // A null member is not a Kubernetes resource.
@@ -357,7 +357,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				if err := json.Unmarshal(item["apiVersion"], &apiVersion); err != nil {
 					return true
 				}
-				identity := apiVersion + "/" + kind + "/" + namespace + "/" + name
+				identity := [4]string{apiVersion, kind, namespace, name}
 				if _, exists := seenNames[identity]; exists {
 					return true
 				}

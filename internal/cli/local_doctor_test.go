@@ -848,6 +848,22 @@ func TestLocalInventoryBoundsIgnoredExtensionDepth(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryIdentityFieldsDoNotCollideOnSeparator(t *testing.T) {
+	for _, tc := range []struct {
+		body    string
+		invalid bool
+	}{
+		{`{"items":[{"apiVersion":"example.io/v1","kind":"Widget","metadata":{"namespace":"ns","name":"one"}},{"apiVersion":"example.io","kind":"v1/Widget","metadata":{"namespace":"ns","name":"one"}}]}`, false},
+		{`{"items":[{"apiVersion":"example.io/v1","kind":"Widget","metadata":{"namespace":"ns","name":"one"}},{"apiVersion":"example.io/v1","kind":"Widget","metadata":{"namespace":"ns","name":"one"}}]}`, true},
+	} {
+		raw := []byte(tc.body)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("reported identity classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsLossyIgnoredValues(t *testing.T) {
 	for _, tc := range []struct {
 		body    string

@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.86"
+version: "0.87"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: unambiguous reported inventory identity (offline)
+
+The complete-list duplicate check joined API version, kind, namespace and name
+with slashes; a reported kind containing a slash could collide with a distinct
+API version/kind pair. The key now uses four separate fields. A disposable
+distinct-pair fixture is accepted and an actual duplicate is still refused.
+This does not validate the provenance or semantic GVK of a remote member;
+projected fields remain optional. Dedicated Colima observed Stopped; no live
+API/Git, reconciliation or retained data/backup mutation. Roll back only the
+identity comparison and test, preserving prior evidence. Original Vault sync
+pending outside checkout. Offline checks cannot prove atomic inventory, strict
+admission or operator acceptance.
 
 ## 2026-10-04: bounded inventory extension nesting (offline)
 

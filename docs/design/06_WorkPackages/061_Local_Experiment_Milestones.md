@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.126"
+version: "5.127"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: unambiguous inventory identity (offline)
+
+WP-L0-GITOPS-001: the four reported identity fields are now compared as a tuple
+rather than a slash-joined string, avoiding collisions between distinct fields
+while still refusing actual duplicates. Dedicated Colima observed Stopped; no
+live API/Git, reconciliation, unknown-request replay, retained data/backup
+mutation or GitHub write. This offline fixture cannot authenticate the server,
+prove atomic inventory, clear strict admission or establish acceptance. Roll
+back only the comparison/test; retain earlier evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-04: independent FinOps history boundary review (offline)
 
