@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.38"
+version: "0.39"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: canonical item envelope keys (offline)
+
+As another independent fixed-profile check, each returned inventory item rejects differently cased aliases of `kind`, `apiVersion`, `metadata`, `spec` and `status` even when canonical fields are also present. This prevents Go's case-insensitive decoder from accepting a conflicting secondary representation of a fixed controller, Flux resource or namespace workload. Fake aliases and canonical fixtures are covered; generic doctor remains unchanged. `go test ./internal/cli -count=1` (778 passed), `go vet ./...`, `make verify-design-context` (89 documents) and `git diff --check` passed; the earlier nested-metadata increment passed `make verify-local-experiment` before this subsequent edit. This is offline shape validation, not authenticated API/Git identity, atomic observation, historical cleanup, strict admission or operator/production acceptance. Dedicated Colima remained stopped; no VM start, live API/SQL, reconciliation, request replay or retained data/backup change. Revert only reader/test changes to roll back; retain VM and evidence. Direct Vault handoff synchronization remains pending outside checkout.
 
 ## 2026-10-03: canonical nested inventory identities (offline)
 

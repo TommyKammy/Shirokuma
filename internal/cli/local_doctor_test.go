@@ -161,6 +161,37 @@ func TestLocalInventoryRejectsAliasedItemIdentity(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsAliasedItemEnvelope(t *testing.T) {
+	for _, field := range []string{"kind", "apiVersion", "metadata", "spec", "status"} {
+		alias := strings.ToUpper(field[:1]) + field[1:]
+		decorate := func(raw string) string {
+			// Insert a harmless alias alongside the canonical field where available;
+			// the inventory itself, not just the later readiness check, must fail.
+			marker := `"metadata":{`
+			if field == "metadata" {
+				return strings.Replace(raw, marker, `"Metadata":{},`+marker, 1)
+			}
+			if field == "kind" || field == "apiVersion" {
+				return strings.Replace(raw, marker, `"`+alias+`":"`+map[string]string{"kind": "Deployment", "apiVersion": "apps/v1"}[field]+`",`+marker, 1)
+			}
+			return strings.Replace(raw, `"`+field+`":`, `"`+alias+`":{},"`+field+`":`, 1)
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: decorate(localControllerJSON())}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("controller item alias %s accepted: %#v", field, check)
+		}
+		check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: decorate(localFluxJSON())}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("Flux item alias %s accepted: %#v", field, check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[0].output = decorate(workloads[0].output)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[0].Status != "degraded" {
+			t.Fatalf("workload item alias %s accepted: %#v", field, checks)
+		}
+	}
+}
+
 func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)

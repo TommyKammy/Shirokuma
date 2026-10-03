@@ -229,15 +229,24 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 	// The same decoder also accepts aliases in item identities. A fixed-profile
 	// inventory must not treat Name/Generation as canonical Kubernetes metadata.
 	var items struct {
-		Items []struct {
-			Metadata map[string]json.RawMessage `json:"metadata"`
-		} `json:"items"`
+		Items []map[string]json.RawMessage `json:"items"`
 	}
 	if err := json.Unmarshal(raw, &items); err != nil {
 		return true
 	}
 	for _, item := range items.Items {
-		for field := range item.Metadata {
+		for field := range item {
+			for _, canonical := range []string{"kind", "apiVersion", "metadata", "spec", "status"} {
+				if field != canonical && strings.EqualFold(field, canonical) {
+					return true
+				}
+			}
+		}
+		var metadata map[string]json.RawMessage
+		if err := json.Unmarshal(item["metadata"], &metadata); err != nil && len(item["metadata"]) != 0 {
+			return true
+		}
+		for field := range metadata {
 			for _, canonical := range []string{"name", "namespace", "generation", "deletionTimestamp"} {
 				if field != canonical && strings.EqualFold(field, canonical) {
 					return true

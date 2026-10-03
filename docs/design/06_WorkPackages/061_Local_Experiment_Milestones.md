@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.70"
+version: "4.71"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: canonical item envelopes (offline)
+
+WP-L0-GITOPS-001: fixed-profile controller, Flux source and Lakehouse inventory items reject case-insensitive aliases of item envelope keys, including conflicting `Spec`/`Status` alongside canonical fields. Fake negatives and canonical positives passed `go test ./internal/cli -count=1` (778 passed), `go vet ./...`, `make verify-design-context` (89 documents) and `git diff --check`; the earlier nested-metadata increment passed `make verify-local-experiment` before this edit. Generic doctor unchanged. Dedicated Colima remained stopped; no VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup change. This does not establish authenticated or atomic inventory, historical cleanup, strict publication admission or operator/production acceptance. Revert only reader/test changes, preserve stopped VM/evidence. Original Vault direct sync remains pending outside checkout.
 
 ## 2026-10-03: canonical nested inventory metadata (offline)
 
