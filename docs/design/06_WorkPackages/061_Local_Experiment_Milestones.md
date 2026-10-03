@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.25"
+version: "5.26"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: escaped duplicate keys in ignored JSON extensions (offline)
+
+WP-L5-LINEAGE-001: disposable saved-summary and HTTP fixtures with an ignored nested `owner` / `ow\u006eer` key collision confirm the existing bounded decoder rejects ambiguity before source eligibility or catalog evidence. WP-L0-GITOPS-001 independently pins the existing complete-list rejection of that collision in envelope and unrelated-item extensions, with a distinct-key positive. No reader behavior changed. Focused lineage (71 tests), isolated Go negative, `go test ./... -count=1` (827 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Read-only `colima list` showed the dedicated VM stopped. No live login/API/Git/SQL, VM start, reconciliation, archived request replay or retained source/session/report/backup change. Offline duplicate-key checks cannot authenticate producers, ensure atomicity, clear strict admission, establish whole-catalog/column lineage or grant operator/production acceptance. Roll back only disposable tests, preserving the stopped VM and historical evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: ignored lossy inventory values and saved-summary Unicode (offline)
 

@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.07"
+version: "1.08"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: escaped duplicate extension keys in saved and catalog JSON (offline)
+
+A disposable saved summary with an ignored nested `owner` / `ow\u006eer` pair is invalid rather than eligible; a disposable catalog response with the same duplicate pair is refused before it can become catalog evidence. The existing bounded decoder already checks keys after escape decoding, so this is regression coverage only, not a reader change. Focused checks and combined verification are recorded in Milestones. The dedicated VM was read-only observed stopped; no real login/API, retained source/report/backup mutation or request replay. This does not authenticate source/catalog producers, make observations atomic, or establish whole-catalog/column lineage or operator acceptance. Roll back the disposable tests only; preserve saved evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: saved-summary Unicode boundary regression (offline)
 

@@ -275,6 +275,17 @@ class CoverageTests(unittest.TestCase):
                 self.assertEqual(report['runs'][0]['reason_codes'], ['INVALID_JSON'])
                 self.assertEqual(self.client.calls, [])
 
+    def test_escaped_duplicate_unused_summary_key_cannot_enter_eligible_domain(self):
+        path = self.add_run(curated=True)
+        (path / 'summary.json').write_bytes(
+            b'{"run_token":"' + path.name.encode() +
+            b'","result":"passed","extra":{"owner":1,"ow\\u006eer":2}}')
+        report = self.collect()
+        self.assertEqual(report['inventory']['eligible'], 0)
+        self.assertEqual(report['inventory']['invalid'], 1)
+        self.assertEqual(report['runs'][0]['reason_codes'], ['INVALID_JSON'])
+        self.assertEqual(self.client.calls, [])
+
     def test_source_drift_after_eligibility_keeps_two_unknown_edges(self):
         path = self.add_run(curated=True)
         real = self.client.request
@@ -963,7 +974,8 @@ class ReadOnlyClientTests(unittest.TestCase):
 
     def test_malformed_and_oversized_json_are_rejected(self):
         self.client.login_attempted, self.client.token = True, 'token'
-        for body in (b'{"x":1,"x":2}', b'{"x":NaN}', b'{"unused":1e999}',
+        for body in (b'{"x":1,"x":2}', b'{"extra":{"owner":1,"ow\\u006eer":2}}',
+                     b'{"x":NaN}', b'{"unused":1e999}',
                      b'{"unused":-1e999}', b'{"unused":1e-999}', b'{"unused":-1e-999}',
                      b'x' * (C.MAX_RESPONSE + 1),
                      b'{"unused":"\xff"}', b'{"unused":"\\ud800"}', b'{"\\ud800":1}'):

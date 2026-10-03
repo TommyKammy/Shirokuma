@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.74"
+version: "0.75"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: escaped duplicate keys in ignored inventory extensions (offline)
+
+A complete fixed-profile list already refuses nested extension keys `owner` / `ow\u006eer` after decoding, both at envelope level and on an unrelated member. A distinct-key extension stays valid. The new disposable regression pins this existing behavior; the reader and generic doctor did not change. Focused and combined verification are recorded in Milestones. Dedicated Colima was observed stopped; no live API/Git, reconciliation, VM start or retained data/backup mutation. A fake list cannot authenticate Kubernetes/Git, guarantee atomic inventory, clear strict admission or establish operator acceptance. Roll back the regression test only and preserve evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: lossy ignored inventory values (offline)
 

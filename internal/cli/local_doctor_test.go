@@ -751,6 +751,23 @@ func TestLocalInventoryRejectsLossyIgnoredValues(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsEscapedDuplicateExtensionKey(t *testing.T) {
+	for _, tc := range []struct {
+		body    string
+		invalid bool
+	}{
+		{`{"extension":{"owner":1,"ow\u006eer":2},"items":[]}`, true},
+		{`{"items":[{"extension":{"owner":1,"ow\u006eer":2}}]}`, true},
+		{`{"extension":{"owner":1,"other":2},"items":[]}`, false},
+	} {
+		raw := []byte(tc.body)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("escaped extension key classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRequiresCanonicalUIDKey(t *testing.T) {
 	for _, uidField := range []string{`"UID":"uid-one"`, `"Uid":"uid-one"`, `"uid":"uid-one","UID":"uid-two"`} {
 		raw := []byte(`{"items":[{"metadata":{` + uidField + `}}]}`)
