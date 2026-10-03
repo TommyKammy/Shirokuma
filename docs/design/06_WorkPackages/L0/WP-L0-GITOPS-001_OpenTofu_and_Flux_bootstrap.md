@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.88"
+version: "0.89"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: reported creation timestamp (offline)
+
+An unrelated complete-list member reporting an invalid or empty
+`metadata.creationTimestamp` passed as a healthy projection. A disposable
+negative failed before repair; reported creation and deletion times now share
+the bounded RFC3339 validation, with omission still permitted for projected
+fixtures. `go test ./internal/cli -count=1` passed (836 tests). Dedicated Colima
+observed Stopped; no live API/Git, reconciliation, retained data/backup mutation
+or GitHub write. Fake-list consistency cannot authenticate remote provenance,
+prove atomicity, clear strict admission or establish operator acceptance. Roll
+back the reader/test only, preserving prior evidence. Original Vault sync
+pending outside the approved checkout.
 
 ## 2026-10-04: reported empty deletion timestamp (offline)
 

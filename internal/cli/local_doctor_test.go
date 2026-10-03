@@ -937,6 +937,30 @@ func TestLocalInventoryRejectsMalformedDeletionTimestamp(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsMalformedCreationTimestamp(t *testing.T) {
+	for _, tc := range []struct {
+		value   string
+		invalid bool
+	}{
+		{`"not-a-time"`, true},
+		{`""`, true},
+		{`null`, true},
+		{`"2026-10-03T12:00:00+24:00"`, true},
+		{`"2026-10-03T12:00:00.123456789Z"`, false},
+	} {
+		raw := []byte(`{"items":[{"kind":"Service","metadata":{"creationTimestamp":` + tc.value + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("creation timestamp classification incorrect: %s (%v)", raw, err)
+		}
+	}
+	raw := []byte(`{"items":[{"metadata":{}}]}`)
+	var list kubernetesResourceList
+	if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+		t.Fatalf("omitted creation timestamp rejected: %s (%v)", raw, err)
+	}
+}
+
 func TestLocalInventoryRejectsAvailableGreaterThanReady(t *testing.T) {
 	for _, status := range []string{
 		`{"availableReplicas":2,"readyReplicas":1}`,

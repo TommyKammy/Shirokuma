@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.130"
+version: "5.131"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: reported GitOps creation timestamp (offline)
+
+WP-L0-GITOPS-001: an unrelated member's malformed reported creation timestamp
+passed the fixed-profile complete-list check before repair. Reported creation
+and deletion times now use the same RFC3339 validator; omitted projections
+remain compatible. The focused negative failed before repair and the full Go
+CLI suite passed (836 tests). Dedicated Colima observed Stopped; no live
+API/Git, reconciliation, retained data/backup mutation or GitHub write. This
+offline fixture does not authenticate the producer, establish atomic inventory,
+clear strict admission or prove acceptance. Roll back reader/test only, keeping
+historical evidence; original Vault synchronization pending outside checkout.
 
 ## 2026-10-04: separate FinOps saved-history check (offline)
 

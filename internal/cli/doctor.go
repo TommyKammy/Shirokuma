@@ -299,13 +299,13 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			seenUIDs[uid] = struct{}{}
 		}
 		for field := range metadata {
-			for _, canonical := range []string{"name", "namespace", "generation", "deletionTimestamp", "uid", "resourceVersion"} {
+			for _, canonical := range []string{"name", "namespace", "generation", "creationTimestamp", "deletionTimestamp", "uid", "resourceVersion"} {
 				if field != canonical && strings.EqualFold(field, canonical) {
 					return true
 				}
 			}
 		}
-		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "deletionTimestamp", "resourceVersion"}) {
+		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "creationTimestamp", "deletionTimestamp", "resourceVersion"}) {
 			return true
 		}
 		// A reported per-object version must remain a usable opaque identity,
@@ -375,19 +375,19 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if identity.Generation < 0 {
 			return true
 		}
-		// A reported deletion timestamp is a Kubernetes nanosecond-precision
-		// RFC3339 time, not arbitrary text. An unrelated terminating member is still part of
-		// the supposedly complete inventory.
-		if rawTimestamp, ok := metadata["deletionTimestamp"]; ok {
-			var timestamp string
-			if err := json.Unmarshal(rawTimestamp, &timestamp); err != nil {
-				return true
-			}
-			if !localDeletionTimestamp.MatchString(timestamp) {
-				return true
-			}
-			if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
-				return true
+		// Reported creation/deletion times on even unrelated members must be
+		// usable Kubernetes timestamps, not malformed claims hidden by a
+		// projected list. Omission remains compatible with older fixtures.
+		for _, key := range []string{"creationTimestamp", "deletionTimestamp"} {
+			if rawTimestamp, ok := metadata[key]; ok {
+				var timestamp string
+				if err := json.Unmarshal(rawTimestamp, &timestamp); err != nil ||
+					!localDeletionTimestamp.MatchString(timestamp) {
+					return true
+				}
+				if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
+					return true
+				}
 			}
 		}
 		// Nested declared fields must also be canonical: encoding/json accepts
