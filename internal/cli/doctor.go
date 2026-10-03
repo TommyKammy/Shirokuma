@@ -352,6 +352,10 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		ready := false
 		for _, condition := range resource.Status.Conditions {
+			if localExperiment && condition.ObservedGeneration == resource.Metadata.Generation &&
+				((condition.Type == "Stalled" || condition.Type == "Reconciling") && condition.Status != "False") {
+				unhealthy = append(unhealthy, resourceID+" (unresolved reconciliation condition)")
+			}
 			if condition.Type == "Ready" && condition.ObservedGeneration == resource.Metadata.Generation {
 				if condition.Status == "True" {
 					ready = true

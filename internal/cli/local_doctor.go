@@ -106,14 +106,17 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		// A scoped kubectl list must not silently mix in other resource types or namespaces.
 		invalid := false
+		seen := make(map[string]bool, len(list.Items))
 		for _, resource := range list.Items {
-			if (resource.Kind != "Deployment" && resource.Kind != "StatefulSet") || resource.Metadata.Namespace != namespace {
+			identity := resource.Kind + "/" + resource.Metadata.Name
+			if (resource.Kind != "Deployment" && resource.Kind != "StatefulSet") || resource.Metadata.Namespace != namespace || resource.Metadata.Name == "" || seen[identity] {
 				invalid = true
 				break
 			}
+			seen[identity] = true
 		}
 		if invalid {
-			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response contained an out-of-scope resource"}
+			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response contained an out-of-scope or duplicated resource"}
 			continue
 		}
 		resources[namespace] = list

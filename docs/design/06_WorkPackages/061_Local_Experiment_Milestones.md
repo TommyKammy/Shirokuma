@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: offline Flux reconciliation and scoped inventory duplicates
+
+WP-L0-GITOPS-001. Fixed-profile read-only doctor rejects current-generation `Stalled`/`Reconciling` status other than explicitly `False` despite `Ready=True`, and rejects duplicate non-target workload kind/name entries in a namespace-scoped list. Existing cleared/stale conditions, healthy inventories and generic doctor contract remain intact. `go test ./internal/cli`, `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. The first focused run caught a malformed new test fixture; after its repair, focused and broad checks passed. Dedicated Colima status returned not running; no VM start, live API/SQL, reconciliation or retained data/backup mutation. Remote revision authenticity, runtime health, strict publication gate and production/operator acceptance remain unverified. Rollback: only local doctor code/tests; keep stopped VM and saved evidence. Original Vault handoff direct synchronization remains pending outside the noninteractive checkout.
+
 ## 2026-10-03: offline Flux zero generation and Lakehouse list scope
 
 WP-L0-GITOPS-001. Two independent read-only local-doctor fixes reject an explicitly reported zero Flux status generation (while permitting an omitted optional field), and reject a foreign-namespace or unexpected-kind item in a namespace-scoped Lakehouse inventory. Fake positive/negative cases, `go test ./internal/cli` (719 passed), `go vet ./...`, `git diff --check` and `make verify-local-experiment` passed. Dedicated Colima read-only status reported not running; no start, live API/SQL read, reconcile, retained request replay, saved data or backup mutation. Remote source authenticity, actual readiness, strict publication gate and production/operator acceptance remain unverified. Rollback is limited to the doctor code/tests, preserving saved evidence and VM. Original Vault handoff cannot be directly synchronized from this noninteractive checkout; sync pending.
