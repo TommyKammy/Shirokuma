@@ -398,6 +398,9 @@ class ReadOnlyClient:
         except urllib.error.HTTPError as error:
             status = error.code
             error.close()
+            # A late 404 is not evidence that a catalog object was absent
+            # within this observation's bounded time window.
+            require(time.monotonic() < self.deadline, 'API_DEADLINE')
             raise APIError(method, path, status) from None
         except (OSError, RuntimeError):
             raise CoverageError('API_UNAVAILABLE') from None

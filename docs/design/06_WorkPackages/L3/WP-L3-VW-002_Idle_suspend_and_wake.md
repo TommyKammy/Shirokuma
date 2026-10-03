@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.65"
+version: "0.66"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: completed UUID survives a failed stop check (offline)
+
+A disposable owner fixture verifies the existing fail-closed dispatch behavior: after a completed UUID, a stop callback that raises rejects and journals a fresh UUID without handler execution; the completed UUID still returns its exact saved response without a second operation. No production owner behavior was changed. Focused and full verification are in Milestones. No VM start, live SQL/backend, archived replay, retained session or backup change. This does not prove caller receipt, owner restart recovery or independent backend/cleanup state. Roll back only this disposable test; keep archived sessions and unknown requests untouched. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: one-shot stop observed at dispatch (offline)
 

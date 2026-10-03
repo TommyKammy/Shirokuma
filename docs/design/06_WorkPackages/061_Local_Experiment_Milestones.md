@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.30"
+version: "5.31"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: catalog error deadline and completed Warehouse replay (offline)
+
+WP-L5-LINEAGE-001: a test-owned GET 404 delivered after expiry previously escaped as ordinary missing-object evidence; the HTTP-error branch now closes the response and refuses it as `API_DEADLINE`. A timely 404 remains valid. The new negative failed before repair, then focused lineage (75 tests) passed. Independently WP-L3-VW-002: a disposable completed UUID still returns its exact saved response after a failing stop callback rejects a fresh UUID; no second handler call or archived request replay. No owner code change; focused Warehouse (78 + 88 + 16 + 22 + 15 tests) passed. `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed; private full logs at `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-076/{verify,design}.log`. Read-only dedicated Colima listing: Stopped. No live catalog login/GET, backend/SQL, VM start, retained source/credential/session/report/backup mutation or GitHub write. Neither offline check authenticates the catalog/backend, establishes atomic inventory, caller receipt, owner restart recovery, whole-catalog/column lineage or operator/production acceptance. Roll back the HTTP-error guard and its disposable test, or the independent Warehouse fixture, without removing historical reports, sessions or backups. Original Vault direct synchronization pending outside checkout.
 
 ## 2026-10-03: expired disposable catalog login cannot start GET (offline)
 

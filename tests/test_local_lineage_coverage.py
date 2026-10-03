@@ -1016,6 +1016,23 @@ class ReadOnlyClientTests(unittest.TestCase):
             with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
                 self.client.request('GET', next(iter(C.ANCHORS)))
 
+    def test_late_http_404_cannot_be_evidence_of_missing_catalog_entry(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+        def late_error(request, timeout):
+            client.deadline = time.monotonic() - 1
+            raise urllib.error.HTTPError(request.full_url, 404, 'missing', {}, io.BytesIO(b'private'))
+        with patch.object(client.opener, 'open', side_effect=late_error):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+        client.deadline = time.monotonic() + 10
+        error = urllib.error.HTTPError(C.URL, 404, 'missing', {}, io.BytesIO(b'private'))
+        with patch.object(client.opener, 'open', side_effect=error):
+            with self.assertRaises(C.APIError) as caught:
+                client.request('GET', next(iter(C.ANCHORS)))
+        self.assertEqual(caught.exception.status, 404)
+        self.assertTrue(error.fp.closed)
+
     def test_login_response_finishing_after_deadline_never_sends_get(self):
         client = self.client
         class LateLogin(Response):

@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.11"
+version: "1.12"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: late catalog 404 is not absence evidence (offline)
+
+The bounded GET client now checks its deadline when an HTTP error arrives, after closing its response stream. A disposable 404 returned only after expiry previously escaped as a normal `APIError` (potential missing-edge evidence); it now fails with `API_DEADLINE`. An on-time 404 retains its prior meaning. The negative failed before repair; focused and full checks are in Milestones. No live login/API, VM start or retained source/report/credential/backup change. This client-side limit cannot authenticate the catalog, guarantee an atomic observation, establish whole-catalog/column lineage or grant operator acceptance. Roll back only the HTTP-error deadline guard and its test; preserve historical reports. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: expired login response cannot authorize a catalog GET (offline)
 
