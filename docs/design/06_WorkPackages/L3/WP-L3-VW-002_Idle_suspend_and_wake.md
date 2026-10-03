@@ -5,12 +5,25 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.85"
+version: "0.86"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: explicit Unix RPC authority (offline)
+
+The fixed Go client sends `Host: warehouse.local`. A test-owned request with
+`Host: other.local` or an alternate port previously parsed as a transition;
+the owner now refuses a different explicit authority before journal or handler.
+The minimal socket fixtures that omit Host remain compatible, and the exact
+Go host passes. The isolated negative failed before repair; focused Warehouse
+tests passed afterward. This does not authenticate the Unix peer beyond the
+existing UID check, prove caller receipt, backend state, restart recovery or
+operator acceptance. No VM start, live backend/SQL, archived replay or retained
+session/backup mutation. Roll back only this parser guard and fixture; preserve
+saved sessions. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: keep-alive extension refused (offline)
 

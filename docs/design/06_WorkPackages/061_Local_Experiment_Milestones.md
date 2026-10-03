@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.54"
+version: "5.55"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: catalog error URL and Unix RPC authority (offline)
+
+WP-L5-LINEAGE-001 now refuses a thrown HTTP 404 whose final URL differs from
+the fixed requested catalog path, while an exact-path 404 still passes. Separately
+WP-L3-VW-002 refuses an explicitly different Host authority on its single-request
+Unix RPC while accepting the Go client's `warehouse.local` and existing
+Host-free test fixtures. Both isolated negatives failed before repair. Focused
+lineage (97 tests), Warehouse lifecycle, `make verify-local-experiment` and
+`make verify-design-context` (89 documents) passed; private logs under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-013/`. Dedicated
+Colima was read-only observed stopped. No VM start, live catalog/backend/SQL,
+archived request replay, retained credential/source/session/report/backup change
+or GitHub write. Neither offline guard proves remote authenticity, atomicity,
+caller receipt, restart recovery, whole-catalog/column lineage or operator
+acceptance. Roll back only these independent guards/tests; preserve saved
+evidence and the stopped VM. Original Vault sync pending outside this checkout.
 
 ## 2026-10-03: catalog refresh and Unix keep-alive metadata (offline)
 

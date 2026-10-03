@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.30"
+version: "1.31"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: HTTP error URL bound to requested catalog entity (offline)
+
+An injected 404 for a different URL previously became missing-object evidence
+for the requested fixed path. The error branch now checks `geturl()` against the
+exact request after closing the error stream and before returning the status;
+the observation deadline still takes precedence. An exact-path 404 remains
+valid. The isolated negative failed before repair and 97 focused tests passed
+afterward. This is an offline opener boundary, not remote producer identity or
+atomic/whole-catalog/column lineage evidence. No live login, VM start, retained
+source/credential/report/backup change or replay. Roll back only this guard and
+fixture, retaining reports. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: refresh metadata on fixed catalog responses (offline)
 

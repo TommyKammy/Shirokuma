@@ -484,6 +484,9 @@ class ReadOnlyClient:
         except urllib.error.HTTPError as error:
             try:
                 status = error.code
+                # A failed lookup for another URL is not proof that the
+                # requested fixed-path catalog entity is absent.
+                observed_url = error.geturl()
             except (OSError, RuntimeError):
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 raise CoverageError('API_UNAVAILABLE') from None
@@ -492,6 +495,8 @@ class ReadOnlyClient:
             # A late 404 is not evidence that a catalog object was absent
             # within this observation's bounded time window.
             require(time.monotonic() < self.deadline, 'API_DEADLINE')
+            require(type(observed_url) is str and observed_url == request.full_url,
+                    'API_RESPONSE_INVALID')
             require(type(status) is int and 400 <= status <= 599, 'API_RESPONSE_INVALID')
             raise APIError(method, path, status) from None
         except (OSError, RuntimeError):

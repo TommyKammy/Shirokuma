@@ -1302,12 +1302,29 @@ class ReadOnlyClientTests(unittest.TestCase):
             with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
                 client.request('GET', next(iter(C.ANCHORS)))
         client.deadline = time.monotonic() + 10
-        error = urllib.error.HTTPError(C.URL, 404, 'missing', {}, io.BytesIO(b'private'))
+        error = urllib.error.HTTPError(C.URL + next(iter(C.ANCHORS)), 404, 'missing', {}, io.BytesIO(b'private'))
         with patch.object(client.opener, 'open', side_effect=error):
             with self.assertRaises(C.APIError) as caught:
                 client.request('GET', next(iter(C.ANCHORS)))
         self.assertEqual(caught.exception.status, 404)
         self.assertTrue(error.fp.closed)
+
+    def test_http_error_from_another_url_is_not_missing_catalog_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for url, expected in ((C.URL + path, 404), (C.URL + '/tables/name/other', None)):
+            with self.subTest(url=url):
+                stream = io.BytesIO(b'private')
+                error = urllib.error.HTTPError(url, 404, 'missing', {}, stream)
+                with patch.object(self.client.opener, 'open', side_effect=error):
+                    if expected is None:
+                        with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                            self.client.request('GET', path)
+                    else:
+                        with self.assertRaises(C.APIError) as caught:
+                            self.client.request('GET', path)
+                        self.assertEqual(caught.exception.status, expected)
+                self.assertTrue(stream.closed)
 
     def test_noninteger_http_status_cannot_be_catalog_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'

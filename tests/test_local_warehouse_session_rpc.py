@@ -886,9 +886,16 @@ class SessionRPCTest(unittest.TestCase):
                        b'TE: trailers\r\n', b'Proxy-Connection: keep-alive\r\n',
                        b'Keep-Alive: timeout=5\r\n',
                        b'Connection: upgrade\r\n', b'Connection: keep-alive, Upgrade\r\n',
-                      b'Connection: keep-alive\r\n', b'Connection: X-Trace\r\n'):
+                       b'Connection: keep-alive\r\n', b'Connection: X-Trace\r\n'):
             with self.subTest(extra=extra), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
                 self.rpc._read_request(BufferedConnection(self.wire(body, base + extra)))
+        # The Go client uses warehouse.local. An explicit different authority
+        # must not label a transition as if it targeted that fixed endpoint.
+        for extra in (b'Host: other.local\r\n', b'Host: warehouse.local:80\r\n'):
+            with self.subTest(extra=extra), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
+                self.rpc._read_request(BufferedConnection(self.wire(body, base + extra)))
+        self.assertEqual(self.rpc._read_request(BufferedConnection(
+            self.wire(body, base + b'Host: warehouse.local\r\n'))), json.loads(body))
         self.assertEqual(self.rpc._read_request(BufferedConnection(
             self.wire(body, base + b'Connection: Close\r\n'))), json.loads(body))
         self.assertEqual(self.calls, [])

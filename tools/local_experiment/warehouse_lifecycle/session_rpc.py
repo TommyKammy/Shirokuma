@@ -395,6 +395,9 @@ class SessionRPC:
         else:
             raise RPCError('INVALID_HTTP')
         require(headers.get(b'content-type') == b'application/json', 'INVALID_HTTP')
+        # The fixed Go Unix client names this origin. A different explicit
+        # HTTP authority cannot describe the same scoped transition.
+        require(b'host' not in headers or headers[b'host'] == b'warehouse.local', 'INVALID_HTTP')
         length = headers.get(b'content-length', b'')
         require(re.fullmatch(rb'[0-9]{1,4}', length) is not None, 'INVALID_HTTP')
         length = int(length)
