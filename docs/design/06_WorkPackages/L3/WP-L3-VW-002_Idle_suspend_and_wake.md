@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.38"
+version: "0.39"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: bounded projected list count (offline)
+
+The opt-in metadata-only inventory now bounds the decimal list-count text by the fixed per-list limit before converting it to an integer. A 5000-digit fake count reproduced unbounded conversion before repair; an empty complete list still passes. `make test-local-warehouse-lifecycle` passed. The dedicated Colima profile remained stopped; no live template/API/SQL, owner call, unknown-request replay, retained session or backup mutation. This does not authenticate inventory, establish atomic absence or historical cleanup, or prove operator/production acceptance. Revert only this reader/test change and preserve the VM and saved evidence. Original Vault handoff direct sync remains pending outside checkout.
 
 ## 2026-10-03: bounded report assembly (offline)
 

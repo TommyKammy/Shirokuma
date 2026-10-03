@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.72"
+version: "4.73"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: bounded Warehouse projected count (offline)
+
+WP-L3-VW-002: the scoped-list metadata reader now bounds the projected item-count digits before integer conversion. A fake 5000-digit count failed the new focused test before repair; `make test-local-warehouse-lifecycle` passed afterward. Dedicated Colima stayed stopped; no API/SQL, owner operation, unknown-request replay or retained data/backup mutation. Fake parsing is not authenticated or atomic inventory, historical cleanup or operator/production acceptance. Roll back only reader/test, preserving VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: nested canonical diagnostic fields and null item envelopes (offline)
 

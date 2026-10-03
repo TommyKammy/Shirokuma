@@ -127,8 +127,9 @@ class ReadOnlyKubernetes:
                 header[3] == 'COMPLETE' and
                  0 < len(header[4].encode('utf-8')) <= 1024 and
                  all(not char.isspace() and not unicodedata.category(char).startswith('C') for char in header[4]) and
-                re.fullmatch(r'(0|[1-9][0-9]*)', header[2]) is not None and
-                int(header[2]) == len(lines) and len(lines) <= limit)
+                 len(lines) <= limit and len(header[2]) <= len(str(limit)) and
+                 re.fullmatch(r'(0|[1-9][0-9]*)', header[2]) is not None and
+                 int(header[2]) == len(lines))
         return {'kind': kind, 'items': [row(line) for line in lines]}
 
     def labelled(self, token):

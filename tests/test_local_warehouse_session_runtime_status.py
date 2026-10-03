@@ -315,6 +315,17 @@ class RuntimeStatusTests(TestCase):
         with mock.patch.object(R.W, 'command', return_value='discovery.k8s.io/v1\tEndpointSliceList\t0\tCOMPLETE\t43\n'):
             self.assertEqual(R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')['items'], [])
 
+    def test_projected_count_is_bounded_before_integer_conversion(self):
+        # An otherwise bounded stdout can carry more decimal digits than
+        # Python's int conversion limit; reject by the known list limit first.
+        raw = 'v1\tList\t' + '1' * 5000 + '\tCOMPLETE\t42\n'
+        with mock.patch.object(R.W, 'command', return_value=raw), \
+             mock.patch.object(R, 'int', create=True, side_effect=AssertionError('unbounded conversion')):
+            with self.assertRaises(R.RuntimeStatusError):
+                R.ReadOnlyKubernetes().labelled(TOKEN)
+        with mock.patch.object(R.W, 'command', return_value='v1\tList\t0\tCOMPLETE\t42\n'):
+            self.assertEqual(R.ReadOnlyKubernetes().labelled(TOKEN)['items'], [])
+
     def test_cli_only_contacts_kubernetes_after_saved_completion_gate(self):
         session = {'journal_sha256': 'b'*64}
         claim = {'journal_sha256': 'b'*64, 'recorded_completion': 'correlated-saved-claim'}
