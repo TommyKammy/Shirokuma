@@ -379,10 +379,13 @@ class ReadOnlyClient:
             headers['Authorization'] = 'Bearer ' + self.token
         request = urllib.request.Request(URL + path, method=method, headers=headers,
                                          data=canonical(data).encode() if data is not None else None)
-        response_opened = False
+        response_opened = response_entered = False
+        opened = None
         try:
-            with self.opener.open(request, timeout=min(10, remaining)) as response:
-                response_opened = True
+            opened = self.opener.open(request, timeout=min(10, remaining))
+            response_opened = True
+            with opened as response:
+                response_entered = True
                 # An opener may return an HTTP response after the deadline
                 # without raising HTTPError. Its status is not timely evidence.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
@@ -583,6 +586,14 @@ class ReadOnlyClient:
             # or return the unclosed observation as catalog evidence.
             require(time.monotonic() < self.deadline, 'API_DEADLINE')
             raise CoverageError('API_RESPONSE_INVALID') from None
+        finally:
+            if response_opened and not response_entered:
+                # A failed __enter__ never calls __exit__. This is an already
+                # opened stream, not an opener error describing absent data.
+                try:
+                    opened.close()
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    pass
 
     def login_existing(self):
         require(not self.login_attempted, 'LOGIN_ALREADY_ATTEMPTED')

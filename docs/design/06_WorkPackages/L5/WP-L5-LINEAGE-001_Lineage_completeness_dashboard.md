@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.42"
+version: "1.43"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: opened catalog context-entry failure (offline)
+
+An opener returning a stream whose context entry raises an exact-path 404
+previously treated that error as missing evidence and left the returned stream
+open. Mark the stream as opened before context entry and close it on entry
+failure. Timely injected entry failures are unavailable; late ones are deadline,
+never missing. The isolated negative failed before repair; focused lineage
+passed afterward. No catalog login, VM start or retained source/report/backup
+change. This does not authenticate the producer, establish atomic or complete
+catalog/column coverage, or grant operator acceptance. Roll back only the
+entry boundary and fixture, retaining saved evidence. Original Vault sync
+remains pending outside the noninteractive checkout.
 
 ## 2026-10-04: post-open HTTP error is not absence (offline)
 

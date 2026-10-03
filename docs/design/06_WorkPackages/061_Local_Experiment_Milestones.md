@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.66"
+version: "5.67"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: catalog context entry and private proxy chain (offline)
+
+WP-L5-LINEAGE-001 refuses an exact-path 404 raised while entering an already
+opened catalog stream as missing evidence; it closes both streams and reports
+unavailable/deadline. Independently WP-L3-VW-002 refuses `Proxy` and `Via` on
+the fixed Unix transition before journal or handler. The isolated catalog
+negative failed before repair (timely false missing; late unclosed stream);
+the Warehouse negatives were not run before repair. Focused lineage (113)
+and Warehouse (78 + 108 + 16 + 22 + 15) tests passed after repair. Read-only
+Colima listing showed the dedicated VM stopped. No VM start, live catalog,
+backend/SQL, archived request replay, retained evidence/backup mutation or
+GitHub write. These fixtures do not authenticate producers/peers, prove
+atomicity, caller receipt, restart recovery, whole-catalog/column lineage or
+operator acceptance. Roll back only the independent guards/fixtures, retain
+saved evidence and the stopped VM. Original Vault sync pending outside this
+checkout.
 
 ## 2026-10-04: post-open catalog errors and bare real identity (offline)
 

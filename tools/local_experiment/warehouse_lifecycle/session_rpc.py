@@ -389,7 +389,7 @@ class SessionRPC:
                      not name.startswith((b'x-original-', b'x-rewrite-')) and
                     name not in headers and name not in
                       (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
-                         b'te', b'proxy-connection', b'keep-alive',
+                          b'te', b'proxy-connection', b'keep-alive', b'proxy', b'via',
                           b'authorization', b'proxy-authorization', b'cookie',
                           b'forwarded', b'x-real-ip', b'x-real-host', b'x-forwarded-host', b'x-forwarded-proto',
                           b'x-forwarded-for', b'x-forwarded-port', b'x-forwarded-prefix',
