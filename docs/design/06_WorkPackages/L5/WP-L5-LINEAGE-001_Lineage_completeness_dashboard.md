@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.26"
+version: "1.27"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: declared catalog content location (offline)
+
+A fixed-path catalog GET now refuses any `Content-Location` declaration before
+promoting its JSON body to evidence. This conservative assumption avoids
+attributing a representation explicitly located elsewhere to the requested
+entity; even a self-referential declaration is refused until live compatibility
+is established. Disposable negatives failed before repair, then 93 focused tests
+passed. No live login, VM start, retained report/source/credential/backup mutation
+or replay. Header refusal does not authenticate the catalog or establish atomic,
+whole-catalog or column lineage or operator acceptance. Roll back the location
+guard and fixture only, retaining saved evidence. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-03: partial catalog representation metadata (offline)
 

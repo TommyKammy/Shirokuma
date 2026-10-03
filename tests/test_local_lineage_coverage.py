@@ -875,6 +875,23 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_catalog_content_location_is_not_target_identity_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for location in (None, '/tables/name/other?include=all', C.URL + path):
+            with self.subTest(location=location):
+                response = Response(b'{"id":1}')
+                response.headers = Message()
+                if location is not None:
+                    response.headers['Content-Location'] = location
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if location is None:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                    else:
+                        with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                            self.client.request('GET', path)
+                self.assertTrue(response.closed)
+
     def test_partial_catalog_range_is_not_complete_json_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.50"
+version: "5.51"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: catalog location and Unix protocol extensions (offline)
+
+WP-L5-LINEAGE-001 now refuses declared `Content-Location` even for a
+self-referential catalog GET (conservative compatibility assumption; live
+producer not checked). Independently WP-L3-VW-002 refuses `Upgrade` and
+`Trailer` on its fixed single-request Unix RPC. Both disposable negatives
+failed before repair; focused lineage (93 tests) and Warehouse (78 + 102 + 16
++ 22 + 15 tests) passed. Read-only `colima list` showed the dedicated VM stopped;
+no VM start, live login/backend/SQL, archived replay, retained source/session/
+credential/report/backup mutation or GitHub write. Offline fixtures cannot
+authenticate producers, prove atomicity, caller receipt, restart recovery,
+whole-catalog/column lineage or operator acceptance. Roll back only these
+independent guards/fixtures; preserve saved evidence and stopped VM. Direct
+original Vault sync pending outside this checkout.
 
 ## 2026-10-03: partial catalog metadata and RPC negotiation (offline)
 

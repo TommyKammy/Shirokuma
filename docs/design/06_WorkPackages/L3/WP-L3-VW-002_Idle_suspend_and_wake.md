@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.81"
+version: "0.82"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: upgrade and trailer negotiation refused (offline)
+
+The fixed single-request Unix RPC now rejects `Upgrade` and `Trailer` headers
+before parsing a transition, journaling or dispatch. These are not supported
+optional extensions to its fixed HTTP/1.1 contract. Disposable negatives failed
+before repair; focused Warehouse suites passed (78 + 102 + 16 + 22 + 15 tests).
+No VM start, archived replay, live backend/SQL or retained session/backup
+mutation. This cannot prove caller receipt, backend authenticity, restart
+recovery or operator acceptance. Roll back the parser guard and test only;
+retain historical sessions. Original Vault sync pending outside checkout.
 
 ## 2026-10-03: protocol negotiation before RPC journaling (offline)
 

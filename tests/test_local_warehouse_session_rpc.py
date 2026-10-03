@@ -881,7 +881,8 @@ class SessionRPCTest(unittest.TestCase):
                 self.rpc._read_request(BufferedConnection(self.wire(body, base + name + b': yes\r\n')))
         # Reject protocol negotiation even if its advertised body is already
         # complete and parses as a valid transition. Neither path may journal.
-        for extra in (b'Expect: 100-continue\r\n', b'Transfer-Encoding: chunked\r\n'):
+        for extra in (b'Expect: 100-continue\r\n', b'Transfer-Encoding: chunked\r\n',
+                      b'Upgrade: websocket\r\n', b'Trailer: X-Digest\r\n'):
             with self.subTest(extra=extra), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
                 self.rpc._read_request(BufferedConnection(self.wire(body, base + extra)))
         self.assertEqual(self.calls, [])
