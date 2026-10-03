@@ -12,6 +12,17 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: malformed saved edge targets (offline)
+
+Separately from the known-edge evidence check, direct rendering now returns
+`RenderError` for list/dict edge targets instead of leaking `TypeError` from
+set construction. Two disposable negatives raised raw exceptions before repair;
+normal and malformed scalar targets are covered. Focused lineage and full local
+verification passed afterward. No VM start, retained data/backup mutation or
+catalog access. This bounds a presentation input, not provenance, catalog
+atomicity, whole-catalog/column coverage or operator acceptance. Roll back the
+target guard/test only; preserve saved reports. Original Vault sync pending.
+
 ## 2026-10-04: known edges require per-run catalog evidence (offline)
 
 The direct renderer rejects a known edge without matching non-null saved

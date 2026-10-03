@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.86"
+version: "5.87"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: malformed saved lineage targets (offline)
+
+WP-L5-LINEAGE-001's renderer now refuses unhashable saved edge targets with
+its bounded `RenderError`, not a raw `TypeError`. Two test-owned negatives
+reproduced the exception; `make test-local-lineage-coverage` (131 tests),
+`make verify-local-experiment`, `make verify-design-context` and diff check
+passed afterward. Logs are private under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-040/`.
+No VM start, retained source/report/backup change, archived replay or GitHub
+write. Offline rendering does not establish source/catalog authenticity,
+atomicity, whole-catalog/column coverage or operator acceptance. Roll back
+only the guard/test; retain historical evidence. Original Vault sync pending.
 
 ## 2026-10-04: known lineage edge catalog evidence (offline)
 

@@ -266,7 +266,8 @@ def _validate(report):
         _require(type(edges) is list, 'INVALID_EDGES')
         if run['eligible']:
             eligible += 1
-            _require(len(edges) == 2 and {edge.get('target') for edge in edges if type(edge) is dict} == {'stg', 'mart'},
+            _require(len(edges) == 2 and all(type(edge) is dict for edge in edges) and
+                     all(sum(edge.get('target') == target for edge in edges) == 1 for target in ('stg', 'mart')),
                       'ELIGIBLE_RUN_REQUIRES_TWO_EDGES')
             # Known edges come only from matching first/final catalog reads.
             # The aggregate stability field can be null/false for other runs.

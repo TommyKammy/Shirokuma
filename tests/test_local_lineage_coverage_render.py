@@ -116,6 +116,14 @@ class CoverageRenderTests(unittest.TestCase):
                 render(value)
         self.assertIn('2 / 2 エッジ', render(report()))
 
+    def test_malformed_edge_target_fails_as_render_error(self):
+        for target in ([], {}, None, 42):
+            value = report()
+            value['runs'][0]['edges'][0]['target'] = target
+            with self.subTest(target=target), self.assertRaises(RenderError):
+                render(value)
+        self.assertIn('2 / 2 エッジ', render(report()))
+
     def test_excluded_failed_invalid_and_incomplete_sources_remain_visible(self):
         runs = [run(), run(2, source_status='failed', eligible=False),
                 run(3, source_status='invalid', eligible=False), run(4, source_status='incomplete', eligible=False)]
