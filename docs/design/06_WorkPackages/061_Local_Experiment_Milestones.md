@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.24"
+version: "5.25"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: ignored lossy inventory values and saved-summary Unicode (offline)
+
+WP-L0-GITOPS-001: complete fixed-profile lists refuse Go's lossy escaped-surrogate decoding in ignored string values, including nested envelope extensions and unrelated items. A disposable negative failed before the reader guard; ordinary Unicode extensions pass. WP-L5-LINEAGE-001 independently pins the existing fail-closed saved-summary behavior for an ignored lone-surrogate key/value and invalid raw UTF-8: none enters the eligible domain. Focused lineage (70 tests), Go CLI (826 passed), `go vet ./...`, combined `make verify-local-experiment`, `make verify-design-context` (89 documents) passed. Read-only Colima listing: dedicated VM stopped. No VM start, live login/API/Git/SQL, reconciliation, request replay, retained credential/source/report/backup mutation or GitHub write. Offline JSON integrity does not authenticate producers/API/Git, guarantee atomicity, establish whole-catalog/column lineage, clear strict admission or grant operator/production acceptance. Roll back the Go guard and disposable tests only; preserve VM and historical evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: underflowed lineage numbers and lossy inventory keys (offline)
 

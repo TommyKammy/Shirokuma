@@ -627,6 +627,11 @@ func localInventoryUniqueFields(raw []byte) bool {
 		}
 		delim, ok := token.(json.Delim)
 		if !ok {
+			// Go also replaces malformed escaped surrogates in values. An
+			// ignored extension must not silently make a lossy list complete.
+			if text, ok := token.(string); ok && strings.ContainsRune(text, utf8.RuneError) {
+				return false
+			}
 			return true
 		}
 		switch delim {

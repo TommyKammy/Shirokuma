@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.06"
+version: "1.07"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: saved-summary Unicode boundary regression (offline)
+
+An independent disposable saved-source test pins the existing decoder's rejection of escaped lone surrogates in ignored values and keys and invalid raw UTF-8. These cannot make a Data Plan eligible or cause catalog reads. No reader behavior changed. The focused suite and repository checks passed; see Milestones. No actual credential, saved source, report or backup was changed and the dedicated VM stayed stopped. This is local JSON integrity, not source/catalog authentication, atomicity, whole-catalog/column lineage or operator acceptance. Roll back the regression test only; preserve retained evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: nonzero JSON underflow cannot become zero (offline)
 

@@ -733,6 +733,24 @@ func TestLocalInventoryRejectsReplacementCharacterInListVersion(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsLossyIgnoredValues(t *testing.T) {
+	for _, tc := range []struct {
+		body    string
+		invalid bool
+	}{
+		{`{"extension":{"nested":["ok", "\ud800"]},"items":[]}`, true},
+		{`{"items":[{"extension":"\ud800"}]}`, true},
+		{`{"items":[{"extension":"\ufffd"}]}`, true},
+		{`{"extension":{"nested":["雪"]},"items":[]}`, false},
+	} {
+		raw := []byte(tc.body)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("ignored value classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRequiresCanonicalUIDKey(t *testing.T) {
 	for _, uidField := range []string{`"UID":"uid-one"`, `"Uid":"uid-one"`, `"uid":"uid-one","UID":"uid-two"`} {
 		raw := []byte(`{"items":[{"metadata":{` + uidField + `}}]}`)

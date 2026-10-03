@@ -262,6 +262,19 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(report['runs'][0]['reason_codes'], ['INVALID_JSON'])
         self.assertEqual(self.client.calls, [])
 
+    def test_lossy_unused_summary_unicode_cannot_enter_eligible_domain(self):
+        path = self.add_run(curated=True)
+        for extension in (b'"unused":"\\ud800"', b'"\\ud800":"ignored"',
+                          b'"unused":"\xff"'):
+            with self.subTest(extension=extension):
+                (path / 'summary.json').write_bytes(
+                    b'{"run_token":"' + path.name.encode() + b'","result":"passed",' + extension + b'}')
+                report = self.collect()
+                self.assertEqual(report['inventory']['eligible'], 0)
+                self.assertEqual(report['inventory']['invalid'], 1)
+                self.assertEqual(report['runs'][0]['reason_codes'], ['INVALID_JSON'])
+                self.assertEqual(self.client.calls, [])
+
     def test_source_drift_after_eligibility_keeps_two_unknown_edges(self):
         path = self.add_run(curated=True)
         real = self.client.request

@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.73"
+version: "0.74"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: lossy ignored inventory values (offline)
+
+The complete-list duplicate-key walk now also refuses U+FFFD in decoded string values at any depth, including an ignored extension in an envelope or unrelated item. Go silently maps an escaped lone surrogate to this replacement character. A disposable negative failed before repair; ordinary Unicode extensions remain compatible. Generic doctor is unchanged. Focused Go, vet and repository verification are recorded in Milestones. No live API/Git, VM start, reconciliation or retained data/backup mutation. This cannot authenticate the API/Git or provide atomic inventory, strict admission or operator acceptance. Roll back this reader guard/test only, retaining previous evidence and the stopped VM. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: lossy unknown JSON keys invalidate complete lists (offline)
 
