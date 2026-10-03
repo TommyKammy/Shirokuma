@@ -396,10 +396,18 @@ class ReadOnlyClient:
                 lengths = headers.get_all('Content-Length', []) if headers is not None else []
                 transfers = headers.get_all('Transfer-Encoding', []) if headers is not None else []
                 encodings = headers.get_all('Content-Encoding', []) if headers is not None else []
+                media_types = headers.get_all('Content-Type', []) if headers is not None else []
                 # Header access is part of the bounded observation too: a
                 # late malformed header is not an on-time framing result.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 require(type(lengths) is list and len(lengths) <= 1, 'API_RESPONSE_INVALID')
+                # Do not promote a body explicitly labeled as another media
+                # type to catalog JSON, even when its bytes happen to parse.
+                require(type(media_types) is list and len(media_types) <= 1 and
+                        (not media_types or (type(media_types[0]) is str and
+                         re.fullmatch(r'application/json(?:;[ \t]*charset=utf-8)?',
+                                      media_types[0], re.IGNORECASE) is not None)),
+                        'API_RESPONSE_INVALID')
                 # urllib does not decode content codings. Even a JSON-looking
                 # body is not complete evidence when its declared representation
                 # requires a decoding step that this reader did not perform.

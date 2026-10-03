@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.22"
+version: "1.23"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: declared catalog media type (offline)
+
+The bounded read-only client now refuses a response explicitly labeled as a
+non-JSON media type (or conflicting duplicate types), even when the exposed
+bytes parse as JSON. A single `application/json` with optional UTF-8 charset
+remains supported; undeclared types retain compatibility. Disposable fixture
+and 91 focused lineage tests passed. No live login/GET, VM start or retained
+source/credential/report/backup modification. This cannot authenticate the
+catalog, make separate reads atomic, or establish whole-catalog/column lineage
+or operator acceptance. Roll back only the media-type guard/test while keeping
+historical reports. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: catalog transfer-token boundaries (offline)
 

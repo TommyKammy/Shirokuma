@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.45"
+version: "5.46"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: declared catalog media type (offline)
+
+Independently of the Warehouse header commit, WP-L5-LINEAGE-001 rejects a
+declared non-JSON or duplicate catalog media type before its JSON-looking body
+can become evidence; an ordinary JSON type with optional UTF-8 charset passes.
+Focused lineage suite passed (91 tests); combined `make verify-local-experiment`,
+`make verify-design-context` (89 documents) and `git diff --check` passed after
+both independent changes. The dedicated VM was last read-only
+observed stopped; no VM start, live catalog/login, retained source/credential/
+report/backup mutation, archived request replay or GitHub write. HTTP response
+shape alone cannot authenticate the producer, guarantee atomic observations,
+whole-catalog/column lineage or operator acceptance. Roll back the media-type
+guard/fixture only, retaining saved reports. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-03: Warehouse optional-header control bytes (offline)
 

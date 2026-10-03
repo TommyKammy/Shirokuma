@@ -875,6 +875,27 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_declared_non_json_catalog_media_type_is_not_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for types, expected in [(['text/plain'], 'API_RESPONSE_INVALID'),
+                                (['application/json; charset=latin1'], 'API_RESPONSE_INVALID'),
+                                (['application/json', 'application/json'], 'API_RESPONSE_INVALID'),
+                                (['application/json'], None),
+                                (['Application/JSON; charset=UTF-8'], None)]:
+            with self.subTest(types=types):
+                response = Response(b'{"id":1}')
+                response.headers = Message()
+                for media_type in types:
+                    response.headers['Content-Type'] = media_type
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if expected:
+                        with self.assertRaisesRegex(C.CoverageError, expected):
+                            self.client.request('GET', path)
+                    else:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                self.assertTrue(response.closed)
+
     def test_catalog_content_coding_cannot_disguise_plain_json(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))
