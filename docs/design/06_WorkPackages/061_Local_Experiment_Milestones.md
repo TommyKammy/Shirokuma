@@ -12,6 +12,23 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: policy allowed-response port attributes (offline)
+
+WP-L2-POL-001: three test-owned dry-run responses with injected UDP, host IP,
+or port name passed before repair and now fail closed as unknown with the
+original pending request. Boolean ports are also rejected; TCP and empty API
+defaults remain supported. Focused observer tests passed (22). The dedicated
+Colima profile was observed stopped; no live admission, archived request replay,
+retained report/volume/backup change or GitHub write. `make verify-local-experiment`,
+`make verify-design-context` (89 documents), `make check-no-secret-filenames`
+and `git diff --check` passed. Private full verification output:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-054/verify-policy.log`
+(SHA-256 `53d475cf5d80b24d7142a4a84405bf56c10a2ccba260456cc873eeffdd0a6971`).
+This offline comparison does not authenticate the server, establish arbitrary
+mutation coverage or operator acceptance. Roll back comparator/test only;
+preserve pending requests and stopped lab. Original Vault sync pending outside
+the approved checkout.
+
 ## 2026-10-04: policy container context and independent FinOps review (offline)
 
 WP-L2-POL-001: three disposable allowed responses injecting container privilege,

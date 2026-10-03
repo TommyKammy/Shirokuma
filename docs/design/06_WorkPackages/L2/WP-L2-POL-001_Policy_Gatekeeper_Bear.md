@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-04: allowed response port attributes (offline)
+
+Three disposable dry-run responses injecting UDP protocol, host IP or a port
+name were incorrectly classified allowed. The comparator now checks the full
+supported port attribute set, preserving the harmless API TCP/empty defaults
+and rejecting boolean ports. An unknown response retains its pending request;
+do not replay it. Focused observer tests passed (22). Dedicated Colima was
+observed stopped; no admission, saved request, retained volume/backup or GitHub
+write. Fake responses cannot authenticate the API or establish general Pod
+mutation coverage or operator acceptance. Roll back only the comparator/test;
+preserve pending requests. Original Vault sync pending outside checkout.
+
 ## 2026-10-04: allowed response container security context (offline)
 
 Three test-owned allowed dry-run responses injected an unsubmitted container

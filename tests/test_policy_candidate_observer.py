@@ -159,6 +159,31 @@ class ObserverTests(unittest.TestCase):
                 self.assertIsNotNone(receipt['pending'])
                 self.assertEqual(receipt['request_count'],1)
 
+    def test_allowed_response_cannot_mutate_port_attributes(self):
+        value=pod();value['spec']['containers'][0]['ports']=[{'containerPort':8080}]
+        source=prepared(value)
+        for changes in ({'protocol':'UDP'}, {'hostIP':'0.0.0.0'},
+                        {'name':'unexpected'}, {'containerPort':True}):
+            with self.subTest(changes=changes):
+                kube=FakeKube();observer=O.CandidateObserver(source,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body)
+                    altered['spec']['containers'][0]['ports'][0].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(source,kube);observer.observe()
+        def defaulted(body):
+            effective=copy.deepcopy(body)
+            effective['spec']['containers'][0]['ports'][0]['protocol']='TCP'
+            return SimpleNamespace(returncode=0,stdout=json.dumps(effective),stderr='')
+        kube.respond=defaulted
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_accepts_harmless_server_defaults_and_equivalent_quantities(self):
         self.ready()
         def respond(body):

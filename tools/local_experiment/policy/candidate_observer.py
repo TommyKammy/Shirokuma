@@ -144,8 +144,14 @@ def allowed_pod_matches(value, body):
     if type(ports) is not list or len(ports) != len(submitted.get('ports', [])):
         return False
     for current, source in zip(ports, submitted.get('ports', [])):
-        if (type(current) is not dict or current.get('containerPort') != source['containerPort'] or
-                current.get('hostPort', 0) != source.get('hostPort', 0)):
+        if (type(current) is not dict or
+                set(current) - {'containerPort', 'hostPort', 'protocol', 'name', 'hostIP'} or
+                type(current.get('containerPort')) is not int or
+                current['containerPort'] != source['containerPort'] or
+                type(current.get('hostPort', 0)) is not int or
+                current.get('hostPort', 0) != source.get('hostPort', 0) or
+                current.get('protocol', 'TCP') != 'TCP' or
+                current.get('name', '') != '' or current.get('hostIP', '') != ''):
             return False
     return True
 
