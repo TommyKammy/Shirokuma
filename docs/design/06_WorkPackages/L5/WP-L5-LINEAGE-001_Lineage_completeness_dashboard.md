@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.31"
+version: "1.32"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: partial-representation metadata on thrown 404 (offline)
+
+An injected fixed-path HTTP 404 with `Content-Range` was accepted as missing
+catalog evidence before repair. The error reader now refuses that declaration
+for both HTTPMessage and plain mapping headers; the disposable negative failed
+before repair and focused lineage checks passed afterward. It still closes the
+error stream. No VM start, live catalog, retained source/report/backup mutation
+or replay. This conservative response check does not authenticate a producer,
+prove atomic reads or whole-catalog/column lineage, or grant operator acceptance.
+Roll back only this guard/test; keep saved evidence. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-04: case-insensitive thrown-error location metadata (offline)
 

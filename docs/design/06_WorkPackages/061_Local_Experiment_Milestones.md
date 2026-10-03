@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.55"
+version: "5.56"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: rewritten private RPC target and partial catalog 404 (offline)
+
+WP-L3-VW-002 refuses `X-Original-URL`, `X-Rewrite-URL` and
+`X-Forwarded-Prefix` on the fixed Unix transition. Independently,
+WP-L5-LINEAGE-001 refuses `Content-Range` on a thrown fixed-path 404 instead
+of calling it missing. Both disposable negatives failed before repair; focused
+Warehouse and lineage suites passed after repair. Dedicated Colima was
+read-only observed stopped. No VM start, live SQL/catalog, archived request
+replay, retained session/source/report/backup mutation or GitHub write. These
+offline framing checks cannot prove producer/peer identity, atomicity, caller
+receipt, restart recovery, whole-catalog/column lineage or operator acceptance.
+`make test-local-warehouse-lifecycle`, `make test-local-lineage-coverage`
+(102 tests), `make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` passed after repair. Private logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-018/`.
+Roll back only the independent guards/tests and preserve saved evidence and the
+stopped VM. Original Vault synchronization pending outside this checkout.
 
 ## 2026-10-04: case-varied catalog error headers and forwarded RPC fields (offline)
 

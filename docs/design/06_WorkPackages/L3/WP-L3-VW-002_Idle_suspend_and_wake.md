@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.86"
+version: "0.87"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: rewritten target metadata on private RPC (offline)
+
+Complete disposable transitions with `X-Original-URL`, `X-Rewrite-URL` or
+`X-Forwarded-Prefix` reached the handler before repair. The owner now refuses
+these path-override hints before journaling or dispatch; ordinary printable
+extensions remain compatible. The negative failed before repair and focused
+Warehouse checks passed afterward. No archived UUID replay, VM start, live
+backend/SQL or retained session/backup change. This is a parser boundary, not
+peer authentication, caller receipt, restart recovery or operator acceptance.
+Roll back only the parser guard/test; preserve saved evidence. Original Vault
+sync pending outside this checkout.
 
 ## 2026-10-04: additional forwarded RPC headers (offline)
 

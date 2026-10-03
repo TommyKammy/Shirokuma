@@ -385,7 +385,8 @@ class SessionRPC:
                          b'te', b'proxy-connection', b'keep-alive',
                          b'authorization', b'proxy-authorization', b'cookie',
                           b'forwarded', b'x-forwarded-host', b'x-forwarded-proto',
-                          b'x-forwarded-for', b'x-forwarded-port'), 'INVALID_HTTP')
+                           b'x-forwarded-for', b'x-forwarded-port', b'x-forwarded-prefix',
+                           b'x-original-url', b'x-rewrite-url'), 'INVALID_HTTP')
             # Do not normalize ambiguous framing: a peer and a proxy may
             # interpret whitespace around a length differently.
             require(value.startswith(b' ') and value[1:] and

@@ -1339,6 +1339,17 @@ class ReadOnlyClientTests(unittest.TestCase):
                         self.client.request('GET', path)
                 self.assertTrue(stream.closed)
 
+    def test_http_error_partial_representation_is_not_missing_catalog_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        stream = io.BytesIO(b'private')
+        error = urllib.error.HTTPError(C.URL + path, 404, 'missing',
+                                       {'Content-Range': 'bytes 0-6/12'}, stream)
+        with patch.object(self.client.opener, 'open', side_effect=error):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                self.client.request('GET', path)
+        self.assertTrue(stream.closed)
+
     def test_http_error_case_varied_mapping_location_is_not_missing_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))
