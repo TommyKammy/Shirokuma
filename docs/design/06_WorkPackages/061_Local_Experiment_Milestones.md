@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.68"
+version: "5.69"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: offline lineage report consistency
+
+WP-L5-LINEAGE-001 now refuses a rendered success claim if the saved inventory
+is incomplete or an eligible source has drifted; their expected edges must
+remain unknown. A second check refuses a `complete` observation when its
+source/catalog stability, reason codes or expected edge statuses contradict
+completion. Two test-owned negative cases failed before their respective
+fixes. Focused lineage 115 tests, `make verify-local-experiment`, design-context
+(89 documents), secret scan and diff check passed. The retained seven-run,
+fourteen-edge JSON rendered read-only without modifying historical evidence.
+Read-only `colima list` found `mac-studio-solo` stopped; no VM start, live API,
+retained source/report/backup mutation, archived request replay or GitHub
+write. Private combined log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-031/verify-local.log`.
+These checks do not authenticate a producer or establish atomic, whole-catalog/
+column, operator or production acceptance. Roll back renderer/tests alone;
+preserve prior evidence and stopped VM. Original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: private proxy extension namespace (offline)
 

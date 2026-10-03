@@ -119,11 +119,38 @@ class CoverageRenderTests(unittest.TestCase):
         value = report()
         value['inventory']['complete'] = False
         value['observation']['status'] = 'incomplete'
+        value['observation']['source_stable'] = False
         value['observation']['reason_codes'] = ['SOURCE_INVENTORY_CHANGED']
+        for edge in value['runs'][0]['edges']:
+            edge.update(status='unknown', reason_code='SOURCE_INVENTORY_CHANGED')
+        value['coverage'].update(present=0, unknown=2, known=0, rate=None,
+                                 observation_rate=0.0, complete=False)
         html = render(value)
         self.assertIn('保存証跡の一覧取得は未完了です', html)
         self.assertIn('取得できた範囲の集計', html)
         self.assertIn('全実験を網羅した結果とは扱えません', html)
+
+    def test_unverified_inventory_and_changed_eligible_run_cannot_claim_present_edges(self):
+        value = report()
+        value['inventory']['complete'] = False
+        value['observation'].update(status='incomplete', source_stable=False)
+        with self.assertRaises(RenderError):
+            render(value)
+
+        value = report([run(1, ('present', 'present'), source_status='incomplete')])
+        value['observation'].update(status='incomplete', source_stable=False)
+        value['runs'][0]['source_sha256_after'] = None
+        with self.assertRaises(RenderError):
+            render(value)
+
+    def test_complete_observation_requires_verified_source_and_no_failures(self):
+        for mutate in (lambda value: value['observation'].update(source_stable=False),
+                       lambda value: value['observation'].update(reason_codes=['SOURCE_INVENTORY_CHANGED']),
+                       lambda value: value['observation'].update(metadata_stable=False)):
+            value = report()
+            mutate(value)
+            with self.assertRaises(RenderError):
+                render(value)
 
     def test_all_data_strings_are_text_not_active_markup(self):
         payload = '<img src="https://foreign.invalid/x" onerror="alert(1)"><script>alert(2)</script>&'

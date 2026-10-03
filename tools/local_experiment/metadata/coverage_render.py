@@ -196,6 +196,10 @@ def _validate(report):
     for key in ('entries', 'uuid_runs', 'eligible', 'valid', 'failed', 'incomplete', 'invalid', 'unrecognized_entries'):
         _count(inventory.get(key))
     _require(type(inventory.get('complete')) is bool, 'INVALID_INVENTORY_COMPLETENESS')
+    if observation['status'] == 'complete':
+        _require(inventory['complete'] and observation['source_stable'] and
+                 observation['metadata_stable'] is not False and not observation['reason_codes'],
+                 'INCONSISTENT_OBSERVATION_COMPLETION')
     for key in ('denominator', 'known', *STATUSES):
         _count(coverage.get(key))
     _require(type(coverage.get('complete')) is bool)
@@ -225,6 +229,10 @@ def _validate(report):
             _require(not edges, 'INELIGIBLE_RUN_HAS_EDGES')
         for edge in edges:
             _require(type(edge) is dict and type(edge.get('status')) is str and edge['status'] in STATUSES)
+            # The collector retains the denominator on source drift and on a
+            # failed final inventory, but cannot certify any of those edges.
+            _require((inventory['complete'] and source == 'valid') or edge['status'] == 'unknown',
+                     'UNVERIFIED_EDGE_CLAIM')
             for key in ('from', 'to', 'reason_code'):
                 _text(edge.get(key), limit=2048 if key != 'reason_code' else 256)
             counts[edge['status']] += 1
@@ -235,6 +243,8 @@ def _validate(report):
     known = denominator - counts['unknown']
     _require(coverage['denominator'] == denominator and coverage['known'] == known and
              all(coverage[key] == value for key, value in counts.items()), 'INCONSISTENT_EDGE_COUNTS')
+    _require(observation['status'] != 'complete' or not counts['unknown'],
+             'INCONSISTENT_OBSERVATION_COMPLETION')
     _require(coverage['complete'] is (denominator > 0 and counts['present'] == denominator),
              'INCONSISTENT_COVERAGE_COMPLETION')
     _rate(coverage.get('rate'), counts['present'] / denominator if denominator and not counts['unknown'] else None)

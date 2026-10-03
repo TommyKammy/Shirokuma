@@ -5,12 +5,32 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.43"
+version: "1.44"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: offline report integrity at the rendering boundary
+
+The collector preserves two expected edges as unknown when a previously
+eligible source changes or the final saved-run inventory is incomplete. The
+offline renderer formerly accepted a contradictory report with present edges
+and a 100% rate under either condition. It now refuses those claims rather
+than presenting a misleading percentage. Independently, a report cannot label
+the observation complete if source stability is false, catalog stability is
+explicitly false, any expected edge is unknown, or observation failure reasons
+are present. The first negative and the complete-observation negative failed
+before their respective guards; focused 115 tests and the local regression
+passed after repair. The retained seven-run/fourteen-edge report still renders
+read-only, without rewriting its JSON or HTML. The dedicated Colima profile
+was read-only observed stopped. No API login, VM start, retained source/report/
+backup mutation or replay. Renderer validation is internal report consistency,
+not producer authentication, live catalog observation, atomicity, whole-catalog
+or column coverage, or operator acceptance. Revert only the renderer/tests if
+necessary; keep saved reports and the stopped VM. Original Vault sync remains
+pending outside this noninteractive checkout.
 
 ## 2026-10-04: opened catalog context-entry failure (offline)
 
