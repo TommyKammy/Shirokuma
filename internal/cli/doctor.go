@@ -86,18 +86,18 @@ type kubernetesResourceList struct {
 			DeletionTimestamp string `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Spec struct {
-			Suspend   bool   `json:"suspend"`
-			Path      string `json:"path"`
-			Prune     bool   `json:"prune"`
-			Wait      bool   `json:"wait"`
-			Ref       struct {
+			Suspend bool   `json:"suspend"`
+			Path    string `json:"path"`
+			Prune   bool   `json:"prune"`
+			Wait    bool   `json:"wait"`
+			Ref     struct {
 				Branch string `json:"branch"`
 			} `json:"ref"`
 			URL       string `json:"url"`
 			SecretRef struct {
 				Name string `json:"name"`
 			} `json:"secretRef"`
-			Replicas  *int   `json:"replicas"`
+			Replicas  *int `json:"replicas"`
 			SourceRef struct {
 				Kind      string `json:"kind"`
 				Name      string `json:"name"`
@@ -111,6 +111,7 @@ type kubernetesResourceList struct {
 			ReadyReplicas       int    `json:"readyReplicas"`
 			UpdatedReplicas     int    `json:"updatedReplicas"`
 			ObservedGeneration  *int64 `json:"observedGeneration"`
+			LastAppliedRevision string `json:"lastAppliedRevision"`
 			Artifact            struct {
 				Revision string `json:"revision"`
 			} `json:"artifact"`
@@ -317,6 +318,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	seenResources := map[string]bool{}
 	rootCount, rootSourceCount, devCount := 0, 0, 0
 	rootSuspended := false
+	sourceRevision, devRevision := "", ""
 	for _, resource := range resources.Items {
 		kinds[resource.Kind]++
 		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
@@ -357,6 +359,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if isRootSource {
 			rootSourceCount++
+			sourceRevision = resource.Status.Artifact.Revision
 			if localExperiment && resource.Spec.Suspend {
 				unhealthy = append(unhealthy, resourceID+" (declared source suspended)")
 			}
@@ -375,6 +378,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if localExperiment && isDev {
 			devCount++
+			devRevision = resource.Status.LastAppliedRevision
 			if !resource.Spec.Wait {
 				unhealthy = append(unhealthy, resourceID+" (wait disabled)")
 			}
@@ -441,6 +445,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	}
 	if localExperiment && devCount != 1 {
 		unhealthy = append(unhealthy, "Kustomization/flux-system/shirokuma-dev (missing or duplicated)")
+	}
+	if localExperiment && devCount == 1 && rootSourceCount == 1 && (devRevision == "" || devRevision != sourceRevision) {
+		unhealthy = append(unhealthy, "Kustomization/flux-system/shirokuma-dev (applied revision differs from source)")
 	}
 	if len(unhealthy) > 0 {
 		sort.Strings(unhealthy)

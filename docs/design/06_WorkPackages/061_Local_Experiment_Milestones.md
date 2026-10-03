@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.45"
+version: "4.46"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: reported dev/source revision alignment (offline)
+
+WP-L0-GITOPS-001. Fixed-profile doctor rejects a Ready dev Kustomization with missing or older `status.lastAppliedRevision` relative to its declared GitRepository artifact revision. Fake negative and matching positives pass, generic profile unaffected. First Go package run found a missing-case fixture error (2 failures), corrected; final `go test ./internal/cli` (748 tests), `go vet ./...`, `make verify-local-experiment` passed. Read-only dedicated Colima status: stopped; no start, live API/SQL, reconcile, retained request replay or volume/backup change. This is reported-field consistency, not source authentication, actual Git smoke or production acceptance. Revert only doctor/test increment to recover; keep historical evidence. Direct original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: Warehouse scoped UID uniqueness (offline)
 

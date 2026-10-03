@@ -28,7 +28,47 @@ func localControllerJSON() string {
 }
 
 func localFluxJSON() string {
-	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+}
+
+func TestLocalFluxDevAppliedRevisionMatchesSource(t *testing.T) {
+	for _, test := range []struct{ name, revision string }{
+		{"missing", ""},
+		{"older", "main@sha1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var list map[string]interface{}
+			if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+				t.Fatal(err)
+			}
+			for _, item := range list["items"].([]interface{}) {
+				object := item.(map[string]interface{})
+				if object["kind"] == "Kustomization" && object["metadata"].(map[string]interface{})["name"] == "shirokuma-dev" {
+					if test.revision == "" {
+						delete(object["status"].(map[string]interface{}), "lastAppliedRevision")
+					} else {
+						object["status"].(map[string]interface{})["lastAppliedRevision"] = test.revision
+					}
+				}
+			}
+			output, err := json.Marshal(list)
+			if err != nil {
+				t.Fatal(err)
+			}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}, localExperimentContext, true)
+			if check.Status != "degraded" || !strings.Contains(check.Summary, "applied revision differs from source") || strings.Contains(check.Summary, test.revision) && test.revision != "" {
+				t.Fatalf("dev %s revision accepted: %#v", test.name, check)
+			}
+			generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}, localExperimentContext, false)
+			if strings.Contains(generic.Summary, "applied revision differs from source") {
+				t.Fatalf("generic profile inherited local check: %#v", generic)
+			}
+		})
+	}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true)
+	if check.Status != "informational" {
+		t.Fatalf("matching dev revision rejected: %#v", check)
+	}
 }
 
 func TestLocalFluxDeclaredOriginAndCredentialsReference(t *testing.T) {

@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.19"
+version: "0.20"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: dev applied revision must match reported source (offline)
+
+The fixed local doctor now compares the declared dev Kustomization's nonempty `status.lastAppliedRevision` with the declared GitRepository's `status.artifact.revision`. A Ready dev object that still reports an older applied revision (or no applied revision) no longer counts as reconciled to the current reported source. An isolated missing/older fake test passed after the check; the first package run caught a test-fixture mistake (the missing case retained the shared fixture field), then the corrected package suite passed (748 tests), as did `go vet ./...` and `make verify-local-experiment`. Generic doctor remains unchanged. Dedicated Colima was read-only observed stopped; no VM start, live API/SQL read, Flux reconcile, retained request replay, volume or backup mutation. Matching reported revisions do **not** authenticate remote Git/source identity, prove the running workload was applied from this checkout, or satisfy the strict publication gate and operator/production acceptance. Rollback: revert the local comparison/fixture/tests only, preserving stopped VM and saved evidence. Original Vault handoff direct sync remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: declared source identity and active revision (offline)
 
