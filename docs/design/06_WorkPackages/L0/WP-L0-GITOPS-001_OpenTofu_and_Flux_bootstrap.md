@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.78"
+version: "0.79"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent inventory identity review (offline)
+
+Reviewed the current fixed-list envelope and member identity checks in
+`internal/cli/doctor.go`: aliases/null/duplicate keys, malformed or duplicate
+reported UIDs, resource versions and DNS identities fail closed; omitted
+projected fields remain intentional. No additional defect established and no
+doctor behavior changed. `go test ./internal/cli -count=1` passed. Dedicated
+Colima was read-only observed Stopped; no API/Git request, reconciliation or
+retained data mutation. Static review and fake tests cannot authenticate the
+remote inventory or establish atomic reads, strict admission or acceptance.
+No runtime rollback; keep saved evidence. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-03: cross-kind UID collision regression (offline)
 
