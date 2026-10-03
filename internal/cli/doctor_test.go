@@ -129,6 +129,16 @@ func TestExecRunnerParsesStdoutWithoutStderrWarnings(t *testing.T) {
 	}
 }
 
+func TestExecRunnerRejectsOversizedStdoutWithoutPartialResult(t *testing.T) {
+	output, err := (execRunner{}).Run(context.Background(), "sh", "-c", "head -c 1048577 /dev/zero")
+	if err == nil || output != nil {
+		t.Fatalf("oversized output accepted: bytes=%d err=%v", len(output), err)
+	}
+	if !strings.Contains(err.Error(), "exceeded limit") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestExecRunnerBoundsTimedOutProcessTree(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()

@@ -230,8 +230,8 @@ class RuntimeStatusTests(TestCase):
         server = PREFIX + '-xs'
         responses = [
             'Secret\t' + PREFIX + '-secret\tshirokuma-dev\t' + str(uuid.uuid4()) + '\t\t\n',
-            'List\t0\tCOMPLETE\n',
-            'List\t1\tCOMPLETE\nEndpointSlice\t' + server + '-abcde\tshirokuma-dev\t' +
+            'v1\tList\t0\tCOMPLETE\n',
+            'discovery.k8s.io/v1\tEndpointSliceList\t1\tCOMPLETE\nEndpointSlice\t' + server + '-abcde\tshirokuma-dev\t' +
                 str(uuid.uuid4()) + '\t\t' + server + '\n',
         ]
         with mock.patch.object(R.W, 'command', side_effect=responses) as command:
@@ -255,14 +255,17 @@ class RuntimeStatusTests(TestCase):
         # A Kubernetes list may report remaining items even if the continuation
         # token is absent/empty; the metadata-only projection must flag it.
         self.assertIn('or .metadata.continue .metadata.remainingItemCount', R.MANY)
-        for raw in ('', 'List\t0\tTRUNCATED\n', 'List\t1\tCOMPLETE\n',
-                    'PodList\t0\tCOMPLETE\n', 'List\t0\tCOMPLETE\nextra\n'):
+        for raw in ('', 'v1\tList\t0\tTRUNCATED\n', 'v1\tList\t1\tCOMPLETE\n',
+                    'v2\tList\t0\tCOMPLETE\n', 'discovery.k8s.io/v1\tList\t0\tCOMPLETE\n',
+                    'v1\tPodList\t0\tCOMPLETE\n', 'v1\tList\t0\tCOMPLETE\nextra\n'):
             with self.subTest(raw=raw), mock.patch.object(R.W, 'command', return_value=raw):
                 with self.assertRaises(R.RuntimeStatusError):
                     R.ReadOnlyKubernetes().labelled(TOKEN)
-        with mock.patch.object(R.W, 'command', return_value='PodList\t0\tCOMPLETE\n'):
+        with mock.patch.object(R.W, 'command', return_value='v1\tPodList\t0\tCOMPLETE\n'):
             with self.assertRaises(R.RuntimeStatusError):
                 R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')
+        with mock.patch.object(R.W, 'command', return_value='v1\tList\t0\tCOMPLETE\n'):
+            self.assertEqual(R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')['items'], [])
 
     def test_cli_only_contacts_kubernetes_after_saved_completion_gate(self):
         session = {'journal_sha256': 'b'*64}

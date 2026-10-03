@@ -44,7 +44,7 @@ ROW = ('{{printf "%s\\t%s\\t%s\\t%s\\t" .kind .metadata.name '
        '{{with .metadata.labels}}{{with index . "kubernetes.io/service-name"}}{{.}}{{end}}{{end}}'
        '{{printf "\\n"}}')
 ONE = '{{if .metadata}}' + ROW + '{{end}}'
-MANY = ('{{printf "%s\\t%d\\t" .kind (len .items)}}'
+MANY = ('{{printf "%s\\t%s\\t%d\\t" .apiVersion .kind (len .items)}}'
          '{{if or .metadata.continue .metadata.remainingItemCount}}TRUNCATED{{else}}COMPLETE{{end}}'
         '{{printf "\\n"}}{{range .items}}' + ROW + '{{end}}')
 
@@ -115,9 +115,11 @@ class ReadOnlyKubernetes:
         # kubectl's generic printer wraps a single-kind EndpointSlice selector
         # in List on this client; each item is still checked as EndpointSlice.
         expected_headers = {'List', kind} if kind == 'EndpointSliceList' else {kind}
-        require(len(header) == 3 and header[0] in expected_headers and header[2] == 'COMPLETE' and
-                re.fullmatch(r'(0|[1-9][0-9]*)', header[1]) is not None and
-                int(header[1]) == len(lines) and len(lines) <= limit)
+        expected_versions = {'v1'} if kind == 'List' else {'v1', 'discovery.k8s.io/v1'}
+        require(len(header) == 4 and header[0] in expected_versions and
+                header[1] in expected_headers and header[3] == 'COMPLETE' and
+                re.fullmatch(r'(0|[1-9][0-9]*)', header[2]) is not None and
+                int(header[2]) == len(lines) and len(lines) <= limit)
         return {'kind': kind, 'items': [row(line) for line in lines]}
 
     def labelled(self, token):

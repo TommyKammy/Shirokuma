@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,6 +26,7 @@ const (
 	policyCheckTimeout     = 2 * time.Minute
 	commandWaitDelay       = 2 * time.Second
 	maxReportedResources   = 10
+	maxDoctorCommandOutput = 1 << 20
 )
 
 var localFluxGitRevision = regexp.MustCompile(`^main@sha1:[0-9a-f]{40}$`)
@@ -36,6 +38,19 @@ type commandRunner interface {
 
 type execRunner struct {
 	waitDelay time.Duration
+}
+
+type doctorOutput struct {
+	buffer    bytes.Buffer
+	overLimit bool
+}
+
+func (output *doctorOutput) Write(data []byte) (int, error) {
+	if output.buffer.Len()+len(data) > maxDoctorCommandOutput {
+		output.overLimit = true
+		return 0, fmt.Errorf("doctor command output exceeded limit")
+	}
+	return output.buffer.Write(data)
 }
 
 func (runner execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -55,7 +70,17 @@ func (runner execRunner) Run(ctx context.Context, name string, args ...string) (
 	if command.WaitDelay <= 0 {
 		command.WaitDelay = commandWaitDelay
 	}
-	return command.Output()
+	var output doctorOutput
+	command.Stdout = &output
+	command.Stderr = io.Discard
+	err := command.Run()
+	if output.overLimit {
+		return nil, fmt.Errorf("doctor command output exceeded limit")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return output.buffer.Bytes(), nil
 }
 
 type doctorCheck struct {

@@ -12,6 +12,10 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: scoped list API version projection (offline)
+
+The opt-in read-only scoped inventory now projects list `apiVersion` before interpreting an empty owner-labelled or EndpointSlice list. It accepts Kubernetes `v1/List` and either `v1/List` or `discovery.k8s.io/v1/EndpointSliceList` for endpoints; an absent/wrong version fails closed instead of publishing scoped absence. Fake positive/negative projections and `make test-local-warehouse-lifecycle`, followed by `make verify-local-experiment`, passed. Dedicated Colima remained stopped; no live API/SQL, owner request, unknown-request replay, retained session, backup or volume changes. API-version syntax does not authenticate the server or prove historical cleanup, atomicity or production acceptance. Roll back reader/tests only; preserve saved evidence and VM. Original Vault handoff direct sync pending outside checkout.
+
 ## 2026-10-03: projected metadata names have bounded label syntax (offline)
 
 The optional read-only runtime-status reader now rejects projected object names and service-name labels beginning or ending in `-` instead of treating these malformed values as stable present resources. Existing length and character bounds remain; valid generated ReplicaSet and EndpointSlice names continue to pass. Isolated fake-name/service-label negatives and healthy inventory plus `make test-local-warehouse-lifecycle` pass. Dedicated Colima remained stopped; no live API/SQL, owner request, unknown-request replay, archived session, backup or volume change. A syntactically plausible projection does not authenticate the cluster or make its two rounds atomic; historical cleanup and production acceptance remain unverified. Revert only this reader/test change and preserve saved evidence and stopped VM. Original Vault direct handoff sync pending outside checkout.

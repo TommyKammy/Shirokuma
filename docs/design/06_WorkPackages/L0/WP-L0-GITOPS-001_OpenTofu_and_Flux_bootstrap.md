@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-03: bounded doctor child stdout (offline)
+
+The doctor command runner now caps each child stdout at 1 MiB and discards stderr instead of buffering it; excess stdout fails with no partial result. An initial oversized-output regression exposed `bytes.Buffer.ReadFrom` bypassing an embedded writer's limit; the writer was changed to a private buffer and the regression passed. `go test ./internal/cli`, `go vet ./...` and `make verify-local-experiment` passed. Dedicated Colima was read-only observed stopped; no live API, reconciliation, retained data or backup changes. This bounds child output memory, not remote source authenticity, runtime readiness or production acceptance. Rollback only the runner/test change; preserve historical evidence. Original Vault handoff sync pending outside checkout.
+
 ## 2026-10-03: paused deployments in local diagnostics (offline)
 
 Two independent fixed-profile checks now degrade an otherwise fully replicated Flux controller Deployment or Lakehouse Deployment when `spec.paused: true` is reported. An absent/false pause remains compatible; StatefulSets are not Deployments. Fake negative and healthy cases passed `go test ./internal/cli` (755 tests) and `go vet ./...`; the initial focused test used the first dev workload (a StatefulSet) as its replacement target and failed, then the targeted Deployment fixture passed. Dedicated Colima read-only status was stopped; no VM start, real API/SQL, reconciliation, retained request replay or backup/volume mutation. A reported pause is not remote Git authenticity or actual runtime readiness; strict publication, Git smoke, recovery and production/operator acceptance remain open. Roll back only the local diagnostic parsing/checks and tests, preserving retained evidence and stopped VM. Original Vault handoff direct sync remains pending outside this checkout.

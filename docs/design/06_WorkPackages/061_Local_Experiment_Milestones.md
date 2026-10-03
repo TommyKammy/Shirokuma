@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: bounded doctor output and Warehouse list version (offline)
+
+WP-L0-GITOPS-001: doctor child stdout is capped at 1 MiB with no partial result on overflow and stderr is discarded. The first negative test failed because embedded `bytes.Buffer.ReadFrom` bypassed the limit; a private buffer fixed it. WP-L3-VW-002: metadata-only Warehouse scoped lists now project and validate `apiVersion` before interpreting an empty inventory; fake malformed versions are rejected, valid Kubernetes list variants accepted. `go test ./internal/cli`, `go vet ./...`, `make test-local-warehouse-lifecycle`, `make verify-local-experiment` and `git diff --check` passed. Read-only dedicated Colima status: stopped. No live API/SQL, reconciliation, owner request, unknown-request replay, retained session/volume or backup changes. These offline checks are neither backend/source authentication nor historical cleanup, strict publication gate, or production/operator acceptance. Roll back only the respective readers and tests; keep saved evidence and stopped VM. Original Vault direct handoff synchronization remains pending outside checkout.
+
 ## 2026-10-03: Warehouse projected name syntax (offline)
 
 WP-L3-VW-002. Separate offline metadata-reader increment rejects object names and service-name labels with leading/trailing hyphens; valid generated names remain accepted. Fake positive/negative cases and `make test-local-warehouse-lifecycle` passed. Dedicated Colima remained stopped; no live API/SQL, owner operation, unknown-request replay, retained data/backup mutation. This is not source authenticity, atomic observation, historical cleanup or production/operator acceptance. Roll back only the local reader/tests, retaining stopped VM and evidence. Original Vault handoff direct sync pending outside checkout.
