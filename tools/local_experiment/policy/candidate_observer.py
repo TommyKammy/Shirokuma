@@ -405,10 +405,11 @@ class CandidateObserver:
                 matched_host_expectation=False,
                 response_content_check='not-checked',
                 error_code=error.code if isinstance(error, CandidateObservationError) else 'DRY_RUN_OBSERVATION_FAILED')
-            if self._receipt['pending'] is not None:
-                self._receipt['admission'] = 'unknown'
             if not sent:
                 self._receipt['pending'] = None
+                self._receipt['admission'] = 'not-observed'
+            elif self._receipt['pending'] is not None:
+                self._receipt['admission'] = 'unknown'
             try:
                 progress(self.receipt())
             except BaseException:

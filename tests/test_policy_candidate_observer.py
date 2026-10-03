@@ -113,6 +113,20 @@ class ObserverTests(unittest.TestCase):
         self.assertIsNotNone(saved[-1]['pending'])
         self.assertEqual(saved[-1]['result'], 'failed')
 
+    def test_failed_intent_write_does_not_send_request(self):
+        self.ready()
+        def fail_before_send(value):
+            if value['pending'] is not None:
+                raise OSError('simulated intent write failure')
+        with self.assertRaises(O.CandidateObservationError):
+            self.observer.verify(progress=fail_before_send)
+        self.assertEqual(self.kube.requests, [])
+        receipt=self.observer.receipt()
+        self.assertEqual(receipt['request_count'], 0)
+        self.assertIsNone(receipt['pending'])
+        self.assertEqual(receipt['admission'], 'not-observed')
+        self.assertEqual(receipt['result'], 'failed')
+
     def test_opposite_output_stream_must_be_empty_not_just_whitespace(self):
         for outcome, extra in (('allowed', ' '), ('denied', '\n')):
             with self.subTest(outcome=outcome):

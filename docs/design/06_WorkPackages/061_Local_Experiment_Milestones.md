@@ -5,12 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.142"
+version: "5.143"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: pre-send policy receipt and separate GitOps type boundary (offline)
+
+WP-L2-POL-001: an isolated failing progress writer before the dry-run was sent
+produced `unknown` admission with no pending intent and zero requests. The
+negative failed before repair. The failure receipt now reports `not-observed`;
+sent requests still retain unknown/pending, with no replay. Focused observer
+44 tests passed. Independently, WP-L0-GITOPS-001's typed Go decoder already
+rejects non-array conditions; a regression pins that boundary and valid arrays
+without changing the reader. Focused and full Go CLI tests (844) and vet
+passed. The dedicated Colima profile was read-only observed Stopped; no live
+API/Git, reconciliation, retained request/report/volume/backup mutation or
+GitHub write. Offline fixtures cannot authenticate producers, establish atomic
+inventory, prove durable writes or operator acceptance. Roll back only the
+policy observer/test and the independent GitOps test if needed; preserve saved
+pending intents and evidence. Original Vault sync pending outside checkout.
+After both increments, `go test ./... -count=1` (844 Go tests), `go vet ./...`,
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. The first
+focused policy run failed as expected before repair; the initial attempted
+`.venv/bin/python` command was unavailable and was replaced by `python3`.
+The local suite's synthetic failure output is not live acceptance evidence.
 
 ## 2026-10-04: strict policy dry-run streams (offline)
 

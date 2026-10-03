@@ -608,6 +608,23 @@ func TestLocalInventoryRejectsMalformedUnrelatedConditions(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryConditionsRequireArrayBeforeInspection(t *testing.T) {
+	for _, conditions := range []string{`{}`, `"Ready"`, `42`, `true`} {
+		raw := []byte(`{"items":[{"status":{"conditions":` + conditions + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err == nil {
+			t.Fatalf("non-array conditions decoded as complete inventory: %s", raw)
+		}
+	}
+	for _, conditions := range []string{`[]`, `[{"type":"Ready","status":"True"}]`} {
+		raw := []byte(`{"items":[{"status":{"conditions":` + conditions + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid conditions rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsMalformedConditionTransitionTime(t *testing.T) {
 	for _, tc := range []struct {
 		field   string

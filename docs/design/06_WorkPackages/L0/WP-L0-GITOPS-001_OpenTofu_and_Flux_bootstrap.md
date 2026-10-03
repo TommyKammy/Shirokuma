@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.95"
+version: "0.96"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: typed unrelated conditions regression (offline)
+
+Pinned the Go decoder's existing refusal of non-array `status.conditions` on
+an unrelated complete-list member, alongside valid empty and typed conditions.
+The proposed reader defect was ruled out before changing implementation; the
+focused and full CLI Go suites (844 tests) and vet passed. No live inventory,
+reconciliation or retained data/backup change; Colima was observed Stopped.
+This cannot authenticate a remote producer, prove atomic inventory, clear
+strict admission or establish acceptance. Roll back the test only if needed;
+keep historical evidence. Original Vault sync pending outside this checkout.
 
 ## 2026-10-04: reported creation and condition regression (offline)
 

@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.33"
+version: "0.34"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: pre-send intent writer failure (offline)
+
+A test-owned failing intent writer stopped the request before send (zero API
+calls), but the in-memory failure receipt reported `admission=unknown` with no
+pending intent. The negative failed before repair. Pre-send failures now retain
+`not-observed`/no pending; post-send failures still retain unknown/pending and
+never replay. Focused observer 44 tests passed. No live admission or retained
+request/volume/backup change; the dedicated lab was observed Stopped. This
+does not prove durable writer behavior, API authenticity or acceptance. Roll
+back only the observer and test if needed; preserve existing pending intents.
+Original Vault sync pending outside this checkout.
 
 ## 2026-10-04: dry-run opposite-stream bytes (offline)
 
