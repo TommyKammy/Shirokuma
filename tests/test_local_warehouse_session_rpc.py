@@ -923,6 +923,18 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(len(self.rpc._entries), 1)
 
+    def test_forwarded_authority_cannot_label_private_transition(self):
+        self.start()
+        body = json.dumps(self.request()).encode()
+        base = b'Content-Type: application/json\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n'
+        for extra in (b'Forwarded: host=other.local\r\n',
+                      b'X-Forwarded-Host: other.local\r\n',
+                      b'X-Forwarded-Proto: https\r\n'):
+            with self.subTest(extra=extra):
+                self.assertEqual(self.exchange(self.wire(body, base + extra), raw=True)[0], 400)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.rpc._entries, {})
+
     def test_buffered_bytes_after_declared_body_are_refused(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         body = json.dumps(self.request()).encode()

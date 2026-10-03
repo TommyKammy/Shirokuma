@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-04: forwarded authority refused on private Unix RPC (offline)
+
+Complete disposable requests with `Forwarded`, `X-Forwarded-Host` or
+`X-Forwarded-Proto` previously dispatched a transition despite declaring an
+alternate origin. The single-request owner now rejects these headers before
+journaling/dispatch; normal fixed Go requests and printable extensions still
+pass. The isolated negative failed before repair; focused Warehouse suites and
+local verification passed. No archived UUID replay, backend/SQL connection,
+VM start, retained session/volume/backup mutation. This parser guard cannot
+prove peer authenticity beyond the existing UID check, caller receipt, owner
+restart recovery or operator acceptance. Roll back only the parser guard/test;
+keep saved sessions and stopped VM. Logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-016/`.
+Original Vault sync pending outside checkout.
+
 ## 2026-10-03: explicit Unix RPC authority (offline)
 
 The fixed Go client sends `Host: warehouse.local`. A test-owned request with

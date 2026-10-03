@@ -487,6 +487,14 @@ class ReadOnlyClient:
                 # A failed lookup for another URL is not proof that the
                 # requested fixed-path catalog entity is absent.
                 observed_url = error.geturl()
+                error_headers = error.headers
+                if hasattr(error_headers, 'get_all'):
+                    alternate = [error_headers.get_all(name, []) for name in
+                                 ('Location', 'Content-Location', 'Refresh')]
+                else:
+                    # Existing injected HTTPError fixtures supply plain dicts.
+                    alternate = [[error_headers[name]] if name in error_headers else []
+                                 for name in ('Location', 'Content-Location', 'Refresh')]
             except (OSError, RuntimeError):
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 raise CoverageError('API_UNAVAILABLE') from None
@@ -502,6 +510,10 @@ class ReadOnlyClient:
             # within this observation's bounded time window.
             require(time.monotonic() < self.deadline, 'API_DEADLINE')
             require(type(observed_url) is str and observed_url == request.full_url,
+                    'API_RESPONSE_INVALID')
+            # A 404 that also nominates another location is not unambiguous
+            # absence evidence for the fixed requested catalog entity.
+            require(all(type(values) is list and not values for values in alternate),
                     'API_RESPONSE_INVALID')
             require(type(status) is int and 400 <= status <= 599, 'API_RESPONSE_INVALID')
             raise APIError(method, path, status) from None

@@ -1326,6 +1326,19 @@ class ReadOnlyClientTests(unittest.TestCase):
                         self.assertEqual(caught.exception.status, expected)
                 self.assertTrue(stream.closed)
 
+    def test_http_error_redirect_metadata_is_not_missing_catalog_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for header in ('Location', 'Content-Location', 'Refresh'):
+            with self.subTest(header=header):
+                stream = io.BytesIO(b'private')
+                error = urllib.error.HTTPError(C.URL + path, 404, 'missing',
+                                               {header: C.URL + '/tables/name/other'}, stream)
+                with patch.object(self.client.opener, 'open', side_effect=error):
+                    with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                        self.client.request('GET', path)
+                self.assertTrue(stream.closed)
+
     def test_noninteger_http_status_cannot_be_catalog_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

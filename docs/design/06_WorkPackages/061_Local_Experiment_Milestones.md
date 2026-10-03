@@ -12,6 +12,22 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: catalog error-location and private RPC forwarded authority (offline)
+
+WP-L5-LINEAGE-001 rejects a thrown fixed-path 404 with alternate `Location`,
+`Content-Location` or `Refresh` metadata as missing-object evidence. Separately,
+WP-L3-VW-002 rejects forwarded origin/authority headers before Unix RPC
+dispatch. Disposable negatives failed before repair; lineage focused 100 tests,
+Warehouse focused suites and `make verify-local-experiment` passed after repair.
+Private full log SHA256 `a83b34a7681b2428bbabde4c8b919ba88da316d2940b2748978599179a4a4166`
+under `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-016/`.
+Read-only dedicated Colima observation: stopped. No VM start, live catalog,
+SQL, archived request replay, retained source/session/credential/backup change
+or GitHub write. Neither offline guard proves independent producer identity,
+atomic catalog coverage, caller receipt, owner restart recovery or operator
+acceptance. Roll back only the independent guards/tests and preserve saved
+evidence; original Vault sync pending outside this checkout.
+
 ## 2026-10-04: saved FinOps HTML and catalog cleanup refusal (offline)
 
 WP-L6-FIN-001's standalone saved-report renderer previously decoded a

@@ -12,6 +12,20 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: error response alternate-location refusal (offline)
+
+An exact-path HTTP 404 advertising `Location`, `Content-Location` or `Refresh`
+was formerly classified as a missing catalog entry. Disposable negatives
+reproduced this; the bounded reader now refuses alternate-location metadata
+on thrown errors, while a plain exact-path 404 remains valid. The error stream
+is closed and the deadline remains authoritative. Focused lineage (100 tests)
+and local verification passed; logs under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-016/`.
+This is not producer authentication, current catalog observation, atomic or
+whole-column coverage. No VM start, retained source/report/backup mutation or
+replay. Roll back only the error metadata guard/test, preserving saved evidence.
+Original Vault sync pending outside checkout.
+
 ## 2026-10-04: failed HTTP error cleanup remains unknown (offline)
 
 A test-owned exact-path 404 whose response close raises after closing formerly
