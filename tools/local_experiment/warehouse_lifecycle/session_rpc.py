@@ -398,7 +398,11 @@ class SessionRPC:
         # request (or hidden behind a valid first transition).
         require(len(buffered) == length, 'INVALID_HTTP')
         raw = bytes(buffered[:length])
-        return parse_request(raw, self.session_id, allow_query=self.allow_query)
+        request = parse_request(raw, self.session_id, allow_query=self.allow_query)
+        # Parsing the complete JSON is part of receiving a bounded request.
+        # Do not dispatch a body whose validation finishes after the deadline.
+        require(time.monotonic() < deadline, 'INVALID_HTTP')
+        return request
 
     def _dispatch(self, request):
         request_id = request['request_id']

@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.43"
+version: "5.44"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse post-parse deadline and catalog transfer tokens (offline)
+
+WP-L3-VW-002 checks the absolute receive deadline after JSON validation, before
+dispatch; a disposable parser crossing the boundary is refused without handler
+or journal. Independently WP-L5-LINEAGE-001 pins acceptance of case-insensitive
+single `chunked` transfer coding and refusal of padded/parameterized tokens;
+no catalog reader change. Focused Warehouse (78 + 100 + 16 + 22 + 15 tests) and
+lineage (90 tests) passed. Dedicated Colima read-only observed stopped. No VM
+start, live backend/catalog/SQL, archived request replay, retained session/
+source/credential/report/backup mutation or GitHub write. `make
+verify-local-experiment`, `make verify-design-context` and `git diff --check`
+passed; full private logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-004/`. These tests
+do not establish producer authenticity, atomicity, caller receipt, restart
+recovery, whole-catalog/column lineage or operator acceptance. Roll back only
+the guard and disposable fixtures, retaining historical evidence. Direct
+original Vault sync pending outside this checkout.
 
 ## 2026-10-03: folded Warehouse request headers (offline)
 

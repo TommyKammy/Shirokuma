@@ -924,6 +924,32 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.rpc._entries, {})
         self.assertEqual(self.calls, [])
 
+    def test_request_parsed_after_read_deadline_is_refused(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        payload = self.wire(json.dumps(self.request()).encode())
+        clock = [100.0]
+        original_parse = R.parse_request
+
+        class Connection:
+            def settimeout(self, timeout):
+                pass
+
+            def recv(self, limit):
+                return payload
+
+        def late_parse(*args, **kwargs):
+            request = original_parse(*args, **kwargs)
+            clock[0] = 101.0
+            return request
+
+        with mock.patch.object(R, 'READ_TIMEOUT_SECONDS', 0.5), \
+             mock.patch.object(R.time, 'monotonic', side_effect=lambda: clock[0]), \
+             mock.patch.object(R, 'parse_request', side_effect=late_parse):
+            with self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
+                self.rpc._read_request(Connection())
+        self.assertEqual(self.rpc._entries, {})
+        self.assertEqual(self.calls, [])
+
     def test_json_exact_keys_types_duplicates_and_trailing_data(self):
         valid = self.request()
         invalid = [{**valid, 'sql': 'DROP anything'}, {**valid, 'schema_version': True},

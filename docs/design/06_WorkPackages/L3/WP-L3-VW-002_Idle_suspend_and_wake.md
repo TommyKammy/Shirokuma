@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.75"
+version: "0.76"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: request validation must finish within receive deadline (offline)
+
+The Unix owner now checks the same absolute request deadline after bounded JSON
+validation, before dispatch. A disposable complete request whose parser advances
+the clock past the deadline is refused without handler calls or journal entries;
+the focused Warehouse suite passed. This does not prove caller receipt, backend
+authenticity or restart recovery. No dedicated VM start, archived UUID replay,
+live backend/SQL or retained session/backup mutation. Roll back only the
+post-parse guard and fixture, preserving saved sessions. Direct original Vault
+sync remains pending outside this checkout; broader checks are in Milestones.
 
 ## 2026-10-03: duplicate and folded RPC headers (offline)
 

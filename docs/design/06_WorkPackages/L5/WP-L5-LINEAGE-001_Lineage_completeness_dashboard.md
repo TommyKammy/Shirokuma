@@ -5,12 +5,23 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.21"
+version: "1.22"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: catalog transfer-token boundaries (offline)
+
+Additional disposable response fixtures pin the existing rule that a single
+case-insensitive `chunked` token is accepted, while a trailing blank or
+parameterized token is refused before JSON can become evidence. The focused
+lineage suite passed; no client behavior changed. No live API/login, VM start,
+retained source/credential/report/backup mutation or request replay. This does
+not authenticate the catalog, ensure atomic observations or establish whole-
+catalog/column lineage or operator acceptance. Roll back only the fixture,
+preserving reports; direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: encoded catalog responses are not decoded evidence (offline)
 

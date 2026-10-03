@@ -954,6 +954,9 @@ class ReadOnlyClientTests(unittest.TestCase):
         for codings, expected in [(['identity'], 'API_RESPONSE_INVALID'),
                                   (['chunked', 'chunked'], 'API_RESPONSE_INVALID'),
                                   (['gzip, chunked'], 'API_RESPONSE_INVALID'),
+                                  (['chunked '], 'API_RESPONSE_INVALID'),
+                                  (['chunked; extension=yes'], 'API_RESPONSE_INVALID'),
+                                  (['Chunked'], None),
                                   (['chunked'], None)]:
             with self.subTest(codings=codings):
                 response = Response(b'{"id":1}')  # opener exposes decoded bytes
