@@ -132,6 +132,23 @@ class CoverageRenderTests(unittest.TestCase):
                 render(value)
         self.assertIn('2 / 2 エッジ', render(report()))
 
+    def test_catalog_stability_claim_requires_matching_saved_snapshots(self):
+        for after in (None, 'c' * 64):
+            value = report()
+            value['runs'][0]['metadata_sha256_after'] = after
+            with self.subTest(after=after), self.assertRaises(RenderError):
+                render(value)
+        self.assertIn('2 / 2 エッジ', render(report()))
+
+    def test_known_edge_reason_cannot_contradict_saved_status(self):
+        for code in ('VERIFIED_ABSENT', 'CATALOG_CONFLICT', 'CATALOG_UNAVAILABLE',
+                     'CATALOG_CHANGED', 'SOURCE_CHANGED'):
+            value = report()
+            value['runs'][0]['edges'][0]['reason_code'] = code
+            with self.subTest(code=code), self.assertRaises(RenderError):
+                render(value)
+        self.assertIn('2 / 2 エッジ', render(report()))
+
     def test_partial_inventory_is_not_presented_as_the_complete_population(self):
         value = report()
         value['inventory']['complete'] = False

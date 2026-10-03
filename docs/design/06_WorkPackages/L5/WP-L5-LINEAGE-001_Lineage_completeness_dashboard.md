@@ -5,12 +5,26 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.46"
+version: "1.47"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: saved catalog stability and edge explanations (offline)
+
+The offline renderer now refuses `metadata_stable=true` when an eligible run's
+before/after catalog digests are missing or unequal. It also refuses known
+collector edge reason codes that contradict the displayed status (for example,
+`CATALOG_UNAVAILABLE` with a present edge); unrecognized future codes remain
+escaped and displayable. Two disposable catalog negatives failed before repair.
+Focused tests and broader verification are recorded in Milestones. Dedicated
+Colima was observed stopped; no live catalog, saved source/report/backup change,
+or unknown-request replay. These internal consistency checks cannot authenticate
+the catalog, prove atomicity or whole-catalog/column coverage, or establish
+operator acceptance. Roll back renderer/tests alone, preserving retained reports.
+Original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: saved source-stability claim (offline)
 

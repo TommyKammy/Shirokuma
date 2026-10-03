@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.74"
+version: "5.75"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: saved lineage catalog stability and edge explanations (offline)
+
+WP-L5-LINEAGE-001 checks saved catalog digests for each eligible run before
+displaying a stable-catalog claim, and keeps known reason codes aligned with
+edge status. Both missing and unequal catalog digests were accepted by the
+renderer before repair. Focused lineage tests passed (119);
+`make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` passed. Private full logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-034/`.
+Read-only `colima list` observed the dedicated
+VM stopped. No VM start, live catalog, retained report/source/backup mutation,
+unknown-request replay or GitHub write. This is not producer authentication,
+atomicity, whole-catalog/column coverage or operator acceptance. Roll back only
+the renderer/tests, retaining historical evidence and the stopped VM. Original
+Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: distinct FinOps history and stable lineage source (offline)
 

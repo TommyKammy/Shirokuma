@@ -11,6 +11,13 @@ LABELS = {'present': '登録を確認', 'missing': '欠落', 'conflict': '競合
 SYMBOLS = {'present': '✓', 'missing': '−', 'conflict': '!', 'unknown': '?'}
 OPERATIONS = {'uppercase_names': '名前の大文字化', 'name_lengths': '名前の文字数', 'row_count': '行数の集計'}
 SOURCE_LABELS = {'valid': '有効', 'failed': '実行失敗', 'incomplete': '未完了', 'invalid': '無効'}
+# Known collector reason codes must not contradict the displayed edge status.
+# Unknown codes remain printable for forwards-compatible offline reports.
+EDGE_REASON_STATUS = {'VERIFIED_PRESENT': 'present', 'VERIFIED_ABSENT': 'missing',
+                      'CATALOG_CONFLICT': 'conflict',
+                      **dict.fromkeys(('CATALOG_RESPONSE_INVALID', 'CATALOG_UNAVAILABLE',
+                                       'CATALOG_CHANGED', 'NOT_OBSERVED', 'SOURCE_CHANGED',
+                                       'SOURCE_INVENTORY_CHANGED'), 'unknown')}
 REASONS = {
     'VERIFIED_PRESENT': '期待する登録と関係を確認しました',
     'VERIFIED_ABSENT': '期待する登録が見つかりません',
@@ -229,6 +236,10 @@ def _validate(report):
             _require(run['source_sha256_before'] is not None and
                      run['source_sha256_before'] == run['source_sha256_after'],
                      'INCONSISTENT_SOURCE_STABILITY')
+        if observation['metadata_stable'] is True and run['eligible']:
+            _require(run['metadata_sha256_before'] is not None and
+                     run['metadata_sha256_before'] == run['metadata_sha256_after'],
+                     'INCONSISTENT_CATALOG_STABILITY')
         edges = run.get('edges')
         _require(type(edges) is list, 'INVALID_EDGES')
         if run['eligible']:
@@ -245,6 +256,8 @@ def _validate(report):
                      'UNVERIFIED_EDGE_CLAIM')
             for key in ('from', 'to', 'reason_code'):
                 _text(edge.get(key), limit=2048 if key != 'reason_code' else 256)
+            _require(EDGE_REASON_STATUS.get(edge['reason_code'], edge['status']) == edge['status'],
+                     'INCONSISTENT_EDGE_REASON')
             counts[edge['status']] += 1
     _require(inventory['uuid_runs'] == len(runs) and inventory['eligible'] == eligible and
              inventory['entries'] == inventory['uuid_runs'] + inventory['unrecognized_entries'] and
