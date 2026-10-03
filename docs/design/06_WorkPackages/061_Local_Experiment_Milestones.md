@@ -19,7 +19,11 @@ self-referential catalog GET (conservative compatibility assumption; live
 producer not checked). Independently WP-L3-VW-002 refuses `Upgrade` and
 `Trailer` on its fixed single-request Unix RPC. Both disposable negatives
 failed before repair; focused lineage (93 tests) and Warehouse (78 + 102 + 16
-+ 22 + 15 tests) passed. Read-only `colima list` showed the dedicated VM stopped;
++ 22 + 15 tests) passed. `make verify-local-experiment`, `make
+verify-design-context` (89 documents) and `git diff --check` passed after both
+repairs; full private logs are in
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-009/`.
+Read-only `colima list` showed the dedicated VM stopped;
 no VM start, live login/backend/SQL, archived replay, retained source/session/
 credential/report/backup mutation or GitHub write. Offline fixtures cannot
 authenticate producers, prove atomicity, caller receipt, restart recovery,
