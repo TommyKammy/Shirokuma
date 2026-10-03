@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.16"
+version: "0.17"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: allowed response owner and pull credentials (offline)
+
+Two disposable fake allowed responses gained a controller owner reference or
+image-pull secret despite neither being submitted. Both incorrectly passed
+before repair. The comparator now refuses these changes and accepts explicit
+empty API forms. Focused observer 25 tests and full local verification passed.
+Dedicated Colima was read-only observed stopped; no admission, archived request
+replay, retained evidence/volume/backup modification or GitHub write. Unknown
+responses retain pending requests. This does not authenticate a server, cover
+arbitrary Pod mutation or establish operator acceptance. Roll back comparator
+and test only; preserve unknown requests and historical evidence. Original
+Vault sync pending outside the approved noninteractive checkout.
 
 ## 2026-10-04: allowed response Pod identity and placement (offline)
 

@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.104"
+version: "5.105"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy Pod owner and pull credentials (offline)
+
+WP-L2-POL-001: two fake allowed responses injecting an owner reference or
+image-pull secret passed before repair; they now fail closed as unknown with
+the pending request retained. Explicit empty API defaults still match. Focused
+observer suite passed (25). `make verify-local-experiment` passed after repair.
+Dedicated Colima was observed stopped; no admission, archived request replay,
+retained report/volume/backup change or GitHub write. Fake responses do not
+authenticate the server, cover arbitrary mutations or establish acceptance.
+Roll back comparator/test only, preserving unknown requests and saved evidence.
+Original Vault synchronization pending outside the noninteractive checkout.
 
 ## 2026-10-04: policy Pod placement and independent FinOps boundary (offline)
 

@@ -97,6 +97,10 @@ def allowed_pod_matches(value, body):
     if type(meta) is not dict or type(spec) is not dict or any(
             meta.get(key) != body['metadata'][key] for key in ('name', 'namespace')):
         return False
+    # A controller owner can change lifecycle; an injected pull secret changes
+    # the credentials used to fetch the image even when image text is unchanged.
+    if meta.get('ownerReferences') not in (None, []) or spec.get('imagePullSecrets') not in (None, []):
+        return False
     original = body['spec']; containers = spec.get('containers')
     # Pod-level identity/security settings are separate from the container
     # securityContext. Never turn a mutated runAsUser or seccomp profile into an

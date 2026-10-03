@@ -167,6 +167,32 @@ class ObserverTests(unittest.TestCase):
         kube.respond=defaults
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_acquire_owner_or_image_pull_credentials(self):
+        for location, changes in (('metadata', {'ownerReferences':[{'uid':str(uuid.uuid4()),
+                                      'kind':'Deployment','name':'foreign','apiVersion':'apps/v1'}]}),
+                                  ('spec', {'imagePullSecrets':[{'name':'private-registry'}]})):
+            with self.subTest(location=location):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered[location].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertEqual(receipt['response_content_check'],'not-checked')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaults(body):
+            altered=copy.deepcopy(body)
+            altered['metadata']['ownerReferences']=[]
+            altered['spec']['imagePullSecrets']=[]
+            return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+        kube.respond=defaults
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_cannot_inject_container_security_context(self):
         for context in ({'privileged':False,'allowPrivilegeEscalation':True},
                         {'privileged':False,'runAsUser':0},
