@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.44"
+version: "5.45"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse optional-header control bytes (offline)
+
+WP-L3-VW-002 refuses NUL/DEL in ignored RPC headers before dispatch or journal
+creation. Focused Warehouse suites passed (78 + 100 + 16 + 22 + 15 tests).
+Read-only dedicated Colima listing: stopped. No VM start, backend/SQL, archived
+UUID replay, retained session/backup mutation or GitHub write. This socket
+fixture does not prove caller receipt, backend authenticity, owner restart
+recovery or operator acceptance. Roll back the guard and disposable fixture
+only, preserving historical evidence. Original Vault sync pending outside
+this checkout.
 
 ## 2026-10-03: Warehouse post-parse deadline and catalog transfer tokens (offline)
 

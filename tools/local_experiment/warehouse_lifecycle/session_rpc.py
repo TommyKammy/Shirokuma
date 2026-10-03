@@ -382,7 +382,7 @@ class SessionRPC:
             # interpret whitespace around a length differently.
             require(value.startswith(b' ') and value[1:] and
                     value[1:] == value[1:].strip(b' \t') and
-                    b'\t' not in value, 'INVALID_HTTP')
+                    all(32 <= byte <= 126 for byte in value[1:]), 'INVALID_HTTP')
             headers[name] = value[1:]
         else:
             raise RPCError('INVALID_HTTP')

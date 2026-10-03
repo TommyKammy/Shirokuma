@@ -846,6 +846,8 @@ class SessionRPCTest(unittest.TestCase):
             self.wire(body, b'Content-Type: application/json\r\nContent-Length:  '+length+b'\r\n'),
             self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b' \r\n'),
             self.wire(body, b'Content-Type: application/json\r\nContent-Length:\t'+length+b'\r\n'),
+            self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b'\r\nX-Extra: yes\x00no\r\n'),
+            self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b'\r\nX-Extra: yes\x7fno\r\n'),
             self.wire(body, b'Content-Length: '+length+b'\r\n'),
             self.wire(body, request_line=b'POST /v1/other HTTP/1.1\r\n'),
             self.wire(body, request_line=b'GET /v1/transition HTTP/1.1\r\n'),

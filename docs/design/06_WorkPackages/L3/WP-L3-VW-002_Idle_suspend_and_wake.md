@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.76"
+version: "0.77"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: reject control bytes in optional RPC headers (offline)
+
+The single-request Unix parser now refuses non-printable ASCII in any header
+value, including ignored extension headers, before dispatch or journaling.
+Disposable NUL and DEL headers return 400 with no handler call or saved entry;
+`make test-local-warehouse-lifecycle` passed (78 + 100 + 16 + 22 + 15 tests).
+The dedicated VM was observed stopped; no archived UUID replay, live backend/SQL
+or retained session/backup mutation. This cannot establish caller receipt,
+backend authenticity, restart recovery or operator acceptance. Roll back only
+the parser guard and fixture, preserving archived sessions. Direct original
+Vault sync remains pending outside this checkout.
 
 ## 2026-10-03: request validation must finish within receive deadline (offline)
 
