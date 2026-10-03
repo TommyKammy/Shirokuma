@@ -301,6 +301,12 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			if string(nested.raw) == "null" || !localInventoryCanonicalFields(nested.raw, nested.keys) {
 				return true
 			}
+			var fields map[string]json.RawMessage
+			if len(nested.raw) != 0 {
+				if err := json.Unmarshal(nested.raw, &fields); err != nil || localInventoryNullFields(fields, nested.keys) {
+					return true
+				}
+			}
 		}
 		var conditions []json.RawMessage
 		_ = json.Unmarshal(status["conditions"], &conditions)
@@ -314,6 +320,14 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			var fields map[string]json.RawMessage
 			if err := json.Unmarshal(condition, &fields); err != nil ||
 				localInventoryNullFields(fields, []string{"type", "status", "observedGeneration"}) {
+				return true
+			}
+			var shape struct {
+				Type   string `json:"type"`
+				Status string `json:"status"`
+			}
+			if err := json.Unmarshal(condition, &shape); err != nil || shape.Type == "" ||
+				(shape.Status != "True" && shape.Status != "False" && shape.Status != "Unknown") {
 				return true
 			}
 		}

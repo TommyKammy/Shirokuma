@@ -41,10 +41,7 @@ func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 		resources := strings.Replace(localFluxJSON(), `{"type":"Ready","status":"True","observedGeneration":1}`, `{"type":"Ready","status":"True","observedGeneration":1},`+extra, 1)
 		responses := []fakeResponse{{output: localControllerJSON()}, {output: resources}}
 		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
-		expected := "incomplete condition"
-		if extra == `null` {
-			expected = "resource response was incomplete"
-		}
+		expected := "resource response was incomplete"
 		if check.Status != "degraded" || !strings.Contains(check.Summary, expected) {
 			t.Fatalf("extra condition %s accepted: %#v", extra, check)
 		}
@@ -183,6 +180,44 @@ func TestLocalInventoryRejectsNullNestedScalarFields(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsNullReferenceScalars(t *testing.T) {
+	for _, tc := range []struct{ parent, field string }{
+		{`spec":{"ref`, `branch`}, {`spec":{"ref`, `tag`}, {`spec":{"ref`, `semver`},
+		{`spec":{"ref`, `commit`}, {`spec":{"ref`, `name`},
+		{`spec":{"secretRef`, `name`}, {`spec":{"sourceRef`, `kind`},
+		{`spec":{"sourceRef`, `name`}, {`spec":{"sourceRef`, `namespace`},
+		{`status":{"artifact`, `revision`},
+	} {
+		raw := []byte(`{"items":[{"` + tc.parent + `":{"` + tc.field + `":null}}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("null reference field accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"spec":{"ref":{"branch":"main"},"sourceRef":{"name":"git"}},"status":{"artifact":{"revision":"main@sha1:abc"}}}]}`), []byte(`{"items":[{}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("non-null reference field rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsMalformedUnrelatedConditions(t *testing.T) {
+	for _, field := range []string{`{}`, `{"type":""}`, `{"type":"Ready"}`, `{"type":"Ready","status":"Maybe"}`} {
+		raw := []byte(`{"items":[{"status":{"conditions":[` + field + `]}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("malformed unrelated condition accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"status":{"conditions":[{"type":"Ready","status":"Unknown"}]}}]}`), []byte(`{"items":[{}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid unrelated condition rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullConditionFields(t *testing.T) {
 	for _, field := range []string{`"type":null`, `"status":null`, `"observedGeneration":null`} {
 		raw := []byte(`{"items":[{"status":{"conditions":[{` + field + `}]}}]}`)
@@ -222,8 +257,13 @@ func TestLocalInventoryRejectsNullMembers(t *testing.T) {
 	}
 }
 
-func TestLocalInventoryNullMembersDegradeFixedProfile(t *testing.T) {
-	for _, member := range []string{`null`, `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"status":{"conditions":[null]}}`} {
+func TestLocalInventoryMalformedMembersDegradeFixedProfile(t *testing.T) {
+	for _, member := range []string{
+		`null`,
+		`{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"status":{"conditions":[null]}}`,
+		`{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"bogus"}]}}`,
+		`{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"name":null}}}`,
+	} {
 		decorate := func(raw string) string {
 			return strings.Replace(raw, `"items":[`, `"items":[`+member+`,`, 1)
 		}
@@ -1134,7 +1174,7 @@ func TestLocalFluxRejectsFailedAvailableCondition(t *testing.T) {
 	for _, status := range []string{"False", "Unknown", ""} {
 		controllers := strings.Replace(localControllerJSON(), `"type":"Available","status":"True"`, `"type":"Available","status":"`+status+`"`, 1)
 		runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
-		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || (status != "" && !strings.Contains(check.Summary, "source-controller")) || (status == "" && !strings.Contains(check.Summary, "controller response was incomplete")) {
 			t.Fatalf("controller condition %q accepted: %#v", status, check)
 		}
 	}
@@ -1144,7 +1184,7 @@ func TestLocalFluxRejectsUnresolvedReplicaFailure(t *testing.T) {
 	for _, status := range []string{"True", "Unknown", ""} {
 		controllers := strings.Replace(localControllerJSON(), `"type":"Available","status":"True"`, `"type":"Available","status":"True"},{"type":"ReplicaFailure","status":"`+status+`"`, 1)
 		runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
-		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || (status != "" && !strings.Contains(check.Summary, "source-controller")) || (status == "" && !strings.Contains(check.Summary, "controller response was incomplete")) {
 			t.Fatalf("unresolved ReplicaFailure %q accepted: %#v", status, check)
 		}
 	}
@@ -1477,7 +1517,7 @@ func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 		{"terminating", `"generation":2`, `"generation":2,"deletionTimestamp":"2026-09-16T00:00:00Z"`, "terminating"},
 		{"replica-failure", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":"True"}],"observedGeneration":2`, "failed rollout"},
 		{"replica-failure-unknown", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":"Unknown"}],"observedGeneration":2`, "failed rollout"},
-		{"replica-failure-empty", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":""}],"observedGeneration":2`, "failed rollout"},
+		{"replica-failure-empty", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":""}],"observedGeneration":2`, "response was incomplete"},
 		{"progress-failure", `"observedGeneration":2`, `"conditions":[{"type":"Progressing","status":"False"}],"observedGeneration":2`, "failed rollout"},
 		{"available-failure", `"observedGeneration":2`, `"conditions":[{"type":"Available","status":"False"}],"observedGeneration":2`, "failed rollout"},
 		{"available-unknown", `"observedGeneration":2`, `"conditions":[{"type":"Available","status":"Unknown"}],"observedGeneration":2`, "failed rollout"},

@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.42"
+version: "0.43"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: nested reference nulls and unrelated conditions (offline)
+
+Two independent fixed-profile inventory checks reject explicit null scalar members of `spec.ref`, `spec.secretRef`, `spec.sourceRef` and `status.artifact`, and malformed condition types/statuses on unrelated list items. The former could decode as omission; the latter could be ignored when the expected object was healthy. Isolated negatives failed before repair; a malformed condition on a target now fails earlier as an incomplete list rather than at the target-specific condition check. Omitted optional fields, canonical non-null references and valid `Unknown` conditions remain compatible; generic doctor is unchanged. `go test ./internal/cli -count=1` (789 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima was read-only observed stopped; no live Kubernetes/SQL read, VM start, reconciliation, request replay or retained data/backup mutation. Offline fake responses are not authenticated/atomic inventory, historical cleanup, Git provenance, strict admission or operator/production acceptance. Roll back only the local inventory reader/tests while retaining the stopped VM and evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: null inventory members (offline)
 

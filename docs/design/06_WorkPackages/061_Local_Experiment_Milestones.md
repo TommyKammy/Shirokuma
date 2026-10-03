@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.75"
+version: "4.76"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: nested null references and unrelated conditions (offline)
+
+WP-L0-GITOPS-001: fixed-profile controller, Flux resource and Lakehouse inventories reject explicit null scalar fields inside nested refs/artifacts and invalid or missing type/status in conditions on unrelated list members. Two focused negatives reproduced acceptance before repair. `go test ./internal/cli -count=1` (789 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed after repair. Dedicated Colima read-only status: stopped. No VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. Fake consistency checks do not authenticate API/Git, establish atomic inventory or historical cleanup, clear strict publication admission or establish operator/production acceptance. Roll back only the inventory reader/tests; preserve VM and evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: null inventory members (offline)
 
