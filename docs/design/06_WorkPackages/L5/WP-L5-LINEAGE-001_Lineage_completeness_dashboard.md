@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.60"
+version: "1.61"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: eligible demotion retains initial verification detail (offline)
+
+Direct rendering now refuses an initially eligible, later incomplete run if its
+`SOURCE_VERIFIED` detail is missing, even when it names the later drift. A
+disposable contradiction rendered before the guard; the explained version and
+focused lineage suite (145 tests) pass. Dedicated Colima was observed stopped;
+no live catalog, new collection, retained report/source/volume/backup mutation
+or unknown-request replay. This checks saved claim consistency, not producer
+authenticity, atomicity, whole-catalog/column coverage or acceptance. Roll back
+the renderer/test only and retain historical evidence. Original Vault sync
+pending outside the noninteractive checkout.
 
 ## 2026-10-04: demoted eligible run needs saved drift detail (offline)
 

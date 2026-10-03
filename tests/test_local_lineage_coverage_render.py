@@ -160,6 +160,16 @@ class CoverageRenderTests(unittest.TestCase):
         value['runs'][0]['reason_codes'].append('SOURCE_CHANGED_OR_UNVERIFIABLE')
         self.assertIn('SOURCE_CHANGED_OR_UNVERIFIABLE', render(value))
 
+    def test_eligible_demoted_run_retains_initial_verification_explanation(self):
+        value = report([run(1, ('unknown', 'unknown'), source_status='incomplete')])
+        value['runs'][0]['source_sha256_after'] = None
+        value['observation']['source_stable'] = False
+        value['runs'][0]['reason_codes'] = ['SOURCE_CHANGED_OR_UNVERIFIABLE']
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
+            render(value)
+        value['runs'][0]['reason_codes'].insert(0, 'SOURCE_VERIFIED')
+        self.assertIn('SOURCE_VERIFIED', render(value))
+
     def test_invalid_or_incomplete_source_requires_saved_observation_reason(self):
         for status in ('invalid', 'incomplete'):
             value = report([run(1, source_status=status, eligible=False)])

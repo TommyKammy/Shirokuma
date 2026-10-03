@@ -254,8 +254,8 @@ def _validate(report):
                   'INCONSISTENT_SOURCE_REASON')
         # A valid source has passed the collector's first artifact verification;
         # aggregate stability alone cannot substitute for that per-run evidence.
-        _require(source != 'valid' or 'SOURCE_VERIFIED' in run['reason_codes'],
-                  'INCONSISTENT_SOURCE_REASON')
+        _require(not run['eligible'] or 'SOURCE_VERIFIED' in run['reason_codes'],
+                   'INCONSISTENT_SOURCE_REASON')
         # An initially verified run can only be demoted after its final source
         # snapshot changed or became unavailable; retain the per-run explanation.
         _require(source != 'incomplete' or not run['eligible'] or

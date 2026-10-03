@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.96"
+version: "5.97"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: eligible lineage run retains initial verification (offline)
+
+WP-L5-LINEAGE-001: direct rendering refuses an initially eligible demoted
+source lacking `SOURCE_VERIFIED` despite a saved drift detail. The disposable
+negative rendered before repair; focused lineage 145 tests passed after it.
+Dedicated Colima observed stopped; no VM start, catalog call, new collection,
+retained source/report/volume/backup mutation, request replay or GitHub write.
+This does not establish producer authenticity, atomicity, whole-catalog/column
+coverage or acceptance. Roll back renderer/test only; retain saved evidence.
+Original Vault sync pending outside the noninteractive checkout.
 
 ## 2026-10-04: demoted lineage detail and independent FinOps review (offline)
 
