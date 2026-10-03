@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.15"
+version: "0.16"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: declared root and dev reconciliation paths
+
+Two independent offline fixed-profile diagnostic checks now require the suspended root Kustomization's `spec.path` to be `./deploy/gitops/clusters/local-lite` and the dev Kustomization's to be `./deploy/gitops/dev`, matching their repository declarations. A Ready resource pointing at a different tree (or lacking a path) previously passed the read-only diagnostic. Dev and root negative tests each failed before their respective repair; empty, absent and wrong paths now degrade, while healthy fake fixtures and the generic profile remain compatible. `go test ./internal/cli` (731 tests), `go vet ./...`, `make verify-local-experiment` and `git diff --check` passed. Dedicated Colima read-only status was stopped; no VM start, live API or SQL read, reconciliation, retained request replay, backup or volume mutation. This compares reported configuration against declared paths, not remote Git authenticity, live rollout, strict publication gate or production/operator acceptance. Rollback: revert only the doctor path checks and their tests; keep saved evidence and stopped VM. Direct original Vault handoff synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: declared dev Kustomization is required
 

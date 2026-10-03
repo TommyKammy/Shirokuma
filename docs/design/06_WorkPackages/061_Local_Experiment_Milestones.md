@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.40"
+version: "4.41"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: fixed GitOps root and dev paths
+
+WP-L0-GITOPS-001. Two independent offline read-only doctor checks now reject a root or dev Kustomization whose reported path is absent or differs from the `spec.path` declared by `deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml` and `deploy/gitops/clusters/local-lite/dev.yaml` respectively. The wrong-path tests failed before repair; absent/empty/wrong-path and healthy fixtures pass after repair. Focused `go test ./internal/cli` (731 tests), `go vet ./...`, `make verify-local-experiment` and `git diff --check` passed. Dedicated Colima read-only status was stopped; no start, real API/SQL read, reconciliation, saved request replay or retained data/backup changes. Remote Git provenance, actual readiness, strict gate and production/operator acceptance remain unverified. Revert only the path diagnostic/tests to recover; preserve the stopped VM and retained evidence. Original Vault handoff direct sync is pending outside this noninteractive checkout.
 
 ## 2026-10-03: Warehouse saved-claim reread deadline
 

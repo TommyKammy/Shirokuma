@@ -28,14 +28,47 @@ func localControllerJSON() string {
 }
 
 func localFluxJSON() string {
-	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+}
+
+func TestLocalFluxDevPath(t *testing.T) {
+	for _, path := range []string{"", "./deploy/gitops/other"} {
+		resources := strings.Replace(localFluxJSON(), `"path":"./deploy/gitops/dev",`, `"path":"`+path+`",`, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "path mismatch") {
+			t.Fatalf("dev path %q accepted: %#v", path, check)
+		}
+	}
+	resources := strings.Replace(localFluxJSON(), `"path":"./deploy/gitops/dev",`, "", 1)
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "path mismatch") {
+		t.Fatalf("missing dev path accepted: %#v", check)
+	}
+}
+
+func TestLocalFluxRootPath(t *testing.T) {
+	for _, path := range []string{"", "./deploy/gitops/other"} {
+		resources := strings.Replace(localFluxJSON(), `"path":"./deploy/gitops/clusters/local-lite",`, `"path":"`+path+`",`, 1)
+		if resources == localFluxJSON() {
+			t.Fatal("root fixture has no path")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "path mismatch") {
+			t.Fatalf("root path %q accepted: %#v", path, check)
+		}
+	}
+	resources := strings.Replace(localFluxJSON(), `"path":"./deploy/gitops/clusters/local-lite",`, "", 1)
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "path mismatch") {
+		t.Fatalf("missing root path accepted: %#v", check)
+	}
 }
 
 func TestLocalFluxRequiresDeclaredDevKustomizationAndSource(t *testing.T) {
 	for _, test := range []struct{ name, old, replacement, want string }{
 		{"missing-dev", `"name":"shirokuma-dev","namespace":"flux-system"`, `"name":"unrelated","namespace":"flux-system"`, "shirokuma-dev"},
-		{"wrong-source", `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system"}}`, `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"other"}}`, "source reference mismatch"},
-		{"wrong-source-namespace", `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system"}}`, `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system","namespace":"other"}}`, "source reference mismatch"},
+		{"wrong-source", `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","sourceRef":{"kind":"GitRepository","name":"flux-system"}}`, `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","sourceRef":{"kind":"GitRepository","name":"other"}}`, "source reference mismatch"},
+		{"wrong-source-namespace", `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","sourceRef":{"kind":"GitRepository","name":"flux-system"}}`, `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","sourceRef":{"kind":"GitRepository","name":"flux-system","namespace":"other"}}`, "source reference mismatch"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			resources := strings.Replace(localFluxJSON(), test.old, test.replacement, 1)
@@ -120,7 +153,7 @@ func TestLocalFluxSuspendedRootStillReportsCurrentReconciliationFailure(t *testi
 		{`{"type":"Stalled","status":"True","observedGeneration":1}`, "informational"},
 		{`{"type":"Reconciling","status":"False","observedGeneration":2}`, "informational"},
 	} {
-		resources := strings.Replace(localFluxJSON(), `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},`+test.condition+`]}`, 1)
+		resources := strings.Replace(localFluxJSON(), `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},`+test.condition+`]}`, 1)
 		if resources == localFluxJSON() {
 			t.Fatal("fixture did not change")
 		}
@@ -138,7 +171,7 @@ func TestLocalFluxSuspendedRootRejectsCurrentReadyFailure(t *testing.T) {
 		{`{"type":"Ready","status":"False","observedGeneration":1}`, "informational"},
 		{`{"type":"Ready","status":"True","observedGeneration":2}`, "informational"},
 	} {
-		resources := strings.Replace(localFluxJSON(), `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},`+test.condition+`]}`, 1)
+		resources := strings.Replace(localFluxJSON(), `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},`+test.condition+`]}`, 1)
 		if resources == localFluxJSON() {
 			t.Fatal("fixture did not change")
 		}

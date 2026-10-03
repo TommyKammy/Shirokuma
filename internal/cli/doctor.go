@@ -86,8 +86,9 @@ type kubernetesResourceList struct {
 			DeletionTimestamp string `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Spec struct {
-			Suspend   bool `json:"suspend"`
-			Replicas  *int `json:"replicas"`
+			Suspend   bool   `json:"suspend"`
+			Path      string `json:"path"`
+			Replicas  *int   `json:"replicas"`
 			SourceRef struct {
 				Kind      string `json:"kind"`
 				Name      string `json:"name"`
@@ -334,6 +335,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		isDev := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "shirokuma-dev"
 		if isRoot {
 			rootCount++
+			if localExperiment && resource.Spec.Path != "./deploy/gitops/clusters/local-lite" {
+				unhealthy = append(unhealthy, resourceID+" (path mismatch)")
+			}
 			if localExperiment && (resource.Spec.SourceRef.Kind != "GitRepository" || resource.Spec.SourceRef.Name != "flux-system" ||
 				(resource.Spec.SourceRef.Namespace != "" && resource.Spec.SourceRef.Namespace != "flux-system")) {
 				unhealthy = append(unhealthy, resourceID+" (source reference mismatch)")
@@ -347,6 +351,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if localExperiment && isDev {
 			devCount++
+			if resource.Spec.Path != "./deploy/gitops/dev" {
+				unhealthy = append(unhealthy, resourceID+" (path mismatch)")
+			}
 			if resource.Spec.SourceRef.Kind != "GitRepository" || resource.Spec.SourceRef.Name != "flux-system" ||
 				(resource.Spec.SourceRef.Namespace != "" && resource.Spec.SourceRef.Namespace != "flux-system") {
 				unhealthy = append(unhealthy, resourceID+" (source reference mismatch)")
