@@ -167,6 +167,29 @@ class ObserverTests(unittest.TestCase):
         kube.respond=defaults
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_change_runtime_or_priority(self):
+        for changes in ({'runtimeClassName':'alternate'}, {'priorityClassName':'system-node-critical'},
+                        {'priority':1000000000}, {'preemptionPolicy':'Never'}):
+            with self.subTest(changes=changes):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['spec'].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaults(body):
+            altered=copy.deepcopy(body)
+            altered['spec'].update(runtimeClassName='', priority=0, priorityClassName='',
+                                   preemptionPolicy='PreemptLowerPriority')
+            return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+        kube.respond=defaults
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_cannot_acquire_owner_or_image_pull_credentials(self):
         for location, changes in (('metadata', {'ownerReferences':[{'uid':str(uuid.uuid4()),
                                       'kind':'Deployment','name':'foreign','apiVersion':'apps/v1'}]}),

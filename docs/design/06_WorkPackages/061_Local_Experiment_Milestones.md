@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.106"
+version: "5.107"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy runtime and priority response boundary (offline)
+
+WP-L2-POL-001: four disposable allowed responses with an injected runtime
+class, priority class, nonzero priority or altered preemption passed before
+repair; they now fail closed with pending requests intact. Inert API defaults
+still match. Focused observer 26 tests passed. Dedicated Colima observed
+Stopped; no admission, archived replay, retained report/volume/backup change
+or GitHub write. Fake response comparison cannot authenticate a server, cover
+all Pod mutations or establish acceptance. Roll back comparator/test only;
+preserve pending requests. Original Vault synchronization pending outside
+the noninteractive checkout.
 
 ## 2026-10-04: independent FinOps direct-history review (offline)
 

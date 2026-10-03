@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.17"
+version: "0.18"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: allowed response runtime and priority (offline)
+
+Four disposable fake responses injected a runtime class, critical priority
+class, nonzero priority or altered preemption policy. Each passed before repair;
+the comparator now refuses them as unknown while retaining the pending request.
+Explicit inert API defaults remain accepted. Focused observer 26 tests passed.
+Dedicated Colima was observed stopped; no admission, saved-request replay,
+retained data/volume/backup change or GitHub write. Fake responses do not
+authenticate a server or prove complete mutation coverage or acceptance.
+Roll back comparator/test only, preserving pending requests. Original Vault
+sync remains pending outside the approved checkout.
 
 ## 2026-10-04: allowed response owner and pull credentials (offline)
 

@@ -120,7 +120,11 @@ def allowed_pod_matches(value, body):
             spec.get('nodeSelector') not in (None, {}) or
             spec.get('tolerations') not in (None, []) or
             spec.get('affinity') not in (None, {}) or
-            spec.get('schedulerName', 'default-scheduler') != 'default-scheduler'):
+            spec.get('schedulerName', 'default-scheduler') != 'default-scheduler' or
+            spec.get('runtimeClassName', '') != '' or
+            spec.get('priorityClassName', '') != '' or
+            type(spec.get('priority', 0)) is not int or spec.get('priority', 0) != 0 or
+            spec.get('preemptionPolicy', 'PreemptLowerPriority') != 'PreemptLowerPriority'):
         return False
     if (type(containers) is not list or len(containers) != 1 or
             any(spec.get(key) not in (None, []) for key in ('initContainers', 'ephemeralContainers', 'volumes')) or
