@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.37"
+version: "4.38"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline Warehouse observation deadline
+
+WP-L3-VW-002. The opt-in scoped runtime-status reader checks the overall deadline after both rounds before publishing a current scoped inventory result. An isolated late-completion test failed before the fix, then `make test-local-warehouse-lifecycle` passed. Dedicated Colima was read-only observed stopped; no start, live API/SQL, owner, unknown-request replay, retained run or backup mutation. Not evidence of atomicity, historical cleanup, current backend/VM authenticity or production acceptance. Roll back only the local reader/test change and retain evidence. Original Vault handoff direct synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: offline suspended-root Ready failure
 

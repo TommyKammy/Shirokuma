@@ -180,6 +180,9 @@ def observe(token, kube, *, deadline=None):
     before = datetime.now(timezone.utc).isoformat()
     first = snapshot(token, kube, deadline)
     second = snapshot(token, kube, deadline)
+    # The last projection may finish within its own timeout after the overall
+    # observation deadline; never publish a late two-round result.
+    require(time.monotonic() < deadline)
     require(first == second)
     after = datetime.now(timezone.utc).isoformat()
     return {'schema_version': 1, 'session_id': token, 'observation': 'current-kubernetes-two-reads',

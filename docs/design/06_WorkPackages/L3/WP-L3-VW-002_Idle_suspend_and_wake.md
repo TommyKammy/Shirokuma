@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.24"
+version: "0.25"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: no late scoped inventory result
+
+The opt-in read-only runtime-status reader now checks its overall deadline after the second inventory snapshot, before reporting scoped presence or absence. A fake two-round result that finished after the deadline was previously accepted; the new negative test failed before the fix and passed afterward. `make test-local-warehouse-lifecycle` passed after repair. This is an offline deadline boundary, not an atomic observation or independent evidence of historical cleanup, current SQL/VM authenticity or unknown-request recovery. Dedicated Colima was observed stopped, with no start, API/SQL request, replay or retained run/backup mutation. Original Vault handoff synchronization remains pending outside this noninteractive checkout. Roll back only the reader/test change; preserve stored sessions, empty socket directories and backups, and do not replay unknown requests.
 
 ## 2026-10-03: scoped read-only inventory cross-projection identity
 

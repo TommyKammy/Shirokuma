@@ -55,6 +55,15 @@ class RuntimeStatusTests(TestCase):
         self.assertEqual(len(kube.calls), 2 * (11 + 1 + 2))
         self.assertEqual(kube.calls[:14], kube.calls[14:])
 
+    def test_completed_rounds_cannot_publish_after_deadline(self):
+        empty = {'named_present': 0, 'labelled_present': 0, 'service_endpoints_present': 0,
+                 'snapshot_sha256': '0' * 64}
+        with mock.patch.object(R, 'snapshot', return_value=empty) as snapshots, \
+             mock.patch.object(R.time, 'monotonic', return_value=101):
+            with self.assertRaises(R.RuntimeStatusError):
+                R.observe(TOKEN, FakeKube(), deadline=100)
+            self.assertEqual(snapshots.call_count, 2)
+
     def test_same_name_even_without_owner_label_is_present(self):
         kube = FakeKube()
         kube.names['deployments', PREFIX + '-xs'] = obj('Deployment', PREFIX + '-xs')
