@@ -106,6 +106,7 @@ class ObserverTests(unittest.TestCase):
             lambda body: body['spec']['containers'][0]['resources']['requests'].pop('cpu'),
             lambda body: body['spec'].update(hostNetwork=True),
             lambda body: body['spec'].update(volumes=[{'name':'mount','hostPath':{'path':'/tmp'}}]),
+            lambda body: body['spec'].update(securityContext={'runAsUser':0}),
         )
         for change in changes:
             with self.subTest(change=change):
@@ -122,11 +123,30 @@ class ObserverTests(unittest.TestCase):
                 self.assertEqual(receipt['request_count'],1)
                 self.assertFalse(receipt['matched_host_expectation'])
 
+    def test_allowed_response_cannot_change_pod_security_context(self):
+        value=pod();value['spec']['securityContext']={'runAsNonRoot':True,'runAsUser':10000}
+        source=prepared(value)
+        for context in ({'runAsNonRoot':True,'runAsUser':0},
+                        {'runAsNonRoot':False,'runAsUser':10000},
+                        {'runAsNonRoot':True}):
+            with self.subTest(context=context):
+                kube=FakeKube();observer=O.CandidateObserver(source,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['spec']['securityContext']=context
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertEqual(observer.receipt()['request_count'],1)
+        kube=FakeKube();observer=O.CandidateObserver(source,kube);observer.observe()
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_accepts_harmless_server_defaults_and_equivalent_quantities(self):
         self.ready()
         def respond(body):
             effective=copy.deepcopy(body)
             effective['spec'].update(hostNetwork=False, volumes=[])
+            effective['spec']['securityContext']={}
             effective['spec']['containers'][0]['resources']['requests']['cpu']='0.01'
             effective['spec']['containers'][0]['resources']['limits']['memory']='33554432'
             return SimpleNamespace(returncode=0,stdout=json.dumps(effective),stderr='')

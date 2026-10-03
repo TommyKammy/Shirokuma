@@ -98,6 +98,16 @@ def allowed_pod_matches(value, body):
             meta.get(key) != body['metadata'][key] for key in ('name', 'namespace')):
         return False
     original = body['spec']; containers = spec.get('containers')
+    # Pod-level identity/security settings are separate from the container
+    # securityContext. Never turn a mutated runAsUser or seccomp profile into an
+    # allowed response merely because the container itself is unchanged.
+    pod_context = spec.get('securityContext')
+    submitted_context = original.get('securityContext')
+    if submitted_context is None:
+        if pod_context not in (None, {}):
+            return False
+    elif type(pod_context) is not dict or pod_context != submitted_context:
+        return False
     if (type(containers) is not list or len(containers) != 1 or
             any(spec.get(key) not in (None, []) for key in ('initContainers', 'ephemeralContainers', 'volumes')) or
             any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostIPC', 'hostPID')) or

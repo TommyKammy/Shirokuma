@@ -4,13 +4,28 @@ doc_id: "WP-L2-POL-001"
 title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-29
-version: "0.13"
+updated: 2026-10-04
+version: "0.14"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: allowed response Pod security context (offline)
+
+In a disposable fake server dry-run, changing a submitted Pod-level
+`runAsUser` to 0, changing `runAsNonRoot` to false, or dropping `runAsUser`
+still produced `passed/allowed` before repair. The allowed response now
+requires the submitted Pod `securityContext` unchanged (or absent/empty when
+none was submitted); an unexpected context fails closed as unknown with the
+original pending request retained. Container checks and harmless empty API
+default remain supported. Policy-focused 104 tests passed. No VM start,
+admission call, archived dry-run replay, retained evidence/backup mutation or
+GitHub write. This is a fake-response comparison, not independent admission
+authenticity, arbitrary Pod mutation coverage or production acceptance. Stop
+new candidate checks or revert this guard/test to roll back; keep pending
+unknown requests without replay. Original Vault sync pending outside checkout.
 
 ## 2026-09-29: bounded live full-CLI privileged denial
 

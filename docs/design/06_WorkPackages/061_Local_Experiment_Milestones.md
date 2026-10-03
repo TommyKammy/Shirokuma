@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.101"
+version: "5.102"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent policy allowed-response Pod context (offline)
+
+WP-L2-POL-001: fake dry-run responses changing submitted Pod `runAsUser` or
+`runAsNonRoot`, or dropping `runAsUser`, incorrectly passed before repair; the
+comparison now refuses them as unknown/pending. An unexpected Pod context when
+none was submitted also fails closed. The focused policy suite passed (104
+tests). After both independent increments, `make verify-local-experiment`,
+`make verify-design-context` (89 documents), `make check-no-secret-filenames`
+and `git diff --check` passed. The private full verification log is
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-052/local-verification.log`
+(SHA-256 `fd4263476fee85b1716edaf2e7f86105dd719122f3e4bb844c4e013d5e62fb2b`).
+The initial excluded-lineage and Pod-context fixture failures were expected
+pre-repair negatives. Dedicated Colima stayed Stopped. No live admission, request replay,
+retained report/volume/backup modification or GitHub write. This cannot
+authenticate the server response or prove general policy acceptance. Roll back
+the comparator/test only and preserve unknown requests. Original Vault sync
+pending outside this noninteractive checkout.
 
 ## 2026-10-04: excluded lineage success-code contradiction (offline)
 
