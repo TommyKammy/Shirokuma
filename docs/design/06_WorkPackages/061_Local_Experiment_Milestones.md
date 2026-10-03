@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.00"
+version: "5.01"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: lossy inventory identity and partial socket send (offline)
+
+WP-L0-GITOPS-001 rejects U+FFFD in fixed-profile resource UID and list version fields, including unpaired escaped JSON surrogates decoded lossily by Go. Both focused negatives failed before repair; `go test ./internal/cli -count=1` (808 passed) and `go vet ./...` passed. WP-L3-VW-002 adds a disposable child exit after a partial response header and injected failed send: only incomplete bytes reach the test caller, while independent saved classification stays `unknown-no-replay` and a new process refuses owner identity without dispatch or journal change. The first Warehouse suite failed because the new branch bypassed the socket fixture; the corrected `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima read-only status: stopped. No VM start, actual API/SQL, reconciliation, archived UUID replay or retained data/backup mutation. Offline field validation and disposable socket bytes do not authenticate backend/API/Git, prove delivery, atomicity, historical cleanup, strict admission or operator/production acceptance. Roll back only local reader/tests and disposable fixture; preserve VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: bounded deletion precision and failed send exit (offline)
 

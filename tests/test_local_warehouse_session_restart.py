@@ -41,7 +41,7 @@ def exit_after_write():
     if boundary in ('intent', 'handler', 'handler-error', 'reply') and writes == {'intent': 1, 'handler': 2, 'handler-error': 2, 'reply': 3}[boundary]:
         os._exit(73)
 owner._persist = exit_after_write
-if boundary in ('reply', 'sent', 'received', 'send-error'):
+if boundary in ('reply', 'sent', 'received', 'send-error', 'partial-send'):
     owner._read_request = lambda connection: request
     if boundary == 'reply':
         owner._send = lambda *args: os._exit(75)  # No response may precede the exit.
@@ -51,8 +51,10 @@ if boundary in ('reply', 'sent', 'received', 'send-error'):
             send(*args)
             os._exit(77)  # A successful send is not proof of caller receipt.
         owner._send = exit_after_send
-    elif boundary == 'send-error':
+    elif boundary in ('send-error', 'partial-send'):
         def failed_send(*args):
+            if boundary == 'partial-send':
+                args[0].sendall(b'HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\n')
             raise BrokenPipeError('disposable lost caller')
         owner._send = failed_send
     sender, receiver = socket.socketpair()
@@ -69,11 +71,18 @@ if boundary in ('reply', 'sent', 'received', 'send-error'):
             if len(response) > 16384 or not response.startswith(b'HTTP/1.1 200 OK\\r\\n') or b'"result":"verified"' not in response:
                 sys.exit(80)
             os._exit(79)  # Even a test caller receipt is not authenticated backend state.
-        if boundary == 'send-error':
+        if boundary in ('send-error', 'partial-send'):
             sender.settimeout(2)
-            if sender.recv(1) != b'':
-                sys.exit(82)  # No bytes reached this disposable caller.
-            os._exit(81)  # Exit after the handled failed send, not before journaling.
+            partial = bytearray()
+            while len(partial) <= 16384:
+                chunk = sender.recv(16385 - len(partial))
+                if not chunk:
+                    break
+                partial.extend(chunk)
+            expected = b'HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\n' if boundary == 'partial-send' else b''
+            if partial != expected:
+                sys.exit(82)  # No complete response reached this disposable caller.
+            os._exit(83 if boundary == 'partial-send' else 81)
 else:
     owner._dispatch(request)
 if boundary == 'closed':
@@ -103,7 +112,7 @@ sys.exit(1)
 
 class DisposableOwnerExitTest(unittest.TestCase):
     def test_new_process_cannot_adopt_exited_owners_unknown_request(self):
-        for boundary in ('intent', 'returned', 'handler', 'handler-error', 'reply', 'sent', 'received', 'closed', 'send-error'):
+        for boundary in ('intent', 'returned', 'handler', 'handler-error', 'reply', 'sent', 'received', 'closed', 'send-error', 'partial-send'):
             with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
                 root.chmod(0o700)
@@ -115,7 +124,7 @@ class DisposableOwnerExitTest(unittest.TestCase):
                 child = subprocess.run([sys.executable, '-c', CHILD, str(root), token,
                                         request_id, boundary], cwd=Path(__file__).resolve().parent.parent,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, check=False)
-                self.assertEqual(child.returncode, {'returned': 76, 'sent': 77, 'received': 79, 'closed': 78, 'send-error': 81}.get(boundary, 73),
+                self.assertEqual(child.returncode, {'returned': 76, 'sent': 77, 'received': 79, 'closed': 78, 'send-error': 81, 'partial-send': 83}.get(boundary, 73),
                                  child.stderr.decode(errors='replace'))
                 journal = output / 'rpc' / 'journal.json'
                 original = journal.read_bytes()
@@ -125,7 +134,7 @@ class DisposableOwnerExitTest(unittest.TestCase):
                                   'unknown' if boundary == 'handler-error' else 'verified')
                 self.assertEqual(result['recovery_classification'], 'unknown-no-replay')
                 self.assertEqual(result['runtime_state'], 'unknown')
-                self.assertEqual(result['reply_count'], 1 if boundary in ('reply', 'sent', 'received', 'send-error') else 0)
+                self.assertEqual(result['reply_count'], 1 if boundary in ('reply', 'sent', 'received', 'send-error', 'partial-send') else 0)
                 # An unrelated new UUID is not a way around an exited owner's
                 # occupied session identity; do not start a replacement owner.
                 fresh_id = str(uuid.uuid4())

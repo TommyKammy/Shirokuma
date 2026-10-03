@@ -376,6 +376,7 @@ func TestLocalInventoryRejectsRepeatedOrInvalidUID(t *testing.T) {
 		{`{"metadata":{"uid":null}}`, true},
 		{`{"metadata":{"uid":" "}}`, true},
 		{`{"metadata":{"uid":"uid\u200b-one"}}`, true},
+		{`{"metadata":{"uid":"uid\ud800-one"}}`, true}, // Go replaces an unpaired JSON surrogate.
 		{`{"metadata":{"uid":"uid-one"}}`, false},
 		{`{"status":{}},{"status":{}}`, false}, // projected fixture identities remain optional
 	} {
@@ -383,6 +384,23 @@ func TestLocalInventoryRejectsRepeatedOrInvalidUID(t *testing.T) {
 		var list kubernetesResourceList
 		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
 			t.Fatalf("resource UID classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsReplacementCharacterInListVersion(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		invalid bool
+	}{
+		{`"rv\ud800"`, true}, // An escaped unpaired surrogate silently decodes as U+FFFD.
+		{`"rv\ufffd"`, true},
+		{`"rv-opaque"`, false},
+	} {
+		raw := []byte(`{"metadata":{"resourceVersion":` + tc.version + `},"items":[]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("list version classification incorrect: %s (%v)", raw, err)
 		}
 	}
 }

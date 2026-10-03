@@ -271,7 +271,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if rawUID, ok := metadata["uid"]; ok {
 			var uid string
 			if err := json.Unmarshal(rawUID, &uid); err != nil || uid == "" ||
-				strings.IndexFunc(uid, func(r rune) bool { return unicode.IsSpace(r) || unicode.Is(unicode.C, r) }) >= 0 {
+				strings.IndexFunc(uid, func(r rune) bool { return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r) }) >= 0 {
 				return true
 			}
 			if _, exists := seenUIDs[uid]; exists {
@@ -495,7 +495,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
 		(list.Metadata.ResourceVersion != nil && (len(*list.Metadata.ResourceVersion) == 0 ||
 			len(*list.Metadata.ResourceVersion) > 1024 || strings.IndexFunc(*list.Metadata.ResourceVersion, func(r rune) bool {
-			return unicode.IsSpace(r) || unicode.Is(unicode.C, r)
+			return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r)
 		}) >= 0)) ||
 		(list.Kind != "" && list.Kind != "List") ||
 		(list.APIVersion != "" && list.APIVersion != "v1")

@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.55"
+version: "0.56"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: partial reply before disposable owner exit (offline)
+
+A tenth test-owned child writes only a partial HTTP header after a durable verified reply, injects a failed send and exits. The disposable caller receives exactly that incomplete prefix, while an independent saved reader still reports `unknown-no-replay` and unknown runtime state for original and fresh UUIDs; a new owner process refuses the occupied session without dispatch or journal mutation. Initial focused run failed because the fixture did not enter the socket branch; after correction `make test-local-warehouse-lifecycle` passed. No archived UUID replay, backend/API/SQL, VM start or retained session/backup mutation; dedicated Colima was read-only observed stopped. Partial bytes do not establish caller receipt, backend authenticity, historical cleanup or operator acceptance. Roll back the disposable test only, retaining VM/evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: failed send after durable reply (offline)
 

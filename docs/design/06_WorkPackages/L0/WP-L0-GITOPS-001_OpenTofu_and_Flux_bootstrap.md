@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.59"
+version: "0.60"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: lossy JSON identity characters (offline)
+
+The fixed-profile reader refuses U+FFFD in reported resource UIDs and list resource versions. Go's JSON decoder replaces an escaped unpaired surrogate with that character, so an otherwise complete inventory could silently use a lossy identity. Focused UID/version negatives failed before the guard; visible opaque fixtures and omitted fields remain compatible. `go test ./internal/cli -count=1` (808 passed) and `go vet ./...` passed. This does not authenticate API/Git, prove atomicity, historical cleanup, strict admission or operator acceptance. Dedicated Colima was read-only observed stopped; no VM start, API/SQL, reconciliation or retained data/backup change. Roll back only the local reader/tests, preserving VM/evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: bounded deletion-time precision (offline)
 
