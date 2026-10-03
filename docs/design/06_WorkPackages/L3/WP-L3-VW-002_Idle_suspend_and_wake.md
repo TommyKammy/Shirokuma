@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.83"
+version: "0.84"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: additional Unix RPC negotiation refused (offline)
+
+The fixed one-request owner now refuses `TE` and `Proxy-Connection` before
+parsing a transition or journaling. Both test-owned complete requests were
+accepted by the parser before repair; the bounded parser fixture and focused
+Warehouse suites pass afterward. No VM start, live backend/SQL, archived UUID
+replay or retained session/backup change. This does not prove caller receipt,
+backend authenticity or owner restart recovery. Roll back only this parser
+guard and fixture, retaining historical sessions. Direct original Vault sync
+pending outside checkout.
 
 ## 2026-10-03: Unix RPC connection negotiation (offline)
 

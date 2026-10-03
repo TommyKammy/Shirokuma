@@ -389,6 +389,15 @@ class ReadOnlyClient:
                 # do not turn a late non-200 into timely catalog evidence.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 require(type(status) is int and status == 200, 'API_RESPONSE_INVALID')
+                # urllib's final response URL exposes an unexpected redirect
+                # even when an injected opener supplies a successful 200.
+                # The normal opener also disables HTTP redirects.
+                final_url = getattr(response, 'geturl', None)
+                if callable(final_url):
+                    observed_url = final_url()
+                    require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                    require(type(observed_url) is str and observed_url == request.full_url,
+                            'API_RESPONSE_INVALID')
                 # A declared length is part of the response framing. A short
                 # but syntactically valid JSON prefix is not complete evidence
                 # when the peer promised additional bytes.

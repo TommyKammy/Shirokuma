@@ -875,6 +875,22 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_catalog_response_final_url_must_match_requested_path(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for final_url in (C.URL + path, C.URL + '/tables/name/other?include=all'):
+            with self.subTest(final_url=final_url):
+                response = Response(b'{"id":1}')
+                response.headers = Message()
+                response.geturl = lambda: final_url
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if final_url == C.URL + path:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                    else:
+                        with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                            self.client.request('GET', path)
+                self.assertTrue(response.closed)
+
     def test_catalog_location_cannot_redirect_a_successful_fixed_get(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

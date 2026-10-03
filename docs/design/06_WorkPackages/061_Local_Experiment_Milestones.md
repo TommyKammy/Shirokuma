@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.52"
+version: "5.53"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Unix RPC negotiation and catalog final URL (offline)
+
+WP-L3-VW-002 refuses `TE`/`Proxy-Connection` negotiation on a complete
+test-owned request before dispatch or journaling; WP-L5-LINEAGE-001 separately
+checks a returned catalog response's final URL when exposed by its opener.
+Both isolated negatives failed before repair. Focused Warehouse (78 + 102 +
+16 + 22 + 15 tests) and lineage (95 tests) passed. `make
+verify-local-experiment`, `make verify-design-context` (89 documents) and
+`git diff --check` passed; full private logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-011/`.
+Read-only Colima listing
+showed the dedicated VM stopped. No VM start, archived UUID replay, live
+backend/catalog/SQL, retained session/source/credential/report/backup mutation
+or GitHub write. These are offline protocol checks, not evidence of producer
+authenticity, atomicity, caller receipt, restart recovery, whole-catalog/column
+lineage or operator acceptance. A response without `geturl` cannot benefit from
+the extra URL check. Roll back only the independent guards/fixtures; preserve
+historical evidence and the stopped VM. Direct original Vault sync pending
+outside this noninteractive checkout.
 
 ## 2026-10-03: catalog redirect metadata and Unix connection negotiation (offline)
 
