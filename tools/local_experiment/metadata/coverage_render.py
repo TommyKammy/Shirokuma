@@ -214,6 +214,12 @@ def _validate(report):
         _require(operation is None or type(operation) is str and operation in OPERATIONS, 'INVALID_OPERATION')
         source = run.get('source_status')
         _require(type(source) is str and source in SOURCE_LABELS and type(run.get('eligible')) is bool)
+        # Initial validation admits only valid runs. An eligible run can later
+        # become incomplete when its saved source drifts, but not invalid/failed.
+        _require((source == 'valid' and run['eligible']) or
+                 (source == 'incomplete') or
+                 (source in ('failed', 'invalid') and not run['eligible']),
+                 'INCONSISTENT_SOURCE_ELIGIBILITY')
         sources[source] += 1
         _codes(run.get('reason_codes'))
         for key in ('source_sha256_before', 'source_sha256_after', 'metadata_sha256_before', 'metadata_sha256_after'):

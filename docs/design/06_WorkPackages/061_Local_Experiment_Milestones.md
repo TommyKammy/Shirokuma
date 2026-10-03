@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.72"
+version: "5.73"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: saved lineage eligibility claim (offline)
+
+WP-L5-LINEAGE-001 now refuses mutually inconsistent source status and initial
+denominator inclusion in direct offline rendering. Two disposable negatives
+were accepted before repair; focused lineage 116 tests passed afterward. The
+first focused rerun failed due solely to a test assertion accidentally moved
+into the new test; corrected and rerun, without changing retained evidence.
+Full `make verify-local-experiment`, design-context, secret scan and diff check
+passed; private full log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-032/verify-lineage.log`.
+No VM start, live API, retained source/report/backup mutation or GitHub write.
+This is not independent producer authentication, atomicity, whole-catalog or
+column coverage, or operator acceptance. Roll back renderer/test only; keep
+historical reports. Private negative/focused logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-032/`.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-04: saved FinOps HTML browser policy (offline)
 

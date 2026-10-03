@@ -5,12 +5,27 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.44"
+version: "1.45"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: saved lineage source eligibility consistency (offline)
+
+The offline renderer now rejects a `valid` source omitted from the initial
+eligible denominator and an `invalid`/`failed` source included in it. Only an
+initially eligible run that later becomes `incomplete` may retain its two
+unknown edges. Disposable contradictory reports passed before this check;
+116 focused lineage tests now pass. No catalog login, VM start, retained
+source/report/backup change or archived request replay. This validates one
+internal claim, not provenance, atomicity, whole-catalog/column coverage or
+operator acceptance. Full local verification, design-context, secret scan and
+diff check passed; private logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-032/`.
+Roll back this guard and test only while preserving
+historical evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: offline report integrity at the rendering boundary
 

@@ -115,6 +115,13 @@ class CoverageRenderTests(unittest.TestCase):
         self.assertIn('分母を保持 / 2エッジ不明', html)
         self.assertIn('観測途中に証跡が変化', html)
 
+    def test_source_status_must_match_original_eligibility(self):
+        excluded_valid = report([run(1, source_status='valid', eligible=False)])
+        included_invalid = report([run(1, ('unknown', 'unknown'), source_status='invalid')])
+        for value in (excluded_valid, included_invalid):
+            with self.subTest(source=value['runs'][0]['source_status']), self.assertRaises(RenderError):
+                render(value)
+
     def test_partial_inventory_is_not_presented_as_the_complete_population(self):
         value = report()
         value['inventory']['complete'] = False
