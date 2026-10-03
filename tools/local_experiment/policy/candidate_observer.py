@@ -377,9 +377,9 @@ class CandidateObserver:
                     value = json.loads(response.stdout, object_pairs_hook=unique_object)
                 except (TypeError, ValueError):
                     value = None
-                if not response.stderr.strip() and allowed_pod_matches(value, self._body):
+                if response.stderr == '' and allowed_pod_matches(value, self._body):
                     admission = 'allowed'
-            elif type(response.returncode) is int and response.returncode > 0 and not response.stdout.strip():
+            elif type(response.returncode) is int and response.returncode > 0 and response.stdout == '':
                 # A kubectl denial has no successful object on stdout. A mixed
                 # success/error stream cannot establish the server's outcome.
                 reported = reported_denials(response.stderr, self._body['metadata']['name'], self._items)

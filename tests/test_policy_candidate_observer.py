@@ -113,6 +113,26 @@ class ObserverTests(unittest.TestCase):
         self.assertIsNotNone(saved[-1]['pending'])
         self.assertEqual(saved[-1]['result'], 'failed')
 
+    def test_opposite_output_stream_must_be_empty_not_just_whitespace(self):
+        for outcome, extra in (('allowed', ' '), ('denied', '\n')):
+            with self.subTest(outcome=outcome):
+                kube=FakeKube()
+                source=self.input if outcome == 'allowed' else prepared(pod(privileged=True))
+                observer=O.CandidateObserver(source,kube);observer.observe()
+                def respond(body):
+                    if outcome == 'allowed':
+                        return SimpleNamespace(returncode=0,stdout=json.dumps(body),stderr=extra)
+                    denial=kube.denial(body,['P01'])
+                    return SimpleNamespace(returncode=1,stdout=extra,stderr=denial.stderr)
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.verify(progress=lambda value:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+                self.assertEqual(len(kube.requests),1)
+
     def test_allowed_response_must_represent_the_submitted_pod(self):
         changes = (
             lambda body: body['spec']['containers'][0].update(image='private.example/other@sha256:'+'c'*64),

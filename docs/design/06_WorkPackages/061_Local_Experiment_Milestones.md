@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.141"
+version: "5.142"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: strict policy dry-run streams (offline)
+
+WP-L2-POL-001: the observer accepted whitespace-only output on the wrong
+stream of an otherwise recognized allowed/denied dry-run response. It now
+requires exactly empty stderr for allowed and stdout for denied. Two
+test-owned mixed replies remain unknown/pending after one request, never
+replayed. Focused observer 43 tests and native policy 17 tests passed; local
+verification passed. A separate read-only review of the GitOps local doctor
+inventory null-replica handling found the existing checks already reject all
+six tested explicit-null counters; no GitOps implementation or test was
+retained. Dedicated Colima was read-only observed Stopped. No live admission,
+reconciliation, retained data/backup change or GitHub write. Fake responses
+do not authenticate the API, cover all mutations or establish acceptance.
+Roll back only the policy observer/test if needed; retain pending intents and
+historical evidence. Original Vault sync pending outside this checkout.
 
 ## 2026-10-04: terminal policy receipt and independent FinOps review (offline)
 

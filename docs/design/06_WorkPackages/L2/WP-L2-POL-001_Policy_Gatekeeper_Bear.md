@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.32"
+version: "0.33"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: dry-run opposite-stream bytes (offline)
+
+The candidate observer previously treated whitespace-only stderr on a
+successful Pod response, or whitespace-only stdout on a recognized policy
+denial, as an empty stream. It now requires the opposite stream to be exactly
+empty; test-owned mixed responses remain unknown/pending after one request,
+without replay. Focused observer 43 tests and native policy 17 tests passed;
+`make verify-local-experiment` passed. This does not prove API authenticity,
+general mutation coverage or live admission. Dedicated Colima was read-only
+observed Stopped; no live request or retained data/backup change. Roll back
+only the observer and test if necessary; do not replay saved pending intents.
+Original Vault synchronization is pending outside the approved checkout.
 
 ## 2026-10-04: terminal receipt failure retains dry-run intent (offline)
 
