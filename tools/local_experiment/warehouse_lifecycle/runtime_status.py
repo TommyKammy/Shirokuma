@@ -47,7 +47,7 @@ ROW = ('{{printf "%s\\t%s\\t%s\\t%s\\t" .kind .metadata.name '
 # absent resource. --ignore-not-found prints nothing only for a missing object.
 ONE = '{{if .}}{{if .metadata}}' + ROW + '{{else}}INVALID{{end}}{{end}}'
 MANY = ('{{printf "%s\\t%s\\t%d\\t" .apiVersion .kind (len .items)}}'
-           '{{if or (eq (printf "%T" .items) "<nil>") (eq (printf "%T" .metadata) "<nil>")}}INVALID{{else}}'
+            '{{if or (eq (printf "%T" .items) "<nil>") (eq (printf "%T" .metadata) "<nil>") (not .metadata.resourceVersion)}}INVALID{{else}}'
           '{{if or .metadata.continue .metadata.remainingItemCount}}TRUNCATED{{else}}COMPLETE{{end}}{{end}}'
         '{{printf "\\n"}}{{range .items}}' + ROW + '{{end}}')
 

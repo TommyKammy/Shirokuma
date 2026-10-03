@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.57"
+version: "4.58"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Deployment progress and Warehouse list version (offline)
+
+WP-L0-GITOPS-001: fixed-profile Flux controller and Lakehouse Deployment diagnostics require an explicit `Progressing=True` in addition to availability and complete counters; StatefulSets and generic doctor remain unchanged. Fake missing/healthy cases, `go test ./internal/cli -count=1` (768 tests) and `go vet ./...` passed. WP-L3-VW-002: metadata-only scoped-list projection refuses empty/missing resource version; fake malformed/valid header cases and `make test-local-warehouse-lifecycle` passed. `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed after both increments. The list-template check has not been rendered against a live API. Dedicated Colima read-only status was stopped; no VM start, live API/SQL, reconcile, unknown-request replay, retained data or backup mutation. Offline reported fields do not establish backend/Git authenticity, atomic inventory, historical cleanup, strict publication gate or operator/production acceptance. Roll back only local readers/tests; preserve the stopped VM and saved evidence. Original Vault handoff direct sync pending outside checkout.
 
 ## 2026-10-03: Warehouse missing list metadata (offline)
 

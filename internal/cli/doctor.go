@@ -352,9 +352,13 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 				unready = true
 			}
 			available := false
+			progressing := false
 			for _, condition := range controller.Status.Conditions {
 				if condition.Type == "Available" && condition.Status == "True" {
 					available = true
+				}
+				if condition.Type == "Progressing" && condition.Status == "True" {
+					progressing = true
 				}
 				if (condition.Type == "ReplicaFailure" && (condition.Status == "True" || (localExperiment && condition.Status != "False"))) ||
 					(condition.Type == "Progressing" && condition.Status != "True") ||
@@ -362,7 +366,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 					unready = true
 				}
 			}
-			unready = unready || !available
+			unready = unready || !available || !progressing
 		}
 		if unready {
 			unhealthy = append(unhealthy, "Deployment/"+controller.Metadata.Name)

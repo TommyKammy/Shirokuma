@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.27"
+version: "0.28"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: explicit Deployment progress in fixed-profile diagnostics (offline)
+
+Two independent local-only checks require `Progressing=True` as well as `Available=True` and complete counters on the four fixed Flux controller Deployments and on Lakehouse Deployments. An absent Progressing condition previously passed; StatefulSets remain replica-based and the generic doctor is unchanged. Fake missing/healthy cases, `go test ./internal/cli -count=1` (768 tests), `go vet ./...` and `make test-local-warehouse-lifecycle` passed. Dedicated Colima was observed stopped; no VM start, live API/SQL, reconciliation, unknown-request replay, retained session or backup change. Reported condition consistency is not authenticated runtime/Git identity, smoke, strict publication admission or operator/production acceptance. Roll back only the two local diagnostics and their fixture/tests, preserving the stopped VM and saved evidence. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: competing source refs and other Flux API versions (offline)
 

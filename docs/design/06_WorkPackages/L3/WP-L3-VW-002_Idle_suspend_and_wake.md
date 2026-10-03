@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.33"
+version: "0.34"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: list metadata requires a resource version (offline)
+
+The opt-in scoped-list metadata-only template projects `INVALID` when `metadata.resourceVersion` is empty, even if the envelope includes metadata and `items=[]`. The bounded reader already rejects `INVALID`; fake owner/endpoint-list rejection and Warehouse focused tests passed. The requirement assumes a Kubernetes API list supplies a nonempty opaque resource version; no numeric format or cross-read equality is inferred. Dedicated Colima was stopped; client-side template rendering against a live API was not possible and the fake/template checks do not validate live behavior. No VM start, API/SQL call, owner operation, unknown-request replay, retained session or backup change. This does not authenticate a backend, make separate reads atomic, prove historical cleanup or establish production acceptance. Revert only the template/test and retain saved sessions and stopped VM. Original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: absent list metadata cannot imply scoped absence (offline)
 

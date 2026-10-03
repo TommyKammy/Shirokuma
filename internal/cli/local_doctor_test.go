@@ -14,7 +14,7 @@ import (
 func healthyLocalWorkload(kind, namespace, name string) string {
 	conditions := ""
 	if kind == "Deployment" {
-		conditions = `,"conditions":[{"type":"Available","status":"True"}]`
+		conditions = `,"conditions":[{"type":"Available","status":"True"},{"type":"Progressing","status":"True"}]`
 	}
 	return fmt.Sprintf(`{"kind":%q,"metadata":{"name":%q,"namespace":%q,"generation":2},"spec":{"replicas":1},"status":{"observedGeneration":2,"replicas":1,"availableReplicas":1,"readyReplicas":1,"updatedReplicas":1%s}}`, kind, name, namespace, conditions)
 }
@@ -774,7 +774,7 @@ func TestLocalFluxRejectsUnresolvedReplicaFailure(t *testing.T) {
 }
 
 func TestLocalFluxRequiresAvailableConditionOnControllers(t *testing.T) {
-	controllers := strings.Replace(localControllerJSON(), `,"conditions":[{"type":"Available","status":"True"}]`, "", 1)
+	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"},`, "", 1)
 	runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
 	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
 		t.Fatalf("controller missing Available condition passed: %#v", check)
@@ -782,6 +782,21 @@ func TestLocalFluxRequiresAvailableConditionOnControllers(t *testing.T) {
 	generic := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
 	if check := checkFlux(context.Background(), generic, localExperimentContext); !strings.Contains(check.Summary, "suspended") {
 		t.Fatalf("generic doctor behavior changed: %#v", check)
+	}
+}
+
+func TestLocalFluxRequiresProgressingConditionOnControllers(t *testing.T) {
+	controllers := strings.Replace(localControllerJSON(), `,{"type":"Progressing","status":"True"}`, "", 1)
+	responses := []fakeResponse{{output: controllers}, {output: localFluxJSON()}}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+		t.Fatalf("controller without Progressing=True accepted: %#v", check)
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false); strings.Contains(check.Summary, "source-controller") {
+		t.Fatalf("generic profile inherited local condition check: %#v", check)
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("healthy controllers rejected: %#v", check)
 	}
 }
 
@@ -1025,10 +1040,24 @@ func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 
 func TestLocalLakehouseRequiresAvailableConditionOnlyOnDeployments(t *testing.T) {
 	responses := localWorkloadResponses()
-	responses[1].output = strings.Replace(responses[1].output, `,"conditions":[{"type":"Available","status":"True"}]`, "", 1)
+	responses[1].output = strings.Replace(responses[1].output, `{"type":"Available","status":"True"},`, "", 1)
 	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
 	if checks[0].Status != "healthy" || checks[1].Status != "healthy" || checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "Available=True") || checks[3].Status != "healthy" {
 		t.Fatalf("missing deployment condition or StatefulSet condition handling: %#v", checks)
+	}
+}
+
+func TestLocalLakehouseRequiresProgressingConditionOnlyOnDeployments(t *testing.T) {
+	responses := localWorkloadResponses()
+	responses[1].output = strings.Replace(responses[1].output, `,{"type":"Progressing","status":"True"}`, "", 1)
+	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+	if checks[0].Status != "healthy" || checks[1].Status != "healthy" || checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "Progressing=True") || checks[3].Status != "healthy" {
+		t.Fatalf("missing Deployment progress or StatefulSet handling: %#v", checks)
+	}
+	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: localWorkloadResponses()}, localExperimentContext) {
+		if check.Status != "healthy" {
+			t.Fatalf("healthy workload rejected: %#v", check)
+		}
 	}
 }
 
@@ -1128,7 +1157,7 @@ func TestLocalFluxExceptionDoesNotHideOtherFailures(t *testing.T) {
 		{"stale-controller", strings.Replace(localControllerJSON(), `"observedGeneration":2`, `"observedGeneration":1`, 1), localFluxJSON()},
 		{"unready-controller", strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":0`, 1), localFluxJSON()},
 		{"terminating-controller", strings.Replace(localControllerJSON(), `"generation":2`, `"generation":2,"deletionTimestamp":"2026-09-16T00:00:00Z"`, 1), localFluxJSON()},
-		{"failed-controller", strings.Replace(localControllerJSON(), `"conditions":[{"type":"Available","status":"True"}]`, `"conditions":[{"type":"Available","status":"True"},{"type":"ReplicaFailure","status":"True"}]`, 1), localFluxJSON()},
+		{"failed-controller", strings.Replace(localControllerJSON(), `"type":"Available","status":"True"`, `"type":"Available","status":"True"},{"type":"ReplicaFailure","status":"True"`, 1), localFluxJSON()},
 		{"missing-controller-replicas", strings.Replace(localControllerJSON(), `"spec":{"replicas":1}`, `"spec":{}`, 1), localFluxJSON()},
 		{"failed-child", localControllerJSON(), strings.Replace(localFluxJSON(), `"name":"shirokuma-catalog","namespace":"flux-system","generation":1`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":2`, 1)},
 		{"suspended-child", localControllerJSON(), strings.Replace(localFluxJSON(), `"generation":1},"status"`, `"generation":1},"spec":{"suspend":true},"status"`, 1)},
