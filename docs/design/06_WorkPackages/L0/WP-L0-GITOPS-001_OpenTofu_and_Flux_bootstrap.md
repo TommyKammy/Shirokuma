@@ -5,12 +5,18 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.36"
+version: "0.37"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: canonical list envelope keys (offline)
+
+Verification: `go test ./internal/cli -count=1` (775 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents), and `git diff --check` passed. Private full-regression log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-023/verify-second.log`.
+
+Independent local-only inventory increment: fixed-profile controller, Flux resource and namespace workload lists now require the exact `items` key and refuse case-insensitive aliases of the top-level `items`, `metadata`, `kind`, and `apiVersion` keys. Go's decoder otherwise accepts `Items` as `items` and may interpret aliased or conflicting fields as a complete Kubernetes list. Fake list negatives and canonical positives pass; the generic doctor remains unchanged. Dedicated Colima was observed stopped, without VM start, API/SQL observation, reconciliation, unknown-request replay or retained storage/backup change. Shape validation is not authenticated or atomic inventory, source provenance, strict admission or production/operator acceptance. Revert only the local inventory reader/test to recover; preserve VM and evidence. Original Vault handoff direct sync remains pending outside checkout.
 
 ## 2026-10-03: incomplete diagnostic conditions (offline)
 

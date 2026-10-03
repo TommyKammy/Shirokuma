@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.68"
+version: "4.69"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: canonical fixed-profile inventory envelopes (offline)
+
+Verification: `go test ./internal/cli -count=1` (775 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents), `git diff --check` passed. Private full-regression log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-023/verify-second.log`.
+
+WP-L0-GITOPS-001: fixed-profile controller/source and namespace workload lists reject differently cased top-level list keys, including `Items`, before interpreting a complete inventory; the generic doctor retains its prior behavior. Fake negatives/positives and focused Go tests passed. Dedicated Colima remained stopped, with no live API/SQL, VM start, reconciliation, unknown-request replay or retained data/backup mutation. This does not authenticate the API/Git, prove atomicity or historical cleanup, clear strict publication admission or establish operator/production acceptance. Revert only reader/test changes, keeping VM and evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: incomplete condition entries in local diagnostics (offline)
 

@@ -70,6 +70,42 @@ func TestLocalLakehouseRejectsIncompleteConditions(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRequiresCanonicalEnvelopeKeys(t *testing.T) {
+	for _, alias := range []string{"Items", "ITEMS", "Metadata", "Kind", "APIVERSION"} {
+		controllers := strings.Replace(localControllerJSON(), `"items"`, `"`+alias+`"`, 1)
+		if alias != "Items" && alias != "ITEMS" {
+			value := `{}`
+			if alias == "Kind" {
+				value = `"List"`
+			} else if alias == "APIVERSION" {
+				value = `"v1"`
+			}
+			controllers = strings.TrimSuffix(localControllerJSON(), "}") + `,"` + alias + `":` + value + `}`
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("alias %q accepted: %#v", alias, check)
+		}
+		generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, false)
+		if strings.Contains(generic.Summary, "controller response was incomplete") {
+			t.Fatalf("generic profile inherited canonical-envelope check: %#v", generic)
+		}
+		flux := strings.Replace(localFluxJSON(), `"items"`, `"Items"`, 1)
+		check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: flux}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("Flux resource alias accepted: %#v", check)
+		}
+		lakehouse := localWorkloadResponses()
+		lakehouse[0].output = strings.Replace(lakehouse[0].output, `"items"`, `"Items"`, 1)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: lakehouse}, localExperimentContext); checks[0].Status != "degraded" {
+			t.Fatalf("workload alias accepted: %#v", checks)
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("canonical envelope rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)

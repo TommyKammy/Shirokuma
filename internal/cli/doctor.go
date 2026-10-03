@@ -190,6 +190,22 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		string(envelope.Kind) == "null" || string(envelope.APIVersion) == "null" || !localInventoryUniqueFields(raw) {
 		return true
 	}
+	// encoding/json matches struct field names case-insensitively. A Kubernetes
+	// List's canonical envelope must not be satisfied by aliases such as Items.
+	var topLevel map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &topLevel); err != nil {
+		return true
+	}
+	if _, ok := topLevel["items"]; !ok {
+		return true
+	}
+	for key := range topLevel {
+		for _, canonical := range []string{"items", "metadata", "kind", "apiVersion"} {
+			if key != canonical && strings.EqualFold(key, canonical) {
+				return true
+			}
+		}
+	}
 	if len(envelope.Metadata) != 0 {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(envelope.Metadata, &fields); err != nil {
