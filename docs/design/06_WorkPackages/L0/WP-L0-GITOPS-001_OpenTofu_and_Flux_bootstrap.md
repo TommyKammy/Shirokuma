@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.51"
+version: "0.52"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: reported UID consistency in fixed inventories (offline)
+
+The fixed-profile complete-inventory reader rejects two members reporting the same nonempty Kubernetes UID, even under different names/kinds, and rejects explicitly empty/null or noncanonical `UID`/`Uid` metadata keys. Omitted UIDs remain compatible with older projected fixtures. A broader duplicate-name check was abandoned after six existing tests exposed its earlier failure summary; their existing resource-specific duplicate rejection remains unchanged. `go test ./... -count=1` (802 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed after narrowing the fix; milestone regression is recorded in Local Experiment Milestones. Dedicated Colima read-only status reported stopped; no VM start, API/SQL, reconciliation, unknown request replay or retained data/backup mutation. Offline UID consistency is not authenticated/atomic API inventory, Git provenance, historical cleanup, strict publication admission or operator/production acceptance. Roll back only the reader/tests, retaining the stopped VM and saved evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: unavailable replicas bounded by desired capacity (offline)
 

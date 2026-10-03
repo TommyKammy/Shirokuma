@@ -240,6 +240,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 	if err := json.Unmarshal(raw, &items); err != nil {
 		return true
 	}
+	seenUIDs := make(map[string]struct{})
 	for _, item := range items.Items {
 		if item == nil {
 			return true // A null member is not a Kubernetes resource.
@@ -263,8 +264,20 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if err := json.Unmarshal(item["metadata"], &metadata); err != nil && len(item["metadata"]) != 0 {
 			return true
 		}
+		// Distinct Kubernetes objects cannot share a UID in one complete list.
+		// Older projected fixtures omit UIDs, so only bind reported values.
+		if rawUID, ok := metadata["uid"]; ok {
+			var uid string
+			if err := json.Unmarshal(rawUID, &uid); err != nil || uid == "" {
+				return true
+			}
+			if _, exists := seenUIDs[uid]; exists {
+				return true
+			}
+			seenUIDs[uid] = struct{}{}
+		}
 		for field := range metadata {
-			for _, canonical := range []string{"name", "namespace", "generation", "deletionTimestamp"} {
+			for _, canonical := range []string{"name", "namespace", "generation", "deletionTimestamp", "uid"} {
 				if field != canonical && strings.EqualFold(field, canonical) {
 					return true
 				}

@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.89"
+version: "4.90"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: reported UID consistency (offline)
+
+WP-L0-GITOPS-001: complete fixed-profile inventories refuse reused nonempty UIDs across unrelated resources and explicitly empty/null or noncanonical UID metadata fields; omitted UID fixtures stay compatible. An initial broader duplicate-name guard failed six existing summary assertions and was narrowed to the independent UID gap without changing their established resource-specific rejection. `go test ./... -count=1` (802 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima read-only status: stopped. No VM start, API/SQL, reconciliation, unknown UUID replay or retained data/backup mutation. Offline reported UIDs do not authenticate API/Git, establish atomicity or historical cleanup, clear strict publication admission or prove operator/production acceptance. Roll back reader/tests only; preserve VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: unrelated unavailable replica bound (offline)
 

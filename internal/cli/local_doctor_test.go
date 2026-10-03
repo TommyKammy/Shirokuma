@@ -322,6 +322,36 @@ func TestLocalInventoryRejectsNegativeReplicaCountersOnUnrelatedMembers(t *testi
 	}
 }
 
+func TestLocalInventoryRejectsRepeatedOrInvalidUID(t *testing.T) {
+	member := `{"kind":"Deployment","metadata":{"namespace":"shirokuma-dev","name":"unrelated","uid":"uid-one"}}`
+	for _, tc := range []struct {
+		members string
+		invalid bool
+	}{
+		{member + `,{"kind":"StatefulSet","metadata":{"namespace":"shirokuma-dev","name":"other","uid":"uid-one"}}`, true},
+		{member + `,{"kind":"StatefulSet","metadata":{"namespace":"shirokuma-dev","name":"other","uid":"uid-two"}}`, false},
+		{`{"metadata":{"uid":""}}`, true},
+		{`{"metadata":{"uid":null}}`, true},
+		{`{"status":{}},{"status":{}}`, false}, // projected fixture identities remain optional
+	} {
+		raw := []byte(`{"items":[` + tc.members + `]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("resource UID classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryRequiresCanonicalUIDKey(t *testing.T) {
+	for _, uidField := range []string{`"UID":"uid-one"`, `"Uid":"uid-one"`, `"uid":"uid-one","UID":"uid-two"`} {
+		raw := []byte(`{"items":[{"metadata":{` + uidField + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("noncanonical UID accepted: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsAvailableGreaterThanReady(t *testing.T) {
 	for _, status := range []string{
 		`{"availableReplicas":2,"readyReplicas":1}`,
