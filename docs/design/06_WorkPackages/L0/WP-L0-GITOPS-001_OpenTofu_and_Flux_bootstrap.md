@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.14"
+version: "0.15"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: declared dev Kustomization is required
+
+The local-only read-only doctor previously reported the suspended root as informational even if the repository-declared `Kustomization/flux-system/shirokuma-dev` was missing, or if it was Ready while referencing an unrelated source. It now requires exactly one dev Kustomization and its `GitRepository/flux-system/flux-system` source reference (omitted or matching source namespace), as declared by `deploy/gitops/clusters/local-lite/dev.yaml`. A fake negative test failed before the fix; missing/wrong-source/wrong-namespace negative and healthy positive cases pass afterward. Generic-profile behavior remains unchanged. `go test ./...`, `go vet ./...` passed; see Milestones for wider verification. Dedicated Colima was read-only observed stopped; no VM start, real API/SQL read, reconciliation, request replay, retained data or backup change. This does not prove live readiness, Git provenance, smoke reconciliation, strict gate, or production acceptance. Roll back only doctor/test changes while preserving saved evidence and the stopped VM. Direct synchronization of the original Vault handoff remains pending outside the noninteractive checkout.
 
 ## 2026-10-03: suspended root current Ready failure
 

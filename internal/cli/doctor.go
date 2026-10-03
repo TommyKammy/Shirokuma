@@ -305,7 +305,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	}
 	kinds := map[string]int{}
 	seenResources := map[string]bool{}
-	rootCount, rootSourceCount := 0, 0
+	rootCount, rootSourceCount, devCount := 0, 0, 0
 	rootSuspended := false
 	for _, resource := range resources.Items {
 		kinds[resource.Kind]++
@@ -331,6 +331,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		isRoot := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
 		isRootSource := resource.Kind == "GitRepository" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
+		isDev := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "shirokuma-dev"
 		if isRoot {
 			rootCount++
 			if localExperiment && (resource.Spec.SourceRef.Kind != "GitRepository" || resource.Spec.SourceRef.Name != "flux-system" ||
@@ -342,6 +343,13 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			rootSourceCount++
 			if localExperiment && !localFluxGitRevision.MatchString(resource.Status.Artifact.Revision) {
 				unhealthy = append(unhealthy, resourceID+" (revision unverified)")
+			}
+		}
+		if localExperiment && isDev {
+			devCount++
+			if resource.Spec.SourceRef.Kind != "GitRepository" || resource.Spec.SourceRef.Name != "flux-system" ||
+				(resource.Spec.SourceRef.Namespace != "" && resource.Spec.SourceRef.Namespace != "flux-system") {
+				unhealthy = append(unhealthy, resourceID+" (source reference mismatch)")
 			}
 		}
 		if localExperiment && resource.Metadata.DeletionTimestamp != "" {
@@ -393,6 +401,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	}
 	if localExperiment && rootSourceCount != 1 {
 		unhealthy = append(unhealthy, "GitRepository/flux-system/flux-system (missing or duplicated)")
+	}
+	if localExperiment && devCount != 1 {
+		unhealthy = append(unhealthy, "Kustomization/flux-system/shirokuma-dev (missing or duplicated)")
 	}
 	if len(unhealthy) > 0 {
 		sort.Strings(unhealthy)

@@ -28,7 +28,36 @@ func localControllerJSON() string {
 }
 
 func localFluxJSON() string {
-	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+}
+
+func TestLocalFluxRequiresDeclaredDevKustomizationAndSource(t *testing.T) {
+	for _, test := range []struct{ name, old, replacement, want string }{
+		{"missing-dev", `"name":"shirokuma-dev","namespace":"flux-system"`, `"name":"unrelated","namespace":"flux-system"`, "shirokuma-dev"},
+		{"wrong-source", `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system"}}`, `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"other"}}`, "source reference mismatch"},
+		{"wrong-source-namespace", `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system"}}`, `"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system","namespace":"other"}}`, "source reference mismatch"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resources := strings.Replace(localFluxJSON(), test.old, test.replacement, 1)
+			if resources == localFluxJSON() {
+				t.Fatal("fixture did not change")
+			}
+			responses := []fakeResponse{{output: localControllerJSON()}, {output: resources}}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+			if check.Status != "degraded" || !strings.Contains(check.Summary, test.want) {
+				t.Fatalf("declared dev Kustomization gap accepted: %#v", check)
+			}
+			if test.name == "missing-dev" {
+				generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
+				if strings.Contains(generic.Summary, "shirokuma-dev (missing") {
+					t.Fatalf("generic profile inherited fixed dev requirement: %#v", generic)
+				}
+			}
+		})
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("declared dev Kustomization rejected: %#v", check)
+	}
 }
 
 func TestLocalDoctorRejectsWrongListKind(t *testing.T) {

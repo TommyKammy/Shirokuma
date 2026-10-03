@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.38"
+version: "4.39"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline declared dev GitOps resource
+
+WP-L0-GITOPS-001. The fixed local doctor now rejects a missing `shirokuma-dev` Kustomization or its wrong GitRepository source reference; the declared manifest requires it, but prior root/source checks did not. A fake negative failed before the fix; focused and Go package tests, vet and generic-profile compatibility passed after repair. Dedicated Colima read-only status was stopped; no start, real API/SQL, reconciliation, retained request replay or backup/volume mutation. Live readiness, revision authenticity, Git smoke, strict gate and production/operator acceptance remain unverified. Roll back doctor/tests only and retain saved evidence; original Vault handoff direct sync remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: offline Warehouse observation deadline
 
