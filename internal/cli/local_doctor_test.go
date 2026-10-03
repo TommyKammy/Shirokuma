@@ -188,6 +188,26 @@ func TestLocalInventoryRejectsNullMemberWithoutRejectingEmptyList(t *testing.T) 
 	}
 }
 
+func TestLocalInventoryRejectsLossyUnknownJSONKey(t *testing.T) {
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[],"\ud800":1}`),
+		[]byte(`{"items":[{"metadata":{"name":"valid","\ud800":1}}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if !localInventoryIncomplete(list, raw) {
+			t.Fatalf("lossy key accepted: %s", raw)
+		}
+	}
+	var list kubernetesResourceList
+	raw := []byte(`{"items":[],"extension":"snow"}`)
+	if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+		t.Fatalf("valid extension rejected: %s (%v)", raw, err)
+	}
+}
+
 func TestLocalInventoryRejectsMalformedReportedDNSNames(t *testing.T) {
 	for _, tc := range []struct {
 		field, value string

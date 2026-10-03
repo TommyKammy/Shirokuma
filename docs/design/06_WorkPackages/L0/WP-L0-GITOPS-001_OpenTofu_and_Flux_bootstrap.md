@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.72"
+version: "0.73"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: lossy unknown JSON keys invalidate complete lists (offline)
+
+The fixed-profile duplicate-key walk now refuses an escaped lone-surrogate key decoded by Go to U+FFFD, even in an otherwise ignored extension at the envelope or member level. A disposable complete-list negative failed before repair; an ordinary extension and the canonical empty list remain compatible. Generic doctor is unchanged. No live API/Git, VM start, reconciliation or retained data/backup change. Fake response shape cannot authenticate the API or Git, make separate reads atomic, clear strict admission or grant operator acceptance. Roll back the key guard/test only and preserve existing evidence; direct original Vault sync pending outside checkout. Verification is in Milestones.
 
 ## 2026-10-03: null inventory member regression (offline)
 

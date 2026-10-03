@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.05"
+version: "1.06"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: nonzero JSON underflow cannot become zero (offline)
+
+The shared bounded decoder now refuses a nonzero floating JSON mantissa that Python rounds to zero (for example `1e-999`), including unused catalog response fields and saved-summary fields. Both disposable negatives failed before repair; literal zero with a large negative exponent and finite ordinary numbers remain valid. An invalid saved summary cannot become eligible, and an invalid catalog response cannot become present evidence. No live login/API, VM start, retained source/credential/report/backup change or request replay. This does not authenticate producer/catalog provenance, guarantee atomicity or establish whole-catalog/column lineage or operator acceptance. Roll back decoder/tests only; preserve stopped VM and historical reports. Direct original Vault sync pending outside checkout; verification is in Milestones.
 
 ## 2026-10-03: reject nonfinite exponent overflow (offline)
 

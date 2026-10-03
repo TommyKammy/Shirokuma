@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.23"
+version: "5.24"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: underflowed lineage numbers and lossy inventory keys (offline)
+
+WP-L5-LINEAGE-001: the bounded JSON decoder refuses nonzero mantissas silently rounded to zero by Python float conversion, in catalog responses and saved summaries, including unused fields; literal zero remains valid. WP-L0-GITOPS-001 independently refuses an escaped lone-surrogate JSON key decoded lossily by Go even when the key is an ignored extension; valid extension keys remain accepted. Both disposable negatives failed before repair. Focused lineage (69 tests), Go CLI (825 passed), `go vet ./...`, combined `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima read-only observation: stopped. No live login/API/Git/SQL, VM start, reconciliation, unknown-request replay, retained source/credential/report/backup mutation or GitHub write. Offline shape checks cannot authenticate producers/API/Git, guarantee atomicity, establish whole-catalog/column lineage, clear strict admission or grant operator/production acceptance. Roll back decoder and inventory key guard/tests only, retaining VM, reports and historical evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: nonfinite JSON cannot enter catalog or saved-source evidence (offline)
 

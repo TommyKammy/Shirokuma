@@ -73,7 +73,12 @@ def now():
 def decode(raw):
     def finite_float(text):
         value = float(text)
-        require(math.isfinite(value), 'INVALID_JSON')
+        # float() also silently rounds a nonzero JSON mantissa to zero for
+        # sufficiently negative exponents. Do not turn evidence into a value
+        # different from the value sent by the source or catalog.
+        mantissa = re.split('[eE]', text, maxsplit=1)[0]
+        require(math.isfinite(value) and (value != 0 or not re.search('[1-9]', mantissa)),
+                'INVALID_JSON')
         return value
 
     def pairs(items):

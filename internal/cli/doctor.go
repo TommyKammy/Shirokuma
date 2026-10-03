@@ -641,6 +641,12 @@ func localInventoryUniqueFields(raw []byte) bool {
 				if !ok {
 					return false
 				}
+				// encoding/json replaces escaped lone surrogates in keys with
+				// U+FFFD. Even an ignored extension key must not make a lossy
+				// inventory look complete.
+				if strings.ContainsRune(name, utf8.RuneError) {
+					return false
+				}
 				if _, exists := seen[name]; exists {
 					return false
 				}
