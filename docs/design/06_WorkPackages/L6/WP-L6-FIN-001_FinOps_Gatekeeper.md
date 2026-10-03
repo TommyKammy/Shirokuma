@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.43"
+version: "0.44"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: separate saved-history review after lifecycle guard (offline)
+
+Inspected direct selection, digest/order binding, bounded HTML and per-report
+storage coverage in `finops/history.py` independently of the GitOps repair.
+No additional defect established; FinOps implementation and saved reports
+unchanged. `make test-local-finops` passed 181 tests (seven Linux-only skips).
+Dedicated Colima remained Stopped; no collection, retained report/volume/backup
+mutation or GitHub write. AgentHouse usage remains `null / NOT_MEASURED`.
+Offline tests cannot authenticate producers, run Linux-only fixtures, measure
+current usage or establish acceptance. No runtime rollback; preserve reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-04: independent saved-history review (offline)
 

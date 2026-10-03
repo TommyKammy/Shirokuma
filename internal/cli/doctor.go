@@ -378,6 +378,9 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		// Reported creation/deletion times on even unrelated members must be
 		// usable Kubernetes timestamps, not malformed claims hidden by a
 		// projected list. Omission remains compatible with older fixtures.
+		var creation, deletion time.Time
+		_, hasCreation := metadata["creationTimestamp"]
+		_, hasDeletion := metadata["deletionTimestamp"]
 		for _, key := range []string{"creationTimestamp", "deletionTimestamp"} {
 			if rawTimestamp, ok := metadata[key]; ok {
 				var timestamp string
@@ -385,10 +388,19 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 					!localDeletionTimestamp.MatchString(timestamp) {
 					return true
 				}
-				if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
+				parsed, err := time.Parse(time.RFC3339Nano, timestamp)
+				if err != nil {
 					return true
 				}
+				if key == "creationTimestamp" {
+					creation = parsed
+				} else {
+					deletion = parsed
+				}
 			}
+		}
+		if hasCreation && hasDeletion && deletion.Before(creation) {
+			return true
 		}
 		// Nested declared fields must also be canonical: encoding/json accepts
 		// Spec.Ref.Branch or Status.Conditions as if they were Kubernetes keys.

@@ -5,12 +5,26 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.89"
+version: "0.90"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: reported lifecycle timestamp order (offline)
+
+An unrelated member reporting deletion before creation passed the fixed-profile
+complete-list check even though both timestamps were individually valid. The
+focused negative failed before repair; when both times are reported, the reader
+now compares parsed instants (including timezone offsets). Equal times and
+omitted projections remain compatible. `go test ./internal/cli -count=1` passed
+(837 tests). Dedicated Colima observed Stopped; no live API/Git read,
+reconciliation, retained data/backup mutation or GitHub write. This local
+consistency check cannot authenticate the producer, prove atomic inventory,
+clear strict admission or establish operator acceptance. Roll back the reader
+and test only if needed; preserve earlier evidence. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-04: reported creation timestamp (offline)
 

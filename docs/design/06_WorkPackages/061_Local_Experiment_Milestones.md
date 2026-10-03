@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.132"
+version: "5.133"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: GitOps lifecycle order and independent FinOps check (offline)
+
+WP-L0-GITOPS-001: an unrelated complete-list member reporting deletion before
+creation passed before repair; parsed timestamps now require nondecreasing
+order when both are present. The disposable negative failed before repair;
+focused Go CLI suite passed (837 tests). Separately WP-L6-FIN-001 saved-history
+selection, digest/order and storage presentation were inspected without a new
+defect; FinOps suite passed 181 tests (seven Linux-only skips). Dedicated
+Colima was read-only observed Stopped; no live API/Git, reconciliation,
+collection, unknown-request replay, retained report/volume/backup mutation or
+GitHub write. AgentHouse volume remains `null / NOT_MEASURED`. Offline checks
+do not authenticate producers, prove atomic inventory, exercise Linux fixtures,
+measure current usage, clear strict admission or establish operator acceptance.
+Roll back the GitOps reader/test only if needed, preserving historical evidence;
+no FinOps runtime rollback. Original Vault synchronization pending outside the
+approved checkout.
+After both increments, `go test ./... -count=1` (837 tests), `go vet ./...`,
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. Synthetic
+failure-path output in local verification is not a live runtime check.
 
 ## 2026-10-04: separate FinOps saved-history review (offline)
 

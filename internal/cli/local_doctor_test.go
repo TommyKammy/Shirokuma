@@ -961,6 +961,25 @@ func TestLocalInventoryRejectsMalformedCreationTimestamp(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsDeletionBeforeCreation(t *testing.T) {
+	for _, tc := range []struct {
+		metadata string
+		invalid  bool
+	}{
+		{`"creationTimestamp":"2026-10-03T12:00:00Z","deletionTimestamp":"2026-10-03T11:59:59Z"`, true},
+		{`"creationTimestamp":"2026-10-03T12:00:00+09:00","deletionTimestamp":"2026-10-03T03:00:01Z"`, false},
+		{`"creationTimestamp":"2026-10-03T12:00:00Z","deletionTimestamp":"2026-10-03T12:00:00Z"`, false},
+		{`"creationTimestamp":"2026-10-03T12:00:00Z"`, false},
+		{`"deletionTimestamp":"2026-10-03T12:00:00Z"`, false},
+	} {
+		raw := []byte(`{"items":[{"kind":"Service","metadata":{` + tc.metadata + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("creation/deletion order incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsAvailableGreaterThanReady(t *testing.T) {
 	for _, status := range []string{
 		`{"availableReplicas":2,"readyReplicas":1}`,
