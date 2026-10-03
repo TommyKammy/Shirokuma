@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.42"
+version: "4.43"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: declared Git branch and dev wait
+
+WP-L0-GITOPS-001. Two independent offline fixed-profile doctor checks now reject a missing/wrong `flux-system` GitRepository branch and absent/false dev Kustomization `wait`, against `deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml` and `deploy/gitops/clusters/local-lite/dev.yaml`. Fake positive/negative cases and generic-profile isolation passed. Initial focused test exposed stale shared-fixture replacements (two failures), fixed before the final `go test ./internal/cli` (737 passed), `go vet ./...`, `git diff --check` and `make verify-local-experiment` pass. Dedicated Colima read-only status: stopped; no VM start, actual API/SQL reads, reconciliation, saved-request replay, retained volume or backup changes. Remote source identity, live readiness, strict publication gate and operator/production acceptance remain unverified. Roll back only doctor checks/tests and preserve saved evidence and stopped VM. Original Vault handoff direct sync is pending outside this noninteractive checkout.
 
 ## 2026-10-03: declared root and dev pruning
 

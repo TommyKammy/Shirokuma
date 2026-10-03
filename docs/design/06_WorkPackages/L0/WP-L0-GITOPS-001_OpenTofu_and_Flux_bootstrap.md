@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.17"
+version: "0.18"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: declared source branch and dev wait
+
+Two independent offline fixed-profile checks now reject drift from the repository declarations: the `flux-system` GitRepository must report `spec.ref.branch: main` (missing/other branch fails), and the dev Kustomization must report `spec.wait: true` (missing/false fails). Previously either could be Ready and pass the local doctor. The generic profile is unchanged. Fake negative/positive cases passed `go test ./internal/cli` (737 tests), `go vet ./...`, `git diff --check`, and `make verify-local-experiment`; the first focused run found two stale test replacements after updating the shared fixture and passed after correction. Dedicated Colima read-only status was stopped; no start, live API/SQL, reconciliation, retained request replay, volume or backup mutation. Reported fields do not authenticate remote Git, confirm live convergence, clear the historical strict gate, or establish operator/production acceptance. Roll back only these doctor checks/tests, retaining the stopped VM and saved evidence. Original Vault handoff direct synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: declared root and dev pruning
 

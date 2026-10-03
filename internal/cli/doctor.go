@@ -89,6 +89,10 @@ type kubernetesResourceList struct {
 			Suspend   bool   `json:"suspend"`
 			Path      string `json:"path"`
 			Prune     bool   `json:"prune"`
+			Wait      bool   `json:"wait"`
+			Ref       struct {
+				Branch string `json:"branch"`
+			} `json:"ref"`
 			Replicas  *int   `json:"replicas"`
 			SourceRef struct {
 				Kind      string `json:"kind"`
@@ -349,12 +353,18 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if isRootSource {
 			rootSourceCount++
+			if localExperiment && resource.Spec.Ref.Branch != "main" {
+				unhealthy = append(unhealthy, resourceID+" (declared branch mismatch)")
+			}
 			if localExperiment && !localFluxGitRevision.MatchString(resource.Status.Artifact.Revision) {
 				unhealthy = append(unhealthy, resourceID+" (revision unverified)")
 			}
 		}
 		if localExperiment && isDev {
 			devCount++
+			if !resource.Spec.Wait {
+				unhealthy = append(unhealthy, resourceID+" (wait disabled)")
+			}
 			if !resource.Spec.Prune {
 				unhealthy = append(unhealthy, resourceID+" (prune disabled)")
 			}
