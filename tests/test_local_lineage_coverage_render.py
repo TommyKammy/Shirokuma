@@ -142,6 +142,16 @@ class CoverageRenderTests(unittest.TestCase):
             with self.subTest(before=before, after=after), self.assertRaises(RenderError):
                 render(value)
 
+    def test_valid_source_requires_final_saved_evidence_even_in_incomplete_observation(self):
+        value = report()
+        value['runs'][0]['source_sha256_after'] = None
+        value['observation'].update(status='incomplete', source_stable=False,
+                                    reason_codes=['SOURCE_INVENTORY_UNAVAILABLE'])
+        with self.assertRaises(RenderError):
+            render(value)
+        value['runs'][0]['source_sha256_after'] = 'a' * 64
+        self.assertIn('2 / 2 エッジ', render(value))
+
     def test_catalog_stability_claim_requires_matching_saved_snapshots(self):
         for after in (None, 'c' * 64):
             value = report()

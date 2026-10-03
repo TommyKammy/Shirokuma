@@ -5,12 +5,25 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.00"
+version: "1.01"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: Envoy identity and target hints on private RPC (offline)
+
+The fixed one-request Unix transition refuses bare `X-Envoy` and the
+`X-Envoy-*` namespace before handler or journal. Disposable original-path and
+external-address requests previously reached the handler; the new fixture
+checks bounded refusal. Unrelated printable extension headers remain supported.
+Focused Warehouse and lineage checks passed. An initial focused rerun hit a
+new indentation error in this edit; corrected and rerun. No VM start, backend/
+SQL, archived request replay or retained session/backup modification. This
+does not independently authenticate the peer or prove caller receipt, restart
+recovery or operator acceptance. Roll back parser/test alone and retain saved
+evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: X-Proxy identity hints on private RPC (offline)
 

@@ -235,9 +235,12 @@ def _validate(report):
             _require(value is None or type(value) is str and re.fullmatch('[0-9a-f]{64}', value), 'INVALID_EVIDENCE_HASH')
         _require(not run['eligible'] or run['source_sha256_before'] is not None,
                  'INCONSISTENT_SOURCE_ELIGIBILITY')
-        _require(source != 'valid' or run['source_sha256_after'] is None or
-                 run['source_sha256_before'] == run['source_sha256_after'],
-                 'INCONSISTENT_SOURCE_STATUS')
+        # A valid source survived the final snapshot; a failed final read is
+        # classified incomplete by the collector, even if the observation as
+        # a whole is incomplete for some other reason.
+        _require(source != 'valid' or
+                  run['source_sha256_before'] == run['source_sha256_after'],
+                  'INCONSISTENT_SOURCE_STATUS')
         if observation['source_stable']:
             _require(run['source_sha256_before'] is not None and
                      run['source_sha256_before'] == run['source_sha256_after'],

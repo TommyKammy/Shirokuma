@@ -5,12 +5,26 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.48"
+version: "1.49"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: final evidence for valid saved sources (offline)
+
+The direct renderer previously allowed a `valid` source with a missing final
+digest whenever the overall observation was incomplete for another reason. A
+disposable negative reproduced this; the renderer now requires matching initial
+and final digests for every `valid` run, even in an incomplete observation. A
+separate incomplete observation with intact source evidence remains displayable.
+Focused lineage and Warehouse checks passed after repair; full verification is
+recorded in Milestones. This is saved-claim consistency, not provenance,
+atomicity, whole-catalog/column coverage or operator acceptance. No VM start,
+catalog access, retained source/report/backup mutation or replay. Roll back
+renderer/test alone; preserve archived evidence. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-04: complete-population and initial-evidence claims (offline)
 

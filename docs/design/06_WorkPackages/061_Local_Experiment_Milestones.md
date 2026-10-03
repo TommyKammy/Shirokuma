@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.78"
+version: "5.79"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: final lineage evidence and private Envoy hints (offline)
+
+WP-L5-LINEAGE-001 refuses a `valid` saved source without its final digest,
+even when the overall observation is incomplete for another reason. The
+test-owned negative failed before repair; a separate incomplete observation
+with intact evidence remains valid. Independently WP-L3-VW-002 refuses bare
+`X-Envoy` and `X-Envoy-*` identity/target hints before private Unix dispatch
+and journaling. Focused lineage and Warehouse checks passed after repair.
+The first focused rerun failed due to an edit-induced Warehouse indentation
+error; corrected and rerun. `make verify-local-experiment`,
+`make verify-design-context` and `git diff --check` passed; private failed
+and passing logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-036/`.
+Read-only Colima listing observed the dedicated VM stopped. No VM start, live
+catalog/backend/SQL, archived UUID replay, retained source/session/report/
+backup mutation or GitHub write. Offline fixtures do not prove independent
+producer/peer identity, atomicity, caller receipt, restart recovery, complete
+catalog/column coverage or operator acceptance. Roll back the independent
+guards/tests only, preserving historical evidence and the stopped VM. Original
+Vault synchronization remains pending outside the approved checkout.
 
 ## 2026-10-04: private X-Proxy namespace (offline)
 
