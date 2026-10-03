@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.74"
+version: "4.75"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: null inventory members (offline)
+
+WP-L0-GITOPS-001: fixed-profile lists now refuse null item members and null condition entries even on unrelated resources. Isolated negatives failed before repair; `go test ./internal/cli -count=1` (787 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed afterward. Dedicated Colima read-only status reported stopped. No VM start, live API/SQL, reconciliation, unknown-request replay, retained data/backup mutation. Fake diagnostics cannot authenticate or atomically observe the API, prove historical cleanup, clear strict publication admission or establish operator/production acceptance. Roll back only reader/tests, preserving VM and evidence; original Vault handoff direct sync remains pending outside checkout.
 
 ## 2026-10-03: nested null fields and reverse Warehouse projections (offline)
 

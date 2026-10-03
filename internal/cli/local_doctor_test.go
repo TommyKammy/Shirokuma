@@ -41,7 +41,11 @@ func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 		resources := strings.Replace(localFluxJSON(), `{"type":"Ready","status":"True","observedGeneration":1}`, `{"type":"Ready","status":"True","observedGeneration":1},`+extra, 1)
 		responses := []fakeResponse{{output: localControllerJSON()}, {output: resources}}
 		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
-		if check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete condition") {
+		expected := "incomplete condition"
+		if extra == `null` {
+			expected = "resource response was incomplete"
+		}
+		if check.Status != "degraded" || !strings.Contains(check.Summary, expected) {
 			t.Fatalf("extra condition %s accepted: %#v", extra, check)
 		}
 		generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
@@ -191,6 +195,50 @@ func TestLocalInventoryRejectsNullConditionFields(t *testing.T) {
 		var list kubernetesResourceList
 		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
 			t.Fatalf("non-null or omitted condition field rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsNullMembers(t *testing.T) {
+	for _, tc := range []struct{ name, raw string }{
+		{"list item", `{"items":[{},null]}`},
+		{"condition entry", `{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"},null]}}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var list kubernetesResourceList
+			if err := json.Unmarshal([]byte(tc.raw), &list); err != nil {
+				t.Fatal(err)
+			}
+			if !localInventoryIncomplete(list, []byte(tc.raw)) {
+				t.Fatalf("null member accepted: %s", tc.raw)
+			}
+		})
+	}
+	for _, raw := range []string{`{"items":[{}]}`, `{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}`} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal([]byte(raw), &list); err != nil || localInventoryIncomplete(list, []byte(raw)) {
+			t.Fatalf("non-null member rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryNullMembersDegradeFixedProfile(t *testing.T) {
+	for _, member := range []string{`null`, `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"status":{"conditions":[null]}}`} {
+		decorate := func(raw string) string {
+			return strings.Replace(raw, `"items":[`, `"items":[`+member+`,`, 1)
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: decorate(localControllerJSON())}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("controller member %s accepted: %#v", member, check)
+		}
+		check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: decorate(localFluxJSON())}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("Flux member %s accepted: %#v", member, check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[0].output = decorate(workloads[0].output)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[0].Status != "degraded" {
+			t.Fatalf("Lakehouse member %s accepted: %#v", member, checks)
 		}
 	}
 }

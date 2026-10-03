@@ -235,6 +235,9 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		return true
 	}
 	for _, item := range items.Items {
+		if item == nil {
+			return true // A null member is not a Kubernetes resource.
+		}
 		// Explicit null is not an omitted field in a Kubernetes object. In
 		// particular, a null spec/status on an unrelated item must not be
 		// mistaken for a valid member of a complete namespace inventory.
@@ -302,6 +305,9 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		var conditions []json.RawMessage
 		_ = json.Unmarshal(status["conditions"], &conditions)
 		for _, condition := range conditions {
+			if string(condition) == "null" {
+				return true // A null entry cannot describe a condition.
+			}
 			if !localInventoryCanonicalFields(condition, []string{"type", "status", "observedGeneration"}) {
 				return true
 			}

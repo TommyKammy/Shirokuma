@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.41"
+version: "0.42"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: null inventory members (offline)
+
+Two independent fixed-profile checks reject explicit null list items and null condition entries, including on otherwise unrelated inventory members. Go's JSON decoder previously treated these as zero-value objects, allowing the list to appear complete. Omitted optional fields and ordinary non-null members remain compatible; generic doctor is unchanged. Focused negatives failed before repair; `go test ./internal/cli -count=1` (787 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed afterward. Dedicated Colima was read-only observed stopped; no VM start, API/SQL read, reconciliation, unknown-request replay or retained data/backup change. This checks fake response consistency, not authenticated or atomic Kubernetes inventory, Git provenance, historical cleanup, strict admission or operator/production acceptance. Roll back only the local reader/tests, preserving the stopped VM and saved evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: null nested scalar and condition fields (offline)
 
