@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.109"
+version: "5.110"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent policy DNS and metadata response guards
+
+WP-L2-POL-001: six DNS/hostname/service-link and three metadata selector or
+finalizer mutations in disposable fake allowed responses passed before repair.
+They now fail closed while the original intent remains pending; inert defaults
+remain accepted. Candidate-focused 75 tests, `make test-local-policy` (17) and
+`make verify-local-experiment` passed. Dedicated Colima observed Stopped. No
+live admission, retained request replay, backup/volume mutation or GitHub
+write. These are offline comparisons, not authenticated server responses,
+complete mutation coverage or acceptance. Roll back comparator/test only and
+preserve pending evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: policy namespace/host resolution and separate Warehouse review
 

@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.19"
+version: "0.20"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: DNS and metadata response boundaries (offline)
+
+Six disposable allowed responses redirected DNS/hostname/service links and
+three injected labels, annotations or finalizers. All nine passed before the
+guard and now fail closed as unknown, retaining their pending request. Explicit
+inert API defaults still match. Focused candidate tests (75) and full local
+verification passed. The dedicated Colima was observed Stopped; no admission,
+archived request replay, retained data/backup mutation or GitHub write. Fake
+responses cannot authenticate the API or prove complete Pod mutation coverage,
+current runtime state or acceptance. Roll back the comparator/tests only if
+needed; preserve unknown requests. Original Vault sync remains pending outside
+the approved noninteractive checkout.
 
 ## 2026-10-04: process namespace and host aliases (offline)
 

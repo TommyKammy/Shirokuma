@@ -99,7 +99,11 @@ def allowed_pod_matches(value, body):
         return False
     # A controller owner can change lifecycle; an injected pull secret changes
     # the credentials used to fetch the image even when image text is unchanged.
-    if meta.get('ownerReferences') not in (None, []) or spec.get('imagePullSecrets') not in (None, []):
+    if (meta.get('ownerReferences') not in (None, []) or
+            meta.get('labels') not in (None, {}) or
+            meta.get('annotations') not in (None, {}) or
+            meta.get('finalizers') not in (None, []) or
+            spec.get('imagePullSecrets') not in (None, [])):
         return False
     original = body['spec']; containers = spec.get('containers')
     # Pod-level identity/security settings are separate from the container
@@ -130,6 +134,14 @@ def allowed_pod_matches(value, body):
     # can silently redirect names resolved by the candidate's container.
     if (spec.get('shareProcessNamespace', False) is not False or
             spec.get('hostAliases') not in (None, [])):
+        return False
+    # The submitted Pod cannot select DNS or host identity. Allow only the
+    # inert API defaults, not a resolver, service-link or FQDN mutation.
+    if (spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
+            spec.get('dnsConfig') not in (None, {}) or
+            spec.get('hostname', '') != '' or spec.get('subdomain', '') != '' or
+            spec.get('enableServiceLinks', True) is not True or
+            spec.get('setHostnameAsFQDN', False) is not False):
         return False
     if (type(containers) is not list or len(containers) != 1 or
             any(spec.get(key) not in (None, []) for key in ('initContainers', 'ephemeralContainers', 'volumes')) or
