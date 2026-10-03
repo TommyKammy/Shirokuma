@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.40"
+version: "0.41"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: wall-clock rollback cannot publish an inverted observation (offline)
+
+The opt-in two-round read-only scoped inventory now refuses a wall-clock interval whose end precedes its start, instead of publishing a misleading observation window when the workstation clock steps backwards. A fake clock negative failed before repair, then passed; `make test-local-warehouse-lifecycle` and `make verify-local-experiment` passed afterward. Monotonic deadline and unchanged two-round consistency remain the freshness boundaries. Dedicated Colima remained stopped; no live API/SQL, owner action, unknown-request replay or retained session/backup mutation. This cannot authenticate the API, prove an atomic inventory or historical cleanup, or establish operator/production acceptance. Roll back only the offline reader/test; preserve VM and saved evidence. Direct original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: reverse scoped projection membership (offline)
 

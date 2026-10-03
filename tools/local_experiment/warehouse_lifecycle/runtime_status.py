@@ -230,14 +230,18 @@ def snapshot(token, kube, deadline):
 def observe(token, kube, *, deadline=None):
     require(type(token) is str and re.fullmatch(r'[0-9a-f]{32}', token) is not None)
     deadline = time.monotonic() + MAX_SECONDS if deadline is None else deadline
-    before = datetime.now(timezone.utc).isoformat()
+    before_time = datetime.now(timezone.utc)
     first = snapshot(token, kube, deadline)
     second = snapshot(token, kube, deadline)
     # The last projection may finish within its own timeout after the overall
     # observation deadline; never publish a late two-round result.
     require(time.monotonic() < deadline)
     require(first == second)
-    after = datetime.now(timezone.utc).isoformat()
+    after_time = datetime.now(timezone.utc)
+    # Monotonic bounds freshness, but a backwards wall-clock step would
+    # produce a misleading, inverted evidence interval.
+    require(after_time >= before_time)
+    before, after = before_time.isoformat(), after_time.isoformat()
     report = {'schema_version': 1, 'session_id': token, 'observation': 'current-kubernetes-two-reads',
             'scope': 'fixed-names-owner-labels-and-two-service-endpoints-in-shirokuma-dev',
             'observed_from': before, 'observed_to': after,

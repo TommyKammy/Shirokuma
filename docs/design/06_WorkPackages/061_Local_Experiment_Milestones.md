@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.77"
+version: "4.78"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: bounded Warehouse observation wall-clock interval (offline)
+
+WP-L3-VW-002: read-only scoped report rejects a backwards wall-clock interval. Fake negative failed before repair; Warehouse focused suite and `make verify-local-experiment` passed after repair (private logs `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-030/warehouse-test.log` and `verify-final.log`). Monotonic deadline remains in place; timestamps are not atomic or authenticated inventory. Dedicated Colima remained stopped; no live API/SQL, owner operation, unknown-request replay, retained session or backup mutation. Historical cleanup and operator/production acceptance remain unverified. Roll back reader/test only, preserving VM and evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: unrelated diagnostic condition bounds (offline)
 

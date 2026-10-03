@@ -1,5 +1,6 @@
 """Isolated Kubernetes metadata responses; no VM, owner, SQL or saved files."""
 import copy
+from datetime import datetime, timezone
 import io
 import os
 from unittest import TestCase, mock
@@ -72,6 +73,17 @@ class RuntimeStatusTests(TestCase):
             with self.assertRaises(R.RuntimeStatusError):
                 R.observe(TOKEN, FakeKube(), deadline=100)
             self.assertEqual(snapshots.call_count, 2)
+
+    def test_reversed_wall_clock_does_not_publish_an_inverted_interval(self):
+        empty = {'named_present': 0, 'labelled_present': 0, 'service_endpoints_present': 0,
+                 'snapshot_sha256': '0' * 64}
+        with mock.patch.object(R, 'snapshot', return_value=empty), \
+             mock.patch.object(R, 'datetime') as clock:
+            clock.now.side_effect = [
+                 datetime(2026, 10, 3, 2, tzinfo=timezone.utc),
+                 datetime(2026, 10, 3, 1, tzinfo=timezone.utc)]
+            with self.assertRaises(R.RuntimeStatusError):
+                R.observe(TOKEN, FakeKube())
 
     def test_same_name_even_without_owner_label_is_present(self):
         kube = FakeKube()
