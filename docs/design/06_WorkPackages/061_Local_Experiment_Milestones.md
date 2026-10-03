@@ -12,6 +12,19 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: FinOps saved-history floating underflow (offline)
+
+WP-L6-FIN-001's offline history previously turned nonzero JSON measurements
+such as `1e-999` into zero. A disposable pair of valid saved-report fixtures
+reproduced acceptance before repair; the bounded decoder now rejects nonzero
+underflow while allowing an actual zero exponent and ordinary report values.
+`make test-local-finops` and `make verify-local-experiment` passed after repair;
+private logs under `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-014/`.
+No collector/schema change, saved report edit, VM start, retained volume/backup
+scan or GitHub write. This does not measure current resources, authenticate the
+report producer, establish total costs or prove backup recovery. Roll back only
+history decoder/test; preserve saved reports. Original Vault sync pending.
+
 ## 2026-10-04: Unix RPC credential headers and catalog 404 closure (offline)
 
 WP-L3-VW-002 rejects bearer/proxy/browser credential headers on its private

@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -25,6 +27,15 @@ class HistoryError(ValueError):
 def parse(raw):
     if type(raw) is not bytes or not 0 < len(raw) <= MAX_INPUT_BYTES: raise HistoryError()
 
+    def finite_float(text):
+        value = float(text)
+        # A saved nonzero measurement must not silently round to zero when
+        # decoded, even when the resulting report otherwise validates.
+        mantissa = re.split('[eE]', text, maxsplit=1)[0]
+        if not math.isfinite(value) or (value == 0 and re.search('[1-9]', mantissa)):
+            raise HistoryError()
+        return value
+
     def pairs(items):
         value = {}
         for key, item in items:
@@ -33,7 +44,7 @@ def parse(raw):
         return value
 
     try:
-        values = json.loads(raw.decode('utf-8'), object_pairs_hook=pairs,
+        values = json.loads(raw.decode('utf-8'), object_pairs_hook=pairs, parse_float=finite_float,
                             parse_constant=lambda _: (_ for _ in ()).throw(HistoryError()))
         if type(values) is not list or not 2 <= len(values) <= MAX_REPORTS: raise HistoryError()
         reports = []

@@ -60,6 +60,15 @@ class HistoryTests(unittest.TestCase):
         too_many = encoded([report()] * 9)
         with self.assertRaises(H.HistoryError): H.parse(too_many)
 
+    def test_nonzero_float_underflow_cannot_become_saved_zero_usage(self):
+        original = encoded([report(), report(processes())])
+        self.assertIn(b'0.5', original)
+        underflow = original.replace(b'0.5', b'1e-999')
+        with self.assertRaises(H.HistoryError):
+            H.parse(underflow)
+        self.assertEqual(len(H.parse(original)), 2)
+        self.assertEqual(len(H.parse(original.replace(b'0.5', b'0e-999'))), 2)
+
     def test_cli_failure_has_no_partial_html_or_private_error(self):
         class Input:
             buffer = io.BytesIO(b'[{"secret":"PRIVATE_TOKEN"},{}]')

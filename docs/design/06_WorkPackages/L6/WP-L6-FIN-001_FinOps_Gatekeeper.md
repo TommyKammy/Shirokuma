@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-04 保存FinOps履歴の非ゼロ浮動小数underflow拒否（offline）
+
+保存した2–8報を読む`history.parse`はJSONの極小非ゼロ数`1e-999`をPythonの
+floatで0に丸め、妥当な0の測定値としてHTMLへ渡し得た。隔離された2件の
+valid reportの既存0.5測定値を置換した負例で修正前の誤受入を再現。非ゼロ
+mantissaが0へunderflowした場合だけ拒否し、真の`0e-999`と通常の保存履歴を
+維持する。public schema/collector・保存report原本は変更しない。これは
+選択したJSON数値のdecode境界であり、現在の実使用量やレポートの独立
+producer真正性・継続量・backup復旧を証明しない。実volume、VM、保持data、
+backupを走査/変更せず、AgentHouse volumeは`null / NOT_MEASURED`、WP
+local-partial。focusedと全回帰の結果はMilestones、private logは
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-014/`。
+戻す場合はhistory decoder/test差分のみ戻し、保存report/backupを保持する。
+原Vault同期は非対話checkout外で保留。
+
 ## 保存レポートの保存領域観測範囲表（2026-09-27・offline履歴）
 
 保存v1–v9の履歴HTMLにAgentHouse Docker volume、MLflow store、Notebook Lab workspace、Serving HOME/TMPの固定5行×選択観測の範囲表を追加。各reportのvalidated JSONだけで、schema対象外・参照未取得・参照確認/未計測・論理bytes未取得・観測した通常ファイル`st_size`を分ける。0は**当該directoryの実際に保存された論理0**のセルだけに表示。AgentHouseのvolumeは参照が成功していても使用量`NOT_MEASURED`を維持。合計/増減、観測間の連続性、TMP削除可能量、物理占有、backupは推定しない。公開schema・collector・保存JSONは変更せず、選択2–8報をoffline表示するだけ。
