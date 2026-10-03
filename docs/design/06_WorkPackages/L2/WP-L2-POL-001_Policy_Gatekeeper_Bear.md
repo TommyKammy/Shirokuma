@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.20"
+version: "0.21"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: unsubmitted Pod controls and metadata lifecycle (offline)
+
+Three disposable allowed responses inserted `hostUsers: false`, a resource
+claim, or a zero termination grace period; three separate responses added a
+generated name, deletion timestamp, or deletion grace period. All six passed
+before repair. The spec comparison now refuses unknown keys and these controls
+except inert explicit defaults; metadata lifecycle mutations also fail closed
+as unknown, retaining the pending request. Focused observer suite (32 tests)
+and `make verify-local-experiment` passed. Dedicated Colima was observed
+Stopped. No live admission, archived replay, retained report/volume/backup
+mutation or GitHub write. Fake responses neither authenticate an API nor prove
+complete Pod mutation coverage or operator acceptance. If necessary roll back
+comparator/tests only; preserve pending requests and existing evidence. Original
+Vault synchronization remains pending outside the noninteractive checkout.
 
 ## 2026-10-04: scheduling and lifecycle response controls (offline)
 

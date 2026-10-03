@@ -103,9 +103,31 @@ def allowed_pod_matches(value, body):
             meta.get('labels') not in (None, {}) or
             meta.get('annotations') not in (None, {}) or
             meta.get('finalizers') not in (None, []) or
+            meta.get('generateName', '') != '' or
+            meta.get('deletionTimestamp') is not None or
+            meta.get('deletionGracePeriodSeconds') is not None or
             spec.get('imagePullSecrets') not in (None, [])):
         return False
     original = body['spec']; containers = spec.get('containers')
+    # Reject newly introduced Pod controls by default. Explicitly handle
+    # harmless API defaults below instead of silently trusting new fields.
+    if set(spec) - {
+            'containers', 'securityContext', 'serviceAccountName', 'serviceAccount',
+            'nodeName', 'nodeSelector', 'tolerations', 'affinity', 'schedulerName',
+            'runtimeClassName', 'priorityClassName', 'priority', 'preemptionPolicy',
+            'shareProcessNamespace', 'hostAliases', 'topologySpreadConstraints',
+            'readinessGates', 'overhead', 'activeDeadlineSeconds', 'dnsPolicy',
+            'dnsConfig', 'hostname', 'subdomain', 'enableServiceLinks',
+            'setHostnameAsFQDN', 'initContainers', 'ephemeralContainers', 'volumes',
+            'hostNetwork', 'hostIPC', 'hostPID', 'automountServiceAccountToken',
+            'restartPolicy', 'imagePullSecrets', 'terminationGracePeriodSeconds',
+            'hostUsers', 'resourceClaims'}:
+        return False
+    if (type(spec.get('terminationGracePeriodSeconds', 30)) is not int or
+            spec.get('terminationGracePeriodSeconds', 30) != 30 or
+            spec.get('hostUsers', True) is not True or
+            spec.get('resourceClaims') not in (None, [])):
+        return False
     # Pod-level identity/security settings are separate from the container
     # securityContext. Never turn a mutated runAsUser or seccomp profile into an
     # allowed response merely because the container itself is unchanged.

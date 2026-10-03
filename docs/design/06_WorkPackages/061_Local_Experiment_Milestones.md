@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.111"
+version: "5.112"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: Pod spec extension and metadata lifecycle response guards (offline)
+
+WP-L2-POL-001: six disposable fake allowed responses carrying unsubmitted
+host-user isolation, resource claim, zero grace period, generated name or
+deletion lifecycle fields passed before repair. They now fail closed with
+the original request pending; inert explicit API defaults remain accepted.
+Focused observer 32 tests and `make verify-local-experiment` passed. Dedicated
+Colima observed Stopped; no live admission, saved-request replay, retained
+report/volume/backup mutation or GitHub write. Fake checks cannot authenticate
+an API, prove full mutation coverage or establish acceptance. Roll back only
+comparator/tests, retaining pending requests and historical evidence. Original
+Vault synchronization pending outside the approved checkout.
 
 ## 2026-10-04: policy scheduling/lifecycle and independent GitOps review (offline)
 

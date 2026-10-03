@@ -238,6 +238,53 @@ class ObserverTests(unittest.TestCase):
         kube.respond=defaults
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_add_unrecognized_pod_controls(self):
+        for changes in ({'hostUsers':False},
+                        {'resourceClaims':[{'name':'claim','source':{'resourceClaimName':'other'}}]},
+                        {'terminationGracePeriodSeconds':0}):
+            with self.subTest(changes=changes):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['spec'].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaults(body):
+            altered=copy.deepcopy(body)
+            altered['spec'].update(hostUsers=True, resourceClaims=[], terminationGracePeriodSeconds=30)
+            return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+        kube.respond=defaults
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
+    def test_allowed_response_cannot_add_metadata_lifecycle_controls(self):
+        for changes in ({'generateName':'different-'},
+                        {'deletionTimestamp':'2026-10-04T00:00:00Z'},
+                        {'deletionGracePeriodSeconds':0}):
+            with self.subTest(changes=changes):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['metadata'].update(changes)
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        def defaults(body):
+            altered=copy.deepcopy(body)
+            altered['metadata'].update(generateName='', deletionTimestamp=None,
+                                       deletionGracePeriodSeconds=None)
+            return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+        kube.respond=defaults
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_cannot_redirect_dns_or_hostname(self):
         for changes in ({'dnsPolicy':'None'},
                         {'dnsConfig':{'nameservers':['127.0.0.1']}},
