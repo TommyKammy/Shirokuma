@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.10"
+version: "1.11"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: valid escaped surrogate pair remains catalog data (offline)
+
+An independent disposable HTTP response confirms the bounded decoder preserves a valid escaped surrogate pair as its Unicode scalar while continuing to reject lone surrogates; no reader behavior changed. Focused lineage and combined local verification passed (Milestones). No live login/API, VM start or retained source/credential/report/backup change. This is JSON compatibility, not catalog authentication, atomicity, whole-catalog/column lineage or operator acceptance. Roll back only the test, preserving historical evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: client deadline cannot be disabled by constructor input (offline)
 

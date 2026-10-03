@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.29"
+version: "5.30"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: valid catalog Unicode escape compatibility (offline)
+
+WP-L5-LINEAGE-001: a disposable HTTP response with a valid escaped surrogate pair remains accepted and decoded to the same scalar as raw UTF-8. This pins the existing positive boundary alongside lone-surrogate negatives without changing the client. `make test-local-lineage-coverage` passed (73 tests); `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed after this addition. Private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-074/{lineage-second,verify-final,design-second}.log`. No dedicated VM start, live login/API, retained source/credential/report/backup mutation or unknown-request replay. Offline compatibility does not authenticate producer/catalog, establish atomicity, whole-catalog/column lineage or operator/production acceptance. Roll back only the test; keep historical reports and stopped VM. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: serve-loop callback failure and explicit null counters (offline)
 

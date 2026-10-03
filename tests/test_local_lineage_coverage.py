@@ -995,6 +995,9 @@ class ReadOnlyClientTests(unittest.TestCase):
         body = '{"unused":"雪 😀"}'.encode('utf-8')
         with patch.object(self.client.opener, 'open', return_value=Response(body)):
             self.assertEqual(self.client.request('GET', next(iter(C.ANCHORS))), {'unused': '雪 😀'})
+        # A valid escaped pair must not be mistaken for an unpaired surrogate.
+        with patch.object(self.client.opener, 'open', return_value=Response(b'{"unused":"\\ud83d\\ude00"}')):
+            self.assertEqual(self.client.request('GET', next(iter(C.ANCHORS))), {'unused': '😀'})
         with patch.object(self.client.opener, 'open', return_value=Response(b'{"unused":1e308}')):
             self.assertEqual(self.client.request('GET', next(iter(C.ANCHORS))), {'unused': 1e308})
         with patch.object(self.client.opener, 'open', return_value=Response(b'{"unused":0e-999}')):
