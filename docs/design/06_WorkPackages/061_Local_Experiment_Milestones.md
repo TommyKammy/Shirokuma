@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.78"
+version: "4.79"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse forward-clock and UTF-8 output bounds (offline)
+
+WP-L3-VW-002: read-only scoped report refuses an observation wall-clock span over 90 seconds despite a timely monotonic read; decoded kubectl metadata output is also bounded in UTF-8 bytes. Two fake negatives failed before repair; boundary positives, `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed afterward. Private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-031/warehouse-final.log`, `verify-final.log`, `design-final.log`. Dedicated Colima status reported stopped; no live API/SQL, owner operation, unknown-request replay or retained session/backup mutation. No authenticated/atomic inventory, historical cleanup, strict publication or operator/production acceptance is established. Roll back reader/tests only, preserving stopped VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: bounded Warehouse observation wall-clock interval (offline)
 

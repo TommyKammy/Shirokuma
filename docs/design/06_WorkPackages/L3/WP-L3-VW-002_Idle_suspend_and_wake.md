@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.41"
+version: "0.42"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: bounded forward-clock interval and metadata bytes (offline)
+
+Two separate read-only safeguards: a forward wall-clock jump beyond the 90-second observation budget now rejects the reported interval, complementing the previous backwards-clock check; and the decoded metadata-only kubectl response is checked against the 65536-byte limit in UTF-8, not just Python characters. Isolated negatives reproduced both acceptances before repair; boundary positives, `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents), and `git diff --check` pass afterward. Private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-031/warehouse-final.log`, `verify-final.log`, `design-final.log`. Dedicated Colima was read-only observed stopped; no live API/SQL, owner action, unknown-request replay or retained session/backup mutation. The command runner already bounds subprocess bytes; this second check covers its decoded response contract. These are offline bounds, not authenticated/atomic API inventory, historical cleanup or operator/production acceptance. Roll back reader/tests only, preserve VM and saved evidence. Direct original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: wall-clock rollback cannot publish an inverted observation (offline)
 

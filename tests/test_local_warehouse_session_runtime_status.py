@@ -1,6 +1,6 @@
 """Isolated Kubernetes metadata responses; no VM, owner, SQL or saved files."""
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import io
 import os
 from unittest import TestCase, mock
@@ -84,6 +84,34 @@ class RuntimeStatusTests(TestCase):
                  datetime(2026, 10, 3, 1, tzinfo=timezone.utc)]
             with self.assertRaises(R.RuntimeStatusError):
                 R.observe(TOKEN, FakeKube())
+
+    def test_forward_wall_clock_jump_does_not_publish_a_long_interval(self):
+        empty = {'named_present': 0, 'labelled_present': 0, 'service_endpoints_present': 0,
+                 'snapshot_sha256': '0' * 64}
+        start = datetime(2026, 10, 3, 1, tzinfo=timezone.utc)
+        with mock.patch.object(R, 'snapshot', return_value=empty), \
+             mock.patch.object(R, 'datetime') as clock, \
+             mock.patch.object(R.time, 'monotonic', return_value=1):
+            clock.now.side_effect = [start, datetime(2026, 10, 3, 2, tzinfo=timezone.utc)]
+            with self.assertRaises(R.RuntimeStatusError):
+                R.observe(TOKEN, FakeKube(), deadline=10)
+        with mock.patch.object(R, 'snapshot', return_value=empty), \
+             mock.patch.object(R, 'datetime') as clock, \
+             mock.patch.object(R.time, 'monotonic', return_value=1):
+            clock.now.side_effect = [start, start + timedelta(seconds=R.MAX_SECONDS)]
+            self.assertEqual(R.observe(TOKEN, FakeKube(), deadline=10)['current_state'],
+                             'scoped-absence-observed')
+
+    def test_metadata_stdout_limit_counts_utf8_bytes(self):
+        # Fake the command boundary: the subprocess normally limits bytes,
+        # but a custom reader must not accept a larger decoded response.
+        raw = 'é' * 40000
+        with mock.patch.object(R.W, 'command', return_value=raw):
+            with self.assertRaises(R.RuntimeStatusError):
+                R.ReadOnlyKubernetes()._get('secrets', PREFIX + '-secret', template=R.ONE)
+        with mock.patch.object(R.W, 'command', return_value='é' * 32768):
+            self.assertEqual(len(R.ReadOnlyKubernetes()._get('secrets', PREFIX + '-secret', template=R.ONE)),
+                             32768)
 
     def test_same_name_even_without_owner_label_is_present(self):
         kube = FakeKube()

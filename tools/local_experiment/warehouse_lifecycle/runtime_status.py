@@ -102,7 +102,7 @@ class ReadOnlyKubernetes:
                          '--request-timeout=10s', 'get', resource, *args,
                          '--chunk-size=0', '-o=go-template=' + template],
                         timeout=15, output_limit=65536)
-        require(type(raw) is str and len(raw) <= 65536)
+        require(type(raw) is str and len(raw) <= 65536 and len(raw.encode('utf-8')) <= 65536)
         return raw
 
     def get(self, resource, name):
@@ -238,9 +238,9 @@ def observe(token, kube, *, deadline=None):
     require(time.monotonic() < deadline)
     require(first == second)
     after_time = datetime.now(timezone.utc)
-    # Monotonic bounds freshness, but a backwards wall-clock step would
-    # produce a misleading, inverted evidence interval.
-    require(after_time >= before_time)
+    # Monotonic bounds freshness; either direction of a large wall-clock step
+    # would make the reported interval misleading despite a timely read.
+    require(before_time <= after_time and (after_time - before_time).total_seconds() <= MAX_SECONDS)
     before, after = before_time.isoformat(), after_time.isoformat()
     report = {'schema_version': 1, 'session_id': token, 'observation': 'current-kubernetes-two-reads',
             'scope': 'fixed-names-owner-labels-and-two-service-endpoints-in-shirokuma-dev',
