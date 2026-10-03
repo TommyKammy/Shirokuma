@@ -630,6 +630,24 @@ func TestLocalInventoryRejectsMalformedConditionTransitionTime(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryConditionCannotPrecedeCreation(t *testing.T) {
+	for _, tc := range []struct {
+		creation, transition string
+		invalid              bool
+	}{
+		{`"2026-10-04T02:00:00Z"`, `"2026-10-04T01:59:59Z"`, true},
+		{`"2026-10-04T02:00:00+01:00"`, `"2026-10-04T01:30:00Z"`, false},
+		{`"2026-10-04T02:00:00Z"`, `"2026-10-04T02:00:00Z"`, false},
+		{`"2026-10-04T02:00:00Z"`, `"2026-10-04T02:00:01Z"`, false},
+	} {
+		raw := []byte(`{"items":[{"metadata":{"creationTimestamp":` + tc.creation + `},"status":{"conditions":[{"type":"Ready","status":"True","lastTransitionTime":` + tc.transition + `}]}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("condition lifecycle classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsDuplicatedUnrelatedConditionTypes(t *testing.T) {
 	for _, raw := range [][]byte{
 		[]byte(`{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"},{"type":"Ready","status":"False"}]}}]}`),

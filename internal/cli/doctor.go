@@ -589,7 +589,11 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 					!localDeletionTimestamp.MatchString(timestamp) {
 					return true
 				}
-				if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
+				transition, err := time.Parse(time.RFC3339Nano, timestamp)
+				if err != nil {
+					return true
+				}
+				if hasCreation && transition.Before(creation) {
 					return true
 				}
 			}

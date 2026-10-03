@@ -97,5 +97,24 @@ class StorageCoverageHistoryTests(unittest.TestCase):
         self.assertIn('#1 / v8',matrix)
         self.assertIn('#2 / v9',matrix)
 
+    def test_reordered_reports_keep_storage_scope_with_original_observation(self):
+        old=public(serving_usage_complete())
+        new=public(serving_tmp_usage_complete())
+        # Preserve every original sample window; only the enclosing report's
+        # timestamp moves forward via the public builder.
+        new=C.build_report(new['components'],new['disks'],new['inference'],
+            observed_at='2026-09-20T23:59:59Z',local_processes=new['local_processes'],
+            storage=new['storage'],docker_storage=new['docker_storage'],
+            host_storage=new['host_storage'])
+        C.validate_public(old)
+        C.validate_public(new)
+        entries=H.parse(encoded([new,old]))
+        self.assertEqual([index for index,_ in entries],[1,0])
+        matrix=H._storage_coverage(entries)
+        self.assertIn('#1 / v8',matrix)
+        self.assertIn('#2 / v9',matrix)
+        tmp=row(matrix,'Serving TMP')
+        self.assertLess(tmp.index('このschemaには含まれません'),tmp.index('論理 0 bytes'))
+
 
 if __name__=='__main__':unittest.main()

@@ -12,6 +12,31 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: condition chronology and independent FinOps history order (offline)
+
+WP-L0-GITOPS-001: a synthetic unrelated member's condition transition before
+creation passed before repair; parsed instants are now compared when both are
+reported. Equal times, offsets and omitted projections still pass. WP-L6-FIN-001:
+a separate synthetic reverse-selection test pins storage-coverage columns to
+their chronological v8/v9 reports, keeping absent Serving TMP distinct from
+measured logical zero. The initial FinOps fixture failed public validation when
+its enclosing timestamp was edited directly; it was rebuilt through the public
+contract, preserving sample windows. Focused Go and FinOps tests passed (182
+FinOps tests, seven Linux-only skips). The dedicated Colima profile was observed
+Stopped; no live API/Git, reconciliation, collection, unknown-request replay,
+retained report/volume/backup change or GitHub write. AgentHouse usage remains
+`null / NOT_MEASURED`. These offline checks neither authenticate producers nor
+prove atomic inventory, current usage, strict admission or operator acceptance.
+Roll back only the GitOps reader/test and FinOps test; retain saved evidence.
+Original Vault synchronization is pending outside the approved checkout.
+After both changes, `go test ./... -count=1`, `go vet ./...`,
+`make test-local-finops`, `make verify-local-experiment`,
+`make verify-design-context` (89 documents), `make check-no-secret-filenames`
+and `git diff --check` passed. The full verification log is ignored private
+`tmp/local-experiment/attempt-080-verify.log`; its synthetic failure-path
+output is not a live runtime observation. FinOps first-fixture validation
+failure was preserved in the task transcript, not mistaken for acceptance.
+
 ## 2026-10-04: condition timestamp and independent FinOps review (offline)
 
 WP-L0-GITOPS-001: an unrelated condition's malformed/null reported transition

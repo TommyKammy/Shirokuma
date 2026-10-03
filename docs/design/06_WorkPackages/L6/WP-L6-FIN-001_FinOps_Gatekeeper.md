@@ -12,6 +12,19 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-04: reordered history storage scope (offline)
+
+Added a synthetic direct-history regression: reverse-selected v9/v8 reports
+with distinct valid observation times must display the v8 schema-absent Serving
+TMP cell before the v9 logical-zero cell. The first fixture failed public
+validation because its timestamp was edited without rebuilding; rebuilding
+through the public contract preserved the original sample windows and the
+focused 182 tests passed (seven Linux-only skips). No collector, saved report,
+VM, volume or backup was changed; AgentHouse remains `null / NOT_MEASURED`.
+This pins presentation order, not producer authenticity, present-day usage or
+operator acceptance. Roll back only the test if needed. Original Vault sync
+remains pending outside the approved checkout.
+
 ## 2026-10-04: independent direct-history review (offline)
 
 Reviewed direct selected-index/order and canonical digest validation,

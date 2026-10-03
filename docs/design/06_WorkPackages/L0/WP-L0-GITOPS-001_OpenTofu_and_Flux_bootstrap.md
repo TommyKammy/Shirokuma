@@ -12,6 +12,19 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-04: condition transition before creation (offline)
+
+An unrelated inventory member could report a condition transition preceding
+its own creation timestamp. An isolated negative failed before repair; the
+fixed-profile complete-list reader now compares parsed instants when both
+fields are present. Equal instants, offsets and omitted projected fields remain
+compatible. This is reported lifecycle consistency, not a trusted clock or
+authenticated producer. Dedicated Colima was read-only observed Stopped; no
+live API/Git, reconciliation, retained data/backup or GitHub write. Roll back
+only the reader and test, preserving evidence and the stopped VM. Strict
+admission, Git smoke and operator acceptance remain open. Original Vault sync
+is pending outside the approved checkout.
+
 ## 2026-10-04: reported condition transition time (offline)
 
 An unrelated member's condition with a null, empty or invalid reported
