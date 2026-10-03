@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.56"
+version: "4.57"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse missing list metadata (offline)
+
+WP-L3-VW-002: an empty scoped list whose metadata is nil now projects a fixed invalid marker, which the bounded reader refuses. Fake header/template checks, `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, design-context and diff check passed. Private final log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-015/verify-after-warehouse.log`. Dedicated Colima remained stopped; no VM start, actual API/SQL observation, owner operation, unknown-request replay, saved run or backup mutation. Offline fixtures are not authenticated absence, atomic inventory, historical cleanup or production/operator acceptance. Roll back projection/test only; keep saved sessions and stopped VM. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: Flux source selector and other resource versions (offline)
 

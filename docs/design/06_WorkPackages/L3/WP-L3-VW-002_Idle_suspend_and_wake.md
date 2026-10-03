@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.32"
+version: "0.33"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: absent list metadata cannot imply scoped absence (offline)
+
+The opt-in metadata-only list projection now marks a nil `.metadata` invalid, even if `.items` is a complete empty array, rather than treating that response as scoped absence. The bounded reader rejects the fixed invalid marker; fake owner/endpoints rejection, `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. Final verification log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-015/verify-after-warehouse.log` (private/ignored). Client-side template rendering against a live Kubernetes API was not possible with dedicated Colima stopped; the fake/template assertion is not a live observation. No VM start, API/SQL, owner call, unknown-request replay, retained session or backup mutation. This check cannot authenticate a backend, make two reads atomic, prove historical cleanup or establish production acceptance. Roll back only the projection/test, preserving stopped VM and saved sessions. Original Vault handoff direct sync remains pending outside checkout.
 
 ## 2026-10-03: absent list items cannot project scoped absence (offline)
 

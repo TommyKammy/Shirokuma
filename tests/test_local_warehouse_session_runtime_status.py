@@ -267,6 +267,11 @@ class RuntimeStatusTests(TestCase):
         # token is absent/empty; the metadata-only projection must flag it.
         self.assertIn('or .metadata.continue .metadata.remainingItemCount', R.MANY)
         self.assertIn('eq (printf "%T" .items) "<nil>"', R.MANY)
+        # Without list metadata, an empty projection is not evidence of absence.
+        self.assertIn('eq (printf "%T" .metadata) "<nil>"', R.MANY)
+        with mock.patch.object(R.W, 'command', return_value='v1\tList\t0\tINVALID\n'):
+            with self.assertRaises(R.RuntimeStatusError):
+                R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')
         for raw in ('', 'v1\tList\t0\tINVALID\n', 'v1\tList\t0\tTRUNCATED\n', 'v1\tList\t1\tCOMPLETE\n',
                     'v2\tList\t0\tCOMPLETE\n', 'discovery.k8s.io/v1\tList\t0\tCOMPLETE\n',
                     'v1\tPodList\t0\tCOMPLETE\n', 'v1\tList\t0\tCOMPLETE\nextra\n'):
