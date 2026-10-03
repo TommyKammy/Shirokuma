@@ -122,8 +122,9 @@ type kubernetesResourceList struct {
 		RemainingItemCount *int64 `json:"remainingItemCount"`
 	} `json:"metadata"`
 	Items []struct {
-		Kind     string `json:"kind"`
-		Metadata struct {
+		Kind       string `json:"kind"`
+		APIVersion string `json:"apiVersion"`
+		Metadata   struct {
 			Name              string `json:"name"`
 			Namespace         string `json:"namespace"`
 			Generation        int64  `json:"generation"`
@@ -333,7 +334,8 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	for _, controller := range controllers.Items {
 		unready := controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas
 		if localExperiment {
-			unready = unready || controller.Kind != "Deployment" || controller.Metadata.Namespace != "flux-system" ||
+			unready = unready || (controller.APIVersion != "" && controller.APIVersion != "apps/v1") ||
+				controller.Kind != "Deployment" || controller.Metadata.Namespace != "flux-system" ||
 				controller.Spec.Paused ||
 				controller.Metadata.DeletionTimestamp != "" ||
 				controller.Metadata.Generation < 1 || controller.Status.ObservedGeneration == nil || *controller.Status.ObservedGeneration != controller.Metadata.Generation ||

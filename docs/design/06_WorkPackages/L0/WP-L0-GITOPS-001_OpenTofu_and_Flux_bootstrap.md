@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.24"
+version: "0.25"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: item API versions in read-only inventories (offline)
+
+Two independent local-only diagnostic checks reject a Flux controller Deployment or a Lakehouse Deployment/StatefulSet item that explicitly reports an API version other than `apps/v1`, despite otherwise healthy rollout fields. Absent item versions remain compatible with existing projected fixtures; `apps/v1` passes. The controller failure does not echo the untrusted version, and the Lakehouse failure remains namespace-scoped. Fake positive/negative cases, `go test ./internal/cli` (762 tests), `go vet ./...`, and `make verify-local-experiment` passed. Dedicated Colima was observed stopped and was not started. No live API/SQL read, reconciliation, unknown request replay, retained volume or backup change. Reported API versions do not authenticate Kubernetes, Git origin or actual readiness; strict publication, smoke and operator/production acceptance remain open. Roll back only these local readers/tests; preserve the VM and saved evidence. Direct original Vault handoff synchronization remains pending outside checkout.
 
 ## 2026-10-03: bounded DNS identities in local diagnostic inventories (offline)
 

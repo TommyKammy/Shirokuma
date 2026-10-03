@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.52"
+version: "4.53"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: fixed inventory item API versions (offline)
+
+WP-L0-GITOPS-001: two independent read-only local doctor increments reject explicitly non-`apps/v1` Flux controller and Lakehouse workload items; absent versions remain compatible with projected fixtures and `apps/v1` passes. Fake positive/negative cases, `go test ./internal/cli` (762 tests), `go vet ./...`, `make verify-local-experiment`, and diff check passed. Dedicated Colima was read-only observed stopped; no VM start, actual API/SQL observation, reconciliation, unknown-request replay or retained data/backup mutation. Offline response-shape checks do not authenticate the API or Git source or satisfy smoke, strict admission or operator/production acceptance. Roll back local diagnostic readers/tests only while retaining historical evidence and the stopped VM. Original Vault direct handoff synchronization remains pending outside checkout.
 
 ## 2026-10-03: DNS identity bounds in offline local doctor
 

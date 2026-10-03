@@ -607,6 +607,20 @@ func TestLocalFluxRejectsWrongControllerIdentity(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsWrongControllerAPIVersion(t *testing.T) {
+	for _, version := range []string{"v1", "batch/v1"} {
+		controllers := strings.Replace(localControllerJSON(), `"kind":"Deployment"`, `"apiVersion":"`+version+`","kind":"Deployment"`, 1)
+		runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
+		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+			t.Fatalf("wrong controller version %q accepted: %#v", version, check)
+		}
+	}
+	controllers := strings.Replace(localControllerJSON(), `"kind":"Deployment"`, `"apiVersion":"apps/v1","kind":"Deployment"`, 1)
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("apps/v1 controller rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsFailedAvailableCondition(t *testing.T) {
 	for _, status := range []string{"False", "Unknown", ""} {
 		controllers := strings.Replace(localControllerJSON(), `"type":"Available","status":"True"`, `"type":"Available","status":"`+status+`"`, 1)
@@ -913,6 +927,24 @@ func TestLocalLakehouseAcceptsCompleteV1ListEnvelope(t *testing.T) {
 	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext) {
 		if check.Status != "healthy" {
 			t.Fatalf("valid v1 inventory rejected: %#v", check)
+		}
+	}
+}
+
+func TestLocalLakehouseRejectsWrongItemAPIVersion(t *testing.T) {
+	for _, version := range []string{"v1", "batch/v1"} {
+		responses := localWorkloadResponses()
+		responses[0].output = strings.Replace(responses[0].output, `"kind":"StatefulSet"`, `"apiVersion":"`+version+`","kind":"StatefulSet"`, 1)
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "out-of-scope") || checks[1].Status != "healthy" {
+			t.Fatalf("wrong workload version %q accepted or unrelated namespace degraded: %#v", version, checks)
+		}
+	}
+	responses := localWorkloadResponses()
+	responses[1].output = strings.Replace(responses[1].output, `"kind":"Deployment"`, `"apiVersion":"apps/v1","kind":"Deployment"`, 1)
+	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext) {
+		if check.Status != "healthy" {
+			t.Fatalf("apps/v1 workload rejected: %#v", check)
 		}
 	}
 }
