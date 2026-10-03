@@ -73,6 +73,7 @@ type doctorReport struct {
 }
 
 type kubernetesResourceList struct {
+	Kind     string `json:"kind"`
 	Metadata struct {
 		Continue string `json:"continue"`
 	} `json:"metadata"`
@@ -94,13 +95,13 @@ type kubernetesResourceList struct {
 			} `json:"sourceRef"`
 		} `json:"spec"`
 		Status struct {
-			Replicas           int    `json:"replicas"`
-			AvailableReplicas  int    `json:"availableReplicas"`
-			UnavailableReplicas *int  `json:"unavailableReplicas"`
-			ReadyReplicas      int    `json:"readyReplicas"`
-			UpdatedReplicas    int    `json:"updatedReplicas"`
-			ObservedGeneration *int64 `json:"observedGeneration"`
-			Artifact           struct {
+			Replicas            int    `json:"replicas"`
+			AvailableReplicas   int    `json:"availableReplicas"`
+			UnavailableReplicas *int   `json:"unavailableReplicas"`
+			ReadyReplicas       int    `json:"readyReplicas"`
+			UpdatedReplicas     int    `json:"updatedReplicas"`
+			ObservedGeneration  *int64 `json:"observedGeneration"`
+			Artifact            struct {
 				Revision string `json:"revision"`
 			} `json:"artifact"`
 			Conditions []struct {
@@ -238,7 +239,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if err := json.Unmarshal(controllerOutput, &controllers); err != nil {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was not valid JSON"}
 	}
-	if localExperiment && (controllers.Items == nil || controllers.Metadata.Continue != "") {
+	if localExperiment && (controllers.Items == nil || controllers.Metadata.Continue != "" || (controllers.Kind != "" && controllers.Kind != "List")) {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was incomplete"}
 	}
 	if len(controllers.Items) != 4 {
@@ -299,7 +300,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	if err := json.Unmarshal(resourceOutput, &resources); err != nil {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was not valid JSON"}
 	}
-	if localExperiment && (resources.Items == nil || resources.Metadata.Continue != "") {
+	if localExperiment && (resources.Items == nil || resources.Metadata.Continue != "" || (resources.Kind != "" && resources.Kind != "List")) {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was incomplete"}
 	}
 	kinds := map[string]int{}
@@ -356,6 +357,13 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			}
 		}
 		if localExperiment && isRoot && resource.Spec.Suspend && resource.Metadata.DeletionTimestamp == "" {
+			// A stale Ready condition is expected while suspended, but an
+			// explicitly failed current generation is not healthy history.
+			for _, condition := range resource.Status.Conditions {
+				if condition.Type == "Ready" && condition.ObservedGeneration == resource.Metadata.Generation && condition.Status != "True" {
+					unhealthy = append(unhealthy, resourceID+" (conflicting Ready condition)")
+				}
+			}
 			rootSuspended = true
 			continue
 		}

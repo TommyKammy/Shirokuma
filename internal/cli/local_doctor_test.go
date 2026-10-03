@@ -31,6 +31,39 @@ func localFluxJSON() string {
 	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
 }
 
+func TestLocalDoctorRejectsWrongListKind(t *testing.T) {
+	for _, test := range []struct{ name, controllers, resources string }{
+		{"controllers", `{"kind":"DeploymentList",` + localControllerJSON()[1:], localFluxJSON()},
+		{"flux-resources", localControllerJSON(), `{"kind":"PodList",` + localFluxJSON()[1:]},
+		{"valid-list", `{"kind":"List",` + localControllerJSON()[1:], `{"kind":"List",` + localFluxJSON()[1:]},
+	} {
+		runner := &fakeRunner{responses: []fakeResponse{{output: test.controllers}, {output: test.resources}}}
+		check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true)
+		if test.name == "valid-list" {
+			if check.Status != "informational" {
+				t.Fatalf("%s: %#v", test.name, check)
+			}
+		} else if check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete") {
+			t.Fatalf("%s: %#v", test.name, check)
+		}
+		if test.name == "controllers" && len(runner.calls) != 1 {
+			t.Fatalf("unexpected source read after malformed controller list: %v", runner.calls)
+		}
+	}
+	for _, kind := range []string{"PodList", "List"} {
+		responses := localWorkloadResponses()
+		responses[0].output = `{"kind":"` + kind + `",` + responses[0].output[1:]
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		want := "degraded"
+		if kind == "List" {
+			want = "healthy"
+		}
+		if checks[0].Status != want || checks[1].Status != "healthy" {
+			t.Fatalf("workload list %s: %#v", kind, checks)
+		}
+	}
+}
+
 func TestLocalFluxRejectsCurrentReconciliationConditions(t *testing.T) {
 	for _, condition := range []string{`{"type":"Stalled","status":"True","observedGeneration":1}`, `{"type":"Reconciling","status":"True","observedGeneration":1}`, `{"type":"Reconciling","status":"Unknown","observedGeneration":1}`} {
 		resources := strings.Replace(localFluxJSON(), `"type":"Ready","status":"True","observedGeneration":1`, `"type":"Ready","status":"True","observedGeneration":1},`+condition[:len(condition)-1], 1)
@@ -64,6 +97,24 @@ func TestLocalFluxSuspendedRootStillReportsCurrentReconciliationFailure(t *testi
 		}
 		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
 		if check.Status != test.status || (test.status == "degraded" && !strings.Contains(check.Summary, "unresolved reconciliation")) {
+			t.Fatalf("suspended root condition %s: %#v", test.condition, check)
+		}
+	}
+}
+
+func TestLocalFluxSuspendedRootRejectsCurrentReadyFailure(t *testing.T) {
+	for _, test := range []struct{ condition, status string }{
+		{`{"type":"Ready","status":"False","observedGeneration":2}`, "degraded"},
+		{`{"type":"Ready","status":"Unknown","observedGeneration":2}`, "degraded"},
+		{`{"type":"Ready","status":"False","observedGeneration":1}`, "informational"},
+		{`{"type":"Ready","status":"True","observedGeneration":2}`, "informational"},
+	} {
+		resources := strings.Replace(localFluxJSON(), `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`, `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1},`+test.condition+`]}`, 1)
+		if resources == localFluxJSON() {
+			t.Fatal("fixture did not change")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+		if check.Status != test.status || (test.status == "degraded" && !strings.Contains(check.Summary, "conflicting Ready")) {
 			t.Fatalf("suspended root condition %s: %#v", test.condition, check)
 		}
 	}

@@ -5,12 +5,18 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.13"
+version: "0.14"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: suspended root current Ready failure
+
+Separately, fixed-profile Flux controller/source and Lakehouse workload inventories now reject a reported outer list kind other than `List`; absent outer kind remains compatible with earlier fixtures, while explicit `List` passes. A malformed controller inventory stops before reading the Flux source. Fake wrong-kind and positive cases pass focused tests. This checks reported response shape, not Kubernetes API identity or authenticity.
+
+The fixed local doctor now degrades an intentionally suspended root Kustomization if it explicitly reports `Ready=False` or `Ready=Unknown` for its current generation. Previously the suspended-root early exit hid those failures; stale Ready conditions and a current `Ready=True` remain informational. Offline fake positive/negative cases, `go test ./internal/cli` (725 tests), `go vet ./...`, `make verify-local-experiment`, and `git diff --check` passed; an initial focused test failed because its fixture replacement did not match, then passed after correcting the fixture. Dedicated Colima was read-only observed stopped; no start, live API/SQL, reconciliation, saved request replay, retained volume or backup mutation. Actual Flux/remote revision authenticity, strict publication gate and production/operator acceptance remain unverified. Roll back only the local doctor condition/list checks and tests, retaining the stopped VM and historical evidence. Original Vault handoff direct synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: suspended-root failures and unavailable-replica contradictions
 

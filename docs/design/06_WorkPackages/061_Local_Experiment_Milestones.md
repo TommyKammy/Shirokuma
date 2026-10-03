@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.36"
+version: "4.37"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline suspended-root Ready failure
+
+Independent offline increment: fixed-profile Flux controller/source and Lakehouse workload inventory readers reject a reported outer kind other than `List`. An absent kind remains compatible; explicit `List` passes. Fake negative and positive cases passed, including a check that an invalid controller list prevents the following source read. This does not authenticate a remote API.
+
+WP-L0-GITOPS-001. The fixed-profile doctor no longer treats a suspended root Kustomization with a current-generation `Ready=False`/`Unknown` as informational. Stale Ready and current `Ready=True` stay informational; generic doctor unchanged. A malformed first test replacement failed and was repaired; final `go test ./internal/cli` (725 tests), `go vet ./...`, `make verify-local-experiment`, and `git diff --check` passed. Dedicated Colima read-only status returned not running; no VM start, actual API/SQL read, reconciliation, retained request replay, backup or retained-volume mutation. Live readiness, source authenticity, strict gate and production/operator acceptance remain unverified. Roll back the local diagnostic/test changes only; preserve stopped VM and evidence. Original Vault handoff direct synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: offline suspended Flux failure and unavailable replicas
 
