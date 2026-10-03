@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.96"
+version: "4.97"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: malformed deletion time and disposable caller receipt (offline)
+
+WP-L0-GITOPS-001: a reported nonempty deletion timestamp on an unrelated complete-inventory member must be RFC3339; the isolated negative failed before repair, and `go test ./internal/cli -count=1` (806 passed) afterward. WP-L3-VW-002: a test-owned caller receives the injected handler's verified HTTP response before its owner process exits; independent saved classification remains `unknown-no-replay` and a fresh owner process refuses the session identity without dispatch. The first focused Warehouse run failed because the new boundary inherited the earlier send-exit injector; after correcting the fixture, `make test-local-warehouse-lifecycle` passed. After the final bounded-receive test change, focused Warehouse and `make verify-local-experiment` passed again; `make verify-design-context` (89 documents), `go vet ./...` and `git diff --check` passed. Private final logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-043/warehouse-final.log`, `verify-final.log` and `design.log`. Dedicated Colima was read-only observed stopped; no VM start, actual API/SQL, archived UUID replay or retained data/backup mutation. Offline reported fields and a disposable caller receipt do not authenticate the API/Git/backend, prove historical cleanup or establish strict publication or operator/production acceptance. Roll back reader/test and disposable fixture only, preserving VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: clean Warehouse owner close remains non-adoptable (offline)
 

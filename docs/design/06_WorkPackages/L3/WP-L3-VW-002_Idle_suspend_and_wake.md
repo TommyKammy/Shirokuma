@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.52"
+version: "0.53"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: disposable caller receives reply before owner exit (offline)
+
+A seventh test-owned child-process boundary reads a complete 200/verified socket response after the injected handler and durable reply, then exits. An independent reader still classifies the saved UUID and a fresh UUID `unknown-no-replay` with unknown runtime state; a separate owner process refuses journal collision without dispatch or journal mutation. Initial focused run failed because the new boundary inherited the `sent` fault injector and exited before receipt; the corrected branch passed `make test-local-warehouse-lifecycle`. Caller receipt in this disposable process is not authenticated backend state or an archived caller's receipt. No archived UUID replay, actual backend/API/SQL, VM start or retained data/backup mutation; dedicated Colima observed stopped. Roll back the test case only, preserving VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: clean owner shutdown cannot transfer session identity (offline)
 

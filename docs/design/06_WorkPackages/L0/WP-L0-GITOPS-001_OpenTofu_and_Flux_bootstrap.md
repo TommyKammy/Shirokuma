@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.56"
+version: "0.57"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: reported deletion timestamps (offline)
+
+Fixed-profile inventories now refuse malformed nonempty `metadata.deletionTimestamp` values even on unrelated members; RFC3339 timestamps, empty/omitted fixture fields remain compatible. The isolated negative failed before the repair; `go test ./internal/cli -count=1` passed (806 tests). Dedicated `mac-studio-solo` Colima was read-only observed stopped. No live API/SQL, reconciliation, VM start or retained data/backup mutation. This is reported-field consistency, not authenticated/atomic Kubernetes or Git evidence, historical cleanup, strict admission or operator acceptance. Roll back only the reader/test; preserve the stopped VM and saved evidence. Original Vault direct sync remains pending outside checkout.
 
 ## 2026-10-03: invisible reported resource UID (offline)
 

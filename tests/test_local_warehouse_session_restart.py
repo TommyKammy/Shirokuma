@@ -39,11 +39,11 @@ def exit_after_write():
     if boundary in ('intent', 'handler', 'reply') and writes == {'intent': 1, 'handler': 2, 'reply': 3}[boundary]:
         os._exit(73)
 owner._persist = exit_after_write
-if boundary in ('reply', 'sent'):
+if boundary in ('reply', 'sent', 'received'):
     owner._read_request = lambda connection: request
     if boundary == 'reply':
         owner._send = lambda *args: os._exit(75)  # No response may precede the exit.
-    else:
+    elif boundary == 'sent':
         send = owner._send
         def exit_after_send(*args):
             send(*args)
@@ -52,6 +52,17 @@ if boundary in ('reply', 'sent'):
     sender, receiver = socket.socketpair()
     with sender:
         owner._connection(receiver)
+        if boundary == 'received':
+            sender.settimeout(2)
+            response = bytearray()
+            while len(response) <= 16384:
+                chunk = sender.recv(16385 - len(response))
+                if not chunk:
+                    break
+                response.extend(chunk)
+            if len(response) > 16384 or not response.startswith(b'HTTP/1.1 200 OK\\r\\n') or b'"result":"verified"' not in response:
+                sys.exit(80)
+            os._exit(79)  # Even a test caller receipt is not authenticated backend state.
 else:
     owner._dispatch(request)
 if boundary == 'closed':
@@ -81,7 +92,7 @@ sys.exit(1)
 
 class DisposableOwnerExitTest(unittest.TestCase):
     def test_new_process_cannot_adopt_exited_owners_unknown_request(self):
-        for boundary in ('intent', 'returned', 'handler', 'reply', 'sent', 'closed'):
+        for boundary in ('intent', 'returned', 'handler', 'reply', 'sent', 'received', 'closed'):
             with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
                 root.chmod(0o700)
@@ -93,7 +104,7 @@ class DisposableOwnerExitTest(unittest.TestCase):
                 child = subprocess.run([sys.executable, '-c', CHILD, str(root), token,
                                         request_id, boundary], cwd=Path(__file__).resolve().parent.parent,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, check=False)
-                self.assertEqual(child.returncode, {'returned': 76, 'sent': 77, 'closed': 78}.get(boundary, 73),
+                self.assertEqual(child.returncode, {'returned': 76, 'sent': 77, 'received': 79, 'closed': 78}.get(boundary, 73),
                                  child.stderr.decode(errors='replace'))
                 journal = output / 'rpc' / 'journal.json'
                 original = journal.read_bytes()
@@ -102,7 +113,7 @@ class DisposableOwnerExitTest(unittest.TestCase):
                                   'pending' if boundary in ('intent', 'returned') else 'verified')
                 self.assertEqual(result['recovery_classification'], 'unknown-no-replay')
                 self.assertEqual(result['runtime_state'], 'unknown')
-                self.assertEqual(result['reply_count'], 1 if boundary in ('reply', 'sent') else 0)
+                self.assertEqual(result['reply_count'], 1 if boundary in ('reply', 'sent', 'received') else 0)
                 # An unrelated new UUID is not a way around an exited owner's
                 # occupied session identity; do not start a replacement owner.
                 fresh_id = str(uuid.uuid4())

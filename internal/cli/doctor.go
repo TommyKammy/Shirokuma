@@ -299,6 +299,20 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if identity.Generation < 0 {
 			return true
 		}
+		// A reported deletion timestamp is a Kubernetes RFC3339 time, not
+		// arbitrary text. An unrelated terminating member is still part of
+		// the supposedly complete inventory.
+		if rawTimestamp, ok := metadata["deletionTimestamp"]; ok {
+			var timestamp string
+			if err := json.Unmarshal(rawTimestamp, &timestamp); err != nil {
+				return true
+			}
+			if timestamp != "" {
+				if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
+					return true
+				}
+			}
+		}
 		// Nested declared fields must also be canonical: encoding/json accepts
 		// Spec.Ref.Branch or Status.Conditions as if they were Kubernetes keys.
 		for _, nested := range []struct {

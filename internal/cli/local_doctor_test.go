@@ -380,6 +380,25 @@ func TestLocalInventoryRequiresCanonicalUIDKey(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsMalformedDeletionTimestamp(t *testing.T) {
+	for _, tc := range []struct {
+		value   string
+		invalid bool
+	}{
+		{`"not-a-time"`, true},
+		{`"2026-10-03"`, true},
+		{`"2026-10-03T12:00:00Z"`, false},
+		{`"2026-10-03T12:00:00+09:00"`, false},
+		{`""`, false}, // projected fixtures may omit or use an empty timestamp
+	} {
+		raw := []byte(`{"items":[{"metadata":{"deletionTimestamp":` + tc.value + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("deletion timestamp classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsAvailableGreaterThanReady(t *testing.T) {
 	for _, status := range []string{
 		`{"availableReplicas":2,"readyReplicas":1}`,
