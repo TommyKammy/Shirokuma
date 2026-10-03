@@ -102,6 +102,23 @@ class RuntimeStatusTests(TestCase):
         with self.assertRaises(R.RuntimeStatusError):
             R.observe(TOKEN, kube)
 
+    def test_fixed_name_label_change_between_rounds_cannot_look_stable(self):
+        class Relabel(FakeKube):
+            def get(self, resource, name):
+                value = super().get(resource, name)
+                if (resource, name) == ('deployments', PREFIX + '-xs') and len(self.calls) > 14:
+                    value['metadata']['labels'][R.OWNER] = 'b' * 32
+                return value
+
+        kube = Relabel()
+        kube.names['deployments', PREFIX + '-xs'] = obj('Deployment', PREFIX + '-xs')
+        steady = FakeKube()
+        steady.names = copy.deepcopy(kube.names)
+        steady.names['deployments', PREFIX + '-xs']['metadata']['labels'][R.OWNER] = 'b' * 32
+        self.assertEqual(R.observe(TOKEN, steady)['current_state'], 'scoped-resources-present')
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+
     def test_conflicting_identity_between_projections_fails_in_one_round(self):
         kube = FakeKube()
         name = PREFIX + '-xs'

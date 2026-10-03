@@ -138,13 +138,18 @@ def listed(value, limit, kind):
 def snapshot(token, kube, deadline):
     prefix = M.name(token)
     named = []
+    named_labels = []
     for kind, (resource, suffixes) in KINDS.items():
         for suffix in suffixes:
             require(time.monotonic() < deadline)
             name = prefix + suffix
             value = kube.get(resource, name)
             if value is not None:
-                named.append(identity(value, kind=kind, name=name))
+                row = identity(value, kind=kind, name=name)
+                named.append(row)
+                labels = value['metadata']['labels']
+                named_labels.append((*row, labels.get(M.OWNER, ''),
+                                     labels.get('kubernetes.io/service-name', '')))
     require(time.monotonic() < deadline)
     owned = [identity(value, label=token) for value in listed(kube.labelled(token), 64, 'List')]
     require(all(kind in KINDS or kind in ('ReplicaSet', 'EndpointSlice') for kind, _, _ in owned))
@@ -173,7 +178,7 @@ def snapshot(token, kube, deadline):
             uid_owners[uid] = key
         require(len({(kind, name) for kind, name, _ in values}) == len(values))
     # A hash correlates two bounded snapshots; it is not independent attestation.
-    rows = [sorted(values) for values in (named, owned, endpoints)]
+    rows = [sorted(values) for values in (named, owned, endpoints, named_labels)]
     return {'named_present': len(named), 'labelled_present': len(owned),
             'service_endpoints_present': len(endpoints),
             'snapshot_sha256': hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()}

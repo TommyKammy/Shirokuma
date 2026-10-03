@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.27"
+version: "0.28"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: fixed-name labels participate in both inventory rounds (offline)
+
+The read-only scoped runtime-status reader now includes the observed owner and service-name labels for each fixed-name resource in its two-round snapshot hash. A fixed-name object whose UID stays constant but whose owner label changes between rounds previously looked stable if it was not selected by the owner-label listing; a fake stable-positive and relabel-negative now pass. `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. Private regression log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-005/verify-final.log` (SHA256 `789e1067848ad3f868fa8fdf07c9b8c65eb033d0eb29897e8af5becb8c1dff64`). Dedicated Colima remained stopped: no live API/SQL, owner request, unknown-request replay, archived session or backup change. This is bounded metadata consistency, **not** an atomic snapshot, historical cleanup proof, authenticated backend observation or production acceptance. Revert only the reader/test changes, preserving retained runs/VM and unknown requests. Original Vault handoff direct synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: one UID cannot name two scoped resources (offline)
 

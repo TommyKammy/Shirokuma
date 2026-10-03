@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.46"
+version: "4.47"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse fixed-name label stability (offline)
+
+WP-L3-VW-002. A second independent offline increment includes fixed-name resources' owner/service-name labels in the two-round inventory hash; stable UID with a changed owner label is rejected, while an unchanged unrelated label remains scoped presence. `make test-local-warehouse-lifecycle`, `make verify-local-experiment` (private log `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-005/verify-final.log`, SHA256 `789e1067848ad3f868fa8fdf07c9b8c65eb033d0eb29897e8af5becb8c1dff64`), design-context and diff check passed. Dedicated Colima remained stopped; no live API/SQL, saved-request replay, owner operation, retained session or backup modification. Round stability is not atomicity, historical cleanup or backend authenticity. Roll back the reader/test only; preserve saved evidence. Original Vault handoff direct sync pending outside checkout.
 
 ## 2026-10-03: reported dev/source revision alignment (offline)
 
