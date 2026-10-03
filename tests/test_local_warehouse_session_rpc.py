@@ -228,6 +228,30 @@ class SessionRPCTest(unittest.TestCase):
         saved = json.loads(self.rpc.journal_path.read_bytes())
         self.assertEqual(saved['requests'][0]['state'], 'rejected')
 
+    def test_stop_check_raising_after_stopping_owner_preserves_completed_replay(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        original = self.request()
+        completed = self.rpc._dispatch(original)
+        checks = []
+
+        def stopping_failure():
+            checks.append(True)
+            self.rpc._stop.set()
+            raise RuntimeError('disposable stop failure')
+
+        self.rpc._stop_callback = stopping_failure
+        fresh = self.request()
+        self.assertEqual(self.rpc._dispatch(fresh)['result'], 'unknown')
+        self.assertEqual(self.rpc._dispatch(original), completed)
+        self.assertEqual(self.rpc._dispatch(self.request())['result'], 'unknown')
+        self.assertEqual(checks, [True])
+        self.assertEqual(self.calls, [('chill', original['request_id'])])
+        self.assertEqual(self.rpc._error_codes.count('STOP_CALLBACK_FAILED'), 1)
+        saved = json.loads(self.rpc.journal_path.read_bytes())
+        self.assertEqual([entry['state'] for entry in saved['requests']],
+                         ['completed', 'rejected', 'rejected'])
+
     def test_failing_serve_stop_callback_returns_failed_without_dispatch(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         self.rpc.__enter__()

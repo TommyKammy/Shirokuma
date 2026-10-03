@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-03: late HTTP-error code access (offline)
+
+A disposable thrown 404 whose code accessor expires the observation confirms the existing post-error deadline check returns `API_DEADLINE` and closes the stream; it cannot count as missing catalog evidence. No reader change or real login/GET. Focused checks and limits are recorded in Milestones. This does not authenticate the API or provide atomic, whole-catalog or column lineage evidence. Roll back the fixture only, retaining reports; original Vault synchronization remains pending outside checkout.
+
 ## 2026-10-03: status access stays within catalog deadline (offline)
 
 The bounded reader checks time again after obtaining the response status. A disposable response whose status access ends after expiry is refused as `API_DEADLINE`, rather than classifying its late 404 as an on-time invalid response. Timely status behavior is unchanged. No real catalog login/GET, VM start or retained credential/source/report/backup change; this test-owned delayed status is not remote producer authentication, atomicity, whole-catalog/column lineage or operator acceptance. Roll back this additional guard and fixture only, retaining saved reports. Focused and broader evidence is in Milestones; direct original Vault synchronization remains pending outside checkout.
