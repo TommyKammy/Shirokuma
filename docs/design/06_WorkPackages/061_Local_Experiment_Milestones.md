@@ -5,16 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.39"
+version: "4.40"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+## 2026-10-03: Warehouse saved-claim reread deadline
+
+WP-L3-VW-002. Independent offline increment: the opt-in scoped runtime-status command carries one deadline across both inventory rounds and the subsequent saved journal/completion reread. A late reread previously printed the inventory; an isolated negative test failed before repair and passed afterward, alongside a timely positive, `make test-local-warehouse-lifecycle`, `make verify-local-experiment` and `make verify-design-context`. No VM start, actual API/SQL, saved request replay, retained volume or backup mutation. Scoped freshness is not atomicity, historical cleanup, current backend authenticity or production acceptance. Revert only this reader/test change and preserve saved sessions; original Vault handoff direct sync remains pending outside this noninteractive checkout.
+
 ## 2026-10-03: offline declared dev GitOps resource
 
-WP-L0-GITOPS-001. The fixed local doctor now rejects a missing `shirokuma-dev` Kustomization or its wrong GitRepository source reference; the declared manifest requires it, but prior root/source checks did not. A fake negative failed before the fix; focused and Go package tests, vet and generic-profile compatibility passed after repair. Dedicated Colima read-only status was stopped; no start, real API/SQL, reconciliation, retained request replay or backup/volume mutation. Live readiness, revision authenticity, Git smoke, strict gate and production/operator acceptance remain unverified. Roll back doctor/tests only and retain saved evidence; original Vault handoff direct sync remains pending outside this noninteractive checkout.
+WP-L0-GITOPS-001. The fixed local doctor now rejects a missing `shirokuma-dev` Kustomization or its wrong GitRepository source reference; the declared manifest requires it, but prior root/source checks did not. A fake negative failed before the fix; focused and Go package tests, vet, generic-profile compatibility, `make verify-local-experiment` and `make verify-design-context` passed after repair. Dedicated Colima read-only status was stopped; no start, real API/SQL, reconciliation, retained request replay or backup/volume mutation. Live readiness, revision authenticity, Git smoke, strict gate and production/operator acceptance remain unverified. Roll back doctor/tests only and retain saved evidence; original Vault handoff direct sync remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: offline Warehouse observation deadline
 

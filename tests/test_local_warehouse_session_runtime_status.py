@@ -226,6 +226,33 @@ class RuntimeStatusTests(TestCase):
             self.assertEqual(output.getvalue(), '')
             self.assertEqual(errors.getvalue().strip(), 'RUNTIME_OBSERVATION_UNVERIFIED')
 
+    def test_cli_rechecks_deadline_after_saved_claim_reread(self):
+        session = {'journal_sha256': 'b'*64}
+        claim = {'journal_sha256': 'b'*64, 'recorded_completion': 'correlated-saved-claim'}
+        with mock.patch.object(R, 'check_context'), mock.patch.object(R.S, 'read', return_value=session) as saved, \
+             mock.patch.object(R.C, 'read', return_value=claim) as completion, \
+             mock.patch.object(R, 'observe', return_value={'current_state': 'scoped-absence-observed'}) as observe, \
+             mock.patch.object(R.time, 'monotonic', side_effect=[100, 102]), \
+             mock.patch.object(R, 'MAX_SECONDS', 1), \
+             mock.patch('sys.stdout', new_callable=io.StringIO) as output, \
+             mock.patch('sys.stderr', new_callable=io.StringIO) as errors:
+            self.assertEqual(R.main(['--session', TOKEN]), 1)
+            self.assertEqual(saved.call_count, 2)
+            self.assertEqual(completion.call_count, 2)
+            self.assertEqual(observe.call_count, 1)
+            self.assertEqual(observe.call_args.kwargs['deadline'], 101)
+            self.assertEqual(output.getvalue(), '')
+            self.assertEqual(errors.getvalue().strip(), 'RUNTIME_OBSERVATION_UNVERIFIED')
+
+        with mock.patch.object(R, 'check_context'), mock.patch.object(R.S, 'read', return_value=session), \
+             mock.patch.object(R.C, 'read', return_value=claim), \
+             mock.patch.object(R, 'observe', return_value={'current_state': 'scoped-absence-observed'}), \
+             mock.patch.object(R.time, 'monotonic', side_effect=[100, 100.5]), \
+             mock.patch.object(R, 'MAX_SECONDS', 1), \
+             mock.patch('sys.stdout', new_callable=io.StringIO) as output:
+            self.assertEqual(R.main(['--session', TOKEN]), 0)
+            self.assertIn('scoped-absence-observed', output.getvalue())
+
     def test_bad_context_or_missing_saved_claim_never_queries_runtime(self):
         with mock.patch.object(R, 'check_context', side_effect=R.ContextError('unavailable')), \
              mock.patch.object(R.S, 'read') as saved, mock.patch.object(R, 'ReadOnlyKubernetes') as kube, \

@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.25"
+version: "0.26"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: saved-claim reread shares the observation deadline
+
+The opt-in metadata-only runtime-status command previously enforced its 90-second deadline after two inventory rounds but not after the saved journal/completion reread before stdout. The command now passes one explicit deadline into `observe` and checks it again after saved-claim correlation; a delayed reread cannot publish an aged scoped-absence/presence report. The isolated late-reread negative test failed before repair, then late and timely tests and `make test-local-warehouse-lifecycle` passed. No VM start, live API/SQL read, owner request or unknown-request replay, retained run or backup mutation. This bounded freshness check is not an atomic snapshot, independent VM authenticity, historical cleanup proof or production acceptance. Roll back only the reader/test change, retaining archived sessions and backups; original Vault handoff direct sync remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: no late scoped inventory result
 

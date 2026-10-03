@@ -211,8 +211,12 @@ def main(argv=None):
         completion = C.read(token)
         require(saved['journal_sha256'] == completion['journal_sha256'] and
                 completion['recorded_completion'] == 'correlated-saved-claim')
-        report = observe(token, ReadOnlyKubernetes())
+        deadline = time.monotonic() + MAX_SECONDS
+        report = observe(token, ReadOnlyKubernetes(), deadline=deadline)
         require(saved == S.read(token) and completion == C.read(token))
+        # The saved-claim recheck is part of the same bounded observation, not
+        # permission to publish an inventory that has already aged out.
+        require(time.monotonic() < deadline)
         report['saved_completion'] = 'correlated-saved-claim'
     except (RuntimeStatusError, S.StatusError, W.ExperimentError, ContextError,
             OSError, TypeError, KeyError, ValueError):
