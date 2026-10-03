@@ -384,6 +384,7 @@ class SessionRPC:
             # recognized proxy fields: an unrecognized variant must not carry
             # a second authority or target alongside this fixed Unix request.
             require(name != b'x-forwarded' and not name.startswith(b'x-forwarded-') and
+                    not name.startswith((b'x-original-', b'x-rewrite-')) and
                     name not in headers and name not in
                       (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
                          b'te', b'proxy-connection', b'keep-alive',

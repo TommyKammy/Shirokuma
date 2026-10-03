@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.90"
+version: "0.91"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: target-hint families on private RPC (offline)
+
+The one-request Unix transition refuses `X-Original-*` and `X-Rewrite-*`
+headers, including test-owned `X-Original-Path` and `X-Rewrite-URI`, before
+dispatch or journaling. Ordinary printable unrelated extension headers remain
+supported. Focused Warehouse tests passed. Dedicated Colima was observed
+stopped; no archived UUID replay, live backend/SQL or retained session/backup
+mutation. This does not establish peer authenticity beyond the UID check,
+caller receipt, restart recovery or operator acceptance. Roll back this guard
+and fixture alone; preserve sessions. Original Vault sync is pending outside
+this checkout.
 
 ## 2026-10-04: original URI and host on private RPC (offline)
 

@@ -946,8 +946,10 @@ class SessionRPCTest(unittest.TestCase):
         base = b'Content-Type: application/json\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n'
         for extra in (b'X-Original-URL: /v1/other\r\n',
                       b'X-Original-URI: /v1/other\r\n',
-                      b'X-Original-Host: other.local\r\n',
-                      b'X-Rewrite-URL: /v1/other\r\n',
+                       b'X-Original-Host: other.local\r\n',
+                       b'X-Original-Path: /v1/other\r\n',
+                       b'X-Rewrite-URL: /v1/other\r\n',
+                       b'X-Rewrite-URI: /v1/other\r\n',
                       b'X-Forwarded-Prefix: /other\r\n'):
             with self.subTest(extra=extra):
                 self.assertEqual(self.exchange(self.wire(body, base + extra), raw=True)[0], 400)

@@ -399,7 +399,7 @@ class ReadOnlyClient:
                 if final_url is not None:
                     try:
                         observed_url = final_url()
-                    except TypeError:
+                    except (TypeError, ValueError):
                         require(time.monotonic() < self.deadline, 'API_DEADLINE')
                         raise CoverageError('API_RESPONSE_INVALID') from None
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
