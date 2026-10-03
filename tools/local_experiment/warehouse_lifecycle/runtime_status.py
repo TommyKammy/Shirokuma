@@ -44,7 +44,7 @@ ROW = ('{{printf "%s\\t%s\\t%s\\t%s\\t" .kind .metadata.name '
        '{{printf "\\n"}}')
 ONE = '{{if .metadata}}' + ROW + '{{end}}'
 MANY = ('{{printf "%s\\t%d\\t" .kind (len .items)}}'
-        '{{if .metadata.continue}}TRUNCATED{{else}}COMPLETE{{end}}'
+         '{{if or .metadata.continue .metadata.remainingItemCount}}TRUNCATED{{else}}COMPLETE{{end}}'
         '{{printf "\\n"}}{{range .items}}' + ROW + '{{end}}')
 
 

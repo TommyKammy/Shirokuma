@@ -240,6 +240,9 @@ class RuntimeStatusTests(TestCase):
             self.assertIsNone(call.kwargs.get('log_path'))
 
     def test_blank_truncated_or_malformed_lists_are_not_empty(self):
+        # A Kubernetes list may report remaining items even if the continuation
+        # token is absent/empty; the metadata-only projection must flag it.
+        self.assertIn('or .metadata.continue .metadata.remainingItemCount', R.MANY)
         for raw in ('', 'List\t0\tTRUNCATED\n', 'List\t1\tCOMPLETE\n',
                     'PodList\t0\tCOMPLETE\n', 'List\t0\tCOMPLETE\nextra\n'):
             with self.subTest(raw=raw), mock.patch.object(R.W, 'command', return_value=raw):

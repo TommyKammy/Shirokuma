@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.49"
+version: "4.50"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Warehouse metadata list remaining count (offline)
+
+WP-L3-VW-002. Independent metadata-only list projection increment: `remainingItemCount` now marks a list truncated even if `metadata.continue` is empty; the existing bounded reader rejects truncated output. Focused fake reader checks covered the template marker and refusal. Dedicated Colima was read-only observed stopped; no VM start, live API/SQL, owner request, unknown-request replay, saved run/backup/volume mutation. Offline projection checks cannot establish authenticated backend identity, atomic snapshots, historical cleanup or production/operator acceptance. Roll back only projection/test; keep archived evidence. Original Vault handoff direct sync pending outside checkout.
 
 ## 2026-10-03: local doctor list-envelope contradictions (offline)
 

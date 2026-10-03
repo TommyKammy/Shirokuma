@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.29"
+version: "0.30"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: remaining-item metadata cannot imply scoped absence (offline)
+
+The metadata-only kubectl list projection now marks `TRUNCATED` when `remainingItemCount` is nonzero, even with an empty continuation token. The existing reader already refuses `TRUNCATED` without publishing partial JSON. This conservative consistency guard applies to the owner-label and EndpointSlice lists, not fixed-name GETs. The focused fake reader test checks that the projection includes the field and that truncated output fails; no live API or SQL read was made. Dedicated Colima remained stopped, with no owner call, saved-request replay, retained run, backup or volume mutation. The new guard does not authenticate a backend, make the two rounds atomic, or prove historical cleanup or production acceptance. Roll back only the projection/test and retain saved runs and VM; direct original Vault handoff sync remains pending outside this checkout.
 
 ## 2026-10-03: scoped projections agree on labels (offline)
 
