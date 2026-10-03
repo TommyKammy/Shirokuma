@@ -452,6 +452,30 @@ func TestLocalInventoryRejectsInvisibleReportedNamesAndKinds(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsUnusableItemResourceVersion(t *testing.T) {
+	for _, raw := range []string{
+		`{"items":[{"metadata":{"resourceVersion":""}}]}`,
+		`{"items":[{"metadata":{"resourceVersion":"8\n9"}}]}`,
+		`{"items":[{"metadata":{"resourceVersion":"8\ud800"}}]}`,
+		`{"items":[{"metadata":{"resourceVersion":null}}]}`,
+		`{"items":[{"metadata":{"ResourceVersion":"8"}}]}`,
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal([]byte(raw), &list); err != nil || !localInventoryIncomplete(list, []byte(raw)) {
+			t.Fatalf("unusable item resource version accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range []string{
+		`{"items":[{"metadata":{"resourceVersion":"8"}}]}`,
+		`{"items":[{"metadata":{}}]}`,
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal([]byte(raw), &list); err != nil || localInventoryIncomplete(list, []byte(raw)) {
+			t.Fatalf("valid or omitted resource version rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryCorruptionDegradesAllFixedProfileReads(t *testing.T) {
 	for _, mutate := range []func(string) string{
 		func(raw string) string {

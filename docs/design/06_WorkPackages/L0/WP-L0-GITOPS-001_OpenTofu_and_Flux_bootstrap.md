@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.67"
+version: "0.68"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: reported object resource versions (offline)
+
+The fixed-profile inventory now refuses an explicitly reported per-object `metadata.resourceVersion` that is empty, null, over 1024 bytes, case-aliased, lossy or contains invisible characters, including on unrelated members. Omitted versions remain compatible with projected fixtures. A focused fake negative failed before repair; `go test ./... -count=1` (820 passed) and `go vet ./...` passed after. The generic doctor is unchanged. Read-only Colima listing showed the dedicated VM stopped; no VM start, API/Git/SQL, reconciliation, replay or retained data/backup changes. This offline field consistency does not authenticate API/Git, establish atomic inventory or historical cleanup, clear strict admission or grant operator acceptance. Roll back reader/test only; preserve VM/evidence. Original Vault direct sync pending outside checkout; broader verification is in Milestones.
 
 ## 2026-10-03: invisible reported resource identities (offline)
 

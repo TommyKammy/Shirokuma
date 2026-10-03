@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.17"
+version: "5.18"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: saved-file read stability and object resource versions (offline)
+
+WP-L5-LINEAGE-001: a disposable saved file whose ctime changes during its read, with bytes and mtime restored, now fails the source snapshot instead of producing a digest; focused lineage suite passed (60 tests). WP-L0-GITOPS-001: fixed-profile inventory rejects unusable reported per-object resource versions on unrelated members; a focused negative failed before repair, then full Go tests (820 passed) and vet passed. `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed; private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-061/{verify,design}.log`. Read-only `colima list` showed the dedicated VM stopped; no VM start, live API/Git/SQL, reconciliation, archived request replay or retained source/session/report/backup mutation. Neither offline check authenticates producer/API/Git, proves atomicity, historical cleanup, whole-catalog/column lineage, strict admission or operator/production acceptance. Roll back only the two readers/tests; preserve VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: reported resource names and kinds (offline)
 

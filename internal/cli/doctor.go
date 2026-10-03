@@ -285,14 +285,25 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			seenUIDs[uid] = struct{}{}
 		}
 		for field := range metadata {
-			for _, canonical := range []string{"name", "namespace", "generation", "deletionTimestamp", "uid"} {
+			for _, canonical := range []string{"name", "namespace", "generation", "deletionTimestamp", "uid", "resourceVersion"} {
 				if field != canonical && strings.EqualFold(field, canonical) {
 					return true
 				}
 			}
 		}
-		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "deletionTimestamp"}) {
+		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "deletionTimestamp", "resourceVersion"}) {
 			return true
+		}
+		// A reported per-object version must remain a usable opaque identity,
+		// even when the resource is unrelated to the expected controller.
+		if rawVersion, ok := metadata["resourceVersion"]; ok {
+			var version string
+			if err := json.Unmarshal(rawVersion, &version); err != nil || version == "" || len(version) > 1024 ||
+				strings.IndexFunc(version, func(r rune) bool {
+					return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r)
+				}) >= 0 {
+				return true
+			}
 		}
 		// Whitespace and format characters also obscure a reported resource
 		// identity, even when JSON decoding did not lose any bytes.

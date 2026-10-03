@@ -171,14 +171,17 @@ def _source_file_at(directory_fd, name, device, limit, *, expected=None):
         raw = b''.join(chunks)
         after = os.fstat(fd)
         current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-        require(len(raw) <= limit and (before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
-                (after.st_size, after.st_mtime_ns, after.st_ctime_ns) and
+        require(len(raw) <= limit and
+                (before.st_dev, before.st_ino, before.st_mode, before.st_uid,
+                 before.st_size, before.st_mtime_ns, before.st_ctime_ns, before.st_nlink) ==
+                (after.st_dev, after.st_ino, after.st_mode, after.st_uid,
+                 after.st_size, after.st_mtime_ns, after.st_ctime_ns, after.st_nlink) and
                 (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino) and
                 stat.S_ISREG(current.st_mode) and current.st_uid == before.st_uid and
                 after.st_nlink == current.st_nlink == 1 and
                 stat.S_IMODE(current.st_mode) == 0o600 and
-                (current.st_size, current.st_mtime_ns, current.st_ctime_ns) ==
-                (after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'SOURCE_CHANGED')
+                (current.st_mode, current.st_size, current.st_mtime_ns, current.st_ctime_ns) ==
+                (after.st_mode, after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'SOURCE_CHANGED')
         return raw
     finally:
         os.close(fd)

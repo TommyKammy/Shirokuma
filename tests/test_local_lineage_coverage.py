@@ -284,6 +284,24 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(report['coverage']['unknown'], 2)
         self.assertIsNone(report['coverage']['rate'])
 
+    def test_file_changed_during_snapshot_with_restored_mtime_is_rejected(self):
+        path = self.add_run(curated=True)
+        target = path / 'summary.json'
+        original_read = os.read
+        changed = False
+        def change_during_read(fd, size):
+            nonlocal changed
+            if not changed and os.fstat(fd).st_ino == target.stat().st_ino:
+                info = target.stat()
+                os.utime(target, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
+                os.utime(target, ns=(info.st_atime_ns, info.st_mtime_ns))
+                changed = True
+            return original_read(fd, size)
+        with patch.object(C.os, 'read', side_effect=change_during_read):
+            with self.assertRaisesRegex(C.CoverageError, 'SOURCE_CHANGED'):
+                C.source_snapshot(path)
+        self.assertTrue(changed)
+
     def test_unavailable_final_inventory_cannot_leave_present_edges(self):
         self.add_run(curated=True)
         original = C.listing

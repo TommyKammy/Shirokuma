@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.99"
+version: "1.00"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: metadata stability during a saved-file read (offline)
+
+The snapshot now compares an opened file's full device/inode/mode/owner/size/mtime/ctime/link-count metadata before and after reading, and compares its final entry mode as well. A disposable fixture changed a file during `os.read` and restored its mtime and bytes; previously the snapshot succeeded, while the tightened reader refuses it. `make test-local-lineage-coverage` passed (60 tests). No saved source, report, catalog or backup was modified; read-only Colima listing showed the dedicated VM stopped. This is conservative against concurrent writes and cannot detect a same-UID actor restoring all metadata between checks, authenticate a producer, establish atomicity or prove whole-catalog/column lineage. Roll back reader/test only, preserving retained evidence; original Vault sync remains pending outside checkout. Broader verification is recorded in Milestones.
 
 ## 2026-10-03: bind source metadata across separate reads (offline)
 
