@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.61"
+version: "1.62"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: excluded source needs a recorded verification result (offline)
+
+Direct rendering now refuses `invalid` and initially `incomplete` saved rows
+with no per-run reason. The collector always records a first-verification result;
+the aggregate `UNVERIFIED_SOURCE_RUNS` cannot explain an individual exclusion.
+Both disposable negatives rendered before repair; valid explained exclusions
+remain displayable. Focused lineage 146 tests passed after fixture alignment.
+Dedicated Colima was observed stopped; no catalog read, collection, retained
+source/report/backup mutation or request replay. This checks internal saved
+claims, not producer authenticity, atomicity, whole-catalog/column coverage or
+acceptance. Roll back renderer/test together, preserving saved evidence.
+Original Vault synchronization remains pending outside the noninteractive checkout.
 
 ## 2026-10-04: eligible demotion retains initial verification detail (offline)
 

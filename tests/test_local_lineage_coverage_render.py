@@ -15,7 +15,8 @@ def run(number=1, statuses=('present', 'present'), *, source_status='valid', eli
         'source_status': source_status, 'eligible': eligible,
         'reason_codes': ['RECORDED_RUN_FAILED'] if source_status == 'failed' else
                         ['SOURCE_VERIFIED', 'SOURCE_CHANGED_OR_UNVERIFIABLE'] if source_status == 'incomplete' and eligible else
-                        ['SOURCE_VERIFIED'] if source_status == 'valid' else [],
+                         ['SOURCE_VERIFIED'] if source_status == 'valid' else
+                         ['SOURCE_INVALID'] if source_status == 'invalid' else ['SUMMARY_MISSING'],
         'source_sha256_before': 'a' * 64 if eligible else None,
         'source_sha256_after': 'a' * 64 if eligible else None,
         'metadata_sha256_before': 'b' * 64 if eligible else None,
@@ -141,6 +142,15 @@ class CoverageRenderTests(unittest.TestCase):
             render(value)
         value['runs'][0]['reason_codes'] = ['RECORDED_RUN_FAILED']
         self.assertIn('RECORDED_RUN_FAILED', render(value))
+
+    def test_unverified_source_requires_its_saved_verification_result(self):
+        for status, reason in (('invalid', 'SOURCE_INVALID'), ('incomplete', 'SUMMARY_MISSING')):
+            value = report([run(1, source_status=status, eligible=False)])
+            value['runs'][0]['reason_codes'] = []
+            with self.subTest(status=status), self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
+                render(value)
+            value['runs'][0]['reason_codes'] = [reason]
+            self.assertIn(reason, render(value))
 
     def test_valid_run_requires_its_saved_verification_explanation(self):
         value = report()

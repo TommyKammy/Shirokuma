@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.98"
+version: "5.99"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: excluded lineage per-run reason (offline)
+
+WP-L5-LINEAGE-001 rejects saved invalid/initially incomplete source rows without
+their per-run verification result. Two disposable negatives rendered before repair;
+focused lineage 146 tests passed after aligning positive fixtures with the
+collector. Dedicated Colima read-only observed Stopped. No VM start, catalog
+read, new collection, retained source/report/backup mutation, request replay or
+GitHub write. This is internal saved-claim consistency, not producer identity,
+atomicity, whole-catalog/column coverage or operator acceptance. Roll back the
+renderer guard/test only; retain historical evidence. Original Vault sync
+pending outside the noninteractive checkout.
 
 ## 2026-10-04: independent Warehouse proxy IP suffix refusal (offline)
 
