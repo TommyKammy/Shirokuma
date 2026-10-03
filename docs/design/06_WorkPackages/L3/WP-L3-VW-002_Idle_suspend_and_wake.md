@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.50"
+version: "0.51"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: fresh process also refuses exited owner identity (offline)
+
+For each of five disposable owner-exit boundaries, a second, independently launched owner process now tries the same test-owned session and must refuse `JOURNAL_COLLISION` without dispatch or changing the journal; the existing parent-process collision and new-UUID saved-classification assertions remain. This exercises process-independent collision refusal, not safe replay or authenticated backend recovery. Only test-owned temporary paths were created and removed; archived UUIDs, runs and backups were untouched, with dedicated Colima stopped. Roll back the added child assertion only and preserve archived evidence/VM. Original Vault sync pending outside checkout.
 
 ## 2026-10-03: new UUID cannot adopt an exited disposable owner (offline)
 

@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.52"
+version: "0.53"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: available and unavailable capacity cannot overlap (offline)
+
+The fixed-profile reader now refuses an unrelated workload reporting available plus unavailable replicas above explicitly desired capacity; available surplus during rolling updates remains compatible only with zero unavailable. Missing fields remain optional. The focused negative failed before repair; the first full Go run exposed an older target-specific failure message superseded by the earlier incomplete-list check, and the final suite passed. This is reported-field consistency, not authenticated or atomic Kubernetes/Git evidence, historical cleanup, strict admission or operator acceptance. Dedicated Colima was read-only observed stopped; no VM start, API/SQL, replay, reconciliation or retained storage/backup mutation. Roll back only the reader/test, preserving VM and evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: reported UID consistency in fixed inventories (offline)
 

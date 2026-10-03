@@ -400,6 +400,31 @@ func TestLocalInventoryRejectsUnavailableGreaterThanDesired(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsAvailableAndUnavailableExceedingDesired(t *testing.T) {
+	for _, status := range []string{
+		`{"availableReplicas":2,"unavailableReplicas":1}`,
+		`{"replicas":3,"availableReplicas":2,"unavailableReplicas":2}`,
+	} {
+		raw := []byte(`{"items":[{"kind":"Deployment","spec":{"replicas":2},"status":` + status + `}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("contradictory available/unavailable counts accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, status := range []string{
+		`{"availableReplicas":1,"unavailableReplicas":1}`,
+		`{"replicas":3,"availableReplicas":3,"unavailableReplicas":0}`,
+		`{"availableReplicas":2}`,
+		`{"unavailableReplicas":2}`,
+	} {
+		raw := []byte(`{"items":[{"kind":"Deployment","spec":{"replicas":2},"status":` + status + `}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("compatible available/unavailable counts rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullConditionFields(t *testing.T) {
 	for _, field := range []string{`"type":null`, `"status":null`, `"observedGeneration":null`} {
 		raw := []byte(`{"items":[{"status":{"conditions":[{` + field + `}]}}]}`)
@@ -1212,17 +1237,14 @@ func TestLocalFluxSuspendedRootRejectsCurrentReadyFailure(t *testing.T) {
 func TestLocalDoctorRejectsContradictoryUnavailableReplicas(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":1,"unavailableReplicas":1`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
-	if check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
 		t.Fatalf("contradictory Flux controller accepted: %#v", check)
 	}
 	for _, value := range []string{"1", "-1"} {
 		responses := localWorkloadResponses()
 		responses[0].output = strings.Replace(responses[0].output, `"availableReplicas":1`, `"availableReplicas":1,"unavailableReplicas":`+value, 1)
 		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
-		summary := "unavailable replicas"
-		if value == "-1" {
-			summary = "workload response was incomplete"
-		}
+		summary := "workload response was incomplete"
 		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, summary) || checks[1].Status != "healthy" {
 			t.Fatalf("contradictory Lakehouse status %s accepted: %#v", value, checks)
 		}

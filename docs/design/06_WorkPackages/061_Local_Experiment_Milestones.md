@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.91"
+version: "4.92"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: capacity overlap and independent owner collision (offline)
+
+WP-L0-GITOPS-001: a fixed-profile inventory rejects available plus unavailable replicas above explicitly desired capacity on an unrelated workload; rolling surplus with zero unavailable and omitted fields remain compatible. The focused negative failed before repair. The first full Go suite found an existing target-specific error expectation superseded by the earlier incomplete-inventory refusal; after updating it, `go test ./internal/cli -count=1` passed (803 tests). WP-L3-VW-002: five disposable process exits now also verify that a *separate new process* refuses the original session identity without dispatch or journal change. `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents), `go vet ./...` and `git diff --check` passed. Private regression logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-040/verify.log` and `design.log`. No archived UUID replay, actual backend/API/SQL, VM start, retained data/backup mutation or historical cleanup. Read-only dedicated Colima status: stopped. These observations do not authenticate Kubernetes/Git/backend, make reads atomic, prove delivery, clear strict publication admission or establish operator/production acceptance. Roll back the reader and isolated tests only; preserve VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: unrelated UUID at disposable owner exits (offline)
 

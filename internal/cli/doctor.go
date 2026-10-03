@@ -375,6 +375,17 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				if err := json.Unmarshal(rawUnavailable, &unavailable); err != nil || unavailable > desired {
 					return true
 				}
+				// Kubernetes counts unavailable against desired, not the rolling
+				// total. Available pods and unavailable desired capacity cannot
+				// overlap, even while a rollout has surplus ready pods.
+				if rawAvailable, present := status["availableReplicas"]; present {
+					var available int64
+					if err := json.Unmarshal(rawAvailable, &available); err != nil ||
+						(available >= desired && unavailable != 0) ||
+						(available < desired && unavailable > desired-available) {
+						return true
+					}
+				}
 			}
 		}
 		var observed struct {

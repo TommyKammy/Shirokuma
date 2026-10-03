@@ -57,6 +57,24 @@ else:
 os._exit(74)
 """
 
+COLLISION_CHILD = """
+from pathlib import Path
+import sys
+from tools.local_experiment.warehouse_lifecycle import session_rpc as R
+
+root, token = sys.argv[1:]
+R.SOCKET_ROOT = Path(root) / 'sockets'
+def handler(*args):
+    raise AssertionError('unexpected dispatch')
+try:
+    R.SessionRPC(token, Path(root) / token, handler).__enter__()
+except R.RPCError as error:
+    if str(error) == 'JOURNAL_COLLISION':
+        sys.exit(0)
+    raise
+sys.exit(1)
+"""
+
 
 class DisposableOwnerExitTest(unittest.TestCase):
     def test_new_process_cannot_adopt_exited_owners_unknown_request(self):
@@ -95,6 +113,13 @@ class DisposableOwnerExitTest(unittest.TestCase):
                     with self.assertRaisesRegex(R.RPCError, 'JOURNAL_COLLISION'):
                         R.SessionRPC(token, output, lambda *args: calls.append(args)).__enter__()
                 self.assertEqual(calls, [])
+                # Refusal must hold in an independent owner process, not only
+                # when the test parent creates another owner in its own memory.
+                restarted = subprocess.run([sys.executable, '-c', COLLISION_CHILD, str(root), token],
+                                           cwd=Path(__file__).resolve().parent.parent,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           timeout=10, check=False)
+                self.assertEqual(restarted.returncode, 0, restarted.stderr.decode(errors='replace'))
                 self.assertEqual(journal.read_bytes(), original)
 
 
