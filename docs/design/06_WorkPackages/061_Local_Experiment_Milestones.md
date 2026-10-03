@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.81"
+version: "5.82"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: private Warehouse forwarded extension namespace (offline)
+
+Independently of the lineage increment below, WP-L3-VW-002 refuses
+`Forwarded-*` metadata before private Unix dispatch or journaling. Two
+test-owned complete requests reached the handler before repair; focused
+Warehouse suites passed afterward. An intermediate rerun had an edit-induced
+indentation error, corrected before the successful rerun; private logs remain
+under `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-038/`.
+No VM start, backend/SQL, archived request replay, retained session/backup
+change or GitHub write. This does not authenticate the socket peer, prove
+caller receipt, restart recovery or operator acceptance. Roll back parser/test
+only; preserve saved evidence and stopped VM. Original Vault sync pending.
 
 ## 2026-10-04: offline lineage catalog denominator and edge identities
 

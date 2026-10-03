@@ -384,21 +384,20 @@ class SessionRPC:
             # recognized proxy fields: an unrecognized variant must not carry
             # a second authority or target alongside this fixed Unix request.
             require(name not in (b'x-forwarded', b'x-real', b'x-original', b'x-rewrite', b'x-proxy', b'x-envoy', b'x-remote') and
-                     not name.startswith(b'x-forwarded-') and
-                      not name.startswith(b'x-real-') and
-                      not name.startswith((b'x-original-', b'x-rewrite-')) and
-                       not name.startswith((b'proxy-', b'x-proxy-', b'x-envoy-', b'x-remote-', b'remote-')) and
+                    not name.startswith((b'forwarded-', b'x-forwarded-')) and
+                    not name.startswith(b'x-real-') and
+                    not name.startswith((b'x-original-', b'x-rewrite-')) and
+                    not name.startswith((b'proxy-', b'x-proxy-', b'x-envoy-', b'x-remote-', b'remote-')) and
                     name not in headers and name not in
-                      (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
-                          b'te', b'proxy-connection', b'keep-alive', b'proxy', b'via',
-                          b'authorization', b'proxy-authorization', b'cookie',
-                          b'client-ip', b'x-client-ip',
-                          b'forwarded', b'x-real-ip', b'x-real-host', b'x-forwarded-host', b'x-forwarded-proto',
-                          b'x-forwarded-for', b'x-forwarded-port', b'x-forwarded-prefix',
-                          b'x-original-url', b'x-original-uri', b'x-original-host',
-                          b'x-rewrite-url',
-                           b'x-http-method-override', b'x-method-override',
-                           b'x-http-method', b'x-original-method'), 'INVALID_HTTP')
+                    (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
+                     b'te', b'proxy-connection', b'keep-alive', b'proxy', b'via',
+                     b'authorization', b'proxy-authorization', b'cookie',
+                     b'client-ip', b'x-client-ip',
+                     b'forwarded', b'x-real-ip', b'x-real-host', b'x-forwarded-host', b'x-forwarded-proto',
+                     b'x-forwarded-for', b'x-forwarded-port', b'x-forwarded-prefix',
+                     b'x-original-url', b'x-original-uri', b'x-original-host',
+                     b'x-rewrite-url', b'x-http-method-override', b'x-method-override',
+                     b'x-http-method', b'x-original-method'), 'INVALID_HTTP')
             # Do not normalize ambiguous framing: a peer and a proxy may
             # interpret whitespace around a length differently.
             require(value.startswith(b' ') and value[1:] and

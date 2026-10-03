@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.01"
+version: "1.02"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: forwarded extension claims on private RPC (offline)
+
+The fixed Unix transition now refuses `Forwarded-*` as well as the bare
+`Forwarded` and `X-Forwarded-*` names. Disposable `Forwarded-Host` and
+`Forwarded-For` reached the handler before repair; focused Warehouse suites
+passed after repair. An intermediate rerun found an edit-induced indentation
+error; corrected and rerun. No VM start, archived request replay, backend/SQL,
+retained session/backup mutation or GitHub write. This parser rule is not peer
+authentication, caller receipt, restart recovery or operator acceptance. Roll
+back parser/test alone, preserving saved evidence. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-04: remote-identity hints on private RPC (offline)
 
