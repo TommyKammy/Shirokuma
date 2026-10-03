@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.58"
+version: "0.59"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: concurrent busy reply correlation (offline)
+
+The disposable serial-handler fixture now checks that the competing busy 409 carries the competing UUID, and that the original caller thread finishes with exactly one response after handler release. The focused Warehouse suite and full local verification passed; this is test-only and does not demonstrate a fix for the previously intermittent Warehouse failure. No archived UUID was replayed and no backend, VM, retained session or backup was changed. Roll back this assertion only, retaining evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: query retry fixture holds its disposable handler (offline)
 

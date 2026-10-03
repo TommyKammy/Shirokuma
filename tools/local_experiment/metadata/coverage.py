@@ -231,10 +231,10 @@ def source_snapshot(path):
                     require((opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino),
                             'SOURCE_CHANGED')
                     final = os.fstat(child)
-                    require(stat.S_ISDIR(current.st_mode) and current.st_uid == opened.st_uid and
-                            stat.S_IMODE(current.st_mode) == 0o700 and
-                            (final.st_dev, final.st_ino) == (opened.st_dev, opened.st_ino) and
-                            final.st_uid == opened.st_uid and stat.S_IMODE(final.st_mode) == 0o700,
+                    require(_source_directory_identity(info) == _source_directory_identity(opened) ==
+                            _source_directory_identity(final) == _source_directory_identity(current) and
+                            stat.S_ISDIR(current.st_mode) and current.st_uid == os.getuid() and
+                            stat.S_IMODE(current.st_mode) == 0o700,
                             'SOURCE_CHANGED')
                 finally:
                     os.close(child)

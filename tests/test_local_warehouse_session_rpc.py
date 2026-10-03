@@ -435,10 +435,13 @@ class SessionRPCTest(unittest.TestCase):
             self.assertEqual((pending[0], pending[1].get('result'), pending[1].get('request_id')),
                              (409, 'unknown', first['request_id']))
             busy = self.exchange(second)
-            self.assertEqual((busy[0], busy[1]['result']), (409, 'busy'))
+            self.assertEqual((busy[0], busy[1].get('result'), busy[1].get('request_id')),
+                             (409, 'busy', second['request_id']))
         finally:
             self.release.set()
             sender.join(3)
+        self.assertFalse(sender.is_alive(), 'first caller did not finish after handler release')
+        self.assertEqual(len(received), 1)
         self.assertEqual(received[0][0], 200)
         self.assertEqual(self.exchange(second), busy)
         self.assertEqual(len(self.calls), 1)

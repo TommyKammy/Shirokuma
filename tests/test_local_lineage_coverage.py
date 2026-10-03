@@ -410,6 +410,26 @@ class CoverageTests(unittest.TestCase):
         finally:
             child.chmod(0o700)
 
+    def test_snapshot_rejects_nested_directory_metadata_change_during_visit(self):
+        path = self.add_run()
+        child = path / 'nested'
+        child.mkdir(mode=0o700)
+        save(child / 'extra.json', {'value': 1})
+        actual_names = C._bounded_names
+        calls = 0
+        def change_after_nested_listing(fd, limit, code):
+            nonlocal calls
+            names = actual_names(fd, limit, code)
+            calls += 1
+            if calls == 2:  # First listing through the nested directory descriptor.
+                info = child.stat()
+                os.utime(child, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
+            return names
+        with patch.object(C, '_bounded_names', side_effect=change_after_nested_listing):
+            with self.assertRaisesRegex(C.CoverageError, 'SOURCE_CHANGED'):
+                C.source_snapshot(path)
+        self.assertGreaterEqual(calls, 2)
+
     def test_snapshot_rejects_root_privacy_change_after_visit(self):
         path = self.add_run()
         actual_current = C._current_source_path

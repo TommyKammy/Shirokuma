@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.96"
+version: "0.97"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: nested saved-run directory metadata (offline)
+
+The snapshot now compares each opened nested directory's full device/inode/mode/owner/size/mtime/ctime/link-count identity before and after its traversal and against its no-follow parent entry. A disposable nested-directory mtime change during traversal is refused, even when names and file hashes remain unchanged. The 54-test focused suite and full local verification passed; see Local Experiment Milestones. This assumes concurrent legitimate changes should fail closed. Reverting this reader/test change leaves retained source and reports untouched. No live catalog, VM, retained source or backup was changed. Restored metadata, independent provenance, atomicity, whole-catalog/column lineage and operator acceptance remain unproved. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: collection run-entry metadata stability (offline)
 

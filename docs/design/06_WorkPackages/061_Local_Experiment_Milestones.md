@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.10"
+version: "5.11"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: nested source metadata and busy reply correlation (offline)
+
+WP-L5-LINEAGE-001 compares nested directory metadata across traversal; a disposable mtime mutation fails closed (`make test-local-lineage-coverage`: 54 passed). Independently WP-L3-VW-002 strengthens the competing busy-reply test with its own UUID and one completed original caller (`make test-local-warehouse-lifecycle`: passed). `make verify-local-experiment`, `make verify-design-context` and focused suites passed; private full logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-055/{verify,design}.log`. Read-only `colima list` showed the dedicated VM stopped. No VM start, catalog/API/SQL, archived UUID replay, retained source/session/report or backup mutation. Tests cannot establish atomicity, producer/backend authenticity, whole-catalog/column lineage, intermittent Warehouse failure repair or operator/production acceptance. Roll back reader and disposable test only, preserving saved evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: lineage run-entry stability and Warehouse query retry fixture (offline)
 
