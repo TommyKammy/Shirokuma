@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.40"
+version: "0.41"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: policy resource identity aliases (offline)
+
+Six test-owned policy resource metadata aliases (`Name`, `Uid`, `Generation`,
+`Labels`, `Annotations`, `DeletionTimestamp`) were accepted alongside canonical
+identity/ownership fields before repair. The fixed-candidate baseline now
+rejects conflicting case-variant identity fields before dry-run; the six-case
+negative failed before repair and observer suite (49 tests) passed afterward.
+Dedicated Colima was observed stopped. No live API/admission, retained requests,
+volumes or backups changed. This fixture cannot authenticate the API or prove
+atomic inventory, strict admission or operator acceptance. Roll back only this
+guard/test if necessary; preserve pending intents without replay. Original Vault
+sync remains pending outside the approved checkout.
 
 ## 2026-10-04: namespace identity alias baseline (offline)
 

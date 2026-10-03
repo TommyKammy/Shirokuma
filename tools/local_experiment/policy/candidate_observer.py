@@ -328,8 +328,14 @@ class CandidateObserver:
         for expected in self._items:
             current = self.kube.get(expected['kind'], expected['metadata']['name'])
             require(type(current) is dict, 'BASELINE_RESOURCE_MISSING')
+            resource_meta = current.get('metadata')
+            identity_keys = {'name', 'uid', 'generation', 'labels', 'annotations', 'deletiontimestamp'}
+            canonical_keys = {'name', 'uid', 'generation', 'labels', 'annotations', 'deletionTimestamp'}
+            require(type(resource_meta) is dict and not any(
+                type(key) is str and key.lower() in identity_keys and key not in canonical_keys
+                for key in resource_meta), 'BASELINE_IDENTITY_INVALID')
             M.assert_owned(current, expected)
-            meta = current['metadata']; generation = meta.get('generation')
+            meta = resource_meta; generation = meta.get('generation')
             require(identity(meta.get('uid')) and type(generation) is int and generation > 0
                     and meta.get('deletionTimestamp') is None, 'BASELINE_IDENTITY_INVALID')
             if expected['kind'] == M.POLICY:

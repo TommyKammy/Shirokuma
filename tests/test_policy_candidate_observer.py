@@ -129,6 +129,20 @@ class ObserverTests(unittest.TestCase):
                     observer.observe()
                 self.assertEqual(kube.requests, [])
 
+    def test_policy_resource_identity_aliases_cannot_hide_conflicting_owner(self):
+        for key, value in (('Name', 'other-policy'), ('Uid', 'other-uid'),
+                           ('Generation', 2), ('Labels', {'owner': 'other'}),
+                           ('Annotations', {'owner': 'other'}),
+                           ('DeletionTimestamp', '2026-10-04T00:00:00Z')):
+            with self.subTest(key=key):
+                kube=FakeKube()
+                resource=next(iter(kube.resources.values()))
+                resource['metadata'][key]=value
+                observer=O.CandidateObserver(prepared(),kube)
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.observe()
+                self.assertEqual(kube.requests, [])
+
     def test_allowed_exact_body_one_attempt_and_all_guards(self):
         observed=self.ready();receipts=[]
         def save(value):

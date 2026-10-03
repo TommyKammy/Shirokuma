@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.150"
+version: "5.151"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy resource identity aliases (offline)
+
+WP-L2-POL-001: six fake resources with conflicting case-variant identity or
+ownership metadata were accepted before repair. The baseline now rejects them
+before dry-run; six negative cases failed first, then the observer suite passed
+(49 tests). `make verify-local-experiment`, `make verify-design-context`
+(89 documents), `make check-no-secret-filenames` and `git diff --check`
+passed. Dedicated Colima observed stopped; no live admission, retained
+request/report/volume/backup change or GitHub write. Fake responses cannot
+authenticate producers, prove atomic inventory, clear strict admission or
+establish operator acceptance. Roll back only the guard/test; retain saved
+intents without replay. Original Vault synchronization pending outside the
+approved checkout.
 
 ## 2026-10-04: namespace identity aliases and independent FinOps check (offline)
 
