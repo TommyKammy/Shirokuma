@@ -301,7 +301,11 @@ class CandidateObserver:
         require(type(ns) is dict and ns.get('kind') == 'Namespace' and ns.get('apiVersion') == 'v1', 'NAMESPACE_UNKNOWN')
         metadata = ns.get('metadata', {})
         labels = metadata.get('labels')
-        require(metadata.get('name') == M.NAMESPACE and identity(metadata.get('uid'))
+        require(type(metadata) is dict
+                and not any(type(key) is str and key.lower() in
+                            {'name', 'uid', 'labels', 'deletiontimestamp'}
+                            and key not in {'name', 'uid', 'labels', 'deletionTimestamp'} for key in metadata)
+                and metadata.get('name') == M.NAMESPACE and identity(metadata.get('uid'))
                 and type(labels) is dict and labels.get('kubernetes.io/metadata.name') == M.NAMESPACE
                 and metadata.get('deletionTimestamp') is None, 'NAMESPACE_IDENTITY_INVALID')
         limits = self.kube.json_request(['-n', M.NAMESPACE, 'get', 'limitranges', '-o', 'json'])

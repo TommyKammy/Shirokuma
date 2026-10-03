@@ -118,6 +118,17 @@ class ObserverTests(unittest.TestCase):
                     observer.observe()
                 self.assertEqual(kube.requests, [])
 
+    def test_namespace_identity_aliases_cannot_hide_conflicting_scope(self):
+        for key, value in (('Name', 'different-namespace'), ('Uid', 'different-uid'),
+                           ('Labels', {'kubernetes.io/metadata.name': 'different-namespace'}),
+                           ('DeletionTimestamp', '2026-10-04T00:00:00Z')):
+            with self.subTest(key=key):
+                kube=FakeKube();kube.namespace['metadata'][key]=value
+                observer=O.CandidateObserver(prepared(),kube)
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.observe()
+                self.assertEqual(kube.requests, [])
+
     def test_allowed_exact_body_one_attempt_and_all_guards(self):
         observed=self.ready();receipts=[]
         def save(value):

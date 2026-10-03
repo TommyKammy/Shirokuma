@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.149"
+version: "5.150"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: namespace identity aliases and independent FinOps check (offline)
+
+WP-L2-POL-001: four fake Namespace metadata identity aliases alongside canonical
+fields became ready before repair and now fail before dry-run. The negative
+reproduced four failures, then focused observer 48 tests and native policy 17
+tests passed. Separately WP-L6-FIN-001 saved-history selection, digest/order,
+storage scope and output bounds were inspected without establishing another
+defect; 182 FinOps tests passed (seven Linux-only skips). Dedicated Colima was
+observed stopped. No live admission, collection, retained request/report/volume/
+backup mutation or GitHub write. AgentHouse usage remains `null / NOT_MEASURED`.
+Offline fixtures cannot authenticate producers, prove atomic namespace state,
+measure current usage, clear strict admission or establish operator acceptance.
+Roll back only the policy guard/test if necessary; retain pending intents and
+saved reports. No FinOps runtime rollback. Original Vault sync pending outside
+the approved checkout. `go test ./... -count=1` (847 tests), `make
+verify-local-experiment`, `make verify-design-context` (89 documents), `make
+check-no-secret-filenames` and `git diff --check` passed. The local suite's
+expected synthetic failure output is not live runtime acceptance.
 
 ## 2026-10-04: policy list envelope aliases and independent GitOps check (offline)
 

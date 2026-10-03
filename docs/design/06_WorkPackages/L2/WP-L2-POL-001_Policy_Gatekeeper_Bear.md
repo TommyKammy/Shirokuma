@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.39"
+version: "0.40"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: namespace identity alias baseline (offline)
+
+Four fake Namespace replies with canonical identity plus conflicting `Name`,
+`Uid`, `Labels` or `DeletionTimestamp` metadata aliases incorrectly became
+ready. The negative reproduced four failures before repair. The fixed-candidate
+observer now rejects these aliases before dry-run; focused observer 48 tests
+and native policy 17 tests passed. The dedicated Colima profile was observed
+stopped; no live API/admission, existing request, volume or backup was changed.
+This does not authenticate a namespace inventory or establish admission or
+operator acceptance. Roll back only the alias guard/test if needed, preserving
+pending intents without replay. Original Vault synchronization pending outside
+the approved checkout.
 
 ## 2026-10-04: conflicting LimitRange list envelope aliases (offline)
 
