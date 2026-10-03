@@ -389,6 +389,20 @@ class ReadOnlyClient:
                 # do not turn a late non-200 into timely catalog evidence.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 require(type(status) is int and status == 200, 'API_RESPONSE_INVALID')
+                # A declared length is part of the response framing. A short
+                # but syntactically valid JSON prefix is not complete evidence
+                # when the peer promised additional bytes.
+                headers = getattr(response, 'headers', None)
+                lengths = headers.get_all('Content-Length', []) if headers is not None else []
+                require(type(lengths) is list and len(lengths) <= 1, 'API_RESPONSE_INVALID')
+                declared = None
+                if lengths:
+                    length = lengths[0]
+                    require(type(length) is str and re.fullmatch(r'[0-9]+', length) is not None and
+                            len(length) <= 10, 'API_RESPONSE_INVALID')
+                    declared = int(length)
+                    require(declared <= MAX_RESPONSE, 'API_RESPONSE_TOO_LARGE')
+                require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 chunks, count = [], 0
                 while True:
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
@@ -404,6 +418,7 @@ class ReadOnlyClient:
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
                     require(count <= MAX_RESPONSE, 'API_RESPONSE_TOO_LARGE')
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                require(declared is None or count == declared, 'API_RESPONSE_INVALID')
                 try:
                     value = decode(b''.join(chunks))
                 except CoverageError:

@@ -12,6 +12,19 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-03: declared catalog body length (offline)
+
+The bounded GET reader now checks a single declared `Content-Length` against
+the exact bytes received before treating valid JSON as evidence. A truncated
+but syntactically complete prefix, conflicting or malformed lengths, and an
+over-limit declaration fail closed; a matching length remains valid. The
+disposable focused test covers these cases; combined verification is recorded
+in Milestones. No live catalog login/GET, VM start, retained credential/source/
+report/backup mutation or request replay. This only checks declared HTTP
+framing, not catalog authenticity, atomicity, whole-catalog/column lineage or
+operator acceptance. Roll back reader/test only; preserve saved reports.
+Direct original Vault synchronization remains pending outside checkout.
+
 ## 2026-10-03: malformed catalog read chunk is not JSON evidence (offline)
 
 An isolated disposable response returning text instead of bytes repeatedly hit the response-size limit rather than rejecting the malformed stream. The reader now checks both the post-read deadline and exact byte type before counting chunks. The negative failed before repair and the 85-test lineage suite passed afterward. No live login/API, VM start or retained credential/source/report/backup change. This guards client framing only, not catalog authenticity, atomicity, whole-catalog/column lineage or operator acceptance. Roll back only the chunk guard and disposable fixture, retaining historical reports. Direct original Vault synchronization remains pending outside checkout; broader checks are in Milestones.

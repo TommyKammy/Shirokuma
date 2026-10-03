@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: declared catalog response length (offline)
+
+WP-L5-LINEAGE-001 now refuses a syntactically valid JSON response shorter than
+its declared `Content-Length`, duplicate/malformed declarations and declared
+lengths over the existing 2 MiB response cap; a matching length passes. The
+disposable focused lineage suite passed (86 tests), as did
+`make verify-local-experiment`, `make verify-design-context` (89 documents)
+and `git diff --check`. Dedicated Colima was read-only observed stopped; no
+live login/catalog, VM start, retained source/credential/report/backup change
+or unknown-request replay. The check does not authenticate the HTTP peer,
+guarantee atomic catalog state or establish whole-catalog/column lineage or
+operator acceptance. Roll back only the reader and disposable test while
+retaining saved reports. Original Vault sync remains pending outside checkout.
+
 ## 2026-10-03: catalog read chunk type (offline)
 
 After the independent catalog-close/Warehouse stop-clock commit below, WP-L5-LINEAGE-001 gained an exact-byte guard on each catalog response chunk. A disposable text-returning reader formerly cycled to `API_RESPONSE_TOO_LARGE`; the negative failed before repair and focused lineage passed (85 tests). The reader also checks time immediately after the read before classifying malformed chunks. `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed; private failed-negative and final logs at `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-084/`. No live catalog/API, VM start, retained source/credential/report/backup modification or replay. This cannot authenticate the catalog, establish atomicity, whole-catalog/column lineage or operator/production acceptance. Roll back only the chunk guard/test, preserving stopped VM and historical evidence. Direct original Vault synchronization remains pending outside checkout.

@@ -1,5 +1,6 @@
 """Read-only coverage preserves unknowns, failed inputs and the initial domain."""
 import copy
+from email.message import Message
 import io
 import json
 import os
@@ -874,6 +875,28 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_declared_http_length_must_match_complete_body(self):
+        body = b'{"id":1}'
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for lengths, expected in [([str(len(body) + 1)], 'API_RESPONSE_INVALID'),
+                                  (['x'], 'API_RESPONSE_INVALID'),
+                                  (['2', '2'], 'API_RESPONSE_INVALID'),
+                                  ([str(C.MAX_RESPONSE + 1)], 'API_RESPONSE_TOO_LARGE'),
+                                  ([str(len(body))], None)]:
+            with self.subTest(lengths=lengths):
+                response = Response(body)
+                response.headers = Message()
+                for length in lengths:
+                    response.headers['Content-Length'] = length
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if expected:
+                        with self.assertRaisesRegex(C.CoverageError, expected):
+                            self.client.request('GET', path)
+                    else:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                self.assertTrue(response.closed)
+
     def test_deadline_cannot_be_disabled_by_invalid_timeout(self):
         for timeout in (float('inf'), float('nan'), -1, 0, 301, True):
             with self.subTest(timeout=timeout), self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
