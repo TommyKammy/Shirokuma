@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.34"
+version: "5.35"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: late catalog classification and mid-check owner expiry (offline)
+
+WP-L5-LINEAGE-001: a malformed disposable catalog response whose JSON decoding expires no longer escapes as an on-time `INVALID_JSON`; an oversized response whose decisive byte arrives after expiry similarly yields `API_DEADLINE`, while both timely failures retain their previous codes. The isolated malformed negative failed before repair. WP-L3-VW-002 independently pins the existing post-callback TTL check: a disposable owner that expires during its false-returning stop check durably rejects the new UUID without handler or false callback-failure code; no owner implementation change. Focused lineage (79 tests) and Warehouse (78 + 92 + 16 + 22 + 15 tests), `make verify-local-experiment`, `make verify-design-context` (89 documents), and `git diff --check` passed. Full private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-079/{verify,design,warehouse}.log`. Read-only `colima list` reported the dedicated VM stopped. No VM start, real login/API/backend/SQL, archived replay, retained source/credential/session/report/backup mutation or GitHub write. Offline fixtures neither authenticate catalog/backend producers nor prove atomicity, archived caller receipt, owner restart recovery, whole-catalog/column lineage or operator/production acceptance. Roll back only the catalog deadline guards and disposable tests; retain the stopped VM and historical evidence. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: expired owner dispatch skips callback (offline)
 

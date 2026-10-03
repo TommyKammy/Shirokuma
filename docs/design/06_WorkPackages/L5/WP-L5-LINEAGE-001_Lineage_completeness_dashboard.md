@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.14"
+version: "1.15"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: late invalid and oversized catalog responses (offline)
+
+The bounded client now checks its deadline before classifying an oversized chunk and when decoding fails. Disposable late oversized bytes and malformed JSON discovered after expiry no longer receive timely size/JSON classifications; on-time failures keep their existing codes. The isolated malformed negative failed before repair. No live catalog login/GET, VM start or retained credential/source/report/backup mutation. This does not authenticate the catalog, make observations atomic or establish whole-catalog/column lineage or operator acceptance. Roll back the two deadline guards/tests only, preserving saved reports. Direct original Vault synchronization remains pending outside checkout; verification is in Milestones.
 
 ## 2026-10-03: late transport error respects catalog deadline (offline)
 

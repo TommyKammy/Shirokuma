@@ -393,9 +393,18 @@ class ReadOnlyClient:
                         break
                     chunks.append(chunk)
                     count += len(chunk)
+                    # Even an oversized response has no timely classification
+                    # if its decisive byte arrived after the read deadline.
+                    require(time.monotonic() < self.deadline, 'API_DEADLINE')
                     require(count <= MAX_RESPONSE, 'API_RESPONSE_TOO_LARGE')
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
-                value = decode(b''.join(chunks))
+                try:
+                    value = decode(b''.join(chunks))
+                except CoverageError:
+                    # A malformed response discovered only after expiry is not
+                    # a timely observation of the catalog's response shape.
+                    require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                    raise
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 return value
         except urllib.error.HTTPError as error:

@@ -1016,6 +1016,46 @@ class ReadOnlyClientTests(unittest.TestCase):
             with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
                 self.client.request('GET', next(iter(C.ANCHORS)))
 
+    def test_invalid_json_discovered_after_deadline_is_not_timely_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+        original = C.decode
+
+        def late_decode(raw):
+            client.deadline = time.monotonic() - 1
+            return original(raw)
+
+        with patch.object(C, 'decode', side_effect=late_decode):
+            with patch.object(client.opener, 'open', return_value=Response(b'{invalid')):
+                with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                    client.request('GET', next(iter(C.ANCHORS)))
+        client.deadline = time.monotonic() + 10
+        with patch.object(client.opener, 'open', return_value=Response(b'{invalid')):
+            with self.assertRaisesRegex(C.CoverageError, 'INVALID_JSON'):
+                client.request('GET', next(iter(C.ANCHORS)))
+
+    def test_oversized_response_arriving_after_deadline_is_not_timely_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+
+        class LateOversize(Response):
+            def read(self, size=-1):
+                chunk = super().read(size)
+                if self.tell() > C.MAX_RESPONSE:
+                    client.deadline = time.monotonic() - 1
+                return chunk
+
+        body = b'x' * (C.MAX_RESPONSE + 1)
+        late = LateOversize(body)
+        with patch.object(client.opener, 'open', return_value=late):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+        self.assertTrue(late.closed)
+        client.deadline = time.monotonic() + 10
+        with patch.object(client.opener, 'open', return_value=Response(body)):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_TOO_LARGE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+
     def test_late_http_404_cannot_be_evidence_of_missing_catalog_entry(self):
         self.client.login_attempted, self.client.token = True, 'token'
         client = self.client
