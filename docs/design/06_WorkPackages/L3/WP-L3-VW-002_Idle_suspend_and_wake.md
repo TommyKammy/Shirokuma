@@ -12,6 +12,10 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: cross-selector membership in archived-session inventory (offline)
+
+The opt-in read-only scoped reader now rejects a fixed-name object advertising the session owner if it is absent from that round's owner-selected list. Independently, an owner-selected EndpointSlice advertising either fixed Service must occur in that round's corresponding service-selected list. Unrelated owner-selected slices still count as scoped presence without requiring membership in those two Service lists. Fake contradictory and matching projections pass focused Warehouse tests. Dedicated Colima was observed stopped; no VM/API/SQL read, owner operation, unknown-request replay, retained data or backup change. These checks reject contradictory projections, **not** transient races, atomic inventory, authenticated API identity, historical cleanup, or production/operator acceptance. Roll back only runtime-status reader/tests, preserving saved sessions and stopped VM. Original Vault direct handoff sync remains pending outside checkout.
+
 ## 2026-10-03: bounded projected list count (offline)
 
 The opt-in metadata-only inventory now bounds the decimal list-count text by the fixed per-list limit before converting it to an integer. A 5000-digit fake count reproduced unbounded conversion before repair; an empty complete list still passes. `make test-local-warehouse-lifecycle` passed. The dedicated Colima profile remained stopped; no live template/API/SQL, owner call, unknown-request replay, retained session or backup mutation. This does not authenticate inventory, establish atomic absence or historical cleanup, or prove operator/production acceptance. Revert only this reader/test change and preserve the VM and saved evidence. Original Vault handoff direct sync remains pending outside checkout.

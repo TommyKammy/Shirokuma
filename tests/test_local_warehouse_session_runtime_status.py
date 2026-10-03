@@ -164,6 +164,31 @@ class RuntimeStatusTests(TestCase):
         with self.assertRaises(R.RuntimeStatusError):
             R.observe(TOKEN, kube)
 
+    def test_owner_selector_must_include_owned_fixed_name(self):
+        kube = FakeKube()
+        name = PREFIX + '-xs'
+        fixed = obj('Deployment', name, owner=TOKEN)
+        kube.names['deployments', name] = fixed
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+        kube.owned = [copy.deepcopy(fixed)]
+        self.assertEqual(R.observe(TOKEN, kube)['named_present'], 1)
+
+    def test_service_selector_must_include_owned_endpoint_slice(self):
+        kube = FakeKube()
+        service = PREFIX + '-xs'
+        endpoint = obj('EndpointSlice', service + '-abcde', owner=TOKEN, service=service)
+        kube.owned = [endpoint]
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+        kube.slices[service] = [copy.deepcopy(endpoint)]
+        self.assertEqual(R.observe(TOKEN, kube)['service_endpoints_present'], 1)
+        # An owned slice for another Service is still within owner scope but
+        # is not part of the two fixed Service selectors.
+        kube.owned = [obj('EndpointSlice', 'other-abcde', owner=TOKEN, service='other')]
+        kube.slices.clear()
+        self.assertEqual(R.observe(TOKEN, kube)['labelled_present'], 1)
+
     def test_conflicting_identity_between_projections_fails_in_one_round(self):
         kube = FakeKube()
         name = PREFIX + '-xs'

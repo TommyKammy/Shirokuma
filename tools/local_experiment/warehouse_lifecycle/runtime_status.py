@@ -177,6 +177,20 @@ def snapshot(token, kube, deadline):
             endpoint_values.append(value)
     require(time.monotonic() < deadline)
     require(all(len(values) == len(set(values)) for values in (named, owned, endpoints)))
+    # A named object advertising this session's owner must also appear in the
+    # owner-selector projection. Separate API reads can race; reject the
+    # contradictory round instead of presenting it as a stable observation.
+    owned_set = set(owned)
+    for value in named_values:
+        if value['metadata']['labels'].get(OWNER) == token:
+            require(identity(value) in owned_set)
+    # Likewise a selected EndpointSlice for either fixed Service cannot vanish
+    # from the corresponding service-name selector within the same round.
+    endpoint_set = set(endpoints)
+    services = {prefix + suffix for suffix in ('-xs', '-s')}
+    for value in owned_values:
+        if value['kind'] == 'EndpointSlice' and value['metadata']['labels'].get('kubernetes.io/service-name') in services:
+            require(identity(value) in endpoint_set)
     # The three API projections are separate reads. A resource present in more
     # than one projection must retain its identity within this round as well.
     identities = {}

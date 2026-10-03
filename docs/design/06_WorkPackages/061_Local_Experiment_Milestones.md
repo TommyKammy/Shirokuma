@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: Warehouse cross-selector membership (offline)
+
+WP-L3-VW-002: two independent read-only inventory consistency checks reject an owner-labelled fixed-name object absent from the owner-selected projection, and a selected owner EndpointSlice for either fixed Service absent from its service-selected projection. Matching and unrelated-slice fixtures and `make test-local-warehouse-lifecycle` passed. Dedicated Colima read-only status reported stopped; no live API/SQL, owner operation, unknown-request replay or retained session/backup mutation. Separate API reads are not atomic or independently authenticated; historical cleanup and operator/production acceptance remain open. Roll back the reader/tests only and retain saved evidence/VM. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: bounded Warehouse projected count (offline)
 
 WP-L3-VW-002: the scoped-list metadata reader now bounds the projected item-count digits before integer conversion. A fake 5000-digit count failed the new focused test before repair; `make test-local-warehouse-lifecycle` passed afterward. Dedicated Colima stayed stopped; no API/SQL, owner operation, unknown-request replay or retained data/backup mutation. Fake parsing is not authenticated or atomic inventory, historical cleanup or operator/production acceptance. Roll back only reader/test, preserving VM and evidence. Original Vault direct sync pending outside checkout.
