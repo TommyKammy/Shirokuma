@@ -251,8 +251,45 @@ class GatekeeperTests(unittest.TestCase):
             observer.verify(progress=failed_save)
         self.assertEqual(kube.requests, [])
         self.assertEqual(caught.exception.receipt['result'], 'failed')
-        self.assertEqual(caught.exception.receipt['pending']['candidate_id'], 'c01')
+        self.assertIsNone(caught.exception.receipt['pending'])
         self.assertNotIn('PRIVATE', json.dumps(caught.exception.receipt))
+
+    def test_failed_completion_write_keeps_sent_request_unknown_and_pending(self):
+        kube = FakeKube()
+        observer = G.GatekeeperObserver(kube)
+        observer.observe()
+        saved = []
+        def save(value):
+            if kube.requests and value['pending'] is None:
+                raise OSError('PRIVATE progress writer failure')
+            saved.append(value)
+        with self.assertRaises(G.GatekeeperError) as caught:
+            observer.verify(progress=save)
+        self.assertEqual(len(kube.requests), 1)
+        self.assertEqual(len(saved), 2)  # Intent, then failure; never resend.
+        for receipt in (caught.exception.receipt, observer.receipt(), saved[-1]):
+            self.assertEqual(receipt['result'], 'failed')
+            self.assertEqual(receipt['pending']['candidate_id'], 'c01')
+            self.assertEqual(receipt['pending']['outcome'], 'unknown')
+            self.assertEqual(receipt['results'][0]['admission'], 'unknown')
+            self.assertFalse(receipt['results'][0]['matched_host_expectation'])
+            self.assertNotIn('PRIVATE', json.dumps(receipt))
+
+    def test_failed_final_write_keeps_last_request_unknown_without_replay(self):
+        kube = FakeKube()
+        observer = G.GatekeeperObserver(kube)
+        observer.observe()
+        def save(value):
+            if value['result'] == 'passed':
+                raise OSError('PRIVATE final writer failure')
+        with self.assertRaises(G.GatekeeperError) as caught:
+            observer.verify(progress=save)
+        self.assertEqual(len(kube.requests), 15)
+        receipt = caught.exception.receipt
+        self.assertEqual(receipt['result'], 'failed')
+        self.assertEqual(receipt['pending']['candidate_id'], 'c15')
+        self.assertEqual(receipt['results'][-1]['admission'], 'unknown')
+        self.assertNotIn('passed_cases', receipt)
 
 
 if __name__ == '__main__':

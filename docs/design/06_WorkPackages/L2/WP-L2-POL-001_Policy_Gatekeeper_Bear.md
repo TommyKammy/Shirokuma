@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.34"
+version: "0.35"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed-corpus progress receipt failure (offline)
+
+The legacy 15-case fixed-corpus verifier cleared its pending intent before a
+per-case completion write; a test-owned writer failure left an in-memory known
+result without a pending request. The negative failed before repair. A failed
+completion or terminal write now restores the affected sent case as unknown and
+pending, without replay. A failed pre-send write instead has no pending request
+and zero probes. Focused 14 tests and local verification passed. This cannot
+guarantee durability when the writer remains broken, authenticate a live API,
+or establish policy acceptance. Dedicated Colima observed Stopped; no live
+dry-run, retained request/volume/backup mutation or GitHub write. Roll back the
+fixed-corpus observer and tests only if required; retain previous pending
+intents and evidence. Original Vault synchronization pending outside checkout.
 
 ## 2026-10-04: pre-send intent writer failure (offline)
 

@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.96"
+version: "0.97"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent condition-array boundary check (offline)
+
+Inspected the unrelated-member typed condition decoder and its explicit-null
+checks after the separate fixed-corpus policy repair. The two focused Go tests
+passed; no further defect established or GitOps implementation changed. The
+dedicated VM remained Stopped; no live Git/API read, reconciliation or retained
+data/backup mutation. Offline fixtures do not authenticate a remote producer,
+prove atomic inventory, clear strict admission or establish acceptance. No
+GitOps runtime rollback; retain prior evidence. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-04: typed unrelated conditions regression (offline)
 

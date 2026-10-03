@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.143"
+version: "5.144"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: fixed policy corpus progress and independent GitOps review (offline)
+
+WP-L2-POL-001: a test-owned completion writer failed after the first fixed
+dry-run and exposed a known result without pending intent; the negative failed
+before repair. Failure after a sent request now restores unknown/pending, and
+a final receipt writer failure does likewise for the last case, without replay.
+Pre-send writer failure has zero probes and no pending request. Focused observer
+14 tests passed. Independently inspected WP-L0-GITOPS-001 unrelated-member
+condition array/null handling; two focused Go tests passed, no new defect or
+reader change. `go test ./... -count=1` passed (844 Go tests), as did `make
+verify-local-experiment`, `make verify-design-context` (89 documents) and
+`make check-no-secret-filenames`. The local suite contains synthetic failure
+output, not live acceptance. Dedicated Colima read-only observed Stopped; no
+API/Git, reconciliation, retained request/report/volume/backup change or GitHub
+write. Offline checks do not guarantee durable writes on a broken writer,
+authenticate producers, prove atomic inventory, clear strict admission or grant
+operator acceptance. Roll back only the policy observer/tests if needed;
+preserve pending intents and saved evidence. Original Vault sync pending
+outside this approved checkout.
 
 ## 2026-10-04: pre-send policy receipt and separate GitOps type boundary (offline)
 

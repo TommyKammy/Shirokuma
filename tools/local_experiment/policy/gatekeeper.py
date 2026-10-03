@@ -198,6 +198,7 @@ class GatekeeperObserver:
                 progress(self.receipt())
         self.started = True
         self.outcome = 'running'
+        sent = False
         try:
             _require(_source_hashes() == self.sources, 'policy source changed after observation')
             _require(MANAGE.load_manifest() == self.items, 'native manifest changed after observation')
@@ -208,6 +209,7 @@ class GatekeeperObserver:
             for i, case in enumerate(self.cases, 1):
                 self.pending = {'candidate_id': f'c{i:02}', 'input_sha256': _hash(case['object']), 'outcome': 'unknown'}
                 notify()
+                sent = True
                 result = self.kube.smoke_request(copy.deepcopy(case['object']))
                 _require(len(result.stdout) <= 2 * 1024 * 1024 and len(result.stderr) <= 2 * 1024 * 1024,
                          'native dry-run response exceeds its bound')
@@ -230,14 +232,27 @@ class GatekeeperObserver:
                                   'violation_ids': [RULE_IDS[expected]] if matched and expected else [],
                                   'scope_limit_ids': [OUTSIDE] if case['object']['metadata']['namespace'] != MANAGE.NAMESPACE else [],
                                   'input_sha256': _hash(case['object'])})
+                _require(matched, 'native dry-run did not match the fixed policy expectation')
                 self.pending = None
                 notify()
-                _require(matched, 'native dry-run did not match the fixed policy expectation')
+                sent = False
             _require(_source_hashes() == self.sources and MANAGE.inventory_status(self.kube, self.items) == self.initial,
                      'native baseline changed during dry-run verification')
             self.outcome = 'passed'
+            sent = True  # Final receipt has not yet been durably confirmed.
             notify()
+            sent = False
         except BaseException as error:
+            # A failed progress write after a request cannot establish that the
+            # tentative result was durably recorded. Keep the original intent
+            # unknown rather than advertising a confirmed result or replaying it.
+            if sent and self.pending is None and self.rows:
+                last = self.rows[-1]
+                self.pending = {'candidate_id': last['candidate_id'],
+                                'input_sha256': last['input_sha256'], 'outcome': 'unknown'}
+                last.update(admission='unknown', matched_host_expectation=False, violation_ids=[])
+            elif not sent:
+                self.pending = None
             self.outcome = 'interrupted' if not isinstance(error, Exception) else 'failed'
             receipt = self.receipt()
             try:
