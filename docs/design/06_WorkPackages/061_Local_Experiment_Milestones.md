@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.38"
+version: "5.39"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: catalog read chunk type (offline)
+
+After the independent catalog-close/Warehouse stop-clock commit below, WP-L5-LINEAGE-001 gained an exact-byte guard on each catalog response chunk. A disposable text-returning reader formerly cycled to `API_RESPONSE_TOO_LARGE`; the negative failed before repair and focused lineage passed (85 tests). The reader also checks time immediately after the read before classifying malformed chunks. `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed; private failed-negative and final logs at `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-084/`. No live catalog/API, VM start, retained source/credential/report/backup modification or replay. This cannot authenticate the catalog, establish atomicity, whole-catalog/column lineage or operator/production acceptance. Roll back only the chunk guard/test, preserving stopped VM and historical evidence. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: catalog close and Warehouse stop-clock boundaries (offline)
 

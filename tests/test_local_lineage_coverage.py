@@ -990,6 +990,19 @@ class ReadOnlyClientTests(unittest.TestCase):
                 with self.assertRaises(C.CoverageError):
                     self.client.request('GET', next(iter(C.ANCHORS)))
 
+    def test_nonbyte_catalog_chunk_is_bounded_invalid_response(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+
+        class TextChunk(Response):
+            def read(self, size=-1):
+                return '{"id":1}'
+
+        response = TextChunk()
+        with patch.object(self.client.opener, 'open', return_value=response):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                self.client.request('GET', next(iter(C.ANCHORS)))
+        self.assertTrue(response.closed)
+
     def test_valid_unicode_response_is_preserved(self):
         self.client.login_attempted, self.client.token = True, 'token'
         body = '{"unused":"雪 😀"}'.encode('utf-8')

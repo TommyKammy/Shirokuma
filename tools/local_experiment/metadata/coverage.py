@@ -393,6 +393,8 @@ class ReadOnlyClient:
                 while True:
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
                     chunk = response.read(min(65536, MAX_RESPONSE + 1 - count))
+                    require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                    require(type(chunk) is bytes, 'API_RESPONSE_INVALID')
                     if not chunk:
                         break
                     chunks.append(chunk)
