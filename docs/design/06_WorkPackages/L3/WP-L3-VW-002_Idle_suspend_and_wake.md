@@ -12,6 +12,10 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: serve-loop stop cannot accept another connection (offline)
+
+A test-owned stop callback setting the event while returning false previously allowed `serve` to enter another `accept` before the loop noticed the stop. It now exits before accepting again. The isolated negative failed before repair; focused and broader evidence is in Milestones. Existing admitted workers still drain. No archived request replay, backend/SQL, VM start or retained session/backup change. This does not prove caller receipt, backend identity, restart recovery or operator acceptance. Roll back only the serve guard and fixture, keeping archived sessions; original Vault sync remains pending outside checkout.
+
 ## 2026-10-03: stop callback raises after setting stop (offline)
 
 A disposable callback sets the stop event then raises: its fresh UUID and a subsequent fresh UUID are durably rejected, the completed UUID replays exactly, the callback runs only once and no second handler runs. This pins existing fail-closed dispatch behavior; no owner implementation, archived replay or live backend/SQL change. Focused checks and limits are in Milestones. It does not prove archived caller receipt, backend authenticity or restart recovery. Roll back the fixture only; retain sessions and backups. Original Vault synchronization remains pending outside checkout.

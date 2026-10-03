@@ -264,6 +264,22 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(self.rpc._entries, {})
 
+    def test_serve_stop_event_set_during_false_callback_never_accepts(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        checks = []
+
+        def stopping_check():
+            checks.append(True)
+            self.rpc._stop.set()
+            return False
+
+        with mock.patch.object(socket.socket, 'accept', side_effect=AssertionError('accepted after stop')):
+            result = self.rpc.serve(stop=stopping_check)
+        self.assertEqual(checks, [True])
+        self.assertEqual(result['requests'], 0)
+        self.assertEqual(self.calls, [])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.output = Path(self.temp.name).resolve()

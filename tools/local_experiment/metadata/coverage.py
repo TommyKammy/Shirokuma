@@ -412,8 +412,13 @@ class ReadOnlyClient:
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 return value
         except urllib.error.HTTPError as error:
-            status = error.code
-            error.close()
+            try:
+                status = error.code
+            except (OSError, RuntimeError):
+                require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                raise CoverageError('API_UNAVAILABLE') from None
+            finally:
+                error.close()
             # A late 404 is not evidence that a catalog object was absent
             # within this observation's bounded time window.
             require(time.monotonic() < self.deadline, 'API_DEADLINE')

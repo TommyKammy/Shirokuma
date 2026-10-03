@@ -1099,6 +1099,32 @@ class ReadOnlyClientTests(unittest.TestCase):
                 client.request('GET', next(iter(C.ANCHORS)))
         self.assertTrue(stream.closed)
 
+    def test_http_error_code_failure_closes_stream_without_missing_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+
+        class BrokenCode(urllib.error.HTTPError):
+            def __getattribute__(self, name):
+                if name == 'code':
+                    if self.late:
+                        client.deadline = time.monotonic() - 1
+                    raise OSError('private status failure')
+                return super().__getattribute__(name)
+
+            def close(self):
+                self.fp.close()
+
+        for late, expected in ((False, 'API_UNAVAILABLE'), (True, 'API_DEADLINE')):
+            with self.subTest(late=late):
+                stream = io.BytesIO(b'private')
+                error = BrokenCode(C.URL, 404, 'missing', {}, stream)
+                error.late = late
+                client.deadline = time.monotonic() + 10
+                with patch.object(client.opener, 'open', side_effect=error):
+                    with self.assertRaisesRegex(C.CoverageError, expected):
+                        client.request('GET', next(iter(C.ANCHORS)))
+                self.assertTrue(stream.closed)
+
     def test_late_returned_http_status_is_deadline_not_response_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         client = self.client
