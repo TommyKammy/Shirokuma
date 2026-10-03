@@ -178,6 +178,7 @@ class CoverageRenderTests(unittest.TestCase):
         with self.assertRaises(RenderError):
             render(value)
         value['runs'][0]['source_sha256_after'] = 'a' * 64
+        value['observation']['source_stable'] = True
         self.assertIn('2 / 2 エッジ', render(value))
 
     def test_catalog_stability_claim_requires_matching_saved_snapshots(self):
@@ -187,6 +188,26 @@ class CoverageRenderTests(unittest.TestCase):
             with self.subTest(after=after), self.assertRaises(RenderError):
                 render(value)
         self.assertIn('2 / 2 エッジ', render(report()))
+
+    def test_catalog_instability_cannot_accompany_fully_known_edges(self):
+        value = report()
+        value['observation'].update(status='incomplete', metadata_stable=False,
+                                    reason_codes=['UNKNOWN_EXPECTED_EDGES'])
+        with self.assertRaises(RenderError):
+            render(value)
+
+    def test_complete_inventory_and_equal_source_snapshots_cannot_claim_instability(self):
+        value = report()
+        value['observation'].update(status='incomplete', source_stable=False,
+                                    reason_codes=['SOURCE_INVENTORY_UNAVAILABLE'])
+        with self.assertRaises(RenderError):
+            render(value)
+        value['inventory']['complete'] = False
+        for edge in value['runs'][0]['edges']:
+            edge.update(status='unknown', reason_code='SOURCE_INVENTORY_CHANGED')
+        value['coverage'].update(present=0, unknown=2, known=0, rate=None,
+                                 observation_rate=0.0, complete=False)
+        self.assertIn('保存証跡の一覧取得は未完了', render(value))
 
     def test_known_edge_reason_cannot_contradict_saved_status(self):
         for code in ('VERIFIED_ABSENT', 'CATALOG_CONFLICT', 'CATALOG_UNAVAILABLE',

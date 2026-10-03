@@ -84,7 +84,13 @@ def _read(root, token):
                     raw=os.read(fd,MAX_JOURNAL_BYTES+1)
                     after=os.fstat(fd)
                     current=os.stat('journal.json',dir_fd=journal,follow_symlinks=False)
-                    require(len(raw)==before.st_size and before==after and
+                    # Reading may update access time on some host filesystems.
+                    # Compare identity, permissions and content-change metadata,
+                    # not the atime changed by this reader itself.
+                    stable_fields=('st_dev','st_ino','st_mode','st_uid','st_gid',
+                                   'st_nlink','st_size','st_mtime_ns','st_ctime_ns')
+                    require(len(raw)==before.st_size and
+                            all(getattr(before,key)==getattr(after,key) for key in stable_fields) and
                              (before.st_dev,before.st_ino)==(current.st_dev,current.st_ino) and
                              stat.S_ISREG(current.st_mode))
                     _current_root(root,base)

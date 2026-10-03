@@ -285,10 +285,21 @@ def _validate(report):
                      'INCONSISTENT_EDGE_REASON')
             counts[edge['status']] += 1
     _require(inventory['uuid_runs'] == len(runs) and inventory['eligible'] == eligible and
-             inventory['entries'] == inventory['uuid_runs'] + inventory['unrecognized_entries'] and
-             all(inventory[key] == value for key, value in sources.items()), 'INCONSISTENT_SOURCE_COUNTS')
+              inventory['entries'] == inventory['uuid_runs'] + inventory['unrecognized_entries'] and
+              all(inventory[key] == value for key, value in sources.items()), 'INCONSISTENT_SOURCE_COUNTS')
+    # The collector marks an inventory incomplete when its final listing
+    # changes or fails. With a complete inventory and identical saved snapshots
+    # for every run, its source-stability result cannot be false.
+    _require(not inventory['complete'] or observation['source_stable'] or
+             any(row['source_sha256_before'] is None or
+                 row['source_sha256_before'] != row['source_sha256_after'] for row in runs),
+             'INCONSISTENT_SOURCE_STABILITY')
     denominator = eligible * 2
     known = denominator - counts['unknown']
+    # A changed catalog observation or unknown target always leaves at least
+    # one expected edge unknown; it cannot yield fully known coverage.
+    _require(observation['metadata_stable'] is not False or counts['unknown'] > 0,
+             'INCONSISTENT_CATALOG_STABILITY')
     _require(coverage['denominator'] == denominator and coverage['known'] == known and
              all(coverage[key] == value for key, value in counts.items()), 'INCONSISTENT_EDGE_COUNTS')
     _require(observation['status'] != 'complete' or not counts['unknown'],

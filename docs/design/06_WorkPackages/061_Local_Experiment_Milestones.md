@@ -5,12 +5,50 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.82"
+version: "5.84"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: archived journal atime tolerance (offline)
+
+WP-L3-VW-002's saved status reader no longer compares atime across its own
+read; it still compares inode/device, ownership, mode, link count, size and
+nanosecond content/change times. An injected atime-only fixture failed before
+repair; the system `python3` focused run also failed an unrelated preexisting
+`Path.hardlink_to` version incompatibility, so subsequent checks used the
+Make-configured Python. A focused Warehouse run and first full local run hit
+the unchanged journal fixture's `JOURNAL_UNVERIFIED`; the previously passing
+focused rerun did not resolve this defect. After the stat repair,
+`make test-local-warehouse-lifecycle` and `make verify-local-experiment`
+passed. Failed and passing private logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-039/`.
+No retained journal/report/backup mutation, VM start, unknown-request replay
+or GitHub write. Atime tolerance does not establish journal producer
+authenticity, restart recovery or caller receipt. Roll back comparator/test
+only, retaining archived sessions; original Vault sync pending.
+
+## 2026-10-04: saved lineage stability and private client IP hints (offline)
+
+WP-L5-LINEAGE-001 refuses a saved false catalog-stability claim with all
+expected edges known, and a false source-stability claim when the inventory is
+complete and all saved source snapshots agree. Incomplete inventory is still
+displayable. Both disposable negatives rendered before repair; focused lineage
+128 tests passed after repair. Independently WP-L3-VW-002 refuses
+`True-Client-IP` and `CF-Connecting-IP` before Unix dispatch/journaling; both
+test-owned requests reached the handler before repair. Focused Warehouse
+first rerun failed at the unchanged saved-journal filesystem fixture with
+`JOURNAL_UNVERIFIED`; unchanged second rerun passed. Private failed and passing
+logs: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-039/`.
+Read-only Colima listing observed the dedicated VM stopped. No VM start,
+catalog/backend/SQL, archived UUID replay, retained report/source/session/
+backup mutation or GitHub write. Offline fixtures cannot establish producer or
+peer authenticity, atomicity, whole-catalog/column coverage, caller receipt,
+restart recovery or operator acceptance. Roll back only the independent
+guards/tests, retaining historical evidence and the stopped VM. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-04: private Warehouse forwarded extension namespace (offline)
 

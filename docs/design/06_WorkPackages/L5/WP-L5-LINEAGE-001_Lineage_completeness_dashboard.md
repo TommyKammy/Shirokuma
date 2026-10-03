@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.51"
+version: "1.52"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: saved stability claims versus completed observations (offline)
+
+The direct renderer refuses `metadata_stable=false` with no unknown expected
+edge: the collector leaves an unknown edge when catalog snapshots differ or a
+target is unobserved. It also refuses `source_stable=false` when the saved
+inventory is complete and every run has matching non-null source digests;
+incomplete inventories remain displayable. Both test-owned contradictory
+reports rendered before repair. Focused results and the broader check are in
+Milestones. Only offline renderer/tests changed; the dedicated VM remains
+stopped. This does not authenticate the report producer or establish atomic,
+whole-catalog/column or operator acceptance. Roll back renderer/tests only;
+preserve saved reports and backups. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: offline catalog denominator and fixed edge identities
 

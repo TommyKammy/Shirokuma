@@ -5,12 +5,39 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.02"
+version: "1.04"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: journal reader ignores its own access-time update (offline)
+
+The archived journal reader compared entire `fstat` results across its own
+read, including access time. Under host filesystem atime changes this rejected
+an unchanged private journal as `JOURNAL_UNVERIFIED`; a focused injected
+atime-only negative reproduced the failure. Compare identity, ownership,
+permissions, link count, size and nanosecond modification/change timestamps
+instead. No permission or content-change check was relaxed. The focused
+Warehouse suite and full local verification passed afterward (Milestones).
+An earlier full run and a focused run failed in the existing saved-journal
+fixture; preserve their logs. No archived session was rewritten or replayed,
+no VM start/SQL or backup change. This does not prove saved producer identity,
+owner restart recovery or caller receipt. Roll back the stat comparator/test
+alone if needed; preserve historical journals. Vault sync pending outside checkout.
+
+## 2026-10-04: proxy-specific client IP hints on private RPC (offline)
+
+The one-request Unix parser refuses `True-Client-IP` and `CF-Connecting-IP`:
+neither can supply identity on the fixed private transition. Two disposable
+complete requests reached the handler before repair and are now refused
+without journal or handler dispatch; unrelated printable extensions remain
+compatible. Focused and broader results are in Milestones. No VM start,
+backend/SQL, archived UUID replay or retained session/backup mutation. This
+cannot authenticate the socket peer independently or prove caller receipt,
+restart recovery or operator acceptance. Roll back parser/test alone, retaining
+saved sessions. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: forwarded extension claims on private RPC (offline)
 

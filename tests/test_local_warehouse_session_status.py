@@ -4,6 +4,7 @@ from copy import deepcopy
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -35,6 +36,29 @@ def raw(items=None,replies=None):
 
 
 class SessionStatusTests(unittest.TestCase):
+    def test_own_read_access_time_change_does_not_invalidate_unchanged_journal(self):
+        with tempfile.TemporaryDirectory(dir=S.ROOT/'tmp/local-experiment') as temp:
+            root=Path(temp)/'runs';root.mkdir(mode=0o700)
+            journal=root/TOKEN/'rpc';journal.mkdir(parents=True,mode=0o700)
+            (root/TOKEN).chmod(0o700)
+            file=journal/'journal.json';file.write_bytes(raw([entry()]));file.chmod(0o600)
+            original=os.fstat
+            reads=0
+            def changed_atime(fd):
+                nonlocal reads
+                state=original(fd)
+                if state.st_ino==file.stat().st_ino and state.st_dev==file.stat().st_dev:
+                    reads+=1
+                    if reads==2:
+                        fields=('st_mode','st_uid','st_gid','st_dev','st_ino','st_nlink',
+                                'st_size','st_mtime_ns','st_ctime_ns','st_atime_ns')
+                        result={key:getattr(state,key) for key in fields}
+                        result['st_atime_ns']+=1_000_000_000
+                        return SimpleNamespace(**result)
+                return state
+            with patch.object(S.os,'fstat',side_effect=changed_atime):
+                self.assertEqual(S.read(TOKEN,root,ID)['request_lookup']['recorded_result'],'pending')
+
     def test_recovery_classification_never_dispatches_or_promotes_a_journal(self):
         with tempfile.TemporaryDirectory(dir=S.ROOT/'tmp/local-experiment') as temp:
             root=Path(temp)/'runs';root.mkdir(mode=0o700)
