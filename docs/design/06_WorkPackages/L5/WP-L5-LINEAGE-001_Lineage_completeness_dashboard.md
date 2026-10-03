@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-04: saved complete catalog and operation claims (offline)
+
+The renderer rejects `complete` with an eligible run and no explicit true
+catalog-stability result; the zero-eligible case retains its null result.
+Separately an eligible run without a saved supported operation is rejected.
+Both disposable negatives rendered before repair and fail closed afterward;
+focused and repository verification are recorded in Milestones. The stopped
+dedicated VM, retained reports/sources and backups were not changed. These
+checks do not authenticate the producer or prove whole-catalog/column lineage,
+atomicity or operator acceptance. Roll back the renderer/tests alone, keeping
+historical evidence. Original Vault sync remains pending outside checkout.
+
 ## 2026-10-04: eligible source demotion needs changed or unreadable evidence (offline)
 
 After the final-valid-source check, a separate disposable report still claimed
