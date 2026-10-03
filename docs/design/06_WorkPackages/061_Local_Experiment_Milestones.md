@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.105"
+version: "5.106"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent FinOps direct-history review (offline)
+
+WP-L6-FIN-001: reviewed direct-history selection, chronological tie-breaking,
+digest binding and duplicate refusal after the separate policy repair. No
+further defect established and no FinOps behavior or saved report changed.
+`make test-local-finops` passed 181 tests (seven Linux-only skips). Dedicated
+Colima remained stopped; no collection, retained report/volume/backup change
+or unknown-request replay. AgentHouse retained volume remains `null /
+NOT_MEASURED`. Offline fixtures cannot establish producer authenticity,
+actual Linux runtime behavior, current usage or operator acceptance. No
+FinOps rollback; preserve saved reports. Original Vault sync pending outside
+the approved checkout.
 
 ## 2026-10-04: policy Pod owner and pull credentials (offline)
 
