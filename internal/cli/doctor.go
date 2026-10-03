@@ -261,13 +261,18 @@ func runDoctor(ctx context.Context, runner commandRunner, profile, kubeContext, 
 }
 
 func checkCluster(ctx context.Context, runner commandRunner, kubeContext string) doctorCheck {
+	return checkClusterForProfile(ctx, runner, kubeContext, false)
+}
+
+func checkClusterForProfile(ctx context.Context, runner commandRunner, kubeContext string, localExperiment bool) doctorCheck {
 	checkContext, cancel := context.WithTimeout(ctx, kubernetesCheckTimeout)
 	defer cancel()
 	output, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "get", "--raw=/readyz")
 	if err != nil {
 		return failedCheck("cluster", err)
 	}
-	if strings.TrimSpace(string(output)) != "ok" {
+	if (localExperiment && string(output) != "ok" && string(output) != "ok\n") ||
+		(!localExperiment && strings.TrimSpace(string(output)) != "ok") {
 		return doctorCheck{Name: "cluster", Status: "degraded", Summary: "readiness endpoint did not return ok"}
 	}
 	return doctorCheck{Name: "cluster", Status: "healthy", Summary: "Kubernetes readiness endpoint returned ok"}

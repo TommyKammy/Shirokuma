@@ -12,6 +12,10 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: malformed named GET is not absence (offline)
+
+The metadata-only named GET template distinguishes a missing resource (empty stdout under `--ignore-not-found`) from a returned object with missing metadata (fixed `INVALID` marker). The latter is rejected before an absence report. Fake missing/malformed/valid cases, client-side kubectl template rendering and the focused Warehouse suite passed. The dedicated Colima profile was observed stopped; no live API/SQL, owner request, unknown-request replay, retained session or backup changes. Client-side rendering does not establish live API behavior or provenance; scoped absence remains two separate reads, not historical cleanup or production acceptance. Roll back reader/test only; retain saved sessions and stopped VM. Original Vault synchronization remains pending outside checkout.
+
 ## 2026-10-03: scoped list type/version pairing (offline)
 
 The optional metadata-only reader now accepts only `v1/List` or `discovery.k8s.io/v1/EndpointSliceList` for endpoint selections; the former is emitted by the local kubectl generic printer. It rejects the previously accepted crossed pairs even for empty lists. Fake positive/negative responses and `make test-local-warehouse-lifecycle` passed. Dedicated Colima was observed stopped; no live API/SQL, owner operation, saved-request replay, retained data or backup changes. The reported list envelope cannot authenticate the API, make separate reads atomic, or prove historical cleanup or operator acceptance. Roll back reader/tests only, leaving archived sessions and stopped VM intact. Direct original Vault synchronization remains pending outside checkout.

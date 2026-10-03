@@ -31,6 +31,24 @@ func localFluxJSON() string {
 	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
 }
 
+func TestLocalClusterReadyResponseIsExact(t *testing.T) {
+	for _, response := range []string{"ok", "ok\n"} {
+		check := checkClusterForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: response}}}, localExperimentContext, true)
+		if check.Status != "healthy" {
+			t.Fatalf("valid readiness response rejected: %#v", check)
+		}
+	}
+	for _, response := range []string{" ok", "ok ", "ok\r\n", "\nok", "ok\nextra"} {
+		check := checkClusterForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: response}}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("padded readiness response accepted: %#v", check)
+		}
+	}
+	if check := checkCluster(context.Background(), &fakeRunner{responses: []fakeResponse{{output: " ok "}}}, localExperimentContext); check.Status != "healthy" {
+		t.Fatalf("generic doctor behavior changed: %#v", check)
+	}
+}
+
 func TestLocalFluxDiagnosticDoesNotEchoInvalidResourceIdentity(t *testing.T) {
 	for _, test := range []struct{ field, value string }{
 		{"name", "token-secret\nunsafe"},

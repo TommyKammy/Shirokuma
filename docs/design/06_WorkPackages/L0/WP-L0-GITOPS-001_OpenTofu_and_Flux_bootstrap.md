@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-03: fixed-profile readiness response framing (offline)
+
+The local-only doctor now requires exactly `ok` or `ok\n` from the read-only Kubernetes `/readyz` request. Previously `strings.TrimSpace` accepted padded and extra-newline responses as readiness; the generic doctor retains that compatibility. Fake positive/negative cases, `go test ./internal/cli` (759 passed) and `go vet ./...` passed. Dedicated Colima was read-only observed stopped, with no live API, reconciliation, retained data or backup mutation. Exact returned text does not authenticate the endpoint, Git revision or real readiness, and does not meet strict publication or production acceptance. Revert the local-only check/test to roll back; preserve historical evidence and the VM. Direct original Vault synchronization remains pending outside checkout.
+
 ## 2026-10-03: exact local API endpoint projection (offline)
 
 The fixed local doctor no longer trims whitespace around the reported Kubernetes API URL before checking the loopback HTTPS endpoint. Whitespace-padded responses, including an appended newline, now degrade before subsequent API reads; exact loopback IPv4, IPv6 and localhost fixtures still pass. `go test ./internal/cli` (758 passed) and `go vet ./...` passed. Dedicated Colima was read-only observed stopped; no live API, reconciliation, retained data or backup change. This is a fake-response diagnostic boundary, not API authenticity, remote Git provenance or acceptance. Roll back only local scope validation/test changes; preserve the VM and historical evidence. Original Vault direct handoff sync remains pending outside checkout.

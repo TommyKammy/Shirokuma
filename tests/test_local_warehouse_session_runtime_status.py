@@ -251,6 +251,17 @@ class RuntimeStatusTests(TestCase):
             self.assertIsNone(call.kwargs.get('body'))
             self.assertIsNone(call.kwargs.get('log_path'))
 
+    def test_named_get_distinguishes_missing_from_malformed_object(self):
+        self.assertIn('{{if .}}{{if .metadata}}', R.ONE)
+        self.assertIn('{{else}}INVALID{{end}}{{end}}', R.ONE)
+        name = PREFIX + '-secret'
+        with mock.patch.object(R.W, 'command', return_value=''):
+            self.assertIsNone(R.ReadOnlyKubernetes().get('secrets', name))
+        for raw in ('INVALID', 'INVALID\n', 'Secret\t' + name + '\n'):
+            with self.subTest(raw=raw), mock.patch.object(R.W, 'command', return_value=raw):
+                with self.assertRaises(R.RuntimeStatusError):
+                    R.ReadOnlyKubernetes().get('secrets', name)
+
     def test_blank_truncated_or_malformed_lists_are_not_empty(self):
         # A Kubernetes list may report remaining items even if the continuation
         # token is absent/empty; the metadata-only projection must flag it.

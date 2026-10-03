@@ -43,7 +43,9 @@ ROW = ('{{printf "%s\\t%s\\t%s\\t%s\\t" .kind .metadata.name '
        '{{printf "\\t"}}'
        '{{with .metadata.labels}}{{with index . "kubernetes.io/service-name"}}{{.}}{{end}}{{end}}'
        '{{printf "\\n"}}')
-ONE = '{{if .metadata}}' + ROW + '{{end}}'
+# A successful named GET with an object but no metadata is malformed, not an
+# absent resource. --ignore-not-found prints nothing only for a missing object.
+ONE = '{{if .}}{{if .metadata}}' + ROW + '{{else}}INVALID{{end}}{{end}}'
 MANY = ('{{printf "%s\\t%s\\t%d\\t" .apiVersion .kind (len .items)}}'
          '{{if or .metadata.continue .metadata.remainingItemCount}}TRUNCATED{{else}}COMPLETE{{end}}'
         '{{printf "\\n"}}{{range .items}}' + ROW + '{{end}}')

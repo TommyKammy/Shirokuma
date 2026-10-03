@@ -34,7 +34,7 @@ func runLocalExperimentDoctor(ctx context.Context, runner commandRunner, kubeCon
 	scope := checkLocalExperimentScope(ctx, runner, kubeContext)
 	checks := []doctorCheck{scope}
 	if scope.Status == "healthy" {
-		checks = append(checks, checkCluster(ctx, runner, kubeContext), checkFluxForProfile(ctx, runner, kubeContext, true))
+		checks = append(checks, checkClusterForProfile(ctx, runner, kubeContext, true), checkFluxForProfile(ctx, runner, kubeContext, true))
 		checks = append(checks, checkLocalLakehouse(ctx, runner, kubeContext)...)
 	}
 	checks = append(checks,
