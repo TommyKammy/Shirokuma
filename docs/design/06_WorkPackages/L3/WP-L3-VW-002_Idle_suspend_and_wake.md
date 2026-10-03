@@ -5,12 +5,25 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.79"
+version: "0.80"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: invalid optional RPC header names (offline)
+
+Disposable buffered requests with underscore, high-bit or trailing-space
+extension names confirm the existing parser refuses them before journaling or
+dispatch. A separate fixture avoids consuming the bounded Unix owner's request
+budget; the initial extended socket test exhausted it and failed three later
+requests, then the corrected focused Warehouse suites passed (78 + 102 + 16 +
+22 + 15 tests). No owner code, VM start, backend/SQL, archived UUID replay or
+retained session/backup mutation. Parser assertions do not prove HTTP caller
+receipt, backend authenticity, restart recovery or operator acceptance. Roll
+back only this disposable fixture, preserving historical evidence. Direct
+original Vault sync pending outside checkout.
 
 ## 2026-10-03: optional-header ASCII boundary (offline)
 

@@ -5,12 +5,23 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.24"
+version: "1.25"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: conflicting catalog media declarations (offline)
+
+Disposable GET responses pin refusal of a repeated UTF-8/non-UTF-8 charset
+parameter and a comma-combined JSON/plain media declaration; the existing
+bounded reader rejects both before their JSON-looking bodies become evidence.
+The focused lineage suite passed (91 tests); no reader change, live login/GET,
+VM start or retained source/credential/report/backup mutation. This is not
+catalog authentication, atomicity, whole-catalog/column lineage or operator
+acceptance. Roll back the two fixture rows only, keeping historical reports.
+Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: quoted UTF-8 catalog charset (offline)
 

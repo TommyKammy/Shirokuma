@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.48"
+version: "5.49"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: catalog media conflicts and Warehouse header names (offline)
+
+WP-L5-LINEAGE-001 pins the existing refusal of a repeated charset or
+comma-combined JSON/plain declaration (91 focused tests). Independently
+WP-L3-VW-002 pins invalid optional RPC header names before parsing or journal
+creation (focused 78 + 102 + 16 + 22 + 15 tests). The first extended socket
+fixture exhausted its bounded owner's request budget and failed three later
+requests; after isolating the new parser cases the focused suite passed, with
+no owner or reader behavior change. `make verify-local-experiment`, `make
+verify-design-context` (89 documents) and `git diff --check` passed; private
+verification logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-007/`.
+Dedicated Colima read-only observed
+stopped. No VM start, live backend/catalog/SQL, archived replay, retained
+session/source/credential/report/backup mutation or GitHub write. These
+offline fixtures cannot authenticate a catalog/backend, prove atomicity,
+caller receipt, restart recovery, whole-catalog/column lineage or operator
+acceptance. Roll back only the disposable tests; preserve historical evidence.
+Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: optional RPC header ASCII boundary (offline)
 

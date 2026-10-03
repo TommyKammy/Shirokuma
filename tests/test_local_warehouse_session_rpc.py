@@ -860,6 +860,28 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(self.rpc._entries, {})
 
+    def test_invalid_extension_header_names_never_dispatch(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        body = json.dumps(self.request()).encode()
+        length = str(len(body)).encode()
+        base = b'Content-Type: application/json\r\nContent-Length: ' + length + b'\r\n'
+        class BufferedConnection:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def settimeout(self, timeout):
+                pass
+
+            def recv(self, limit):
+                payload, self.payload = self.payload, b''
+                return payload
+
+        for name in (b'X_Extra', b'X-\x80Extra', b'X-Extra '):
+            with self.subTest(name=name), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
+                self.rpc._read_request(BufferedConnection(self.wire(body, base + name + b': yes\r\n')))
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.rpc._entries, {})
+
     def test_printable_extension_header_remains_compatible_without_duplicate_aliases(self):
         self.start()
         body = json.dumps(self.request()).encode()
