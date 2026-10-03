@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-03: fixed Deployment availability must be explicit
+
+Two independent offline increments require `Available=True` for the four fixed Flux controller Deployments and the two fixed Lakehouse Deployments, even when replica counters are complete. StatefulSets retain their replica-based check (they do not expose Deployment availability conditions). A missing condition is now degraded; a conflicting non-True condition remains degraded. Fake missing-condition and healthy-inventory tests pass; `go test ./internal/cli` (709 tests) and `go vet ./...` pass. Dedicated Colima was observed stopped and not started. No live API/SQL read, reconciliation, saved run or backup mutation. This does not establish runtime health, remote source authenticity, strict supply-chain admission or production acceptance. Rollback is limited to the local doctor and fake fixtures; preserve the stopped VM and retained evidence. Direct Vault handoff synchronization remains pending outside this noninteractive checkout.
+
 ## 2026-10-03: conservative conditions and Flux inventory kind
 
 Two independent offline diagnostic increments: a fixed Flux controller or Lakehouse workload with complete replica counters but `Available=Unknown` or `Progressing=Unknown` is degraded rather than treated as healthy. The local Flux resource inventory also rejects a kind outside the seven kinds explicitly requested from kubectl; generic-profile behavior is unchanged. Fake negative and healthy cases pass (`go test ./internal/cli`, `go test ./...`, `go vet ./...`, `make verify-local-experiment`). Read-only Colima status reported stopped; no live cluster/SQL read, reconcile, saved run or backup change. These checks do not prove remote revision provenance, runtime health or production acceptance. Roll back only the local doctor and its tests; preserve VM and retained evidence. Direct Vault handoff synchronization remains pending outside this noninteractive checkout.

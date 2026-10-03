@@ -8,6 +8,10 @@ status: local-partial
 
 # WP-L0-GITOPS-001 evidence snapshot
 
+## 2026-10-03 offline Deployment condition checks
+
+- Fixed Flux controllers and Lakehouse Deployments now require an explicit `Available=True` alongside complete replica counters; StatefulSets continue to use replica counters. Fake missing-condition negatives and healthy fixtures, Go tests/vet and `make verify-local-experiment` pass. Dedicated Colima was observed stopped and not started. This does not authenticate live runtime, remote source or strict admission. Direct Vault handoff sync remains pending outside the checkout; rollback and gaps are in the WP and Milestones.
+
 ## 2026-10-03 offline diagnostic increment
 
 - Fixed-profile doctor rejects endpoint ports outside 1–65535 and verifies the four named Flux controllers are Deployments in `flux-system`; fake negative and positive cases, Go tests/vet and local verification passed. Dedicated Colima remained stopped. Runtime source provenance, strict gate and Git smoke remain unverified. Vault sync pending due to noninteractive checkout boundary; see WP and Milestones for rollback.

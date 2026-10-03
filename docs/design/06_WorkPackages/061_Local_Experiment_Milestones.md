@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: explicit Deployment availability in offline local doctor
+
+WP-L0-GITOPS-001. Two independent fixed-profile diagnostic increments reject missing `Available=True` on Flux controller Deployments and on Lakehouse Deployments despite complete replica counters; StatefulSets remain replica-based. Healthy fake inventories and the generic Flux profile remain compatible. `go test ./internal/cli` (709 tests) and `go vet ./...` passed. Read-only dedicated Colima status reported stopped; no start, live API/SQL read, reconciliation, retained run or backup mutation. Runtime health, remote source authenticity, strict publication gate and operator/production acceptance remain unverified. Roll back only local doctor code/tests and preserve retained evidence. Original Vault handoff is outside this noninteractive checkout; direct synchronization remains pending.
+
 ## 2026-10-03: offline condition ambiguity and Flux kind validation
 
 WP-L0-GITOPS-001. Dedicated Colima read-only status: not running; no start. Two independent local-doctor increments reject `Available`/`Progressing` conditions other than `True` on otherwise fully replicated fixed deployments, and reject unexpected kinds in the fixed Flux resource list. Healthy fake inventories remain accepted; generic Flux doctor unchanged. `go test ./internal/cli` (706 tests), `go test ./...` (707 tests), `go vet ./...`, `make verify-local-experiment` passed. No real API/SQL read, reconciliation, retained run/backup mutation or GitHub write. Remote source authenticity, strict publication gate, runtime health and operator/production acceptance remain unverified. Rollback: only local doctor code/tests, leave retained evidence and stopped VM intact. Original Vault handoff outside this checkout remains pending synchronization.

@@ -12,7 +12,11 @@ import (
 )
 
 func healthyLocalWorkload(kind, namespace, name string) string {
-	return fmt.Sprintf(`{"kind":%q,"metadata":{"name":%q,"namespace":%q,"generation":2},"spec":{"replicas":1},"status":{"observedGeneration":2,"replicas":1,"availableReplicas":1,"readyReplicas":1,"updatedReplicas":1}}`, kind, name, namespace)
+	conditions := ""
+	if kind == "Deployment" {
+		conditions = `,"conditions":[{"type":"Available","status":"True"}]`
+	}
+	return fmt.Sprintf(`{"kind":%q,"metadata":{"name":%q,"namespace":%q,"generation":2},"spec":{"replicas":1},"status":{"observedGeneration":2,"replicas":1,"availableReplicas":1,"readyReplicas":1,"updatedReplicas":1%s}}`, kind, name, namespace, conditions)
 }
 
 func localControllerJSON() string {
@@ -144,11 +148,23 @@ func TestLocalFluxRejectsWrongControllerIdentity(t *testing.T) {
 
 func TestLocalFluxRejectsFailedAvailableCondition(t *testing.T) {
 	for _, status := range []string{"False", "Unknown", ""} {
-		controllers := strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":1,"conditions":[{"type":"Available","status":"`+status+`"}]`, 1)
+		controllers := strings.Replace(localControllerJSON(), `"type":"Available","status":"True"`, `"type":"Available","status":"`+status+`"`, 1)
 		runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
 		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
 			t.Fatalf("controller condition %q accepted: %#v", status, check)
 		}
+	}
+}
+
+func TestLocalFluxRequiresAvailableConditionOnControllers(t *testing.T) {
+	controllers := strings.Replace(localControllerJSON(), `,"conditions":[{"type":"Available","status":"True"}]`, "", 1)
+	runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
+	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+		t.Fatalf("controller missing Available condition passed: %#v", check)
+	}
+	generic := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
+	if check := checkFlux(context.Background(), generic, localExperimentContext); !strings.Contains(check.Summary, "suspended") {
+		t.Fatalf("generic doctor behavior changed: %#v", check)
 	}
 }
 
@@ -341,6 +357,15 @@ func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 	}
 }
 
+func TestLocalLakehouseRequiresAvailableConditionOnlyOnDeployments(t *testing.T) {
+	responses := localWorkloadResponses()
+	responses[1].output = strings.Replace(responses[1].output, `,"conditions":[{"type":"Available","status":"True"}]`, "", 1)
+	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+	if checks[0].Status != "healthy" || checks[1].Status != "healthy" || checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "Available=True") || checks[3].Status != "healthy" {
+		t.Fatalf("missing deployment condition or StatefulSet condition handling: %#v", checks)
+	}
+}
+
 func TestLocalLakehouseReportsNamespaceReadFailuresWithoutLeakingOutput(t *testing.T) {
 	for _, response := range []fakeResponse{{output: "not JSON secret=hidden"}, {err: errors.New("credential=hidden")}} {
 		responses := localWorkloadResponses()
@@ -391,7 +416,7 @@ func TestLocalFluxExceptionDoesNotHideOtherFailures(t *testing.T) {
 		{"stale-controller", strings.Replace(localControllerJSON(), `"observedGeneration":2`, `"observedGeneration":1`, 1), localFluxJSON()},
 		{"unready-controller", strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":0`, 1), localFluxJSON()},
 		{"terminating-controller", strings.Replace(localControllerJSON(), `"generation":2`, `"generation":2,"deletionTimestamp":"2026-09-16T00:00:00Z"`, 1), localFluxJSON()},
-		{"failed-controller", strings.Replace(localControllerJSON(), `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":"True"}],"observedGeneration":2`, 1), localFluxJSON()},
+		{"failed-controller", strings.Replace(localControllerJSON(), `"conditions":[{"type":"Available","status":"True"}]`, `"conditions":[{"type":"Available","status":"True"},{"type":"ReplicaFailure","status":"True"}]`, 1), localFluxJSON()},
 		{"missing-controller-replicas", strings.Replace(localControllerJSON(), `"spec":{"replicas":1}`, `"spec":{}`, 1), localFluxJSON()},
 		{"failed-child", localControllerJSON(), strings.Replace(localFluxJSON(), `"name":"shirokuma-catalog","namespace":"flux-system","generation":1`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":2`, 1)},
 		{"suspended-child", localControllerJSON(), strings.Replace(localFluxJSON(), `"generation":1},"status"`, `"generation":1},"spec":{"suspend":true},"status"`, 1)},

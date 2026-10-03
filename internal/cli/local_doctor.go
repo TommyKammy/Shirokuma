@@ -135,13 +135,21 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 			default:
 				check.Status = "healthy"
 				check.Summary = fmt.Sprintf("%s current generation %d is ready (%d/%d replicas); Kubernetes readiness only", resourceID, resource.Metadata.Generation, resource.Status.ReadyReplicas, *desired)
+				available := workload.kind != "Deployment"
 				for _, condition := range resource.Status.Conditions {
+					if condition.Type == "Available" && condition.Status == "True" {
+						available = true
+					}
 					if (condition.Type == "ReplicaFailure" && condition.Status == "True") ||
 						(condition.Type == "Progressing" && condition.Status != "True") ||
 						(condition.Type == "Available" && condition.Status != "True") {
 						check.Status = "degraded"
 						check.Summary = resourceID + " reports a failed rollout condition"
 					}
+				}
+				if !available {
+					check.Status = "degraded"
+					check.Summary = resourceID + " has no Available=True condition"
 				}
 			}
 		}
