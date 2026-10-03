@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.47"
+version: "5.48"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: optional RPC header ASCII boundary (offline)
+
+After the independent quoted-charset/printable-extension commit,
+WP-L3-VW-002 pins refusal of US and high-bit bytes in ignored headers before
+dispatch or journaling; no parser change. Focused Warehouse suites passed
+(78 + 101 + 16 + 22 + 15 tests). The dedicated VM was last read-only observed
+stopped; no VM start, live backend/SQL, archived request replay, retained
+session/backup change or GitHub write. A disposable socket cannot prove caller
+receipt, backend authenticity, restart recovery or operator acceptance. Roll
+back only these fixtures, preserving archived evidence. Direct original Vault
+sync pending outside checkout.
 
 ## 2026-10-03: quoted catalog charset and printable RPC extension (offline)
 

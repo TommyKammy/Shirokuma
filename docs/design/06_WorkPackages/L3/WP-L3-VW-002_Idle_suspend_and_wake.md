@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.78"
+version: "0.79"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: optional-header ASCII boundary (offline)
+
+Independently of the printable-extension compatibility fixture, disposable
+Unix requests now check that an ignored header containing US (0x1f) or a
+high-bit byte (0x80) receives 400 before journal/handler work. The existing
+ASCII-only parser required no behavior change. Focused Warehouse suites passed
+(78 + 101 + 16 + 22 + 15 tests). No VM start, archived UUID replay, backend/SQL
+or retained session/backup change. This is not caller receipt, backend
+authentication, restart recovery or operator acceptance. Roll back only these
+fixture cases, preserving saved sessions. Original Vault sync pending.
 
 ## 2026-10-03: printable extension header compatibility (offline)
 
