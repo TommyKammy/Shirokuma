@@ -444,7 +444,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		}
 		// A decoded replacement rune in the reported Git URL or Kustomization
 		// path loses the identity of the source being diagnosed.
-		if localInventoryLossyStrings(spec, []string{"url", "path"}) {
+		if localInventoryInvisibleLocations(spec, []string{"url", "path"}) {
 			return true
 		}
 		for _, nested := range []struct {
@@ -484,6 +484,13 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			}
 			var fields map[string]json.RawMessage
 			if err := json.Unmarshal(reference.raw, &fields); err != nil || localInventoryLossyStrings(fields, reference.keys) {
+				return true
+			}
+		}
+		if len(status["artifact"]) != 0 {
+			var artifact map[string]json.RawMessage
+			if err := json.Unmarshal(status["artifact"], &artifact); err != nil ||
+				localInventoryInvisibleLocations(artifact, []string{"url"}) {
 				return true
 			}
 		}
@@ -557,6 +564,20 @@ func localInventoryLossyStrings(fields map[string]json.RawMessage, keys []string
 		if raw, ok := fields[key]; ok {
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || strings.ContainsRune(value, utf8.RuneError) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func localInventoryInvisibleLocations(fields map[string]json.RawMessage, keys []string) bool {
+	for _, key := range keys {
+		if raw, ok := fields[key]; ok {
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil || strings.IndexFunc(value, func(r rune) bool {
+				return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r)
+			}) >= 0 {
 				return true
 			}
 		}

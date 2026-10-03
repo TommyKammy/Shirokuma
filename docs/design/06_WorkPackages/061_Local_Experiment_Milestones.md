@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.13"
+version: "5.14"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: reported location characters (offline)
+
+WP-L0-GITOPS-001: reject whitespace and Unicode control/format characters in fixed-profile reported source URL, Kustomization path and artifact URL. An isolated escaped-newline fake response passed before repair; after repair `go test ./internal/cli -count=1`, `go vet ./...` and `make verify-local-experiment` passed. Private full log: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-057/verify-second.log`. Dedicated Colima was read-only observed stopped; no VM start, API/Git/SQL, reconciliation, retained data/backup mutation or request replay. Fake shape validation cannot authenticate remote source/API, ensure atomic reads, historical cleanup, strict admission or operator acceptance. Roll back local reader/tests only; preserve VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: source metadata bound across separate observations (offline)
 

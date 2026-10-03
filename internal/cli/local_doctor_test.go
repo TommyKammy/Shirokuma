@@ -313,6 +313,19 @@ func TestLocalInventoryRejectsLossyArtifactLocation(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsInvisibleLocations(t *testing.T) {
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"spec":{"url":"https://example.invalid/repo\n.git"}}]}`),
+		[]byte(`{"items":[{"spec":{"path":"./clusters/\u200blocal"}}]}`),
+		[]byte(`{"items":[{"status":{"artifact":{"url":"https://example.invalid/\rartifact"}}}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("invisible location accepted: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullReferenceScalars(t *testing.T) {
 	for _, tc := range []struct{ parent, field string }{
 		{`spec":{"ref`, `branch`}, {`spec":{"ref`, `tag`}, {`spec":{"ref`, `semver`},

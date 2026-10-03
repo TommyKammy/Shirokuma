@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.63"
+version: "0.64"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: invisible characters in reported locations (offline)
+
+The fixed-profile complete inventory now refuses whitespace and Unicode control/format characters in a reported Git source URL, Kustomization path or artifact URL, including escaped newline, carriage return and zero-width characters on unrelated items. A focused fake response was accepted before the repair and rejected afterward; the existing canonical positives still pass. Focused Go tests, vet and full local verification passed; see Milestones. The generic doctor remains unchanged. No VM start, live API/Git/SQL, reconciliation, retained data/backup mutation or replay; the dedicated Colima profile was read-only observed stopped. This validates only reported shape, not the URL destination or Git/API provenance, atomic inventory, historical cleanup, strict admission or operator acceptance. Roll back reader/tests only, preserving VM/evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: reported Flux artifact location shape (offline)
 
