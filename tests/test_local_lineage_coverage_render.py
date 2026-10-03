@@ -31,10 +31,12 @@ def report(runs=None, unrecognized=0):
     eligible = sum(item['eligible'] for item in runs)
     denominator = eligible * 2
     known = denominator - counts['unknown']
+    source_stable = all(item['source_sha256_before'] is not None and
+                        item['source_sha256_before'] == item['source_sha256_after'] for item in runs)
     return {'schema_version': 1, 'observed_at': '2026-09-17T07:30:00.000000Z',
         'scope': 'verified-historical-data-plan-lineage',
-        'observation': {'status': 'incomplete' if counts['unknown'] else 'complete',
-            'source_stable': True, 'metadata_stable': None if counts['unknown'] else True, 'reason_codes': []},
+        'observation': {'status': 'incomplete' if counts['unknown'] or not source_stable else 'complete',
+            'source_stable': source_stable, 'metadata_stable': None if counts['unknown'] else True, 'reason_codes': []},
         'inventory': {'entries': len(runs) + unrecognized, 'uuid_runs': len(runs), 'eligible': eligible, 'complete': True,
             **{state: sum(item['source_status'] == state for item in runs)
                for state in ('valid', 'failed', 'incomplete', 'invalid')}, 'unrecognized_entries': unrecognized},
@@ -121,6 +123,14 @@ class CoverageRenderTests(unittest.TestCase):
         for value in (excluded_valid, included_invalid):
             with self.subTest(source=value['runs'][0]['source_status']), self.assertRaises(RenderError):
                 render(value)
+
+    def test_source_stability_claim_requires_matching_saved_snapshots(self):
+        for after in (None, 'c' * 64):
+            value = report()
+            value['runs'][0]['source_sha256_after'] = after
+            with self.subTest(after=after), self.assertRaises(RenderError):
+                render(value)
+        self.assertIn('2 / 2 エッジ', render(report()))
 
     def test_partial_inventory_is_not_presented_as_the_complete_population(self):
         value = report()

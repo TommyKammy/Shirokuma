@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.45"
+version: "1.46"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: saved source-stability claim (offline)
+
+The direct offline renderer rejects `source_stable=true` unless every reported
+run has matching non-null before/after source digests. Two test-owned negative
+reports were accepted before repair; focused lineage tests (117) and full local
+verification passed afterward. This checks an internal saved claim, not source
+authenticity or an atomic observation. No VM start, live API, saved source/
+report/backup mutation, unknown-request replay or GitHub write. Retain the
+historical evidence and roll back only renderer/test if necessary. Logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-033/`.
+Whole-catalog/column coverage and operator acceptance remain outstanding;
+original Vault sync pending outside this checkout.
 
 ## 2026-10-04: saved lineage source eligibility consistency (offline)
 

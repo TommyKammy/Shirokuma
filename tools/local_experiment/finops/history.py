@@ -37,11 +37,15 @@ def parse(raw):
                             parse_constant=lambda _: (_ for _ in ()).throw(HistoryError()))
         if type(values) is not list or not 2 <= len(values) <= MAX_REPORTS: raise HistoryError()
         reports = []
+        seen = set()
         for item in values:
             canonical = json.dumps(item, ensure_ascii=True, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
             if len(canonical) > C.MAX_PUBLIC_BYTES: raise HistoryError()
             C.validate_public(item)
-            reports.append((item, hashlib.sha256(canonical).hexdigest()))
+            digest = hashlib.sha256(canonical).hexdigest()
+            if digest in seen: raise HistoryError()
+            seen.add(digest)
+            reports.append((item, digest))
         return sorted(enumerate(reports), key=lambda pair: (C.stamp(pair[1][0]['observed_at'])[1], pair[0]))
     except Exception: raise HistoryError() from None
 
@@ -147,6 +151,7 @@ def render(entries):
     try:
         if {item[0] for item in entries} != set(range(len(entries))): raise HistoryError()
         previous = None
+        seen = set()
         for selected_index, (report, saved_digest) in entries:
             if type(selected_index) is not int or not 0 <= selected_index < len(entries): raise HistoryError()
             C.validate_public(report)
@@ -157,6 +162,8 @@ def render(entries):
                                    separators=(',', ':'), allow_nan=False).encode()
             if len(canonical) > C.MAX_PUBLIC_BYTES or type(saved_digest) is not str or \
                     saved_digest != hashlib.sha256(canonical).hexdigest(): raise HistoryError()
+            if saved_digest in seen: raise HistoryError()
+            seen.add(saved_digest)
     except (TypeError, ValueError, UnicodeError, OverflowError):
         raise HistoryError() from None
     sections, navigation = [], []

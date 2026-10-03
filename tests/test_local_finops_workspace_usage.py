@@ -150,7 +150,7 @@ class WorkspaceUsageTests(unittest.TestCase):
             host_storage=H.validate(v))
         self.assertEqual(value['result'],'partial');self.assertEqual(C.validate_public(value),value)
         self.assertIn('取得中にディレクトリが変化',HTML.render(value))
-        self.assertIn('取得中にディレクトリが変化',HISTORY.render(HISTORY.parse(json.dumps([value,value]).encode())))
+        self.assertIn('取得中にディレクトリが変化',HISTORY.render(HISTORY.parse(json.dumps([old,value]).encode())))
 
     def test_failed_timeout_keeps_reference_with_observed_attempt_window(self):
         v=host_usage_complete();row=v['components'][1]

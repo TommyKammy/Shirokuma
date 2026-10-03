@@ -58,6 +58,19 @@ class HistoryTests(unittest.TestCase):
             with self.subTest(indices=[item[0] for item in invalid]), self.assertRaises(H.HistoryError):
                 H.render(invalid)
 
+    def test_repeated_saved_report_is_not_a_second_observation(self):
+        first = report()
+        payload = encoded([first, first])
+        with self.assertRaises(H.HistoryError):
+            H.parse(payload)
+        from hashlib import sha256
+        canonical = json.dumps(first, ensure_ascii=True, sort_keys=True,
+                               separators=(',', ':'), allow_nan=False).encode()
+        digest = sha256(canonical).hexdigest()
+        with self.assertRaises(H.HistoryError):
+            H.render([(0, (first, digest)), (1, (first, digest))])
+        self.assertIn('保存FinOps観測履歴', H.render(H.parse(encoded([first, report(processes())]))))
+
     def test_offline_html_declares_no_external_resources_or_script(self):
         html = H.render(H.parse(encoded([report(), report(processes())])))
         self.assertIn('Content-Security-Policy', html)

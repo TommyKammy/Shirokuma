@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.73"
+version: "5.74"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: distinct FinOps history and stable lineage source (offline)
+
+WP-L6-FIN-001 rejects duplicated canonical saved reports in both parsed and
+direct history rendering; WP-L5-LINEAGE-001 rejects a saved source-stability
+claim with missing or unequal per-run digests. Disposable negatives failed
+before repair. Focused lineage 117 and FinOps 178 tests (7 Linux-only skipped),
+full `make verify-local-experiment` and design-context passed. An intermediate
+FinOps run exposed an existing fixture selecting a duplicate report; it was
+updated to two different valid observations before passing. Read-only Colima
+listing showed the dedicated VM stopped. No VM start, live collection/catalog,
+retained report/source/volume/backup mutation, archived request replay or
+GitHub write. These offline checks do not authenticate producers, prove atomic
+or whole-catalog/column coverage, measure current usage or establish operator
+acceptance. Roll back the two guards and their fixtures only; retain evidence
+and stopped VM. Private focused, intermediate and full logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-033/`.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: saved lineage eligibility claim (offline)
 

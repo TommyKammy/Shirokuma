@@ -225,6 +225,10 @@ def _validate(report):
         for key in ('source_sha256_before', 'source_sha256_after', 'metadata_sha256_before', 'metadata_sha256_after'):
             value = run.get(key)
             _require(value is None or type(value) is str and re.fullmatch('[0-9a-f]{64}', value), 'INVALID_EVIDENCE_HASH')
+        if observation['source_stable']:
+            _require(run['source_sha256_before'] is not None and
+                     run['source_sha256_before'] == run['source_sha256_after'],
+                     'INCONSISTENT_SOURCE_STABILITY')
         edges = run.get('edges')
         _require(type(edges) is list, 'INVALID_EDGES')
         if run['eligible']:

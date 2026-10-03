@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.26"
+version: "0.27"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04 Duplicate saved observation refusal (offline)
+
+The history parser and direct renderer now reject repeated canonical report
+content, rather than displaying one saved report as two independent observations.
+The disposable negative failed before repair. Focused FinOps tests passed (178
+tests; 7 Linux-only skips), followed by full local verification. An existing
+workspace-usage fixture that selected the same report twice was changed to use
+two distinct valid reports; the intermediate failure is retained in the private
+log. This is a content-identity check, not proof that different reports came
+from independent producers or that current usage was measured. No VM start,
+collection, retained report/volume/backup mutation or GitHub write. Roll back
+only the history guard and fixture changes; preserve saved evidence. Logs:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-033/`.
+Original Vault sync pending outside this checkout.
 
 ## 2026-10-04 Saved FinOps HTML browser policy (offline)
 
