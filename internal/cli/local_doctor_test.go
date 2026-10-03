@@ -291,6 +291,28 @@ func TestLocalInventoryRejectsLossySourceLocation(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsLossyArtifactLocation(t *testing.T) {
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"status":{"artifact":{"url":"https://example.invalid/\ud800"}}}]}`),
+		[]byte(`{"items":[{"status":{"artifact":{"url":null}}}]}`),
+		[]byte(`{"items":[{"status":{"artifact":{"URL":"https://example.invalid/artifact"}}}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("invalid artifact location accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{
+		[]byte(`{"items":[{"status":{"artifact":{"url":"https://example.invalid/artifact"}}}]}`),
+		[]byte(`{"items":[{"status":{"artifact":{"revision":"main@sha1:abc"}}}]}`),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid artifact location rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullReferenceScalars(t *testing.T) {
 	for _, tc := range []struct{ parent, field string }{
 		{`spec":{"ref`, `branch`}, {`spec":{"ref`, `tag`}, {`spec":{"ref`, `semver`},

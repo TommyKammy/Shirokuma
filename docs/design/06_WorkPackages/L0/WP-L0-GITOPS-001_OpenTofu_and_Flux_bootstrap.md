@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.62"
+version: "0.63"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: reported Flux artifact location shape (offline)
+
+The fixed-profile complete inventory now rejects an artifact `url` containing U+FFFD after lossy JSON decoding, explicit null, or differently cased `URL` (which Go's JSON decoder may otherwise accept as a canonical field). A focused disposable response was accepted before the guard and refused afterward; canonical and omitted URL fixtures remain compatible. This is reported-field consistency, not verification of the URL destination, remote Git, API identity, historical cleanup, strict admission or operator acceptance. Generic doctor is unchanged. No VM start, API/Git/SQL access, reconciliation, retained source/backup mutation or replay; the dedicated Colima profile was read-only observed stopped. Roll back reader/test only and preserve evidence/VM; direct original Vault sync pending outside checkout. Focused and broader test results are recorded in Local Experiment Milestones.
 
 ## 2026-10-03: non-lossy reported source locations (offline)
 

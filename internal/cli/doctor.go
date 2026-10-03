@@ -454,7 +454,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			{spec["ref"], []string{"branch", "tag", "semver", "commit", "name"}},
 			{spec["secretRef"], []string{"name"}},
 			{spec["sourceRef"], []string{"kind", "name", "namespace"}},
-			{status["artifact"], []string{"revision"}},
+			{status["artifact"], []string{"revision", "url"}},
 		} {
 			// An explicitly null nested object decodes like an omitted struct in
 			// encoding/json. Only omission is compatible with projected fixtures.
@@ -477,7 +477,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			{spec["ref"], []string{"branch", "tag", "semver", "commit", "name"}},
 			{spec["secretRef"], []string{"name"}},
 			{spec["sourceRef"], []string{"kind", "name", "namespace"}},
-			{status["artifact"], []string{"revision"}},
+			{status["artifact"], []string{"revision", "url"}},
 		} {
 			if len(reference.raw) == 0 {
 				continue

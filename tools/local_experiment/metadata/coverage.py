@@ -208,7 +208,11 @@ def source_snapshot(path):
     def visit(fd, relative, depth, device):
         nonlocal total, nodes
         require(depth <= 20, 'SOURCE_LIMIT_EXCEEDED')
-        files[relative + '/'] = {'directory': True}
+        # Include the opened directory identity, including empty directories:
+        # replacing one between the two source reads must invalidate stability.
+        opened_dir = os.fstat(fd)
+        files[relative + '/'] = {'directory': True, 'device': opened_dir.st_dev,
+                                 'inode': opened_dir.st_ino}
         names = _bounded_names(fd, 1024, 'SOURCE_LIMIT_OR_SYMLINK')
         identities = {}
         for name in names:
@@ -563,6 +567,12 @@ def collect(client, *, source_root=SOURCE_ROOT, evidence_reader=evidence.read_ev
     except (CoverageError, OSError):
         report['observation']['reason_codes'].append('SOURCE_INVENTORY_UNAVAILABLE')
         report['inventory']['complete'] = False
+    if names is not None and not report['inventory']['complete']:
+        # The first inventory still fixes the denominator, but a changed or
+        # unavailable final inventory cannot certify any edge in that domain.
+        for row in report['runs']:
+            for edge in row['edges']:
+                edge.update(status='unknown', reason_code='SOURCE_INVENTORY_CHANGED')
     inv = report['inventory']
     for row in report['runs']:
         inv[row['source_status']] += 1

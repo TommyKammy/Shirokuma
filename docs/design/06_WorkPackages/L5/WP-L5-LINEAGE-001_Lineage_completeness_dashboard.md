@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.97"
+version: "0.98"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: inventory drift and empty-directory replacement (offline)
+
+The initial eligible run inventory still fixes the denominator, but a changed or unavailable final collection listing now makes every initially observed edge unknown rather than reporting complete coverage or a success rate. A disposable new run during catalog observation and an injected failed final listing both reproduced the old misleading complete coverage before repair. Separately the source digest now binds opened directory device/inode, including an empty nested directory: replacing a disposable empty directory between source reads previously left the digest unchanged and present edges intact. All three negatives pass after repair. This changes snapshot digest values; compare newly computed snapshots within the same reader version, not old report hashes. No saved source/report/catalog/backup or VM was changed; read-only Colima status was stopped. These checks cannot detect restored identities between reads, authenticate producer or API, provide an atomic inventory, or establish whole-catalog/column lineage or operator acceptance. Roll back reader/tests only, preserving saved reports and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: nested saved-run directory metadata (offline)
 

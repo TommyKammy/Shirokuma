@@ -5,12 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.11"
+version: "5.12"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: artifact URL inventory shape (offline)
+
+WP-L0-GITOPS-001: fixed-profile Flux inventory refuses lossy U+FFFD, explicit null and case-aliased `URL` on a reported artifact, including unrelated list members. Focused negative failed before repair, passed after; `go test ./internal/cli -count=1`, `go vet ./...`, final combined `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Private logs under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-056/` (`go.log`, `vet.log`, `verify-combined.log`, `design-combined.log`). No VM start, API/Git/SQL read, reconciliation, retained data/backup mutation or request replay; read-only Colima list reported dedicated profile stopped. Fake fields are not authenticated Git/API evidence, atomic observation, historical cleanup, strict admission or operator acceptance. Roll back local reader/test only; original Vault direct sync pending outside checkout.
+
+## 2026-10-03: lineage inventory and empty-directory drift (offline)
+
+WP-L5-LINEAGE-001: final collection change or unreadable final listing now suppresses initially present edges as unknown, keeping the original eligible denominator without claiming a success rate; replacing an empty nested directory between source reads changes its snapshot digest. Three disposable negatives failed before their repairs; `make test-local-lineage-coverage` passed (57 tests). Final `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-056/{lineage-negative,lineage-final,verify-final,design-final}.log`; earlier verification before the final-listing repair is also retained. Read-only `colima list` reported dedicated VM stopped; no VM start, API/SQL, archived request replay, retained source/report/backup mutation or cleanup. Directory device/inode in the snapshot digest changes historical hash compatibility; old reports remain untouched. These offline reads cannot guarantee atomicity against restored state, independent provenance, whole-catalog/column lineage or operator/production acceptance. Roll back only reader/tests, preserving reports/evidence and stopped VM; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: nested source metadata and busy reply correlation (offline)
 

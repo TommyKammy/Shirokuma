@@ -198,6 +198,66 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual((result['coverage']['denominator'], result['coverage']['unknown']), (2, 2))
         self.assertFalse(result['observation']['source_stable'])
 
+    def test_new_run_during_catalog_observation_cannot_leave_complete_coverage(self):
+        self.add_run(curated=True)
+        original = self.client.request
+        added = False
+        def request(*args, **kwargs):
+            nonlocal added
+            if not added:
+                self.add_run('b' * 32)
+                added = True
+            return original(*args, **kwargs)
+        self.client.request = request
+        result = self.collect()
+        self.assertTrue(added)
+        self.assertFalse(result['inventory']['complete'])
+        self.assertFalse(result['observation']['source_stable'])
+        self.assertEqual(result['coverage']['denominator'], 2)  # initial eligible domain
+        self.assertEqual(result['coverage']['unknown'], 2)
+        self.assertIsNone(result['coverage']['rate'])
+        self.assertFalse(result['coverage']['complete'])
+
+    def test_empty_directory_replacement_between_source_reads_is_unknown(self):
+        path = self.add_run(curated=True)
+        original = path / 'empty'
+        original.mkdir(mode=0o700)
+        before = C.source_snapshot(path)
+        request = self.client.request
+        replaced = False
+        def replace(*args, **kwargs):
+            nonlocal replaced
+            if not replaced:
+                old = path / 'old-empty'
+                original.rename(old)
+                original.mkdir(mode=0o700)
+                old.rmdir()
+                replaced = True
+            return request(*args, **kwargs)
+        self.client.request = replace
+        report = self.collect()
+        self.assertTrue(replaced)
+        self.assertNotEqual(before, C.source_snapshot(path))
+        self.assertEqual(report['coverage']['unknown'], 2)
+        self.assertIsNone(report['coverage']['rate'])
+
+    def test_unavailable_final_inventory_cannot_leave_present_edges(self):
+        self.add_run(curated=True)
+        original = C.listing
+        calls = 0
+        def listing(root):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise C.CoverageError('SOURCE_INVENTORY_CHANGED')
+            return original(root)
+        with patch.object(C, 'listing', listing):
+            report = self.collect()
+        self.assertEqual(calls, 2)
+        self.assertFalse(report['inventory']['complete'])
+        self.assertEqual(report['coverage']['unknown'], 2)
+        self.assertIsNone(report['coverage']['rate'])
+
     def test_symlink_source_is_invalid_not_followed_and_never_eligible(self):
         path = self.add_run()
         (path / 'leak').symlink_to('/etc/passwd')
