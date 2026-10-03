@@ -65,6 +65,14 @@ class HistoryTests(unittest.TestCase):
                 H.render([(entries[0][0], (changed, entries[0][1][1])), entries[1]])
         self.assertIn('保存FinOps観測履歴', H.render(entries))
 
+    def test_direct_renderer_bounds_cyclic_report_without_partial_html(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        changed = json.loads(json.dumps(entries[0][1][0]))
+        changed['limits'].append(changed)
+        with self.assertRaises(H.HistoryError):
+            H.render([(entries[0][0], (changed, entries[0][1][1])), entries[1]])
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
+
     def test_direct_renderer_requires_complete_ordered_selection(self):
         first = report(); later_time = '2026-09-20T00:00:22.000Z'
         later = C.build_report(first['components'], first['disks'],

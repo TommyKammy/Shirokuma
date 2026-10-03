@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.90"
+version: "5.91"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: offline lineage inventory claim and FinOps cyclic input
+
+WP-L5-LINEAGE-001: direct rendering rejects saved inventory-failure reasons
+paired with a complete population (both negatives reproduced before repair).
+Synthetic fixtures now distinguish incomplete inventory from unrelated source
+failures. WP-L6-FIN-001: a separate cyclic direct-history regression confirms
+the existing bounded error; no FinOps reader or collector behavior changed.
+Focused lineage 139 tests and FinOps 181 tests passed. Dedicated Colima was
+read-only observed Stopped. No catalog/VM start, new collection, retained
+source/report/volume/backup mutation, unknown-request replay or GitHub write.
+Neither result proves saved producer authenticity, atomicity, current usage,
+whole-catalog/column coverage, backup recovery or operator acceptance. Roll
+back only these guards/tests, preserving historical evidence and stopped VM.
+Private focused logs: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-045/`.
+Final `make verify-local-experiment`, `make verify-design-context`,
+`make check-no-secret-filenames` and `git diff --check` passed. Earlier focused
+lineage runs failed as expected on the two new negatives, then on synthetic
+positive reports with contradictory inventory explanations; these failures
+were retained in the private session log before fixture correction.
+Original Vault sync pending outside the noninteractive checkout.
 
 ## 2026-10-04: reverse lineage explanations for saved source/inventory (offline)
 

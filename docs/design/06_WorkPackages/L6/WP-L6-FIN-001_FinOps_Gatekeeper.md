@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.27"
+version: "0.28"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04 Direct history cyclic-input regression (offline)
+
+A disposable cyclic in-memory report is already rejected with bounded
+`HistoryError` by the direct history renderer; a distinct valid saved pair still
+renders. This pins existing behavior without changing collection, saved data,
+or the renderer. Focused checks and local verification are in Milestones.
+No VM start, retained report/volume/backup mutation or GitHub write. It does
+not authenticate reports, measure current usage or establish operator
+acceptance. Roll back this regression test only, preserving saved records.
+Original Vault sync pending outside this noninteractive checkout.
 
 ## 2026-10-04 Direct history malformed report fields (offline)
 

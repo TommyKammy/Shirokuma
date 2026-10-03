@@ -208,9 +208,13 @@ def _validate(report):
         _count(inventory.get(key))
     _require(type(inventory.get('complete')) is bool, 'INVALID_INVENTORY_COMPLETENESS')
     _require(inventory['complete'] or
-             any(code in observation['reason_codes'] for code in
-                 ('SOURCE_INVENTORY_CHANGED', 'SOURCE_INVENTORY_UNAVAILABLE')),
-             'INCONSISTENT_INVENTORY_REASON')
+              any(code in observation['reason_codes'] for code in
+                  ('SOURCE_INVENTORY_CHANGED', 'SOURCE_INVENTORY_UNAVAILABLE')),
+              'INCONSISTENT_INVENTORY_REASON')
+    _require(not inventory['complete'] or not any(
+              code in observation['reason_codes'] for code in
+              ('SOURCE_INVENTORY_CHANGED', 'SOURCE_INVENTORY_UNAVAILABLE')),
+              'INCONSISTENT_INVENTORY_REASON')
     _require(inventory['complete'] or not observation['source_stable'],
              'INCONSISTENT_SOURCE_STABILITY')
     _require(inventory['eligible'] != 0 or observation['metadata_stable'] is None,

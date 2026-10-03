@@ -5,12 +5,27 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.55"
+version: "1.56"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: saved inventory failure cannot claim complete population (offline)
+
+The direct renderer now refuses `SOURCE_INVENTORY_CHANGED` or
+`SOURCE_INVENTORY_UNAVAILABLE` alongside `inventory.complete=true`. Both
+disposable contradictions rendered before the guard; incomplete inventory with
+unknown edges still renders. Several older synthetic positive reports used an
+inventory failure without an incomplete inventory; their reasons/counts now
+represent the independent failure they intended to exercise. Focused lineage
+checks and local verification are recorded in Milestones. Dedicated Colima was
+observed stopped; no live catalog read, retained report/source/backup mutation,
+replay or GitHub write. This checks only saved internal consistency, not
+producer authenticity, atomicity, whole-catalog/column coverage or acceptance.
+Roll back the guard and test/fixture adjustments alone; preserve saved evidence.
+Original Vault sync pending outside the approved checkout.
 
 ## 2026-10-04: reverse saved source and inventory explanations (offline)
 

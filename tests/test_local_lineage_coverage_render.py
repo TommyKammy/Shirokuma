@@ -99,7 +99,7 @@ class CoverageRenderTests(unittest.TestCase):
         value = report([run(1, ('unknown', 'unknown'), source_status='incomplete')])
         value['observation']['source_stable'] = False
         value['runs'][0]['source_sha256_after'] = None
-        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE', 'UNVERIFIED_SOURCE_RUNS']
+        value['observation']['reason_codes'] = ['UNVERIFIED_SOURCE_RUNS']
         with self.assertRaisesRegex(RenderError, 'INCONSISTENT_UNKNOWN_REASON'):
             render(value)
         value['observation']['reason_codes'].append('UNKNOWN_EXPECTED_EDGES')
@@ -126,7 +126,7 @@ class CoverageRenderTests(unittest.TestCase):
     def test_invalid_or_incomplete_source_requires_saved_observation_reason(self):
         for status in ('invalid', 'incomplete'):
             value = report([run(1, source_status=status, eligible=False)])
-            value['observation'].update(status='incomplete', reason_codes=['SOURCE_INVENTORY_UNAVAILABLE'])
+            value['observation'].update(status='incomplete', reason_codes=[])
             with self.subTest(status=status), self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
                 render(value)
             value['observation']['reason_codes'].append('UNVERIFIED_SOURCE_RUNS')
@@ -134,7 +134,7 @@ class CoverageRenderTests(unittest.TestCase):
 
     def test_unrecognized_entries_require_saved_observation_reason(self):
         value = report([], unrecognized=2)
-        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
+        value['observation']['reason_codes'] = ['SOURCE_UNAVAILABLE']
         with self.assertRaisesRegex(RenderError, 'INCONSISTENT_INVENTORY_REASON'):
             render(value)
         value['observation']['reason_codes'].append('UNRECOGNIZED_SOURCE_ENTRIES')
@@ -158,7 +158,9 @@ class CoverageRenderTests(unittest.TestCase):
             value['observation']['status'] = 'incomplete'
             with self.subTest(runs=len(runs)), self.assertRaisesRegex(RenderError, 'INCONSISTENT_OBSERVATION_COMPLETION'):
                 render(value)
-            value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
+            value['inventory']['unrecognized_entries'] = 1
+            value['inventory']['entries'] += 1
+            value['observation']['reason_codes'] = ['UNRECOGNIZED_SOURCE_ENTRIES']
             self.assertIn('観測未完了', render(value))
 
     def test_partial_inventory_requires_saved_inventory_failure_reason(self):
@@ -169,6 +171,20 @@ class CoverageRenderTests(unittest.TestCase):
             render(value)
         value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
         self.assertIn('保存証跡の一覧取得は未完了', render(value))
+
+    def test_inventory_failure_reason_cannot_claim_complete_inventory(self):
+        for reason in ('SOURCE_INVENTORY_CHANGED', 'SOURCE_INVENTORY_UNAVAILABLE'):
+            value = report()
+            value['observation'].update(status='incomplete', reason_codes=[reason])
+            with self.subTest(reason=reason), self.assertRaisesRegex(RenderError, 'INCONSISTENT_INVENTORY_REASON'):
+                render(value)
+            value['inventory']['complete'] = False
+            value['observation']['source_stable'] = False
+            for edge in value['runs'][0]['edges']:
+                edge.update(status='unknown', reason_code=reason)
+            value['coverage'].update(present=0, unknown=2, known=0, rate=None, observation_rate=0.0, complete=False)
+            value['observation']['reason_codes'].append('UNKNOWN_EXPECTED_EDGES')
+            self.assertIn('保存証跡の一覧取得は未完了', render(value))
 
     def test_zero_eligible_catalog_stability_is_unobserved(self):
         for stable in (True, False):
@@ -253,10 +269,10 @@ class CoverageRenderTests(unittest.TestCase):
                 render(value)
 
     def test_valid_source_requires_final_saved_evidence_even_in_incomplete_observation(self):
-        value = report()
+        value = report(unrecognized=1)
         value['runs'][0]['source_sha256_after'] = None
         value['observation'].update(status='incomplete', source_stable=False,
-                                    reason_codes=['SOURCE_INVENTORY_UNAVAILABLE'])
+                                     reason_codes=['UNRECOGNIZED_SOURCE_ENTRIES'])
         with self.assertRaises(RenderError):
             render(value)
         value['runs'][0]['source_sha256_after'] = 'a' * 64
@@ -273,9 +289,9 @@ class CoverageRenderTests(unittest.TestCase):
 
     def test_known_edges_require_matching_catalog_snapshots_without_global_stability_claim(self):
         for before, after in ((None, None), ('b' * 64, None), ('b' * 64, 'c' * 64)):
-            value = report()
+            value = report(unrecognized=1)
             value['observation'].update(status='incomplete', metadata_stable=None,
-                                        reason_codes=['SOURCE_INVENTORY_UNAVAILABLE'])
+                                         reason_codes=['UNRECOGNIZED_SOURCE_ENTRIES'])
             value['runs'][0]['metadata_sha256_before'] = before
             value['runs'][0]['metadata_sha256_after'] = after
             with self.subTest(before=before, after=after), self.assertRaises(RenderError):
