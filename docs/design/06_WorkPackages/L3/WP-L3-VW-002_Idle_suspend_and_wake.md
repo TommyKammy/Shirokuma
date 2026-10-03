@@ -5,12 +5,18 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.43"
+version: "0.44"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: unknown-request recovery boundary for the next local experiment
+
+Current code has a **within-one-owner** UUID journal/replay guarantee (`session_rpc.py`); saved-request/completion readers correlate archived claims after owner exit, but cannot establish whether a caller received a reply or whether a previously pending action reached the backend. A new owner must **not** adopt an old UUID as a fresh operation or re-POST an unknown request just because the saved journal is readable. The stopped dedicated Colima profile was confirmed by read-only status; no owner, SQL or retained session was opened for this planning increment.
+
+Dependency-ready next step: exercise a *new disposable session only* with an injected handler and isolated journal, simulate reply loss and process termination at the durable-intent, handler-return and durable-response boundaries, then implement a read-only recovery classification that distinguishes verified saved completion from pending/unknown without scheduling a backend action. Preserve the old journal, operation files, socket directory and backup on any uncertain result. Before any actual owner-restart recovery is claimed, independently identify the current backend and correlate the target's operation identity with authenticated read-only runtime observations; a matching saved receipt alone is not that proof. An unrecorded/contradictory result remains unknown and blocks replay, cleanup and acceptance. Document the exact disposable scope and rollback before a lab run. This is a design/test plan, **not** completed recovery, historical cleanup or production/operator acceptance. Vault original direct sync remains pending outside this checkout.
 
 ## 2026-10-03: invalid decoded kubectl Unicode (offline)
 

@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: Warehouse restart-recovery next-step boundary (plan only)
+
+WP-L3-VW-002: inspected the current read-only saved-request/runtime-status contract and `session_rpc.py` dispatch; recorded a disposable-session fault-injection sequence and explicit prohibition on replaying unknown archived UUIDs. No owner restart, RPC POST, SQL, cluster API read, retained journal/backup mutation or VM start. This is not a tested recovery implementation or acceptance. Resume with isolated fixtures and independent backend evidence; roll back this planning note only, retaining all saved evidence. Original Vault sync pending outside checkout.
+
 ## 2026-10-03: invalid diagnostic UTF-8 and unrelated observed generation (offline)
 
 WP-L0-GITOPS-001: fixed-profile inventories refuse malformed raw UTF-8 (which Go JSON otherwise replaces), and negative/future top-level status generations on unrelated members. Negatives reproduced prior acceptance; controller, Flux-resource and Lakehouse fake reads, `go test ./internal/cli -count=1` (795 passed), `go vet ./...` and `make verify-local-experiment` passed. Dedicated Colima read-only status: stopped. No live API/SQL, VM start, reconciliation, unknown-request replay or retained data/backup mutation. Offline responses do not prove authenticated/atomic inventory, historical cleanup, strict publication admission or operator/production acceptance. Roll back reader/tests only, preserving VM and evidence; original Vault direct sync pending outside checkout.
