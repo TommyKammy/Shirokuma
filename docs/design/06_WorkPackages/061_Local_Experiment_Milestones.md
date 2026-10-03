@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.94"
+version: "5.95"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent FinOps offline review
+
+WP-L6-FIN-001: reviewed saved-history parsing/rendering and the public report
+validator after the separate lineage commit; no new defect was reproduced or
+FinOps behavior changed. Focused `make test-local-finops`: 181 tests passed,
+including seven Linux-only skips. `make verify-design-context` passed (89
+documents) after the lineage note update. Dedicated Colima remained stopped;
+no VM start, new collection, retained report/volume/backup mutation or request
+replay. AgentHouse retained-volume usage remains `null / NOT_MEASURED`; Linux
+fixtures, producer authenticity, current usage and operator acceptance remain
+unverified. Original Vault sync pending outside the checkout.
 
 ## 2026-10-04: valid-run lineage verification detail (offline)
 
