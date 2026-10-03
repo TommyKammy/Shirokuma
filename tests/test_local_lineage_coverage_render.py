@@ -33,11 +33,16 @@ def report(runs=None, unrecognized=0):
     known = denominator - counts['unknown']
     source_stable = all(item['source_sha256_before'] is not None and
                         item['source_sha256_before'] == item['source_sha256_after'] for item in runs)
+    reasons = (['UNVERIFIED_SOURCE_RUNS'] if any(item['source_status'] in ('invalid', 'incomplete') for item in runs) else [])
+    if unrecognized:
+        reasons.append('UNRECOGNIZED_SOURCE_ENTRIES')
+    if counts['unknown']:
+        reasons.append('UNKNOWN_EXPECTED_EDGES')
     return {'schema_version': 1, 'observed_at': '2026-09-17T07:30:00.000000Z',
         'scope': 'verified-historical-data-plan-lineage',
-        'observation': {'status': 'incomplete' if counts['unknown'] or not source_stable else 'complete',
+        'observation': {'status': 'incomplete' if reasons or not source_stable else 'complete',
             'source_stable': source_stable, 'metadata_stable': None if not eligible or counts['unknown'] else True,
-            'reason_codes': ['UNKNOWN_EXPECTED_EDGES'] if counts['unknown'] else []},
+            'reason_codes': reasons},
         'inventory': {'entries': len(runs) + unrecognized, 'uuid_runs': len(runs), 'eligible': eligible, 'complete': True,
             **{state: sum(item['source_status'] == state for item in runs)
                for state in ('valid', 'failed', 'incomplete', 'invalid')}, 'unrecognized_entries': unrecognized},
@@ -94,7 +99,7 @@ class CoverageRenderTests(unittest.TestCase):
         value = report([run(1, ('unknown', 'unknown'), source_status='incomplete')])
         value['observation']['source_stable'] = False
         value['runs'][0]['source_sha256_after'] = None
-        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
+        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE', 'UNVERIFIED_SOURCE_RUNS']
         with self.assertRaisesRegex(RenderError, 'INCONSISTENT_UNKNOWN_REASON'):
             render(value)
         value['observation']['reason_codes'].append('UNKNOWN_EXPECTED_EDGES')
@@ -117,6 +122,27 @@ class CoverageRenderTests(unittest.TestCase):
         value = report([run(1, source_status='invalid', eligible=False)])
         value['observation'].update(status='incomplete', reason_codes=['UNVERIFIED_SOURCE_RUNS'])
         self.assertIn('UNVERIFIED_SOURCE_RUNS', render(value))
+
+    def test_invalid_or_incomplete_source_requires_saved_observation_reason(self):
+        for status in ('invalid', 'incomplete'):
+            value = report([run(1, source_status=status, eligible=False)])
+            value['observation'].update(status='incomplete', reason_codes=['SOURCE_INVENTORY_UNAVAILABLE'])
+            with self.subTest(status=status), self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
+                render(value)
+            value['observation']['reason_codes'].append('UNVERIFIED_SOURCE_RUNS')
+            self.assertIn('UNVERIFIED_SOURCE_RUNS', render(value))
+
+    def test_unrecognized_entries_require_saved_observation_reason(self):
+        value = report([], unrecognized=2)
+        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_UNAVAILABLE']
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_INVENTORY_REASON'):
+            render(value)
+        value['observation']['reason_codes'].append('UNRECOGNIZED_SOURCE_ENTRIES')
+        self.assertIn('識別できない項目は2件', render(value))
+        value = report([])
+        value['observation'].update(status='incomplete', reason_codes=['UNRECOGNIZED_SOURCE_ENTRIES'])
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_INVENTORY_REASON'):
+            render(value)
 
     def test_zero_denominator_is_not_zero_or_full_coverage(self):
         html = render(report([]))

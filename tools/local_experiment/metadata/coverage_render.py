@@ -304,9 +304,12 @@ def _validate(report):
     _require(inventory['uuid_runs'] == len(runs) and inventory['eligible'] == eligible and
               inventory['entries'] == inventory['uuid_runs'] + inventory['unrecognized_entries'] and
               all(inventory[key] == value for key, value in sources.items()), 'INCONSISTENT_SOURCE_COUNTS')
-    _require('UNVERIFIED_SOURCE_RUNS' not in observation['reason_codes'] or
-             inventory['invalid'] + inventory['incomplete'] > 0,
-             'INCONSISTENT_SOURCE_REASON')
+    _require(('UNVERIFIED_SOURCE_RUNS' in observation['reason_codes']) ==
+              (inventory['invalid'] + inventory['incomplete'] > 0),
+              'INCONSISTENT_SOURCE_REASON')
+    _require(('UNRECOGNIZED_SOURCE_ENTRIES' in observation['reason_codes']) ==
+              (inventory['unrecognized_entries'] > 0),
+              'INCONSISTENT_INVENTORY_REASON')
     # The collector marks an inventory incomplete when its final listing
     # changes or fails. With a complete inventory and identical saved snapshots
     # for every run, its source-stability result cannot be false.

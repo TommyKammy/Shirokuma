@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.89"
+version: "5.90"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: reverse lineage explanations for saved source/inventory (offline)
+
+WP-L5-LINEAGE-001 direct rendering refuses invalid/incomplete runs without
+`UNVERIFIED_SOURCE_RUNS` and unrecognized inventory without
+`UNRECOGNIZED_SOURCE_ENTRIES`; reverse false-positive checks remain. Focused
+lineage tests passed after updating synthetic positive reports to match the
+collector. The dedicated Colima profile was observed stopped. No VM start,
+catalog call, retained source/report/volume/backup mutation, unknown-request
+replay or GitHub write. `make test-local-lineage-coverage` (138 tests),
+`make verify-local-experiment`, `make verify-design-context` and diff check
+passed. This is saved-report consistency, not producer
+authentication, atomicity, full catalog/column coverage or acceptance. Roll
+back only these guards/tests; preserve prior evidence. Private verification
+logs: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-044/`.
+Original Vault sync pending outside the noninteractive checkout.
 
 ## 2026-10-04: direct FinOps history malformed fields (offline)
 

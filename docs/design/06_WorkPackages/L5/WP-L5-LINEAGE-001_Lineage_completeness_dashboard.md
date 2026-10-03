@@ -5,12 +5,28 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.54"
+version: "1.55"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: reverse saved source and inventory explanations (offline)
+
+The direct renderer now refuses invalid/incomplete saved runs without the
+collector's `UNVERIFIED_SOURCE_RUNS` observation reason, and unrecognized
+inventory entries without `UNRECOGNIZED_SOURCE_ENTRIES`. Conversely, those
+reasons cannot be claimed without corresponding rows/counts. Disposable
+negative and positive fixtures exercise both boundaries. Focused lineage
+138 tests, local verification, design-context and diff check passed. The dedicated VM
+was observed stopped; no live catalog access, saved report/source/backup
+mutation or unknown-request replay. This checks only internal claims, not
+producer authenticity, atomicity, whole-catalog/column coverage or operator
+acceptance. Roll back the two renderer guards and fixture changes alone;
+retain archived reports. Private focused and broader logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-044/`.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: saved reason-code claims require corresponding observations (offline)
 
