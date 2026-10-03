@@ -5,12 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.138"
+version: "5.139"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: numeric policy defaults and independent FinOps review (offline)
+
+WP-L2-POL-001: nine disposable allowed responses with numeric zero rather than
+boolean false in Pod isolation/default or container stream controls are already
+refused as unknown/pending, without request replay. Pinned this behavior in a
+new test; focused observer suite passed (40 tests), no comparator change.
+Independently inspected WP-L6-FIN-001 saved-history parse/digest/order, bounded
+rendering and per-report storage coverage without a new defect or behavior
+change; `make test-local-finops` passed (182 tests, seven Linux-only skips).
+Dedicated Colima read-only observed Stopped; no API call, collection, retained
+request/report/volume/backup mutation or GitHub write. AgentHouse usage remains
+`null / NOT_MEASURED`. Offline fixtures cannot authenticate producers, measure
+current usage, run Linux-only fixtures, clear strict admission or establish
+operator acceptance. Roll back only the policy regression test if needed;
+preserve pending requests and saved reports. No FinOps runtime rollback. Original
+Vault synchronization pending outside the approved checkout.
+
+After both increments, `make verify-local-experiment`,
+`make verify-design-context` (89 documents), `make check-no-secret-filenames`
+and `git diff --check` passed. The local suite's simulated failure output is
+not live runtime evidence.
 
 ## 2026-10-04: explicit policy status and equal-time FinOps order (offline)
 

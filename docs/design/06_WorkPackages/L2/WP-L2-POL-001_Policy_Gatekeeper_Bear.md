@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.29"
+version: "0.30"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: numeric false defaults regression (offline)
+
+Pinned nine fake allowed responses with JSON number `0` in Pod host isolation,
+automount, process sharing, hostname, or container stream controls. The existing
+identity-based boolean checks already reject all nine; no observer behavior
+changed. Focused observer suite passed (40 tests). The original intent remains
+unknown/pending in every negative and is never replayed. Dedicated Colima was
+read-only observed Stopped; no live API, retained request/volume/backup change
+or GitHub write. These fixtures cannot authenticate a server, establish complete
+mutation coverage or operator acceptance. Roll back only the new test if needed;
+retain pending and historical evidence. Original Vault sync pending outside the
+approved checkout.
 
 ## 2026-10-04: explicit null dry-run status (offline)
 

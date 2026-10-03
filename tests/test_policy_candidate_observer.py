@@ -162,6 +162,25 @@ class ObserverTests(unittest.TestCase):
                 self.assertIsNotNone(receipt['pending'])
                 self.assertEqual(receipt['request_count'],1)
 
+    def test_allowed_response_rejects_numeric_pod_and_container_boolean_defaults(self):
+        for level, key in (('pod', 'hostNetwork'), ('pod', 'hostIPC'),
+                           ('pod', 'hostPID'), ('pod', 'automountServiceAccountToken'),
+                           ('pod', 'shareProcessNamespace'), ('pod', 'setHostnameAsFQDN'),
+                           ('container', 'stdin'), ('container', 'stdinOnce'),
+                           ('container', 'tty')):
+            with self.subTest(level=level, key=key):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body)
+                    target=altered['spec'] if level == 'pod' else altered['spec']['containers'][0]
+                    target[key]=0
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
     def test_allowed_response_cannot_claim_persisted_identity(self):
         for metadata in ({'uid':str(uuid.UUID(int=42))}, {'resourceVersion':'123'},
                          {'generation':1}, {'creationTimestamp':'2026-10-04T00:00:00Z'},
