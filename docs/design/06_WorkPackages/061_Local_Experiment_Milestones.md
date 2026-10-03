@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.01"
+version: "5.02"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: fixed inventory and lineage source read safeguards (offline)
+
+WP-L0-GITOPS-001: reject reported UIDs over 1024 bytes and lossy U+FFFD condition types in fixed-profile inventories; both focused negatives failed before repair. `go test ./internal/cli -count=1` (809 passed), `go vet ./...` passed. WP-L5-LINEAGE-001: reject a test-owned source file whose mode changes from 0600 after reading and before final entry inspection; corrected isolated negative failed before repair, then `make test-local-lineage-coverage` (42 tests) and `make verify-local-experiment` passed. Dedicated Colima read-only list: stopped. No VM start, live API/Git/catalog/SQL, unknown-request replay, retained source/session/backup mutation or reconciliation. Offline responses and temporary source fixtures do not authenticate API or source producer, establish atomic inventory, current catalog lineage, historical cleanup, strict admission or operator/production acceptance. Roll back reader/tests only; preserve VM, reports and retained evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: lossy inventory identity and partial socket send (offline)
 

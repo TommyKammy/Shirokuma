@@ -4,13 +4,17 @@ doc_id: "WP-L5-LINEAGE-001"
 title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-02
-version: "0.8"
+updated: 2026-10-03
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: source file privacy recheck after read (offline)
+
+The descriptor-relative source reader now checks current entry owner, 0600 mode and size/mtime/ctime against the opened file after reading. A test-owned source chmod after the file read but before final entry stat previously yielded a snapshot; the isolated negative failed before repair and passes afterward. `make test-local-lineage-coverage` (42 tests) and `make verify-local-experiment` passed. Only temporary fixture files were changed and restored; the dedicated Colima profile was observed stopped. No retained Data Plan, catalog, SQL, API, backup or VM was mutated. A same-UID actor modifying and restoring evidence between checks remains possible, and this does not establish independent provenance, whole-catalog/column lineage or operator acceptance. Roll back reader/test only, preserving existing source, reports and backups. Original Vault sync pending outside checkout.
 
 ## 2026-10-02: current catalog reread for seven historical Data Plans — bounded live
 

@@ -377,6 +377,8 @@ func TestLocalInventoryRejectsRepeatedOrInvalidUID(t *testing.T) {
 		{`{"metadata":{"uid":" "}}`, true},
 		{`{"metadata":{"uid":"uid\u200b-one"}}`, true},
 		{`{"metadata":{"uid":"uid\ud800-one"}}`, true}, // Go replaces an unpaired JSON surrogate.
+		{`{"metadata":{"uid":"` + strings.Repeat("u", 1025) + `"}}`, true},
+		{`{"metadata":{"uid":"` + strings.Repeat("u", 1024) + `"}}`, false},
 		{`{"metadata":{"uid":"uid-one"}}`, false},
 		{`{"status":{}},{"status":{}}`, false}, // projected fixture identities remain optional
 	} {
@@ -384,6 +386,23 @@ func TestLocalInventoryRejectsRepeatedOrInvalidUID(t *testing.T) {
 		var list kubernetesResourceList
 		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
 			t.Fatalf("resource UID classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsLossyConditionType(t *testing.T) {
+	for _, tc := range []struct {
+		typeJSON string
+		invalid  bool
+	}{
+		{`"Ready\ud800"`, true},
+		{`"Ready\ufffd"`, true},
+		{`"Ready"`, false},
+	} {
+		raw := []byte(`{"items":[{"status":{"conditions":[{"type":` + tc.typeJSON + `,"status":"True"}]}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("condition type classification incorrect: %s (%v)", raw, err)
 		}
 	}
 }
