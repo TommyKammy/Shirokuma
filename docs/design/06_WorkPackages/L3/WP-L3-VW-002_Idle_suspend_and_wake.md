@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.82"
+version: "0.83"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: Unix RPC connection negotiation (offline)
+
+The one-request Unix owner accepts absent `Connection` or explicit `close`
+only; upgrade, keep-alive and nominated extension tokens no longer silently
+dispatch a transition. Disposable negatives failed before repair. Focused
+Warehouse suites passed (78 + 102 + 16 + 22 + 15 tests); local and design
+verification passed. The dedicated VM remained stopped; no live backend/SQL,
+archived UUID replay or retained session/backup mutation. This cannot prove
+caller receipt, backend authenticity, restart recovery or operator acceptance.
+Roll back only the connection guard and disposable tests, preserving archived
+sessions. Original Vault sync pending outside checkout.
 
 ## 2026-10-03: upgrade and trailer negotiation refused (offline)
 

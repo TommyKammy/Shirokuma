@@ -399,6 +399,7 @@ class ReadOnlyClient:
                 media_types = headers.get_all('Content-Type', []) if headers is not None else []
                 ranges = headers.get_all('Content-Range', []) if headers is not None else []
                 locations = headers.get_all('Content-Location', []) if headers is not None else []
+                redirects = headers.get_all('Location', []) if headers is not None else []
                 # Header access is part of the bounded observation too: a
                 # late malformed header is not an on-time framing result.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
@@ -420,6 +421,9 @@ class ReadOnlyClient:
                 # This fixed-path reader cannot establish that a declared
                 # alternate representation location is the requested entity.
                 require(type(locations) is list and not locations, 'API_RESPONSE_INVALID')
+                # A successful fixed-path GET must not advertise another target
+                # through redirect metadata either (including a self-reference).
+                require(type(redirects) is list and not redirects, 'API_RESPONSE_INVALID')
                 # Competing length and transfer framing is ambiguous even if
                 # urllib exposes a decoded, syntactically valid JSON prefix.
                 require(type(transfers) is list and not (lengths and transfers), 'API_RESPONSE_INVALID')

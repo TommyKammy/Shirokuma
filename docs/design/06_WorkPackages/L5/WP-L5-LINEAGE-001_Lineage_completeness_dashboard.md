@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.27"
+version: "1.28"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: successful catalog GET with redirect metadata (offline)
+
+The fixed-path reader now refuses `Location` on a returned HTTP 200, including
+a self-reference, before accepting JSON as catalog evidence. This is a
+conservative compatibility assumption, not an observed live producer contract.
+Disposable negatives failed before repair; focused lineage (94 tests), local
+verification and design-context checks passed. Dedicated Colima was observed
+stopped; no VM start, live login/GET, retained source/credential/report/backup
+mutation or replay. This response check does not authenticate the producer,
+guarantee atomicity, or establish whole-catalog/column lineage or operator
+acceptance. Roll back only the redirect guard and fixture, retaining saved
+reports. Direct original Vault sync pending outside this checkout.
 
 ## 2026-10-03: declared catalog content location (offline)
 

@@ -386,6 +386,10 @@ class SessionRPC:
             require(value.startswith(b' ') and value[1:] and
                     value[1:] == value[1:].strip(b' \t') and
                     all(32 <= byte <= 126 for byte in value[1:]), 'INVALID_HTTP')
+            # Only an explicit close matches the one-request Unix connection.
+            # Connection: Upgrade (or a nominated extension header) must not
+            # turn the fixed transition into negotiated protocol traffic.
+            require(name != b'connection' or value[1:].lower() == b'close', 'INVALID_HTTP')
             headers[name] = value[1:]
         else:
             raise RPCError('INVALID_HTTP')
