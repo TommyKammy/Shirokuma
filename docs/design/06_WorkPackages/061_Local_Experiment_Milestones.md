@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.80"
+version: "5.81"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: offline lineage catalog denominator and edge identities
+
+WP-L5-LINEAGE-001's direct renderer refuses a catalog stability observation
+with no eligible runs, and refuses edges whose saved source/stg/mart paths do
+not match the fixed fixture and run token. Five disposable negatives rendered
+before repair; the focused lineage suite (126 tests) passed after repair.
+Read-only Colima listing found the dedicated VM stopped. No VM start, catalog
+call, archived replay, retained source/report/backup mutation or GitHub write.
+This validates only saved claims, not provenance, atomicity, whole-catalog/
+column lineage or operator acceptance. Roll back renderer/tests only; retain
+historical evidence and stopped VM. Original Vault sync pending outside checkout.
+Private focused output: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-038/`.
 
 ## 2026-10-04: private Warehouse remote-identity hints (offline)
 

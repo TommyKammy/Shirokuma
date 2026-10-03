@@ -5,12 +5,25 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.50"
+version: "1.51"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: offline catalog denominator and fixed edge identities
+
+The direct renderer refuses a true/false catalog-stability claim with zero
+eligible runs: the collector records null when there were no catalog reads.
+Independently, eligible edges must name the fixed fixture → token-specific stg
+→ token-specific mart paths, even when an edge is unknown. Five disposable
+negative cases rendered before repair; focused lineage tests pass afterward.
+Only offline presentation validation changed; the dedicated VM stayed stopped.
+No retained reports, sources or backups were rewritten. These checks do not
+authenticate the producer, prove atomic/whole-catalog or column coverage, or
+establish operator acceptance. Roll back only renderer/tests, preserving saved
+evidence. Original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-04: saved complete catalog and operation claims (offline)
 

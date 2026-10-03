@@ -96,6 +96,26 @@ class CoverageRenderTests(unittest.TestCase):
         self.assertNotIn('登録率 0.0%', html)
         self.assertIn('集計対象の実験履歴はありません', html)
 
+    def test_zero_eligible_catalog_stability_is_unobserved(self):
+        for stable in (True, False):
+            value = report([])
+            value['observation']['status'] = 'incomplete'
+            value['observation']['metadata_stable'] = stable
+            with self.subTest(stable=stable), self.assertRaises(RenderError):
+                render(value)
+        self.assertIn('未観測', render(report([])))
+
+    def test_eligible_edges_follow_fixed_run_identity(self):
+        for target, field, replacement in (('stg', 'from', 'shirokuma_local.iceberg.smoke.other'),
+                                           ('stg', 'to', 'shirokuma_local.iceberg.local_experiment.dataops_00000000000000000000000000000002_stg'),
+                                           ('mart', 'from', 'shirokuma_local.iceberg.smoke.fixture_v1'),
+                                           ('mart', 'to', 'shirokuma_local.iceberg.local_experiment.dataops_00000000000000000000000000000002_mart')):
+            value = report()
+            next(edge for edge in value['runs'][0]['edges'] if edge['target'] == target)[field] = replacement
+            with self.subTest(target=target, field=field), self.assertRaises(RenderError):
+                render(value)
+        self.assertIn('2 / 2 エッジ', render(report()))
+
     def test_excluded_failed_invalid_and_incomplete_sources_remain_visible(self):
         runs = [run(), run(2, source_status='failed', eligible=False),
                 run(3, source_status='invalid', eligible=False), run(4, source_status='incomplete', eligible=False)]
@@ -238,8 +258,6 @@ class CoverageRenderTests(unittest.TestCase):
     def test_all_data_strings_are_text_not_active_markup(self):
         payload = '<img src="https://foreign.invalid/x" onerror="alert(1)"><script>alert(2)</script>&'
         value = report()
-        value['runs'][0]['edges'][0]['from'] = payload
-        value['runs'][0]['edges'][0]['to'] = payload
         value['runs'][0]['edges'][0]['reason_code'] = payload
         value['runs'][0]['reason_codes'] = [payload]
         value['limits'] = [payload]

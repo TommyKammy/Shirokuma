@@ -203,6 +203,8 @@ def _validate(report):
     for key in ('entries', 'uuid_runs', 'eligible', 'valid', 'failed', 'incomplete', 'invalid', 'unrecognized_entries'):
         _count(inventory.get(key))
     _require(type(inventory.get('complete')) is bool, 'INVALID_INVENTORY_COMPLETENESS')
+    _require(inventory['eligible'] != 0 or observation['metadata_stable'] is None,
+             'INCONSISTENT_CATALOG_STABILITY')
     if observation['status'] == 'complete':
         _require(inventory['complete'] and observation['source_stable'] and
                   (observation['metadata_stable'] is True or inventory['eligible'] == 0 and
@@ -263,11 +265,16 @@ def _validate(report):
         if run['eligible']:
             eligible += 1
             _require(len(edges) == 2 and {edge.get('target') for edge in edges if type(edge) is dict} == {'stg', 'mart'},
-                     'ELIGIBLE_RUN_REQUIRES_TWO_EDGES')
+                      'ELIGIBLE_RUN_REQUIRES_TWO_EDGES')
         else:
             _require(not edges, 'INELIGIBLE_RUN_HAS_EDGES')
         for edge in edges:
             _require(type(edge) is dict and type(edge.get('status')) is str and edge['status'] in STATUSES)
+            suffix = f'shirokuma_local.iceberg.local_experiment.dataops_{token}_'
+            expected_paths = {'stg': ('shirokuma_local.iceberg.smoke.fixture_v1', suffix + 'stg'),
+                              'mart': (suffix + 'stg', suffix + 'mart')}
+            _require((edge.get('from'), edge.get('to')) == expected_paths[edge['target']],
+                     'INCONSISTENT_EDGE_PATH')
             # The collector retains the denominator on source drift and on a
             # failed final inventory, but cannot certify any of those edges.
             _require((inventory['complete'] and source == 'valid') or edge['status'] == 'unknown',
