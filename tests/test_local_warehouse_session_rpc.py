@@ -17,6 +17,28 @@ from tools.local_experiment.warehouse_lifecycle import status as S
 
 
 class SessionRPCTest(unittest.TestCase):
+    def test_one_shot_dispatch_stop_cannot_admit_later_new_uuid(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler,
+                                replay_grace_seconds=0.05)
+        self.rpc.__enter__()
+        checks = 0
+        def one_shot_stop():
+            nonlocal checks
+            checks += 1
+            return checks == 1
+        self.rpc._stop_callback = one_shot_stop
+        first, second = self.request(), self.request()
+        self.assertEqual(self.rpc._dispatch(first)['result'], 'unknown')
+        self.assertIsNotNone(self.rpc._replay_until)
+        self.assertEqual(self.rpc._dispatch(second)['result'], 'unknown')
+        self.assertEqual(checks, 1)
+        self.assertEqual(self.calls, [])
+        self.assertEqual([entry['state'] for entry in self.rpc._entries.values()],
+                         ['rejected', 'rejected'])
+        saved = json.loads(self.rpc.journal_path.read_bytes())
+        self.assertEqual(len(saved['requests']), 2)
+        self.assertTrue(all(item['state'] == 'rejected' for item in saved['requests']))
+
     def test_isolated_termination_boundaries_leave_unknown_saved_intent(self):
         # Simulated process termination is injected before dispatch can write
         # the next journal state; never feed either saved UUID to a new owner.

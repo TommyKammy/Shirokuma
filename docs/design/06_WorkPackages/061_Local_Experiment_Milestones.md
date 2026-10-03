@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: one-shot Warehouse stop at dispatch (offline)
+
+WP-L3-VW-002: a test-owned stop callback seen only by dispatch no longer allows a later fresh UUID through when it returns false on subsequent checks. The first stop transitions the owner into bounded replay-only grace, preserving same-owner saved-ID responses. Focused `make test-local-warehouse-lifecycle` passed (78 + 87 + 16 + 22 + 15 tests); `make verify-local-experiment` and `make verify-design-context` passed (private logs `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-075/{verify,design}.log`). Read-only Colima status: dedicated VM stopped. No live backend, archived replay, VM start, retained session/backup change or GitHub write. An offline owner signal does not authenticate a backend, prove caller receipt, provide restart recovery or operator/production acceptance. Roll back owner guard/test only, retaining stopped VM and archived evidence. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: valid catalog Unicode escape compatibility (offline)
 
 WP-L5-LINEAGE-001: a disposable HTTP response with a valid escaped surrogate pair remains accepted and decoded to the same scalar as raw UTF-8. This pins the existing positive boundary alongside lone-surrogate negatives without changing the client. `make test-local-lineage-coverage` passed (73 tests); `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed after this addition. Private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-074/{lineage-second,verify-final,design-second}.log`. No dedicated VM start, live login/API, retained source/credential/report/backup mutation or unknown-request replay. Offline compatibility does not authenticate producer/catalog, establish atomicity, whole-catalog/column lineage or operator/production acceptance. Roll back only the test; keep historical reports and stopped VM. Direct original Vault sync pending outside checkout.

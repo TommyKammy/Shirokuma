@@ -401,7 +401,7 @@ class SessionRPC:
             entry = {'request': request, 'state': 'pending', 'response': None, 'error_code': None}
             self._entries[request_id] = entry
             stop_requested = False
-            if self._stop_callback is not None:
+            if self._replay_until is None and self._stop_callback is not None:
                 try:
                     stop_requested = bool(self._stop_callback())
                 except BaseException:
@@ -409,6 +409,10 @@ class SessionRPC:
                     # request or authorize the handler to run.
                     stop_requested = True
                     self._fail('STOP_CALLBACK_FAILED')
+                if stop_requested and not self._stop.is_set():
+                    # A one-shot stop signal seen by a worker must not be
+                    # forgotten if the serve thread sees it as false later.
+                    self._replay_until = time.monotonic() + self.replay_grace_seconds
             # accept() may return just before the TTL while its worker reaches
             # dispatch afterward. The serve-loop deadline alone cannot bound
             # admission of that already accepted connection.

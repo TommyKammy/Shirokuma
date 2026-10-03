@@ -12,6 +12,10 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: one-shot stop observed at dispatch (offline)
+
+A disposable stop callback returned true only to the dispatch worker, then false. Previously the first UUID was rejected but a subsequent new UUID could reach the handler before the serve loop observed a stop. Dispatch now enters bounded replay-only grace on the first true result; subsequent new UUIDs are durably rejected, while already saved UUIDs retain same-owner replay behavior. Focused Warehouse and full local/design verification passed. This does not establish backend state, caller receipt, archived restart recovery or operator acceptance. No dedicated VM start, archived replay, retained session/backup modification or live SQL/API. Roll back the guard and disposable test only; preserve archived evidence. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: serve-loop stop callback failure returns failed (offline)
 
 A disposable stop callback throwing on the first serve-loop check previously escaped as an exception rather than returning a failed owner result. The owner now records `STOP_CALLBACK_FAILED`, stops accepting, drains existing workers, persists its journal and returns `failed`; no handler is dispatched for this fixture. The isolated negative failed before repair, then the focused Warehouse suite and local verification passed (see Milestones). This does not authenticate backend state, establish archived UUID recovery or caller receipt. No dedicated VM start, archived request replay, retained session/backup change or live API/SQL. Roll back only the serve-loop guard and disposable test; retain saved evidence. Original Vault direct sync pending outside checkout.
