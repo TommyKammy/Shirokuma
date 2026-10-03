@@ -5,12 +5,26 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.90"
+version: "0.91"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: reported null generation regression (offline)
+
+A disposable unrelated member with `metadata.generation: null` is already
+refused by the fixed-profile complete-list reader; a targeted regression now
+pins that boundary alongside zero, positive and omitted projected values.
+No doctor implementation changed. `go test ./internal/cli -run
+^TestLocalInventoryRejectsNullGeneration$ -count=1` and `go test ./...
+-count=1` passed (838 Go tests). Dedicated Colima observed Stopped; no live
+API/Git read, reconciliation, retained data/backup mutation or GitHub write.
+This fixture cannot authenticate the producer, prove atomic inventory, clear
+strict admission or establish operator acceptance. Roll back only the test if
+needed, retaining historical evidence. Original Vault sync pending outside
+the approved checkout.
 
 ## 2026-10-04: reported lifecycle timestamp order (offline)
 

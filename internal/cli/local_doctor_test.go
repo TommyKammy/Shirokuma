@@ -961,6 +961,24 @@ func TestLocalInventoryRejectsMalformedCreationTimestamp(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsNullGeneration(t *testing.T) {
+	for _, tc := range []struct {
+		metadata string
+		invalid  bool
+	}{
+		{`"generation":null`, true},
+		{`"generation":0`, false},
+		{`"generation":1`, false},
+		{`"name":"other"`, false},
+	} {
+		raw := []byte(`{"items":[{"kind":"Service","metadata":{` + tc.metadata + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("generation classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsDeletionBeforeCreation(t *testing.T) {
 	for _, tc := range []struct {
 		metadata string

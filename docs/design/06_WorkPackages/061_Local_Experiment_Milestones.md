@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.133"
+version: "5.134"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: GitOps null generation and separate FinOps review (offline)
+
+WP-L0-GITOPS-001: a test-owned unrelated inventory member with an explicitly
+null generation is already refused; pinned that behavior while retaining
+omitted/zero/positive projected values. No doctor behavior changed. Separately,
+WP-L6-FIN-001 saved-history selection, digest/order and per-report storage
+coverage were inspected without a new defect or FinOps behavior change;
+`make test-local-finops` passed 181 tests (seven Linux-only skips). Dedicated
+Colima was read-only observed Stopped; no live API/Git, reconciliation,
+collection, unknown-request replay, retained report/volume/backup mutation
+or GitHub write. AgentHouse usage stays `null / NOT_MEASURED`. Offline checks
+cannot authenticate producers, establish atomic inventory, exercise Linux
+fixtures, measure current usage, clear strict admission or establish operator
+acceptance. Roll back only the GitOps regression test if needed; no FinOps
+runtime rollback. Original Vault sync pending outside the approved checkout.
+`go test ./... -count=1` passed (838 Go tests), as did `go vet ./...`,
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check`. The local suite's
+synthetic failure-path output is not a live runtime check.
 
 ## 2026-10-04: GitOps lifecycle order and independent FinOps check (offline)
 
