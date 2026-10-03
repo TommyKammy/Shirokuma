@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.125"
+version: "5.126"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent FinOps history boundary review (offline)
+
+WP-L6-FIN-001: after the GitOps depth-guard commit, independently inspected
+direct saved-history parsing, digest/order binding, bounded HTML and per-report
+storage coverage; no further defect established or FinOps behavior changed.
+`make test-local-finops` passed 181 tests (seven Linux-only skips). Dedicated
+Colima remained Stopped; no collection, retained report/volume/backup mutation
+or GitHub write. AgentHouse retained volume stays `null / NOT_MEASURED`.
+Offline fixtures cannot establish producer identity, actual Linux behavior,
+current usage or acceptance. No FinOps runtime rollback; retain saved reports.
+Original Vault sync pending outside checkout.
+After both increments, `make verify-local-experiment`, `make
+verify-design-context` (89 documents), `make check-no-secret-filenames`, `go
+test ./... -count=1` (834 Go tests), and `git diff --check` passed. These are
+offline checks, not live runtime acceptance.
 
 ## 2026-10-04: bounded GitOps inventory extension depth (offline)
 
