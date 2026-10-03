@@ -385,8 +385,9 @@ class SessionRPC:
             # a second authority or target alongside this fixed Unix request.
             require(name not in (b'x-forwarded', b'x-real', b'x-original', b'x-rewrite') and
                      not name.startswith(b'x-forwarded-') and
-                     not name.startswith(b'x-real-') and
-                     not name.startswith((b'x-original-', b'x-rewrite-')) and
+                      not name.startswith(b'x-real-') and
+                      not name.startswith((b'x-original-', b'x-rewrite-')) and
+                      not name.startswith(b'proxy-') and
                     name not in headers and name not in
                       (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
                           b'te', b'proxy-connection', b'keep-alive', b'proxy', b'via',

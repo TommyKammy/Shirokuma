@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.67"
+version: "5.68"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: private proxy extension namespace (offline)
+
+After the separate catalog-entry/proxy-chain commit, WP-L3-VW-002 also refuses
+all `Proxy-*` metadata on its fixed Unix transition. Disposable `Proxy-Host`
+and `Proxy-Status` requests reached the handler before repair; the focused
+Warehouse suite passed after repair. No VM start, live backend/SQL, archived
+request replay, retained session/backup change or GitHub write. This offline
+parser boundary does not establish independent peer authenticity, caller
+receipt, restart recovery or operator acceptance. Roll back only the guard
+and fixture, retaining saved evidence and the stopped VM. Original Vault sync
+pending outside this checkout.
 
 ## 2026-10-04: catalog context entry and private proxy chain (offline)
 

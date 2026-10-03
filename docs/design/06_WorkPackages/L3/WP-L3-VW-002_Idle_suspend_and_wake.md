@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.97"
+version: "0.98"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: proxy extension namespace (offline)
+
+After the separate proxy-chain increment, disposable complete transitions
+with `Proxy-Host` and `Proxy-Status` still reached the handler. Refuse all
+`Proxy-*` metadata before journal or dispatch while retaining ordinary
+unrelated extension headers. The isolated negative failed before repair; the
+focused Warehouse lifecycle suite passed afterward. No archived UUID replay,
+VM start, backend/SQL or retained session/backup mutation. This does not prove
+peer authenticity, caller receipt, restart recovery or operator acceptance.
+Roll back only this namespace guard/test, preserving historical evidence.
+Original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: private RPC proxy-chain metadata (offline)
 
