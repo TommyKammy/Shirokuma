@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.43"
+version: "0.44"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: unrelated condition type and generation bounds (offline)
+
+Two independent fixed-profile inventory checks now refuse condition types with whitespace/control characters or more than 316 bytes, and negative or future `observedGeneration` relative to a reported positive item generation. Previously a malformed condition on an unrelated resource could coexist with healthy expected resources. Omitted condition generation remains compatible; a zero item generation continues through the existing resource-specific rejection. Fake controller, Flux-resource and Lakehouse workload negatives failed before repair and passed afterward (`go test ./internal/cli -count=1`: 791 passed; `go vet ./...`). Dedicated Colima was observed stopped; no VM start, API/SQL read, reconciliation, unknown-request replay or retained storage/backup mutation. Offline consistency cannot authenticate API/Git identity, establish atomic inventory or historical cleanup, clear strict admission or prove operator/production acceptance. Roll back only this reader/tests; retain stopped VM and saved evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: nested reference nulls and unrelated conditions (offline)
 

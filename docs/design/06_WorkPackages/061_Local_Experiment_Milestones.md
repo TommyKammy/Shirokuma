@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.76"
+version: "4.77"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: unrelated diagnostic condition bounds (offline)
+
+WP-L0-GITOPS-001: fixed-profile inventories reject invisible/oversized condition types and negative/future condition generations even on unrelated list members. Two negatives reproduced prior acceptance. Focused `go test ./internal/cli -count=1` (791 passed) and `go vet ./...` passed after repair. Dedicated Colima read-only status reported stopped; no live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. Fake shape checks do not authenticate API/Git, prove atomicity or historical cleanup, clear strict publication admission or establish operator/production acceptance. Roll back only the reader/tests, retaining VM and evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: nested null references and unrelated conditions (offline)
 

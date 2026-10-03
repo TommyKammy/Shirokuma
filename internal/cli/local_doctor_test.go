@@ -415,6 +415,38 @@ func TestLocalInventoryRejectsExplicitNullItemFields(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsMalformedUnrelatedConditionTypes(t *testing.T) {
+	for _, conditionType := range []string{`" "`, `"Ready\nspoof"`, `"` + strings.Repeat("x", 317) + `"`} {
+		foreign := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":` + conditionType + `,"status":"True"}]}}`
+		resources := strings.Replace(localFluxJSON(), `"items":[`, `"items":[`+foreign+`,`, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("malformed unrelated condition type accepted: %#v", check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[1].output = strings.Replace(workloads[1].output, `"items":[`, `"items":[`+foreign+`,`, 1)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "incomplete") {
+			t.Fatalf("malformed unrelated workload condition type accepted: %#v", checks)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsFutureUnrelatedConditionGeneration(t *testing.T) {
+	for _, generation := range []string{"-1", "2"} {
+		foreign := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":` + generation + `}]}}`
+		resources := strings.Replace(localFluxJSON(), `"items":[`, `"items":[`+foreign+`,`, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("unrelated condition generation %s accepted: %#v", generation, check)
+		}
+		controllers := strings.Replace(localControllerJSON(), `"items":[`, `"items":[`+foreign+`,`, 1)
+		check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("unrelated controller condition generation %s accepted: %#v", generation, check)
+		}
+	}
+}
+
 func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)

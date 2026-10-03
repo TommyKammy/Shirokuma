@@ -267,6 +267,12 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "deletionTimestamp"}) {
 			return true
 		}
+		var identity struct {
+			Generation int64 `json:"generation"`
+		}
+		if err := json.Unmarshal(item["metadata"], &identity); err != nil && len(item["metadata"]) != 0 {
+			return true
+		}
 		// Nested declared fields must also be canonical: encoding/json accepts
 		// Spec.Ref.Branch or Status.Conditions as if they were Kubernetes keys.
 		for _, nested := range []struct {
@@ -328,6 +334,22 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			}
 			if err := json.Unmarshal(condition, &shape); err != nil || shape.Type == "" ||
 				(shape.Status != "True" && shape.Status != "False" && shape.Status != "Unknown") {
+				return true
+			}
+			// A condition on an unrelated item still belongs to this claimed
+			// complete inventory. Do not accept invisible or unbounded types, or
+			// a generation that could not yet belong to its resource.
+			if len(shape.Type) > 316 || strings.IndexFunc(shape.Type, func(r rune) bool {
+				return unicode.IsSpace(r) || unicode.Is(unicode.C, r)
+			}) >= 0 {
+				return true
+			}
+			var generation struct {
+				ObservedGeneration *int64 `json:"observedGeneration"`
+			}
+			if err := json.Unmarshal(condition, &generation); err != nil ||
+				(generation.ObservedGeneration != nil && (*generation.ObservedGeneration < 0 ||
+					(identity.Generation > 0 && *generation.ObservedGeneration > identity.Generation))) {
 				return true
 			}
 		}
