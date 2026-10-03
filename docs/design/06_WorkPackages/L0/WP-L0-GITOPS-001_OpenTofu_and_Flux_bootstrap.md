@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.18"
+version: "0.19"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: declared source identity and active revision (offline)
+
+Two independent fixed-profile read-only checks now reject a Ready `flux-system` GitRepository if its reported `spec.url` or `spec.secretRef.name` differs from the checked-in `gotk-sync.yaml` (including absent values), and if it is suspended or its artifact revision uses a ref other than the declared `main`. Diagnostics do not print either URL or credential reference. The generic doctor remains unchanged. Fake positive/negative cases: `go test ./internal/cli` (745 passed), `go vet ./...`, `git diff --check`, and `make verify-local-experiment` passed; the first focused run failed four assertions that incorrectly expected the generic doctor to treat a suspended root as healthy, corrected to test only that it does not enforce fixed declaration fields. Dedicated Colima read-only status: stopped; no VM start, live API/SQL reads, reconciliation, unknown-request replay or retained data/backup mutation. This checks reported fields and revision syntax, **not** remote origin authentication, SSH credential contents, revision publication identity, actual readiness, strict admission or operator/production acceptance. Roll back only these doctor checks and their tests; preserve retained evidence and the stopped VM. Original Vault handoff synchronization remains pending outside this noninteractive checkout.
 
 ## 2026-10-03: declared source branch and dev wait
 

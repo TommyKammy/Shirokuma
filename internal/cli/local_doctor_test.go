@@ -28,7 +28,63 @@ func localControllerJSON() string {
 }
 
 func localFluxJSON() string {
-	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+}
+
+func TestLocalFluxDeclaredOriginAndCredentialsReference(t *testing.T) {
+	for _, test := range []struct{ name, field, value, want string }{
+		{"origin-absent", "url", "", "declared origin mismatch"},
+		{"origin-other", "url", "ssh://git@github.com/other/repository", "declared origin mismatch"},
+		{"credentials-absent", "secretRef", "", "declared credentials reference mismatch"},
+		{"credentials-other", "secretRef", "other", "declared credentials reference mismatch"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var list map[string]interface{}
+			if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+				t.Fatal(err)
+			}
+			spec := list["items"].([]interface{})[0].(map[string]interface{})["spec"].(map[string]interface{})
+			if test.value == "" {
+				delete(spec, test.field)
+			} else if test.field == "secretRef" {
+				spec[test.field] = map[string]string{"name": test.value}
+			} else {
+				spec[test.field] = test.value
+			}
+			output, err := json.Marshal(list)
+			if err != nil {
+				t.Fatal(err)
+			}
+			responses := []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+			if check.Status != "degraded" || !strings.Contains(check.Summary, test.want) || strings.Contains(check.Summary, test.value) && test.value != "" {
+				t.Fatalf("%s: %#v", test.name, check)
+			}
+			generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
+			if strings.Contains(generic.Summary, test.want) {
+				t.Fatalf("generic profile changed: %#v", generic)
+			}
+		})
+	}
+}
+
+func TestLocalFluxSourceMustBeActiveAtDeclaredBranch(t *testing.T) {
+	for _, test := range []struct{ name, old, replacement, want string }{
+		{"source-suspended", `"ref":{"branch":"main"}`, `"suspend":true,"ref":{"branch":"main"}`, "declared source suspended"},
+		{"other-revision-ref", `"revision":"main@sha1:`, `"revision":"other@sha1:`, "revision unverified"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resources := strings.Replace(localFluxJSON(), test.old, test.replacement, 1)
+			if resources == localFluxJSON() {
+				t.Fatal("fixture unchanged")
+			}
+			responses := []fakeResponse{{output: localControllerJSON()}, {output: resources}}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+			if check.Status != "degraded" || !strings.Contains(check.Summary, test.want) {
+				t.Fatalf("declared source drift accepted: %#v", check)
+			}
+		})
+	}
 }
 
 func TestLocalFluxDeclaredBranchAndDevWait(t *testing.T) {

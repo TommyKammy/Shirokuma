@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.43"
+version: "4.44"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: declared Flux origin and active source (offline)
+
+WP-L0-GITOPS-001. Two independent doctor increments reject a reported GitRepository origin/Secret reference that differs from `deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml`, and a suspended source or artifact ref other than the declared `main` even when Ready is reported. No raw URL/credential reference is emitted in diagnostics; generic profile unchanged. Fake negative/healthy cases and `go test ./internal/cli` (745 passed), `go vet ./...`, `git diff --check`, `make verify-local-experiment` passed. First focused run had four wrong generic-profile assertions; repaired before final checks. Dedicated Colima status read-only: stopped; no VM start, live API/SQL, reconciliation, request replay or retained storage/backup modification. These are offline reported-field checks, not authenticated Git/SSH identity, live readiness, strict publication gate or production/operator acceptance. Roll back only local doctor checks/tests, preserve saved evidence and VM. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: declared Git branch and dev wait
 

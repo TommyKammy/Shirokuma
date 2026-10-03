@@ -27,7 +27,7 @@ const (
 	maxReportedResources   = 10
 )
 
-var localFluxGitRevision = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}@sha1:[0-9a-f]{40}$`)
+var localFluxGitRevision = regexp.MustCompile(`^main@sha1:[0-9a-f]{40}$`)
 
 type commandRunner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
@@ -93,6 +93,10 @@ type kubernetesResourceList struct {
 			Ref       struct {
 				Branch string `json:"branch"`
 			} `json:"ref"`
+			URL       string `json:"url"`
+			SecretRef struct {
+				Name string `json:"name"`
+			} `json:"secretRef"`
 			Replicas  *int   `json:"replicas"`
 			SourceRef struct {
 				Kind      string `json:"kind"`
@@ -353,8 +357,17 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if isRootSource {
 			rootSourceCount++
+			if localExperiment && resource.Spec.Suspend {
+				unhealthy = append(unhealthy, resourceID+" (declared source suspended)")
+			}
 			if localExperiment && resource.Spec.Ref.Branch != "main" {
 				unhealthy = append(unhealthy, resourceID+" (declared branch mismatch)")
+			}
+			if localExperiment && resource.Spec.URL != "ssh://git@github.com/TommyKammy/Shirokuma" {
+				unhealthy = append(unhealthy, resourceID+" (declared origin mismatch)")
+			}
+			if localExperiment && resource.Spec.SecretRef.Name != "flux-system" {
+				unhealthy = append(unhealthy, resourceID+" (declared credentials reference mismatch)")
 			}
 			if localExperiment && !localFluxGitRevision.MatchString(resource.Status.Artifact.Revision) {
 				unhealthy = append(unhealthy, resourceID+" (revision unverified)")
