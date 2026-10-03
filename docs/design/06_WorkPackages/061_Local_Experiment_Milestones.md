@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.69"
+version: "4.70"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: canonical nested inventory metadata (offline)
+
+WP-L0-GITOPS-001: two independent fixed-profile checks reject case-insensitive aliases of pagination/version fields inside list metadata and identity fields inside each item's metadata. Fake negatives and canonical positives passed `go test ./internal/cli -count=1` (777 tests), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents), and `git diff --check`. Read-only dedicated Colima status reported stopped; no VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup change. These fake response checks do not authenticate API/Git, prove atomic inventory or historical cleanup, clear strict admission or establish operator/production acceptance. Revert only local reader/tests, retaining stopped VM and evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: canonical fixed-profile inventory envelopes (offline)
 

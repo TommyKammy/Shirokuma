@@ -106,6 +106,61 @@ func TestLocalInventoryRequiresCanonicalEnvelopeKeys(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRequiresCanonicalMetadataKeys(t *testing.T) {
+	for _, field := range []string{`"ResourceVersion":"123"`, `"RemainingItemCount":0`, `"Continue":""`} {
+		decorate := func(raw string) string {
+			return strings.Replace(raw, `"items":`, `"metadata":{`+field+`},"items":`, 1)
+		}
+		controllers := decorate(localControllerJSON())
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("controller metadata alias %s accepted: %#v", field, check)
+		}
+		check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: decorate(localFluxJSON())}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("Flux metadata alias %s accepted: %#v", field, check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[0].output = decorate(workloads[0].output)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[0].Status != "degraded" {
+			t.Fatalf("workload metadata alias %s accepted: %#v", field, checks)
+		}
+	}
+	canonical := `"metadata":{"resourceVersion":"123","remainingItemCount":0,"continue":""},"items":`
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: strings.Replace(localControllerJSON(), `"items":`, canonical, 1)}, {output: localFluxJSON()}}}, localExperimentContext, true)
+	if check.Status != "informational" {
+		t.Fatalf("canonical metadata rejected: %#v", check)
+	}
+}
+
+func TestLocalInventoryRejectsAliasedItemIdentity(t *testing.T) {
+	for _, field := range []string{"name", "namespace", "generation", "deletionTimestamp"} {
+		alias := strings.ToUpper(field[:1]) + field[1:]
+		decorate := func(raw string) string {
+			if field == "deletionTimestamp" {
+				return strings.Replace(raw, `"generation":`, `"`+alias+`":"","generation":`, 1)
+			}
+			return strings.Replace(raw, `"`+field+`":`, `"`+alias+`":`, 1)
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: decorate(localControllerJSON())}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("controller item alias %s accepted: %#v", field, check)
+		}
+		check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: decorate(localFluxJSON())}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("Flux item alias %s accepted: %#v", field, check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[0].output = decorate(workloads[0].output)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[0].Status != "degraded" {
+			t.Fatalf("workload item alias %s accepted: %#v", field, checks)
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("canonical item identity rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)

@@ -211,9 +211,37 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if err := json.Unmarshal(envelope.Metadata, &fields); err != nil {
 			return true
 		}
+		// A differently cased pagination/version field is not an omitted field:
+		// encoding/json would still populate the corresponding struct member.
+		for field := range fields {
+			for _, canonical := range []string{"resourceVersion", "remainingItemCount", "continue"} {
+				if field != canonical && strings.EqualFold(field, canonical) {
+					return true
+				}
+			}
+		}
 		for _, key := range []string{"resourceVersion", "remainingItemCount", "continue"} {
 			if string(fields[key]) == "null" {
 				return true
+			}
+		}
+	}
+	// The same decoder also accepts aliases in item identities. A fixed-profile
+	// inventory must not treat Name/Generation as canonical Kubernetes metadata.
+	var items struct {
+		Items []struct {
+			Metadata map[string]json.RawMessage `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return true
+	}
+	for _, item := range items.Items {
+		for field := range item.Metadata {
+			for _, canonical := range []string{"name", "namespace", "generation", "deletionTimestamp"} {
+				if field != canonical && strings.EqualFold(field, canonical) {
+					return true
+				}
 			}
 		}
 	}
