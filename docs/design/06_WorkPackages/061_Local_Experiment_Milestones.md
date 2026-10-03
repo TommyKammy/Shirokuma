@@ -5,12 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.114"
+version: "5.115"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: security type confusion and independent FinOps review (offline)
+
+WP-L2-POL-001: two test-owned allowed responses replacing security `true` with
+JSON number `1` passed before repair and now fail closed, leaving the original
+request pending without replay. Focused observer 35 tests and policy 17 tests
+passed. Independently inspected WP-L6-FIN-001 saved-history output boundaries
+without establishing another defect; its focused suite passed 181 tests with
+seven Linux-only skips. Dedicated Colima observed Stopped; no live API,
+collection, retained request/report/volume/backup mutation or GitHub write.
+AgentHouse retained-volume usage remains `null / NOT_MEASURED`. Offline fake
+checks do not authenticate producers, prove arbitrary mutation coverage,
+measure current usage or establish operator acceptance. Roll back the policy
+comparator/test only if needed, retaining pending requests and saved reports.
+Original Vault sync pending outside this checkout.
+
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. Private full
+verification log: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-064/verify-local.log`
+(SHA-256 `3bf03c0746542bce9272bb256a520d26c0c3baa86a3f2af1d23c715164b5c7da`).
+The initial focused negative failed twice as expected before repair. These
+checks are offline, not live admission or acceptance.
 
 ## 2026-10-04: allowed dry-run status and independent lineage review (offline)
 

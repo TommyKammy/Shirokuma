@@ -141,6 +141,27 @@ class ObserverTests(unittest.TestCase):
         kube=FakeKube();observer=O.CandidateObserver(source,kube);observer.observe()
         self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
 
+    def test_allowed_response_cannot_change_security_boolean_to_number(self):
+        value=pod();value['spec']['securityContext']={'runAsNonRoot':True}
+        value['spec']['containers'][0]['securityContext']['allowPrivilegeEscalation']=True
+        source=prepared(value)
+        for level in ('pod', 'container'):
+            with self.subTest(level=level):
+                kube=FakeKube();observer=O.CandidateObserver(source,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body)
+                    if level == 'pod':
+                        altered['spec']['securityContext']['runAsNonRoot']=1
+                    else:
+                        altered['spec']['containers'][0]['securityContext']['allowPrivilegeEscalation']=1
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                receipt=observer.receipt()
+                self.assertEqual(receipt['admission'],'unknown')
+                self.assertIsNotNone(receipt['pending'])
+                self.assertEqual(receipt['request_count'],1)
+
     def test_allowed_response_cannot_inject_pod_identity_or_scheduling(self):
         for changes in ({'serviceAccountName':'admin'}, {'nodeName':'other-node'},
                         {'nodeSelector':{'role':'privileged'}},

@@ -137,7 +137,8 @@ def allowed_pod_matches(value, body):
     if submitted_context is None:
         if pod_context not in (None, {}):
             return False
-    elif type(pod_context) is not dict or pod_context != submitted_context:
+    elif (type(pod_context) is not dict or
+          json.dumps(pod_context, sort_keys=True) != json.dumps(submitted_context, sort_keys=True)):
         return False
     # The submitted subset cannot choose an identity or placement. An allowed
     # response must not silently acquire either, even when policy CEL passes.
@@ -203,7 +204,9 @@ def allowed_pod_matches(value, body):
     # Only the harmless explicit false default may appear beyond the submitted
     # container context. Other injected settings can change execution identity
     # or privileges even when the named policy checks still pass.
-    if (any(context.get(key) != raw for key, raw in submitted_security.items()) or
+    if (any(key not in context or
+            json.dumps(context[key], sort_keys=True) != json.dumps(raw, sort_keys=True)
+            for key, raw in submitted_security.items()) or
             any(key not in submitted_security and (key != 'privileged' or value is not False)
                 for key, value in context.items()) or
             any(container.get(key) not in (None, []) for key in ('env', 'envFrom', 'command', 'args', 'volumeMounts'))):

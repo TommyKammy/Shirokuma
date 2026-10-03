@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.23"
+version: "0.24"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: security boolean type in dry-run responses (offline)
+
+Two disposable allowed responses substituted JSON number `1` for a submitted
+Pod `runAsNonRoot: true` or container `allowPrivilegeEscalation: true`. Python
+equality previously treated both as unchanged. Compare submitted security
+values using canonical JSON representation so boolean and numeric types remain
+distinct; keep the permitted explicit `privileged: false` default. Both
+negatives now remain unknown/pending without replay; focused observer 35 tests
+and policy 17 tests passed. Dedicated Colima observed Stopped; no live
+admission, retained evidence/volume/backup mutation or GitHub write. Fake
+responses cannot authenticate the API, prove arbitrary mutation coverage or
+establish operator acceptance. Roll back only comparator/test if needed and
+retain pending requests and historical evidence. Original Vault sync pending
+outside the approved checkout.
 
 ## 2026-10-04: dry-run response status boundary (offline)
 
