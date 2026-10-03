@@ -44,7 +44,7 @@ Plan-only (zero model requests) with a model listed for this project; substitute
 an eligible model ID after checking the account's entitlement:
 
 ```sh
-rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --model openai/SELECTED_MODEL --max-runs 96 --max-minutes 10080
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --model openai/SELECTED_MODEL --max-runs 500 --max-minutes 10080
 ```
 
 `subscription_preflight` must report `openai_oauth_label_present` before
@@ -54,10 +54,10 @@ OAuth-only route support the local experiment despite the billing uncertainty.
 Start the bounded series with the same model ID:
 
 ```sh
-rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --execute --use-pro-weekly-limit --model openai/SELECTED_MODEL --max-runs 96 --max-minutes 10080
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --execute --use-pro-weekly-limit --model openai/SELECTED_MODEL --max-runs 500 --max-minutes 10080
 ```
 
-Allowed limits are **1–96 sequential runs and 1–10080 minutes (seven days)**
+Allowed limits are **1–500 sequential runs and 1–10080 minutes (seven days)**
 per manual launch. Set smaller values if unattended host operation is
 undesirable. The runner rechecks the OAuth label before **each** attempt and
 pins `--model`; it rejects ambiguous OpenAI account listings and inherited
@@ -69,6 +69,16 @@ providers. A weekly quota error is a stop, never an automatic paid retry or a
 request to buy more capacity. No cron/launchd task, recurring subscription or
 background daemon is installed. Do not use `--dangerously-skip-permissions`.
 The project instructions and tool permissions are not an OS sandbox.
+
+The owner raised the local series ceiling from 96 to 500 after observing low
+ChatGPT Pro weekly allowance usage. This changes the **next** invocation's
+scheduling guard, not the arguments of an already running process or the
+subscription/billing evidence. An existing 96-session series may naturally
+finish, then a one-shot continuation may use only the remaining 404 sessions
+after independently checking its checkpoint, clean descendant HEAD and stop
+reason `run_budget_reached`. Never continue after an error, unknown remote
+state, safety boundary or quota exhaustion. Do not kill an active request just
+to apply the new ceiling or replay its last operation.
 
 The checkout's `opencode.jsonc` denies normal use of every provider except
 OpenAI. The CLI's noninteractive permission requests for the parent workspace,

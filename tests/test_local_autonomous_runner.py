@@ -118,14 +118,14 @@ class AutonomousRunnerTests(unittest.TestCase):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
              contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertEqual(R.main(['--max-runs', '96', '--max-minutes', '10080']), 0)
+            self.assertEqual(R.main(['--max-runs', '500', '--max-minutes', '10080']), 0)
         plan = json.loads(out.getvalue())
-        self.assertEqual((plan['planned_max_runs'], plan['planned_max_minutes']), (96, 10080))
+        self.assertEqual((plan['planned_max_runs'], plan['planned_max_minutes']), (500, 10080))
         self.assertEqual(plan['subscription_preflight'], 'not_checked')
         with self.assertRaisesRegex(R.RunnerError, 'BUDGET_INVALID'):
-            R.run(self.root, self.vault, str(self.cli), max_runs=97, max_minutes=10080, model=self.model)
+            R.run(self.root, self.vault, str(self.cli), max_runs=501, max_minutes=10080, model=self.model)
         with self.assertRaisesRegex(R.RunnerError, 'BUDGET_INVALID'):
-            R.run(self.root, self.vault, str(self.cli), max_runs=96, max_minutes=10081, model=self.model)
+            R.run(self.root, self.vault, str(self.cli), max_runs=500, max_minutes=10081, model=self.model)
 
     def test_missing_or_ambiguous_oauth_cannot_start_run(self):
         for mode in ('missing', 'api', 'multiple', 'untyped', 'legacy_text'):

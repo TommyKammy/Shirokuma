@@ -5,7 +5,7 @@ title: "Use autonomous local experimental development"
 status: accepted
 created: 2026-09-16
 updated: 2026-10-03
-version: "1.2"
+version: "1.3"
 area: adr
 tags: [shirokuma, adr, local, development]
 ---
@@ -87,6 +87,16 @@ as sufficient experimental routing evidence. Do not claim independent billing
 proof. Restrict normal provider selection to OpenAI in the dedicated checkout;
 stop on actual evidence of another account/provider, metered API usage, or an
 out-of-scope action. This does not waive data retention or acceptance limits.
+
+After 61 sessions in the bounded local series, the owner reported only 3% of
+their ChatGPT Pro weekly token allowance consumed and raised the series
+ceiling from 96 to 500. The report is an owner observation, not an independently
+verified account or billing measurement. The seven-day wall-clock guard,
+OAuth-only preflight, clean descendant commit/checkpoint requirement and
+stop-on-error/quota rules remain unchanged. A process already started with
+the old limit must not be modified or interrupted mid-request; use a separately
+validated, one-shot continuation from its clean budget boundary. The ceiling
+is neither a model-request count nor a monetary cap.
 
 ## Verification and completion
 
