@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.18"
+version: "1.19"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: response header access within catalog deadline (offline)
+
+The bounded GET reader now checks the observation clock after reading declared
+length headers, before classifying malformed framing. A disposable header
+accessor expiring the deadline cannot be reported as a timely malformed header;
+the focused lineage suite passed (87
+tests). No live login/API, VM start, retained source/credential/report/backup
+mutation or replay. This does not authenticate the catalog, establish atomicity,
+whole-catalog/column lineage or operator acceptance. Roll back the deadline
+guard and disposable fixture only; preserve saved reports. Direct original
+Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: declared catalog body length (offline)
 

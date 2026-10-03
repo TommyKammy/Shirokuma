@@ -5,12 +5,23 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.72"
+version: "0.73"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: request receive must finish before parsing deadline (offline)
+
+The owner now checks its absolute HTTP read deadline immediately after each
+socket receive; a complete disposable request returned after expiry is refused
+before parsing or dispatch. Focused Warehouse tests passed after correcting a
+fixture that initially used an uninitialized owner. No archived UUID replay,
+backend/SQL, VM start, retained session or backup mutation. This does not prove
+archived caller receipt, backend authenticity or restart recovery. Roll back
+only the receive guard and test, keeping archived sessions. Direct original
+Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: peer check precedes disposable request read (offline)
 

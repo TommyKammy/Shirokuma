@@ -351,6 +351,7 @@ class SessionRPC:
             require(remaining > 0, 'INVALID_HTTP')
             connection.settimeout(remaining)
             part = connection.recv(limit)
+            require(time.monotonic() < deadline, 'INVALID_HTTP')
             require(bool(part), 'INVALID_HTTP')
             buffered.extend(part)
 

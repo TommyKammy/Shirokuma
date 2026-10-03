@@ -878,6 +878,24 @@ class SessionRPCTest(unittest.TestCase):
                 self.assertLess(time.monotonic() - started, max(0.5, second_attempt - started + 0.4))
         self.assertEqual(self.calls, [])
 
+    def test_complete_request_arriving_after_read_deadline_is_refused(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        payload = self.wire(json.dumps(self.request()).encode())
+
+        class LateConnection:
+            def settimeout(self, timeout):
+                self.timeout = timeout
+
+            def recv(self, limit):
+                return payload
+
+        with mock.patch.object(R, 'READ_TIMEOUT_SECONDS', 0.1), \
+             mock.patch.object(R.time, 'monotonic', side_effect=[100, 100, 100.2]):
+            with self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
+                self.rpc._read_request(LateConnection())
+        self.assertEqual(self.rpc._entries, {})
+        self.assertEqual(self.calls, [])
+
     def test_json_exact_keys_types_duplicates_and_trailing_data(self):
         valid = self.request()
         invalid = [{**valid, 'sql': 'DROP anything'}, {**valid, 'schema_version': True},

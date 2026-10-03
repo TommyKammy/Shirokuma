@@ -875,6 +875,26 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_late_invalid_length_is_deadline_not_timely_framing_error(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+
+        class LateHeaders:
+            def get_all(self, key, default):
+                client.deadline = time.monotonic() - 1
+                return ['invalid']
+
+        class CheckedResponse(Response):
+            def read(self, *args):
+                raise AssertionError('late response body must not be read')
+
+        response = CheckedResponse(b'{"id":1}')
+        response.headers = LateHeaders()
+        with patch.object(self.client.opener, 'open', return_value=response):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                self.client.request('GET', next(iter(C.ANCHORS)))
+        self.assertTrue(response.closed)
+
     def test_declared_http_length_must_match_complete_body(self):
         body = b'{"id":1}'
         self.client.login_attempted, self.client.token = True, 'token'

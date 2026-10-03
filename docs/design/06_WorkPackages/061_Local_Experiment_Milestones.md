@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.39"
+version: "5.40"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: catalog header and Warehouse receive deadlines (offline)
+
+WP-L5-LINEAGE-001 checks the catalog deadline after declared-length header
+access, before classifying a malformed declaration; its disposable late-header regression
+and focused lineage suite passed (87 tests). Independently WP-L3-VW-002 checks
+the absolute request deadline after socket receive, before parsing a complete
+late request; focused Warehouse suite passed after fixing a test fixture's
+uninitialized owner (initial failed command output was not saved; the passing
+log is at `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-086/warehouse.log`). Dedicated
+Colima was read-only observed stopped. `make verify-local-experiment`,
+`make verify-design-context` and `git diff --check` passed (private logs at
+`tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-086/`). No live API/backend/SQL, VM start,
+archived replay, retained source/credential/session/report/backup mutation or
+GitHub write. Neither client-side deadline authenticates a producer, provides
+atomic reads, proves caller receipt/restart recovery, whole-catalog/column
+lineage or operator acceptance. Roll back only these two guards/tests while
+preserving archived evidence; direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: peer UID refusal before Warehouse parsing (offline)
 
