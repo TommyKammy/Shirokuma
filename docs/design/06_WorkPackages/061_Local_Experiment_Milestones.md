@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.63"
+version: "5.64"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: catalog status accessor and private proxy identity (offline)
+
+WP-L5-LINEAGE-001 bounds `TypeError`/`ValueError` from a returned catalog
+status accessor: timely invalid, late deadline, response closed. Separately
+WP-L3-VW-002 refuses `X-Real-IP` and `X-Real-Host` on the fixed Unix RPC
+before handler or journal. Both disposable negatives failed before repair;
+focused lineage (110 tests), Warehouse suites, `make verify-local-experiment`,
+`make verify-design-context` and `git diff --check` passed after repair. Read-only
+`colima list` showed dedicated VM stopped. No VM start, live catalog/backend,
+SQL, archived request replay, retained source/session/report/backup mutation
+or GitHub write. Offline checks do not authenticate producers or peers, prove
+atomicity, caller receipt, restart recovery, whole-catalog/column lineage or
+operator acceptance. Roll back only the two independent guards and fixtures;
+preserve evidence and stopped VM. Private focused logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-027/`. Original
+Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: catalog header value failures (offline)
 

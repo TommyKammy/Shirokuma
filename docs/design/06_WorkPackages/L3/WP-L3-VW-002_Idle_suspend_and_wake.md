@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.93"
+version: "0.94"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: proxy real-identity hints on private RPC (offline)
+
+Disposable complete Unix transitions bearing `X-Real-IP` or `X-Real-Host`
+reached the handler before repair. Both are now refused before dispatch or
+journaling; unrelated printable extension headers remain compatible. This
+fixed-protocol assumption is untested against a live backend. No dedicated VM
+start, archived UUID replay, backend/SQL or retained session/backup mutation.
+This parser check cannot independently authenticate the peer, prove caller
+receipt or owner restart recovery, or establish operator acceptance. Roll back
+only this header guard and fixture, preserving archived evidence. Original
+Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: canonical private RPC length (offline)
 

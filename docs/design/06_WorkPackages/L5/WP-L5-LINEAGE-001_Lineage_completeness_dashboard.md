@@ -5,12 +5,23 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.39"
+version: "1.40"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: returned catalog status accessor failures (offline)
+
+An injected returned response whose `status` accessor raises `TypeError` or
+`ValueError` previously escaped as a raw exception. Four timely/late negative
+cases failed before repair; the bounded reader now closes the stream and
+classifies timely failures as `API_RESPONSE_INVALID`, late ones as
+`API_DEADLINE`. No live catalog login or VM start; this does not authenticate
+the producer, prove atomic or whole-catalog/column coverage, or establish
+operator acceptance. Roll back only this status guard and fixture, preserving
+saved evidence. Original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: value failures in catalog header access (offline)
 

@@ -390,7 +390,7 @@ class SessionRPC:
                       (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
                          b'te', b'proxy-connection', b'keep-alive',
                           b'authorization', b'proxy-authorization', b'cookie',
-                          b'forwarded', b'x-forwarded-host', b'x-forwarded-proto',
+                          b'forwarded', b'x-real-ip', b'x-real-host', b'x-forwarded-host', b'x-forwarded-proto',
                           b'x-forwarded-for', b'x-forwarded-port', b'x-forwarded-prefix',
                           b'x-original-url', b'x-original-uri', b'x-original-host',
                           b'x-rewrite-url',
