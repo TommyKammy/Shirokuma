@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.22"
+version: "5.23"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: nonfinite JSON cannot enter catalog or saved-source evidence (offline)
+
+WP-L5-LINEAGE-001: the shared bounded decoder refuses float exponent overflow to positive or negative infinity, including unused response fields. Both disposable HTTP negatives failed before repair; an independent disposable saved-summary fixture confirms that an unused overflow cannot make a source eligible. WP-L0-GITOPS-001 independently pins the existing rejection of a null list member, including after a non-null member, without rejecting an empty list; no Go reader change. Focused lineage (68 tests), isolated Go regression, final combined `make verify-local-experiment`, `make verify-design-context` (89 documents), `go test ./internal/cli -count=1` (824 passed), `go vet ./...` and `git diff --check` passed. Private combined logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-067/{verify-final,design-final}.log`. Read-only `colima list` reported the dedicated VM stopped. No live login/API/Git/SQL, VM start, reconciliation, unknown-request replay or retained credential/source/report/backup mutation. Offline fixtures do not authenticate producer/catalog/API/Git, guarantee atomicity, clear strict admission or establish whole-catalog/column lineage or operator/production acceptance. Roll back decoder and disposable tests only; retain the stopped VM and historical reports. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: credential directory bound across login (offline)
 

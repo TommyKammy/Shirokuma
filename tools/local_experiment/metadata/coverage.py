@@ -11,6 +11,7 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -70,6 +71,11 @@ def now():
 
 
 def decode(raw):
+    def finite_float(text):
+        value = float(text)
+        require(math.isfinite(value), 'INVALID_JSON')
+        return value
+
     def pairs(items):
         result = {}
         for key, value in items:
@@ -78,7 +84,8 @@ def decode(raw):
         return result
     try:
         value = json.loads(raw.decode('utf-8') if isinstance(raw, bytes) else raw,
-                           object_pairs_hook=pairs,
+                            object_pairs_hook=pairs,
+                            parse_float=finite_float,
                            parse_constant=lambda _: (_ for _ in ()).throw(CoverageError('INVALID_JSON')))
         # JSON permits escaped lone surrogates in some decoders; neither those
         # nor lossy raw UTF-8 can be trusted as catalog identity or evidence.

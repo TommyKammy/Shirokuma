@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.04"
+version: "1.05"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: reject nonfinite exponent overflow (offline)
+
+The shared bounded JSON decoder now rejects numbers such as `1e999` and `-1e999` that Python would otherwise parse as infinity, even in unused members. Disposable HTTP negatives failed before repair and passed afterward. A separate saved-summary fixture confirms an overflow in an unused field cannot enter the eligible source domain; no retained source was edited. Finite JSON values retain existing behavior. Focused and broader verification are in Milestones. This is not independent producer/API provenance, atomicity, whole-catalog or column lineage, or operator acceptance. Roll back only decoder/tests; preserve historical reports and the stopped VM. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: credential parent identity across login (offline)
 

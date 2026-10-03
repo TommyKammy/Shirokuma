@@ -169,6 +169,25 @@ func TestLocalInventoryRejectsNullItems(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsNullMemberWithoutRejectingEmptyList(t *testing.T) {
+	for _, tc := range []struct {
+		raw     string
+		invalid bool
+	}{
+		{`{"items":[null]}`, true},
+		{`{"items":[{},null]}`, true},
+		{`{"items":[]}`, false},
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal([]byte(tc.raw), &list); err != nil {
+			t.Fatal(err)
+		}
+		if got := localInventoryIncomplete(list, []byte(tc.raw)); got != tc.invalid {
+			t.Fatalf("incomplete=%t for %s, want %t", got, tc.raw, tc.invalid)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsMalformedReportedDNSNames(t *testing.T) {
 	for _, tc := range []struct {
 		field, value string

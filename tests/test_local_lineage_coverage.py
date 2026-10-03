@@ -242,6 +242,16 @@ class CoverageTests(unittest.TestCase):
                 self.assertEqual(report['inventory']['invalid'], 1)
                 self.assertEqual(report['runs'][0]['reason_codes'], ['SOURCE_RESULT_INVALID'])
 
+    def test_nonfinite_unused_summary_field_cannot_enter_eligible_domain(self):
+        path = self.add_run(curated=True)
+        (path / 'summary.json').write_bytes(
+            ('{"run_token":"' + path.name + '","result":"passed","unused":1e999}').encode())
+        report = self.collect()
+        self.assertEqual(report['inventory']['eligible'], 0)
+        self.assertEqual(report['inventory']['invalid'], 1)
+        self.assertEqual(report['runs'][0]['reason_codes'], ['INVALID_JSON'])
+        self.assertEqual(self.client.calls, [])
+
     def test_source_drift_after_eligibility_keeps_two_unknown_edges(self):
         path = self.add_run(curated=True)
         real = self.client.request
@@ -930,7 +940,8 @@ class ReadOnlyClientTests(unittest.TestCase):
 
     def test_malformed_and_oversized_json_are_rejected(self):
         self.client.login_attempted, self.client.token = True, 'token'
-        for body in (b'{"x":1,"x":2}', b'{"x":NaN}', b'x' * (C.MAX_RESPONSE + 1),
+        for body in (b'{"x":1,"x":2}', b'{"x":NaN}', b'{"unused":1e999}',
+                     b'{"unused":-1e999}', b'x' * (C.MAX_RESPONSE + 1),
                      b'{"unused":"\xff"}', b'{"unused":"\\ud800"}', b'{"\\ud800":1}'):
             with self.subTest(size=len(body)), patch.object(self.client.opener, 'open', return_value=Response(body)):
                 with self.assertRaises(C.CoverageError):
@@ -941,6 +952,8 @@ class ReadOnlyClientTests(unittest.TestCase):
         body = '{"unused":"雪 😀"}'.encode('utf-8')
         with patch.object(self.client.opener, 'open', return_value=Response(body)):
             self.assertEqual(self.client.request('GET', next(iter(C.ANCHORS))), {'unused': '雪 😀'})
+        with patch.object(self.client.opener, 'open', return_value=Response(b'{"unused":1e308}')):
+            self.assertEqual(self.client.request('GET', next(iter(C.ANCHORS))), {'unused': 1e308})
 
     def test_no_proxy_redirect_and_deadline_are_enforced(self):
         client = C.ReadOnlyClient(state=self.state)

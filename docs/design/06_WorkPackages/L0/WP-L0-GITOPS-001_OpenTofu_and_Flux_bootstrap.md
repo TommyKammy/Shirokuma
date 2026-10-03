@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.71"
+version: "0.72"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: null inventory member regression (offline)
+
+An independent fake-list regression pins the existing rejection of `items:[null]`, including when the null follows another member, while preserving `items:[]` as a valid empty envelope. No reader behavior or generic doctor changed. A valid empty envelope still does not prove expected workloads exist. Focused and broader checks are in Milestones. Dedicated VM stayed stopped; no live API/Git, reconciliation or retained data change. This cannot authenticate Kubernetes/Git, make reads atomic or clear strict admission/operator acceptance. Roll back the test only; original Vault sync pending outside checkout.
 
 ## 2026-10-03: explicit null inventory regression (offline)
 
