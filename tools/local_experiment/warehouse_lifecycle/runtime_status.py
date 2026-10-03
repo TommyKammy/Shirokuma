@@ -34,6 +34,7 @@ KINDS = {
 LABELLED = 'networkpolicies,configmaps,secrets,services,pods,deployments,replicasets,endpointslices'
 MAX_SECONDS = 90
 OWNER = M.OWNER
+DNS_LABEL = re.compile(r'(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])\Z')
 # kubectl fetches objects internally, but its stdout contains *only* these
 # metadata fields: never emit Secret.data or Pod specs to this process/log.
 ROW = ('{{printf "%s\\t%s\\t%s\\t%s\\t" .kind .metadata.name '
@@ -64,7 +65,7 @@ def identity(value, *, kind=None, name=None, label=None):
     uid = meta.get('uid')
     require(type(uid) is str and canonical_uuid(uid) and
             meta.get('namespace') == W.NAMESPACE and
-            type(meta.get('name')) is str and re.fullmatch(r'[a-z0-9-]{1,63}', meta['name']) is not None and
+             type(meta.get('name')) is str and DNS_LABEL.fullmatch(meta['name']) is not None and
             type(meta.get('labels')) is dict)
     require(kind is None or value['kind'] == kind)
     require(name is None or meta['name'] == name)
@@ -84,7 +85,7 @@ def row(line):
     require(len(fields) == 6)
     kind, name, namespace, uid, owner, service = fields
     require(owner == '' or re.fullmatch(r'[0-9a-f]{32}', owner) is not None)
-    require(service == '' or re.fullmatch(r'[a-z0-9-]{1,63}', service) is not None)
+    require(service == '' or DNS_LABEL.fullmatch(service) is not None)
     return {'kind': kind, 'metadata': {'name': name, 'namespace': namespace,
             'uid': uid, 'labels': {**({OWNER: owner} if owner else {}),
                                    **({'kubernetes.io/service-name': service} if service else {})}}}

@@ -12,6 +12,10 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: projected metadata names have bounded label syntax (offline)
+
+The optional read-only runtime-status reader now rejects projected object names and service-name labels beginning or ending in `-` instead of treating these malformed values as stable present resources. Existing length and character bounds remain; valid generated ReplicaSet and EndpointSlice names continue to pass. Isolated fake-name/service-label negatives and healthy inventory plus `make test-local-warehouse-lifecycle` pass. Dedicated Colima remained stopped; no live API/SQL, owner request, unknown-request replay, archived session, backup or volume change. A syntactically plausible projection does not authenticate the cluster or make its two rounds atomic; historical cleanup and production acceptance remain unverified. Revert only this reader/test change and preserve saved evidence and stopped VM. Original Vault direct handoff sync pending outside checkout.
+
 ## 2026-10-03: remaining-item metadata cannot imply scoped absence (offline)
 
 The metadata-only kubectl list projection now marks `TRUNCATED` when `remainingItemCount` is nonzero, even with an empty continuation token. The existing reader already refuses `TRUNCATED` without publishing partial JSON. This conservative consistency guard applies to the owner-label and EndpointSlice lists, not fixed-name GETs. The focused fake reader test checks that the projection includes the field and that truncated output fails; no live API or SQL read was made. Dedicated Colima remained stopped, with no owner call, saved-request replay, retained run, backup or volume mutation. The new guard does not authenticate a backend, make the two rounds atomic, or prove historical cleanup or production acceptance. Roll back only the projection/test and retain saved runs and VM; direct original Vault handoff sync remains pending outside this checkout.

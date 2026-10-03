@@ -12,6 +12,10 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: Warehouse projected name syntax (offline)
+
+WP-L3-VW-002. Separate offline metadata-reader increment rejects object names and service-name labels with leading/trailing hyphens; valid generated names remain accepted. Fake positive/negative cases and `make test-local-warehouse-lifecycle` passed. Dedicated Colima remained stopped; no live API/SQL, owner operation, unknown-request replay, retained data/backup mutation. This is not source authenticity, atomic observation, historical cleanup or production/operator acceptance. Roll back only the local reader/tests, retaining stopped VM and evidence. Original Vault handoff direct sync pending outside checkout.
+
 ## 2026-10-03: paused Deployment local diagnostics (offline)
 
 WP-L0-GITOPS-001. Two independent fixed-profile checks reject a paused Flux controller or Lakehouse Deployment despite complete replicas; healthy unpaused fixtures and StatefulSet behavior remain. Initial focused run failed on an incorrectly targeted StatefulSet fixture, corrected before `go test ./internal/cli` (755 passed) and `go vet ./...` passed. Read-only Colima status: stopped. No live API/SQL, reconciliation, unknown-request replay, retained data or backup mutation. This is offline reported-field consistency, not actual source/runtime authenticity, Git smoke, strict gate or production/operator acceptance. Roll back only local doctor/tests, retaining stopped VM and evidence. Original Vault handoff direct sync pending outside checkout.

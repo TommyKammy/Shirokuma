@@ -81,6 +81,18 @@ class RuntimeStatusTests(TestCase):
         self.assertEqual(report['current_state'], 'scoped-resources-present')
         self.assertEqual((report['labelled_present'], report['service_endpoints_present']), (1, 1))
 
+    def test_noncanonical_projected_dns_labels_cannot_count_as_resources(self):
+        for name in ('-child', 'child-', '-', 'a' * 64):
+            with self.subTest(name=name):
+                kube = FakeKube()
+                kube.owned = [obj('ReplicaSet', name, owner=TOKEN)]
+                with self.assertRaises(R.RuntimeStatusError):
+                    R.observe(TOKEN, kube)
+                with self.assertRaises(R.RuntimeStatusError):
+                    R.row('EndpointSlice\tchild\t' + R.W.NAMESPACE + '\t' + str(uuid.uuid4()) +
+                          '\t\t' + name)
+        self.assertEqual(R.observe(TOKEN, FakeKube())['current_state'], 'scoped-absence-observed')
+
     def test_mutation_between_rounds_and_equally_sized_uid_replacement_fail(self):
         class Changing(FakeKube):
             def endpoints(self, service):
