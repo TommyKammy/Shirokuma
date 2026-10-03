@@ -324,6 +324,23 @@ func TestLocalInventoryRejectsUnrelatedObservedGenerationContradictions(t *testi
 	}
 }
 
+func TestLocalInventoryRejectsConditionAheadOfStatusGeneration(t *testing.T) {
+	for _, tc := range []struct {
+		observed string
+		invalid  bool
+	}{
+		{`"observedGeneration":1,`, true},
+		{`"observedGeneration":2,`, false},
+		{``, false}, // projected fixtures may omit the top-level status generation
+	} {
+		raw := []byte(`{"items":[{"metadata":{"generation":2},"status":{` + tc.observed + `"conditions":[{"type":"Ready","status":"True","observedGeneration":2}]}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
+			t.Fatalf("condition/status generation classification incorrect: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNegativeReplicaCountersOnUnrelatedMembers(t *testing.T) {
 	for _, field := range []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas"} {
 		raw := []byte(`{"items":[{"status":{"` + field + `":-1}}]}`)
@@ -387,7 +404,10 @@ func TestLocalInventoryRejectsMalformedDeletionTimestamp(t *testing.T) {
 	}{
 		{`"not-a-time"`, true},
 		{`"2026-10-03"`, true},
+		{`"2026-10-03T12:00:00,123Z"`, true},
+		{`"2026-10-03T12:00:00+24:00"`, true},
 		{`"2026-10-03T12:00:00Z"`, false},
+		{`"2026-10-03T12:00:00.123456789Z"`, false},
 		{`"2026-10-03T12:00:00+09:00"`, false},
 		{`""`, false}, // projected fixtures may omit or use an empty timestamp
 	} {
@@ -1426,7 +1446,7 @@ func TestLocalFluxRejectsConflictingStatusGenerationWhenReported(t *testing.T) {
 			}
 			runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}
 			check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true)
-			if check.Status != "degraded" || (test.name != "explicit-zero" && !strings.Contains(check.Summary, "resource response was incomplete")) || (test.name == "explicit-zero" && !strings.Contains(check.Summary, "status generation mismatch")) {
+			if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
 				t.Fatalf("conflicting reported generation accepted: %#v", check)
 			}
 			generic := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}

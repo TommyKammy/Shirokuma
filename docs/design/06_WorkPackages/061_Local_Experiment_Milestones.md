@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.97"
+version: "4.98"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: strict deletion-time syntax and condition generation (offline)
+
+WP-L0-GITOPS-001: fixed-profile complete inventories reject permissively parsed comma-fraction/+24:00 deletion times and unrelated conditions reporting an observed generation ahead of explicitly reported top-level status generation. Isolated negatives failed before repair; `go test ./internal/cli -count=1` (807 passed), `go vet ./...`, `make verify-local-experiment` and `git diff --check` passed after repair. Dedicated Colima read-only status reported stopped. No live API/SQL, VM start, reconciliation, unknown UUID replay or retained session/backup mutation. These fake-field checks do not authenticate API/Git, prove atomicity/historical cleanup, clear strict publication admission or establish operator/production acceptance. Revert only local reader/tests; retain VM/evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: malformed deletion time and disposable caller receipt (offline)
 

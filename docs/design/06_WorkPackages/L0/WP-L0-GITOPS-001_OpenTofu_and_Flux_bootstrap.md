@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.57"
+version: "0.58"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: deletion time syntax and condition/status generation (offline)
+
+Two independent complete-inventory guards: a nonempty reported deletion timestamp must have RFC3339 dot-fraction syntax and a timezone within the stated offset range, rather than relying on Go's permissive time parser (which accepts comma fractions and +24:00); and an unrelated member's explicitly reported condition observed generation cannot be ahead of its explicitly reported top-level status observed generation. Omitted generation/timestamp fields and canonical examples remain compatible. Focused negatives failed before repair; `go test ./internal/cli -count=1` (807 passed), `go vet ./...`, `make verify-local-experiment` and `git diff --check` passed afterward. An existing explicit-zero fixture now expects earlier incomplete-inventory refusal instead of the later target-specific mismatch. Read-only `colima status --profile mac-studio-solo` reported stopped; no VM start, API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. Fake reported fields cannot authenticate Kubernetes/Git, make separate reads atomic, prove historical cleanup, clear strict publication admission or establish operator/production acceptance. Roll back only the reader and tests, preserving stopped VM and saved evidence. Original Vault direct sync remains pending outside checkout.
 
 ## 2026-10-03: reported deletion timestamps (offline)
 

@@ -33,6 +33,7 @@ const (
 
 var localFluxGitRevision = regexp.MustCompile(`^main@sha1:[0-9a-f]{40}$`)
 var localFluxDNSLabel = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
+var localDeletionTimestamp = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$`)
 
 func localFluxValidName(name string, maxLength int, subdomain bool) bool {
 	if len(name) == 0 || len(name) > maxLength {
@@ -308,6 +309,9 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				return true
 			}
 			if timestamp != "" {
+				if !localDeletionTimestamp.MatchString(timestamp) {
+					return true
+				}
 				if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
 					return true
 				}
@@ -481,7 +485,8 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			}
 			if err := json.Unmarshal(condition, &generation); err != nil ||
 				(generation.ObservedGeneration != nil && (*generation.ObservedGeneration < 0 ||
-					(identity.Generation > 0 && *generation.ObservedGeneration > identity.Generation))) {
+					(identity.Generation > 0 && *generation.ObservedGeneration > identity.Generation) ||
+					(observed.Generation != nil && *generation.ObservedGeneration > *observed.Generation))) {
 				return true
 			}
 		}
