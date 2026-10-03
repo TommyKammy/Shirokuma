@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.49"
+version: "5.50"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: partial catalog metadata and RPC negotiation (offline)
+
+WP-L5-LINEAGE-001 refuses a returned 200 with `Content-Range` before treating
+valid JSON as complete catalog evidence; a normal complete response still
+passes (92 focused tests). Independently WP-L3-VW-002 pins refusal of an
+`Expect` or transfer-negotiation header before the disposable RPC can create a
+journal or dispatch (Warehouse focused 78 + 102 + 16 + 22 + 15 tests). Dedicated
+Colima was read-only observed stopped. `make verify-local-experiment`, `make
+verify-design-context` (89 documents) and `git diff --check` passed. No VM start, live catalog/backend/SQL,
+archived request replay, retained source/credential/session/report/backup
+mutation or GitHub write. These offline checks cannot authenticate remote
+producers, prove atomic reads, caller receipt, restart recovery, whole-catalog/
+column lineage or operator acceptance. Roll back only the range guard and two
+disposable fixtures, preserving historical evidence. Direct original Vault
+sync pending outside checkout.
 
 ## 2026-10-03: catalog media conflicts and Warehouse header names (offline)
 

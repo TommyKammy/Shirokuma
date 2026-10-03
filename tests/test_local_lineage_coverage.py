@@ -875,6 +875,25 @@ class Response(io.BytesIO):
 
 
 class ReadOnlyClientTests(unittest.TestCase):
+    def test_partial_catalog_range_is_not_complete_json_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for content_range in ('bytes 0-7/20', 'bytes */20', None):
+            with self.subTest(content_range=content_range):
+                response = Response(b'{"id":1}')
+                response.headers = Message()
+                response.headers['Content-Type'] = 'application/json'
+                response.headers['Content-Length'] = '8'
+                if content_range is not None:
+                    response.headers['Content-Range'] = content_range
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if content_range is None:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                    else:
+                        with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                            self.client.request('GET', path)
+                self.assertTrue(response.closed)
+
     def test_declared_non_json_catalog_media_type_is_not_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

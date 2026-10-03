@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.25"
+version: "1.26"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: partial catalog representation metadata (offline)
+
+The bounded reader now refuses `Content-Range` on a returned HTTP 200 before
+using a JSON-looking body as a complete catalog observation. A disposable
+partial-range and unsatisfied-range fixture fail closed; the same body with
+matching length and no range remains valid (92 focused tests). No live login,
+VM start, retained source/credential/report/backup change or replay. This
+response-shape check cannot authenticate the producer, guarantee atomicity or
+establish whole-catalog/column lineage or operator acceptance. Roll back only
+the header guard and fixture, preserving saved reports. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-03: conflicting catalog media declarations (offline)
 

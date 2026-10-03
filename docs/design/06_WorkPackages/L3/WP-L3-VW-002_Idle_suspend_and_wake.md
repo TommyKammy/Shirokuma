@@ -5,12 +5,22 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.80"
+version: "0.81"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: protocol negotiation before RPC journaling (offline)
+
+Disposable complete requests advertising `Expect: 100-continue` or a transfer
+coding confirm the existing parser rejects them before dispatch or journal
+creation. No owner behavior changed; focused Warehouse suites passed (78 + 102
++ 16 + 22 + 15 tests). No VM start, archived replay, live backend/SQL or
+retained session/backup mutation. This does not prove caller receipt, backend
+authenticity, restart recovery or operator acceptance. Roll back the fixture
+only, retaining historical sessions. Original Vault sync pending.
 
 ## 2026-10-03: invalid optional RPC header names (offline)
 

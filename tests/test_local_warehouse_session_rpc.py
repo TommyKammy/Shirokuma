@@ -860,7 +860,7 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(self.rpc._entries, {})
 
-    def test_invalid_extension_header_names_never_dispatch(self):
+    def test_invalid_extension_header_names_and_framing_never_dispatch(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)
         body = json.dumps(self.request()).encode()
         length = str(len(body)).encode()
@@ -879,6 +879,11 @@ class SessionRPCTest(unittest.TestCase):
         for name in (b'X_Extra', b'X-\x80Extra', b'X-Extra '):
             with self.subTest(name=name), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
                 self.rpc._read_request(BufferedConnection(self.wire(body, base + name + b': yes\r\n')))
+        # Reject protocol negotiation even if its advertised body is already
+        # complete and parses as a valid transition. Neither path may journal.
+        for extra in (b'Expect: 100-continue\r\n', b'Transfer-Encoding: chunked\r\n'):
+            with self.subTest(extra=extra), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
+                self.rpc._read_request(BufferedConnection(self.wire(body, base + extra)))
         self.assertEqual(self.calls, [])
         self.assertEqual(self.rpc._entries, {})
 
