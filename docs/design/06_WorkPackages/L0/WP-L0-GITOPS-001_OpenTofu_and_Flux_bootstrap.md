@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.33"
+version: "0.34"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: invisible inventory versions (offline)
+
+As a separate local-only increment, fixed-profile inventory versions now reject Unicode control/format and whitespace characters, including an escaped zero-width character, rather than checking only ASCII control/space. Opaque bounded visible versions and omitted fixture fields remain compatible. Focused negative tests failed before repair; `go test ./internal/cli -count=1` (770 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed after repair. Dedicated Colima remained stopped; no live API/SQL, reconciliation, unknown-request replay, retained session or backup mutation. A visible response field is not authenticated inventory or Git provenance, atomicity, historical cleanup, strict admission or operator/production acceptance. Revert only the reader/tests and retain VM and evidence. Original Vault direct handoff sync pending outside checkout.
 
 ## 2026-10-03: null continuation and null list identity (offline)
 

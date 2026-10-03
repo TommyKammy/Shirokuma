@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.64"
+version: "4.65"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: invisible inventory versions (offline)
+
+WP-L0-GITOPS-001: independent fixed-profile inventory version check rejects Unicode control/format and whitespace code points (including escaped zero-width characters), aligning with the scoped Warehouse version boundary. Fake negatives failed before repair; `go test ./internal/cli -count=1` (770 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and diff check passed afterward. Dedicated Colima remains stopped with no VM start or live API/SQL, reconciliation, saved-request replay or retained storage/backup mutation. Offline checks cannot authenticate API/Git, prove atomicity or historical cleanup, satisfy strict admission, or establish operator/production acceptance. Roll back only local reader/tests and preserve VM/evidence. Direct original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: null continuation and null list identity (offline)
 

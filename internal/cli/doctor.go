@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 )
@@ -204,7 +205,7 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
 		(list.Metadata.ResourceVersion != nil && (len(*list.Metadata.ResourceVersion) == 0 ||
 			len(*list.Metadata.ResourceVersion) > 1024 || strings.IndexFunc(*list.Metadata.ResourceVersion, func(r rune) bool {
-			return r < 33 || r == 127
+			return unicode.IsSpace(r) || unicode.Is(unicode.C, r)
 		}) >= 0)) ||
 		(list.Kind != "" && list.Kind != "List") ||
 		(list.APIVersion != "" && list.APIVersion != "v1")

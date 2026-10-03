@@ -886,7 +886,7 @@ func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
 			}
 		}
 	}
-	for _, field := range []string{`"metadata":null,`, `"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"  "},`, `"metadata":{"resourceVersion":"1 2"},`, `"metadata":{"resourceVersion":"1\n2"},`, `"metadata":{"resourceVersion":"` + strings.Repeat("x", 1025) + `"},`, `"apiVersion":"v2",`, `"apiVersion":null,`, `"kind":null,`} {
+	for _, field := range []string{`"metadata":null,`, `"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"  "},`, `"metadata":{"resourceVersion":"1 2"},`, `"metadata":{"resourceVersion":"rv\u001b[0m"},`, `"metadata":{"resourceVersion":"rv\u0001"},`, `"metadata":{"resourceVersion":"rv\u200b"},`, `"metadata":{"resourceVersion":"` + strings.Repeat("x", 1025) + `"},`, `"apiVersion":"v2",`, `"apiVersion":null,`, `"kind":null,`} {
 		for _, first := range []bool{true, false} {
 			responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
 			index := 1
@@ -967,7 +967,7 @@ func TestLocalWorkloadRejectsEmptyReportedListResourceVersion(t *testing.T) {
 			t.Fatalf("explicit null %s: %#v", field, checks)
 		}
 	}
-	for _, field := range []string{`"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"rv\tother"},`, `"metadata":{"resourceVersion":"` + strings.Repeat("x", 1025) + `"},`, `"metadata":null,`, `"kind":null,`, `"apiVersion":null,`} {
+	for _, field := range []string{`"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"rv\tother"},`, `"metadata":{"resourceVersion":"rv\u200b"},`, `"metadata":{"resourceVersion":"` + strings.Repeat("x", 1025) + `"},`, `"metadata":null,`, `"kind":null,`, `"apiVersion":null,`} {
 		for _, index := range []int{0, 1} {
 			responses := localWorkloadResponses()
 			responses[index].output = strings.Replace(responses[index].output, `{"items":`, `{`+field+`"items":`, 1)
