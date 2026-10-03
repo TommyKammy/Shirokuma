@@ -13,6 +13,7 @@ from tools.local_experiment.warehouse_lifecycle import session_rpc as R, status 
 CHILD = """
 import os
 from pathlib import Path
+import socket
 import sys
 from tools.local_experiment.warehouse_lifecycle import session_rpc as R
 
@@ -33,17 +34,24 @@ def exit_after_write():
     global writes
     persist()
     writes += 1
-    if writes == (1 if boundary == 'intent' else 2):
+    if writes == {'intent': 1, 'handler': 2, 'reply': 3}[boundary]:
         os._exit(73)
 owner._persist = exit_after_write
-owner._dispatch(request)
+if boundary == 'reply':
+    owner._read_request = lambda connection: request
+    owner._send = lambda *args: os._exit(75)  # No response may precede the exit.
+    sender, receiver = socket.socketpair()
+    with sender:
+        owner._connection(receiver)
+else:
+    owner._dispatch(request)
 os._exit(74)
 """
 
 
 class DisposableOwnerExitTest(unittest.TestCase):
     def test_new_process_cannot_adopt_exited_owners_unknown_request(self):
-        for boundary in ('intent', 'handler'):
+        for boundary in ('intent', 'handler', 'reply'):
             with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
                 root.chmod(0o700)
@@ -63,7 +71,7 @@ class DisposableOwnerExitTest(unittest.TestCase):
                                  'pending' if boundary == 'intent' else 'verified')
                 self.assertEqual(result['recovery_classification'], 'unknown-no-replay')
                 self.assertEqual(result['runtime_state'], 'unknown')
-                self.assertEqual(result['reply_count'], 0)
+                self.assertEqual(result['reply_count'], 1 if boundary == 'reply' else 0)
                 calls = []
                 with mock.patch.object(R, 'SOCKET_ROOT', root / 'sockets'):
                     with self.assertRaisesRegex(R.RPCError, 'JOURNAL_COLLISION'):

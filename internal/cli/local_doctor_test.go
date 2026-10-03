@@ -322,6 +322,30 @@ func TestLocalInventoryRejectsNegativeReplicaCountersOnUnrelatedMembers(t *testi
 	}
 }
 
+func TestLocalInventoryRejectsAvailableGreaterThanReady(t *testing.T) {
+	for _, status := range []string{
+		`{"availableReplicas":2,"readyReplicas":1}`,
+		`{"replicas":3,"availableReplicas":2,"readyReplicas":1}`,
+	} {
+		raw := []byte(`{"items":[{"kind":"Deployment","status":` + status + `}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("available replicas exceeded ready replicas: %s (%v)", raw, err)
+		}
+	}
+	for _, status := range []string{
+		`{"replicas":3,"availableReplicas":1,"readyReplicas":2}`,
+		`{"availableReplicas":2}`,
+		`{"readyReplicas":1}`,
+	} {
+		raw := []byte(`{"items":[{"status":` + status + `}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("compatible replica counters rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullConditionFields(t *testing.T) {
 	for _, field := range []string{`"type":null`, `"status":null`, `"observedGeneration":null`} {
 		raw := []byte(`{"items":[{"status":{"conditions":[{` + field + `}]}}]}`)
@@ -540,6 +564,7 @@ func TestLocalInventoryRejectsImpossibleUnrelatedReplicaCounters(t *testing.T) {
 		`{"replicas":1,"readyReplicas":2}`,
 		`{"replicas":1,"updatedReplicas":2}`,
 		`{"replicas":1,"availableReplicas":2}`,
+		`{"replicas":3,"readyReplicas":1,"availableReplicas":2}`,
 	} {
 		foreign := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"spec":{"replicas":1},"status":` + status + `}`
 		controller := strings.Replace(localControllerJSON(), `"items":[`, `"items":[`+foreign+`,`, 1)
@@ -1697,7 +1722,7 @@ func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 		{"missing-generation", `"observedGeneration":2,`, ``, "current generation"},
 		{"scaled-down", `"spec":{"replicas":1}`, `"spec":{"replicas":0}`, "positive desired replica"},
 		{"missing-desired", `"spec":{"replicas":1}`, `"spec":{}`, "positive desired replica"},
-		{"missing-ready", `"readyReplicas":1`, `"readyReplicas":0`, "rollout incomplete"},
+		{"missing-ready", `"readyReplicas":1`, `"readyReplicas":0`, "response was incomplete"},
 		{"old-replicas", `"updatedReplicas":1`, `"updatedReplicas":0`, "rollout incomplete"},
 		{"unavailable", `"availableReplicas":1`, `"availableReplicas":0`, "rollout incomplete"},
 		{"extra-replica", `"status":{"observedGeneration":2,"replicas":1`, `"status":{"observedGeneration":2,"replicas":2`, "rollout incomplete"},

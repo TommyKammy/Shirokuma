@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.47"
+version: "0.48"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: disposable process exit after reply journal (offline)
+
+A third test-owned child now exits with `os._exit` immediately after fsync of the reply record but before the socket send. A separate process reads the verified saved response and one journaled reply, nevertheless classifies the request `unknown-no-replay` with `runtime_state=unknown`; a fresh owner refuses collision without dispatch or journal mutation. This adds a real process-exit boundary to the previous two, not backend recovery, original-caller delivery evidence or a restart of an archived session. Only disposable test directories are cleaned. Focused and milestone regressions are recorded in Local Experiment Milestones. Dedicated Colima remained stopped; no API/SQL, unknown UUID replay or retained session/backup mutation. Roll back test only, preserving saved evidence and VM. Independent backend identity, historical cleanup and operator/production acceptance remain open. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: real disposable process exit at journal boundaries (offline)
 

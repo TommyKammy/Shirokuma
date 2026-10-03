@@ -336,6 +336,20 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				}
 			}
 		}
+		// Available pods are a subset of ready pods in one reported status.
+		// Only compare explicitly reported fields; omitted fixture counters are
+		// not equivalent to an observed zero.
+		if rawAvailable, ok := status["availableReplicas"]; ok {
+			if rawReady, present := status["readyReplicas"]; present {
+				var available, ready int64
+				if err := json.Unmarshal(rawAvailable, &available); err != nil {
+					return true
+				}
+				if err := json.Unmarshal(rawReady, &ready); err != nil || available > ready {
+					return true
+				}
+			}
+		}
 		var observed struct {
 			Generation *int64 `json:"observedGeneration"`
 		}

@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.49"
+version: "0.50"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: available replicas cannot exceed ready replicas (offline)
+
+The fixed-profile complete-inventory reader rejects an unrelated member explicitly reporting more available than ready replicas, even when both remain below total. Missing counters remain optional and rolling total may exceed desired. An isolated negative failed before repair; a prior missing-ready fixture now fails earlier as incomplete inventory instead of at the target rollout boundary. Focused Go tests and milestone regression are recorded in Local Experiment Milestones. Dedicated Colima read-only status was stopped; no VM start, live API/SQL, reconciliation, unknown UUID replay or retained session/backup mutation. This is reported-field consistency, not authenticated or atomic API/Git evidence, historical cleanup, strict publication admission or operator/production acceptance. Roll back reader/test only; preserve VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: impossible unrelated replica totals (offline)
 
