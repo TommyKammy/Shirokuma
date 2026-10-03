@@ -255,11 +255,21 @@ def listing(root):
     root = Path(root)
     fd = _open_source_dir(root, private=False)  # Collection root is 0755; runs are private.
     try:
+        def identity(name):
+            info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            return info.st_dev, info.st_ino, info.st_mode, info.st_uid
+
         initial = os.fstat(fd)
         names = _bounded_names(fd, MAX_ENTRIES, 'SOURCE_INVENTORY_LIMIT')
+        # Preserve identity even when an entry is replaced under the same name.
+        # Do not follow a symlink here: invalid entries remain visible to the
+        # later per-run validator rather than vanishing from the inventory.
+        identities = {name: identity(name) for name in names}
         # A newly created/removed run during enumeration cannot be included in
         # a supposedly complete denominator. This does not make the read atomic.
         require(names == _bounded_names(fd, MAX_ENTRIES, 'SOURCE_INVENTORY_LIMIT'),
+                'SOURCE_INVENTORY_CHANGED')
+        require(all(identities[name] == identity(name) for name in names),
                 'SOURCE_INVENTORY_CHANGED')
         _current_source_path(root, fd)
         final = os.fstat(fd)

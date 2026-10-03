@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.04"
+version: "5.05"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: lineage same-name run replacement (offline)
+
+WP-L5-LINEAGE-001: inventory now compares no-follow run entry identities across two name listings; a disposable same-name directory replacement failed before repair. `make test-local-lineage-coverage` passed (48 tests), along with `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check`. The dedicated Colima profile was last observed stopped; no VM start, live API/SQL, retained source/report/backup mutation or unknown-request replay. This cannot detect restored entries or establish atomicity, source authenticity, full catalog coverage or operator/production acceptance. Roll back reader/tests only and preserve evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: lineage collection membership and mode (offline)
 

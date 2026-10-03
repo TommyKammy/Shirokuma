@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.91"
+version: "0.92"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: same-name collection entry replacement (offline)
+
+An independently enumerated run name now retains a no-follow device/inode/mode/owner identity through the second listing. Replacing a test-owned directory with another directory at the same name previously passed both name lists; the isolated negative failed before repair, and the focused suite passes (48 tests). Unexpected/symlink entries remain visible to per-run validation rather than being silently discarded. A restored entry between reads is still undetectable; no atomic snapshot or producer authentication is claimed. No retained source, report, catalog, API, SQL, backup or VM was touched. Roll back reader/test only and preserve saved evidence; direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: collection listing stability (offline)
 

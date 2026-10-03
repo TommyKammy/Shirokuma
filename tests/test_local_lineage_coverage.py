@@ -299,6 +299,24 @@ class CoverageTests(unittest.TestCase):
         finally:
             self.root.chmod(0o700)
 
+    def test_collection_rejects_same_name_run_replacement(self):
+        path = self.add_run()
+        original = C._bounded_names
+        displaced = self.root.with_name('displaced-data-plans-run')
+        calls = 0
+        def replace_after_listing(fd, limit, code):
+            nonlocal calls
+            names = original(fd, limit, code)
+            calls += 1
+            if calls == 2:
+                path.rename(displaced)
+                path.mkdir(mode=0o700)
+            return names
+        with patch.object(C, '_bounded_names', side_effect=replace_after_listing):
+            with self.assertRaises(C.CoverageError):
+                C.listing(self.root)
+        self.assertEqual(calls, 2)
+
     def test_source_reader_cannot_validate_a_displaced_run(self):
         path = self.add_run(curated=True)
         original_hash = C.source_snapshot(path)
