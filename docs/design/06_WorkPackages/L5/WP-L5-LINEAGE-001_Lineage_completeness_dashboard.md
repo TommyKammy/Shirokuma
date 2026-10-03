@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-03: status access stays within catalog deadline (offline)
+
+The bounded reader checks time again after obtaining the response status. A disposable response whose status access ends after expiry is refused as `API_DEADLINE`, rather than classifying its late 404 as an on-time invalid response. Timely status behavior is unchanged. No real catalog login/GET, VM start or retained credential/source/report/backup change; this test-owned delayed status is not remote producer authentication, atomicity, whole-catalog/column lineage or operator acceptance. Roll back this additional guard and fixture only, retaining saved reports. Focused and broader evidence is in Milestones; direct original Vault synchronization remains pending outside checkout.
+
 ## 2026-10-03: late invalid and oversized catalog responses (offline)
 
 The bounded client now checks its deadline before classifying an oversized chunk and when decoding fails. Disposable late oversized bytes and malformed JSON discovered after expiry no longer receive timely size/JSON classifications; on-time failures keep their existing codes. The isolated malformed negative failed before repair. No live catalog login/GET, VM start or retained credential/source/report/backup mutation. This does not authenticate the catalog, make observations atomic or establish whole-catalog/column lineage or operator acceptance. Roll back the two deadline guards/tests only, preserving saved reports. Direct original Vault synchronization remains pending outside checkout; verification is in Milestones.

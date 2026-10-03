@@ -384,7 +384,11 @@ class ReadOnlyClient:
                 # An opener may return an HTTP response after the deadline
                 # without raising HTTPError. Its status is not timely evidence.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
-                require(response.status == 200, 'API_RESPONSE_INVALID')
+                status = response.status
+                # Status access can itself finish after the observation bound;
+                # do not turn a late non-200 into timely catalog evidence.
+                require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                require(status == 200, 'API_RESPONSE_INVALID')
                 chunks, count = [], 0
                 while True:
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')

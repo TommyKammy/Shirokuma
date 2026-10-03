@@ -1095,6 +1095,22 @@ class ReadOnlyClientTests(unittest.TestCase):
                 client.request('GET', next(iter(C.ANCHORS)))
         self.assertTrue(timely.closed)
 
+    def test_status_observed_after_deadline_is_not_response_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+
+        class LateStatus(Response):
+            @property
+            def status(self):
+                client.deadline = time.monotonic() - 1
+                return 404
+
+        response = LateStatus(b'private')
+        with patch.object(client.opener, 'open', return_value=response):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                client.request('GET', next(iter(C.ANCHORS)))
+        self.assertTrue(response.closed)
+
     def test_late_transport_failure_is_deadline_not_availability_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         client = self.client

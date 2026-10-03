@@ -12,6 +12,10 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: stop during a false dispatch callback (offline)
+
+A disposable stop callback sets the owner's stop event but returns false. The existing post-callback guard durably rejects the new UUID without running its handler or recording a false callback-failure code. No owner implementation change, archived replay, VM start, live backend/SQL or retained session/backup mutation. This cannot prove original caller receipt, authenticated backend state or restart recovery. Roll back only this disposable fixture; preserve archived sessions. Focused and broader results are in Milestones; original Vault synchronization remains pending outside checkout.
+
 ## 2026-10-03: owner expiry during dispatch stop check (offline)
 
 An independent disposable fixture moves the owner past TTL inside its stop callback, which returns false. The existing post-callback TTL guard durably rejects the fresh UUID without handler execution or a false callback-failure code. No owner behavior change, VM start, live backend/SQL, archived replay or retained session/backup mutation. This does not prove caller receipt, authenticated backend state or restart recovery. Roll back only this fixture, retaining historical sessions; original Vault synchronization remains pending outside checkout. Focused and broader checks are in Milestones.
