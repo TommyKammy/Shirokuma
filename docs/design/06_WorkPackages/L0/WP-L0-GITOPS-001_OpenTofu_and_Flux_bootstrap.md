@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-03: non-lossy item names and namespaces (offline)
+
+Fixed-profile inventories now reject U+FFFD in explicitly reported item names and namespaces, including an unpaired escaped JSON surrogate replaced by Go's decoder. The focused negative failed before repair; `go test ./internal/cli -count=1` (810 passed) and `go vet ./...` passed after. Omitted projected identities and generic doctor remain unchanged. The dedicated Colima profile was observed stopped; no VM start, live API/Git/SQL, reconciliation or retained data/backup change. Offline response consistency is not authenticated or atomic inventory, remote provenance, historical cleanup, strict admission or operator acceptance. Roll back local reader/test only; retain VM and evidence. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: bounded UID and non-lossy condition type (offline)
 
 Two independent fixed-profile inventory checks refuse reported UIDs longer than 1024 bytes and condition types containing U+FFFD (including an unpaired escaped JSON surrogate silently replaced by Go). Omitted UIDs, a 1024-byte visible opaque UID and normal conditions remain compatible; generic doctor is unchanged. Both focused negatives failed before repair; `go test ./internal/cli -count=1` (809 passed) and `go vet ./...` passed afterward. The dedicated Colima profile was observed stopped. No VM start, API/Git/SQL read, reconciliation or retained data/backup change. Offline field validation does not authenticate API/Git, establish atomic inventory or historical cleanup, clear strict admission or prove operator/production acceptance. Roll back only local reader/tests; preserve stopped VM and saved evidence. Original Vault sync pending outside checkout.

@@ -205,6 +205,19 @@ func TestLocalInventoryRejectsNullNestedScalarFields(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsLossyItemIdentity(t *testing.T) {
+	for _, field := range []string{"name", "namespace"} {
+		raw := []byte(`{"items":[{"metadata":{"` + field + `":"app\ud800"}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if !localInventoryIncomplete(list, raw) {
+			t.Fatalf("lossy %s accepted", field)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullReferenceScalars(t *testing.T) {
 	for _, tc := range []struct{ parent, field string }{
 		{`spec":{"ref`, `branch`}, {`spec":{"ref`, `tag`}, {`spec":{"ref`, `semver`},

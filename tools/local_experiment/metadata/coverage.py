@@ -219,6 +219,12 @@ def source_snapshot(path):
                     current = os.stat(name, dir_fd=fd, follow_symlinks=False)
                     require((opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino),
                             'SOURCE_CHANGED')
+                    final = os.fstat(child)
+                    require(stat.S_ISDIR(current.st_mode) and current.st_uid == opened.st_uid and
+                            stat.S_IMODE(current.st_mode) == 0o700 and
+                            (final.st_dev, final.st_ino) == (opened.st_dev, opened.st_ino) and
+                            final.st_uid == opened.st_uid and stat.S_IMODE(final.st_mode) == 0o700,
+                            'SOURCE_CHANGED')
                 finally:
                     os.close(child)
             else:
@@ -232,6 +238,9 @@ def source_snapshot(path):
     try:
         visit(root_fd, '.', 0, os.fstat(root_fd).st_dev)
         _current_source_path(path, root_fd)
+        final = os.fstat(root_fd)
+        require(final.st_uid == os.getuid() and stat.S_IMODE(final.st_mode) == 0o700,
+                'SOURCE_CHANGED')
         return digest(files)
     finally:
         os.close(root_fd)

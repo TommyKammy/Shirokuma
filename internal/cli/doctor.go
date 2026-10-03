@@ -289,6 +289,16 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "deletionTimestamp"}) {
 			return true
 		}
+		// An escaped unpaired surrogate decodes to U+FFFD in Go. Neither a
+		// Kubernetes resource name nor namespace can have that lossy identity.
+		for _, key := range []string{"name", "namespace"} {
+			if value, ok := metadata[key]; ok {
+				var identity string
+				if err := json.Unmarshal(value, &identity); err != nil || strings.ContainsRune(identity, utf8.RuneError) {
+					return true
+				}
+			}
+		}
 		var identity struct {
 			Generation int64 `json:"generation"`
 		}

@@ -318,6 +318,46 @@ class CoverageTests(unittest.TestCase):
         finally:
             summary.chmod(0o600)
 
+    def test_snapshot_rejects_nested_directory_privacy_change_after_visit(self):
+        path = self.add_run()
+        child = path / 'nested'
+        child.mkdir(mode=0o700)
+        save(child / 'extra.json', {'value': 1})
+        actual_stat = os.stat
+        seen = 0
+        def change_mode_before_final_stat(name, *args, **kwargs):
+            nonlocal seen
+            if name == 'nested' and kwargs.get('dir_fd') is not None:
+                seen += 1
+                if seen == 2:
+                    child.chmod(0o755)
+            return actual_stat(name, *args, **kwargs)
+        try:
+            with patch.object(C.os, 'stat', side_effect=change_mode_before_final_stat):
+                with self.assertRaises((C.CoverageError, OSError)):
+                    C.source_snapshot(path)
+            self.assertEqual(seen, 2)
+        finally:
+            child.chmod(0o700)
+
+    def test_snapshot_rejects_root_privacy_change_after_visit(self):
+        path = self.add_run()
+        actual_current = C._current_source_path
+        seen = 0
+        def change_after_visit(target, fd):
+            nonlocal seen
+            seen += 1
+            if seen == 2:
+                path.chmod(0o755)
+            return actual_current(target, fd)
+        try:
+            with patch.object(C, '_current_source_path', side_effect=change_after_visit):
+                with self.assertRaises(C.CoverageError):
+                    C.source_snapshot(path)
+            self.assertEqual(seen, 2)
+        finally:
+            path.chmod(0o700)
+
     def test_new_run_during_observation_marks_inventory_incomplete(self):
         self.add_run()
         real = self.client.request
