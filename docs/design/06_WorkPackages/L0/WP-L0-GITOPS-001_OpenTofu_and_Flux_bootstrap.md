@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.55"
+version: "0.56"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: invisible reported resource UID (offline)
+
+The fixed-profile inventory now refuses a reported UID containing whitespace or Unicode control/format characters, including an escaped zero-width separator; omitted UIDs and visible opaque values remain compatible. The focused negative failed before the repair and `go test ./internal/cli -count=1` passed (805 tests). Read-only dedicated Colima status reported stopped. No VM start, live API/SQL, reconciliation, replay or retained data/backup mutation. Fake response validation is not authenticated/atomic API or Git evidence, historical cleanup, strict admission or operator acceptance. Roll back only reader/test; retain VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: Flux controller/resource UID collision (offline)
 

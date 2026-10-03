@@ -269,7 +269,8 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		// Older projected fixtures omit UIDs, so only bind reported values.
 		if rawUID, ok := metadata["uid"]; ok {
 			var uid string
-			if err := json.Unmarshal(rawUID, &uid); err != nil || uid == "" {
+			if err := json.Unmarshal(rawUID, &uid); err != nil || uid == "" ||
+				strings.IndexFunc(uid, func(r rune) bool { return unicode.IsSpace(r) || unicode.Is(unicode.C, r) }) >= 0 {
 				return true
 			}
 			if _, exists := seenUIDs[uid]; exists {

@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.94"
+version: "4.95"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: invisible reported UID (offline)
+
+WP-L0-GITOPS-001: reject whitespace and Unicode control/format characters in reported fixed-profile inventory UIDs, preserving omitted and visible opaque UIDs. Focused negative failed before repair; `go test ./internal/cli -count=1` passed (805 tests). Read-only dedicated Colima status: stopped. No live API/SQL, reconciliation, replay, VM start or retained data/backup mutation. Offline fields do not authenticate Kubernetes/Git, provide atomic observation, historical cleanup, strict admission or operator/production acceptance. Roll back reader/test only, retaining stopped VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: Flux controller and resource UID collision (offline)
 

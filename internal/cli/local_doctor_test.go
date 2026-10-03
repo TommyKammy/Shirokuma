@@ -357,6 +357,9 @@ func TestLocalInventoryRejectsRepeatedOrInvalidUID(t *testing.T) {
 		{member + `,{"kind":"StatefulSet","metadata":{"namespace":"shirokuma-dev","name":"other","uid":"uid-two"}}`, false},
 		{`{"metadata":{"uid":""}}`, true},
 		{`{"metadata":{"uid":null}}`, true},
+		{`{"metadata":{"uid":" "}}`, true},
+		{`{"metadata":{"uid":"uid\u200b-one"}}`, true},
+		{`{"metadata":{"uid":"uid-one"}}`, false},
 		{`{"status":{}},{"status":{}}`, false}, // projected fixture identities remain optional
 	} {
 		raw := []byte(`{"items":[` + tc.members + `]}`)
