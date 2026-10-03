@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.38"
+version: "1.39"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: value failures in catalog header access (offline)
+
+Both a returned response and a thrown exact-path 404 can expose a callable
+`get_all` that raises `ValueError`. This formerly escaped raw; the stream now
+closes and the bounded reader reports timely `API_RESPONSE_INVALID` or late
+`API_DEADLINE`. Four added cases failed before repair; 109 focused lineage
+tests and local/design verification passed after repair. No VM start, catalog login, retained report/source/backup
+change or replay. This does not authenticate the producer, establish atomic or
+whole-catalog/column coverage, or grant operator acceptance. Roll back only
+these header guards/fixtures, preserving historical evidence. Original Vault
+sync remains pending outside this checkout.
 
 ## 2026-10-04: returned catalog stream read failure (offline)
 

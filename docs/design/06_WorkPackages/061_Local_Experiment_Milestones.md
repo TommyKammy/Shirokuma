@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.62"
+version: "5.63"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: catalog header value failures (offline)
+
+After the separate stream/Unix length increment, WP-L5-LINEAGE-001 also bounds
+`ValueError` from `get_all` on a returned catalog response or thrown exact-path
+404. All four new timely/late negative cases failed before repair; 109 focused
+lineage tests, `make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` passed afterward. No VM start, live catalog/login, archived request
+replay, retained source/report/backup mutation or GitHub write. This offline
+classification cannot authenticate the catalog, establish atomic or
+whole-catalog/column coverage, or prove operator acceptance. Roll back only
+the header guards/tests, preserving historical evidence. Original Vault sync
+pending outside this checkout. Private negative and focused logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-026/`.
 
 ## 2026-10-04: catalog stream failures and canonical Unix RPC length (offline)
 

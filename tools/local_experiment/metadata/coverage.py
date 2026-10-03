@@ -418,7 +418,7 @@ class ReadOnlyClient:
                     require(callable(getattr(headers, 'get_all', None)), 'API_RESPONSE_INVALID')
                     try:
                         return headers.get_all(name, [])
-                    except TypeError:
+                    except (TypeError, ValueError):
                         require(time.monotonic() < self.deadline, 'API_DEADLINE')
                         raise CoverageError('API_RESPONSE_INVALID') from None
 
@@ -530,7 +530,7 @@ class ReadOnlyClient:
             except (OSError, RuntimeError):
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 raise CoverageError('API_UNAVAILABLE') from None
-            except TypeError:
+            except (TypeError, ValueError):
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 raise CoverageError('API_RESPONSE_INVALID') from None
             finally:
