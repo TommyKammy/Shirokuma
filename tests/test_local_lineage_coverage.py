@@ -917,6 +917,18 @@ class ReadOnlyClientTests(unittest.TestCase):
                         self.assertEqual(self.client.request('GET', path), {'id': 1})
                 self.assertTrue(response.closed)
 
+    def test_conflicting_catalog_transfer_framing_is_not_evidence(self):
+        body = b'{"id":1}'
+        self.client.login_attempted, self.client.token = True, 'token'
+        response = Response(body)
+        response.headers = Message()
+        response.headers['Content-Length'] = str(len(body))
+        response.headers['Transfer-Encoding'] = 'chunked'
+        with patch.object(self.client.opener, 'open', return_value=response):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                self.client.request('GET', next(iter(C.ANCHORS)))
+        self.assertTrue(response.closed)
+
     def test_deadline_cannot_be_disabled_by_invalid_timeout(self):
         for timeout in (float('inf'), float('nan'), -1, 0, 301, True):
             with self.subTest(timeout=timeout), self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):

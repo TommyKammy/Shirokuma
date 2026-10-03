@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.40"
+version: "5.41"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: buffered Warehouse suffix and conflicting catalog framing (offline)
+
+WP-L3-VW-002 refuses a test-owned request with bytes already buffered after its
+declared body before journaling or dispatch; separately WP-L5-LINEAGE-001 refuses
+a decoded catalog response advertising both `Content-Length` and
+`Transfer-Encoding`. Focused Warehouse (78 + 99 + 16 + 22 + 15 tests), lineage
+(88 tests), `make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` passed. Private broader logs are in
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-001/`.
+Read-only Colima listing showed the dedicated VM stopped. No live backend,
+catalog, SQL, VM start, archived request replay, retained session/source/
+credential/report/backup mutation or GitHub write. The socket check concerns
+only bytes already received, and HTTP framing is not catalog authentication;
+neither proves atomic reads, caller receipt, restart recovery, whole-catalog/
+column lineage or operator acceptance. Roll back only these guards/tests,
+preserving saved evidence and stopped VM. Direct original Vault sync pending
+outside this noninteractive checkout.
 
 ## 2026-10-03: catalog header and Warehouse receive deadlines (offline)
 

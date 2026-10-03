@@ -5,12 +5,25 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.73"
+version: "0.74"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: buffered trailing request bytes refused (offline)
+
+The single-request Unix RPC reader now refuses bytes already received beyond
+the declared HTTP body rather than dispatching the valid prefix. A disposable
+connection delivering a complete request plus a NUL or another request line in
+one receive is rejected before any journal entry or handler call. The bounded
+reader does not wait for future bytes after an exact body; later arrivals remain
+outside this assertion. Focused Warehouse and combined checks passed (Milestones).
+No archived UUID replay, backend/SQL, VM start or retained session/backup change.
+This is not caller-receipt, authenticated backend or restart-recovery evidence.
+Roll back only this parser guard/test, preserving saved sessions. Direct original
+Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: request receive must finish before parsing deadline (offline)
 

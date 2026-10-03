@@ -849,6 +849,27 @@ class SessionRPCTest(unittest.TestCase):
                 self.assertEqual(self.exchange(request, raw=True)[0], 400)
         self.assertEqual(self.calls, [])
 
+    def test_buffered_bytes_after_declared_body_are_refused(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        body = json.dumps(self.request()).encode()
+
+        class BufferedConnection:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def settimeout(self, timeout):
+                pass
+
+            def recv(self, limit):
+                payload, self.payload = self.payload, b''
+                return payload
+
+        for extra in (b'\x00', b'POST /v1/transition HTTP/1.1\r\n'):
+            with self.subTest(extra=extra), self.assertRaisesRegex(R.RPCError, 'INVALID_HTTP'):
+                self.rpc._read_request(BufferedConnection(self.wire(body) + extra))
+        self.assertEqual(self.rpc._entries, {})
+        self.assertEqual(self.calls, [])
+
     def test_slow_partial_request_has_absolute_deadline(self):
         self.start()
         with mock.patch.object(R, 'READ_TIMEOUT_SECONDS', 0.15):

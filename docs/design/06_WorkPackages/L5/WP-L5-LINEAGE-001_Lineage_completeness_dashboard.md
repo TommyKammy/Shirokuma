@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.19"
+version: "1.20"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: conflicting catalog HTTP framing refused (offline)
+
+The bounded catalog reader refuses a response declaring both `Content-Length`
+and `Transfer-Encoding`, even if the exposed body is complete JSON of the
+declared length. A disposable conflicting-header response fails closed and
+closes its stream. Focused lineage and combined verification passed (Milestones).
+No live catalog login/GET, VM start, retained credential/source/report/backup
+mutation or request replay. This does not authenticate HTTP peers, guarantee
+atomic observations, whole-catalog/column lineage or operator acceptance. Roll
+back only the framing guard/test, preserving historical reports; direct original
+Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: response header access within catalog deadline (offline)
 

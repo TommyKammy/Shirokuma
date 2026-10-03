@@ -394,10 +394,14 @@ class ReadOnlyClient:
                 # when the peer promised additional bytes.
                 headers = getattr(response, 'headers', None)
                 lengths = headers.get_all('Content-Length', []) if headers is not None else []
+                transfers = headers.get_all('Transfer-Encoding', []) if headers is not None else []
                 # Header access is part of the bounded observation too: a
                 # late malformed header is not an on-time framing result.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
                 require(type(lengths) is list and len(lengths) <= 1, 'API_RESPONSE_INVALID')
+                # Competing length and transfer framing is ambiguous even if
+                # urllib exposes a decoded, syntactically valid JSON prefix.
+                require(type(transfers) is list and not (lengths and transfers), 'API_RESPONSE_INVALID')
                 declared = None
                 if lengths:
                     length = lengths[0]

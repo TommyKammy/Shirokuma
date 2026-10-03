@@ -388,6 +388,10 @@ class SessionRPC:
         require(0 < length <= MAX_BODY, 'INVALID_HTTP')
         while len(buffered) < length:
             receive(length - len(buffered))
+        # One connection carries exactly one request. Bytes already received
+        # beyond its declared body cannot be silently interpreted as another
+        # request (or hidden behind a valid first transition).
+        require(len(buffered) == length, 'INVALID_HTTP')
         raw = bytes(buffered[:length])
         return parse_request(raw, self.session_id, allow_query=self.allow_query)
 
