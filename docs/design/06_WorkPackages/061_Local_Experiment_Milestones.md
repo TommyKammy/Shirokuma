@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.51"
+version: "4.52"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: DNS identity bounds in offline local doctor
+
+WP-L0-GITOPS-001: two separate diagnostic increments reject malformed Flux resource name/namespace components and malformed unrelated Lakehouse workload names in fixed-profile list responses. Fake positive/negative cases, `go test ./internal/cli` (760 tests), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and diff check passed. Dedicated Colima was read-only observed stopped; no VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. This does not authenticate API or Git identity, prove live readiness or satisfy strict publication and operator/production acceptance. Roll back only the local doctor readers/tests while preserving saved evidence and VM. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: missing named metadata and exact readiness text (offline)
 

@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.23"
+version: "0.24"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: bounded DNS identities in local diagnostic inventories (offline)
+
+Two independent fixed-profile read-only checks: Flux resource names now require nonempty DNS subdomain labels of at most 63 bytes each (total at most 253), while namespaces require a single DNS label of at most 63 bytes. Previously `a..b`, a 64-byte component, or a dotted namespace could pass the loose regex. Separately, namespace-scoped Lakehouse inventories reject malformed *unrelated* workload names rather than accepting them alongside healthy fixed workloads. Fake malformed/healthy fixtures and `go test ./internal/cli` (760 tests), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima read-only status reported stopped; no live API/SQL, reconciliation, retained request replay, volume or backup change. These are response-shape checks, not API/Git authentication, atomic inventory, strict publication gate or operator/production acceptance. Revert only the local readers/tests to recover; leave saved evidence and stopped VM intact. Direct original Vault handoff synchronization remains pending outside checkout.
 
 ## 2026-10-03: fixed-profile readiness response framing (offline)
 

@@ -109,7 +109,7 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 		seen := make(map[string]bool, len(list.Items))
 		for _, resource := range list.Items {
 			identity := resource.Kind + "/" + resource.Metadata.Name
-			if (resource.Kind != "Deployment" && resource.Kind != "StatefulSet") || resource.Metadata.Namespace != namespace || resource.Metadata.Name == "" || seen[identity] {
+			if (resource.Kind != "Deployment" && resource.Kind != "StatefulSet") || resource.Metadata.Namespace != namespace || !localFluxValidName(resource.Metadata.Name, 253, true) || seen[identity] {
 				invalid = true
 				break
 			}

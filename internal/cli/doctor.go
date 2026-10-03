@@ -30,7 +30,23 @@ const (
 )
 
 var localFluxGitRevision = regexp.MustCompile(`^main@sha1:[0-9a-f]{40}$`)
-var localFluxDNSName = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$`)
+var localFluxDNSLabel = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
+
+func localFluxValidName(name string, maxLength int, subdomain bool) bool {
+	if len(name) == 0 || len(name) > maxLength {
+		return false
+	}
+	labels := strings.Split(name, ".")
+	if !subdomain && len(labels) != 1 {
+		return false
+	}
+	for _, label := range labels {
+		if len(label) > 63 || !localFluxDNSLabel.MatchString(label) {
+			return false
+		}
+	}
+	return true
+}
 
 type commandRunner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
@@ -369,8 +385,8 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		if localExperiment {
 			// Do not echo arbitrary API fields in a human-facing diagnostic.
 			// Even malformed resource names may contain credentials or controls.
-			validIdentity := len(resource.Metadata.Name) <= 253 && len(resource.Metadata.Namespace) <= 63 &&
-				localFluxDNSName.MatchString(resource.Metadata.Name) && localFluxDNSName.MatchString(resource.Metadata.Namespace)
+			validIdentity := localFluxValidName(resource.Metadata.Name, 253, true) &&
+				localFluxValidName(resource.Metadata.Namespace, 63, false)
 			switch resource.Kind {
 			case "GitRepository", "OCIRepository", "Bucket", "HelmRepository", "HelmChart", "Kustomization", "HelmRelease":
 			default:

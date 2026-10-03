@@ -54,6 +54,9 @@ func TestLocalFluxDiagnosticDoesNotEchoInvalidResourceIdentity(t *testing.T) {
 		{"name", "token-secret\nunsafe"},
 		{"namespace", "token-secret/unsafe"},
 		{"kind", "token-secret/unsafe"},
+		{"name", "a..b"},
+		{"name", strings.Repeat("a", 64) + ".b"},
+		{"namespace", "flux.system"},
 	} {
 		var list map[string]interface{}
 		if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
@@ -73,6 +76,21 @@ func TestLocalFluxDiagnosticDoesNotEchoInvalidResourceIdentity(t *testing.T) {
 		if check.Status != "degraded" || !strings.Contains(check.Summary, "identity unverified") || strings.Contains(check.Summary, test.value) || strings.Contains(check.Summary, "token-secret") {
 			t.Fatalf("invalid %s leaked or accepted: %#v", test.field, check)
 		}
+	}
+}
+
+func TestLocalLakehouseRejectsMalformedUnrelatedNames(t *testing.T) {
+	for _, name := range []string{"extra..pod", strings.Repeat("a", 64) + ".pod", "secret\nfield"} {
+		responses := localWorkloadResponses()
+		responses[0].output = strings.TrimSuffix(responses[0].output, `]}`) + `,{"kind":"Deployment","metadata":{"name":` + fmt.Sprintf("%q", name) + `,"namespace":"shirokuma-storage"}}]}`
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "out-of-scope") || strings.Contains(checks[0].Summary, name) || checks[1].Status != "healthy" {
+			t.Fatalf("malformed unrelated workload name %q accepted or leaked: %#v", name, checks)
+		}
+	}
+	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: localWorkloadResponses()}, localExperimentContext)
+	if checks[0].Status != "healthy" {
+		t.Fatalf("valid workload inventory rejected: %#v", checks)
 	}
 }
 
