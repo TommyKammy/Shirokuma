@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.129"
+version: "5.130"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: separate FinOps saved-history check (offline)
+
+WP-L6-FIN-001: inspected direct selection, chronological ordering, canonical
+digest/duplicate checks and per-report storage coverage after the GitOps
+timestamp commit. No new defect established or FinOps behavior changed. `make
+test-local-finops` passed 181 tests (seven Linux-only skips). Dedicated Colima
+remained Stopped; no collection, retained report/volume/backup mutation or
+GitHub write. AgentHouse retained volume remains `null / NOT_MEASURED`. Offline
+checks do not authenticate producers, exercise Linux fixtures, measure current
+usage or establish acceptance. No FinOps rollback; retain reports. Original
+Vault sync pending outside checkout.
+
+After both increments, `go test ./... -count=1` (835 tests), `go vet ./...`,
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. The local
+verification includes synthetic failure-path output, not a live runtime test.
 
 ## 2026-10-04: reported empty GitOps deletion timestamp (offline)
 
