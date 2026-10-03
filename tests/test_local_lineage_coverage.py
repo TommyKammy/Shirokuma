@@ -908,6 +908,23 @@ class ReadOnlyClientTests(unittest.TestCase):
                             self.client.request('GET', path)
                 self.assertTrue(response.closed)
 
+    def test_catalog_refresh_metadata_cannot_select_another_target(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+        for refresh in (None, '0; url=/tables/name/other?include=all'):
+            with self.subTest(refresh=refresh):
+                response = Response(b'{"id":1}')
+                response.headers = Message()
+                if refresh is not None:
+                    response.headers['Refresh'] = refresh
+                with patch.object(self.client.opener, 'open', return_value=response):
+                    if refresh is None:
+                        self.assertEqual(self.client.request('GET', path), {'id': 1})
+                    else:
+                        with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                            self.client.request('GET', path)
+                self.assertTrue(response.closed)
+
     def test_catalog_content_location_is_not_target_identity_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         path = next(iter(C.ANCHORS))

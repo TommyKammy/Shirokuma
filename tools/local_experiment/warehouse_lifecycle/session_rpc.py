@@ -381,7 +381,7 @@ class SessionRPC:
             # negotiation, upgrade or trailing fields.
             require(name not in headers and name not in
                      (b'transfer-encoding', b'expect', b'upgrade', b'trailer',
-                      b'te', b'proxy-connection'), 'INVALID_HTTP')
+                       b'te', b'proxy-connection', b'keep-alive'), 'INVALID_HTTP')
             # Do not normalize ambiguous framing: a peer and a proxy may
             # interpret whitespace around a length differently.
             require(value.startswith(b' ') and value[1:] and

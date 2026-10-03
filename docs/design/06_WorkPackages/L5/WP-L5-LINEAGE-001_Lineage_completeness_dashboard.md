@@ -5,12 +5,23 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.29"
+version: "1.30"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: refresh metadata on fixed catalog responses (offline)
+
+The bounded reader refuses `Refresh` on a returned 200 rather than promoting
+JSON that advertises a second target. A disposable alternate-path response was
+accepted before repair; an undecorated response still passes. The assumption is
+conservative and has not been checked against a live producer. Focused lineage
+tests pass. No VM start, live login/GET, source/credential/report/backup change
+or replay. This does not authenticate the producer or establish atomic,
+whole-catalog or column lineage or operator acceptance. Roll back only the
+header guard and fixture, preserving reports. Original Vault sync pending.
 
 ## 2026-10-03: catalog response final URL (offline)
 

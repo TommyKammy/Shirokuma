@@ -409,6 +409,7 @@ class ReadOnlyClient:
                 ranges = headers.get_all('Content-Range', []) if headers is not None else []
                 locations = headers.get_all('Content-Location', []) if headers is not None else []
                 redirects = headers.get_all('Location', []) if headers is not None else []
+                refreshes = headers.get_all('Refresh', []) if headers is not None else []
                 # Header access is part of the bounded observation too: a
                 # late malformed header is not an on-time framing result.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
@@ -433,6 +434,9 @@ class ReadOnlyClient:
                 # A successful fixed-path GET must not advertise another target
                 # through redirect metadata either (including a self-reference).
                 require(type(redirects) is list and not redirects, 'API_RESPONSE_INVALID')
+                # A browser-style refresh can also nominate a different URL;
+                # it is not part of this fixed-path catalog observation.
+                require(type(refreshes) is list and not refreshes, 'API_RESPONSE_INVALID')
                 # Competing length and transfer framing is ambiguous even if
                 # urllib exposes a decoded, syntactically valid JSON prefix.
                 require(type(transfers) is list and not (lengths and transfers), 'API_RESPONSE_INVALID')

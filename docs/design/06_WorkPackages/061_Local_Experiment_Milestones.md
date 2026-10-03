@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.53"
+version: "5.54"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: catalog refresh and Unix keep-alive metadata (offline)
+
+WP-L5-LINEAGE-001 refuses `Refresh` on a returned fixed-path catalog response;
+WP-L3-VW-002 separately refuses `Keep-Alive` on the one-request Unix RPC.
+Both disposable negatives failed before repair. Focused lineage (96 tests)
+and Warehouse (78 + 102 + 16 + 22 + 15 tests) passed. The dedicated Colima
+profile was read-only observed stopped; no VM start, live catalog/backend/SQL,
+archived request replay, retained source/credential/session/report/backup
+mutation or GitHub write. Offline checks cannot authenticate producers, prove
+atomicity, caller receipt, restart recovery, whole-catalog/column lineage or
+operator acceptance. Roll back only these independent guards/fixtures, preserving
+historical evidence and the stopped VM. Original Vault sync pending outside
+this noninteractive checkout.
 
 ## 2026-10-03: Unix RPC negotiation and catalog final URL (offline)
 
