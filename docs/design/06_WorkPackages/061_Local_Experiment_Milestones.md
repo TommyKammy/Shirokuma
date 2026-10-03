@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.113"
+version: "5.114"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: allowed dry-run status and independent lineage review (offline)
+
+WP-L2-POL-001: two disposable allowed responses with a populated Pod status
+passed before repair; they now fail closed as unknown/pending. Empty API status
+still matches. Focused candidate/CLI suites passed (80 + 23). Independently
+reviewed WP-L5-LINEAGE-001 saved source/renderer boundaries without a further
+defect; focused lineage suite passed (147), no lineage code change. Dedicated
+Colima observed Stopped; no live admission/catalog, unknown-request replay,
+retained report/volume/backup mutation or GitHub write. Offline fixtures cannot
+authenticate producers, prove arbitrary mutation or whole-catalog coverage, or
+establish acceptance. Roll back only the policy comparator/test, preserving
+pending requests and saved lineage evidence. Original Vault sync pending outside
+the approved checkout. Initial policy negative failed twice as expected before
+repair; `make test-local-policy` (17), `make verify-local-experiment`,
+`make verify-design-context` (89 documents), `make check-no-secret-filenames`
+and `git diff --check` passed. Private full verification log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-063/verify-local.log`
+(SHA-256 `f4dda8acbbba053298da56edfacaba9895eaae2c8eea91c43d788c08b4f03c12`).
 
 ## 2026-10-04: container resource response guard and independent lineage check
 

@@ -275,6 +275,24 @@ class ObserverTests(unittest.TestCase):
                 self.assertIsNotNone(observer.receipt()['pending'])
                 self.assertEqual(observer.receipt()['request_count'],1)
 
+    def test_allowed_response_cannot_claim_live_pod_status(self):
+        for status in ({'phase':'Running'}, {'conditions':[{'type':'Ready','status':'True'}]}):
+            with self.subTest(status=status):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    altered=copy.deepcopy(body);altered['status']=status
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(altered),stderr='')
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        kube.respond=lambda body: SimpleNamespace(returncode=0,
+            stdout=json.dumps(dict(body,status={})),stderr='')
+        self.assertEqual(observer.verify(progress=lambda v:None)['response_content_check'],'matched')
+
     def test_allowed_response_cannot_add_metadata_lifecycle_controls(self):
         for changes in ({'generateName':'different-'},
                         {'deletionTimestamp':'2026-10-04T00:00:00Z'},

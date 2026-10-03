@@ -5,12 +5,23 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.65"
+version: "1.66"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: independent saved-claim review after policy status repair (offline)
+
+Reviewed direct renderer source eligibility, saved verification reasons, catalog
+digests and edge identity; no additional defect established and no lineage
+behavior changed. `make test-local-lineage-coverage` passed (147 tests). The
+dedicated Colima profile was observed Stopped; no catalog read, collection or
+retained report/backup modification. Offline fixtures cannot authenticate the
+producer, establish whole-catalog/column coverage or operator acceptance. No
+lineage rollback; preserve saved evidence. Original Vault sync pending outside
+the checkout.
 
 ## 2026-10-04: independent saved-source and renderer check (offline)
 

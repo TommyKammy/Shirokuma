@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.22"
+version: "0.23"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: dry-run response status boundary (offline)
+
+Two disposable allowed responses claiming a Running phase or Ready condition
+passed before repair. An allowed server dry-run may return an absent or empty
+Pod status, but a populated status is not evidence of a created/running Pod;
+the comparator now refuses it as unknown and retains the pending request.
+Focused candidate/CLI suites passed (80 + 23). Dedicated Colima was observed
+Stopped; no admission, replay, retained report/volume/backup change or GitHub
+write. Fake responses cannot authenticate an API or prove complete mutation
+coverage or operator acceptance. Roll back comparator/test only if needed,
+preserving pending and historical evidence. Original Vault sync pending outside
+the approved checkout.
 
 ## 2026-10-04: container resource claims in allowed responses (offline)
 
