@@ -98,6 +98,21 @@ class ObserverTests(unittest.TestCase):
         with self.assertRaises(O.CandidateObservationError):self.observer.verify(progress=save)
         self.assertEqual(len(self.kube.requests),1)
 
+    def test_failed_final_receipt_write_preserves_pending_request(self):
+        self.ready()
+        saved=[]
+        def save(value):
+            if value['result'] == 'passed':
+                raise OSError('simulated final receipt failure')
+            saved.append(copy.deepcopy(value))
+        with self.assertRaises(O.CandidateObservationError):
+            self.observer.verify(progress=save)
+        self.assertEqual(len(self.kube.requests), 1)
+        self.assertEqual(self.observer.receipt()['admission'], 'unknown')
+        self.assertIsNotNone(self.observer.receipt()['pending'])
+        self.assertIsNotNone(saved[-1]['pending'])
+        self.assertEqual(saved[-1]['result'], 'failed')
+
     def test_allowed_response_must_represent_the_submitted_pod(self):
         changes = (
             lambda body: body['spec']['containers'][0].update(image='private.example/other@sha256:'+'c'*64),

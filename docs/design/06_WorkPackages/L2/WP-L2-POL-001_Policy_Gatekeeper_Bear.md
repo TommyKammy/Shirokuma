@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.31"
+version: "0.32"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: terminal receipt failure retains dry-run intent (offline)
+
+A fake final `progress` writer failure after one allowed dry-run left the
+in-memory receipt `failed/allowed` with no pending intent. The negative failed
+before repair. On failure after a sent request, restore the unknown pending
+marker before writing the failure receipt; never retry the request. The focused
+observer suite passed (42 tests), as did local verification. No live admission,
+saved request, volume or backup was modified; dedicated Colima was observed
+Stopped. This does not make an actually failed disk writer durable, authenticate
+the API or establish acceptance. Roll back the observer/test only if necessary;
+keep any previously saved pending intent and do not replay unknown requests.
+Original Vault sync pending outside this checkout.
 
 ## 2026-10-04: typed privilege and identity defaults (offline)
 

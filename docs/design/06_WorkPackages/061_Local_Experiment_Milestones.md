@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.140"
+version: "5.141"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: terminal policy receipt and independent FinOps review (offline)
+
+WP-L2-POL-001: a final progress-writer failure after one test-owned allowed
+dry-run previously cleared pending intent and left a misleading allowed claim;
+the negative failed before repair. It now restores unknown/pending before
+failure recording, without replay (focused observer 42 tests passed). This
+cannot guarantee persistence when the writer itself remains broken. Separately,
+WP-L6-FIN-001 saved-history selection, digest/order and per-report storage
+scope were inspected without a new defect or FinOps behavior change; 182 tests
+passed (seven Linux-only skips). `go test ./internal/cli -count=1` (843 tests)
+and `make verify-local-experiment` passed; the latter includes synthetic
+failure-path output, not live runtime evidence. Dedicated Colima read-only
+observed Stopped; no live API, collection, retained request/report/volume/backup
+change or GitHub write. AgentHouse usage remains `null / NOT_MEASURED`.
+Offline checks cannot authenticate producers, prove arbitrary mutation coverage,
+measure current usage, clear strict admission or establish operator acceptance.
+Roll back only the policy observer/test if needed; preserve pending requests
+and saved reports. Original Vault sync pending outside the approved checkout.
 
 ## 2026-10-04: typed policy defaults and independent GitOps chronology (offline)
 

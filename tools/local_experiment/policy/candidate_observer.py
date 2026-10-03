@@ -396,6 +396,11 @@ class CandidateObserver:
             self._receipt.update(result='passed', pending=None, matched_host_expectation=True)
             progress(self.receipt())
         except BaseException as error:
+            # The final progress callback can fail after the dry-run was sent.
+            # Do not let the tentative passed receipt erase the durable intent
+            # or advertise a known admission when final persistence is unknown.
+            if sent and self._receipt['pending'] is None:
+                self._receipt['pending'] = dict(body_sha256=self._body_sha, outcome='unknown')
             self._receipt.update(result='interrupted' if not isinstance(error, Exception) else 'failed',
                 matched_host_expectation=False,
                 response_content_check='not-checked',
