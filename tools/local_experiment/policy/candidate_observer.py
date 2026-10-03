@@ -91,7 +91,8 @@ def allowed_pod_matches(value, body):
     This is deliberately not a claim that no other admission mutation occurred.
     Unsupported changes to the constrained policy features fail closed.
     """
-    if (type(value) is not dict or value.get('apiVersion') != 'v1' or
+    if (type(value) is not dict or set(value) - {'apiVersion', 'kind', 'metadata', 'spec', 'status'} or
+            value.get('apiVersion') != 'v1' or
             value.get('kind') != 'Pod' or value.get('status') not in (None, {})):
         return False
     meta, spec = value.get('metadata'), value.get('spec')

@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.117"
+version: "5.118"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: dry-run top-level envelope and separate FinOps review (offline)
+
+WP-L2-POL-001: two test-owned allowed responses carrying extra top-level
+`items` or `unexpected` claims passed before repair; both now fail closed with
+the original request pending and no replay. Focused observer 37 tests passed.
+WP-L6-FIN-001: independently reviewed direct history selection/digest and
+per-report storage presentation without establishing another defect; focused
+FinOps 181 tests passed (seven Linux-only skips). `make verify-local-experiment`
+and design-context (89 documents) passed. Dedicated Colima observed Stopped;
+no live admission, collection, retained report/volume/backup mutation or GitHub
+write. Offline fake replies and saved-history checks cannot authenticate the
+server/producer, prove full mutation coverage, measure AgentHouse retained
+volume (still `null / NOT_MEASURED`) or establish acceptance. Roll back only
+the policy comparator/test if needed; retain pending requests and saved data.
+No FinOps runtime rollback. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: dry-run object identity and independent GitOps review (offline)
 
