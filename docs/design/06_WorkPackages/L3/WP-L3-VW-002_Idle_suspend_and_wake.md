@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: duplicate and folded RPC headers (offline)
+
+A disposable Unix request with a mixed-case duplicate `Content-Length`, or
+leading-space/tab folded extra header, is refused with HTTP 400 before handler
+dispatch or journal creation. The existing parser already enforces this; no
+owner behavior or archived request changed. Focused Warehouse lifecycle tests
+pass. No VM start, live backend/SQL, archived replay or retained session/backup
+mutation. A disposable socket cannot establish archived caller receipt,
+backend identity or restart recovery. Roll back only the new regression
+assertions, preserving saved sessions. Original Vault sync pending outside this
+checkout; broader verification is in Milestones.
+
 ## 2026-10-03: reject ambiguous RPC header whitespace (offline)
 
 The bounded single-request Unix parser no longer strips whitespace from all

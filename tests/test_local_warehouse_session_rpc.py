@@ -839,6 +839,9 @@ class SessionRPCTest(unittest.TestCase):
         invalid = [
             self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b'\r\nTransfer-Encoding: identity\r\n'),
             self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b'\r\ncontent-length: '+length+b'\r\n'),
+            self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b'\r\nCONTENT-LENGTH: '+length+b'\r\n'),
+            self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b'\r\n\tX-Extra: yes\r\n'),
+            self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b'\r\n X-Extra: yes\r\n'),
             self.wire(body, b'Content-Type: application/json\r\nContent-Length: 4097\r\n'),
             self.wire(body, b'Content-Type: application/json\r\nContent-Length:  '+length+b'\r\n'),
             self.wire(body, b'Content-Type: application/json\r\nContent-Length: '+length+b' \r\n'),
@@ -851,6 +854,7 @@ class SessionRPCTest(unittest.TestCase):
             with self.subTest(request=request[:60]):
                 self.assertEqual(self.exchange(request, raw=True)[0], 400)
         self.assertEqual(self.calls, [])
+        self.assertEqual(self.rpc._entries, {})
 
     def test_buffered_bytes_after_declared_body_are_refused(self):
         self.rpc = R.SessionRPC(self.token, self.output, self.handler)

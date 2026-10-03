@@ -12,6 +12,21 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: folded Warehouse request headers (offline)
+
+After the independent catalog-coding commit, WP-L3-VW-002 gained disposable
+mixed-case duplicate-length and leading-whitespace header regressions. The
+existing Unix parser refuses them before dispatch/journaling; no owner code
+changed. Focused Warehouse lifecycle passed. The dedicated VM was observed
+stopped; no archived replay, live backend/SQL, retained session/backup change
+or GitHub write. Offline parser assertions do not establish archived caller
+receipt, backend authenticity, owner restart recovery or operator acceptance.
+Combined `make verify-local-experiment`, `make verify-design-context` (89
+documents) and `git diff --check` passed; private logs are in
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-003/`.
+Roll back only the fixture while preserving saved evidence. Direct original
+Vault sync pending outside this checkout.
+
 ## 2026-10-03: catalog content coding boundary (offline)
 
 WP-L5-LINEAGE-001 rejects declared content codings on a decoded-looking
