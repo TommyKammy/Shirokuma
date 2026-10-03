@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.81"
+version: "4.82"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline Warehouse restart boundaries and saved-only recovery class
+
+WP-L3-VW-002: an opt-in read-only per-request classification distinguishes a correlated complete saved claim from pending/unrecorded/uncorrelated unknown, and refuses a journal that changes during the observation. Both classes retain `runtime_state=unknown` and never authorize replay. Isolated injected owner fixtures demonstrated durable intent with no handler, and a durable handler response without a recorded reply. First focused test placed the interrupt before its intended durable write and failed; corrected injection and final `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context`, `git diff --check` passed. No live owner restart, backend, API/SQL, archived UUID replay, retained data/backup change or VM start; read-only dedicated Colima status: stopped. Saved claims cannot establish reply delivery, backend authenticity, historical cleanup or production/operator acceptance. Private failed/final focused and regression logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-034/`. Roll back opt-in reader/tests only; preserve saved evidence and VM. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: Warehouse restart-recovery next-step boundary (plan only)
 

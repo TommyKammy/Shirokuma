@@ -169,9 +169,33 @@ def read(token,root=RUNS,request_id=None):
     except (OSError,ValueError,TypeError):raise StatusError('JOURNAL_UNVERIFIED') from None
 
 
+def classify_recovery(token,root=RUNS,request_id=None):
+    """Classify saved evidence only; never authorize replay or infer backend state."""
+    require(RPC.canonical_uuid(request_id))
+    result=read(token,root,request_id)
+    lookup=result['request_lookup']
+    result['recovery_classification']='unknown-no-replay'
+    if lookup['observation']=='recorded-in-snapshot' and lookup['recorded_result'] in ('verified','noop'):
+        from tools.local_experiment.warehouse_lifecycle import status_completion as completion
+        try:
+            claim=completion.read(token,root)
+        except StatusError:
+            pass  # An absent, incomplete or contradictory receipt cannot justify replay.
+        else:
+            require(result['journal_sha256']==claim['journal_sha256'])
+            result['recovery_classification']='correlated-saved-completion'
+    # Even an unknown classification must not describe a journal replaced while
+    # optional completion files were inspected.
+    require(read(token,root,request_id)=={key:value for key,value in result.items()
+                                          if key!='recovery_classification'})
+    result['runtime_state']='unknown'
+    return result
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('session_id',nargs='?')
     parser.add_argument('--with-saved-completion',action='store_true')
+    parser.add_argument('--classify-recovery',action='store_true')
     parser.add_argument('--request-id')
     parser.add_argument('--request-id-from-env',action='store_true')
     args=parser.parse_args(argv)
@@ -181,9 +205,12 @@ def main(argv=None):
     request_id=(os.environ.get('WAREHOUSE_LIFECYCLE_REQUEST_ID') if args.request_id_from_env
                 else args.request_id)
     try:
+        if args.classify_recovery and (args.with_saved_completion or not RPC.canonical_uuid(request_id)):
+            raise StatusError('JOURNAL_UNVERIFIED')
         if args.request_id_from_env and (args.request_id is not None or not RPC.canonical_uuid(request_id)):
             raise StatusError('JOURNAL_UNVERIFIED')
-        result=read(token,RUNS,request_id)
+        result=(classify_recovery(token,RUNS,request_id) if args.classify_recovery else
+                read(token,RUNS,request_id))
         if args.with_saved_completion:
             from tools.local_experiment.warehouse_lifecycle import status_completion as completion
             claim=completion.read(token,RUNS)

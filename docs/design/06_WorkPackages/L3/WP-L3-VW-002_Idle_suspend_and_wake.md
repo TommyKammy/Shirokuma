@@ -5,12 +5,18 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.44"
+version: "0.45"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: isolated restart-boundary fixtures and read-only classification
+
+An opt-in `status.py --classify-recovery --request-id <canonical-uuid> <session-id>` reads only a fixed private saved journal and, for a recorded verified/noop response, tries the existing complete-session receipt/operation correlation. It emits `correlated-saved-completion` only when that correlation succeeds and the journal remains unchanged; missing/pending/uncorrelated or contradictory saved evidence remains `unknown-no-replay`. A changed journal refuses output. `runtime_state` remains `unknown` in both classes; neither class authorizes a POST, adopts an archived UUID, attests caller receipt or identifies the backend. The prior CLI modes are unchanged. A new disposable test-owned RPC owner with injected handler exercised termination immediately after durable intent and after durable handler response, before reply recording. The saved results differ (`pending` versus `verified` without a reply), but neither proves delivery or safe replay. This is *simulated* termination, not a real owner restart or backend recovery.
+
+`make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed. Private failed/final focused and regression logs are under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-034/`. Dedicated Colima read-only status reported stopped; no VM start, Kubernetes/SQL, archived UUID POST, retained run/backup mutation or cleanup. Roll back only the opt-in classifier and isolated tests, retaining saved sessions, evidence and empty socket directories. Real process restart, independent authenticated backend operation identity, historical cleanup and operator/production acceptance remain untested. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: unknown-request recovery boundary for the next local experiment
 

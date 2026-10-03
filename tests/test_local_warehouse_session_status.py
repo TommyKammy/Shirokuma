@@ -35,6 +35,51 @@ def raw(items=None,replies=None):
 
 
 class SessionStatusTests(unittest.TestCase):
+    def test_recovery_classification_never_dispatches_or_promotes_a_journal(self):
+        with tempfile.TemporaryDirectory(dir=S.ROOT/'tmp/local-experiment') as temp:
+            root=Path(temp)/'runs';root.mkdir(mode=0o700)
+            journal=root/TOKEN/'rpc';journal.mkdir(parents=True,mode=0o700)
+            (root/TOKEN).chmod(0o700)
+            file=journal/'journal.json'
+            file.write_bytes(raw([entry()]));file.chmod(0o600)
+            with patch('tools.local_experiment.warehouse_lifecycle.status_completion.read',
+                       side_effect=AssertionError('pending must not consult completion')):
+                pending=S.classify_recovery(TOKEN,root,ID)
+            self.assertEqual(pending['recovery_classification'],'unknown-no-replay')
+            self.assertEqual(pending['runtime_state'],'unknown')
+            file.write_bytes(raw([entry(state='completed')],[entry(state='completed')['response']]))
+            with patch('tools.local_experiment.warehouse_lifecycle.status_completion.read',
+                       side_effect=S.StatusError('SAVED_COMPLETION_UNVERIFIED')):
+                incomplete=S.classify_recovery(TOKEN,root,ID)
+            self.assertEqual(incomplete['recovery_classification'],'unknown-no-replay')
+            sha=incomplete['journal_sha256']
+            with patch('tools.local_experiment.warehouse_lifecycle.status_completion.read',
+                       return_value={'journal_sha256':sha}):
+                complete=S.classify_recovery(TOKEN,root,ID)
+            self.assertEqual(complete['recovery_classification'],'correlated-saved-completion')
+            self.assertEqual(complete['runtime_state'],'unknown')
+            self.assertNotIn('replay_allowed',complete)
+            with patch('tools.local_experiment.warehouse_lifecycle.status_completion.read',
+                       return_value={'journal_sha256':'0'*64}):
+                with self.assertRaises(S.StatusError):S.classify_recovery(TOKEN,root,ID)
+            actual_read=S.read
+            reads=0
+            def replace_between_reads(*args):
+                nonlocal reads
+                reads+=1
+                if reads==2:
+                    file.write_bytes(raw([entry()]))
+                return actual_read(*args)
+            with patch.object(S,'read',side_effect=replace_between_reads),\
+                 patch('tools.local_experiment.warehouse_lifecycle.status_completion.read',
+                       return_value={'journal_sha256':sha}):
+                with self.assertRaises(S.StatusError):S.classify_recovery(TOKEN,root,ID)
+            file.write_bytes(raw([entry(state='completed')],[entry(state='completed')['response']]))
+            with patch('tools.local_experiment.warehouse_lifecycle.status_completion.read',
+                       side_effect=AssertionError('missing ID must not consult completion')):
+                missing=S.classify_recovery(TOKEN,root,'22222222-2222-4222-8222-222222222222')
+            self.assertEqual(missing['recovery_classification'],'unknown-no-replay')
+
     def test_recorded_verified_is_never_live_or_replayed(self):
         e=entry(state='completed');source=raw([e],[e['response']])
         result=S.project(source,TOKEN)

@@ -17,6 +17,43 @@ from tools.local_experiment.warehouse_lifecycle import status as S
 
 
 class SessionRPCTest(unittest.TestCase):
+    def test_isolated_termination_boundaries_leave_unknown_saved_intent(self):
+        # Simulated process termination is injected before dispatch can write
+        # the next journal state; never feed either saved UUID to a new owner.
+        for boundary in ('after_intent', 'after_handler'):
+            with self.subTest(boundary=boundary):
+                self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+                self.rpc.__enter__()
+                request = self.request(request_id=str(uuid.uuid4()))
+                original = self.rpc._persist
+                writes = 0
+                def interrupt():
+                    nonlocal writes
+                    writes += 1
+                    original()
+                    if writes == (1 if boundary == 'after_intent' else 2):
+                        raise KeyboardInterrupt('simulated termination')
+                with mock.patch.object(self.rpc, '_persist', side_effect=interrupt):
+                    with self.assertRaises(KeyboardInterrupt):
+                        self.rpc._dispatch(request)
+                saved = S.project(self.rpc.journal_path.read_bytes(), self.token, request['request_id'])
+                self.assertEqual(saved['request_lookup']['recorded_result'],
+                                 'pending' if boundary == 'after_intent' else 'verified')
+                self.assertEqual(saved['reply_count'], 0)
+                self.assertEqual(saved['runtime_state'], 'unknown')
+                self.assertEqual(len(self.calls), 0 if boundary == 'after_intent' else 1)
+                self.rpc.close()
+                directory = self.rpc.socket_directory
+                self.assertEqual(list(directory.iterdir()), [])
+                directory.rmdir()  # Only the test-owned empty directory.
+                self.rpc = None
+                # New disposable identity for the next boundary, never replay
+                # the interrupted request or reuse its journal directory.
+                self.token = uuid.uuid4().hex
+                self.output = Path(self.temp.name) / self.token
+                self.output.mkdir(mode=0o700)
+                self.calls.clear()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.output = Path(self.temp.name).resolve()

@@ -135,6 +135,16 @@ class SavedCompletionTests(unittest.TestCase):
             with patch.object(S,'RUNS',root):
                 self.assertEqual(C.read(TOKEN,root)['recorded_completion'],'correlated-saved-claim')
                 with patch('sys.stdout',new_callable=io.StringIO) as output:
+                    self.assertEqual(S.main(['--classify-recovery','--request-id',REQUEST_ID,TOKEN]),0)
+                    classified=json.loads(output.getvalue())
+                    self.assertEqual((classified['recovery_classification'],classified['runtime_state']),
+                                     ('correlated-saved-completion','unknown'))
+                with patch('sys.stdout',new_callable=io.StringIO) as output:
+                    self.assertEqual(S.main(['--classify-recovery','--request-id',
+                                             '33333333-3333-4333-8333-333333333333',TOKEN]),0)
+                    self.assertEqual(json.loads(output.getvalue())['recovery_classification'],
+                                     'unknown-no-replay')
+                with patch('sys.stdout',new_callable=io.StringIO) as output:
                     self.assertEqual(S.main(['--with-saved-completion','--request-id',REQUEST_ID,TOKEN]),0)
                     result=json.loads(output.getvalue())
                     self.assertEqual((result['recorded_completion'],result['request_lookup']['recorded_result'],
@@ -153,6 +163,8 @@ class SavedCompletionTests(unittest.TestCase):
                 self.assertEqual(S.main(['--with-saved-completion',TOKEN]),1)
             self.assertEqual(output.getvalue(),'')
             self.assertEqual(errors.getvalue().strip(),'SAVED_COMPLETION_UNVERIFIED')
+            self.assertEqual(S.classify_recovery(TOKEN,root,REQUEST_ID)['recovery_classification'],
+                             'unknown-no-replay')
             (rpc/'journal.json').write_bytes(raw(journal))
             (run/'receipt.json').write_bytes(raw(receipt))
             (run/'receipt.json').chmod(0o644)
