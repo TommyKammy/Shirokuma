@@ -5,12 +5,26 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.97"
+version: "0.98"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: typed remaining-count regression (offline)
+
+Separate fake complete-list responses with boolean or fractional
+`remainingItemCount` are rejected by the existing typed decoder, rather than
+accepted as an empty inventory. A first regression run failed because it
+expected the pagination-specific diagnostic instead of the existing invalid
+JSON diagnostic; the final assertions require degraded status and the correct
+fixed diagnostic. `go test ./... -count=1` passed (846 tests) and vet passed.
+No reader behavior, live Git/API inventory, reconciliation or retained data
+changed; dedicated Colima was observed Stopped. Fake responses cannot prove
+producer authenticity, atomic inventory, strict admission or acceptance.
+Roll back only the regression cases if needed; retain historical evidence.
+Original Vault synchronization pending outside checkout.
 
 ## 2026-10-04: independent list pagination review (offline)
 

@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.146"
+version: "5.147"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: separate typed GitOps pagination regression (offline)
+
+WP-L0-GITOPS-001: boolean/fractional `remainingItemCount` fake list metadata
+already fails the typed Go decoder; two regression cases now pin degraded
+status and its fixed invalid-JSON diagnostic. The first focused run failed
+only because the test expected the pagination-specific diagnostic; corrected
+assertions passed with `go test ./... -count=1` (846 Go tests) and `go vet
+./...`. No GitOps reader change. Dedicated Colima was observed Stopped; no
+live Git/API inventory, reconciliation or retained data/backup change. These
+fixtures cannot authenticate the producer, prove atomic inventory, strict
+admission or operator acceptance. Roll back only these test cases if needed;
+preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: LimitRange remaining-count boundary and GitOps review (offline)
 
