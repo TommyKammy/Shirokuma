@@ -383,13 +383,11 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			if err := json.Unmarshal(rawTimestamp, &timestamp); err != nil {
 				return true
 			}
-			if timestamp != "" {
-				if !localDeletionTimestamp.MatchString(timestamp) {
-					return true
-				}
-				if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
-					return true
-				}
+			if !localDeletionTimestamp.MatchString(timestamp) {
+				return true
+			}
+			if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
+				return true
 			}
 		}
 		// Nested declared fields must also be canonical: encoding/json accepts

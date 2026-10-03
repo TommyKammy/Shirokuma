@@ -922,13 +922,18 @@ func TestLocalInventoryRejectsMalformedDeletionTimestamp(t *testing.T) {
 		{`"2026-10-03T12:00:00Z"`, false},
 		{`"2026-10-03T12:00:00.123456789Z"`, false},
 		{`"2026-10-03T12:00:00+09:00"`, false},
-		{`""`, false}, // projected fixtures may omit or use an empty timestamp
+		{`""`, true}, // a reported empty timestamp is not an omitted projection
 	} {
 		raw := []byte(`{"items":[{"metadata":{"deletionTimestamp":` + tc.value + `}}]}`)
 		var list kubernetesResourceList
 		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) != tc.invalid {
 			t.Fatalf("deletion timestamp classification incorrect: %s (%v)", raw, err)
 		}
+	}
+	raw := []byte(`{"items":[{"metadata":{}}]}`)
+	var list kubernetesResourceList
+	if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+		t.Fatalf("omitted deletion timestamp rejected: %s (%v)", raw, err)
 	}
 }
 

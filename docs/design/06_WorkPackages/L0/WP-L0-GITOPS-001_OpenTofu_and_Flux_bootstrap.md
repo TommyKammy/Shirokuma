@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.87"
+version: "0.88"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: reported empty deletion timestamp (offline)
+
+An unrelated inventory member reporting `metadata.deletionTimestamp: ""`
+previously passed as if the timestamp were omitted. A focused negative failed
+before repair; explicit values now require a parseable RFC3339 timestamp,
+while projected omission remains valid. Go CLI tests (835) passed. Dedicated
+Colima was observed Stopped; no live API/Git read, reconciliation, retained
+data/backup mutation or GitHub write. This is response-shape consistency, not
+remote authenticity, atomicity, strict admission or operator acceptance. Roll
+back only the reader/test if necessary, retaining saved evidence. Original
+Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: unambiguous reported inventory identity (offline)
 

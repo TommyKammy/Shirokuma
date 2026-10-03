@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.128"
+version: "5.129"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: reported empty GitOps deletion timestamp (offline)
+
+WP-L0-GITOPS-001: an unrelated item reporting an empty deletion timestamp
+passed the complete-list reader before repair; it now fails closed. Omitted
+timestamp projections and valid RFC3339 values still pass. The isolated
+negative failed before repair, and `go test ./internal/cli -count=1` passed
+(835 tests). Dedicated Colima observed Stopped; no live API/Git, reconciliation,
+retained data/backup mutation or GitHub write. Fake-list consistency cannot
+authenticate a producer, establish atomic inventory, clear strict admission
+or grant operator acceptance. Roll back reader/test only, retaining earlier
+evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: separate FinOps saved-history check (offline)
 
