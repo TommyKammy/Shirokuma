@@ -81,6 +81,19 @@ class ObserverTests(unittest.TestCase):
     def ready(self):
         return self.observer.observe()
 
+    def test_kubernetes_reader_refuses_duplicate_api_json_keys(self):
+        reader = object.__new__(O.M.Kubernetes)
+        for raw in ('{"kind":"Namespace","kind":"Pod"}',
+                    '{"metadata":{"uid":"first","uid":"second"}}',
+                    '{"items":[{"metadata":{"name":"first","name":"second"}}]}'):
+            with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
+                    returncode=0, stdout=raw)):
+                with self.assertRaises(O.M.PolicyError):
+                    reader.json_request(['get', 'namespace'])
+        with patch.object(reader, 'request', return_value=SimpleNamespace(
+                returncode=0, stdout='{"metadata":{"uid":"first"}}')):
+            self.assertEqual(reader.json_request(['get', 'namespace']), {'metadata': {'uid': 'first'}})
+
     def test_incomplete_limitrange_inventory_never_becomes_ready(self):
         # A first page with no items is not evidence that the namespace has
         # no LimitRanges: the continuation token may hide a later page.

@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.44"
+version: "0.45"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: duplicate raw Kubernetes JSON claims (offline)
+
+The scoped policy reader previously let JSON parsing silently retain the last
+of two identical keys, including nested identity keys and list members. Three
+test-owned replies reproduced acceptance before repair. All scoped policy API
+JSON now rejects duplicate keys before baseline or dry-run interpretation;
+canonical replies remain valid. The focused observer suite passed (53 tests).
+The dedicated Colima profile was observed stopped; no live API/admission,
+retained request, volume or backup changed. Fake transport data cannot
+authenticate the API, prove atomic inventory, clear strict admission or
+establish operator acceptance. Roll back the reader/test only if needed;
+preserve pending requests without replay. Direct original Vault sync remains
+pending outside this checkout.
 
 ## 2026-10-04: namespace selector label aliases (offline)
 

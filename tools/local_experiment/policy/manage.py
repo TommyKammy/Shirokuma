@@ -172,7 +172,15 @@ class Kubernetes:
         result = self.request(args, body)
         if result.returncode or len(result.stdout) > 2 * 1024 * 1024:
             raise PolicyError('scoped Kubernetes request failed or exceeded its response limit')
-        return json.loads(result.stdout) if result.stdout.strip() else None
+        def unique_keys(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    raise PolicyError('scoped Kubernetes response contains duplicate JSON keys')
+                value[key] = item
+            return value
+
+        return json.loads(result.stdout, object_pairs_hook=unique_keys) if result.stdout.strip() else None
 
     def get(self, kind: str, name: str):
         if kind not in RESOURCES or name not in NAMES:

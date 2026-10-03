@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.155"
+version: "5.156"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy transport duplicate keys and independent FinOps review (offline)
+
+WP-L2-POL-001: three fake Kubernetes JSON replies with duplicate top-level or
+nested keys parsed successfully before repair. The scoped policy reader now
+refuses duplicates before baseline interpretation; the negative failed in all
+three cases first, and 53 observer tests passed after repair. Independently,
+WP-L6-FIN-001 saved-history validation, ordering and per-report storage scope
+were reviewed without another defect or behavior change; 183 FinOps tests
+passed (seven Linux-only skips). `make verify-local-experiment`, `make
+verify-design-context` (89 documents), `make check-no-secret-filenames` and
+`git diff --check` passed (the local suite's
+synthetic failure output is not live evidence). Dedicated Colima was observed
+stopped; no live admission, collection, retained request/report/volume/backup
+change or GitHub write. AgentHouse usage remains `null / NOT_MEASURED`. Offline
+fixtures cannot authenticate producers, establish atomic inventory, measure
+current usage, clear strict admission or establish operator acceptance. Roll
+back only the policy reader/test if required; preserve saved evidence and
+pending requests without replay. No FinOps runtime rollback. Direct original
+Vault sync pending outside this checkout.
 
 ## 2026-10-04: separate nested FinOps history claim regression (offline)
 
