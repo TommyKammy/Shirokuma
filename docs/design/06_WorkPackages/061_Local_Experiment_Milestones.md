@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.26"
+version: "5.27"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: dispatch TTL and catalog response deadline (offline)
+
+WP-L3-VW-002: recheck the owner TTL at dispatch so a pre-accepted but late new UUID is journaled as rejected/unknown without handler invocation. The prior serve-loop-only deadline did not cover that worker boundary; already admitted handlers still drain. WP-L5-LINEAGE-001: recheck the bounded catalog response deadline at EOF and after decoding; a test-owned response advancing the deadline at EOF now fails rather than returning evidence. Focused Warehouse (78 + 84 + 16 + 22 + 15 tests) and lineage (72 tests) passed; `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Full private logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-072/{verify,design}.log`. Dedicated Colima was read-only observed stopped. No VM start, live API/Git/SQL, archived UUID replay, retained source/session/report/backup mutation or GitHub write. These offline tests do not authenticate backend/catalog producers, establish atomicity, caller receipt, whole-catalog/column lineage or operator/production acceptance. Roll back the two independent readers and disposable tests only, preserving VM and historical evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: disposable Warehouse TTL drain independent of fixture timeout (offline)
 

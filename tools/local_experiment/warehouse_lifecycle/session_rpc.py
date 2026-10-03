@@ -400,7 +400,12 @@ class SessionRPC:
                 return deepcopy(prior['response']) if prior['response'] is not None else _uncertain(request)
             entry = {'request': request, 'state': 'pending', 'response': None, 'error_code': None}
             self._entries[request_id] = entry
-            if self._replay_until is not None or (self._stop_callback is not None and self._stop_callback()):
+            # accept() may return just before the TTL while its worker reaches
+            # dispatch afterward. The serve-loop deadline alone cannot bound
+            # admission of that already accepted connection.
+            if (self._replay_until is not None or
+                    time.monotonic() - self._started >= self.ttl_seconds or
+                    (self._stop_callback is not None and self._stop_callback())):
                 entry.update(state='rejected', response=_uncertain(request))
                 try:
                     self._persist()

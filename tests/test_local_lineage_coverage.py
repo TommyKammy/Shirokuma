@@ -7,6 +7,7 @@ from pathlib import Path
 import stat
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 import urllib.error
@@ -992,6 +993,19 @@ class ReadOnlyClientTests(unittest.TestCase):
             self.assertEqual(self.client.request('GET', next(iter(C.ANCHORS))), {'unused': 1e308})
         with patch.object(self.client.opener, 'open', return_value=Response(b'{"unused":0e-999}')):
             self.assertEqual(self.client.request('GET', next(iter(C.ANCHORS))), {'unused': 0.0})
+
+    def test_response_finishing_after_deadline_cannot_be_catalog_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        client = self.client
+        class SlowFinish(Response):
+            def read(self, size=-1):
+                chunk = super().read(size)
+                if not chunk:
+                    client.deadline = time.monotonic() - 1
+                return chunk
+        with patch.object(self.client.opener, 'open', return_value=SlowFinish(b'{"id":1}')):
+            with self.assertRaisesRegex(C.CoverageError, 'API_DEADLINE'):
+                self.client.request('GET', next(iter(C.ANCHORS)))
 
     def test_no_proxy_redirect_and_deadline_are_enforced(self):
         client = C.ReadOnlyClient(state=self.state)

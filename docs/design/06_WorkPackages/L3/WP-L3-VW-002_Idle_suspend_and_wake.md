@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.62"
+version: "0.63"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: TTL checked again at dispatch (offline)
+
+A connection accepted just before expiry may reach its worker after expiry. New UUIDs now fail closed at dispatch, persist an uncertain rejected response and never invoke the handler; a disposable pre-accepted/post-deadline regression exercises this gap. Previously admitted handlers still drain. Focused checks and broader verification are recorded in Milestones. No live backend, archived request replay, retained session/backup mutation or VM start. The rejected record cannot prove caller receipt or backend state. Roll back only the owner guard/test, retaining historical evidence and the stopped VM. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: TTL fixture keeps admitted handler pending (offline)
 

@@ -389,7 +389,10 @@ class ReadOnlyClient:
                     chunks.append(chunk)
                     count += len(chunk)
                     require(count <= MAX_RESPONSE, 'API_RESPONSE_TOO_LARGE')
-                return decode(b''.join(chunks))
+                require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                value = decode(b''.join(chunks))
+                require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                return value
         except urllib.error.HTTPError as error:
             status = error.code
             error.close()

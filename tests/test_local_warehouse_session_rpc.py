@@ -488,6 +488,19 @@ class SessionRPCTest(unittest.TestCase):
                                      'result': 'verified', 'error_codes': []})
         self.assertEqual(result[0][0], 200)
 
+    def test_accepted_connection_dispatched_after_ttl_never_calls_handler(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler, ttl_seconds=1)
+        self.rpc.__enter__()
+        self.rpc._started = time.monotonic() - 2
+        request = self.request()
+        response = self.rpc._dispatch(request)
+        self.assertEqual((response['result'], response['request_id']),
+                         ('unknown', request['request_id']))
+        self.assertEqual(self.calls, [])
+        saved = S.project(self.rpc.journal_path.read_bytes(), self.token, request['request_id'])
+        self.assertEqual(saved['request_lookup']['recorded_result'], 'unknown')
+        self.assertEqual(saved['runtime_state'], 'unknown')
+
     def test_request_bound_counts_even_bad_requests(self):
         self.start(max_requests=1)
         self.assertEqual(self.exchange(b'{}', raw=False)[0], 400)

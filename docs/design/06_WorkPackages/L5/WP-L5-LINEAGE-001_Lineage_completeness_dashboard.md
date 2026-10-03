@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.08"
+version: "1.09"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: response completion stays inside the catalog deadline (offline)
+
+The read-only client now checks its deadline after the final response read and after JSON decoding. A disposable response whose EOF arrives after the deadline must not become catalog evidence. Focused and broader checks are in Milestones. The deadline is a client-side bound, not remote API authentication or an atomic catalog snapshot. No live login/GET, saved source/report/credential/backup mutation or VM start. Roll back reader/test only while preserving historical reports; direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: escaped duplicate extension keys in saved and catalog JSON (offline)
 
