@@ -140,7 +140,7 @@ func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext 
 					if condition.Type == "Available" && condition.Status == "True" {
 						available = true
 					}
-					if (condition.Type == "ReplicaFailure" && condition.Status == "True") ||
+					if (condition.Type == "ReplicaFailure" && condition.Status != "False") ||
 						(condition.Type == "Progressing" && condition.Status != "True") ||
 						(condition.Type == "Available" && condition.Status != "True") {
 						check.Status = "degraded"

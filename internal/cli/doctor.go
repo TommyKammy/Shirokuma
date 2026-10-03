@@ -274,7 +274,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 				if condition.Type == "Available" && condition.Status == "True" {
 					available = true
 				}
-				if (condition.Type == "ReplicaFailure" && condition.Status == "True") ||
+				if (condition.Type == "ReplicaFailure" && (condition.Status == "True" || (localExperiment && condition.Status != "False"))) ||
 						(condition.Type == "Progressing" && condition.Status != "True") ||
 						(condition.Type == "Available" && condition.Status != "True") {
 					unready = true
@@ -319,6 +319,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			seenResources[resourceID] = true
 			if resource.Metadata.Generation < 1 {
 				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
+			}
+			if resource.Status.ObservedGeneration != 0 && resource.Status.ObservedGeneration != resource.Metadata.Generation {
+				unhealthy = append(unhealthy, resourceID+" (status generation mismatch)")
 			}
 		}
 		isRoot := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"

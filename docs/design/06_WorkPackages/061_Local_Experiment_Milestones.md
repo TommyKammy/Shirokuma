@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.33"
+version: "4.34"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: offline rollout ambiguity and Flux generation contradiction
+
+WP-L0-GITOPS-001. Two independent offline local-doctor changes reject unknown/empty `ReplicaFailure` for fixed Flux controllers and Lakehouse workloads, and reject a reported Flux top-level observed generation that contradicts metadata even when the Ready condition looks current. Explicitly clear failure, matching/absent optional Flux status generation and the generic Flux profile remain compatible. Dedicated Colima status reported stopped; no start, live API/SQL read, reconcile, saved run or backup mutation. `go test ./internal/cli` and `go test ./...` (715 tests), `go vet ./...`, `git diff --check`, and `make verify-local-experiment` passed. This does not establish live rollout/source authenticity, strict publication gate or operator/production acceptance. Roll back local doctor code/tests only and preserve retained evidence. The original Vault handoff is outside this noninteractive checkout; direct sync remains pending.
 
 ## 2026-10-03: explicit Deployment availability in offline local doctor
 

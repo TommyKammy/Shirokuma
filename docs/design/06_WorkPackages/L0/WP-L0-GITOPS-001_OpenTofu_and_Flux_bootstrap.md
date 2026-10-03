@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.10"
+version: "0.11"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: unresolved rollout failure and contradictory Flux generation
+
+Two independent local-only diagnostic increments, using fake Kubernetes inventories while the dedicated Colima profile was observed stopped: `ReplicaFailure=Unknown` (or an empty status) now degrades a fixed Flux controller or Lakehouse workload despite complete replicas and `Available=True`; explicit `ReplicaFailure=False` is permitted. Separately, if a Flux resource reports top-level `status.observedGeneration`, it must equal its metadata generation even if a `Ready=True` condition claims the current generation. An absent top-level field remains permitted. The generic Flux profile retains its previous contract. Focused `go test ./internal/cli` (715 tests), `go test ./...` (715 tests), `go vet ./...`, and `make verify-local-experiment` passed with positive and negative fake cases. No live API/SQL read, reconcile, saved run, backup, or VM mutation occurred. These offline checks do not establish actual rollout health, source authenticity, strict admission or production acceptance. Roll back only the local doctor code/tests; preserve the stopped VM and retained evidence. Original Vault handoff synchronization is pending outside this noninteractive checkout.
 
 ## 2026-10-03: fixed Deployment availability must be explicit
 

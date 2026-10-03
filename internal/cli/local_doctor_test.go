@@ -124,6 +124,33 @@ func TestLocalFluxRejectsAmbiguousNonRootResources(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsConflictingStatusGenerationWhenReported(t *testing.T) {
+	for _, test := range []struct{ name, old, replacement string }{
+		{"source", `"artifact":{"revision":"main@sha1:`, `"observedGeneration":2,"artifact":{"revision":"main@sha1:`},
+		{"child", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"observedGeneration":2,`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resources := strings.Replace(localFluxJSON(), test.old, test.replacement, 1)
+			if resources == localFluxJSON() {
+				t.Fatal("fixture replacement did not match")
+			}
+			runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}
+			if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "status generation mismatch") {
+				t.Fatalf("conflicting reported generation accepted: %#v", check)
+			}
+			generic := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}
+			if check := checkFlux(context.Background(), generic, localExperimentContext); strings.Contains(check.Summary, "status generation mismatch") {
+				t.Fatalf("generic doctor changed: %#v", check)
+			}
+		})
+	}
+	resources := strings.Replace(localFluxJSON(), `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{`, `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"observedGeneration":1,`, 1)
+	runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}
+	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("matching reported generation rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsWrongControllerIdentity(t *testing.T) {
 	for _, test := range []struct{ name, old, replacement string }{
 		{"kind", `"kind":"Deployment"`, `"kind":"StatefulSet"`},
@@ -153,6 +180,21 @@ func TestLocalFluxRejectsFailedAvailableCondition(t *testing.T) {
 		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
 			t.Fatalf("controller condition %q accepted: %#v", status, check)
 		}
+	}
+}
+
+func TestLocalFluxRejectsUnresolvedReplicaFailure(t *testing.T) {
+	for _, status := range []string{"True", "Unknown", ""} {
+		controllers := strings.Replace(localControllerJSON(), `"type":"Available","status":"True"`, `"type":"Available","status":"True"},{"type":"ReplicaFailure","status":"`+status+`"`, 1)
+		runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
+		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
+			t.Fatalf("unresolved ReplicaFailure %q accepted: %#v", status, check)
+		}
+	}
+	controllers := strings.Replace(localControllerJSON(), `"type":"Available","status":"True"`, `"type":"Available","status":"True"},{"type":"ReplicaFailure","status":"False"`, 1)
+	runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
+	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("explicitly clear ReplicaFailure rejected: %#v", check)
 	}
 }
 
@@ -334,6 +376,8 @@ func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 		{"extra-replica", `"status":{"observedGeneration":2,"replicas":1`, `"status":{"observedGeneration":2,"replicas":2`, "rollout incomplete"},
 		{"terminating", `"generation":2`, `"generation":2,"deletionTimestamp":"2026-09-16T00:00:00Z"`, "terminating"},
 		{"replica-failure", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":"True"}],"observedGeneration":2`, "failed rollout"},
+		{"replica-failure-unknown", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":"Unknown"}],"observedGeneration":2`, "failed rollout"},
+		{"replica-failure-empty", `"observedGeneration":2`, `"conditions":[{"type":"ReplicaFailure","status":""}],"observedGeneration":2`, "failed rollout"},
 		{"progress-failure", `"observedGeneration":2`, `"conditions":[{"type":"Progressing","status":"False"}],"observedGeneration":2`, "failed rollout"},
 		{"available-failure", `"observedGeneration":2`, `"conditions":[{"type":"Available","status":"False"}],"observedGeneration":2`, "failed rollout"},
 		{"available-unknown", `"observedGeneration":2`, `"conditions":[{"type":"Available","status":"Unknown"}],"observedGeneration":2`, "failed rollout"},
