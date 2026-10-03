@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.26"
+version: "0.27"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: competing source refs and other Flux API versions (offline)
+
+Two independent fixed-profile doctor increments: the declared `main` GitRepository now rejects simultaneous `tag`, `semver`, `commit` or `name` selectors, which could otherwise override the branch; other queried Flux resources (OCIRepository, Bucket, HelmRepository, HelmChart and HelmRelease) reject explicit API versions different from the pinned CRDs (`source.toolkit.fluxcd.io/v1`, respectively `helm.toolkit.fluxcd.io/v2`). Absent item versions remain compatible with projected fixtures. Fake negative/positive tests cover each selector and kind without echoing untrusted revision/version; the generic doctor remains unchanged. `go test ./internal/cli -count=1` (766 tests), `go test ./...`, `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) passed. Dedicated Colima was read-only observed stopped; no VM start, live API/SQL, reconciliation, unknown-request replay, retained data or backup mutation. Reported configuration checks are not authenticated Git provenance, live rollout, smoke, strict publication gate or operator/production acceptance. Revert the diagnostic parser/checks and their tests only; preserve the stopped VM and retained evidence. Original Vault handoff direct sync remains pending outside this checkout.
 
 ## 2026-10-03: declared Flux versions and active-root revision (offline)
 

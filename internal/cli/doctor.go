@@ -138,6 +138,10 @@ type kubernetesResourceList struct {
 			Wait    bool   `json:"wait"`
 			Ref     struct {
 				Branch string `json:"branch"`
+				Tag    string `json:"tag"`
+				SemVer string `json:"semver"`
+				Commit string `json:"commit"`
+				Name   string `json:"name"`
 			} `json:"ref"`
 			URL       string `json:"url"`
 			SecretRef struct {
@@ -402,6 +406,18 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			} else if seenResources[resourceID] {
 				unhealthy = append(unhealthy, resourceID+" (duplicated)")
 			}
+			// The queried CRDs are pinned to v1, except HelmRelease (v2).
+			// An omitted version is compatible with projected test inventories.
+			expectedVersion := "source.toolkit.fluxcd.io/v1"
+			switch resource.Kind {
+			case "Kustomization":
+				expectedVersion = "kustomize.toolkit.fluxcd.io/v1"
+			case "HelmRelease":
+				expectedVersion = "helm.toolkit.fluxcd.io/v2"
+			}
+			if validIdentity && resource.APIVersion != "" && resource.APIVersion != expectedVersion {
+				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
+			}
 			seenResources[resourceID] = true
 			if resource.Metadata.Generation < 1 {
 				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
@@ -417,9 +433,6 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			rootCount++
 			rootRevision = resource.Status.LastAppliedRevision
 			rootActive = !resource.Spec.Suspend
-			if localExperiment && resource.APIVersion != "" && resource.APIVersion != "kustomize.toolkit.fluxcd.io/v1" {
-				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
-			}
 			if localExperiment && !resource.Spec.Prune {
 				unhealthy = append(unhealthy, resourceID+" (prune disabled)")
 			}
@@ -433,15 +446,15 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if isRootSource {
 			rootSourceCount++
-			if localExperiment && resource.APIVersion != "" && resource.APIVersion != "source.toolkit.fluxcd.io/v1" {
-				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
-			}
 			sourceRevision = resource.Status.Artifact.Revision
 			if localExperiment && resource.Spec.Suspend {
 				unhealthy = append(unhealthy, resourceID+" (declared source suspended)")
 			}
 			if localExperiment && resource.Spec.Ref.Branch != "main" {
 				unhealthy = append(unhealthy, resourceID+" (declared branch mismatch)")
+			}
+			if localExperiment && (resource.Spec.Ref.Tag != "" || resource.Spec.Ref.SemVer != "" || resource.Spec.Ref.Commit != "" || resource.Spec.Ref.Name != "") {
+				unhealthy = append(unhealthy, resourceID+" (competing source revision selector)")
 			}
 			if localExperiment && resource.Spec.URL != "ssh://git@github.com/TommyKammy/Shirokuma" {
 				unhealthy = append(unhealthy, resourceID+" (declared origin mismatch)")
@@ -455,9 +468,6 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if localExperiment && isDev {
 			devCount++
-			if resource.APIVersion != "" && resource.APIVersion != "kustomize.toolkit.fluxcd.io/v1" {
-				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
-			}
 			devRevision = resource.Status.LastAppliedRevision
 			if !resource.Spec.Wait {
 				unhealthy = append(unhealthy, resourceID+" (wait disabled)")

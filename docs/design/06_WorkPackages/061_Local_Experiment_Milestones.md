@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.55"
+version: "4.56"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: Flux source selector and other resource versions (offline)
+
+WP-L0-GITOPS-001: two independent read-only diagnostic increments reject competing `tag`/`semver`/`commit`/`name` selectors alongside the declared source branch and reject wrong explicitly reported API versions on five other Flux resource kinds. Fake positive/negative tests and generic-profile isolation passed `go test ./internal/cli -count=1` (766), `go test ./...`, `go vet ./...`, `make verify-local-experiment` and design-context (89 documents). Dedicated Colima read-only status was stopped; no VM start, actual API/SQL read, reconcile, saved-request replay, retained data or backup mutation. Offline reported-field checks do not establish Git/API authenticity, smoke, strict publication admission or operator/production acceptance. Roll back only the diagnostic checks/tests; preserve stopped VM and saved evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: Warehouse absent list items (offline)
 

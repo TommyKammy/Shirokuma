@@ -31,8 +31,38 @@ func localFluxJSON() string {
 	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
 }
 
+func TestLocalDeclaredSourceRejectsCompetingRevisionSelectors(t *testing.T) {
+	for _, selector := range []string{"tag", "semver", "commit", "name"} {
+		var list map[string]interface{}
+		if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+			t.Fatal(err)
+		}
+		ref := list["items"].([]interface{})[0].(map[string]interface{})["spec"].(map[string]interface{})["ref"].(map[string]interface{})
+		ref[selector] = "untrusted-revision"
+		output, err := json.Marshal(list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		responses := []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "competing source revision selector") || strings.Contains(check.Summary, "untrusted-revision") {
+			t.Fatalf("selector %s accepted or echoed: %#v", selector, check)
+		}
+		generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
+		if strings.Contains(generic.Summary, "competing source revision selector") {
+			t.Fatalf("generic profile inherited local check: %#v", generic)
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("declared branch-only source rejected: %#v", check)
+	}
+}
+
 func TestLocalDeclaredFluxAPIVersions(t *testing.T) {
-	for _, test := range []struct{ index int; version string }{
+	for _, test := range []struct {
+		index   int
+		version string
+	}{
 		{0, "source.toolkit.fluxcd.io/v1"},
 		{1, "kustomize.toolkit.fluxcd.io/v1"},
 		{3, "kustomize.toolkit.fluxcd.io/v1"},
@@ -55,6 +85,45 @@ func TestLocalDeclaredFluxAPIVersions(t *testing.T) {
 			generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
 			if strings.Contains(generic.Summary, "declared API version mismatch") {
 				t.Fatalf("generic inherited local version check: %#v", generic)
+			}
+		}
+	}
+}
+
+func TestLocalOtherFluxResourceAPIVersions(t *testing.T) {
+	for _, test := range []struct{ kind, expected string }{
+		{"OCIRepository", "source.toolkit.fluxcd.io/v1"},
+		{"Bucket", "source.toolkit.fluxcd.io/v1"},
+		{"HelmRepository", "source.toolkit.fluxcd.io/v1"},
+		{"HelmChart", "source.toolkit.fluxcd.io/v1"},
+		{"HelmRelease", "helm.toolkit.fluxcd.io/v2"},
+	} {
+		for _, version := range []string{"", test.expected, "wrong.example/v1"} {
+			var list map[string]interface{}
+			if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+				t.Fatal(err)
+			}
+			list["items"] = append(list["items"].([]interface{}), map[string]interface{}{
+				"kind": test.kind, "apiVersion": version,
+				"metadata": map[string]interface{}{"name": "another-resource", "namespace": "flux-system", "generation": 1},
+				"status":   map[string]interface{}{"conditions": []interface{}{map[string]interface{}{"type": "Ready", "status": "True", "observedGeneration": 1}}},
+			})
+			output, err := json.Marshal(list)
+			if err != nil {
+				t.Fatal(err)
+			}
+			responses := []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+			if version == "wrong.example/v1" {
+				if check.Status != "degraded" || !strings.Contains(check.Summary, "declared API version mismatch") || strings.Contains(check.Summary, version) {
+					t.Fatalf("%s %q accepted or echoed: %#v", test.kind, version, check)
+				}
+			} else if check.Status != "informational" {
+				t.Fatalf("%s %q rejected: %#v", test.kind, version, check)
+			}
+			generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
+			if strings.Contains(generic.Summary, "declared API version mismatch") {
+				t.Fatalf("generic profile inherited local version check: %#v", generic)
 			}
 		}
 	}
