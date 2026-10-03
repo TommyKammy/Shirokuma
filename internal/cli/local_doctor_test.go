@@ -192,6 +192,79 @@ func TestLocalInventoryRejectsAliasedItemEnvelope(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsAliasedNestedFields(t *testing.T) {
+	for _, tc := range []struct{ marker, alias string }{
+		{`"replicas":1`, `"Replicas":1`},
+		{`"availableReplicas":1`, `"AvailableReplicas":1`},
+		{`"conditions":[`, `"Conditions":[]`},
+		{`"type":"Available"`, `"Type":"Available"`},
+		{`"status":"True"`, `"Status":"True"`},
+		{`"observedGeneration":2`, `"ObservedGeneration":2`},
+	} {
+		decorate := func(raw string) string {
+			return strings.Replace(raw, tc.marker, tc.alias+`,`+tc.marker, 1)
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: decorate(localControllerJSON())}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("controller alias %s accepted: %#v", tc.alias, check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[1].output = decorate(workloads[1].output)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[2].Status != "degraded" {
+			t.Fatalf("workload alias %s accepted: %#v", tc.alias, checks)
+		}
+	}
+	for _, tc := range []struct{ marker, alias string }{
+		{`"branch":"main"`, `"Branch":"main"`},
+		{`"secretRef":{`, `"SecretRef":{}`},
+		{`"revision":"main@sha1:`, `"Revision":"unused"`},
+		{`"sourceRef":{`, `"SourceRef":{}`},
+		{`"path":"./deploy/gitops`, `"Path":"unused"`},
+		{`"type":"Ready"`, `"Type":"Ready"`},
+	} {
+		decorated := strings.Replace(localFluxJSON(), tc.marker, tc.alias+`,`+tc.marker, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: decorated}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("Flux alias %s accepted: %#v", tc.alias, check)
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("canonical nested fields rejected: %#v", check)
+	}
+}
+
+func TestLocalInventoryRejectsExplicitNullItemFields(t *testing.T) {
+	for _, key := range []string{"kind", "apiVersion", "metadata", "spec", "status"} {
+		// Null on an otherwise unrelated item can previously be skipped while
+		// the expected resources still make the inventory look complete.
+		foreign := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"spec":{},"status":{}}`
+		if key == "apiVersion" {
+			foreign = strings.TrimSuffix(foreign, "}") + `,"apiVersion":null}`
+		} else {
+			marker := map[string]string{"kind": `"Deployment"`, "metadata": `{"name":"unrelated","namespace":"flux-system","generation":1}`, "spec": `{}`, "status": `{}`}[key]
+			foreign = strings.Replace(foreign, `"`+key+`":`+marker, `"`+key+`":null`, 1)
+		}
+		flux := strings.Replace(localFluxJSON(), `"items":[`, `"items":[`+foreign+`,`, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: flux}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("null item %s accepted: %#v", key, check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[0].output = strings.Replace(workloads[0].output, `"items":[`, `"items":[`+foreign+`,`, 1)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "incomplete") {
+			t.Fatalf("null workload item %s accepted: %#v", key, checks)
+		}
+	}
+	controller := strings.Replace(localControllerJSON(), `"spec":{"replicas":1}`, `"spec":null`, 1)
+	if controller == localControllerJSON() {
+		t.Fatal("controller fixture did not change")
+	}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controller}, {output: localFluxJSON()}}}, localExperimentContext, true)
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+		t.Fatalf("null controller spec accepted: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)

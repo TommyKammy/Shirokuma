@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.39"
+version: "0.40"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: nested keys and explicit null item fields (offline)
+
+Two further fixed-profile inventory increments: nested `spec`, `status`, source-ref, artifact and condition keys now reject case-insensitive aliases (including aliases alongside canonical fields). Independently, explicitly null item `kind`, `apiVersion`, `metadata`, `spec` and `status` are not interpreted as omitted fields, even on unrelated members of a supposedly complete list. Omitted optional fields remain compatible, and generic doctor is unchanged. Fake controller, Flux resource and namespace workload negatives and canonical positives passed `go test ./internal/cli -count=1` (780 passed), `go vet ./...`, `make verify-local-experiment` and `git diff --check`. Dedicated Colima was observed stopped; no VM start, actual API/SQL, reconciliation, saved-request replay, retained data or backup mutation. Offline shape checks do not authenticate API/Git identity, establish atomic inventory or historical cleanup, clear strict publication admission or prove operator/production acceptance. Roll back only local reader/tests; preserve stopped VM and historical evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: canonical item envelope keys (offline)
 

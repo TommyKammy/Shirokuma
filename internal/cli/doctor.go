@@ -235,6 +235,14 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		return true
 	}
 	for _, item := range items.Items {
+		// Explicit null is not an omitted field in a Kubernetes object. In
+		// particular, a null spec/status on an unrelated item must not be
+		// mistaken for a valid member of a complete namespace inventory.
+		for _, key := range []string{"kind", "apiVersion", "metadata", "spec", "status"} {
+			if string(item[key]) == "null" {
+				return true
+			}
+		}
 		for field := range item {
 			for _, canonical := range []string{"kind", "apiVersion", "metadata", "spec", "status"} {
 				if field != canonical && strings.EqualFold(field, canonical) {
@@ -253,6 +261,42 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				}
 			}
 		}
+		// Nested declared fields must also be canonical: encoding/json accepts
+		// Spec.Ref.Branch or Status.Conditions as if they were Kubernetes keys.
+		for _, nested := range []struct {
+			parent string
+			keys   []string
+		}{
+			{"spec", []string{"suspend", "paused", "path", "prune", "wait", "ref", "url", "secretRef", "replicas", "sourceRef"}},
+			{"status", []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas", "observedGeneration", "lastAppliedRevision", "artifact", "conditions"}},
+		} {
+			if !localInventoryCanonicalFields(item[nested.parent], nested.keys) {
+				return true
+			}
+		}
+		var spec, status map[string]json.RawMessage
+		_ = json.Unmarshal(item["spec"], &spec)
+		_ = json.Unmarshal(item["status"], &status)
+		for _, nested := range []struct {
+			raw  json.RawMessage
+			keys []string
+		}{
+			{spec["ref"], []string{"branch", "tag", "semver", "commit", "name"}},
+			{spec["secretRef"], []string{"name"}},
+			{spec["sourceRef"], []string{"kind", "name", "namespace"}},
+			{status["artifact"], []string{"revision"}},
+		} {
+			if !localInventoryCanonicalFields(nested.raw, nested.keys) {
+				return true
+			}
+		}
+		var conditions []json.RawMessage
+		_ = json.Unmarshal(status["conditions"], &conditions)
+		for _, condition := range conditions {
+			if !localInventoryCanonicalFields(condition, []string{"type", "status", "observedGeneration"}) {
+				return true
+			}
+		}
 	}
 	return list.Items == nil || list.Metadata.Continue != "" ||
 		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
@@ -262,6 +306,24 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		}) >= 0)) ||
 		(list.Kind != "" && list.Kind != "List") ||
 		(list.APIVersion != "" && list.APIVersion != "v1")
+}
+
+func localInventoryCanonicalFields(raw json.RawMessage, keys []string) bool {
+	if len(raw) == 0 || string(raw) == "null" {
+		return true // Existing optional-field and null handling remains with the caller.
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return false
+	}
+	for field := range fields {
+		for _, key := range keys {
+			if field != key && strings.EqualFold(field, key) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // encoding/json accepts duplicate object members and keeps the later value.

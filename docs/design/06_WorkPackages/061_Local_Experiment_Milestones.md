@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.71"
+version: "4.72"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: nested canonical diagnostic fields and null item envelopes (offline)
+
+WP-L0-GITOPS-001: two independent fixed-profile inventory checks reject differently cased nested `spec`/`status`/condition/source fields and explicit null item envelope fields, including on otherwise unrelated members. Fake negatives and canonical fixtures passed `go test ./internal/cli -count=1` (780 passed), `go vet ./...`, `make verify-local-experiment` and `git diff --check`. Dedicated Colima status returned stopped; no VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. This does not establish authenticated or atomic inventory, historical cleanup, strict admission, or operator/production acceptance. Revert only local doctor reader/tests; retain stopped VM and evidence. Original Vault direct sync remains pending outside checkout.
 
 ## 2026-10-03: canonical item envelopes (offline)
 
