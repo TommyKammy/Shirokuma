@@ -5,12 +5,24 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.99"
+version: "1.00"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-04: X-Proxy identity hints on private RPC (offline)
+
+Complete test-owned Unix requests with bare `X-Proxy`, `X-Proxy-User` and
+`X-Proxy-Client-IP` reached the handler before repair. The fixed one-request
+parser now refuses the entire `X-Proxy-*` family and bare name before journal
+or dispatch; the unrelated printable extension contract remains unchanged.
+Focused Warehouse suites passed. No VM start, backend/SQL, archived UUID replay
+or retained session/backup change. This is not independent peer authentication,
+caller receipt, owner restart recovery or operator acceptance. Roll back
+parser/test only, preserving historical evidence. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-04: client-IP claims on the private transition (offline)
 

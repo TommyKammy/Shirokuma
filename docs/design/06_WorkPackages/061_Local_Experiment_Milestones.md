@@ -5,19 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.77"
+version: "5.78"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+## 2026-10-04: private X-Proxy namespace (offline)
+
+Independently of the lineage increment below, WP-L3-VW-002 refuses bare
+`X-Proxy` and `X-Proxy-*` hints before the disposable one-request Unix handler
+or journal. Three test-owned negatives reached the handler before repair;
+focused Warehouse lifecycle suites, `make verify-local-experiment`, design
+context and diff check passed afterward. No VM start, live
+backend/SQL, archived request replay, retained session/backup mutation or
+GitHub write. This parser rule is not peer authentication, caller receipt,
+restart recovery or operator acceptance. Roll back parser/test alone and
+preserve saved evidence. Original Vault sync pending outside checkout.
+
 ## 2026-10-04: saved lineage population and initial evidence (offline)
 
 WP-L5-LINEAGE-001 refuses a complete observation with excluded or unrecognized
 source entries and refuses eligible sources without initial digest or `valid`
 sources with conflicting saved digests. Disposable negatives failed before the
-guards; focused lineage suite 121 passed. No VM start, catalog call, retained
+guards; focused lineage suite 121, `make verify-local-experiment`, design
+context and diff check passed. No VM start, catalog call, retained
 source/report/backup change, unknown-request replay or GitHub write. These
 saved-claim checks do not prove provenance, atomicity, whole-catalog/column
 coverage or operator acceptance. Roll back renderer/tests alone, retaining
