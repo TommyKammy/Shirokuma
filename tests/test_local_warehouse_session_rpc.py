@@ -467,7 +467,9 @@ class SessionRPCTest(unittest.TestCase):
         entered = threading.Event()
         def handler(action, request_id):
             entered.set()
-            self.release.wait(3)
+            # TTL expires while the admitted handler remains in flight, not
+            # because this fixture's wall-clock wait happened to time out.
+            self.release.wait()
             return self.response(action, request_id)
         self.start(handler, ttl_seconds=0.05)
         result = []
@@ -477,6 +479,7 @@ class SessionRPCTest(unittest.TestCase):
             self.assertTrue(entered.wait(2))
             time.sleep(0.15)
             self.assertTrue(self.thread.is_alive())
+            self.assertEqual(result, [], 'admitted handler completed before explicit release')
         finally:
             self.release.set()
             sender.join(3)

@@ -12,6 +12,10 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: TTL fixture keeps admitted handler pending (offline)
+
+The disposable RPC TTL/drain test now holds its admitted handler until an explicit release instead of relying on a three-second wall-clock expiry, and asserts no response was produced before that release. The existing `finally` releases and joins the test-owned thread on assertion failure. Warehouse focused and broader verification are in Milestones. This is a test fixture improvement only; it does not establish live backend behavior, archived caller receipt, unknown-request recovery or operator acceptance. No archived UUID replay, VM start, API/SQL, retained session or backup change. Roll back only the test assertion/wait change, preserving evidence. Original Vault direct sync pending outside checkout.
+
 ## 2026-10-03: disposable concurrent reply order (offline)
 
 The serial-handler test now checks the exact durable reply sequence for a pending retry, competing busy UUID, original verified response and both completed replays; its two saved request records remain unchanged. `make test-local-warehouse-lifecycle` passed; combined verification is recorded in Milestones. This tests only one disposable owner and does not prove archived caller receipt, backend authenticity, owner restart recovery, historical cleanup or a repair for intermittent failures. No archived UUID replay, VM start, API/SQL or retained session/backup mutation. Roll back only the test assertions, preserving evidence. Original Vault direct sync pending outside checkout.
