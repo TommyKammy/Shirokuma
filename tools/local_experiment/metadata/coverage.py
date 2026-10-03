@@ -390,6 +390,20 @@ class ReadOnlyClient:
         self.login_attempted = True
         try:
             directory(self.state)
+            # Bind the credential's private parent across the login as well as
+            # the file bytes/identity; a changed sibling or directory must not
+            # authorize a later catalog GET with a stale credential snapshot.
+            def state_identity():
+                fd = _open_source_dir(self.state)
+                try:
+                    opened = _source_directory_identity(os.fstat(fd))
+                    _current_source_path(self.state, fd)
+                    require(opened == _source_directory_identity(self.state.lstat()), 'CREDENTIALS_CHANGED')
+                    return opened
+                finally:
+                    os.close(fd)
+
+            parent_identity = state_identity()
             raw, identity = read_file(self.state / '.env', 4096, with_identity=True)
             values = {}
             for line in raw.decode('utf-8').splitlines():
@@ -406,7 +420,8 @@ class ReadOnlyClient:
             require(type(token) is str and 1 <= len(token) <= 8192 and re.fullmatch(r'[A-Za-z0-9_.~+/=-]+', token),
                     'LOGIN_RESPONSE_INVALID')
             again, final_identity = read_file(self.state / '.env', 4096, with_identity=True)
-            require(again == raw and final_identity == identity, 'CREDENTIALS_CHANGED')
+            require(again == raw and final_identity == identity and
+                    state_identity() == parent_identity, 'CREDENTIALS_CHANGED')
             self.token = token
         except Exception:
             self.login_error = 'LOGIN_UNAVAILABLE'

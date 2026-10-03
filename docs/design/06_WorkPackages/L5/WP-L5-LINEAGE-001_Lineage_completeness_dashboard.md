@@ -12,6 +12,10 @@ tags: [shirokuma, workpackage, l5, metadata]
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
 
+## 2026-10-03: credential parent identity across login (offline)
+
+The existing one-POST credential login now compares the pinned private directory's full metadata before reading `.env` and after the second file read. A disposable POST fixture changed only the directory mtime with the file bytes/identity unchanged; previously the first GET proceeded, now login fails closed with no GET or retry. This cannot retract the POST or prevent a same-UID actor restoring metadata between checks, nor authenticate the credential producer or remote API. No live login/GET, retained credential/source/report/backup or VM change. Focused checks and full regression are in Milestones; rollback the reader/test only, preserve evidence. Original Vault sync remains pending outside checkout.
+
 ## 2026-10-03: collection path identity at return (offline)
 
 The final collection inventory check now compares the pathname entry's full directory identity with the opened descriptor and initial metadata. A disposable replacement reported at the final path lookup, after the earlier path check, previously returned the old inventory when the replacement had the same owner and mode; it now refuses `SOURCE_CHANGED`. The negative failed before repair. This is a bounded offline observation, not atomicity against a restoring actor or independent source/catalog provenance. No retained source, report, credential, backup or VM was changed; direct original Vault sync remains pending outside checkout. Revert only the reader/test change and retain historical reports. Verification and other gaps are recorded in Milestones.

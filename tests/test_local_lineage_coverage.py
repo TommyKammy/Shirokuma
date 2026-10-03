@@ -873,6 +873,22 @@ class ReadOnlyClientTests(unittest.TestCase):
         self.assertEqual([call[0].method for call in self.calls], ['POST'])
         self.assertIsNone(self.client.token)
 
+    def test_login_refuses_credential_directory_change_with_identical_file(self):
+        original = self.client.opener.open
+
+        def changed_after_login(request, timeout):
+            response = original(request, timeout)
+            if request.method == 'POST':
+                before = self.state.stat()
+                os.utime(self.state, ns=(before.st_atime_ns, before.st_mtime_ns + 1000000000))
+            return response
+
+        with patch.object(self.client.opener, 'open', side_effect=changed_after_login):
+            with self.assertRaisesRegex(C.CoverageError, 'LOGIN_UNAVAILABLE'):
+                self.client.request('GET', next(iter(C.ANCHORS)))
+        self.assertEqual([call[0].method for call in self.calls], ['POST'])
+        self.assertIsNone(self.client.token)
+
     def test_failed_login_is_not_retried_or_defaulted_and_http_error_is_closed(self):
         stream = io.BytesIO(b'PRIVATE_ERROR')
         error = urllib.error.HTTPError(C.URL + '/users/login', 401, 'failed', {}, stream)
