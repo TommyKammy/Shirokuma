@@ -264,7 +264,14 @@ class RuntimeStatusTests(TestCase):
         with mock.patch.object(R.W, 'command', return_value='v1\tPodList\t0\tCOMPLETE\n'):
             with self.assertRaises(R.RuntimeStatusError):
                 R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')
+        for raw in ('v1\tEndpointSliceList\t0\tCOMPLETE\n',
+                    'discovery.k8s.io/v1\tList\t0\tCOMPLETE\n'):
+            with self.subTest(raw=raw), mock.patch.object(R.W, 'command', return_value=raw):
+                with self.assertRaises(R.RuntimeStatusError):
+                    R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')
         with mock.patch.object(R.W, 'command', return_value='v1\tList\t0\tCOMPLETE\n'):
+            self.assertEqual(R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')['items'], [])
+        with mock.patch.object(R.W, 'command', return_value='discovery.k8s.io/v1\tEndpointSliceList\t0\tCOMPLETE\n'):
             self.assertEqual(R.ReadOnlyKubernetes().endpoints(PREFIX + '-xs')['items'], [])
 
     def test_cli_only_contacts_kubernetes_after_saved_completion_gate(self):

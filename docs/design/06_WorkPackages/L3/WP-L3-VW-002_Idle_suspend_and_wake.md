@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.30"
+version: "0.31"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: scoped list type/version pairing (offline)
+
+The optional metadata-only reader now accepts only `v1/List` or `discovery.k8s.io/v1/EndpointSliceList` for endpoint selections; the former is emitted by the local kubectl generic printer. It rejects the previously accepted crossed pairs even for empty lists. Fake positive/negative responses and `make test-local-warehouse-lifecycle` passed. Dedicated Colima was observed stopped; no live API/SQL, owner operation, saved-request replay, retained data or backup changes. The reported list envelope cannot authenticate the API, make separate reads atomic, or prove historical cleanup or operator acceptance. Roll back reader/tests only, leaving archived sessions and stopped VM intact. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: scoped list API version projection (offline)
 

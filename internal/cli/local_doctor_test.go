@@ -781,7 +781,7 @@ func TestLocalExperimentRejectsOtherContextBeforeChecks(t *testing.T) {
 }
 
 func TestLocalExperimentScopeRejectsRemoteOrMalformedEndpoints(t *testing.T) {
-	for _, endpoint := range []string{"https://cluster.example:6443", "https://127.0.0.1.example", "http://127.0.0.1:6443", "https://user:secret@127.0.0.1", "https://127.0.0.1", "https://127.0.0.1:0", "https://127.0.0.1:65536", "https://127.0.0.1:abc", "https://127.0.0.1:6443/proxy", "https://127.0.0.1:6443?redirect=remote", "https://127.0.0.1:6443?", "https://127.0.0.1:6443#fragment", "https://127.0.0.1:6443#", "invalid", "%"} {
+	for _, endpoint := range []string{"https://cluster.example:6443", "https://127.0.0.1.example", "http://127.0.0.1:6443", "https://user:secret@127.0.0.1", "https://127.0.0.1", "https://127.0.0.1:0", "https://127.0.0.1:65536", "https://127.0.0.1:abc", "https://127.0.0.1:6443/proxy", "https://127.0.0.1:6443?redirect=remote", "https://127.0.0.1:6443?", "https://127.0.0.1:6443#fragment", "https://127.0.0.1:6443#", " https://127.0.0.1:6443", "https://127.0.0.1:6443\n", "invalid", "%"} {
 		t.Run(endpoint, func(t *testing.T) {
 			runner := &fakeRunner{responses: []fakeResponse{{output: endpoint}}}
 			report := runLocalExperimentDoctor(context.Background(), runner, localExperimentContext, time.Unix(0, 0))

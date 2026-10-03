@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.50"
+version: "4.51"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: list type/version and exact local endpoint (offline)
+
+Two independent increments: WP-L3-VW-002 rejects crossed endpoint-list kind/API-version pairs (`v1/EndpointSliceList`, `discovery.k8s.io/v1/List`) while accepting the two observed valid pairs; WP-L0-GITOPS-001 rejects whitespace-padded loopback API endpoints before further diagnostic reads. Fake positive/negative cases, `make test-local-warehouse-lifecycle`, `go test ./internal/cli` (758 tests), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima read-only status: stopped. No VM start, live API/SQL, reconciliation, unknown-request replay, retained session or backup modification. These offline shape checks do not establish authenticated backend/Git identity, atomic inventory, historical cleanup, strict publication gate or production/operator acceptance. Roll back only the respective readers/tests; preserve saved evidence and stopped VM. Original Vault handoff direct sync pending outside checkout.
 
 ## 2026-10-03: bounded doctor output and Warehouse list version (offline)
 

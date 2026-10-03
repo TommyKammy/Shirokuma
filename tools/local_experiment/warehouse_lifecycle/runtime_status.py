@@ -114,10 +114,10 @@ class ReadOnlyKubernetes:
         header = lines.pop(0).split('\t')
         # kubectl's generic printer wraps a single-kind EndpointSlice selector
         # in List on this client; each item is still checked as EndpointSlice.
-        expected_headers = {'List', kind} if kind == 'EndpointSliceList' else {kind}
-        expected_versions = {'v1'} if kind == 'List' else {'v1', 'discovery.k8s.io/v1'}
-        require(len(header) == 4 and header[0] in expected_versions and
-                header[1] in expected_headers and header[3] == 'COMPLETE' and
+        expected_headers = ({('v1', 'List'), ('discovery.k8s.io/v1', 'EndpointSliceList')}
+                            if kind == 'EndpointSliceList' else {('v1', 'List')})
+        require(len(header) == 4 and tuple(header[:2]) in expected_headers and
+                header[3] == 'COMPLETE' and
                 re.fullmatch(r'(0|[1-9][0-9]*)', header[2]) is not None and
                 int(header[2]) == len(lines) and len(lines) <= limit)
         return {'kind': kind, 'items': [row(line) for line in lines]}
