@@ -12,6 +12,23 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-03: peer UID refusal before Warehouse parsing (offline)
+
+Independently of the catalog response-framing commit below, WP-L3-VW-002
+now pins the existing Unix peer boundary in a disposable regression: a
+different UID cannot enter `_read_request`, dispatch a handler or create
+request/reply entries. No owner code or archived request changed. Focused
+`make test-local-warehouse-lifecycle` passed (78 + 97 + 16 + 22 + 15 tests).
+Combined `make verify-local-experiment`, `make verify-design-context`
+(89 documents) and `git diff --check` passed; private combined logs are at
+`tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-085/`.
+No VM
+start, live backend/SQL, archived UUID replay or retained session/backup
+mutation. Fixture assertions are not backend authentication, caller receipt,
+owner restart recovery or operator acceptance. Roll back the test alone,
+preserving saved sessions. Original Vault synchronization pending outside
+checkout.
+
 ## 2026-10-03: declared catalog response length (offline)
 
 WP-L5-LINEAGE-001 now refuses a syntactically valid JSON response shorter than

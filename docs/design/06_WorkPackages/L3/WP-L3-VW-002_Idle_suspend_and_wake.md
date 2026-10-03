@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-03: peer check precedes disposable request read (offline)
+
+The existing Unix-socket peer-UID rejection now has a stronger disposable
+regression: a mismatched UID receives a refusal without invoking the request
+parser, handler or saving a request/reply. No owner implementation changed.
+The focused Warehouse suite passed; combined verification is in Milestones.
+No VM start, live backend/SQL, archived UUID replay or retained session/backup
+mutation. This does not prove remote backend authentication, historical caller
+receipt, restart recovery or operator acceptance. Roll back only the test
+assertions, retaining archived evidence. Original Vault sync pending outside
+checkout.
+
 ## 2026-10-03: serve-loop clock must follow stop callback (offline)
 
 A disposable monotonic clock advanced through TTL during a false-returning stop callback; the old pre-callback sample admitted another `accept`. The serve loop now samples time after the callback and refuses that connection with reason `ttl`. A focused negative failed before repair; the Warehouse suite passed afterward (Milestones). No VM start, live backend/SQL, archived UUID replay or retained session/backup mutation. This does not authenticate backend state, prove caller receipt, owner restart recovery or operator acceptance. Roll back only the serve-loop clock change and disposable fixture, preserving saved sessions. Direct original Vault synchronization remains pending outside checkout.

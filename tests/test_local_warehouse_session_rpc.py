@@ -911,9 +911,13 @@ class SessionRPCTest(unittest.TestCase):
 
     def test_peer_identity_mismatch_never_dispatches(self):
         self.start()
-        with mock.patch.object(R, 'peer_uid', return_value=os.getuid() + 1):
+        with mock.patch.object(R, 'peer_uid', return_value=os.getuid() + 1), \
+             mock.patch.object(self.rpc, '_read_request', side_effect=AssertionError('unauthorized read')) as reader:
             self.assertEqual(self.exchange(self.request(), allow_early_reject=True)[0], 400)
+        reader.assert_not_called()
         self.assertEqual(self.calls, [])
+        self.assertEqual(self.rpc._entries, {})
+        self.assertEqual(self.rpc._replies, [])
 
     def test_socket_directory_collision_is_not_adopted(self):
         directory = R.SOCKET_ROOT / ('shirokuma-wl-' + self.token)
