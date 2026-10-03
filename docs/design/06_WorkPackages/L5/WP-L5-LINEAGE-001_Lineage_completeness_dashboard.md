@@ -5,12 +5,24 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.59"
+version: "1.60"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: demoted eligible run needs saved drift detail (offline)
+
+Direct rendering refuses an initially eligible `incomplete` run without its
+`SOURCE_CHANGED_OR_UNVERIFIABLE` per-run explanation. A disposable changed-final-
+snapshot report rendered before the guard; the explained counterpart renders.
+Focused lineage tests (144) passed after the repair. Dedicated Colima was
+read-only observed stopped; no catalog access, retained source/report/volume/
+backup mutation or request replay. This checks internal saved claims, not
+producer identity, atomicity, whole-catalog/column coverage or acceptance.
+Roll back the renderer guard and synthetic fixture/test only, preserving saved
+reports. Original Vault sync pending outside the noninteractive checkout.
 
 ## 2026-10-04: valid saved source needs per-run verification reason (offline)
 

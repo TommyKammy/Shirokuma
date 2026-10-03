@@ -5,12 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.95"
+version: "5.96"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: demoted lineage detail and independent FinOps review (offline)
+
+WP-L5-LINEAGE-001: a disposable saved eligible/incomplete run missing its
+`SOURCE_CHANGED_OR_UNVERIFIABLE` detail rendered before repair; the direct
+renderer now refuses it while accepting the explained run. The first focused
+run exposed a test fixture assembled before its final snapshot was changed;
+after correcting it, the negative reproduced and focused lineage 144 tests
+passed. Separately reviewed WP-L6-FIN-001's history parser/direct renderer;
+no new defect established and no FinOps behavior changed. FinOps 181 tests
+passed (seven Linux-only skips). Dedicated Colima observed Stopped. No VM
+start, live catalog, new collection, retained source/report/volume/backup
+mutation, unknown-request replay or GitHub write. `make verify-local-experiment`,
+`make verify-design-context` (89 documents), `make check-no-secret-filenames`
+and `git diff --check` passed. No live runtime check was possible without
+starting the stopped lab; the synthetic renderer and FinOps checks are offline.
+Internal saved consistency
+does not establish producer authenticity, atomicity, whole-catalog/column
+coverage, current usage or operator acceptance. Roll back the lineage guard
+and synthetic fixture/test only; preserve saved evidence and stopped VM.
+AgentHouse retained volume remains `null / NOT_MEASURED`. Original Vault sync
+pending outside the noninteractive checkout.
 
 ## 2026-10-04: independent FinOps offline review
 

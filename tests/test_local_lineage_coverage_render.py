@@ -14,6 +14,7 @@ def run(number=1, statuses=('present', 'present'), *, source_status='valid', eli
     return {'run_token': token, 'operation': 'name_lengths' if eligible else None,
         'source_status': source_status, 'eligible': eligible,
         'reason_codes': ['RECORDED_RUN_FAILED'] if source_status == 'failed' else
+                        ['SOURCE_VERIFIED', 'SOURCE_CHANGED_OR_UNVERIFIABLE'] if source_status == 'incomplete' and eligible else
                         ['SOURCE_VERIFIED'] if source_status == 'valid' else [],
         'source_sha256_before': 'a' * 64 if eligible else None,
         'source_sha256_after': 'a' * 64 if eligible else None,
@@ -148,6 +149,16 @@ class CoverageRenderTests(unittest.TestCase):
             render(value)
         value['runs'][0]['reason_codes'] = ['SOURCE_VERIFIED']
         self.assertIn('SOURCE_VERIFIED', render(value))
+
+    def test_eligible_demoted_run_requires_saved_drift_explanation(self):
+        value = report([run(1, ('unknown', 'unknown'), source_status='incomplete')])
+        value['runs'][0]['source_sha256_after'] = None
+        value['runs'][0]['reason_codes'] = ['SOURCE_VERIFIED']
+        value['observation']['source_stable'] = False
+        with self.assertRaisesRegex(RenderError, 'INCONSISTENT_SOURCE_REASON'):
+            render(value)
+        value['runs'][0]['reason_codes'].append('SOURCE_CHANGED_OR_UNVERIFIABLE')
+        self.assertIn('SOURCE_CHANGED_OR_UNVERIFIABLE', render(value))
 
     def test_invalid_or_incomplete_source_requires_saved_observation_reason(self):
         for status in ('invalid', 'incomplete'):
