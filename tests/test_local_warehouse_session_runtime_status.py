@@ -189,6 +189,25 @@ class RuntimeStatusTests(TestCase):
         kube.slices.clear()
         self.assertEqual(R.observe(TOKEN, kube)['labelled_present'], 1)
 
+    def test_owner_selector_must_include_service_selected_owned_slice(self):
+        kube = FakeKube()
+        service = PREFIX + '-xs'
+        endpoint = obj('EndpointSlice', service + '-abcde', owner=TOKEN, service=service)
+        kube.slices[service] = [endpoint]
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+        kube.owned = [copy.deepcopy(endpoint)]
+        self.assertEqual(R.observe(TOKEN, kube)['service_endpoints_present'], 1)
+
+    def test_named_get_must_include_owner_selected_fixed_name(self):
+        kube = FakeKube()
+        fixed = obj('Deployment', PREFIX + '-xs', owner=TOKEN)
+        kube.owned = [fixed]
+        with self.assertRaises(R.RuntimeStatusError):
+            R.observe(TOKEN, kube)
+        kube.names['deployments', PREFIX + '-xs'] = copy.deepcopy(fixed)
+        self.assertEqual(R.observe(TOKEN, kube)['named_present'], 1)
+
     def test_conflicting_identity_between_projections_fails_in_one_round(self):
         kube = FakeKube()
         name = PREFIX + '-xs'

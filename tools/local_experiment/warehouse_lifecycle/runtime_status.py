@@ -181,9 +181,15 @@ def snapshot(token, kube, deadline):
     # owner-selector projection. Separate API reads can race; reject the
     # contradictory round instead of presenting it as a stable observation.
     owned_set = set(owned)
+    named_set = set(named)
     for value in named_values:
         if value['metadata']['labels'].get(OWNER) == token:
             require(identity(value) in owned_set)
+    fixed_names = {(kind, prefix + suffix) for kind, (_, suffixes) in KINDS.items()
+                   for suffix in suffixes}
+    for value in owned_values:
+        if (value['kind'], value['metadata']['name']) in fixed_names:
+            require(identity(value) in named_set)
     # Likewise a selected EndpointSlice for either fixed Service cannot vanish
     # from the corresponding service-name selector within the same round.
     endpoint_set = set(endpoints)
@@ -191,6 +197,9 @@ def snapshot(token, kube, deadline):
     for value in owned_values:
         if value['kind'] == 'EndpointSlice' and value['metadata']['labels'].get('kubernetes.io/service-name') in services:
             require(identity(value) in endpoint_set)
+    for value in endpoint_values:
+        if value['metadata']['labels'].get(OWNER) == token:
+            require(identity(value) in owned_set)
     # The three API projections are separate reads. A resource present in more
     # than one projection must retain its identity within this round as well.
     identities = {}

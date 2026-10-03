@@ -152,6 +152,49 @@ func TestLocalInventoryRejectsNullNestedObjects(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsNullNestedScalarFields(t *testing.T) {
+	for _, field := range []string{`"name":null`, `"namespace":null`, `"generation":null`, `"deletionTimestamp":null`} {
+		raw := []byte(`{"items":[{"metadata":{` + field + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("null identity accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, field := range []string{`"replicas":null`, `"prune":null`, `"suspend":null`, `"observedGeneration":null`, `"lastAppliedRevision":null`} {
+		parent := "spec"
+		if strings.Contains(field, "observedGeneration") || strings.Contains(field, "lastAppliedRevision") {
+			parent = "status"
+		}
+		raw := []byte(`{"items":[{"` + parent + `":{` + field + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("null workload field accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"metadata":{"name":"valid"},"spec":{"replicas":1},"status":{"observedGeneration":2}}]}`), []byte(`{"items":[{}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("non-null or omitted field rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsNullConditionFields(t *testing.T) {
+	for _, field := range []string{`"type":null`, `"status":null`, `"observedGeneration":null`} {
+		raw := []byte(`{"items":[{"status":{"conditions":[{` + field + `}]}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("null condition field accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}`), []byte(`{"items":[{"status":{"conditions":[]}}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("non-null or omitted condition field rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsAliasedItemIdentity(t *testing.T) {
 	for _, field := range []string{"name", "namespace", "generation", "deletionTimestamp"} {
 		alias := strings.ToUpper(field[:1]) + field[1:]

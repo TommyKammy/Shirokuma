@@ -261,6 +261,9 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				}
 			}
 		}
+		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "deletionTimestamp"}) {
+			return true
+		}
 		// Nested declared fields must also be canonical: encoding/json accepts
 		// Spec.Ref.Branch or Status.Conditions as if they were Kubernetes keys.
 		for _, nested := range []struct {
@@ -277,6 +280,10 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		var spec, status map[string]json.RawMessage
 		_ = json.Unmarshal(item["spec"], &spec)
 		_ = json.Unmarshal(item["status"], &status)
+		if localInventoryNullFields(spec, []string{"suspend", "paused", "path", "prune", "wait", "url", "replicas"}) ||
+			localInventoryNullFields(status, []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas", "observedGeneration", "lastAppliedRevision", "conditions"}) {
+			return true
+		}
 		for _, nested := range []struct {
 			raw  json.RawMessage
 			keys []string
@@ -298,6 +305,11 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			if !localInventoryCanonicalFields(condition, []string{"type", "status", "observedGeneration"}) {
 				return true
 			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(condition, &fields); err != nil ||
+				localInventoryNullFields(fields, []string{"type", "status", "observedGeneration"}) {
+				return true
+			}
 		}
 	}
 	return list.Items == nil || list.Metadata.Continue != "" ||
@@ -308,6 +320,15 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		}) >= 0)) ||
 		(list.Kind != "" && list.Kind != "List") ||
 		(list.APIVersion != "" && list.APIVersion != "v1")
+}
+
+func localInventoryNullFields(fields map[string]json.RawMessage, keys []string) bool {
+	for _, key := range keys {
+		if string(fields[key]) == "null" {
+			return true
+		}
+	}
+	return false
 }
 
 func localInventoryCanonicalFields(raw json.RawMessage, keys []string) bool {

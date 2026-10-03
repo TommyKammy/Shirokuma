@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.39"
+version: "0.40"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: reverse scoped projection membership (offline)
+
+The opt-in read-only two-round inventory now refuses an owner-selected fixed-name resource absent from its named GET and a service-selected EndpointSlice advertising this session owner absent from the owner-selected list. These complement the existing checks in the other direction; unrelated or differently owned slices still count as scoped presence. Two isolated negatives failed before repair; `make test-local-warehouse-lifecycle` passed after repair. Dedicated Colima was observed stopped; no live API/SQL, owner operation, unknown-request replay or retained data/backup change. Separate API reads can race and do not authenticate the backend, prove atomicity/historical cleanup or establish production/operator acceptance. Roll back only the reader/tests and preserve saved sessions, backups and VM. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: cross-selector membership in archived-session inventory (offline)
 

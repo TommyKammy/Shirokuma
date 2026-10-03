@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.40"
+version: "0.41"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: null nested scalar and condition fields (offline)
+
+The fixed-profile inventory reader now rejects explicit null identity fields in item metadata, declared scalar fields in item spec/status, and type/status/generation fields within conditions. Omitted optional fields and canonical non-null objects remain compatible; generic doctor is unchanged. Two focused negatives failed before repair; `go test ./internal/cli -count=1` (783 passed) and `go vet ./...` passed after repair. Dedicated Colima status reported stopped; no live API/SQL, reconciliation, unknown-request replay or retained data/backup change. These offline response checks do not authenticate Kubernetes/Git, establish atomicity or historical cleanup, clear strict admission or establish operator/production acceptance. Roll back only the local inventory reader/tests, preserving the stopped VM and saved evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: explicit null nested inventory objects (offline)
 

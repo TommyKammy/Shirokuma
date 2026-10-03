@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.73"
+version: "4.74"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: nested null fields and reverse Warehouse projections (offline)
+
+WP-L0-GITOPS-001: fixed-profile inventories refuse explicit null item metadata identity, declared spec/status scalar and condition fields instead of decoding them as omission; generic doctor is unchanged. WP-L3-VW-002: an owner-selected fixed-name object must also appear in its named GET, and a service-selected owner-labelled EndpointSlice must also occur in the owner-selected list. Isolated negatives failed before repair; `go test ./internal/cli -count=1` (783 passed), `go vet ./...`, `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed afterward. Private full-regression and design logs: `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-027/verify.log` and `design.log`. The dedicated Colima profile reported stopped. No live API/SQL, reconciliation, owner operation, unknown-request replay or retained data/backup mutation. Offline consistency checks are not authenticated or atomic observations, historical cleanup, strict publication admission or operator/production acceptance. Roll back only local reader/test changes, preserving stopped VM and evidence; original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: explicit null nested diagnostic objects (offline)
 
