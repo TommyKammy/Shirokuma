@@ -127,6 +127,16 @@ class HistoryTests(unittest.TestCase):
         too_many = encoded([report()] * 9)
         with self.assertRaises(H.HistoryError): H.parse(too_many)
 
+    def test_nested_duplicate_report_claims_cannot_override_saved_observation(self):
+        original = encoded([report(), report(processes())])
+        self.assertIn(b'"inference": {', original)
+        # A last-key-wins decoder would accept the second claim as if the
+        # first one had never been reported.
+        forged = original.replace(b'"inference": {', b'"inference": {}, "inference": {', 1)
+        with self.assertRaises(H.HistoryError):
+            H.parse(forged)
+        self.assertEqual(len(H.parse(original)), 2)
+
     def test_nonzero_float_underflow_cannot_become_saved_zero_usage(self):
         original = encoded([report(), report(processes())])
         self.assertIn(b'0.5', original)

@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.154"
+version: "5.155"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: separate nested FinOps history claim regression (offline)
+
+WP-L6-FIN-001: an independently constructed saved-history JSON with duplicate
+nested `inference` claims is rejected by the existing parser; the original
+two-report selection remains valid. Focused history suite passed (14 tests),
+`make test-local-finops` passed 183 tests (seven Linux-only skips), and
+design-context (89 documents), secret-filename check and diff check passed.
+No FinOps parser/renderer or saved report changed, no collection, retained
+volume/backup mutation or GitHub write; the dedicated lab remained stopped.
+AgentHouse usage stays `null / NOT_MEASURED`. This synthetic regression does
+not authenticate a producer, measure current usage or establish operator
+acceptance. Roll back only the FinOps test if needed, retaining reports. Direct
+original Vault sync pending outside this checkout.
 
 ## 2026-10-04: policy selector aliases and independent GitOps review (offline)
 

@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.53"
+version: "0.54"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: nested duplicate history claim regression (offline)
+
+Independently pinned the existing rejection of a duplicate nested `inference`
+claim in an explicitly selected saved-history JSON input; the original valid
+two-report input still parses. The focused history suite passed (14 tests).
+No parser or renderer behavior, saved report, volume or backup changed. The
+dedicated lab remained stopped; AgentHouse retained usage is still `null /
+NOT_MEASURED`. This synthetic input cannot authenticate a report producer,
+measure current usage or establish acceptance. Roll back only the regression
+test if needed and preserve historical reports. `make test-local-finops`
+passed 183 tests (seven Linux-only skips); design-context (89 documents),
+secret-filename check and diff check passed. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-04: independent saved-history boundary check (offline)
 
