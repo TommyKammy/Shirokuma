@@ -353,6 +353,26 @@ func TestLocalInventoryRejectsDuplicateNamesWithDifferentUIDs(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsSharedUIDAcrossKinds(t *testing.T) {
+	// A name may be shared across kinds, but a Kubernetes UID identifies an
+	// object independently of its name or GVK in one complete list.
+	for _, tc := range []struct {
+		secondUID string
+		invalid   bool
+	}{{"shared", true}, {"distinct", false}} {
+		raw := []byte(`{"items":[` +
+			`{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"first","namespace":"flux-system","uid":"shared"}},` +
+			`{"apiVersion":"v1","kind":"Service","metadata":{"name":"second","namespace":"flux-system","uid":"` + tc.secondUID + `"}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if got := localInventoryIncomplete(list, raw); got != tc.invalid {
+			t.Fatalf("shared UID across kinds incomplete=%t want %t", got, tc.invalid)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsLossyItemEnvelopeIdentity(t *testing.T) {
 	for _, field := range []string{"kind", "apiVersion"} {
 		raw := []byte(`{"items":[{"` + field + `":"apps\ud800"}]}`)

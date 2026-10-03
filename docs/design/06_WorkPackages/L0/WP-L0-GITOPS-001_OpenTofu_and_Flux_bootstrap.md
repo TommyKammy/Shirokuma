@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.77"
+version: "0.78"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: cross-kind UID collision regression (offline)
+
+A disposable complete inventory now checks that a Deployment and Service with
+different names but the same reported UID are refused; distinct UIDs pass.
+The existing validator already applied this boundary, so no doctor behavior
+changed. `go test ./... -count=1` (831 passed) and `go vet ./...` passed.
+No VM start, live API/Git, reconciliation or retained data mutation. A fake
+complete list cannot authenticate remote inventory, ensure atomic reads, clear
+strict admission or establish operator acceptance. Roll back the test only;
+preserve stopped VM and historical evidence. Original Vault sync remains pending
+outside checkout.
 
 ## 2026-10-03: same-namespace duplicate UID regression (offline)
 

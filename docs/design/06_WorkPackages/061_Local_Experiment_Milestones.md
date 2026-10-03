@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.42"
+version: "5.43"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: cross-kind inventory UID collision (offline)
+
+After the independent framing commit below, WP-L0-GITOPS-001 gained a
+disposable complete-list regression: different-kind, different-name resources
+sharing a reported UID fail closed; distinct UIDs pass. No Go reader change.
+`go test ./... -count=1` (831 passed), `go vet ./...`, design-context and
+`git diff --check` passed. Dedicated Colima was last read-only observed stopped;
+no VM start, live API/Git, reconciliation, unknown request replay or retained
+data/backup mutation. This is list-internal consistency, not producer
+authentication, atomicity, strict admission or operator acceptance. Roll back
+only the test while preserving previous evidence. Original Vault synchronization
+remains pending outside this checkout.
 
 ## 2026-10-03: strict RPC header values and catalog transfer coding (offline)
 
