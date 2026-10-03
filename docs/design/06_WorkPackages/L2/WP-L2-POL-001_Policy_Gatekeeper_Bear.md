@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.38"
+version: "0.39"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: conflicting LimitRange list envelope aliases (offline)
+
+Five test-owned empty canonical lists with conflicting case-variant `Items`,
+`Metadata`, `Kind` or `ApiVersion` passed the fixed baseline before repair.
+The observer now refuses these aliases before any dry-run. Focused observer
+47 tests and native policy 17 tests passed. The dedicated Colima profile was
+observed stopped; no live admission, existing request, volume or backup was
+modified. This fake-list consistency check does not authenticate the API,
+establish atomic inventory or grant operator acceptance. Roll back only the
+alias guard and test if needed; retain pending requests without replay.
+Original Vault sync pending outside the approved checkout.
 
 ## 2026-10-04: case-variant LimitRange pagination (offline)
 

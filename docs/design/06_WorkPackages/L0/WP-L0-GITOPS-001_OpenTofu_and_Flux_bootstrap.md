@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.98"
+version: "0.99"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: conflicting list envelope regression (offline)
+
+An independent fake-list test pins the existing refusal of five conflicting
+case-variant top-level aliases alongside canonical `items`/GVK, while the
+canonical empty list remains compatible. No GitOps reader behavior changed;
+the focused Go test passed. Dedicated Colima was observed stopped; no live
+inventory, reconciliation, retained data or backup changed. This fixture
+cannot authenticate the producer, prove atomic inventory, strict admission or
+operator acceptance. Roll back only the new regression test if necessary;
+retain saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: typed remaining-count regression (offline)
 

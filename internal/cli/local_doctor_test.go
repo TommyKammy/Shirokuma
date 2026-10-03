@@ -339,6 +339,25 @@ func TestLocalInventoryRequiresCanonicalMetadataKeys(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsConflictingListEnvelopeAliases(t *testing.T) {
+	for _, field := range []string{`"Items":[{"kind":"Secret"}]`, `"ITEMS":[{"kind":"Secret"}]`,
+		`"Metadata":{"continue":"next-page"}`, `"Kind":"OtherList"`, `"ApiVersion":"v2"`} {
+		raw := []byte(`{"apiVersion":"v1","kind":"List","items":[],` + field + `}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err)
+		}
+		if !localInventoryIncomplete(list, raw) {
+			t.Fatalf("conflicting list alias accepted: %s", field)
+		}
+	}
+	raw := []byte(`{"apiVersion":"v1","kind":"List","metadata":{"continue":"","remainingItemCount":0},"items":[]}`)
+	var list kubernetesResourceList
+	if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+		t.Fatalf("canonical empty list rejected: %s (%v)", raw, err)
+	}
+}
+
 func TestLocalInventoryRejectsNullNestedObjects(t *testing.T) {
 	for _, field := range []string{`"spec":{"ref":null}`, `"spec":{"secretRef":null}`, `"spec":{"sourceRef":null}`, `"status":{"artifact":null}`} {
 		raw := []byte(`{"items":[{` + field + `}]}`)

@@ -106,6 +106,18 @@ class ObserverTests(unittest.TestCase):
         self.kube.limits['metadata']={'continue': '', 'remainingItemCount': 0}
         self.assertEqual(self.ready()['baseline']['limit_ranges'], [])
 
+    def test_limitrange_list_aliases_cannot_hide_items(self):
+        for key, value in (('Items', [{'kind': 'LimitRange'}]),
+                           ('ITEMS', [{'kind': 'LimitRange'}]),
+                           ('Metadata', {'continue': 'next-page'}),
+                           ('Kind', 'OtherList'), ('ApiVersion', 'v2')):
+            with self.subTest(key=key):
+                kube=FakeKube();kube.limits[key]=value
+                observer=O.CandidateObserver(prepared(),kube)
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.observe()
+                self.assertEqual(kube.requests, [])
+
     def test_allowed_exact_body_one_attempt_and_all_guards(self):
         observed=self.ready();receipts=[]
         def save(value):

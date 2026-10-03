@@ -308,6 +308,9 @@ class CandidateObserver:
         limit_metadata = limits.get('metadata', {}) if type(limits) is dict else None
         require(type(limits) is dict and limits.get('apiVersion') == 'v1'
                 and limits.get('kind') in {'List', 'LimitRangeList'} and limits.get('items') == []
+                and not any(type(key) is str and key.lower() in
+                            {'apiversion', 'kind', 'items', 'metadata'}
+                            and key not in {'apiVersion', 'kind', 'items', 'metadata'} for key in limits)
                 and type(limit_metadata) is dict
                 and not any(type(key) is str and key.lower() in {'continue', 'remainingitemcount'}
                             and key not in {'continue', 'remainingItemCount'} for key in limit_metadata)

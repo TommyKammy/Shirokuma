@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.148"
+version: "5.149"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy list envelope aliases and independent GitOps check (offline)
+
+WP-L2-POL-001: five fake conflicting top-level aliases on otherwise empty
+LimitRange lists passed before repair and now fail before dry-run (observer 47
+tests, native policy 17 tests passed). Independently, WP-L0-GITOPS-001 pins
+the existing refusal of those aliases and acceptance of a canonical empty
+list; the focused Go regression passed without reader changes. Dedicated
+Colima observed stopped; no live admission, Git/API inventory, reconciliation,
+retained request/report/volume/backup change or GitHub write. Offline fake
+lists cannot authenticate producers, prove atomic inventory, clear strict
+admission or establish acceptance. Roll back the policy guard/test and the
+independent GitOps test only if needed; preserve pending requests and saved
+evidence. After both increments `go test ./... -count=1` (847 tests), `go
+vet ./...`, `make verify-local-experiment`, `make verify-design-context` (89
+documents) and `make check-no-secret-filenames` passed. The local suite includes
+expected synthetic failure output, not live acceptance evidence. Original
+Vault synchronization pending outside this checkout.
 
 ## 2026-10-04: policy pagination aliases and independent FinOps review (offline)
 
