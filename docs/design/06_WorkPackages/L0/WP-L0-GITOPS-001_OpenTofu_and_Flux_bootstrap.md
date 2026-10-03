@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.69"
+version: "0.70"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: bounded reported Kubernetes names (offline)
+
+The fixed-profile complete inventory rejects a reported item name longer than 253 bytes or namespace longer than 63 bytes, including unrelated list members. An isolated 254-byte negative failed before repair; boundary-length names remain compatible. Focused Go (821 tests), vet and local verification passed. Generic doctor unchanged. Dedicated Colima was read-only observed stopped; no live API/Git, reconciliation or retained data/backup changes. This checks reported shape, not authenticated/atomic Kubernetes or Git state, historical cleanup, strict admission or operator acceptance. Roll back reader/test only, preserving VM/evidence. Original Vault direct sync pending outside checkout; broader results in Milestones.
 
 ## 2026-10-03: fixed-list envelope contract review (offline)
 

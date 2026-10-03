@@ -132,6 +132,26 @@ func TestLocalInventoryRequiresCanonicalEnvelopeKeys(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsUnboundedReportedNames(t *testing.T) {
+	for _, tc := range []struct {
+		field string
+		limit int
+	}{
+		{"name", 253}, {"namespace", 63},
+	} {
+		for _, size := range []int{tc.limit, tc.limit + 1} {
+			raw := []byte(`{"items":[{"metadata":{"` + tc.field + `":"` + strings.Repeat("a", size) + `"}}]}`)
+			var list kubernetesResourceList
+			if err := json.Unmarshal(raw, &list); err != nil {
+				t.Fatal(err)
+			}
+			if got := localInventoryIncomplete(list, raw); got != (size > tc.limit) {
+				t.Fatalf("incomplete=%t for %s length %d", got, tc.field, size)
+			}
+		}
+	}
+}
+
 func TestLocalInventoryRequiresCanonicalMetadataKeys(t *testing.T) {
 	for _, field := range []string{`"ResourceVersion":"123"`, `"RemainingItemCount":0`, `"Continue":""`} {
 		decorate := func(raw string) string {

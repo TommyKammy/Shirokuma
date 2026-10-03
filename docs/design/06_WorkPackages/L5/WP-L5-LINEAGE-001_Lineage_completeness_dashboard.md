@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.02"
+version: "1.03"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: credential read-to-identity and parent stability (offline)
+
+The private credential reader now returns identity captured by the verified open-file read and checks that the entry still matches it before returning. A disposable touch immediately after that read used to pair old bytes with new metadata. Separately, it checks the opened parent directory's full metadata across the read; a disposable change from 0700 to 0755 previously returned credential bytes. Both new negatives pass, alongside 64 focused tests and local verification. No live login, GET, VM start, retained credential, saved source, report or backup change occurred. Same-UID restoration between observations, credential producer/API provenance and whole-catalog/column lineage remain unproved. Roll back reader and temporary tests only; preserve retained evidence. Direct original Vault sync pending outside checkout; broader results in Milestones.
 
 ## 2026-10-03: credential identity across login (offline)
 

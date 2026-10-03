@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.20"
+version: "5.21"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: credential read boundary and reported name bounds (offline)
+
+WP-L5-LINEAGE-001: credential bytes now stay bound to the file identity verified while reading, with a final entry comparison; the opened private parent directory's metadata must also remain stable. Disposable post-read file touch and parent chmod negatives pass (64 focused lineage tests). WP-L0-GITOPS-001: a reported resource name beyond 253 bytes or namespace beyond 63 bytes refuses the fixed-profile complete list; isolated negative failed before repair, boundary positives pass (821 focused Go tests, `go vet ./...`). `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Read-only `colima list` reported the dedicated VM stopped; no live login/API/Git/SQL, VM start, reconciliation, unknown-request replay or retained credential/source/session/report/backup mutation. Offline checks cannot authenticate producers or remote state, exclude same-UID restoration, establish atomicity, whole-catalog/column lineage, strict admission or operator/production acceptance. Roll back only the readers and disposable tests, preserving VM/evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: credential metadata stability across login (offline)
 

@@ -310,6 +310,19 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		if localInventoryInvisibleLocations(metadata, []string{"name", "namespace"}) {
 			return true
 		}
+		// Reported Kubernetes names are bounded DNS identities. An unrelated
+		// member with an impossible name cannot establish a complete list.
+		for _, bounded := range []struct {
+			key   string
+			limit int
+		}{{"name", 253}, {"namespace", 63}} {
+			if rawName, ok := metadata[bounded.key]; ok {
+				var name string
+				if err := json.Unmarshal(rawName, &name); err != nil || len(name) > bounded.limit {
+					return true
+				}
+			}
+		}
 		var identity struct {
 			Generation int64 `json:"generation"`
 		}

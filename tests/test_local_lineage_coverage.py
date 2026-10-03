@@ -82,6 +82,39 @@ class CoverageTests(unittest.TestCase):
                 self.root.unlink()
                 displaced.rename(self.root)
 
+    def test_credential_change_after_verified_read_is_not_accepted(self):
+        credential = self.root / '.env'
+        credential.write_bytes(b'original')
+        credential.chmod(0o600)
+        original = C._source_file_at
+
+        def change_after_read(*args, **kwargs):
+            result = original(*args, **kwargs)
+            os.utime(credential, None)
+            return result
+
+        with patch.object(C, '_source_file_at', change_after_read):
+            with self.assertRaisesRegex(C.CoverageError, 'SOURCE_CHANGED'):
+                C.read_file(credential, 4096, with_identity=True)
+
+    def test_credential_parent_mode_change_during_read_is_not_accepted(self):
+        credential = self.root / '.env'
+        credential.write_bytes(b'original')
+        credential.chmod(0o600)
+        original = C._source_file_at
+
+        def change_parent(*args, **kwargs):
+            result = original(*args, **kwargs)
+            self.root.chmod(0o755)
+            return result
+
+        try:
+            with patch.object(C, '_source_file_at', change_parent):
+                with self.assertRaisesRegex(C.CoverageError, 'SOURCE_CHANGED'):
+                    C.read_file(credential, 4096)
+        finally:
+            self.root.chmod(0o700)
+
     def test_all_runs_missing_is_complete_observation_not_complete_coverage(self):
         self.add_run()
         result = self.collect()

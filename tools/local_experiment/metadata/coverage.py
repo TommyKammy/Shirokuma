@@ -101,11 +101,18 @@ def read_file(path, limit=MAX_FILE_BYTES, *, with_identity=False):
     path = Path(path)
     parent_fd = _open_source_dir(path.parent)
     try:
-        raw = _source_file_at(parent_fd, path.name, os.fstat(parent_fd).st_dev, limit)
+        parent_before = _source_directory_identity(os.fstat(parent_fd))
+        result = _source_file_at(parent_fd, path.name, parent_before[0], limit,
+                                 return_identity=with_identity)
         if with_identity:
-            info = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
-            identity = _source_directory_identity(info)
+            raw, identity = result
+            current = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+            require(_source_directory_identity(current) == identity, 'SOURCE_CHANGED')
+        else:
+            raw = result
         _current_source_path(path.parent, parent_fd)
+        require(_source_directory_identity(os.fstat(parent_fd)) == parent_before,
+                'SOURCE_CHANGED')
         return (raw, identity) if with_identity else raw
     finally:
         os.close(parent_fd)
@@ -145,7 +152,7 @@ def _open_source_dir(path, *, private=True):
         raise
 
 
-def _source_file_at(directory_fd, name, device, limit, *, expected=None):
+def _source_file_at(directory_fd, name, device, limit, *, expected=None, return_identity=False):
     before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
     require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid() and
             stat.S_IMODE(before.st_mode) == 0o600 and before.st_dev == device and
@@ -181,7 +188,7 @@ def _source_file_at(directory_fd, name, device, limit, *, expected=None):
                 stat.S_IMODE(current.st_mode) == 0o600 and
                 (current.st_mode, current.st_size, current.st_mtime_ns, current.st_ctime_ns) ==
                 (after.st_mode, after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'SOURCE_CHANGED')
-        return raw
+        return (raw, _source_directory_identity(after)) if return_identity else raw
     finally:
         os.close(fd)
 
