@@ -871,7 +871,7 @@ func TestLocalFluxRejectsPaginatedInventories(t *testing.T) {
 }
 
 func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
-	for _, field := range []string{`"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"apiVersion":"v2",`} {
+	for _, field := range []string{`"metadata":{"remainingItemCount":1},`, `"metadata":{"remainingItemCount":-1},`, `"metadata":{"resourceVersion":""},`, `"metadata":{"resourceVersion":"  "},`, `"apiVersion":"v2",`} {
 		for _, first := range []bool{true, false} {
 			responses := []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}
 			index := 1
@@ -889,7 +889,7 @@ func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
 			}
 		}
 	}
-	for _, field := range []string{`"metadata":{"remainingItemCount":0},`, `"apiVersion":"v1",`} {
+	for _, field := range []string{`"metadata":{"remainingItemCount":0},`, `"metadata":{"resourceVersion":"1234"},`, `"apiVersion":"v1",`} {
 		responses := []fakeResponse{{output: strings.Replace(localControllerJSON(), `{"items":`, `{`+field+`"items":`, 1)}, {output: strings.Replace(localFluxJSON(), `{"items":`, `{`+field+`"items":`, 1)}}
 		if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true); check.Status != "informational" {
 			t.Fatalf("valid envelope %s rejected: %#v", field, check)
@@ -898,6 +898,20 @@ func TestLocalFluxRejectsInconsistentListEnvelope(t *testing.T) {
 	responses := []fakeResponse{{output: localControllerJSON()}, {output: strings.Replace(localFluxJSON(), `{"items":`, `{"apiVersion":"v2","items":`, 1)}}
 	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false); strings.Contains(check.Summary, "incomplete") {
 		t.Fatalf("generic profile inherited local envelope rule: %#v", check)
+	}
+}
+
+func TestLocalWorkloadRejectsEmptyReportedListResourceVersion(t *testing.T) {
+	for _, index := range []int{0, 1} {
+		responses := localWorkloadResponses()
+		responses[index].output = strings.Replace(responses[index].output, `{"items":`, `{"metadata":{"resourceVersion":""},"items":`, 1)
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		for _, check := range checks {
+			isAffected := index == 0 && check.Name == "seaweedfs" || index == 1 && check.Name != "seaweedfs"
+			if isAffected && (check.Status != "degraded" || !strings.Contains(check.Summary, "incomplete")) || !isAffected && check.Status != "healthy" {
+				t.Fatalf("list %d: unexpected workload check %#v", index, check)
+			}
+		}
 	}
 }
 

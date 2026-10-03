@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.28"
+version: "0.29"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: explicitly blank list resource versions (offline)
+
+The fixed-profile read-only doctor now rejects an explicitly empty or whitespace-only `metadata.resourceVersion` in controller, Flux-resource and namespace workload lists, rather than treating it like an omitted fixture field. A nonempty opaque version and legacy omitted fields remain compatible. Fake negative/positive cases across all three inventories, `go test ./internal/cli -count=1` (769 tests), `go vet ./...`, and Warehouse focused tests passed. Dedicated Colima was observed stopped; no VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. The reported version is not authenticated API identity or an atomic snapshot; Git provenance, strict admission and operator/production acceptance remain open. Roll back only the local list check and tests, preserving the VM and saved evidence. Original Vault handoff direct sync remains pending outside checkout.
 
 ## 2026-10-03: explicit Deployment progress in fixed-profile diagnostics (offline)
 

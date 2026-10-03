@@ -280,6 +280,7 @@ class RuntimeStatusTests(TestCase):
             with self.assertRaises(R.RuntimeStatusError):
                 R.ReadOnlyKubernetes().labelled(TOKEN)
         for raw in ('', 'v1\tList\t0\tINVALID\n', 'v1\tList\t0\tTRUNCATED\n', 'v1\tList\t1\tCOMPLETE\n',
+                    'v1\tList\t0\tCOMPLETE\r\n', 'v1\tList\t0\tCOMPLETE\n\r\n',
                     'v2\tList\t0\tCOMPLETE\n', 'discovery.k8s.io/v1\tList\t0\tCOMPLETE\n',
                     'v1\tPodList\t0\tCOMPLETE\n', 'v1\tList\t0\tCOMPLETE\nextra\n'):
             with self.subTest(raw=raw), mock.patch.object(R.W, 'command', return_value=raw):

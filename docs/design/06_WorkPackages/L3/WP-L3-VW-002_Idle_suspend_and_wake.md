@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.34"
+version: "0.35"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: canonical metadata list row framing (offline)
+
+The opt-in scoped inventory reader now requires LF-only projected list rows rather than accepting CRLF through Python `splitlines()` normalization. Fake CRLF malformed headers, valid LF examples and `make test-local-warehouse-lifecycle` passed. This does not validate a live API; the dedicated Colima profile remained stopped, with no owner call, SQL, unknown-request replay or retained session/backup mutation. Separate reads are not atomic or authenticated, and historical cleanup and operator/production acceptance remain open. Roll back only the local reader/test; retain saved evidence and the stopped VM. Original Vault handoff direct sync remains pending outside checkout.
 
 ## 2026-10-03: list metadata requires a resource version (offline)
 

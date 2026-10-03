@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.58"
+version: "4.59"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: list resource versions and Warehouse row framing (offline)
+
+WP-L0-GITOPS-001: fixed local doctor rejects explicitly empty/blank list resource versions across controller, Flux and Lakehouse inventories while accepting nonempty opaque or absent fixture fields. WP-L3-VW-002: scoped metadata list projections reject CRLF framing rather than normalizing it into apparent complete inventory. Fake negative/positive cases, `go test ./internal/cli -count=1` (769 tests), `go vet ./...`, `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. Dedicated Colima read-only status: stopped; no VM start, live API/SQL, reconciliation, owner request, unknown-request replay or retained session/backup mutation. Offline projections are not authenticated API/Git identity, atomic inventory, historical cleanup, strict publication admission or operator/production acceptance. Roll back only local readers/tests; preserve saved evidence and stopped VM. Original Vault handoff direct sync pending outside checkout.
 
 ## 2026-10-03: Deployment progress and Warehouse list version (offline)
 

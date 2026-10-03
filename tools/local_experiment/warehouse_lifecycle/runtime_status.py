@@ -112,8 +112,10 @@ class ReadOnlyKubernetes:
 
     def _list(self, resource, selector, limit, kind):
         raw = self._get(resource, '-l', selector, template=MANY)
-        require(raw.endswith('\n') and len(raw) <= 65536)
-        lines = raw.splitlines()
+        # The Go template emits LF-delimited metadata rows only. Do not let
+        # splitlines() normalize other separators into a plausible empty list.
+        require(raw.endswith('\n') and '\r' not in raw and len(raw) <= 65536)
+        lines = raw[:-1].split('\n')
         header = lines.pop(0).split('\t')
         # kubectl's generic printer wraps a single-kind EndpointSlice selector
         # in List on this client; each item is still checked as EndpointSlice.

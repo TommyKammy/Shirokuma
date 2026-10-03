@@ -120,6 +120,7 @@ type kubernetesResourceList struct {
 	Metadata   struct {
 		Continue           string `json:"continue"`
 		RemainingItemCount *int64 `json:"remainingItemCount"`
+		ResourceVersion    *string `json:"resourceVersion"`
 	} `json:"metadata"`
 	Items []struct {
 		Kind       string `json:"kind"`
@@ -179,6 +180,7 @@ type kubernetesResourceList struct {
 func localInventoryIncomplete(list kubernetesResourceList) bool {
 	return list.Items == nil || list.Metadata.Continue != "" ||
 		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
+		(list.Metadata.ResourceVersion != nil && strings.TrimSpace(*list.Metadata.ResourceVersion) == "") ||
 		(list.Kind != "" && list.Kind != "List") ||
 		(list.APIVersion != "" && list.APIVersion != "v1")
 }
