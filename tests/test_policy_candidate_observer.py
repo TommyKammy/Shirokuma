@@ -129,6 +129,17 @@ class ObserverTests(unittest.TestCase):
                     observer.observe()
                 self.assertEqual(kube.requests, [])
 
+    def test_namespace_selector_label_alias_cannot_hide_conflicting_scope(self):
+        for key in ('Kubernetes.io/metadata.name', 'kubernetes.io/Metadata.Name',
+                    'KUBERNETES.IO/METADATA.NAME'):
+            with self.subTest(key=key):
+                kube=FakeKube()
+                kube.namespace['metadata']['labels'][key]='different-namespace'
+                observer=O.CandidateObserver(prepared(),kube)
+                with self.assertRaises(O.CandidateObservationError):
+                    observer.observe()
+                self.assertEqual(kube.requests, [])
+
     def test_namespace_envelope_aliases_cannot_hide_conflicting_type(self):
         for key, value in (('Kind', 'Other'), ('KIND', 'Other'),
                            ('ApiVersion', 'v2'), ('Metadata', {'name': 'other'})):

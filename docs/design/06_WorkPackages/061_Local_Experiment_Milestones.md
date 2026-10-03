@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.153"
+version: "5.154"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy selector aliases and independent GitOps review (offline)
+
+WP-L2-POL-001: three conflicting case-variant Namespace selector labels passed
+the fixed baseline before repair; they now fail before dry-run. The negative
+failed in all three cases first, then 52 observer tests passed. Separately,
+WP-L0-GITOPS-001's list envelope, metadata aliases and duplicate-extension
+handling were inspected without a new defect or reader change; three focused
+Go tests passed. Dedicated Colima was observed stopped; no live admission,
+Git/API inventory, reconciliation, retained request/volume/backup mutation or
+GitHub write. `make verify-local-experiment`, `make verify-design-context`
+(89 documents), `make check-no-secret-filenames` passed. Synthetic failure
+output in the local suite is not live evidence. Offline fixtures do not
+authenticate producers, prove atomic inventory, clear strict admission or
+establish operator acceptance. Roll back the policy guard/test only if needed;
+preserve pending intents and evidence. No GitOps runtime rollback. Direct
+original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: policy resource envelope and separate GitOps inspection (offline)
 

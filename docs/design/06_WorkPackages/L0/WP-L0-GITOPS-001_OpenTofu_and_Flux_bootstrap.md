@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.100"
+version: "0.101"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent list identity review (offline)
+
+Independently inspected fixed-profile list envelope, metadata aliases and
+unknown-extension duplicate-key handling after the separate policy selector
+repair. Three focused Go tests passed; no additional reader defect established
+and no GitOps behavior changed. The dedicated lab was observed stopped; no
+live inventory or reconciliation. These fixtures cannot authenticate remote
+state, prove atomic inventory, clear strict admission or grant operator
+acceptance. No runtime rollback; retain historical evidence. Original Vault
+sync pending outside this checkout.
 
 ## 2026-10-04: independent complete-list reader inspection (offline)
 

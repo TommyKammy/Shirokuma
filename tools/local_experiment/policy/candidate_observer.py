@@ -310,6 +310,8 @@ class CandidateObserver:
                             and key not in {'name', 'uid', 'labels', 'deletionTimestamp'} for key in metadata)
                 and metadata.get('name') == M.NAMESPACE and identity(metadata.get('uid'))
                 and type(labels) is dict and labels.get('kubernetes.io/metadata.name') == M.NAMESPACE
+                and not any(type(key) is str and key.lower() == 'kubernetes.io/metadata.name'
+                            and key != 'kubernetes.io/metadata.name' for key in labels)
                 and metadata.get('deletionTimestamp') is None, 'NAMESPACE_IDENTITY_INVALID')
         limits = self.kube.json_request(['-n', M.NAMESPACE, 'get', 'limitranges', '-o', 'json'])
         limit_metadata = limits.get('metadata', {}) if type(limits) is dict else None

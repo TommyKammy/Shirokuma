@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.43"
+version: "0.44"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: namespace selector label aliases (offline)
+
+Three test-owned Namespace replies with a valid canonical selector label and
+conflicting case-variant keys became ready before repair. The fixed baseline
+now refuses these aliases before any dry-run. The negative failed in all three
+cases before repair; the observer suite passed (52 tests) afterward. The
+dedicated Colima profile was observed stopped; no live admission, retained
+request, volume or backup changed. Fake replies cannot authenticate the API,
+prove atomic inventory, clear strict admission or establish acceptance. Roll
+back only this guard/test if necessary; preserve unknown requests without
+replay. Direct original Vault synchronization is pending outside this checkout.
 
 ## 2026-10-04: policy resource envelope aliases (offline)
 
