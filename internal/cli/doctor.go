@@ -319,6 +319,23 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				}
 			}
 		}
+		// Rolling updates may temporarily exceed desired replicas, but a
+		// reported ready/updated/available count cannot exceed the reported
+		// total. Omitted counters in older projected fixtures stay optional.
+		if rawTotal, ok := status["replicas"]; ok {
+			var total int64
+			if err := json.Unmarshal(rawTotal, &total); err != nil {
+				return true
+			}
+			for _, key := range []string{"readyReplicas", "updatedReplicas", "availableReplicas"} {
+				if rawCount, present := status[key]; present {
+					var count int64
+					if err := json.Unmarshal(rawCount, &count); err != nil || count > total {
+						return true
+					}
+				}
+			}
+		}
 		var observed struct {
 			Generation *int64 `json:"observedGeneration"`
 		}

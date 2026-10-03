@@ -535,6 +535,33 @@ func TestLocalInventoryRejectsMalformedUnrelatedConditionTypes(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsImpossibleUnrelatedReplicaCounters(t *testing.T) {
+	for _, status := range []string{
+		`{"replicas":1,"readyReplicas":2}`,
+		`{"replicas":1,"updatedReplicas":2}`,
+		`{"replicas":1,"availableReplicas":2}`,
+	} {
+		foreign := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"spec":{"replicas":1},"status":` + status + `}`
+		controller := strings.Replace(localControllerJSON(), `"items":[`, `"items":[`+foreign+`,`, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controller}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("impossible controller counters %s accepted: %#v", status, check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[1].output = strings.Replace(workloads[1].output, `"items":[`, `"items":[`+foreign+`,`, 1)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[2].Status != "degraded" || !strings.Contains(checks[2].Summary, "incomplete") {
+			t.Fatalf("impossible workload counters %s accepted: %#v", status, checks)
+		}
+	}
+	// During a rolling update total may exceed desired; that alone is not contradictory.
+	valid := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"shirokuma-dev","generation":1},"spec":{"replicas":1},"status":{"replicas":2,"readyReplicas":2,"updatedReplicas":2,"availableReplicas":2}}`
+	workloads := localWorkloadResponses()
+	workloads[1].output = strings.Replace(workloads[1].output, `"items":[`, `"items":[`+valid+`,`, 1)
+	if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[2].Status != "healthy" {
+		t.Fatalf("valid rolling update rejected: %#v", checks)
+	}
+}
+
 func TestLocalInventoryRejectsFutureUnrelatedConditionGeneration(t *testing.T) {
 	for _, generation := range []string{"-1", "2"} {
 		foreign := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":` + generation + `}]}}`

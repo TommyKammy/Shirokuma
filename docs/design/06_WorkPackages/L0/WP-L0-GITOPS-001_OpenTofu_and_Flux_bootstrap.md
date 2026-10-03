@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.48"
+version: "0.49"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: impossible unrelated replica totals (offline)
+
+The fixed-profile inventory now refuses an unrelated member whose explicitly reported ready, updated or available replicas exceed its explicitly reported total. A focused negative failed before repair. Omitted counters remain compatible; a rolling update whose total exceeds desired is valid. `go test ./internal/cli -count=1` (798 passed), `go vet ./...`, and Warehouse focused tests passed; milestone regression is recorded in Local Experiment Milestones. The dedicated Colima profile was observed stopped; no VM start, API/SQL, reconciliation, archived UUID replay, retained data or backup modification. Reported-counter consistency is not authenticated/atomic inventory, Git provenance, historical cleanup, strict publication admission or operator/production acceptance. Roll back only the reader/test; preserve VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: negative replica counters on unrelated inventory members (offline)
 

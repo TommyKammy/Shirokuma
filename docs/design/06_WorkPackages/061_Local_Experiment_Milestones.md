@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.85"
+version: "4.86"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: process-exit recovery refusal and impossible replica totals (offline)
+
+WP-L3-VW-002: test-owned child processes exited after durable intent or handler response; a separate process read both journals as `unknown-no-replay` and a fresh owner refused collision without invoking the handler. This is a real disposable process-exit test, not a live/backend restart or safe replay of an archived UUID. WP-L0-GITOPS-001: fixed-profile inventory rejects unrelated ready/updated/available counters greater than an explicitly reported total, while permitting transient rolling totals above desired. A focused negative failed before repair; the first full Go run caught an invalid positive fixture (adding a fifth fixed controller), which was moved to an unrelated workload before the final `go test ./internal/cli -count=1` (798 passed). `go vet ./...`, `make test-local-warehouse-lifecycle`, `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check` passed. The dedicated Colima profile was read-only observed stopped. No VM start, API/SQL, retained session/backup mutation, reconciliation or unknown UUID replay. Fake response checks and test-owned journals do not authenticate API/Git/backend, prove historical cleanup or meet strict publication or operator/production acceptance. Roll back only the local reader/test and disposable restart test; preserve saved sessions, backups and VM. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: unrelated negative replica counts (offline)
 
