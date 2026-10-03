@@ -380,7 +380,8 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	seenResources := map[string]bool{}
 	rootCount, rootSourceCount, devCount := 0, 0, 0
 	rootSuspended := false
-	sourceRevision, devRevision := "", ""
+	sourceRevision, devRevision, rootRevision := "", "", ""
+	rootActive := false
 	for _, resource := range resources.Items {
 		kinds[resource.Kind]++
 		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
@@ -414,6 +415,11 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		isDev := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "shirokuma-dev"
 		if isRoot {
 			rootCount++
+			rootRevision = resource.Status.LastAppliedRevision
+			rootActive = !resource.Spec.Suspend
+			if localExperiment && resource.APIVersion != "" && resource.APIVersion != "kustomize.toolkit.fluxcd.io/v1" {
+				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
+			}
 			if localExperiment && !resource.Spec.Prune {
 				unhealthy = append(unhealthy, resourceID+" (prune disabled)")
 			}
@@ -427,6 +433,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if isRootSource {
 			rootSourceCount++
+			if localExperiment && resource.APIVersion != "" && resource.APIVersion != "source.toolkit.fluxcd.io/v1" {
+				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
+			}
 			sourceRevision = resource.Status.Artifact.Revision
 			if localExperiment && resource.Spec.Suspend {
 				unhealthy = append(unhealthy, resourceID+" (declared source suspended)")
@@ -446,6 +455,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		}
 		if localExperiment && isDev {
 			devCount++
+			if resource.APIVersion != "" && resource.APIVersion != "kustomize.toolkit.fluxcd.io/v1" {
+				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
+			}
 			devRevision = resource.Status.LastAppliedRevision
 			if !resource.Spec.Wait {
 				unhealthy = append(unhealthy, resourceID+" (wait disabled)")
@@ -516,6 +528,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	}
 	if localExperiment && devCount == 1 && rootSourceCount == 1 && (devRevision == "" || devRevision != sourceRevision) {
 		unhealthy = append(unhealthy, "Kustomization/flux-system/shirokuma-dev (applied revision differs from source)")
+	}
+	if localExperiment && rootActive && rootCount == 1 && rootSourceCount == 1 && (rootRevision == "" || rootRevision != sourceRevision) {
+		unhealthy = append(unhealthy, "Kustomization/flux-system/flux-system (applied revision differs from source)")
 	}
 	if len(unhealthy) > 0 {
 		sort.Strings(unhealthy)

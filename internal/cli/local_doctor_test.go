@@ -31,6 +31,64 @@ func localFluxJSON() string {
 	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
 }
 
+func TestLocalDeclaredFluxAPIVersions(t *testing.T) {
+	for _, test := range []struct{ index int; version string }{
+		{0, "source.toolkit.fluxcd.io/v1"},
+		{1, "kustomize.toolkit.fluxcd.io/v1"},
+		{3, "kustomize.toolkit.fluxcd.io/v1"},
+	} {
+		for _, version := range []string{test.version, "wrong.example/v1"} {
+			var list map[string]interface{}
+			if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+				t.Fatal(err)
+			}
+			list["items"].([]interface{})[test.index].(map[string]interface{})["apiVersion"] = version
+			output, err := json.Marshal(list)
+			if err != nil {
+				t.Fatal(err)
+			}
+			responses := []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+			if version == test.version && check.Status != "informational" || version != test.version && (check.Status != "degraded" || !strings.Contains(check.Summary, "declared API version mismatch") || strings.Contains(check.Summary, version)) {
+				t.Fatalf("index %d version %q: %#v", test.index, version, check)
+			}
+			generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
+			if strings.Contains(generic.Summary, "declared API version mismatch") {
+				t.Fatalf("generic inherited local version check: %#v", generic)
+			}
+		}
+	}
+}
+
+func TestLocalActiveRootAppliedRevisionMatchesSource(t *testing.T) {
+	for _, revision := range []string{"", "main@sha1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"} {
+		var list map[string]interface{}
+		if err := json.Unmarshal([]byte(localFluxJSON()), &list); err != nil {
+			t.Fatal(err)
+		}
+		root := list["items"].([]interface{})[1].(map[string]interface{})
+		delete(root["spec"].(map[string]interface{}), "suspend")
+		root["status"].(map[string]interface{})["conditions"] = []interface{}{map[string]interface{}{"type": "Ready", "status": "True", "observedGeneration": 2}}
+		root["status"].(map[string]interface{})["lastAppliedRevision"] = revision
+		output, err := json.Marshal(list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		responses := []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, true)
+		if revision == "main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" && check.Status != "healthy" || revision != "main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" && (check.Status != "degraded" || !strings.Contains(check.Summary, "applied revision differs from source") || strings.Contains(check.Summary, revision) && revision != "") {
+			t.Fatalf("active root revision %q: %#v", revision, check)
+		}
+		generic := checkFluxForProfile(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, false)
+		if strings.Contains(generic.Summary, "applied revision differs from source") {
+			t.Fatalf("generic inherited local revision check: %#v", generic)
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("suspended root should not require current applied revision: %#v", check)
+	}
+}
+
 func TestLocalClusterReadyResponseIsExact(t *testing.T) {
 	for _, response := range []string{"ok", "ok\n"} {
 		check := checkClusterForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: response}}}, localExperimentContext, true)

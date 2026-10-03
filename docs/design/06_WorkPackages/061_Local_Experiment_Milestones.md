@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.53"
+version: "4.54"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: declared Flux versions and active-root revision (offline)
+
+Milestone regression: `make verify-local-experiment`, `make verify-design-context` (89 documents), and `git diff --check` passed after both changes.
+
+WP-L0-GITOPS-001: fixed local doctor rejects an explicitly wrong API version for the declared source/root/dev Flux objects, and rejects an active root whose applied revision is absent or differs from its reported source; a suspended root may still carry stale revision. Fake positive/negative and generic-profile isolation cases passed `go test ./internal/cli` (764 tests) and `go vet ./...`. Dedicated Colima read-only status: stopped. No VM start, actual API/SQL read, reconciliation, unknown-request replay, retained data/backup mutation. This is reported-field consistency, not authenticated source/API identity, Git smoke, strict admission or operator/production acceptance. Roll back the diagnostic readers/tests only, retaining the stopped VM and evidence. Direct original Vault handoff sync pending outside checkout.
 
 ## 2026-10-03: fixed inventory item API versions (offline)
 

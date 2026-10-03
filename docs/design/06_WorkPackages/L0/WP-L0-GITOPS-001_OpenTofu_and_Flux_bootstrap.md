@@ -5,12 +5,18 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.25"
+version: "0.26"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: declared Flux versions and active-root revision (offline)
+
+Milestone regression: `make verify-local-experiment`, `make verify-design-context` (89 documents), and `git diff --check` passed after both changes.
+
+Two independent fixed-profile read-only checks: explicitly reported API versions of the declared GitRepository, root Kustomization and dev Kustomization must match their checked-in v1 manifests; absent versions remain compatible with existing projected fixtures. An **active** (not suspended) root must report a nonempty last-applied revision matching the reported source artifact; the intentionally suspended root retains its stale-revision allowance. Fake positive/negative cases and generic-profile isolation passed `go test ./internal/cli` (764 tests) and `go vet ./...`. Dedicated Colima was observed stopped; no VM start, actual API/SQL read, reconciliation, unknown-request replay, retained volume or backup mutation. Reported version/revision consistency does not authenticate the API, Git origin or actual rollout, and does not meet smoke, strict publication or operator/production acceptance. Roll back only these local reader/tests, preserving the stopped VM and saved evidence. Direct original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-03: item API versions in read-only inventories (offline)
 
