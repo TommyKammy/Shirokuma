@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: private Warehouse remote-identity hints (offline)
+
+WP-L3-VW-002 rejects `Remote-*` and bare/extended `X-Remote` identity hints
+before its fixed Unix request reaches the handler or journal. Four disposable
+negatives dispatched before repair and are refused afterward; ordinary
+printable extension headers remain compatible. Warehouse focused and
+`make verify-local-experiment` passed. Read-only Colima listing found the
+dedicated VM stopped. No backend/SQL, archived request replay, retained
+session/backup modification or GitHub write. This does not authenticate the
+peer, prove caller receipt, restart recovery or operator acceptance. Roll back
+parser/test only and preserve saved evidence. Original Vault sync pending
+outside checkout; private test logs are under
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-037/`.
+
 ## 2026-10-04: complete lineage catalog proof and eligible operation (offline)
 
 WP-L5-LINEAGE-001 refuses a saved `complete` observation with eligible runs

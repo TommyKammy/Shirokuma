@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l3, warehouse]
 
 # Idle suspend and wake for VirtualWarehouse
 
+## 2026-10-04: remote-identity hints on private RPC (offline)
+
+The fixed Unix transition refuses `Remote-*` and bare/extended `X-Remote`
+headers before handler or journal. Four disposable negatives reached the
+handler before repair; focused and broader checks passed afterward (see
+Milestones). Other printable extension headers stay supported. No VM start,
+backend/SQL, archived request replay, retained session/backup or GitHub write.
+This is not independent peer authentication, caller receipt, restart recovery
+or operator acceptance. Roll back parser/test alone and retain saved evidence;
+original Vault synchronization remains pending outside checkout.
+
 ## 2026-10-04: Envoy identity and target hints on private RPC (offline)
 
 The fixed one-request Unix transition refuses bare `X-Envoy` and the

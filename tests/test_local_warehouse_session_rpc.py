@@ -1014,6 +1014,17 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(self.rpc._entries, {})
 
+    def test_remote_identity_hints_cannot_label_private_transition(self):
+        self.start()
+        body = json.dumps(self.request()).encode()
+        base = b'Content-Type: application/json\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n'
+        for extra in (b'Remote-User: someone\r\n', b'X-Remote-User: someone\r\n',
+                      b'X-Remote-Role: admin\r\n', b'X-Remote-Host: other.local\r\n'):
+            with self.subTest(extra=extra):
+                self.assertEqual(self.exchange(self.wire(body, base + extra), raw=True)[0], 400)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.rpc._entries, {})
+
     def test_rewritten_target_cannot_label_private_transition(self):
         self.start()
         body = json.dumps(self.request()).encode()
