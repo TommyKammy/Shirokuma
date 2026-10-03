@@ -5,12 +5,16 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.45"
+version: "0.46"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-03: invalid inventory UTF-8 and unrelated observed generation (offline)
+
+Two independent fixed-profile guards: reject raw invalid UTF-8 before Go JSON replacement can normalize a claimed complete list; reject negative or future top-level `status.observedGeneration` on any item, including unrelated members. Valid UTF-8, omitted/zero status generation and an older reported generation remain compatible; the generic profile is unchanged. Isolated negatives failed before the fixes. `go test ./internal/cli -count=1` (795 passed), `go vet ./...`, and `make verify-local-experiment` passed after repair. Two older Flux mismatch tests now expect the earlier incomplete-list refusal for future generations while explicit zero retains the specific mismatch. Dedicated Colima was observed stopped; no VM start, live API/SQL, reconciliation, unknown-request replay or retained data/backup mutation. Offline shape tests do not authenticate or atomically observe API/Git, prove historical cleanup, clear strict publication admission or establish operator/production acceptance. Roll back only the reader/tests; preserve VM and evidence. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: negative generation on unrelated inventory members (offline)
 

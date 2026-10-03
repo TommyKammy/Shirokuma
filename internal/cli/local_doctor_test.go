@@ -218,6 +218,66 @@ func TestLocalInventoryRejectsMalformedUnrelatedConditions(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsInvalidUTF8(t *testing.T) {
+	for _, raw := range [][]byte{
+		append([]byte(`{"items":[{"metadata":{"name":"other`), append([]byte{0xff}, []byte(`"}}]}`)...)...),
+		append([]byte(`{"items":[{}],"extra":"`), append([]byte{0xfe}, []byte(`"}`)...)...),
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatal(err) // Go replaces invalid UTF-8 instead of rejecting it.
+		}
+		if !localInventoryIncomplete(list, raw) {
+			t.Fatal("invalid UTF-8 inventory accepted")
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"metadata":{"name":"café"}}]}`), []byte(`{"items":[]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("valid UTF-8 rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestLocalInventoryCorruptionDegradesAllFixedProfileReads(t *testing.T) {
+	for _, mutate := range []func(string) string{
+		func(raw string) string {
+			return strings.Replace(raw, `"items":[`, `"items":[{"metadata":{"generation":1},"status":{"observedGeneration":2}},`, 1)
+		},
+		func(raw string) string { return raw[:len(raw)-1] + `,"extra":"` + string([]byte{0xff}) + `"}` },
+	} {
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: mutate(localControllerJSON())}, {output: localFluxJSON()}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "controller response was incomplete") {
+			t.Fatalf("corrupt controller accepted: %#v", check)
+		}
+		check = checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: mutate(localFluxJSON())}}}, localExperimentContext, true)
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "resource response was incomplete") {
+			t.Fatalf("corrupt Flux resource accepted: %#v", check)
+		}
+		workloads := localWorkloadResponses()
+		workloads[0].output = mutate(workloads[0].output)
+		if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "workload response was incomplete") {
+			t.Fatalf("corrupt workload accepted: %#v", checks)
+		}
+	}
+}
+
+func TestLocalInventoryRejectsUnrelatedObservedGenerationContradictions(t *testing.T) {
+	for _, observed := range []string{`-1`, `3`} {
+		raw := []byte(`{"items":[{"metadata":{"generation":2},"status":{"observedGeneration":` + observed + `}}]}`)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("contradictory observed generation accepted: %s (%v)", raw, err)
+		}
+	}
+	for _, raw := range [][]byte{[]byte(`{"items":[{"metadata":{"generation":2},"status":{"observedGeneration":1}}]}`), []byte(`{"items":[{"status":{"observedGeneration":0}}]}`)} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("older or omitted generation rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullConditionFields(t *testing.T) {
 	for _, field := range []string{`"type":null`, `"status":null`, `"observedGeneration":null`} {
 		raw := []byte(`{"items":[{"status":{"conditions":[{` + field + `}]}}]}`)
@@ -1142,7 +1202,8 @@ func TestLocalFluxRejectsConflictingStatusGenerationWhenReported(t *testing.T) {
 				t.Fatal("fixture replacement did not match")
 			}
 			runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}
-			if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "status generation mismatch") {
+			check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true)
+			if check.Status != "degraded" || (test.name != "explicit-zero" && !strings.Contains(check.Summary, "resource response was incomplete")) || (test.name == "explicit-zero" && !strings.Contains(check.Summary, "status generation mismatch")) {
 				t.Fatalf("conflicting reported generation accepted: %#v", check)
 			}
 			generic := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: resources}}}

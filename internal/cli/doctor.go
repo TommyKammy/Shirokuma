@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 )
@@ -179,6 +180,11 @@ type kubernetesResourceList struct {
 // A local read is a single, complete Kubernetes v1 List, not an arbitrary
 // projection that happens to include the expected objects.
 func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
+	// encoding/json silently replaces malformed UTF-8. Do not turn a corrupt
+	// Kubernetes response into an apparently complete fixed-profile inventory.
+	if !utf8.Valid(raw) {
+		return true
+	}
 	// Keep omitted metadata compatible with projected fixtures, but an explicit
 	// null envelope cannot establish a complete Kubernetes list.
 	var envelope struct {
@@ -294,6 +300,18 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 		var spec, status map[string]json.RawMessage
 		_ = json.Unmarshal(item["spec"], &spec)
 		_ = json.Unmarshal(item["status"], &status)
+		var observed struct {
+			Generation *int64 `json:"observedGeneration"`
+		}
+		if len(item["status"]) != 0 {
+			if err := json.Unmarshal(item["status"], &observed); err != nil {
+				return true
+			}
+		}
+		if observed.Generation != nil && (*observed.Generation < 0 ||
+			(identity.Generation > 0 && *observed.Generation > identity.Generation)) {
+			return true
+		}
 		if localInventoryNullFields(spec, []string{"suspend", "paused", "path", "prune", "wait", "url", "replicas"}) ||
 			localInventoryNullFields(status, []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas", "observedGeneration", "lastAppliedRevision", "conditions"}) {
 			return true

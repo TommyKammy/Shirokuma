@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.80"
+version: "4.81"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: invalid diagnostic UTF-8 and unrelated observed generation (offline)
+
+WP-L0-GITOPS-001: fixed-profile inventories refuse malformed raw UTF-8 (which Go JSON otherwise replaces), and negative/future top-level status generations on unrelated members. Negatives reproduced prior acceptance; controller, Flux-resource and Lakehouse fake reads, `go test ./internal/cli -count=1` (795 passed), `go vet ./...` and `make verify-local-experiment` passed. Dedicated Colima read-only status: stopped. No live API/SQL, VM start, reconciliation, unknown-request replay or retained data/backup mutation. Offline responses do not prove authenticated/atomic inventory, historical cleanup, strict publication admission or operator/production acceptance. Roll back reader/tests only, preserving VM and evidence; original Vault direct sync pending outside checkout.
 
 ## 2026-10-03: negative inventory generation and invalid metadata Unicode (offline)
 
