@@ -5,12 +5,16 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "1.15"
+version: "1.16"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-03: non-integer catalog HTTP status is not evidence (offline)
+
+An isolated disposable response with status `200.0` passed Python's equality check as HTTP 200 before repair; a thrown HTTP error with code `404.0` could likewise be mistaken for missing catalog evidence. Require exact integer 200 on returned responses and an exact integer 4xx/5xx on thrown HTTP errors, after the existing deadline checks and stream closure. The isolated negative failed before repair; 83 focused lineage tests and combined verification passed afterward (Milestones). No live login/API, VM start, retained source/credential/report/backup mutation or request replay. This does not authenticate the producer, provide atomic observations, whole-catalog/column lineage or operator acceptance. Roll back the two status guards and disposable test only, preserving historical reports. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: thrown status accessor closes its stream (offline)
 

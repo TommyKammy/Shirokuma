@@ -1073,6 +1073,26 @@ class ReadOnlyClientTests(unittest.TestCase):
         self.assertEqual(caught.exception.status, 404)
         self.assertTrue(error.fp.closed)
 
+    def test_noninteger_http_status_cannot_be_catalog_evidence(self):
+        self.client.login_attempted, self.client.token = True, 'token'
+        path = next(iter(C.ANCHORS))
+
+        class FloatSuccess(Response):
+            status = 200.0
+
+        response = FloatSuccess(b'{"id":1}')
+        with patch.object(self.client.opener, 'open', return_value=response):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                self.client.request('GET', path)
+        self.assertTrue(response.closed)
+
+        stream = io.BytesIO(b'private')
+        error = urllib.error.HTTPError(C.URL, 404.0, 'missing', {}, stream)
+        with patch.object(self.client.opener, 'open', side_effect=error):
+            with self.assertRaisesRegex(C.CoverageError, 'API_RESPONSE_INVALID'):
+                self.client.request('GET', path)
+        self.assertTrue(stream.closed)
+
     def test_http_error_code_observed_after_deadline_is_not_missing_evidence(self):
         self.client.login_attempted, self.client.token = True, 'token'
         client = self.client

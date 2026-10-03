@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "5.35"
+version: "5.36"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: exact catalog HTTP status and Warehouse TTL callback (offline)
+
+WP-L5-LINEAGE-001: disposable `200.0` status previously became catalog JSON evidence; a `404.0` HTTP error could compare equal to an integer missing-object code. Exact integer HTTP status guards now refuse both; isolated negative failed before repair, focused lineage (83 tests) passed afterward. WP-L3-VW-002 independently pins the existing serve-loop refusal to accept when a false-returning stop callback expires the owner TTL; focused Warehouse suite passed, with no owner-code change. `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed; private logs under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-083/`. Read-only `colima list`: dedicated VM stopped. No live login/API/backend/SQL, VM start, archived replay, retained source/credential/session/report/backup mutation or GitHub write. Offline checks do not authenticate producers or backend, establish atomicity, archived caller receipt, restart recovery, whole-catalog/column lineage or operator/production acceptance. Roll back only the status guards and two disposable fixtures; preserve stopped VM and historical evidence. Original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: thrown catalog status and stopped serve loop (offline)
 

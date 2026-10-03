@@ -388,7 +388,7 @@ class ReadOnlyClient:
                 # Status access can itself finish after the observation bound;
                 # do not turn a late non-200 into timely catalog evidence.
                 require(time.monotonic() < self.deadline, 'API_DEADLINE')
-                require(status == 200, 'API_RESPONSE_INVALID')
+                require(type(status) is int and status == 200, 'API_RESPONSE_INVALID')
                 chunks, count = [], 0
                 while True:
                     require(time.monotonic() < self.deadline, 'API_DEADLINE')
@@ -422,6 +422,7 @@ class ReadOnlyClient:
             # A late 404 is not evidence that a catalog object was absent
             # within this observation's bounded time window.
             require(time.monotonic() < self.deadline, 'API_DEADLINE')
+            require(type(status) is int and 400 <= status <= 599, 'API_RESPONSE_INVALID')
             raise APIError(method, path, status) from None
         except (OSError, RuntimeError):
             # A transport failure delivered only after expiry is no longer an

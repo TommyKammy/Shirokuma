@@ -280,6 +280,23 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(result['requests'], 0)
         self.assertEqual(self.calls, [])
 
+    def test_serve_ttl_expiring_during_false_callback_never_accepts(self):
+        self.rpc = R.SessionRPC(self.token, self.output, self.handler)
+        self.rpc.__enter__()
+        checks = []
+
+        def expiring_check():
+            checks.append(True)
+            self.rpc._started = time.monotonic() - self.rpc.ttl_seconds - 1
+            return False
+
+        with mock.patch.object(socket.socket, 'accept', side_effect=AssertionError('accepted after TTL')):
+            result = self.rpc.serve(stop=expiring_check)
+        self.assertEqual(checks, [True])
+        self.assertEqual(result['reason'], 'ttl')
+        self.assertEqual(result['requests'], 0)
+        self.assertEqual(self.calls, [])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.output = Path(self.temp.name).resolve()

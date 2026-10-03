@@ -5,12 +5,16 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.70"
+version: "0.71"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: serve-loop TTL expiry inside stop callback (offline)
+
+A test-owned callback advances the owner past TTL while returning false. The existing serve-loop TTL check refuses another socket accept and reports `ttl` with zero requests; no owner behavior changed. Focused Warehouse and combined verification are in Milestones. No VM start, backend/SQL, archived request replay or retained session/backup mutation. This does not authenticate backend state, prove archived caller receipt, owner restart recovery or operator acceptance. Roll back only the disposable test; preserve existing sessions and stopped VM. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-03: serve-loop stop cannot accept another connection (offline)
 
