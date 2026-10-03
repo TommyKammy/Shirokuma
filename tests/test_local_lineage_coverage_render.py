@@ -233,6 +233,19 @@ class CoverageRenderTests(unittest.TestCase):
         self.assertIn('取得できた範囲の集計', html)
         self.assertIn('全実験を網羅した結果とは扱えません', html)
 
+    def test_incomplete_inventory_cannot_claim_stable_source_population(self):
+        value = report()
+        value['inventory']['complete'] = False
+        value['observation'].update(status='incomplete', reason_codes=['SOURCE_INVENTORY_CHANGED'])
+        for edge in value['runs'][0]['edges']:
+            edge.update(status='unknown', reason_code='SOURCE_INVENTORY_CHANGED')
+        value['coverage'].update(present=0, unknown=2, known=0, rate=None,
+                                 observation_rate=0.0, complete=False)
+        with self.assertRaises(RenderError):
+            render(value)
+        value['observation']['source_stable'] = False
+        self.assertIn('保存証跡の一覧取得は未完了', render(value))
+
     def test_unverified_inventory_and_changed_eligible_run_cannot_claim_present_edges(self):
         value = report()
         value['inventory']['complete'] = False

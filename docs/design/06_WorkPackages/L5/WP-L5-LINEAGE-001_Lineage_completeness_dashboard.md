@@ -5,12 +5,23 @@ title: "WP-L5-LINEAGE-001 Lineage completeness dashboard"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "1.52"
+version: "1.53"
 area: "workpackage"
 tags: [shirokuma, workpackage, l5, metadata]
 ---
 
 # WP-L5-LINEAGE-001 Lineage completeness dashboard
+
+## 2026-10-04: incomplete inventory cannot claim stable population (offline)
+
+In a separate follow-on, the renderer refuses `inventory.complete=false` with
+`source_stable=true`: the collector marks source stability false when its final
+listing changes or cannot be read. A disposable inconsistent report rendered
+before repair; a partial inventory with false stability still renders. Focused
+lineage tests passed; broader result is in Milestones. No live catalog/VM,
+retained evidence/backup change or replay. This saved-claim check is not source
+authenticity, atomicity, whole-catalog/column coverage or operator acceptance.
+Roll back only renderer/test, preserve reports. Original Vault sync pending.
 
 ## 2026-10-04: saved stability claims versus completed observations (offline)
 

@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.84"
+version: "5.85"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: partial lineage inventory stability claim (offline)
+
+After the independent Warehouse/lineage commit, WP-L5-LINEAGE-001 refuses a
+saved partial inventory claiming stable sources. The disposable negative
+rendered before repair; the focused lineage suite passed afterward. The
+dedicated VM remains stopped; no catalog login, archived replay, retained
+source/report/backup mutation or GitHub write. Offline consistency cannot
+prove source provenance, atomicity, whole-catalog/column coverage or operator
+acceptance. Roll back only this renderer guard/test, retaining earlier reports.
+Original Vault synchronization remains pending outside checkout. Private
+negative and final logs: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-039/`.
 
 ## 2026-10-04: archived journal atime tolerance (offline)
 
