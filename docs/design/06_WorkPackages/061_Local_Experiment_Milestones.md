@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.107"
+version: "5.108"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent lineage edge-claim review (offline)
+
+WP-L5-LINEAGE-001: reviewed direct renderer eligibility, edge identities,
+catalog digest and reason/status boundaries after the separate policy repair.
+No additional defect established and no lineage behavior changed. Focused
+lineage 147 tests and `make verify-local-experiment` passed. Dedicated Colima
+remained stopped; no catalog call, new collection, retained report/backup
+change or unknown-request replay. Static/synthetic checks cannot establish
+saved producer authenticity, whole-catalog/column lineage or acceptance.
+No lineage rollback; retain reports. Original Vault sync pending outside
+the approved checkout.
+After both increments, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. Full local
+verification log: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-057/verify-local.log`
+(SHA-256 `58d24f0dedd9c6772a3c4c126b85a317abcf0120064e847e5b1480aa217ff224`).
+Focused lineage log in the same private directory has SHA-256
+`470d1dbce1912184d98098013e63142ab9b02abfd86fae51aa0d70b1edffa43e`.
+The first policy focused command targeted a nonexistent Make rule; the direct
+observer suite reproduced four expected failures before repair and passed
+afterward. These checks are offline, not live runtime acceptance.
 
 ## 2026-10-04: policy runtime and priority response boundary (offline)
 
