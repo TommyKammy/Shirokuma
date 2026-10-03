@@ -82,6 +82,14 @@ class DisposableOwnerExitTest(unittest.TestCase):
                 self.assertEqual(result['recovery_classification'], 'unknown-no-replay')
                 self.assertEqual(result['runtime_state'], 'unknown')
                 self.assertEqual(result['reply_count'], 1 if boundary in ('reply', 'sent') else 0)
+                # An unrelated new UUID is not a way around an exited owner's
+                # occupied session identity; do not start a replacement owner.
+                fresh_id = str(uuid.uuid4())
+                fresh = S.classify_recovery(token, root, fresh_id)
+                self.assertEqual(fresh['request_lookup']['observation'], 'not-recorded-in-snapshot')
+                self.assertEqual(fresh['recovery_classification'], 'unknown-no-replay')
+                self.assertEqual(fresh['runtime_state'], 'unknown')
+                self.assertEqual(fresh['journal_sha256'], result['journal_sha256'])
                 calls = []
                 with mock.patch.object(R, 'SOCKET_ROOT', root / 'sockets'):
                     with self.assertRaisesRegex(R.RPCError, 'JOURNAL_COLLISION'):

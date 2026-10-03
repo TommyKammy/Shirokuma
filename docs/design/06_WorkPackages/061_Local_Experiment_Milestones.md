@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.90"
+version: "4.91"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: unrelated UUID at disposable owner exits (offline)
+
+Final regression also passed `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check`; private logs are `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-039/verify-final.log` and `design-final.log`.
+
+WP-L3-VW-002: across five disposable process-exit boundaries, a newly generated UUID absent from the original journal is classified `unknown-no-replay` with unknown runtime state and the same journal hash; existing fresh-owner collision refusal remains. `make test-local-warehouse-lifecycle` passed. No archived UUID replay, VM start, API/SQL, retained data/backup mutation or live caller/backend authentication. This is not backend recovery, historical cleanup or operator/production acceptance. Roll back the test assertion only, preserving VM/evidence; direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: reported UID consistency (offline)
 

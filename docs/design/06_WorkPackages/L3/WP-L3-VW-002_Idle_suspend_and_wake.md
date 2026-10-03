@@ -5,12 +5,18 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-03
-version: "0.49"
+version: "0.50"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
 
 # Idle suspend and wake for VirtualWarehouse
+
+## 2026-10-03: new UUID cannot adopt an exited disposable owner (offline)
+
+Final regression also passed `make verify-local-experiment`, `make verify-design-context` (89 documents) and `git diff --check`; private logs are under `tmp/local-experiment/autonomous-runner/run-iiqtlurv/attempt-039/`.
+
+At each of five test-owned process-exit boundaries (durable intent, handler return, durable handler response, reply journal, successful send), a separately generated request UUID absent from the saved journal remains `not-recorded-in-snapshot` and `unknown-no-replay`, with `runtime_state=unknown` and the original journal hash unchanged. The existing fresh-owner collision test still refuses dispatch. `make test-local-warehouse-lifecycle` passed; milestone verification is in Local Experiment Milestones. This strengthens the no-adoption regression, not the backend recovery implementation: there was no archived UUID replay, authenticated backend read, real caller receipt or historical cleanup. Dedicated Colima remains stopped; no API/SQL, VM start, retained run/backup mutation. Roll back this disposable test assertion only, keeping saved evidence and the VM. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-03: two more disposable process-exit boundaries (offline)
 
