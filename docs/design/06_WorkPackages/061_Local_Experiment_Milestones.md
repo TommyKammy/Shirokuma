@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-03
-version: "4.88"
+version: "4.89"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-03: unrelated unavailable replica bound (offline)
+
+WP-L0-GITOPS-001: an unrelated fixed-profile inventory member cannot report more unavailable replicas than explicitly desired; missing counters and rolling totals above desired remain compatible. The isolated negative failed before repair; `go test ./internal/cli -count=1` (800 passed), `go vet ./...`, `make verify-local-experiment`, `make verify-design-context` and `git diff --check` passed after repair. Dedicated Colima read-only status: stopped. No VM start, API/SQL, reconciliation, unknown UUID replay or retained data/backup mutation. Fake shape checks do not authenticate API/Git, prove atomicity/historical cleanup, clear strict publication admission or establish operator/production acceptance. Roll back reader/tests only; preserve stopped VM and evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-03: handler-return and successful-send process exits (offline)
 

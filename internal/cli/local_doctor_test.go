@@ -346,6 +346,30 @@ func TestLocalInventoryRejectsAvailableGreaterThanReady(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsUnavailableGreaterThanDesired(t *testing.T) {
+	for _, rawText := range []string{
+		`{"items":[{"kind":"Deployment","spec":{"replicas":1},"status":{"unavailableReplicas":2}}]}`,
+		`{"items":[{"kind":"Deployment","spec":{"replicas":0},"status":{"unavailableReplicas":1}}]}`,
+	} {
+		raw := []byte(rawText)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("unavailable exceeds desired: %s (%v)", raw, err)
+		}
+	}
+	for _, rawText := range []string{
+		`{"items":[{"spec":{"replicas":2},"status":{"unavailableReplicas":2}}]}`,
+		`{"items":[{"status":{"unavailableReplicas":2}}]}`,
+		`{"items":[{"spec":{"replicas":0},"status":{"unavailableReplicas":0}}]}`,
+	} {
+		raw := []byte(rawText)
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || localInventoryIncomplete(list, raw) {
+			t.Fatalf("compatible unavailable count rejected: %s (%v)", raw, err)
+		}
+	}
+}
+
 func TestLocalInventoryRejectsNullConditionFields(t *testing.T) {
 	for _, field := range []string{`"type":null`, `"status":null`, `"observedGeneration":null`} {
 		raw := []byte(`{"items":[{"status":{"conditions":[{` + field + `}]}}]}`)

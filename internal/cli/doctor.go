@@ -350,6 +350,20 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 				}
 			}
 		}
+		// Unavailable replicas are the pods still required to reach the
+		// declared capacity; rolling updates can add total pods but cannot
+		// require more unavailable pods than the desired count.
+		if rawDesired, ok := spec["replicas"]; ok {
+			if rawUnavailable, present := status["unavailableReplicas"]; present {
+				var desired, unavailable int64
+				if err := json.Unmarshal(rawDesired, &desired); err != nil {
+					return true
+				}
+				if err := json.Unmarshal(rawUnavailable, &unavailable); err != nil || unavailable > desired {
+					return true
+				}
+			}
+		}
 		var observed struct {
 			Generation *int64 `json:"observedGeneration"`
 		}
