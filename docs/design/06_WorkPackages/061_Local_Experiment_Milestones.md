@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.120"
+version: "5.121"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: separate GitOps complete-list inspection (offline)
+
+WP-L0-GITOPS-001: after the policy/FinOps commit, inspected fixed-profile
+list envelope, member identity, UID and reported per-object version checks;
+no additional defect established or doctor behavior changed. `go test
+./internal/cli -count=1` passed (831). Dedicated Colima remained Stopped;
+no live API/Git read, reconciliation, retained data/backup mutation or GitHub
+write. The offline check does not authenticate remote state, prove atomic
+inventory, clear strict admission or establish operator acceptance. No runtime
+rollback; retain earlier evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: contradictory denial stdout and independent FinOps review (offline)
 

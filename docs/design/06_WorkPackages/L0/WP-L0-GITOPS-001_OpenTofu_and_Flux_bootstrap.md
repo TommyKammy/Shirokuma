@@ -4,13 +4,24 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-03
-version: "0.81"
+updated: 2026-10-04
+version: "0.82"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: separate complete-list inspection after denial repair (offline)
+
+After the policy/FinOps increment, checked `internal/cli/doctor.go` raw
+complete-list envelope, member metadata, UID and per-resource-version refusal
+paths. No new defect established and no GitOps behavior changed. `go test
+./internal/cli -count=1` passed (831). Dedicated Colima was observed Stopped;
+no live API/Git read, reconciliation, retained data/backup mutation or GitHub
+write. Offline tests cannot authenticate remote inventory, prove an atomic read,
+clear strict admission or establish operator acceptance. No runtime rollback;
+preserve earlier evidence. Original Vault sync pending outside the checkout.
 
 ## 2026-10-04: independent complete-list review after dry-run repair (offline)
 
