@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.53"
+version: "0.54"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: Pod namespace and host-alias dry-run controls (offline)
+
+Two disposable successful Pod replies added `shareProcessNamespace: true` or
+host aliases without changing the previous smoke fields; both progressed to
+a third fake request before repair. The fixed-corpus comparator now refuses
+both; it also refuses a numeric `hostNetwork` instead of treating it as false.
+The new negative passed after repair (three variants), the native suite passed
+(25 tests), and `make verify-local-experiment` passed. The dedicated Colima
+profile was observed stopped. No live admission, replay, retained data/backup
+change or GitHub write. This is not full effective-object equality or proof of
+API authenticity, strict admission or operator acceptance. Revert the scoped
+comparator/test if needed and retain saved intents. Original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-04: Pod-level security context in legacy smoke (offline)
 

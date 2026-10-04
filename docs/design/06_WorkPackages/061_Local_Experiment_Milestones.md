@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.168"
+version: "5.169"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy smoke namespace/host-alias controls (offline)
+
+WP-L2-POL-001: fake successful Pod replies adding process-namespace sharing
+or host aliases advanced to a third request before repair. The fixed-corpus
+comparator now refuses both and numeric `hostNetwork`; three negatives and
+25 native policy tests passed. `make verify-local-experiment` passed (synthetic
+failure-path output is not live evidence). The dedicated Colima profile was
+observed stopped; no live admission, saved request replay, retained data or
+backup mutation or GitHub write. This does not authenticate the producer,
+prove full effective-object equality, clear strict admission or establish
+operator acceptance. Roll back only the comparator/test if necessary; preserve
+saved intents. Original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-04: local lakehouse workload API-version identity (offline)
 

@@ -442,8 +442,8 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
     containers = spec.get('containers')
     if (type(containers) is not list or len(containers) != 1 or
             type(containers[0]) is not dict or
-            any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostPID', 'hostIPC')) or
-            any(spec.get(key) not in (None, []) for key in ('volumes', 'initContainers', 'ephemeralContainers')) or
+            any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostPID', 'hostIPC', 'shareProcessNamespace')) or
+            any(spec.get(key) not in (None, []) for key in ('volumes', 'initContainers', 'ephemeralContainers', 'hostAliases')) or
              spec.get('restartPolicy') != 'Never' or
              spec.get('automountServiceAccountToken') is not False or
              type(spec.get('securityContext')) is not dict or
