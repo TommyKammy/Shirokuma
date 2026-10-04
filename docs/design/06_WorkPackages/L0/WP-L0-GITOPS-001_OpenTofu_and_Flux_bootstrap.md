@@ -5,12 +5,27 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.112"
+version: "0.113"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent fixed Flux resource identity regression (offline)
+
+An independent fake inventory test now changes kind for each of the source,
+root, dev and optional catalog resources, and namespace for the three fixed
+source/root/dev identities. The unchanged doctor degrades all seven mutations;
+the complete fixture remains informational. An initial test incorrectly required
+the optional catalog to live in `flux-system`; this assumption failed and was
+removed before the passing focused test and full Go suite (860) and vet.
+Dedicated Colima was observed stopped; no live inventory, reconciliation,
+saved-request replay, retained data or backup mutation, or GitHub write.
+Offline fixtures cannot authenticate producers, prove atomic inventory, clear
+strict admission or establish operator acceptance. Revert only this test if
+needed; preserve historical evidence. Direct original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-04: remaining local resource version regression (offline)
 

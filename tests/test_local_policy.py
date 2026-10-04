@@ -531,6 +531,37 @@ class SmokeTests(unittest.TestCase):
             with self.subTest(addresses=addresses):
                 self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
 
+    def test_service_success_rejects_conflicting_cluster_address_fields(self):
+        for cluster_ip, addresses in (('192.0.2.1', ['192.0.2.2']),
+                                      ('None', ['192.0.2.1']),
+                                      ('', ['192.0.2.1'])):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != 'Service':
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'].update(clusterIP=cluster_ip, clusterIPs=addresses)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(cluster_ip=cluster_ip):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
+    def test_service_success_accepts_matching_cluster_address_fields(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def changed(value):
+            if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                    value['spec'].get('externalIPs')):
+                return reference.smoke_request(value)
+            reply = copy.deepcopy(value)
+            reply['spec'].update(clusterIP='192.0.2.1', clusterIPs=['192.0.2.1'])
+            return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+        kube.smoke_failure = changed
+        self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
+
     def test_service_success_does_not_add_traffic_hints(self):
         for mutation in ('distribution', 'application-protocol'):
             kube = FakeKubernetes(ready=True)

@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.193"
+version: "5.194"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: Service address agreement and independent Flux identity (offline)
+
+WP-L2-POL-001: three fake successful Service replies with contradictory
+`clusterIP`/`clusterIPs` advanced before repair. The fixed comparator rejects
+them at the second request, retaining matched and defaulted address forms;
+native 49 tests passed. Independently WP-L0-GITOPS-001 now tests wrong kind for
+four Flux resources and wrong namespace for the three fixed identities; all
+seven degrade with the unchanged doctor. An initial test incorrectly required
+the optional catalog in `flux-system` and failed; after correcting the scope,
+focused Go, full Go suite (860), vet and `make verify-local-experiment` passed.
+Dedicated Colima was observed stopped; no live admission/inventory, unknown
+request replay, retained data/backup mutation or GitHub write. Fake responses
+cannot authenticate producers, prove atomic or effective state, validate IP
+allocation, clear strict admission or establish operator acceptance. Revert
+only the scoped policy guard/tests or the independent Flux test if necessary;
+preserve historical evidence and pending intents. Original Vault sync pending
+outside the approved checkout.
 
 ## 2026-10-04: legacy Service address-list controls (offline)
 

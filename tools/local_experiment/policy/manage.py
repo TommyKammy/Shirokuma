@@ -457,10 +457,14 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                     ('ipFamilies' not in spec or
                      (type(spec['ipFamilies']) is list and len(spec['ipFamilies']) == 1 and
                       spec['ipFamilies'][0] in ('IPv4', 'IPv6'))) and
-                    ('clusterIPs' not in spec or
-                     (type(spec['clusterIPs']) is list and len(spec['clusterIPs']) <= 1 and
-                      all(type(address) is str and address != 'None' and address
-                          for address in spec['clusterIPs']))) and
+                     ('clusterIPs' not in spec or
+                      (type(spec['clusterIPs']) is list and len(spec['clusterIPs']) <= 1 and
+                       all(type(address) is str and address != 'None' and address
+                           for address in spec['clusterIPs']))) and
+                     ('clusterIP' not in spec or
+                      (type(spec['clusterIP']) is str and spec['clusterIP'] != 'None')) and
+                     (not spec.get('clusterIPs') or
+                      spec.get('clusterIP') in (None, spec['clusterIPs'][0])) and
                     spec.get('trafficDistribution') is None and
                   type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
                 all(type(port) is dict and type(port.get('port')) is int and

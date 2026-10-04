@@ -115,6 +115,45 @@ func TestLocalFluxRequiresResourceAPIVersion(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRequiresResourceKindAndNamespace(t *testing.T) {
+	for _, tc := range []struct{ kind, name string }{
+		{"GitRepository", "flux-system"},
+		{"Kustomization", "flux-system"},
+		{"Kustomization", "shirokuma-catalog"},
+		{"Kustomization", "shirokuma-dev"},
+	} {
+		mutations := []struct{ old, replacement string }{
+			{`"kind":"` + tc.kind + `"`, `"kind":"Other"`},
+		}
+		// Catalog is an optional resource, not one of the three fixed identities.
+		if tc.name != "shirokuma-catalog" {
+			mutations = append(mutations, struct{ old, replacement string }{
+				`"namespace":"flux-system"`, `"namespace":"default"`,
+			})
+		}
+		for _, mutation := range mutations {
+			original := `"kind":"` + tc.kind + `","metadata":{"name":"` + tc.name + `","namespace":"flux-system"`
+			member := strings.Replace(original, mutation.old, mutation.replacement, 1)
+			resources := strings.Replace(localFluxJSON(), original, member, 1)
+			if resources == localFluxJSON() {
+				t.Fatalf("fixture did not contain %s/%s", tc.kind, tc.name)
+			}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+				{output: localControllerJSON()}, {output: resources},
+			}}, localExperimentContext, true)
+			if check.Status != "degraded" {
+				t.Fatalf("%s/%s mutation %s accepted: %#v", tc.kind, tc.name, mutation.replacement, check)
+			}
+		}
+	}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: localControllerJSON()}, {output: localFluxJSON()},
+	}}, localExperimentContext, true)
+	if check.Status != "informational" {
+		t.Fatalf("valid resource inventory rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)
