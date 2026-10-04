@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.131"
+version: "0.132"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent StatefulSet condition ambiguity (offline)
+
+Fake storage and dev lists now independently cover identical and conflicting
+duplicate Ready conditions on both fixed StatefulSets. The unchanged doctor
+degrades the affected namespace's checks while retaining the other namespace's
+healthy result. Focused and full Go CLI tests (876) and vet passed. Colima was
+observed stopped; no live inventory, reconciliation or retained data/backup
+mutation. This cannot authenticate the producer, prove atomic inventory or
+establish operator acceptance. Revert only the test if necessary; preserve
+historical evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: independent dev workload condition duplicates (offline)
 

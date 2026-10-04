@@ -779,6 +779,27 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_rejects_scoped_ipv6_cluster_address(self):
+        # ipaddress accepts an interface zone, but ClusterIP is an unscoped
+        # address; a fake successful dry-run must not introduce that suffix.
+        for mutation in ({'clusterIP': 'fe80::1%eth0'},
+                         {'clusterIPs': ['fe80::1%eth0']},
+                         {'clusterIP': 'fe80::1%eth0', 'clusterIPs': ['fe80::1%eth0'],
+                          'ipFamilies': ['IPv6']}):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != 'Service':
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_accepts_address_matching_family(self):
         for address, family in (('192.0.2.1', 'IPv4'), ('2001:db8::1', 'IPv6')):
             kube = FakeKubernetes(ready=True)

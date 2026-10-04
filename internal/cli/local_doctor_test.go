@@ -2063,6 +2063,33 @@ func TestLocalLakehouseRejectsDuplicatedConditionTypes(t *testing.T) {
 	}
 }
 
+func TestLocalLakehouseRejectsDuplicateStatefulSetConditions(t *testing.T) {
+	for _, workload := range []struct {
+		name, namespace string
+		list            int
+	}{{"seaweedfs", "shirokuma-storage", 0}, {"polaris-postgresql", "shirokuma-dev", 1}} {
+		for _, duplicate := range []string{`{"type":"Ready","status":"True"}`, `{"type":"Ready","status":"False"}`} {
+			responses := localWorkloadResponses()
+			original := healthyLocalWorkload("StatefulSet", workload.namespace, workload.name)
+			mutated := strings.Replace(original, `"updatedReplicas":1`, `"updatedReplicas":1,"conditions":[{"type":"Ready","status":"True"},`+duplicate+`]`, 1)
+			if mutated == original || !strings.Contains(responses[workload.list].output, original) {
+				t.Fatalf("missing StatefulSet fixture %s", workload.name)
+			}
+			responses[workload.list].output = strings.Replace(responses[workload.list].output, original, mutated, 1)
+			checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+			for _, check := range checks {
+				want := "degraded"
+				if workload.list == 0 && check.Name != "seaweedfs" || workload.list == 1 && check.Name == "seaweedfs" {
+					want = "healthy"
+				}
+				if check.Status != want {
+					t.Fatalf("%s duplicate %s: unexpected check %#v", workload.name, duplicate, checks)
+				}
+			}
+		}
+	}
+}
+
 func TestLocalDeclaredSourceRejectsCompetingRevisionSelectors(t *testing.T) {
 	for _, selector := range []string{"tag", "semver", "commit", "name"} {
 		var list map[string]interface{}

@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.93"
+version: "0.94"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: unscoped Service ClusterIP replies (offline)
+
+Three fake successful replies with IPv6 interface zone identifiers advanced
+beyond the Service request because Python's `ipaddress` accepted scoped IPv6.
+Focused negatives failed first; the fixed Service success comparator now
+refuses zone identifiers in claimed cluster addresses while preserving plain
+IPv4/IPv6 positives. Native policy suite (73) and full local regression passed.
+Colima was observed stopped; no live API, request replay or retained data/backup
+mutation. This does not authenticate a response, establish full effective-object
+equality or clear strict/operator acceptance. Roll back only the scoped address
+guard and test if necessary; preserve saved intents. Original Vault sync pending.
 
 ## 2026-10-05: malformed success-text refusal (offline)
 

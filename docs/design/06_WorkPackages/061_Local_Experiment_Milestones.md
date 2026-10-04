@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.225"
+version: "5.226"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: StatefulSet duplicates and scoped Service address refusal (offline)
+
+WP-L0-GITOPS-001: independent fake storage/dev StatefulSet lists with repeated
+identical or contradictory Ready now degrade the affected namespace under the
+unchanged doctor; the other namespace stays healthy. WP-L2-POL-001: three
+test-owned scoped IPv6 ClusterIP replies previously advanced beyond the Service
+smoke case; focused negatives failed first and the fixed address comparator now
+rejects zones while retaining plain IPv4/IPv6. Full Go CLI tests (876), vet,
+native policy tests (73), `make verify-local-experiment`, design-context (89
+documents) and diff check passed. Dedicated Colima was observed stopped; no live
+API/inventory, reconciliation, request replay, retained data/backup mutation or
+GitHub write. Offline fixtures cannot authenticate producers, prove atomic
+inventory/full effective-object equality, clear strict admission or grant
+operator acceptance. Revert only the scoped test or policy guard/test if needed;
+preserve saved reports and intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: dev workload duplicate-condition coverage (offline)
 
