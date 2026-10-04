@@ -2594,6 +2594,31 @@ func TestLocalFluxSuspendedRootRejectsCurrentReadyFailure(t *testing.T) {
 	}
 }
 
+func TestLocalFluxSuspendedRootRejectsDuplicateReady(t *testing.T) {
+	root := `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`
+	for _, extra := range []string{
+		`{"type":"Ready","status":"True","observedGeneration":1}`,
+		`{"type":"Ready","status":"False","observedGeneration":2}`,
+	} {
+		resources := strings.Replace(localFluxJSON(), root,
+			strings.Replace(root, `"observedGeneration":1}]`, `"observedGeneration":1},`+extra+`]`, 1), 1)
+		if resources == localFluxJSON() {
+			t.Fatal("suspended root fixture did not change")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: resources},
+		}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("suspended root duplicate %s accepted: %#v", extra, check)
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: localControllerJSON()}, {output: localFluxJSON()},
+	}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("single stale Ready on suspended root rejected: %#v", check)
+	}
+}
+
 func TestLocalDoctorRejectsContradictoryUnavailableReplicas(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":1,"unavailableReplicas":1`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)

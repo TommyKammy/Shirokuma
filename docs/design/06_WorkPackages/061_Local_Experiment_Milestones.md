@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.226"
+version: "5.227"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent suspended-root ambiguity (offline)
+
+WP-L0-GITOPS-001: an independent fake resource inventory pins degraded
+results for duplicate stale or conflicting current Ready on the suspended
+Flux root; a single stale Ready remains informational. Doctor unchanged.
+Focused/full Go CLI tests (877), vet, design-context and diff check passed.
+Dedicated Colima remained stopped; no live API/Git
+read, reconcile, saved-request replay, retained data/backup mutation or
+GitHub write. Fake lists cannot authenticate producers, prove atomic inventory,
+clear strict admission or establish operator acceptance. Revert only the test
+if needed, preserving historical evidence. Original Vault sync pending.
 
 ## 2026-10-05: StatefulSet duplicates and scoped Service address refusal (offline)
 
