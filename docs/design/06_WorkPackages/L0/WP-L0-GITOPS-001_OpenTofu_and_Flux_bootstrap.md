@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.102"
+version: "0.103"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent overflow exponent inventory regression (offline)
+
+Two test-owned complete lists with overflowing exponents in ignored extensions
+are already degraded as incomplete by the recursive decoder. Initial focused
+assertions expected the invalid-JSON diagnostic and failed; corrected assertions
+passed without a reader change. The lab was observed stopped; no live inventory,
+reconciliation, retained data or backup mutation. These fixtures cannot prove
+producer authenticity, atomic inventory, strict admission or acceptance. Roll
+back only the new test cases if needed; keep prior evidence. Original Vault
+sync remains pending outside this checkout.
 
 ## 2026-10-04: independent non-JSON inventory regression (offline)
 

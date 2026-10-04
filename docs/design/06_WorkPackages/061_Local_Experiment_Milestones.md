@@ -5,12 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.158"
+version: "5.159"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: policy exponent overflow and separate GitOps boundary (offline)
+
+WP-L2-POL-001: three test-owned nested/top-level overflowing JSON exponents
+were decoded to infinite floats before repair. All three negatives failed
+first; the scoped policy reader now rejects non-finite floats and accepts
+finite exponents (56 observer tests passed). Independently WP-L0-GITOPS-001
+pins the existing degraded/incomplete status for two such ignored extensions;
+the initial focused test failed on an incorrect invalid-JSON diagnostic
+expectation, then passed with the actual incomplete diagnostic. No GitOps
+reader behavior changed. Dedicated Colima was read-only observed Stopped;
+no live admission, inventory, reconciliation, retained request, volume or
+backup mutation or GitHub write. These fixtures cannot authenticate producers,
+prove atomic inventory, clear strict admission or establish operator
+acceptance. Roll back only the policy reader/test and independent GitOps test
+if needed, preserving saved intents without replay. Direct original Vault
+sync remains pending outside this checkout.
+
+After both increments, `make verify-local-experiment`, `make
+verify-design-context` (89 documents), `make check-no-secret-filenames`,
+`git diff --check` and `go test ./... -count=1` (851 Go tests) passed.
+The local suite's expected synthetic failure-path output is not live evidence.
 
 ## 2026-10-04: policy non-JSON constants and independent GitOps regression (offline)
 

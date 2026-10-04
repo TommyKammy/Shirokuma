@@ -16,6 +16,7 @@ import fcntl
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -185,7 +186,14 @@ class Kubernetes:
         def invalid_constant(value):
             raise PolicyError('scoped Kubernetes response contains non-JSON numeric constant')
 
-        value = json.loads(result.stdout, object_pairs_hook=unique_keys, parse_constant=invalid_constant)
+        def finite_float(raw):
+            value = float(raw)
+            if not math.isfinite(value):
+                raise PolicyError('scoped Kubernetes response contains non-finite JSON number')
+            return value
+
+        value = json.loads(result.stdout, object_pairs_hook=unique_keys,
+                           parse_constant=invalid_constant, parse_float=finite_float)
         if value is None:
             raise PolicyError('scoped Kubernetes response contains explicit JSON null')
         return value

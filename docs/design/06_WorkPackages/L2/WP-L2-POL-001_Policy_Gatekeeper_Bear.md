@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.47"
+version: "0.48"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: overflowing JSON exponent in scoped API (offline)
+
+Three test-owned nested/top-level `1e999` / `-1e999` responses decoded to
+infinite Python floats before repair. The scoped API reader now rejects
+non-finite parsed floats while accepting finite exponents; all three negatives
+failed first, then 56 observer tests passed. Dedicated Colima was observed
+stopped; no live admission, pending-request replay or retained volume/backup
+mutation. Fake replies cannot authenticate the API, establish atomic inventory,
+clear strict admission or grant operator acceptance. Roll back only the parser
+and regression if necessary; retain saved intents. Original Vault sync remains
+pending outside this checkout.
 
 ## 2026-10-04: non-JSON Kubernetes numeric constants (offline)
 
