@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.72"
+version: "0.73"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: equivalent Unicode saved-history identity (offline)
+
+An independent regression feeds the same valid saved report once with literal
+Unicode and once with JSON Unicode escapes. The unchanged canonical digest
+rejects the duplicate pair and renders a distinct pair; focused history tests
+passed (24). This is test-owned input only: no new collection, retained report,
+volume or backup mutation. Dedicated Colima was observed stopped; AgentHouse
+usage remains `null / NOT_MEASURED`. It does not authenticate saved producers,
+measure current usage or establish operator acceptance. Roll back only the test
+if needed; preserve saved reports. Direct original Vault sync pending outside
+checkout.
 
 ## 2026-10-04: canonical duplicate saved history (offline)
 

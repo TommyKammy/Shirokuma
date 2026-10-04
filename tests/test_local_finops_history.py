@@ -147,6 +147,19 @@ class HistoryTests(unittest.TestCase):
         self.assertIn('保存FinOps観測履歴',
                       H.render(H.parse(encoded([first, report(processes())]))))
 
+    def test_unicode_escape_does_not_make_duplicate_saved_observation(self):
+        first = report()
+        first['inference']['groups'][0]['model_name'] = 'café'
+        # The two wire forms differ, but JSON decoding and canonical digesting
+        # must treat escaped and literal Unicode as the same saved report.
+        literal = encoded(first)
+        escaped = json.dumps(first, ensure_ascii=True).encode()
+        self.assertNotEqual(literal, escaped)
+        with self.assertRaises(H.HistoryError):
+            H.parse(b'[' + literal + b',' + escaped + b']')
+        self.assertIn('保存FinOps観測履歴',
+                      H.render(H.parse(encoded([first, report(processes())]))))
+
     def test_offline_html_declares_no_external_resources_or_script(self):
         html = H.render(H.parse(encoded([report(), report(processes())])))
         self.assertIn('Content-Security-Policy', html)

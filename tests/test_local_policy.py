@@ -283,6 +283,22 @@ class SmokeTests(unittest.TestCase):
             with self.subTest(allowed=allowed):
                 self.assertTrue(policy.smoke_success_scope(reply, submitted))
 
+        # Exercise the complete 15-case path, not only the comparator helper:
+        # these are API-defaulted values on the allowed Pod, not on denied cases.
+        for allowed in (defaults, list(reversed(defaults))):
+            kube = FakeKubernetes(ready=True)
+            def defaulted(value):
+                original = reference.smoke_request(value)
+                if original.returncode != 0:
+                    return original
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['tolerations'] = allowed
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = defaulted
+            with self.subTest(allowed=allowed):
+                self.assertEqual(policy.smoke(kube, items())['passed_cases'], 15)
+
     def test_pod_success_does_not_add_os_constraint(self):
         for os_value in ({'name': 'windows'}, {'name': 'linux'}, None, True):
             kube = FakeKubernetes(ready=True)

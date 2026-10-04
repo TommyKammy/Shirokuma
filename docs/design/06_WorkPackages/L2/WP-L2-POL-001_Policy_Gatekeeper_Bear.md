@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.87"
+version: "0.88"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: default tolerations through complete smoke (offline)
+
+The two exact standard 300-second NoExecute defaults, in either order, now
+exercise the entire 15-case legacy smoke path rather than only the reply
+comparator. Both pass while the existing invalid/duplicate toleration negatives
+remain rejected; native policy tests passed (67). Dedicated Colima was observed
+stopped. No live admission, saved-request replay, retained data/backup mutation
+or GitHub write. Defaulting is still an offline assumption; this does not
+authenticate an API producer, establish full effective-object equality, clear
+strict admission or grant operator acceptance. Revert only the added test if
+needed; preserve pending intents. Original Vault sync remains pending outside
+checkout.
 
 ## 2026-10-04: bounded default Pod tolerations (offline)
 

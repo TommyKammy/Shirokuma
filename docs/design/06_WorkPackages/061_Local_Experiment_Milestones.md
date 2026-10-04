@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.217"
+version: "5.218"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent smoke default and Unicode history controls (offline)
+
+WP-L2-POL-001: both orders of the exact two standard default Pod tolerations
+pass the full fixed 15-case fake smoke path; invalid additions remain rejected.
+WP-L6-FIN-001: literal and escaped Unicode encodings of the same saved report
+are refused as a duplicate observation by the unchanged canonical history
+reader; a distinct saved pair renders. Focused native policy (67) and FinOps
+history (24) tests, `make verify-local-experiment`, design-context (89 documents),
+secret-filename and diff checks passed. Dedicated Colima was observed stopped; no live API,
+new collection, unknown-request replay, retained data/backup mutation or GitHub
+write. AgentHouse usage stays `null / NOT_MEASURED`. These offline fixtures
+cannot authenticate producers, establish full effective-object equality or
+atomic inventory, clear strict admission or grant operator acceptance. Revert
+only the independent tests if necessary; preserve saved reports and pending
+intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent canonical FinOps saved-history identity (offline)
 
