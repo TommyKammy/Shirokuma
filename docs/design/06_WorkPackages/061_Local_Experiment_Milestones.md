@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.177"
+version: "5.178"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Service external-routing reply controls (offline)
+
+WP-L2-POL-001: three fake successful replies injected `externalName`,
+`loadBalancerIP` or unrestricted source ranges and advanced to later smoke
+cases before repair. The fixed-corpus comparator now rejects them; 31 native
+tests, `make verify-local-experiment`, design-context, secret-filename and diff
+checks passed. Dedicated Colima was read-only observed stopped. No live API,
+unknown-request replay, retained report/volume/backup mutation or GitHub write.
+This is not full effective-object equality, authenticated admission, strict
+gate or operator acceptance. Revert only the guard/test if necessary; preserve
+historical evidence and pending intents. Original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: independent saved FinOps scope inspection (offline)
 

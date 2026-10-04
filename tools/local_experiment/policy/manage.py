@@ -431,8 +431,11 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
     original = submitted['spec']
     if submitted['kind'] == 'Service':
         return (spec.get('type') == original.get('type', 'ClusterIP') and
-                 spec.get('externalIPs', []) == original.get('externalIPs', []) and
-                spec.get('selector') in (None, {}) and
+                  spec.get('externalIPs', []) == original.get('externalIPs', []) and
+                 spec.get('externalName') in (None, '') and
+                 spec.get('loadBalancerIP') in (None, '') and
+                 spec.get('loadBalancerSourceRanges') in (None, []) and
+                 spec.get('selector') in (None, {}) and
                 type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
                 all(type(port) is dict and type(port.get('port')) is int and
                     port['port'] == expected['port'] and

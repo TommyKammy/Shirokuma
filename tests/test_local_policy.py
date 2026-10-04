@@ -322,6 +322,26 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_does_not_add_external_routing_controls(self):
+        for mutation in (
+            {'externalName': 'outside.example.invalid'},
+            {'loadBalancerIP': '192.0.2.1'},
+            {'loadBalancerSourceRanges': ['0.0.0.0/0']},
+        ):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != 'Service':
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
     def test_pod_success_does_not_accept_namespace_or_host_alias_mutation(self):
         for mutation in ({'shareProcessNamespace': True},
                          {'hostAliases': [{'ip': '192.0.2.1', 'hostnames': ['internal.local']}]},

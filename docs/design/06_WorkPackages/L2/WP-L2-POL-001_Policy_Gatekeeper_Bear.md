@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.60"
+version: "0.61"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Service external-routing reply controls (offline)
+
+Three test-owned successful Service replies added `externalName`,
+`loadBalancerIP` or an unrestricted `loadBalancerSourceRanges` while preserving
+the checked Service type and ports. Before repair each reached later fake smoke
+cases; the fixed-corpus comparator now refuses them after the second request.
+The 31 native policy tests, `make verify-local-experiment`, design-context,
+secret-filename and diff checks passed. The dedicated Colima profile was observed
+stopped; no live request, pending-intent replay, retained volume/backup change
+or GitHub write. This subset check neither authenticates the API nor establishes
+full effective-object equality, strict admission or operator acceptance.
+Revert only the comparator and regression if needed, preserving saved requests
+and historical evidence. Direct original Vault sync remains pending outside
+the checkout.
 
 ## 2026-10-04: legacy container mount and input reply controls (offline)
 
