@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.231"
+version: "5.232"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: embedded-IPv4 IPv6 Service claims (offline)
+
+WP-L2-POL-001: four synthetic successful IPv4-compatible/translated IPv6
+ClusterIP claims passed the Service request before a bounded guard. Focused
+negative failed first; 79 native policy tests and `make verify-local-experiment`
+passed after repair. Dedicated Colima was observed stopped; no live API,
+request replay, retained data/backup mutation or GitHub write. The offline
+fixture cannot authenticate producers, validate allocation or effective-object
+equality, clear strict admission or grant operator acceptance. Revert only the
+scoped guard/test if needed; preserve saved intents. Direct original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: reserved IPv4 replies and independent dev Flux failures (offline)
 

@@ -823,6 +823,27 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_rejects_embedded_ipv4_ipv6_cluster_address(self):
+        # IPv4-compatible and IPv4-translated forms are not ordinary IPv6
+        # Service VIPs, even though ipaddress does not flag them as mapped.
+        for address in ('::192.0.2.1', '::ffff:0:192.0.2.1'):
+            for field in ('clusterIP', 'clusterIPs'):
+                kube = FakeKubernetes(ready=True)
+                reference = FakeKubernetes(ready=True)
+                def changed(value):
+                    if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                            value['spec'].get('externalIPs')):
+                        return reference.smoke_request(value)
+                    reply = copy.deepcopy(value)
+                    reply['spec'][field] = address if field == 'clusterIP' else [address]
+                    reply['spec']['ipFamilies'] = ['IPv6']
+                    return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+                kube.smoke_failure = changed
+                with self.subTest(address=address, field=field):
+                    with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                        policy.smoke(kube, items())
+                    self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_rejects_non_unicast_cluster_address(self):
         # A syntactically valid address is not necessarily a usable Service
         # destination. These cannot represent an allocated unicast ClusterIP.

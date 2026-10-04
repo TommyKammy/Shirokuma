@@ -455,9 +455,12 @@ def service_address_family_consistent(spec: dict) -> bool:
                 parsed in ipaddress.IPv4Network('0.0.0.0/8') or
                 parsed in ipaddress.IPv4Network('240.0.0.0/4')):
             return False
-        # A mapped IPv4 address has version 6 in ipaddress, but does not
-        # establish an ordinary single-stack IPv6 Service allocation.
-        if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped is not None:
+        # IPv4-compatible, mapped and translated forms have version 6 in
+        # ipaddress but cannot establish an ordinary IPv6 Service allocation.
+        if isinstance(parsed, ipaddress.IPv6Address) and (
+                parsed in ipaddress.IPv6Network('::/96') or
+                parsed in ipaddress.IPv6Network('::ffff:0:0/96') or
+                parsed in ipaddress.IPv6Network('0:0:0:0:ffff:0:0:0/96')):
             return False
         if expected_version is not None and parsed.version != expected_version:
             return False

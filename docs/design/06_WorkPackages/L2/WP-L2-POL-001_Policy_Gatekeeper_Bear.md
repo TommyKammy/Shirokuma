@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.98"
+version: "0.99"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: embedded-IPv4 IPv6 ClusterIP refusal (offline)
+
+Four fake successful fixed-Service replies claimed IPv4-compatible or
+IPv4-translated IPv6 addresses in either cluster address field. All four
+advanced past the Service case before the scoped guard; native policy tests
+(79) and `make verify-local-experiment` passed afterward. Plain IPv6 and
+IPv4 fixture successes remain accepted. Colima was observed stopped; no live
+API, saved-request replay, retained data/backup change or GitHub write. This
+does not verify the Service CIDR, response provenance, effective-object
+equality, strict admission or operator acceptance. Roll back only the two
+IPv6 prefix checks and test if necessary; preserve historical evidence and
+pending requests. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: reserved IPv4 Service address refusal (offline)
 
