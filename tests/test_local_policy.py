@@ -1233,6 +1233,26 @@ class SmokeTests(unittest.TestCase):
             with self.subTest(defaults=defaults):
                 self.assertEqual(policy.smoke(kube, items())['passed_cases'], 15)
 
+    def test_pod_success_does_not_add_container_stop_signal(self):
+        # An API response must not silently change how the fixed container exits.
+        for injected in ('SIGKILL', 'SIGTERM', 9):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['containers'][0]['stopSignal'] = injected
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(injected=injected):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
+        submitted = policy.smoke_cases('example.test/image@sha256:' + 'a' * 64)[0]['object']
+        reply = copy.deepcopy(submitted)
+        reply['spec']['containers'][0]['stopSignal'] = None
+        self.assertTrue(policy.smoke_success_scope(reply, submitted))
+
     def test_pod_port_comparison_preserves_submitted_routing(self):
         submitted = policy.smoke_cases('example.test/image@sha256:' + 'a' * 64)[0]['object']
         submitted['spec']['containers'][0]['ports'] = [

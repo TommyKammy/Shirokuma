@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.100"
+version: "0.101"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: fixed Pod stop-signal reply control (offline)
+
+Three fake successful Pod replies added an unsubmitted container `stopSignal`
+and advanced to the third request before the scoped check. A focused negative
+failed first; the comparator now refuses a non-null signal, retaining absent
+and null defaults. Native policy tests (81) passed. Colima was observed stopped;
+no live admission, saved-request replay or retained data/backup mutation.
+Feature-gate/API defaulting, producer authenticity, complete effective-object
+equality, strict admission and operator acceptance remain unverified. Roll back
+only this reply check/test if necessary and preserve saved intents. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: Service reply address-family evidence (offline)
 

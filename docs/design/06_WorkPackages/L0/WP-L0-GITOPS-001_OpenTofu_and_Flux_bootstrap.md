@@ -5,12 +5,21 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.138"
+version: "0.139"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent hex-mapped endpoint spellings (offline)
+
+The unchanged local doctor rejects two additional fake IPv4-mapped IPv6
+loopback endpoint spellings, including a fully expanded form. The focused Go
+test passed. No live Git/API read or reconciliation; Colima was stopped.
+Fake context text does not authenticate the endpoint or establish atomic
+inventory, strict admission or operator acceptance. Revert only the test if
+necessary, retaining earlier evidence. Original Vault sync pending.
 
 ## 2026-10-05: mapped loopback endpoint ambiguity (offline)
 

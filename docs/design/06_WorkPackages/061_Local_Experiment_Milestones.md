@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.234"
+version: "5.235"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: Pod stop signal and independent mapped endpoints (offline)
+
+WP-L2-POL-001: three fake successful Pod replies added an unsubmitted container
+stop signal and passed the first case before a bounded guard; the focused
+negative failed first and all 81 policy tests passed after repair. Independently,
+WP-L0-GITOPS-001 pins refusal of two additional hex-mapped IPv6 loopback
+endpoint forms under the unchanged doctor. Focused/full Go CLI tests, Go vet,
+`make verify-local-experiment`, design-context (89 documents), secret-filename
+and diff checks passed. Colima was
+observed stopped. No live admission, inventory, reconciliation, saved-request
+replay, retained data/backup mutation or GitHub write. Offline fixtures cannot
+authenticate producers, verify API defaulting/feature gates, establish atomic
+inventory or full effective-object equality, clear strict admission or grant
+operator acceptance. Roll back only the scoped guard/test or independent doctor
+test if needed; preserve saved evidence. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-05: independent Service-family and mapped-endpoint guards (offline)
 
