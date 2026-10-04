@@ -437,6 +437,36 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_success_does_not_add_metadata_controls(self):
+        for kind in ('Pod', 'Service'):
+            for mutation in ({'annotations': {'example.invalid/injected': 'value'}},
+                             {'finalizers': ['example.invalid/hold']}):
+                kube = FakeKubernetes(ready=True)
+                reference = FakeKubernetes(ready=True)
+                def changed(value):
+                    if value['kind'] != kind or len(kube.calls) != (1 if kind == 'Pod' else 2):
+                        return reference.smoke_request(value)
+                    reply = copy.deepcopy(value)
+                    reply['metadata'].update(mutation)
+                    return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+                kube.smoke_failure = changed
+                with self.subTest(kind=kind, mutation=mutation):
+                    with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                        policy.smoke(kube, items())
+                    self.assertEqual(len(kube.calls), 1 if kind == 'Pod' else 2)
+
+    def test_success_accepts_empty_metadata_defaults(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def changed(value):
+            reply = copy.deepcopy(value)
+            if len(kube.calls) in (1, 2):
+                reply['metadata'].update(annotations={}, finalizers=[])
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            return reference.smoke_request(value)
+        kube.smoke_failure = changed
+        self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
+
     def test_service_success_does_not_add_external_routing_controls(self):
         for mutation in (
             {'externalName': 'outside.example.invalid'},

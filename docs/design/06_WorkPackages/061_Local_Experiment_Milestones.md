@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.199"
+version: "5.200"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy policy success metadata controls (offline)
+
+WP-L2-POL-001: four fake-success Pod/Service replies added unsubmitted
+annotations or finalizers and passed the original smoke corpus. The fixed
+reply check now refuses them and preserves empty metadata defaults. Native
+55 tests and `make verify-local-experiment` passed. Dedicated Colima was
+observed stopped; no live API, request replay, retained data/backup change or
+GitHub write. This does not authenticate a producer, prove complete effective
+object equality, clear strict admission or establish operator acceptance.
+Revert only the scoped comparator/tests if needed and preserve pending
+requests. Direct original Vault sync remains pending outside the checkout.
 
 ## 2026-10-04: independent present optional Flux catalog (offline)
 

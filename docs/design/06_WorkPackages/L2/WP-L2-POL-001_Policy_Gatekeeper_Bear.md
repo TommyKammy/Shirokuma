@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.74"
+version: "0.75"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy success metadata controls (offline)
+
+The fixed smoke accepted fake successful Pod and Service replies with newly
+injected annotations or finalizers, even though neither was submitted. It now
+requires absent or empty annotations/finalizers and retains both inert empty
+defaults. Four negative fixtures reproduced acceptance before repair; native
+55 tests and the local regression passed after repair. Dedicated Colima was
+observed stopped; no live admission, request replay, retained data/backup
+mutation or GitHub write. This fixed-corpus comparison cannot authenticate
+the producer, prove full effective-object equality, clear strict admission or
+establish operator acceptance. Revert only the scoped check and tests if
+necessary; preserve pending intents. Original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: legacy success selector-label and port-name boundary (offline)
 

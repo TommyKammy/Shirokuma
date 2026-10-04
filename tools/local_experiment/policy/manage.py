@@ -591,6 +591,10 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
                        metadata.get('name') == case['object']['metadata']['name'] and
                        type(metadata.get('labels')) is dict and
                         metadata['labels'] == case['object']['metadata']['labels'] and
+                       metadata.get('annotations', {}) == {} and
+                       type(metadata.get('annotations', {})) is dict and
+                       metadata.get('finalizers', []) == [] and
+                       type(metadata.get('finalizers', [])) is list and
                        smoke_success_scope(value, case['object']))
         row = {'case': case['case'], 'result': 'passed' if passed else 'failed',
                'expected_policy': denied, 'server_dry_run': True,
