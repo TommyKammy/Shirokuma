@@ -255,6 +255,23 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_pod_success_rejects_unsubmitted_pod_security_controls(self):
+        for mutation in ({'fsGroup': 0},
+                         {'supplementalGroups': [0]},
+                         {'sysctls': [{'name': 'net.ipv4.ip_forward', 'value': '1'}]},
+                         {'seLinuxOptions': {'level': 's0:c1,c2'}},
+                         {'windowsOptions': {'hostProcess': True}}):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['securityContext'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                policy.smoke(kube, items())
+            self.assertEqual(len(kube.calls), 1)
+
     def test_success_does_not_change_submitted_scope_label(self):
         for kind in ('Pod', 'Service'):
             kube = FakeKubernetes(ready=True)

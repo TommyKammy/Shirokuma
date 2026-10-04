@@ -479,8 +479,9 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
               spec.get('readinessGates') not in (None, []) or
               spec.get('restartPolicy') != 'Never' or
              spec.get('automountServiceAccountToken') is not False or
-             type(spec.get('securityContext')) is not dict or
-             any(spec['securityContext'].get(key) != val
+              type(spec.get('securityContext')) is not dict or
+              set(spec['securityContext']) != set(original['securityContext']) or
+              any(spec['securityContext'].get(key) != val
                  for key, val in original['securityContext'].items())):
         return False
     actual, expected = containers[0], original['containers'][0]

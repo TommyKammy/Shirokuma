@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.66"
+version: "0.67"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Pod security-context additions (offline)
+
+Five fake successful Pod replies added an unsubmitted fsGroup, supplemental
+group, sysctl, SELinux or Windows security control. The old comparator advanced
+past the first fake reply; the fixed comparator requires the submitted Pod
+security-context keys exactly and rejects each addition immediately. Native
+38-test suite passed. Dedicated Colima was observed stopped; no live API,
+unknown-request replay or retained data/backup change. Assumption: this fixed
+Pod does not need extra API-defaulted Pod security-context keys; live defaulting
+has not been rechecked. This subset check does not authenticate the API, prove
+full effective-object equality, clear strict admission or grant operator
+acceptance. Revert only the scoped comparator/test if needed; retain old
+intents and reports. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: legacy success scope label binding (offline)
 

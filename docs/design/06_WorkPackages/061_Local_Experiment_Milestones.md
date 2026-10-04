@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.185"
+version: "5.186"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Pod security-context additions (offline)
+
+WP-L2-POL-001: five fake successful Pod replies added unsubmitted security
+controls and advanced before repair. The fixed comparison rejects all five
+after one request; 38 native tests passed. Dedicated Colima was observed
+stopped. No live admission, unknown-request replay, retained data/backup
+mutation or GitHub write. Fixed-Pod defaulting assumption, producer
+authenticity, full effective-object equality, strict gate and operator
+acceptance remain unverified. Roll back only the comparator/regression if
+necessary; preserve historical intents. Direct original Vault sync pending.
 
 ## 2026-10-04: legacy success scope label and independent FinOps inspection (offline)
 
