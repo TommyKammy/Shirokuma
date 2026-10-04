@@ -255,6 +255,39 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_success_rejects_boolean_numeric_aliases(self):
+        mutations = (
+            lambda pod: pod['spec']['securityContext'].update(runAsUser=True),
+            lambda pod: pod['spec']['securityContext'].update(runAsNonRoot=1),
+            lambda pod: pod['spec']['containers'][0]['securityContext'].update(allowPrivilegeEscalation=0),
+            lambda pod: pod['spec']['containers'][0]['securityContext'].update(readOnlyRootFilesystem=1),
+        )
+        for mutate in mutations:
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    mutate(reply)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutate=mutate), self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                policy.smoke(kube, items())
+            self.assertEqual(len(kube.calls), 1)
+
+    def test_service_success_rejects_boolean_node_port_alias(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def changed(value):
+            if value['kind'] != 'Service':
+                return reference.smoke_request(value)
+            reply = copy.deepcopy(value)
+            reply['spec']['ports'][0]['nodePort'] = False
+            return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+        kube.smoke_failure = changed
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items())
+        self.assertEqual(len(kube.calls), 2)
+
     def test_pod_success_rejects_unsubmitted_pod_security_controls(self):
         for mutation in ({'fsGroup': 0},
                          {'supplementalGroups': [0]},

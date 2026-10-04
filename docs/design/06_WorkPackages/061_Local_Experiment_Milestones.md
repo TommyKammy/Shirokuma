@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: independent legacy policy JSON type checks (offline)
+
+WP-L2-POL-001: fake successful Pod replies changed four submitted security
+context booleans/integers to equal-by-Python-value values; a separate Service
+reply changed the optional integer zero nodePort to boolean false. All reached
+later fake cases before the repairs; the fixed comparator refuses them after
+one Pod or two Service requests. Native 40-test suite and
+`make verify-local-experiment` passed. Dedicated Colima was observed stopped;
+no live admission, unknown-request replay, retained data/backup mutation or
+GitHub write. This is a limited reply check, not authenticated producer
+identity, full effective-object equality, strict gate or operator acceptance.
+Rollback is comparator/tests only, preserving existing evidence. Direct Vault
+sync remains pending outside checkout.
+
 ## 2026-10-04: independent GitOps workload version coverage (offline)
 
 WP-L0-GITOPS-001: expanded the existing fake workload API-version regression

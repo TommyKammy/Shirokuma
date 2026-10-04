@@ -425,6 +425,17 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
     API defaulting may add unrelated fields; it must not change the controls
     exercised by this fixed corpus. This is not full effective-object equality.
     """
+    def same_json(actual, expected):
+        if type(actual) is not type(expected):
+            return False
+        if type(expected) is dict:
+            return actual.keys() == expected.keys() and all(
+                same_json(actual[key], item) for key, item in expected.items())
+        if type(expected) is list:
+            return len(actual) == len(expected) and all(
+                same_json(left, right) for left, right in zip(actual, expected))
+        return actual == expected
+
     spec = value.get('spec')
     if type(spec) is not dict:
         return False
@@ -448,7 +459,8 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                     port['targetPort'] == expected['targetPort'] and
                     port.get('protocol', 'TCP') == 'TCP' and
                     port.get('appProtocol') is None and
-                    port.get('nodePort', 0) in (0, None)
+                    (port.get('nodePort') is None or
+                     (type(port.get('nodePort')) is int and port['nodePort'] == 0))
                     for port, expected in zip(spec['ports'], original['ports'])))
     if submitted['kind'] != 'Pod':
         return False
@@ -481,7 +493,7 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
              spec.get('automountServiceAccountToken') is not False or
               type(spec.get('securityContext')) is not dict or
               set(spec['securityContext']) != set(original['securityContext']) or
-              any(spec['securityContext'].get(key) != val
+              any(not same_json(spec['securityContext'].get(key), val)
                  for key, val in original['securityContext'].items())):
         return False
     actual, expected = containers[0], original['containers'][0]
@@ -495,7 +507,7 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
              actual.get('env') in (None, []) and actual.get('envFrom') in (None, []) and
             actual.get('resources') == expected['resources'] and
             type(actual.get('securityContext')) is dict and
-            all(actual['securityContext'].get(key) == val
+            all(same_json(actual['securityContext'].get(key), val)
                 for key, val in expected['securityContext'].items()) and
             set(actual['securityContext']) - set(expected['securityContext']) <= {'privileged'} and
             actual['securityContext'].get('privileged', False) is False and

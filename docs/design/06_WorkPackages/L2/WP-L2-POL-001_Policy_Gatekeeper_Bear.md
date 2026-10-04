@@ -12,6 +12,21 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-04: legacy success JSON type aliases (offline)
+
+Two independent fixed-corpus reply boundaries: Pod security-context values
+now compare JSON types recursively (a boolean cannot impersonate a submitted
+integer or vice versa), and the Service's optional zero nodePort rejects a
+boolean false while continuing to allow absent, null or integer zero. Fake
+success replies previously advanced to subsequent smoke requests; both now
+stop after their respective first reply. The native 40-test suite and local
+regression passed. The dedicated Colima profile was observed stopped, with no
+live admission, saved-request replay, retained data/backup mutation or GitHub
+write. This is not producer authentication, full effective-object equality,
+strict admission or operator acceptance. Revert only the comparator/tests if
+necessary, preserving saved intents. Direct original Vault sync pending outside
+this checkout.
+
 ## 2026-10-04: legacy Pod security-context additions (offline)
 
 Five fake successful Pod replies added an unsubmitted fsGroup, supplemental
