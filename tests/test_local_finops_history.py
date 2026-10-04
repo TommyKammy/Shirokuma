@@ -49,7 +49,7 @@ class HistoryTests(unittest.TestCase):
     def test_direct_renderer_bounds_malformed_selection_shape(self):
         entries = H.parse(encoded([report(), report(processes())]))
         for malformed in ((), (0,), (0, ()), (0, (entries[0][1][0],)),
-                          {'index': 0}, ([], entries[0][1])):
+                          {'index': 0}, ([], entries[0][1]), ({'index': 0}, entries[0][1])):
             with self.subTest(malformed=str(malformed)[:40]), self.assertRaises(H.HistoryError):
                 H.render([malformed, entries[1]])
         self.assertIn('保存FinOps観測履歴', H.render(entries))
@@ -145,6 +145,14 @@ class HistoryTests(unittest.TestCase):
             H.parse(underflow)
         self.assertEqual(len(H.parse(original)), 2)
         self.assertEqual(len(H.parse(original.replace(b'0.5', b'0e-999'))), 2)
+
+    def test_overflowing_float_cannot_become_saved_infinite_measurement(self):
+        original = encoded([report(), report(processes())])
+        self.assertIn(b'0.5', original)
+        for exponent in (b'1e999', b'-1e999'):
+            with self.subTest(exponent=exponent), self.assertRaises(H.HistoryError):
+                H.parse(original.replace(b'0.5', exponent, 1))
+        self.assertEqual(len(H.parse(original)), 2)
 
     def test_cli_failure_has_no_partial_html_or_private_error(self):
         class Input:

@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.159"
+version: "5.160"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent FinOps saved-history exponent boundary (offline)
+
+WP-L6-FIN-001: after the separate policy/GitOps commit, selected two synthetic
+reports and pinned existing rejection of both overflowing JSON exponent signs
+in a saved measurement, plus a malformed direct selection index. No FinOps
+reader/renderer behavior or saved report changed. Focused history 15 tests and
+`make test-local-finops` 184 tests passed (seven Linux-only skips). Dedicated
+Colima remained stopped, with no collection, retained report, request, volume
+or backup mutation. AgentHouse usage remains `null / NOT_MEASURED`. Fixtures
+cannot authenticate producers, measure current usage, exercise Linux-only
+fixtures, clear strict admission or establish acceptance. Roll back only the
+FinOps test additions if necessary; retain saved reports. Direct original Vault
+sync remains pending outside checkout.
+
+After this second increment, `make verify-local-experiment`, `make
+verify-design-context` (89 documents), `make check-no-secret-filenames`
+and `git diff --check` passed. Expected synthetic failure-path output in the
+local suite is not live runtime evidence.
 
 ## 2026-10-04: policy exponent overflow and separate GitOps boundary (offline)
 

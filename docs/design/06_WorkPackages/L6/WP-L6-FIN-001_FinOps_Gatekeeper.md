@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.56"
+version: "0.57"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: independent saved-history overflow regression (offline)
+
+An explicitly selected two-report fixture now pins the existing rejection of
+positive and negative overflowing JSON exponents in a saved measurement. A
+direct malformed selection-index shape remains rejected. No parser, renderer or
+saved report changed; focused history 15 tests and FinOps 184 tests passed
+(seven Linux-only skips). Dedicated Colima remained stopped; no collection or
+retained report, volume or backup mutation. AgentHouse volume remains `null /
+NOT_MEASURED`. Fixtures cannot authenticate a producer, measure current usage
+or establish acceptance. Roll back only the test additions if needed, retaining
+historical reports. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: separate direct-history inspection (offline)
 
