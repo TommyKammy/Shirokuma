@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.178"
+version: "5.179"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent FinOps saved-history review (offline)
+
+WP-L6-FIN-001: inspected the direct saved-history selection, validation,
+digest, chronology and per-report storage display after the separate Service
+guard. No new defect or FinOps implementation change was justified; `make
+test-local-finops` passed 190 tests (seven Linux-only skips). Dedicated Colima
+was observed stopped. No collection or retained report/volume/backup mutation;
+AgentHouse usage stays `null / NOT_MEASURED`. Saved-producer authenticity,
+current usage and operator acceptance remain unverified. No runtime rollback;
+preserve reports. Original Vault synchronization remains pending outside the
+checkout.
 
 ## 2026-10-04: legacy Service external-routing reply controls (offline)
 
