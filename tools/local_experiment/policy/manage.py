@@ -459,7 +459,9 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
             any(spec.get(key) not in (None, []) for key in ('volumes', 'initContainers', 'ephemeralContainers', 'hostAliases')) or
              spec.get('imagePullSecrets') not in (None, []) or
              spec.get('nodeSelector') not in (None, {}) or
-             spec.get('affinity') not in (None, {}) or
+              spec.get('affinity') not in (None, {}) or
+              spec.get('topologySpreadConstraints') not in (None, []) or
+              spec.get('overhead') not in (None, {}) or
              spec.get('schedulerName', 'default-scheduler') != 'default-scheduler' or
              spec.get('priorityClassName', '') != '' or
              spec.get('runtimeClassName') is not None or

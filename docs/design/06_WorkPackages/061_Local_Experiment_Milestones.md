@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.183"
+version: "5.184"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Pod topology and overhead reply controls (offline)
+
+WP-L2-POL-001: two fake successful Pod replies added topology spread or
+resource overhead and advanced to later fake requests before repair. Both are
+now refused after one request; native 36-test suite and
+`make verify-local-experiment` passed. Dedicated Colima was observed stopped.
+No live admission, unknown-request replay, retained data/backup mutation or
+GitHub write. Absent/empty defaults are assumed inert for the fixed Pod; no
+live defaulting recheck. Offline comparison cannot authenticate the producer,
+prove full effective-object equality, clear strict admission or grant operator
+acceptance. Revert only the scoped guard/test if needed; preserve historical
+intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent last-controller GitOps identity (offline)
 

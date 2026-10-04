@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.64"
+version: "0.65"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Pod topology and overhead reply controls (offline)
+
+Two test-owned successful Pod replies injected topology spread scheduling or
+resource overhead. Both advanced to the third fake request before repair; the
+fixed-corpus comparator now refuses them after the first. Native policy tests
+(36) and `make verify-local-experiment` passed. Dedicated Colima was observed
+stopped; no live admission, unknown-request replay, retained data/backup
+mutation or GitHub write. Assumption: absent or empty topology and overhead
+are inert for this fixed Pod; live defaulting was not rechecked. These subset
+checks do not authenticate the producer, prove complete effective-object
+equality, clear strict admission or grant operator acceptance. Revert only the
+guard/test if needed, preserving prior evidence and intents. Original Vault
+sync remains pending outside this checkout.
 
 ## 2026-10-04: legacy Pod lifecycle and Service traffic hints (offline)
 
