@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: independent direct FinOps history render boundary (offline)
+
+WP-L6-FIN-001: a direct renderer test pins existing rejection of an 1100-level
+untrusted report extension, while the original pair still renders. No reader
+behavior or saved report changed. `make test-local-finops` passed (188 tests,
+seven Linux-only skips). No collection, retained data or backup mutation;
+AgentHouse usage stays `null / NOT_MEASURED`. This fixture cannot authenticate
+saved producers, measure present usage or establish acceptance. Revert only
+the test if needed, preserving reports. Original Vault sync remains pending
+outside checkout.
+
 ## 2026-10-04: legacy smoke policy-relevant success fields (offline)
 
 WP-L2-POL-001: a successful fake Pod/Service dry-run could preserve identity

@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-04: direct saved-history deep-extension check (offline)
+
+An independent direct `render()` fixture now pins fail-closed handling of a
+1100-level untrusted report extension, while the original two reports still
+render. Existing validation needed no implementation change; 188 focused
+FinOps tests passed (seven Linux-only skips). No collection or retained report,
+volume or backup mutation. AgentHouse usage stays `null / NOT_MEASURED`.
+This does not authenticate saved producers, measure present usage or establish
+acceptance. Roll back only this test if needed and retain saved reports.
+Original Vault synchronization remains pending outside the checkout.
+
 ## 2026-10-04: independent saved-history nesting regression (offline)
 
 A test-owned two-report input with a 1100-level unknown extension is rejected
