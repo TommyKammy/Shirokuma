@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.190"
+version: "5.191"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent legacy Service dual-stack reply control (offline)
+
+WP-L2-POL-001: fake successful Service replies injected either dual-stack
+`ipFamilyPolicy` and advanced through the smoke corpus before repair. The fixed
+comparator now rejects both; the native 44-test suite and
+`make verify-local-experiment` passed. Dedicated Colima remained stopped; no
+live admission, unknown-request replay, retained data/backup mutation or
+GitHub write. This offline guard cannot authenticate a producer, prove full
+effective-object equality, strict admission or operator acceptance. Revert
+only comparator/test if needed; preserve pending intents and old evidence.
+Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-04: local Flux resource API-version identity (offline)
 

@@ -462,6 +462,23 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_does_not_enable_dual_stack(self):
+        for mutation in ({'ipFamilyPolicy': 'RequireDualStack'},
+                         {'ipFamilyPolicy': 'PreferDualStack'}):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != 'Service':
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_does_not_add_traffic_hints(self):
         for mutation in ('distribution', 'application-protocol'):
             kube = FakeKubernetes(ready=True)

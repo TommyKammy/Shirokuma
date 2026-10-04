@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.68"
+version: "0.69"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Service dual-stack reply control (offline)
+
+Two fake successful ClusterIP Service replies introduced `ipFamilyPolicy` as
+`RequireDualStack` or `PreferDualStack`; both advanced through the fixed smoke
+corpus before repair. The local comparator now accepts an absent or default
+`SingleStack` policy, refusing both injected dual-stack modes at the second
+request. Focused native suite (44) and `make verify-local-experiment` passed.
+Dedicated Colima was observed stopped; no live dry-run, unknown-request replay,
+retained data/backup mutation or GitHub write. The fixed-corpus defaulting
+assumption has not been rechecked on the live API; this does not authenticate
+the producer, prove complete effective-object equality, clear strict admission
+or establish operator acceptance. Revert only this comparator/test if needed;
+retain historical evidence and pending intents. Direct original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-04: legacy dry-run identity and independent Service class (offline)
 
