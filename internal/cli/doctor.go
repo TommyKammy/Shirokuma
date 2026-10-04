@@ -1014,7 +1014,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 				unhealthy = append(unhealthy, resourceID+" (duplicated)")
 			}
 			// The queried CRDs are pinned to v1, except HelmRelease (v2).
-			// An omitted version is compatible with projected test inventories.
+			// A scoped API list must declare the version of every returned member.
 			expectedVersion := "source.toolkit.fluxcd.io/v1"
 			switch resource.Kind {
 			case "Kustomization":
@@ -1022,7 +1022,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			case "HelmRelease":
 				expectedVersion = "helm.toolkit.fluxcd.io/v2"
 			}
-			if validIdentity && resource.APIVersion != "" && resource.APIVersion != expectedVersion {
+			if validIdentity && resource.APIVersion != expectedVersion {
 				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
 			}
 			seenResources[resourceID] = true

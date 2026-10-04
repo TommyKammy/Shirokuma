@@ -82,7 +82,32 @@ func TestLocalFluxRequiresControllerKindAndNamespace(t *testing.T) {
 }
 
 func localFluxJSON() string {
-	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+	return `{"items":[{"apiVersion":"source.toolkit.fluxcd.io/v1","kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"apiVersion":"kustomize.toolkit.fluxcd.io/v1","kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"apiVersion":"kustomize.toolkit.fluxcd.io/v1","kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"apiVersion":"kustomize.toolkit.fluxcd.io/v1","kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
+}
+
+func TestLocalFluxRequiresResourceAPIVersion(t *testing.T) {
+	for _, tc := range []struct{ kind, expected string }{
+		{"GitRepository", "source.toolkit.fluxcd.io/v1"},
+		{"Kustomization", "kustomize.toolkit.fluxcd.io/v1"},
+	} {
+		for _, version := range []string{"", "v1", "null"} {
+			original := `"apiVersion":"` + tc.expected + `","kind":"` + tc.kind + `"`
+			replacement := `"kind":"` + tc.kind + `"`
+			if version != "" {
+				replacement = `"apiVersion":` + version + `,` + replacement
+			}
+			resources := strings.Replace(localFluxJSON(), original, replacement, 1)
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+				{output: localControllerJSON()}, {output: resources},
+			}}, localExperimentContext, true)
+			if check.Status != "degraded" {
+				t.Fatalf("%s version %q accepted: %#v", tc.kind, version, check)
+			}
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("valid versions rejected: %#v", check)
+	}
 }
 
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
@@ -2234,7 +2259,7 @@ func TestLocalFluxRejectsDuplicateRootResources(t *testing.T) {
 			t.Fatal(err)
 		}
 		runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}
-		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "duplicated") {
+		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || (!strings.Contains(check.Summary, "duplicated") && !strings.Contains(check.Summary, "response was incomplete")) {
 			t.Fatalf("duplicated root item %d passed: %#v", index, check)
 		}
 	}
@@ -2271,7 +2296,7 @@ func TestLocalFluxRejectsAmbiguousNonRootResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}
-	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "duplicated") {
+	if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || (!strings.Contains(check.Summary, "duplicated") && !strings.Contains(check.Summary, "response was incomplete")) {
 		t.Fatalf("duplicated non-root resource accepted: %#v", check)
 	}
 	generic := &fakeRunner{responses: []fakeResponse{{output: localControllerJSON()}, {output: string(output)}}}

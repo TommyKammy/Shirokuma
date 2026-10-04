@@ -5,12 +5,30 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.110"
+version: "0.111"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: local Flux resource API version identity (offline)
+
+The fixed-profile doctor accepted a fake complete resource inventory with an
+omitted GitRepository API version while the controllers declared theirs. A
+negative failed first; the local resource check now requires the expected
+version for each supported Flux kind (source v1, kustomize v1, HelmRelease v2).
+Missing, mismatched and null source/kustomization versions degrade; the valid
+fixture remains informational. Existing duplicate-resource tests now permit the
+earlier complete-list decoder's "incomplete" diagnostic for a reported GVK,
+without relaxing degraded status. `go test ./... -count=1` (859 tests), `go
+vet ./...` and diff check passed. Dedicated Colima was read-only observed
+Stopped; no live API, reconcile, saved-request replay, retained data/backup
+mutation or GitHub write. Fake responses do not authenticate Kubernetes/Git,
+prove atomic inventory, clear strict admission or establish acceptance. Revert
+only the fixed-profile version guard and its fixtures/tests if needed, retaining
+historical evidence. Direct original Vault synchronization remains pending
+outside the approved checkout.
 
 ## 2026-10-04: independent controller kind and namespace regression (offline)
 

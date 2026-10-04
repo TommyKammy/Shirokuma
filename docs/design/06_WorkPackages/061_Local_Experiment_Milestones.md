@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.189"
+version: "5.190"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: local Flux resource API-version identity (offline)
+
+WP-L0-GITOPS-001: a fake missing GitRepository API version previously retained
+an informational result. The local doctor now requires declared expected API
+versions on each Flux resource, with missing/wrong/null source and Kustomization
+negatives and a valid fixture. Full Go suite (859), vet and diff check passed.
+Dedicated Colima was observed stopped; no live inventory/reconcile, unknown
+request replay, retained data/backup mutation or GitHub write. Offline claims
+cannot authenticate producers, prove atomic inventory, strict admission or
+operator acceptance. Revert only the local version guard and fixtures/tests if
+needed. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent Flux controller kind and namespace regression (offline)
 
