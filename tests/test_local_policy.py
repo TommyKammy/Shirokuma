@@ -255,6 +255,19 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_pod_success_does_not_add_os_constraint(self):
+        for os_value in ({'name': 'windows'}, {'name': 'linux'}, None, True):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['os'] = os_value
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(os_value=os_value), self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                policy.smoke(kube, items())
+            self.assertEqual(len(kube.calls), 1)
+
     def test_success_rejects_boolean_numeric_aliases(self):
         mutations = (
             lambda pod: pod['spec']['securityContext'].update(runAsUser=True),

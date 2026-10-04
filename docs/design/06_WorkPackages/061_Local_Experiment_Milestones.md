@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.211"
+version: "5.212"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: fixed Pod OS reply constraint (offline)
+
+WP-L2-POL-001: four fake successful Pod replies added an unsubmitted OS
+constraint and advanced past the first case before repair. A fixed-corpus
+absence check now rejects all four; the negative failed first and 64 native
+tests passed. Dedicated Colima was observed stopped; no live API, replay,
+retained data/backup mutation or GitHub write. Defaulting, producer identity,
+full effective-object equality, strict admission and operator acceptance
+remain open. Revert only the guard/test if needed; preserve pending intents.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: Pod preemption and independent Flux source duplicates (offline)
 

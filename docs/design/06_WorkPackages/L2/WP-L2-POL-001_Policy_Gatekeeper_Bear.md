@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.83"
+version: "0.84"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed Pod OS reply constraint (offline)
+
+Four fake successful replies introduced an unsubmitted `spec.os` (Windows,
+Linux, null or boolean) and advanced through the fixed smoke corpus before
+repair. The fixed Pod check now requires this field to remain absent; the
+negative failed first and 64 native policy tests passed afterward. This is a
+conservative assumption about the fixed corpus, not a claim about live API
+defaulting or all valid Pod submissions. Colima was observed stopped; no live
+API, unknown-request replay, retained data/backup mutation or GitHub write.
+Producer identity, effective-object equality, strict admission and operator
+acceptance remain unverified. Roll back only the scoped guard/test if needed;
+preserve saved intents. Direct original Vault sync remains pending outside
+this checkout.
 
 ## 2026-10-04: fixed Pod preemption reply control (offline)
 
