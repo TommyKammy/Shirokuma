@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.85"
+version: "0.86"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed-name dry-run reply metadata (offline)
+
+A fake successful Pod/Service reply could add an unsubmitted `generateName`
+while keeping the submitted fixed `name`. Both reached later smoke cases before
+the negative regression; the dry-run identity check now refuses the added
+prefix and still allows absent/empty API defaults. The first focused invocation
+used the wrong test class; the corrected negative failed before repair. Native
+policy suite (66 tests) and full local regression passed. Colima was observed
+stopped; no live API, saved-request replay, retained data/backup mutation or
+GitHub write. This does not authenticate the producer, establish full effective
+object equality, clear strict admission or grant operator acceptance. Roll back
+only this guard/test if needed; preserve historical intents. Direct original
+Vault synchronization remains pending outside the checkout.
 
 ## 2026-10-04: typed submitted container resource reply (offline)
 

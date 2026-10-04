@@ -296,6 +296,21 @@ class SmokeTests(unittest.TestCase):
         reply['spec']['containers'][0]['resources']['requests']['cpu'] = True
         self.assertFalse(policy.smoke_success_scope(reply, submitted))
 
+    def test_success_rejects_unsubmitted_generate_name(self):
+        reference = FakeKubernetes(ready=True)
+        for kind, expected_calls in (('Pod', 1), ('Service', 2)):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != kind:
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['metadata']['generateName'] = 'other-'
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(kind=kind), self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                policy.smoke(kube, items())
+            self.assertEqual(len(kube.calls), expected_calls)
+
     def test_service_success_rejects_boolean_node_port_alias(self):
         kube = FakeKubernetes(ready=True)
         reference = FakeKubernetes(ready=True)

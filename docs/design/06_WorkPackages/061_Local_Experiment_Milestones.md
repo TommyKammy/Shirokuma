@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.214"
+version: "5.215"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: fixed-name dry-run metadata and independent FinOps review (offline)
+
+WP-L2-POL-001: test-owned successful Pod/Service replies added unsubmitted
+`generateName` and advanced through the smoke corpus before a scoped identity
+guard rejected both; absent/empty defaults remain accepted. An initial focused
+test named the wrong class; corrected negative failed before repair. Native 66
+tests, `make verify-local-experiment`, design-context and secret-filename checks
+passed. Independently WP-L6-FIN-001 saved-history parsing, digest/order and
+per-report storage display were reviewed without reader changes; the local
+regression includes the FinOps suite. Dedicated Colima was observed stopped;
+no live API, new collection, unknown-request replay, retained data/backup
+mutation or GitHub write. AgentHouse volume usage remains `null / NOT_MEASURED`.
+Offline tests cannot authenticate producers, establish complete effective-object
+equality, measure usage, clear strict admission or grant operator acceptance.
+Revert only the policy guard/test if necessary; preserve saved reports and
+requests. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: typed Pod resource and independent Flux duplicates (offline)
 

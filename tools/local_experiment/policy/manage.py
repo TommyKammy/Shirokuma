@@ -579,6 +579,7 @@ def smoke_dry_run_identity(value: dict, metadata: dict) -> bool:
     """A successful server dry-run is not evidence of a persisted object."""
     return (value.get('status', {}) == {} and
             metadata.get('uid', '') == '' and
+            metadata.get('generateName', '') == '' and
             metadata.get('resourceVersion', '') == '' and
             type(metadata.get('generation', 0)) is int and
             metadata.get('generation', 0) == 0 and
