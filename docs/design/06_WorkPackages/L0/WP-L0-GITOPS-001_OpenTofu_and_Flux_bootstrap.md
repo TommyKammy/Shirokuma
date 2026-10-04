@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.106"
+version: "0.107"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: local lakehouse workload API-version identity (offline)
+
+A complete, test-owned local workload list omitted the `apiVersion` of a
+ready Deployment; the doctor reported it healthy before repair. Both fixed
+workload kinds now require `apps/v1`, matching the scoped kubectl request.
+The focused negative failed before repair; focused lakehouse/Flux tests and
+full Go tests passed after fixture updates. The dedicated Colima profile was
+observed stopped. No live inventory, reconciliation, request replay, retained
+data/backup change or publication. This does not authenticate the producer,
+prove atomic inventory, clear strict admission or establish acceptance.
+Rollback is the workload version guard and test-fixture updates only; preserve
+prior evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: local Flux controller API-version identity (offline)
 

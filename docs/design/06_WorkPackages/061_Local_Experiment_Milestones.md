@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.167"
+version: "5.168"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: local lakehouse workload API-version identity (offline)
+
+WP-L0-GITOPS-001: a complete test-owned workload list missing a Deployment
+`apiVersion` was reported healthy before repair. The local lakehouse doctor
+now requires `apps/v1` for both Deployment and StatefulSet list members.
+The focused negative failed first; focused Flux/lakehouse and full Go tests
+passed after fixture updates. The dedicated Colima profile was observed
+stopped. No live inventory, reconciliation, retained data/backup mutation,
+unknown-request replay or GitHub write. This fake response cannot authenticate
+its producer, establish atomic state, clear strict admission or operator
+acceptance. Revert only this guard and related fixtures if needed; preserve
+old evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: local Flux controller API-version identity (offline)
 

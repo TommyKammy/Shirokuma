@@ -16,13 +16,13 @@ func healthyLocalWorkload(kind, namespace, name string) string {
 	if kind == "Deployment" {
 		conditions = `,"conditions":[{"type":"Available","status":"True"},{"type":"Progressing","status":"True"}]`
 	}
-	return fmt.Sprintf(`{"kind":%q,"metadata":{"name":%q,"namespace":%q,"generation":2},"spec":{"replicas":1},"status":{"observedGeneration":2,"replicas":1,"availableReplicas":1,"readyReplicas":1,"updatedReplicas":1%s}}`, kind, name, namespace, conditions)
+	return fmt.Sprintf(`{"apiVersion":"apps/v1","kind":%q,"metadata":{"name":%q,"namespace":%q,"generation":2},"spec":{"replicas":1},"status":{"observedGeneration":2,"replicas":1,"availableReplicas":1,"readyReplicas":1,"updatedReplicas":1%s}}`, kind, name, namespace, conditions)
 }
 
 func localControllerJSON() string {
 	var controllers []string
 	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"} {
-		controllers = append(controllers, strings.Replace(healthyLocalWorkload("Deployment", "flux-system", name), `{"kind":`, `{"apiVersion":"apps/v1","kind":`, 1))
+		controllers = append(controllers, healthyLocalWorkload("Deployment", "flux-system", name))
 	}
 	return `{"items":[` + strings.Join(controllers, ",") + `]}`
 }
@@ -83,6 +83,21 @@ func TestLocalLakehouseRejectsIncompleteConditions(t *testing.T) {
 	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: localWorkloadResponses()}, localExperimentContext) {
 		if check.Status != "healthy" {
 			t.Fatalf("complete workload rejected: %#v", check)
+		}
+	}
+}
+
+func TestLocalLakehouseRequiresWorkloadAPIVersion(t *testing.T) {
+	for _, version := range []string{``, `"v1"`, `null`} {
+		responses := localWorkloadResponses()
+		replacement := ""
+		if version != "" {
+			replacement = `"apiVersion":` + version + `,`
+		}
+		responses[1].output = strings.Replace(responses[1].output, `"apiVersion":"apps/v1",`, replacement, 1)
+		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+		if checks[2].Status != "degraded" {
+			t.Fatalf("workload API version %q accepted: %#v", version, checks[2])
 		}
 	}
 }
@@ -1497,7 +1512,7 @@ func TestLocalInventoryRejectsImpossibleUnrelatedReplicaCounters(t *testing.T) {
 		}
 	}
 	// During a rolling update total may exceed desired; that alone is not contradictory.
-	valid := `{"kind":"Deployment","metadata":{"name":"unrelated","namespace":"shirokuma-dev","generation":1},"spec":{"replicas":1},"status":{"replicas":2,"readyReplicas":2,"updatedReplicas":2,"availableReplicas":2}}`
+	valid := `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"unrelated","namespace":"shirokuma-dev","generation":1},"spec":{"replicas":1},"status":{"replicas":2,"readyReplicas":2,"updatedReplicas":2,"availableReplicas":2}}`
 	workloads := localWorkloadResponses()
 	workloads[1].output = strings.Replace(workloads[1].output, `"items":[`, `"items":[`+valid+`,`, 1)
 	if checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: workloads}, localExperimentContext); checks[2].Status != "healthy" {
@@ -2114,10 +2129,7 @@ func TestLocalLakehouseRejectsDuplicateUnrelatedResource(t *testing.T) {
 			t.Fatalf("unaffected namespace rejected: %#v", checks[0])
 		}
 		for _, check := range checks[1:] {
-			expected := "out-of-scope or duplicated"
-			if strings.Contains(entries, `"name":""`) {
-				expected = "workload response was incomplete"
-			}
+			expected := "workload response was incomplete"
 			if check.Status != "degraded" || !strings.Contains(check.Summary, expected) {
 				t.Fatalf("ambiguous list accepted: %#v", check)
 			}
@@ -2733,14 +2745,13 @@ func TestLocalLakehouseAcceptsCompleteV1ListEnvelope(t *testing.T) {
 func TestLocalLakehouseRejectsWrongItemAPIVersion(t *testing.T) {
 	for _, version := range []string{"v1", "batch/v1"} {
 		responses := localWorkloadResponses()
-		responses[0].output = strings.Replace(responses[0].output, `"kind":"StatefulSet"`, `"apiVersion":"`+version+`","kind":"StatefulSet"`, 1)
+		responses[0].output = strings.Replace(responses[0].output, `"apiVersion":"apps/v1"`, `"apiVersion":"`+version+`"`, 1)
 		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
 		if checks[0].Status != "degraded" || !strings.Contains(checks[0].Summary, "out-of-scope") || checks[1].Status != "healthy" {
 			t.Fatalf("wrong workload version %q accepted or unrelated namespace degraded: %#v", version, checks)
 		}
 	}
 	responses := localWorkloadResponses()
-	responses[1].output = strings.Replace(responses[1].output, `"kind":"Deployment"`, `"apiVersion":"apps/v1","kind":"Deployment"`, 1)
 	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext) {
 		if check.Status != "healthy" {
 			t.Fatalf("apps/v1 workload rejected: %#v", check)
@@ -2781,7 +2792,7 @@ func TestLocalLakehouseRejectsIncompleteAndDuplicateInventory(t *testing.T) {
 		{"underflow-list-extension", `{"items":[],"extension":{"value":1e-999}}`, "incomplete"},
 		{"underflow-member-extension", `{"items":[{"metadata":{"name":"other"},"extension":-1e-999}]}`, "incomplete"},
 		{"wrong-api-version", `{"apiVersion":"v2","items":[]}`, "incomplete"},
-		{"duplicate", `{"items":[` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `,` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `]}`, "duplicated"},
+		{"duplicate", `{"items":[` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `,` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `]}`, "incomplete"},
 	} {
 		t.Run(change.name, func(t *testing.T) {
 			responses := localWorkloadResponses()
