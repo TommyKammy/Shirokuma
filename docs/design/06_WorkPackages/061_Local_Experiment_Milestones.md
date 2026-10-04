@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.192"
+version: "5.193"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Service address-list controls (offline)
+
+WP-L2-POL-001: two independent fake-success groups added extra/invalid
+`ipFamilies` and multiple/malformed `clusterIPs` to the fixed ClusterIP reply;
+both reached later smoke cases before repair. The comparator now restricts
+family and cluster-address list cardinality while allowing absent and
+single-family/defaulted address forms. Native 47 tests and local regression
+passed after correcting a positive fixture that inadvertently changed denied
+Services (the first regression failed and is not rewritten). Dedicated Colima
+was observed stopped; no live API, replay, retained data/backup mutation or
+GitHub write. The fixture cannot authenticate the producer, validate allocated
+addresses, establish full effective-object equality, strict admission or
+operator acceptance. Revert only the two scoped checks/tests if needed; keep
+pending intents and historical evidence. Direct original Vault sync pending.
 
 ## 2026-10-04: independent Flux version and FinOps equal-time controls (offline)
 

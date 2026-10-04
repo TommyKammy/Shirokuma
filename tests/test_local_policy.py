@@ -464,7 +464,10 @@ class SmokeTests(unittest.TestCase):
 
     def test_service_success_does_not_enable_dual_stack(self):
         for mutation in ({'ipFamilyPolicy': 'RequireDualStack'},
-                         {'ipFamilyPolicy': 'PreferDualStack'}):
+                         {'ipFamilyPolicy': 'PreferDualStack'},
+                         {'ipFamilies': ['IPv4', 'IPv6']},
+                         {'ipFamilies': ['IPv4', 'IPv4']},
+                         {'ipFamilies': ['unexpected']}):
             kube = FakeKubernetes(ready=True)
             reference = FakeKubernetes(ready=True)
             def changed(value):
@@ -478,6 +481,55 @@ class SmokeTests(unittest.TestCase):
                 with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
+
+    def test_service_success_accepts_single_defaulted_ip_family(self):
+        for family in ('IPv4', 'IPv6'):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if (value['kind'] != 'Service' or
+                        value['spec'].get('type') != 'ClusterIP' or
+                        value['spec'].get('externalIPs')):
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec']['ipFamilies'] = [family]
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(family=family):
+                self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
+
+    def test_service_success_rejects_multiple_cluster_addresses(self):
+        for addresses in (['192.0.2.1', '2001:db8::1'],
+                          ['192.0.2.1', '192.0.2.2'], '192.0.2.1'):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != 'Service':
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec']['clusterIPs'] = addresses
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(addresses=addresses):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
+    def test_service_success_accepts_one_defaulted_cluster_address(self):
+        for addresses in ([], ['192.0.2.1'], ['2001:db8::1']):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if (value['kind'] != 'Service' or
+                        value['spec'].get('type') != 'ClusterIP' or
+                        value['spec'].get('externalIPs')):
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec']['clusterIPs'] = addresses
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(addresses=addresses):
+                self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
 
     def test_service_success_does_not_add_traffic_hints(self):
         for mutation in ('distribution', 'application-protocol'):

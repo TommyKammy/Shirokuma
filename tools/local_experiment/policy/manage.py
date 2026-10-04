@@ -453,8 +453,15 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                   spec.get('sessionAffinityConfig') is None and
                   spec.get('publishNotReadyAddresses', False) is False and
                    spec.get('internalTrafficPolicy', 'Cluster') == 'Cluster' and
-                   spec.get('ipFamilyPolicy', 'SingleStack') == 'SingleStack' and
-                   spec.get('trafficDistribution') is None and
+                    spec.get('ipFamilyPolicy', 'SingleStack') == 'SingleStack' and
+                    ('ipFamilies' not in spec or
+                     (type(spec['ipFamilies']) is list and len(spec['ipFamilies']) == 1 and
+                      spec['ipFamilies'][0] in ('IPv4', 'IPv6'))) and
+                    ('clusterIPs' not in spec or
+                     (type(spec['clusterIPs']) is list and len(spec['clusterIPs']) <= 1 and
+                      all(type(address) is str and address != 'None' and address
+                          for address in spec['clusterIPs']))) and
+                    spec.get('trafficDistribution') is None and
                   type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
                 all(type(port) is dict and type(port.get('port')) is int and
                     port['port'] == expected['port'] and

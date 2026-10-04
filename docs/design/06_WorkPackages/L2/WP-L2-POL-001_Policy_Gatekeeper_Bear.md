@@ -5,12 +5,31 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.69"
+version: "0.70"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Service address-list reply controls (offline)
+
+The fixed single-stack ClusterIP dry-run comparator accepted fake successful
+replies with two IP families (including duplicates), an unknown family, or
+multiple allocated cluster IPs. Both negative groups reached later requests
+before repair. It now permits absent or one IPv4/IPv6 family and absent, empty
+or singleton non-headless `clusterIPs`, rejecting multi-address and malformed
+list shapes. Positive defaulted single-family and single-address fixtures pass.
+This checks reply consistency, not allocation validity or the matching of an
+address to its family. Native 47 tests and local regression passed. The first
+regression attempt failed because a positive fixture also modified denied
+Services; the fixture was scoped to the allowed case and the rerun passed.
+Dedicated Colima was read-only observed stopped; no live dry-run, unknown
+request replay, retained data/backup mutation or GitHub write. Live API
+defaulting, authenticated producer, full effective-object equality, strict
+admission and operator acceptance remain unverified. Roll back these two
+scoped comparator checks and regressions only, preserving historical evidence.
+Direct original Vault sync remains pending outside the approved checkout.
 
 ## 2026-10-04: legacy Service dual-stack reply control (offline)
 
