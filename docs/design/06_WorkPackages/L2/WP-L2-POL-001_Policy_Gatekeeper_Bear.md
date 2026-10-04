@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.75"
+version: "0.76"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: successful Pod probe injection (offline)
+
+Three fake successful Pod replies added an unsubmitted liveness, readiness or
+startup exec probe. Before repair the smoke advanced to a later request; the
+fixed-corpus comparator now refuses each on the first reply. Native 56 tests,
+full local regression, Go suite/vet and design-context passed. Dedicated Colima
+was observed stopped; no live API, pending-request replay, retained data/backup
+mutation or GitHub write. An absent probe is assumed for this fixed Pod; live
+defaulting, producer identity, full effective-object equality, strict admission
+and operator acceptance remain unverified. Roll back only this comparator/test
+if needed, preserving saved intents. Original Vault synchronization is pending
+outside the approved checkout.
 
 ## 2026-10-04: legacy success metadata controls (offline)
 

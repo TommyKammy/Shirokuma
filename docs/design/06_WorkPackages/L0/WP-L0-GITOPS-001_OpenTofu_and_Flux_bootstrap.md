@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.117"
+version: "0.118"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: optional catalog impossible Ready generation (offline)
+
+Independent fake-list variants with a present catalog reporting Ready at
+generation zero or beyond its own generation degrade under the unchanged
+doctor; the current Ready fixture remains informational. Focused Go, full Go
+suite/vet, full local regression and design-context passed. Dedicated Colima
+remained stopped; no live inventory, reconciliation, request replay, retained
+data/backup mutation or GitHub write. This cannot authenticate Git/API,
+establish atomic inventory, clear strict admission or prove operator acceptance.
+Revert only this test extension if needed; preserve saved evidence. Direct
+original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: optional catalog current Ready boundary (offline)
 

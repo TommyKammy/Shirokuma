@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.201"
+version: "5.202"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: fixed Pod probes and optional Flux generation (offline)
+
+WP-L2-POL-001: three unsubmitted exec probe replies reached later smoke cases
+before a scoped check refused liveness/readiness/startup injections on the first
+successful Pod reply. WP-L0-GITOPS-001: the unchanged doctor degrades a present
+optional catalog reporting Ready at zero or a future generation. Native policy
+56 tests, focused and full Go suite/vet, `make verify-local-experiment` and
+design-context passed. The initial red policy regression (three failures) is
+retained in the session evidence; it was not a live API observation. Dedicated
+Colima was observed stopped; no replay, reconciliation, retained data/backup
+mutation or GitHub write. No producer authentication, complete effective-object
+equality, atomic inventory, strict admission or operator acceptance is claimed.
+Rollback: remove only the scoped probe guard/test or independent Flux test;
+preserve saved requests and evidence. Original Vault sync remains pending outside
+the approved checkout.
 
 ## 2026-10-04: optional Flux catalog current Ready (offline)
 

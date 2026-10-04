@@ -219,6 +219,8 @@ func TestLocalFluxOptionalCatalogRejectsStaleOrFailedReady(t *testing.T) {
 		{"stale", `"name":"shirokuma-catalog","namespace":"flux-system","generation":2},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`},
 		{"failed", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"False","observedGeneration":1}]}`},
 		{"missing", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[]}`},
+		{"future", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":2}]}`},
+		{"zero", `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":0}]}`},
 	} {
 		resources := strings.Replace(localFluxJSON(), catalog, tc.replacement, 1)
 		if resources == localFluxJSON() {

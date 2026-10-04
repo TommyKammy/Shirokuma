@@ -806,6 +806,21 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
 
+    def test_pod_success_does_not_add_container_probes(self):
+        for field in ('livenessProbe', 'readinessProbe', 'startupProbe'):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['containers'][0][field] = {
+                        'exec': {'command': ['/bin/true']}, 'periodSeconds': 1}
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
     def test_deep_success_extension_is_a_failed_case(self):
         kube = FakeKubernetes(ready=True)
         def deep(value):
