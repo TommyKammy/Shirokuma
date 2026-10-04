@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.175"
+version: "5.176"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy container mount and input reply controls (offline)
+
+WP-L2-POL-001: three fake successful replies injected a volume mount, volume
+device or `stdinOnce: true` and reached later smoke cases before repair. The
+fixed-corpus comparator now refuses them; 30 native tests passed. Dedicated
+Colima was read-only observed stopped. No live admission, unknown-request
+replay, retained volume/backup mutation or GitHub write. Offline fixtures do
+not authenticate producers, establish full object equality, clear strict
+admission or establish operator acceptance. Roll back only the scoped guard
+and test if needed; retain saved evidence. Original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: legacy container port/security reply and independent FinOps review (offline)
 

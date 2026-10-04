@@ -281,6 +281,25 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
 
+    def test_pod_success_does_not_add_container_io_or_mounts(self):
+        mutations = (
+            {'volumeMounts': [{'name': 'unexpected', 'mountPath': '/data'}]},
+            {'volumeDevices': [{'name': 'unexpected', 'devicePath': '/dev/test'}]},
+            {'stdinOnce': True},
+        )
+        for mutation in mutations:
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['containers'][0].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
     def test_service_success_does_not_accept_public_service_mutation(self):
         for mutate in (lambda service: service['spec'].update(type='LoadBalancer'),
                         lambda service: service['spec'].update(externalIPs=['192.0.2.1']),

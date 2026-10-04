@@ -467,9 +467,12 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
     actual, expected = containers[0], original['containers'][0]
     return (all(actual.get(key) == expected[key] for key in ('name', 'image', 'imagePullPolicy', 'command')) and
             actual.get('args') in (None, []) and actual.get('workingDir', '') == '' and
-            actual.get('lifecycle') is None and
-            actual.get('stdin', False) is False and actual.get('tty', False) is False and
-            actual.get('env') in (None, []) and actual.get('envFrom') in (None, []) and
+             actual.get('lifecycle') is None and
+             actual.get('stdin', False) is False and actual.get('tty', False) is False and
+             actual.get('stdinOnce', False) is False and
+             actual.get('volumeMounts') in (None, []) and
+             actual.get('volumeDevices') in (None, []) and
+             actual.get('env') in (None, []) and actual.get('envFrom') in (None, []) and
             actual.get('resources') == expected['resources'] and
             type(actual.get('securityContext')) is dict and
             all(actual['securityContext'].get(key) == val

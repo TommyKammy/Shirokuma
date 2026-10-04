@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.59"
+version: "0.60"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy container mount and input reply controls (offline)
+
+Three fake successful Pod replies added a volume mount, a volume device or
+`stdinOnce: true` to the fixed allowed container. Each advanced to later smoke
+cases before repair; the fixed-corpus comparator now refuses them after the
+first request. Native tests (30) passed. The dedicated Colima profile was
+observed stopped; no live admission, unknown-request replay or retained
+volume/backup mutation. This does not prove full effective-object equality,
+producer authenticity, strict admission or operator acceptance. Roll back only
+the comparator/test if needed, preserving old intents and reports. Direct
+original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-04: legacy smoke container port and security additions (offline)
 
