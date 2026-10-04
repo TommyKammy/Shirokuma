@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.186"
+version: "5.187"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent GitOps workload version coverage (offline)
+
+WP-L0-GITOPS-001: expanded the existing fake workload API-version regression
+to the storage StatefulSet and last dev Deployment, each with absent, wrong
+and null version; all degrade. Reader unchanged. Initial test indexing panic
+was corrected; focused test, Go suite (857) and vet passed. Dedicated Colima
+was observed stopped. No live API, reconcile, unknown-request replay, retained
+data/backup mutation or GitHub write. Fake lists cannot prove producer
+authenticity, atomic inventory, strict admission or operator acceptance.
+Revert only test coverage if needed. Direct Vault sync remains pending.
 
 ## 2026-10-04: legacy Pod security-context additions (offline)
 

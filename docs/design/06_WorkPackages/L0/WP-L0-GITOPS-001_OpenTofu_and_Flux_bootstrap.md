@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.108"
+version: "0.109"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: both namespace reads and last workload version (offline)
+
+The fixed-profile workload API-version regression now mutates a storage
+StatefulSet and the final dev Deployment as well as the first dev workload;
+missing, wrong and null versions all degrade. The reader is unchanged. An
+initial test-only index error panicked; corrected against the four actual
+workload checks, then focused test, full Go tests (857) and vet passed.
+Dedicated Colima remained stopped. No live inventory, reconciliation,
+unknown-request replay or retained data/backup mutation. Fake lists do not
+authenticate the API, prove atomic inventory, clear strict admission or
+establish acceptance. Revert only this test extension if needed; preserve
+saved evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: last Flux controller API-version regression (offline)
 

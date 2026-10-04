@@ -98,16 +98,28 @@ func TestLocalLakehouseRejectsIncompleteConditions(t *testing.T) {
 }
 
 func TestLocalLakehouseRequiresWorkloadAPIVersion(t *testing.T) {
-	for _, version := range []string{``, `"v1"`, `null`} {
-		responses := localWorkloadResponses()
-		replacement := ""
-		if version != "" {
-			replacement = `"apiVersion":` + version + `,`
-		}
-		responses[1].output = strings.Replace(responses[1].output, `"apiVersion":"apps/v1",`, replacement, 1)
-		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
-		if checks[2].Status != "degraded" {
-			t.Fatalf("workload API version %q accepted: %#v", version, checks[2])
+	for _, target := range []struct {
+		response int
+		last     bool
+		check    int
+	}{{0, false, 0}, {1, false, 1}, {1, true, 3}} {
+		for _, version := range []string{``, `"v1"`, `null`} {
+			responses := localWorkloadResponses()
+			replacement := ""
+			if version != "" {
+				replacement = `"apiVersion":` + version + `,`
+			}
+			const original = `"apiVersion":"apps/v1",`
+			if target.last {
+				index := strings.LastIndex(responses[target.response].output, original)
+				responses[target.response].output = responses[target.response].output[:index] + replacement + responses[target.response].output[index+len(original):]
+			} else {
+				responses[target.response].output = strings.Replace(responses[target.response].output, original, replacement, 1)
+			}
+			checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+			if checks[target.check].Status != "degraded" {
+				t.Fatalf("workload %d API version %q accepted: %#v", target.check, version, checks[target.check])
+			}
 		}
 	}
 }
