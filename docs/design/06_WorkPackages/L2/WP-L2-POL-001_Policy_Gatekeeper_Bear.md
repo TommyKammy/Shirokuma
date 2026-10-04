@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.94"
+version: "0.95"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: IPv4-mapped IPv6 dry-run address refusal (offline)
+
+Three test-owned fixed ClusterIP success replies with IPv4-mapped IPv6
+addresses advanced beyond the Service case before repair (after restricting
+the fixture to the allowed request). The bounded address comparator now refuses
+these mapped addresses while retaining ordinary IPv4/IPv6 positives. Native
+policy suite (74), Go CLI tests (878)/vet, `make verify-local-experiment`,
+design-context, secret-filename and diff checks passed. No live
+API call or saved-request replay occurred: this does not authenticate the
+producer, verify allocation/defaulting, establish full effective-object
+equality or clear strict/operator acceptance. Roll back only the address guard
+and its regression if necessary; preserve saved intents. Direct original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: unscoped Service ClusterIP replies (offline)
 

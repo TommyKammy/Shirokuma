@@ -800,6 +800,29 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_rejects_ipv4_mapped_ipv6_cluster_address(self):
+        # A mapped IPv4 address is not an ordinary IPv6 Service ClusterIP,
+        # even though ipaddress reports version 6 for it.
+        address = '::ffff:192.0.2.1'
+        for mutation in ({'clusterIP': address},
+                         {'clusterIPs': [address]},
+                         {'clusterIP': address, 'clusterIPs': [address],
+                          'ipFamilies': ['IPv6']}):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                        value['spec'].get('externalIPs')):
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_accepts_address_matching_family(self):
         for address, family in (('192.0.2.1', 'IPv4'), ('2001:db8::1', 'IPv6')):
             kube = FakeKubernetes(ready=True)

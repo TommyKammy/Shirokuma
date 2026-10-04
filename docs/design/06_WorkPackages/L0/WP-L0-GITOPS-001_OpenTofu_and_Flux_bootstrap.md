@@ -5,12 +5,22 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.133"
+version: "0.134"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: suspended root duplicate reconciliation (offline)
+
+An independent fake resource inventory pins degradation for identical cleared
+or contradictory Stalled/Reconciling entries on the suspended Flux root; one
+cleared entry stays informational. The doctor is unchanged. Focused/full Go CLI
+tests (878), vet and local regression passed. Offline lists do
+not authenticate Git/API, prove atomic inventory or grant operator acceptance.
+Revert only this regression if necessary, preserving prior evidence. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: suspended root duplicate Ready (offline)
 

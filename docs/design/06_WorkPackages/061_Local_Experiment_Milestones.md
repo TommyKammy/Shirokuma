@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.227"
+version: "5.228"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: mapped Service addresses and suspended-root conditions (offline)
+
+WP-L2-POL-001: three fake IPv4-mapped IPv6 ClusterIP replies progressed through
+the fixed smoke before a bounded refusal; the corrected negative failed first,
+then the native policy suite passed (74). Independently WP-L0-GITOPS-001 pins
+degraded results for duplicate cleared or conflicting Stalled/Reconciling on a
+suspended root, with a single cleared condition informational; doctor unchanged.
+Focused/full Go CLI tests (878), vet, `make verify-local-experiment`,
+design-context (89 documents), secret-filename and diff checks passed; synthetic
+failure-path output is not live admission evidence. Dedicated Colima was
+observed stopped. No live API/Git read, reconcile,
+saved-request replay, retained data/backup mutation or GitHub write. Offline
+fixtures cannot authenticate producers, establish atomic inventory or full
+effective-object equality, clear strict admission or grant operator acceptance.
+Roll back only the scoped guard/test or independent Flux test if needed;
+preserve historical evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: independent suspended-root ambiguity (offline)
 

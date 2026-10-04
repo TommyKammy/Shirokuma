@@ -2619,6 +2619,36 @@ func TestLocalFluxSuspendedRootRejectsDuplicateReady(t *testing.T) {
 	}
 }
 
+func TestLocalFluxSuspendedRootRejectsDuplicateReconciliationConditions(t *testing.T) {
+	root := `"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`
+	for _, condition := range []string{"Stalled", "Reconciling"} {
+		cleared := fmt.Sprintf(`{"type":%q,"status":"False","observedGeneration":2}`, condition)
+		for _, pair := range [][2]string{
+			{cleared, cleared},
+			{cleared, fmt.Sprintf(`{"type":%q,"status":"True","observedGeneration":2}`, condition)},
+		} {
+			resources := strings.Replace(localFluxJSON(), root,
+				strings.Replace(root, `"observedGeneration":1}]`, `"observedGeneration":1},`+pair[0]+`,`+pair[1]+`]`, 1), 1)
+			if resources == localFluxJSON() {
+				t.Fatal("suspended root fixture did not change")
+			}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+				{output: localControllerJSON()}, {output: resources},
+			}}, localExperimentContext, true)
+			if check.Status != "degraded" {
+				t.Fatalf("suspended root duplicate %v accepted: %#v", pair, check)
+			}
+		}
+		single := strings.Replace(localFluxJSON(), root,
+			strings.Replace(root, `"observedGeneration":1}]`, `"observedGeneration":1},`+cleared+`]`, 1), 1)
+		if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: single},
+		}}, localExperimentContext, true); check.Status != "informational" {
+			t.Fatalf("single cleared %s rejected: %#v", condition, check)
+		}
+	}
+}
+
 func TestLocalDoctorRejectsContradictoryUnavailableReplicas(t *testing.T) {
 	controllers := strings.Replace(localControllerJSON(), `"availableReplicas":1`, `"availableReplicas":1,"unavailableReplicas":1`, 1)
 	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true)
