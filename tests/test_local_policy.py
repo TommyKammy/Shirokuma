@@ -372,6 +372,7 @@ class SmokeTests(unittest.TestCase):
                 with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
+
         for field, injected in (
             ('env', [{'name': 'INJECTED', 'value': '1'}]),
             ('envFrom', [{'secretRef': {'name': 'other-secret'}}]),
@@ -384,6 +385,25 @@ class SmokeTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
             kube.smoke_failure = changed
             with self.subTest(field=field):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
+    def test_pod_success_does_not_accept_extra_ports_or_security_controls(self):
+        for mutate in (
+            lambda pod: pod['spec']['containers'][0].update(ports=[{'containerPort': 8080}]),
+            lambda pod: pod['spec']['containers'][0]['securityContext'].update(runAsUser=0),
+            lambda pod: pod['spec']['containers'][0]['securityContext'].update(
+                seccompProfile={'type': 'Unconfined'}),
+        ):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    mutate(reply)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutate):
                 with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)

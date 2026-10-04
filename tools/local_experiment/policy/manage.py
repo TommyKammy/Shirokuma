@@ -474,8 +474,10 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
             type(actual.get('securityContext')) is dict and
             all(actual['securityContext'].get(key) == val
                 for key, val in expected['securityContext'].items()) and
+            set(actual['securityContext']) - set(expected['securityContext']) <= {'privileged'} and
             actual['securityContext'].get('privileged', False) is False and
             type(actual.get('ports', [])) is list and
+            len(actual.get('ports', [])) == len(expected.get('ports', [])) and
             all(type(port) is dict and port.get('hostPort', 0) in (0, None)
                 for port in actual.get('ports', [])))
 

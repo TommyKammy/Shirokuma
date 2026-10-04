@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.174"
+version: "5.175"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy container port/security reply and independent FinOps review (offline)
+
+WP-L2-POL-001: three fake successful replies injected a new container port,
+runAsUser or seccomp profile and reached later smoke cases before repair. The
+fixed-corpus comparator now refuses these additions while retaining inert
+`privileged: false` default; 29 native tests and `make verify-local-experiment`
+passed. Independently WP-L6-FIN-001's direct saved-history selection, digest,
+ordering and bounds were inspected without a reader change; 190 FinOps tests
+passed (seven Linux-only skipped). Dedicated Colima was observed stopped. No
+live API, new collection, unknown-request replay, retained report/volume/backup
+mutation or GitHub write. Offline checks do not authenticate producers, prove
+complete effective-object equality, measure AgentHouse usage (`null /
+NOT_MEASURED`), clear strict admission or establish operator acceptance.
+Roll back only the policy guard/test if necessary; preserve historical intents
+and saved reports. Original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: legacy container execution and independent FinOps binding (offline)
 

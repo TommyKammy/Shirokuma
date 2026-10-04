@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.63"
+version: "0.64"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: independent saved-history review after policy guard
+
+Inspected the direct renderer's selection indices, canonical digest binding,
+ordering and size checks without modifying its reader or retained reports.
+`make test-local-finops` passed 190 tests (seven Linux-only skips); no further
+defect was established. Dedicated Colima was observed stopped; no collection,
+report/volume/backup mutation or request replay. AgentHouse usage stays `null /
+NOT_MEASURED`; producer authenticity, present usage and operator acceptance
+remain unverified. No runtime rollback is needed; preserve saved reports.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: direct saved-history report binding (offline)
 

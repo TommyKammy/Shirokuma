@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.58"
+version: "0.59"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy smoke container port and security additions (offline)
+
+Three fake successful Pod replies added an otherwise unsubmitted container
+port, container runAsUser or seccomp profile. Each reached later cases before
+repair. The fixed-corpus allow comparator now requires the same port count and
+refuses added container security controls except explicit `privileged: false`.
+The 29 native policy tests and local regression passed. The lab remained
+stopped; no API request or saved unknown intent was replayed. This is a
+fixed-subset comparison, not complete effective-object equality, producer
+authentication, strict admission or operator acceptance. Revert only this
+guard and its test if necessary; preserve pending requests and backups.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: legacy container execution reply controls (offline)
 
