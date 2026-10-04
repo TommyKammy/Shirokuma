@@ -11,6 +11,7 @@ import unittest
 from unittest import mock
 
 from tools.local_experiment import autonomous_runner as R
+from tools.local_experiment import astra_preflight as A
 
 
 FAKE_CLI = '''#!/usr/bin/env python3
@@ -212,6 +213,42 @@ class AutonomousRunnerTests(unittest.TestCase):
                         Path('tmp/runner-test/handoff-snapshot.md'), self.model)
         self.assertIn('stop solely because a provider billing ledger', text)
         self.assertNotIn('Stop if the subscription route or entitlement is unclear', text)
+
+    def test_astra_is_a_bounded_toolless_consultant_not_the_primary_model(self):
+        config = json.loads((R.ROOT/'opencode.jsonc').read_text())
+        self.assertNotIn('model', config)
+        adviser = config['agents']['astra-advisor']
+        self.assertEqual((adviser['mode'], adviser['model']),
+                         ('subagent', 'openai/gpt-6-astra'))
+        self.assertEqual(adviser['permissions'],
+                         [{'action': '*', 'resource': '*', 'effect': 'deny'}])
+        self.assertNotIn('apiKey', json.dumps(config))
+        text = R.prompt({'nonce': 'a'*32, 'iteration': 1, 'checkpoint': 'unused'},
+                        Path('tmp/runner-test/handoff-snapshot.md'), self.model)
+        self.assertIn('primary model from '+self.model, text)
+        self.assertIn('`astra-advisor` subagent using `openai/gpt-6-astra`', text)
+        self.assertRegex(text, r'at most two Astra calls total\s+in this parent session')
+        self.assertIn('tools.local_experiment.astra_preflight', text)
+        self.assertIn('ASTRA_CONSULT_PREFLIGHT_OK', text)
+        self.assertIn('do not consult', text)
+        self.assertIn('not the runner\'s session count', text)
+        self.assertNotIn('Do not switch providers/accounts/models', text)
+
+    def test_astra_preflight_checks_oauth_and_catalog_without_model_request(self):
+        completed = subprocess.CompletedProcess(['opencode', 'models'], 0,
+                                                b'openai/gpt-6-sol\nopenai/gpt-6-astra\n', b'')
+        with mock.patch.object(A.runner, 'subscription_preflight') as auth, \
+             mock.patch.object(A.subprocess, 'run', return_value=completed) as command:
+            A.check('/fixed/opencode', self.root)
+        auth.assert_called_once_with('/fixed/opencode', 'openai/gpt-6-astra', self.root)
+        command.assert_called_once_with(['/fixed/opencode', 'models'], cwd=self.root,
+                                        capture_output=True, timeout=20, check=False)
+        for payload in (b'openai/gpt-6-astra-fast\n', b'openai/gpt-6-astra?\n'):
+            with self.subTest(payload=payload), mock.patch.object(A.runner, 'subscription_preflight'), \
+                 mock.patch.object(A.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                     ['opencode', 'models'], 0, payload, b'')):
+                with self.assertRaisesRegex(R.RunnerError, 'ASTRA_MODEL_UNVERIFIED'):
+                    A.check('/fixed/opencode', self.root)
 
     def test_agent_stop_claim_never_becomes_verified_completion(self):
         with mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': 'stop'}), \

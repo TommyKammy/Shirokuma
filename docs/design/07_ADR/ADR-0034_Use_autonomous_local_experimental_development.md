@@ -4,8 +4,8 @@ doc_id: "ADR-0034"
 title: "Use autonomous local experimental development"
 status: accepted
 created: 2026-09-16
-updated: 2026-10-03
-version: "1.3"
+updated: 2026-10-04
+version: "1.4"
 area: adr
 tags: [shirokuma, adr, local, development]
 ---
@@ -97,6 +97,18 @@ stop-on-error/quota rules remain unchanged. A process already started with
 the old limit must not be modified or interrupted mid-request; use a separately
 validated, one-shot continuation from its clean budget boundary. The ceiling
 is neither a model-request count nor a monetary cap.
+
+On 2026-10-04 the owner requested autonomous GPT-6 Astra advice when future
+coding sessions face a difficult blocker. Keep the runner's primary model,
+session/time guards and OAuth-only route unchanged. At a clean, reconciled
+boundary install a project-local `openai/gpt-6-astra` subagent with no tools;
+the parent may call it at most twice total per session for one blocker, using sanitized
+context, then verify the advice independently. A consultation adds model
+requests without adding runner session slots. Do not add a metered account,
+standalone paid run, global configuration or fallback; model listing/OAuth
+label do not prove entitlement or billing. A running checkout/process must not
+be edited to activate the policy mid-attempt. The advisor cannot establish
+runtime truth or override a retained-data/safety stop.
 
 ## Verification and completion
 

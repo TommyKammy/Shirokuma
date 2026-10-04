@@ -190,11 +190,29 @@ allowance, including exhaustion, and requested that this runner start. An
 unambiguous OpenAI OAuth-only connection and explicit {model} are the local
 experimental routing preconditions, NOT independent proof of billing. Do not
 stop solely because a provider billing ledger cannot be independently read;
-do not claim one was verified. Do not switch providers/accounts/models, launch
-nested paid runs, buy services or create recurring costs. Stop on observed
-API-key routing, extra charges, missing OAuth, or a model/provider mismatch.
-No GitHub writes/push or publication,
-retained data/backup deletion, unknown-request replay or whole-Colima reset.
+do not claim one was verified. Do not switch providers/accounts or change the
+primary model from {model}; do not launch nested opencode runs, buy services
+or create recurring costs. If a genuinely difficult technical blocker remains
+after focused investigation and the route checks below pass, consult the
+project-local read-only `astra-advisor` subagent using `openai/gpt-6-astra`
+under the same single OpenAI OAuth connection: at most two Astra calls total
+in this parent session,
+one initial call and one follow-up on that blocker. Do not start another
+consultation for a second blocker. This is the owner's narrow exception,
+not permission for a new provider, API key, independent run or automatic
+fallback. Before each consultation run
+`rtk proxy tools/local_experiment/llm/.venv/bin/python -m tools.local_experiment.astra_preflight`
+from this checkout and require
+ASTRA_CONSULT_PREFLIGHT_OK; this checks the single OAuth label, absent
+API-key route and Astra catalog entry without making a model request.
+If it fails or routing is unclear, do not consult.
+Give the advisor only sanitized code/test context, never secrets, raw private
+logs, Vault contents or saved data. Its advice is not authority to override a
+safety stop; verify any recommendation yourself. Its model requests count
+against the same weekly allowance but not the runner's session count.
+Stop on observed API-key routing, extra charges, missing OAuth, or a
+model/provider mismatch. No GitHub writes/push or publication, retained
+data/backup deletion, unknown-request replay or whole-Colima reset.
 Do not treat green tests, saved claims or a completion percentage as acceptance.
 Do not invoke this runner, launch other autonomous runs or bypass permissions.
 

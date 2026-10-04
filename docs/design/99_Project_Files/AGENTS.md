@@ -4,8 +4,8 @@ doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
-updated: 2026-10-03
-version: "0.6.0"
+updated: 2026-10-04
+version: "0.7.0"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -108,6 +108,25 @@ Merely reading these instructions or running its default plan must never start
 a model request. The runner is not the GitHub supervisor and does not authorize
 new spending, GitHub writes or publication. See
 `tools/local_experiment/AUTONOMOUS_RUNNER.md` for limits and recovery.
+
+The owner also requested a **conditional GPT-6 Astra consultation** when a
+coding session meets a genuine difficult blocker. In sessions with the updated
+runner prompt, the primary model stays pinned; after focused investigation,
+consult only the project-local `astra-advisor` subagent (`openai/gpt-6-astra`,
+no tools) if
+`rtk proxy tools/local_experiment/llm/.venv/bin/python -m tools.local_experiment.astra_preflight` returns
+`ASTRA_CONSULT_PREFLIGHT_OK` immediately before each call. Check the
+same single OpenAI OAuth connection and no API-key route. Limit consultation
+to two Astra calls total per parent session (one initial call and at most one
+follow-up on its blocker); do not open another consultation for a second blocker;
+routine work needs no consultation. Send only a sanitized problem statement,
+relevant code/test excerpts and explicit uncertainties, never raw private logs,
+credentials, Vault contents or retained data. The parent must independently
+verify any advice and retain responsibility for the checkpoint and safety
+boundary. A subagent call uses additional model requests, not extra runner
+session slots; model listing and OAuth label do not prove Pro billing. If the
+route/model is unavailable, quota is exhausted or spending is indicated, do
+not use an API-key/other-provider fallback or retry an unknown operation.
 
 Only when a continuation prompt supplies `CONTROL_JSON`: read the current WP,
 Milestones and private handoff snapshot; complete a coherent local increment and

@@ -5,5 +5,16 @@
       { "action": "provider.use", "resource": "*", "effect": "deny" },
       { "action": "provider.use", "resource": "openai", "effect": "allow" }
     ]
+  },
+  "agents": {
+    "astra-advisor": {
+      "description": "Read-only GPT-6 Astra consultation for a genuine Shirokuma blocker",
+      "mode": "subagent",
+      "model": "openai/gpt-6-astra",
+      "system": "Advise on the sanitized technical blocker supplied by the parent. You have no tools and must not edit, execute, start another agent, request secrets, or authorize spending, GitHub writes, retained-data changes or unknown-request replay. Give concrete options, risks, checks and remaining uncertainty. The parent verifies and owns every decision; advice is not functional, runtime, billing or human acceptance evidence.",
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" }
+      ]
+    }
   }
 }

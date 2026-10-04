@@ -70,6 +70,28 @@ request to buy more capacity. No cron/launchd task, recurring subscription or
 background daemon is installed. Do not use `--dangerously-skip-permissions`.
 The project instructions and tool permissions are not an OS sandbox.
 
+### Conditional Astra advice for difficult blockers
+
+The owner requested autonomous **consultation**, not a change of primary
+model. A future runner prompt may call the project-local `astra-advisor`
+subagent (`openai/gpt-6-astra`) when focused investigation leaves a genuinely
+difficult blocker. The advisor has no tools; the parent supplies only sanitized
+code/test context and independently checks recommendations. Limit this to two
+calls total per parent session: one initial and at most one follow-up on that
+blocker. No standalone
+`opencode run`, new provider, API-key connection, paid fallback, retained-data
+action or GitHub write is authorized. Recheck single OpenAI OAuth/no API-key
+route and that the model is listed before a consultation using
+`rtk proxy tools/local_experiment/llm/.venv/bin/python -m tools.local_experiment.astra_preflight`
+(no model request); an unclear route,
+model error, quota exhaustion or sign of new charges stops that call without
+retry. Advisor model requests use the existing weekly allowance, **but do not
+consume runner session slots**; the run/time guards do not cap tokens or USD.
+`opencode models` lists Astra in this checkout, but the list and OAuth label
+do not independently prove Pro billing or model entitlement. The configuration
+and prompt must be deployed together at a clean boundary: editing the tracked
+checkout during an active runner attempt would invalidate its clean-tree gate.
+
 The owner raised the local series ceiling from 96 to 500 after observing low
 ChatGPT Pro weekly allowance usage. This changes the **next** invocation's
 scheduling guard, not the arguments of an already running process or the
