@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.161"
+version: "5.162"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent escaped GitOps inventory keys (offline)
+
+After the policy/FinOps increment, WP-L0-GITOPS-001 pins existing refusal of
+decoded duplicate list `items` and nested extension `uid` keys using JSON
+escapes; a canonical single extension remains compatible. No reader behavior
+changed. Focused Go test, `go test ./... -count=1` (852 tests), `go vet
+./...`, `make verify-local-experiment`, `make verify-design-context` (89
+documents), `make check-no-secret-filenames` and `git diff --check` passed.
+The ignored verification log is
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-100/verify-after-gitops.log`;
+synthetic failure-path output is not live evidence. Dedicated Colima remained
+stopped; no live Git/API inventory,
+reconciliation, unknown-request replay, retained report/request/volume/backup
+mutation or GitHub write. Offline fixtures cannot authenticate the producer,
+establish atomic inventory, clear strict admission or prove acceptance. Roll
+back only this independent test if needed, preserving saved evidence. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: dry-run numeric transport and independent history key (offline)
 

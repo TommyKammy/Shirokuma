@@ -358,6 +358,28 @@ func TestLocalInventoryRejectsConflictingListEnvelopeAliases(t *testing.T) {
 	}
 }
 
+func TestLocalInventoryRejectsEscapedDuplicateMemberNames(t *testing.T) {
+	// Raw member names differ, but JSON decoding gives the same key. Neither
+	// the envelope nor an ignored nested extension may hide a second claim.
+	for _, raw := range []string{
+		`{"items":[],"it\u0065ms":[{"kind":"Secret"}]}`,
+		`{"items":[{"extension":{"uid":"first","u\u0069d":"second"}}]}`,
+	} {
+		var list kubernetesResourceList
+		if err := json.Unmarshal([]byte(raw), &list); err != nil {
+			t.Fatal(err)
+		}
+		if !localInventoryIncomplete(list, []byte(raw)) {
+			t.Fatalf("decoded duplicate key accepted: %s", raw)
+		}
+	}
+	canonical := []byte(`{"items":[{"extension":{"uid":"first"}}]}`)
+	var list kubernetesResourceList
+	if err := json.Unmarshal(canonical, &list); err != nil || localInventoryIncomplete(list, canonical) {
+		t.Fatalf("canonical extension rejected: %s (%v)", canonical, err)
+	}
+}
+
 func TestLocalInventoryRejectsNullNestedObjects(t *testing.T) {
 	for _, field := range []string{`"spec":{"ref":null}`, `"spec":{"secretRef":null}`, `"spec":{"sourceRef":null}`, `"status":{"artifact":null}`} {
 		raw := []byte(`{"items":[{` + field + `}]}`)

@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.103"
+version: "0.104"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: escaped duplicate inventory claims (offline)
+
+A separate test-owned list pins existing refusal of JSON-escaped duplicate
+`items` in the envelope and duplicate `uid` in an ignored nested extension;
+the canonical single extension still passes. The focused test, full `go test
+./... -count=1` (852 tests) and `go vet ./...` passed. No reader behavior
+changed. Dedicated Colima remained stopped; no live inventory, reconciliation,
+retained data or backup mutation. A fake list cannot authenticate the API,
+prove atomic inventory, clear strict admission or establish operator acceptance.
+Roll back only the test if needed and retain historical evidence. Direct original
+Vault synchronization remains pending outside checkout.
 
 ## 2026-10-04: independent overflow exponent inventory regression (offline)
 
