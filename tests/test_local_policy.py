@@ -334,6 +334,40 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
 
+    def test_pod_success_does_not_accept_scheduling_or_environment_injection(self):
+        for field, injected in (
+            ('nodeSelector', {'zone': 'other'}),
+            ('affinity', {'nodeAffinity': {}}),
+            ('schedulerName', 'other-scheduler'),
+            ('priorityClassName', 'system-node-critical'),
+            ('runtimeClassName', 'other-runtime'),
+        ):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                reply['spec'][field] = injected
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+        for field, injected in (
+            ('env', [{'name': 'INJECTED', 'value': '1'}]),
+            ('envFrom', [{'secretRef': {'name': 'other-secret'}}]),
+        ):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['containers'][0][field] = injected
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
     def test_deep_success_extension_is_a_failed_case(self):
         kube = FakeKubernetes(ready=True)
         def deep(value):

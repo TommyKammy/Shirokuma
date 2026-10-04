@@ -5,12 +5,29 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.56"
+version: "0.57"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Pod scheduling and environment reply controls (offline)
+
+Eight test-owned successful Pod replies injected node selector, affinity,
+scheduler, priority class, runtime class, container environment or secret-backed
+environment while preserving previously checked fields. Each advanced to the
+third fake request before repair; the fixed-corpus comparator now rejects each
+after the first request. The initially constructed environment fixture also
+mutated a Service and raised KeyError; corrected it before confirming the eight
+negative failures. Kubernetes may add default tolerations, so arbitrary
+tolerations remain outside this comparison rather than breaking live defaulting.
+27 native tests and `make verify-local-experiment` passed. Dedicated Colima was
+observed stopped; no live API request, unknown-request replay, retained data or
+backup change. This does not prove complete effective-object equality, API
+authenticity, strict gate or operator acceptance. Revert only the comparator and
+regression if needed; preserve historical pending intents. Original Vault sync
+remains pending outside the approved checkout.
 
 ## 2026-10-04: legacy Pod identity and placement reply controls (offline)
 

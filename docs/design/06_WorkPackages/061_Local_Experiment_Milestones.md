@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.172"
+version: "5.173"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Pod scheduling/environment and separate FinOps review (offline)
+
+WP-L2-POL-001: eight fake successful Pod replies added scheduling or environment
+controls and advanced to the third fake request before repair. After a Service
+fixture mistake was corrected, all eight negatives reproduced; the fixed-corpus
+comparator now rejects them after the first. Kubernetes default tolerations
+remain uncompared. Native policy tests (27) and `make verify-local-experiment`
+passed. Independently WP-L6-FIN-001's saved-history selection, digest, order and
+storage coverage were inspected without a reader change; `make test-local-finops`
+passed. Dedicated Colima was observed stopped. No live admission, collection,
+unknown-request replay, retained request/report/volume/backup mutation or GitHub
+write. AgentHouse usage remains `null / NOT_MEASURED`. Offline fixtures cannot
+authenticate producers, prove full effective-object equality, measure present
+usage, clear strict admission or establish operator acceptance. Revert only the
+policy guard/test if needed; preserve historical evidence and pending intents.
+No FinOps runtime rollback. Direct original Vault sync remains pending outside
+the checkout.
 
 ## 2026-10-04: legacy Pod identity/placement and independent FinOps review (offline)
 

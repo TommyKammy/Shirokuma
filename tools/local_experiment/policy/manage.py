@@ -449,6 +449,11 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
             any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostPID', 'hostIPC', 'shareProcessNamespace')) or
             any(spec.get(key) not in (None, []) for key in ('volumes', 'initContainers', 'ephemeralContainers', 'hostAliases')) or
              spec.get('imagePullSecrets') not in (None, []) or
+             spec.get('nodeSelector') not in (None, {}) or
+             spec.get('affinity') not in (None, {}) or
+             spec.get('schedulerName', 'default-scheduler') != 'default-scheduler' or
+             spec.get('priorityClassName', '') != '' or
+             spec.get('runtimeClassName') is not None or
              spec.get('serviceAccountName', 'default') != 'default' or
              spec.get('serviceAccount', 'default') != 'default' or
              spec.get('nodeName', '') != '' or
@@ -461,6 +466,7 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
         return False
     actual, expected = containers[0], original['containers'][0]
     return (all(actual.get(key) == expected[key] for key in ('name', 'image', 'imagePullPolicy', 'command')) and
+            actual.get('env') in (None, []) and actual.get('envFrom') in (None, []) and
             actual.get('resources') == expected['resources'] and
             type(actual.get('securityContext')) is dict and
             all(actual['securityContext'].get(key) == val
