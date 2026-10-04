@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-04: malformed native smoke metadata (offline)
+
+Three disposable successful dry-run replies with null, array or string
+`metadata` caused an uncaught AttributeError instead of a recorded failed
+case. A focused negative reproduced all three errors before repair; the
+native smoke now checks the metadata object type before reading identity.
+The 20-test native suite passed. This does not establish API authenticity,
+effective-object equality, live admission or acceptance. No request went to
+the stopped lab; no retained data changed. Roll back only this guard/test if
+needed; keep historical records and do not replay unknown requests. Direct
+original Vault sync remains pending outside checkout.
+
 ## 2026-10-04: legacy native smoke success transport (offline)
 
 Four test-owned successful dry-run replies with nonempty stderr, duplicate

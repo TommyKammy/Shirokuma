@@ -12,6 +12,21 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: malformed legacy native smoke metadata (offline)
+
+WP-L2-POL-001: after the mixed-transport commit, three test-owned successful
+dry-run replies with non-object metadata crashed the native smoke comparator
+instead of recording a failed case. All three negatives failed before the
+type guard; the focused native suite passed (20 tests). Dedicated Colima
+remained stopped, without live admission, replay or retained data mutation.
+This is only local failure handling, not authentication, effective-object
+equality, strict admission or acceptance. Revert this guard/test only if
+needed; retain historical evidence. `make verify-local-experiment` passed
+(121 suites, 4072 executed), as did design-context (89 documents), secret-
+filename and diff checks. Ignored log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-102/verify-local-second.log`.
+Direct original Vault sync remains pending.
+
 ## 2026-10-04: legacy native smoke mixed transport (offline)
 
 WP-L2-POL-001: four test-owned allowed dry-run replies with nonempty stderr,

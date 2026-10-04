@@ -433,9 +433,11 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
                       own_denial(response.stderr, denied, messages[denied]))
         else:
             value = smoke_success_object(response)
-            passed = (response.returncode == 0 and value.get('kind') == case['object']['kind']
-                      and value.get('metadata', {}).get('namespace') == case['object']['metadata']['namespace']
-                      and value.get('metadata', {}).get('name') == case['object']['metadata']['name'])
+            metadata = value.get('metadata')
+            passed = (response.returncode == 0 and type(metadata) is dict and
+                      value.get('kind') == case['object']['kind'] and
+                      metadata.get('namespace') == case['object']['metadata']['namespace'] and
+                      metadata.get('name') == case['object']['metadata']['name'])
         row = {'case': case['case'], 'result': 'passed' if passed else 'failed',
                'expected_policy': denied, 'server_dry_run': True,
                'namespace': case['object']['metadata']['namespace'],

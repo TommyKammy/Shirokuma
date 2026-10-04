@@ -322,6 +322,19 @@ class SmokeTests(unittest.TestCase):
             policy.smoke(kube, items())
         self.assertEqual(len(kube.calls), 3)
 
+    def test_malformed_success_metadata_fails_with_policy_error(self):
+        for metadata in (None, [], 'bad'):
+            kube = FakeKubernetes(ready=True)
+            def malformed(value):
+                changed = copy.deepcopy(value)
+                changed['metadata'] = metadata
+                return SimpleNamespace(returncode=0, stdout=json.dumps(changed), stderr='')
+            kube.smoke_failure = malformed
+            with self.subTest(metadata=metadata):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
     def test_smoke_cannot_create_real_objects_or_access_other_namespaces(self):
         client = object.__new__(policy.Kubernetes)
         client.request = mock.Mock(return_value=SimpleNamespace(returncode=0))
