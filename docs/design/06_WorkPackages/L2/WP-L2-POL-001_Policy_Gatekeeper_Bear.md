@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.50"
+version: "0.51"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: native smoke API version identity (offline)
+
+A disposable successful reply with a contradictory `apiVersion` but matching
+kind/name/namespace passed the legacy native smoke. The focused negative failed
+before repair; smoke now also requires the input API version. The native suite
+passed (21 tests). This remains a shallow identity check, not effective-object
+equality or proof of API authenticity, live admission, strict gate or acceptance.
+The dedicated lab was observed stopped; no request or retained data/backup
+mutation. Roll back only the guard/test if needed, preserving pending intents
+without replay. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: malformed native smoke metadata (offline)
 

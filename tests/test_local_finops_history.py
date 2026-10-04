@@ -156,6 +156,15 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(len(H.parse(original)), 2)
         self.assertEqual(len(H.parse(original.replace(b'0.5', b'0e-999'))), 2)
 
+    def test_smallest_representable_saved_measurement_is_not_underflow(self):
+        original = encoded([report(), report(processes())])
+        self.assertIn(b'0.5', original)
+        # The transport guard must distinguish a nonzero subnormal from a
+        # nonzero lexeme that rounds all the way to zero.
+        self.assertEqual(len(H.parse(original.replace(b'0.5', b'5e-324', 1))), 2)
+        with self.assertRaises(H.HistoryError):
+            H.parse(original.replace(b'0.5', b'2e-324', 1))
+
     def test_overflowing_float_cannot_become_saved_infinite_measurement(self):
         original = encoded([report(), report(processes())])
         self.assertIn(b'0.5', original)

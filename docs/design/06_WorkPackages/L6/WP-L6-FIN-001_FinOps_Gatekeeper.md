@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.58"
+version: "0.59"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: representable saved-history subnormal boundary (offline)
+
+An independent two-report fixture pins the existing distinction between
+`5e-324` (nonzero and representable) and `2e-324` (nonzero but rounded to zero)
+in a saved measurement. Focused history suite passed (17 tests); no parser,
+renderer or saved report changed. No collection or retained volume/backup
+mutation; AgentHouse usage remains `null / NOT_MEASURED`. Offline fixtures
+cannot authenticate a producer, measure current usage or establish acceptance.
+Roll back only this test if needed and preserve historical reports. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: escaped duplicate saved-history key (offline)
 

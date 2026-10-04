@@ -255,6 +255,21 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_success_with_wrong_api_version_is_not_a_pass(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def wrong_version(value):
+            original = reference.smoke_request(value)
+            if original.returncode != 0:
+                return original
+            changed = copy.deepcopy(value)
+            changed['apiVersion'] = 'example.invalid/v1'
+            return SimpleNamespace(returncode=0, stdout=json.dumps(changed), stderr='')
+        kube.smoke_failure = wrong_version
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items())
+        self.assertEqual(len(kube.calls), 1)
+
     def test_success_with_conflicting_transport_data_is_not_a_pass(self):
         for variant in ('stderr', 'duplicate', 'oversize', 'constant'):
             kube = FakeKubernetes(ready=True)

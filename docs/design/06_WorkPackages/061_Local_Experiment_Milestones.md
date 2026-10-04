@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.163"
+version: "5.164"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: native API-version identity and independent FinOps boundary (offline)
+
+WP-L2-POL-001: a fake successful dry-run with a contradictory API version
+passed the legacy smoke before repair; a focused negative failed first. Smoke
+now compares API version as well as kind/name/namespace (21 native tests passed).
+Separately WP-L6-FIN-001 pins existing saved-history behavior accepting the
+smallest representable nonzero subnormal and rejecting a nonzero lexeme rounded
+to zero (17 focused history tests passed). No FinOps reader behavior changed.
+Dedicated Colima read-only status returned not running. No live admission,
+collection, unknown-request replay, retained request/report/volume/backup
+mutation or GitHub write. These offline fixtures cannot authenticate producers,
+prove effective-object equality, measure current usage, clear strict admission
+or establish operator acceptance. AgentHouse usage remains `null / NOT_MEASURED`.
+Roll back only the smoke guard/test and separate FinOps test if needed; retain
+saved intents and reports. Direct original Vault sync remains pending outside
+the approved checkout.
+`make verify-local-experiment`, `make test-local-finops` (186 tests, seven
+Linux-only skips), `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. The local
+suite includes expected synthetic failure-path output, not live evidence.
 
 ## 2026-10-04: malformed legacy native smoke metadata (offline)
 

@@ -435,6 +435,7 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
             value = smoke_success_object(response)
             metadata = value.get('metadata')
             passed = (response.returncode == 0 and type(metadata) is dict and
+                      value.get('apiVersion') == case['object']['apiVersion'] and
                       value.get('kind') == case['object']['kind'] and
                       metadata.get('namespace') == case['object']['metadata']['namespace'] and
                       metadata.get('name') == case['object']['metadata']['name'])
