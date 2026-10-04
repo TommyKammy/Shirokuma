@@ -562,6 +562,43 @@ class SmokeTests(unittest.TestCase):
         kube.smoke_failure = changed
         self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
 
+    def test_service_success_rejects_address_family_disagreement(self):
+        for mutation in (
+            {'clusterIP': 'not-an-ip'},
+            {'clusterIPs': ['not-an-ip']},
+            {'clusterIP': '2001:db8::1', 'ipFamilies': ['IPv4']},
+            {'clusterIPs': ['192.0.2.1'], 'ipFamilies': ['IPv6']},
+            {'clusterIP': '192.0.2.1', 'clusterIPs': ['192.0.2.1'], 'ipFamilies': ['IPv6']},
+        ):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != 'Service':
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
+    def test_service_success_accepts_address_matching_family(self):
+        for address, family in (('192.0.2.1', 'IPv4'), ('2001:db8::1', 'IPv6')):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if (value['kind'] != 'Service' or value['spec'].get('externalIPs') or
+                        value['spec'].get('type') != 'ClusterIP'):
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'].update(clusterIP=address, clusterIPs=[address], ipFamilies=[family])
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(family=family):
+                self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
+
     def test_service_success_does_not_add_traffic_hints(self):
         for mutation in ('distribution', 'application-protocol'):
             kube = FakeKubernetes(ready=True)

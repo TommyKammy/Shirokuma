@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.113"
+version: "0.114"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: optional catalog namespace boundary (offline)
+
+An independent fake-list regression now checks that the optional catalog
+Kustomization is not accidentally promoted into the three fixed resource
+namespace identities. The unchanged local doctor remains informational when
+only its namespace changes; focused and full Go tests and vet passed. This is
+not evidence of a live catalog namespace, producer authenticity or atomic
+inventory. Dedicated Colima was observed stopped; no reconciliation, retained
+data/backup mutation or GitHub write. Revert only this test if needed and
+preserve historical evidence. Original Vault sync remains pending outside
+checkout.
 
 ## 2026-10-04: independent fixed Flux resource identity regression (offline)
 

@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 import fcntl
 import hashlib
 import importlib.util
+import ipaddress
 import json
 import math
 import os
@@ -419,6 +420,23 @@ def smoke_success_object(response):
     return value if type(value) is dict else {}
 
 
+def service_address_family_consistent(spec: dict) -> bool:
+    """Validate only addresses claimed by a fixed single-stack Service reply."""
+    family = spec.get('ipFamilies')
+    expected_version = {'IPv4': 4, 'IPv6': 6}.get(family[0]) if type(family) is list and len(family) == 1 else None
+    addresses = ([spec['clusterIP']] if spec.get('clusterIP') else [])
+    if type(spec.get('clusterIPs')) is list:
+        addresses += spec['clusterIPs']
+    for address in addresses:
+        try:
+            parsed = ipaddress.ip_address(address)
+        except (ValueError, TypeError):
+            return False
+        if expected_version is not None and parsed.version != expected_version:
+            return False
+    return True
+
+
 def smoke_success_scope(value: dict, submitted: dict) -> bool:
     """Check the policy-relevant fields of a successful legacy smoke reply.
 
@@ -463,8 +481,9 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                            for address in spec['clusterIPs']))) and
                      ('clusterIP' not in spec or
                       (type(spec['clusterIP']) is str and spec['clusterIP'] != 'None')) and
-                     (not spec.get('clusterIPs') or
-                      spec.get('clusterIP') in (None, spec['clusterIPs'][0])) and
+                      (not spec.get('clusterIPs') or
+                       spec.get('clusterIP') in (None, spec['clusterIPs'][0])) and
+                      service_address_family_consistent(spec) and
                     spec.get('trafficDistribution') is None and
                   type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
                 all(type(port) is dict and type(port.get('port')) is int and

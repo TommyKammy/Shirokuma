@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.194"
+version: "5.195"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: Service address-family consistency and optional Flux scope (offline)
+
+WP-L2-POL-001: five test-owned successful Service replies with invalid IP
+syntax or address/family disagreement advanced before repair; the fixed-corpus
+comparator now refuses them after two requests while retaining absent and
+matching IPv4/IPv6 defaults. Native 51 tests passed. An initial focused run
+used the wrong class name; the LLM venv's deep-nesting behavior differed from
+the repository `python3` used by Make. A positive test initially modified
+denied Services; it was corrected before native verification. Separately,
+WP-L0-GITOPS-001 pins the unchanged doctor's informational result when only the
+optional catalog Kustomization namespace differs from fixed identities.
+Focused and full Go tests, vet, `make verify-local-experiment`, design-context,
+secret-filename and diff checks passed. Dedicated Colima read-only status was
+stopped. No live API, reconciliation, unknown-request replay, retained data or
+backup mutation, or GitHub write. Offline fixtures cannot authenticate
+producers, validate IP allocation or atomic inventory, clear strict admission
+or establish operator acceptance. Roll back only the policy comparator/tests
+or independent Flux regression if necessary; preserve evidence and pending
+intents. Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-04: Service address agreement and independent Flux identity (offline)
 

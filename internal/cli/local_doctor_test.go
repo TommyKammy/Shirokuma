@@ -154,6 +154,24 @@ func TestLocalFluxRequiresResourceKindAndNamespace(t *testing.T) {
 	}
 }
 
+func TestLocalFluxOptionalCatalogDoesNotImposeFixedNamespace(t *testing.T) {
+	// Catalog is discovered by its own identity, not part of the fixed source/root/dev scope.
+	resources := strings.Replace(localFluxJSON(),
+		`"name":"shirokuma-catalog","namespace":"flux-system"`,
+		`"name":"shirokuma-catalog","namespace":"shirokuma-catalog"`, 1)
+	if resources == localFluxJSON() {
+		t.Fatal("catalog fixture was not changed")
+	}
+	for _, inventory := range []string{localFluxJSON(), resources} {
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: inventory},
+		}}, localExperimentContext, true)
+		if check.Status != "informational" {
+			t.Fatalf("optional catalog namespace changed fixed identity check: %#v", check)
+		}
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)

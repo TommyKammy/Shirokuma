@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.71"
+version: "0.72"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Service address/family agreement (offline)
+
+Five fake successful Service replies with malformed cluster addresses or an
+IPv4/IPv6 family contradiction advanced through the fixed corpus before repair.
+The reply comparator now parses present cluster addresses and, when a single
+family is declared, requires that family to match; it retains absent and
+single-family defaulted forms. Native policy suite (51 tests), full local
+regression, Go suite and vet passed. Dedicated Colima was observed stopped;
+no live API request, pending-request replay, retained data/backup mutation or
+GitHub write. Address allocation and API authenticity, effective-object equality,
+strict admission and operator acceptance remain unverified. Roll back only the
+scoped comparator/tests if needed; preserve old intents. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-04: legacy Service cluster address agreement (offline)
 
