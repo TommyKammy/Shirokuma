@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.109"
+version: "0.110"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent controller kind and namespace regression (offline)
+
+Each of the four fixed local Flux controllers now has a fake wrong-kind and
+wrong-namespace test; the unchanged doctor degrades all eight, while the
+unmodified inventory remains informational. The focused Go test, full Go suite
+(858) and vet passed. The dedicated Colima profile was observed stopped; no
+live inventory, reconciliation, unknown-request replay, retained data/backup
+mutation or GitHub write. These fixtures cannot authenticate Kubernetes/Git,
+prove atomic inventory, strict admission or operator acceptance. Revert only
+the test extension if needed, preserving prior evidence. Direct original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-04: remaining controller version regression (offline)
 

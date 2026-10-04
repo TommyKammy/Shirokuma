@@ -53,6 +53,34 @@ func TestLocalFluxRequiresControllerAPIVersion(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRequiresControllerKindAndNamespace(t *testing.T) {
+	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"} {
+		member := healthyLocalWorkload("Deployment", "flux-system", name)
+		for _, mutation := range []struct {
+			old string
+			new string
+		}{
+			{`"kind":"Deployment"`, `"kind":"StatefulSet"`},
+			{`"namespace":"flux-system"`, `"namespace":"default"`},
+		} {
+			controllers := strings.Replace(localControllerJSON(), member,
+				strings.Replace(member, mutation.old, mutation.new, 1), 1)
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+				{output: controllers}, {output: localFluxJSON()},
+			}}, localExperimentContext, true)
+			if check.Status != "degraded" {
+				t.Fatalf("%s %s accepted: %#v", name, mutation.new, check)
+			}
+		}
+	}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: localControllerJSON()}, {output: localFluxJSON()},
+	}}, localExperimentContext, true)
+	if check.Status != "informational" {
+		t.Fatalf("valid controllers rejected: %#v", check)
+	}
+}
+
 func localFluxJSON() string {
 	return `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"spec":{"ref":{"branch":"main"},"url":"ssh://git@github.com/TommyKammy/Shirokuma","secretRef":{"name":"flux-system"}},"status":{"artifact":{"revision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"spec":{"suspend":true,"path":"./deploy/gitops/clusters/local-lite","prune":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"path":"./deploy/gitops/dev","prune":true,"wait":true,"sourceRef":{"kind":"GitRepository","name":"flux-system"}},"status":{"lastAppliedRevision":"main@sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`
 }

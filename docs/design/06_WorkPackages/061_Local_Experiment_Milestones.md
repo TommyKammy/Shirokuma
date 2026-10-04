@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.188"
+version: "5.189"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent Flux controller kind and namespace regression (offline)
+
+WP-L0-GITOPS-001: all four fixed controllers now exercise fake wrong-kind and
+wrong-namespace replies. The unchanged doctor degrades eight mutations and
+retains an informational result for the complete inventory. Focused Go test,
+full Go suite (858) and vet passed. The dedicated Colima profile was observed
+stopped; no live inventory, reconcile, unknown-request replay, retained data/
+backup mutation or GitHub write. Fake responses cannot authenticate a producer,
+prove atomic inventory, clear strict admission or establish operator acceptance.
+Revert only the test if necessary; keep historical evidence. Direct original
+Vault synchronization remains pending outside checkout.
 
 ## 2026-10-04: legacy dry-run identity and Service load-balancer controls (offline)
 
