@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.139"
+version: "0.140"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent mapped IPv4 range endpoint controls (offline)
+
+The unchanged doctor rejects three more synthetic IPv4-mapped IPv6 endpoints,
+including the upper end of the IPv4 loopback range, while accepting a literal
+IPv4 loopback near that range's end. The focused Go test passed. Colima was
+observed stopped; no live Git/API read, reconciliation, saved-request replay,
+retained data/backup mutation or GitHub write. Text fixtures cannot authenticate
+the context or server, establish atomic inventory, clear strict admission or
+grant operator acceptance. Revert only this independent test if necessary and
+preserve prior evidence. Direct original Vault sync remains pending outside
+the checkout.
 
 ## 2026-10-05: independent hex-mapped endpoint spellings (offline)
 

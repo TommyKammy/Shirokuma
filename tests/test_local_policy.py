@@ -893,7 +893,8 @@ class SmokeTests(unittest.TestCase):
     def test_service_success_rejects_host_local_cluster_address(self):
         # Neither loopback nor link-local addresses can be a Service VIP,
         # even when their syntax and ipFamilies agree.
-        for address, family in (('127.0.0.1', 'IPv4'), ('169.254.1.2', 'IPv4'),
+        for address, family in (('127.0.0.1', 'IPv4'), ('127.255.255.254', 'IPv4'),
+                                ('169.254.1.2', 'IPv4'),
                                 ('::1', 'IPv6'), ('fe80::1', 'IPv6')):
             for field in ('clusterIP', 'clusterIPs'):
                 kube = FakeKubernetes(ready=True)
@@ -935,7 +936,7 @@ class SmokeTests(unittest.TestCase):
     def test_service_success_rejects_reserved_ipv4_cluster_address(self):
         # 0/8 (other than the already rejected unspecified address) and 240/4
         # are not ordinary allocatable IPv4 unicast Service destinations.
-        for address in ('0.1.2.3', '240.0.0.1', '255.255.255.254'):
+        for address in ('0.1.2.3', '0.255.255.255', '240.0.0.1', '255.255.255.254'):
             for field in ('clusterIP', 'clusterIPs'):
                 kube = FakeKubernetes(ready=True)
                 reference = FakeKubernetes(ready=True)

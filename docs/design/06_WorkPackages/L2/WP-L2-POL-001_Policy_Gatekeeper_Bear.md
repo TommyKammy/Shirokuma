@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.101"
+version: "0.102"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: independent IPv4 boundary controls (offline)
+
+The unchanged fixed-Service smoke rejects both cluster address fields at
+`0.255.255.255` as reserved and `127.255.255.254` as loopback; focused native
+policy tests (81) passed. These extend separate previously established guards,
+not CIDR allocation evidence. Dedicated Colima was observed stopped; no live
+admission, saved-request replay or retained data/backup mutation. Producer
+authenticity, complete effective-object equality, strict admission and operator
+acceptance remain unverified. Revert only these two fixture extensions if
+necessary; retain saved intents. Direct original Vault sync remains pending.
 
 ## 2026-10-05: fixed Pod stop-signal reply control (offline)
 

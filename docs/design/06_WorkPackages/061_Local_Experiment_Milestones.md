@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.235"
+version: "5.236"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent mapped-loopback range endpoints (offline)
+
+WP-L0-GITOPS-001: three additional synthetic mapped IPv6 forms are rejected
+by the unchanged local doctor, while a literal high IPv4 loopback is accepted.
+Independently WP-L2-POL-001 extends reserved and loopback IPv4 Service reply
+boundary negatives in both address fields under the unchanged comparator.
+Focused Go and native policy checks (81), full Go CLI tests (896), vet and
+`make verify-local-experiment` passed. Dedicated Colima was observed stopped. No live
+Git/API inventory, reconciliation, saved-request replay, retained data/backup
+mutation or GitHub write. These fixtures cannot authenticate a context or
+producer, establish atomic inventory or Service allocation, clear strict admission or grant operator
+acceptance. Revert only this independent test if needed; preserve previous
+evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: Pod stop signal and independent mapped endpoints (offline)
 
