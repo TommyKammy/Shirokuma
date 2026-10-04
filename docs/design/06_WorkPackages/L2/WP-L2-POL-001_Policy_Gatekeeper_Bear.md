@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.61"
+version: "0.62"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Pod DNS and hostname reply controls (offline)
+
+Six test-owned successful replies changed DNS config, hostname, subdomain,
+FQDN flag, service-link injection or host-user namespace without touching the
+previously compared fields. Each reached later fake cases before repair; the
+fixed-corpus comparator now refuses them after the first request, allowing only
+inert Kubernetes defaults. Native policy tests (32) passed. Colima was observed
+stopped; no live request, unknown-request replay or retained data/backup change.
+This is neither complete effective-object equality nor authenticated admission,
+strict-gate or operator acceptance. Revert only this comparison/test if needed;
+keep historical evidence and pending intents. Direct original Vault sync remains
+pending outside the checkout.
 
 ## 2026-10-04: legacy Service external-routing reply controls (offline)
 

@@ -460,8 +460,14 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
              spec.get('serviceAccountName', 'default') != 'default' or
              spec.get('serviceAccount', 'default') != 'default' or
              spec.get('nodeName', '') != '' or
-             spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
-             spec.get('restartPolicy') != 'Never' or
+              spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
+              spec.get('dnsConfig') not in (None, {}) or
+              spec.get('hostname', '') != '' or
+              spec.get('subdomain', '') != '' or
+              spec.get('setHostnameAsFQDN', False) is not False or
+              spec.get('enableServiceLinks', True) is not True or
+              spec.get('hostUsers', True) is not True or
+              spec.get('restartPolicy') != 'Never' or
              spec.get('automountServiceAccountToken') is not False or
              type(spec.get('securityContext')) is not dict or
              any(spec['securityContext'].get(key) != val

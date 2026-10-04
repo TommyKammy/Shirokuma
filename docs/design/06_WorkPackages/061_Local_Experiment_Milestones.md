@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.179"
+version: "5.180"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Pod DNS and hostname reply controls (offline)
+
+WP-L2-POL-001: six fake successful Pod replies adding DNS, hostname, FQDN,
+service-link or host-user controls reached later smoke cases before repair; the
+fixed-corpus comparison now refuses them after the first. Native policy suite
+passed (32 tests). Dedicated Colima was read-only observed stopped. No live
+admission, unknown-request replay, retained volume/backup mutation or GitHub
+write. Fake responses do not authenticate the producer, establish full object
+equality, strict admission or operator acceptance. Revert only this comparison
+and its regression if necessary; preserve historical evidence and pending
+intents. Original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-04: independent FinOps saved-history review (offline)
 
