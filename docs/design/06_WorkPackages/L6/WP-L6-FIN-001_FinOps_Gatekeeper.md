@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.73"
+version: "0.74"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: equivalent numeric saved-history identity (offline)
+
+An independent saved-history regression presents the same valid report with
+`0.5` versus `5e-1` wire encodings. The unchanged canonical digest refuses
+the duplicate pair and a distinct pair still renders; focused history tests
+passed (25). No collection, retained report/volume/backup mutation or reader
+change; dedicated Colima was observed stopped. AgentHouse usage remains
+`null / NOT_MEASURED`. Saved-producer authenticity, present usage and operator
+acceptance remain open. Revert only the test if necessary; preserve reports.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: equivalent Unicode saved-history identity (offline)
 

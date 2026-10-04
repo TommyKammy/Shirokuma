@@ -255,6 +255,25 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_pod_success_refuses_unsubmitted_container_restart_rules(self):
+        for rules in ([{'action': 'Restart', 'exitCodes': {'operator': 'In', 'values': [1]}}],
+                      [{'action': 'Restart', 'exitCodes': {'operator': 'NotIn', 'values': [0]}}]):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['containers'][0]['restartPolicyRules'] = rules
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(rules=rules), self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                policy.smoke(kube, items())
+            self.assertEqual(len(kube.calls), 1)
+        submitted = policy.smoke_cases(FakeKubernetes().image())[0]['object']
+        for empty in (None, []):
+            reply = copy.deepcopy(submitted)
+            reply['spec']['containers'][0]['restartPolicyRules'] = empty
+            self.assertTrue(policy.smoke_success_scope(reply, submitted))
+
     def test_pod_success_refuses_added_scheduling_tolerations(self):
         reference = FakeKubernetes(ready=True)
         defaults = [

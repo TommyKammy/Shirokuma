@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.88"
+version: "0.89"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed container restart-rule reply control (offline)
+
+A fake successful Pod reply with unsubmitted nonempty `restartPolicyRules`
+advanced to later smoke cases before repair. The fixed comparator now refuses
+such rules while accepting absent/empty API defaults; native 68-test policy
+suite and local regression passed. Dedicated Colima was observed stopped; no
+live API, replay, retained data/backup mutation or GitHub write. This does not
+authenticate a producer, verify live defaulting, establish full effective-object
+equality, clear strict admission or grant operator acceptance. Roll back only
+the scoped comparator/test if necessary; preserve pending intents. Original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-04: default tolerations through complete smoke (offline)
 

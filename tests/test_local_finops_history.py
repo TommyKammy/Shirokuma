@@ -160,6 +160,16 @@ class HistoryTests(unittest.TestCase):
         self.assertIn('保存FinOps観測履歴',
                       H.render(H.parse(encoded([first, report(processes())]))))
 
+    def test_equivalent_float_lexemes_do_not_make_duplicate_saved_observation(self):
+        first = encoded(report())
+        self.assertIn(b'0.5', first)
+        alternate = first.replace(b'0.5', b'5e-1', 1)
+        self.assertNotEqual(first, alternate)
+        with self.assertRaises(H.HistoryError):
+            H.parse(b'[' + first + b',' + alternate + b']')
+        self.assertIn('保存FinOps観測履歴',
+                      H.render(H.parse(encoded([report(), report(processes())]))))
+
     def test_offline_html_declares_no_external_resources_or_script(self):
         html = H.render(H.parse(encoded([report(), report(processes())])))
         self.assertIn('Content-Security-Policy', html)

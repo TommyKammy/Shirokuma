@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.218"
+version: "5.219"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: container restart rules and independent numeric history (offline)
+
+WP-L2-POL-001: nonempty unsubmitted Pod container `restartPolicyRules` advanced
+through a fake successful smoke before repair; the fixed check now refuses them
+and retains absent/empty defaults. Native policy suite (68) passed. Separately
+WP-L6-FIN-001: the unchanged saved-history reader rejects duplicate reports
+encoded with equivalent `0.5`/`5e-1` values; a distinct pair renders (25 focused
+tests). `make verify-local-experiment` and diff check passed. Dedicated Colima
+was observed stopped; no live API, saved-request replay, new collection,
+retained data/backup mutation or GitHub write. AgentHouse usage remains
+`null / NOT_MEASURED`. Offline checks cannot authenticate producers, establish
+full effective-object equality, measure current usage, clear strict admission
+or grant operator acceptance. Roll back only the scoped guard/test or the
+independent history test; preserve saved evidence. Direct original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-04: independent smoke default and Unicode history controls (offline)
 
