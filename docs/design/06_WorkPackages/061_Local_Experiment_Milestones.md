@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.187"
+version: "5.188"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy dry-run identity and Service load-balancer controls (offline)
+
+WP-L2-POL-001: six test-owned successful Pod replies claimed persisted identity
+or nonempty status and advanced before repair; empty API defaults still pass.
+An independent fixed ClusterIP Service reply with loadBalancerClass or
+allocateLoadBalancerNodePorts also advanced before repair; both now fail at
+the second request. A separate Service identity test pins that shared guard.
+Native 43 tests, `make verify-local-experiment`, design-
+context (89 documents), secret-filename scan and diff check passed. Dedicated
+Colima was read-only observed stopped; no live admission, unknown-request
+replay, retained data/backup mutation or GitHub write. Reply checks cannot
+authenticate the producer or prove non-persistence, complete effective-object
+equality, strict admission or operator acceptance. Revert only the scoped
+guards/tests if necessary; preserve historical evidence and pending intents.
+Original Vault synchronization remains pending outside the approved checkout.
 
 ## 2026-10-04: remaining Flux controller version regression (offline)
 

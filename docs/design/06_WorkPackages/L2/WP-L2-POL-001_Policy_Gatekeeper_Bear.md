@@ -5,12 +5,33 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.67"
+version: "0.68"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy dry-run identity and independent Service class (offline)
+
+Six fake successful responses carrying a persisted-object UID, resource version,
+generation, creation timestamp, owner or nonempty status previously advanced
+through the fixed smoke corpus. The success path now refuses these claims and
+accepts empty dry-run identity defaults. Separately, the fixed ClusterIP
+Service's successful reply could gain an unsubmitted loadBalancerClass or
+allocateLoadBalancerNodePorts flag; both now fail after the second request.
+Each negative was reproduced before repair; a separate Service identity
+regression confirms the same guard also applies to the second case. Native
+43-test suite and
+`make verify-local-experiment`, design-context, secret-filename and diff checks
+passed. Dedicated Colima was observed stopped; no live admission, unknown
+request replay, retained volume/backup mutation or GitHub write. The dry-run
+identity check is a reply-consistency guard, not proof that the producer did
+not persist an object. Defaulted live Kubernetes responses were not rechecked;
+API authenticity, full effective-object equality, strict admission and
+operator acceptance remain open. Roll back only the two scoped guards and
+regressions if needed, preserving saved intents and reports. Direct original
+Vault sync is pending outside this checkout.
 
 ## 2026-10-04: legacy success JSON type aliases (offline)
 

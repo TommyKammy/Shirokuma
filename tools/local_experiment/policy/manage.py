@@ -444,9 +444,11 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
         return (spec.get('type') == original.get('type', 'ClusterIP') and
                   spec.get('externalIPs', []) == original.get('externalIPs', []) and
                  spec.get('externalName') in (None, '') and
-                 spec.get('loadBalancerIP') in (None, '') and
-                 spec.get('loadBalancerSourceRanges') in (None, []) and
-                  spec.get('selector') in (None, {}) and
+                  spec.get('loadBalancerIP') in (None, '') and
+                  spec.get('loadBalancerSourceRanges') in (None, []) and
+                  spec.get('loadBalancerClass') is None and
+                  spec.get('allocateLoadBalancerNodePorts') is None and
+                   spec.get('selector') in (None, {}) and
                   spec.get('sessionAffinity', 'None') == 'None' and
                   spec.get('sessionAffinityConfig') is None and
                   spec.get('publishNotReadyAddresses', False) is False and
@@ -517,6 +519,20 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                 for port in actual.get('ports', [])))
 
 
+def smoke_dry_run_identity(value: dict, metadata: dict) -> bool:
+    """A successful server dry-run is not evidence of a persisted object."""
+    return (value.get('status', {}) == {} and
+            metadata.get('uid', '') == '' and
+            metadata.get('resourceVersion', '') == '' and
+            type(metadata.get('generation', 0)) is int and
+            metadata.get('generation', 0) == 0 and
+            metadata.get('creationTimestamp') is None and
+            metadata.get('deletionTimestamp') is None and
+            metadata.get('deletionGracePeriodSeconds') is None and
+            metadata.get('ownerReferences') in (None, []) and
+            metadata.get('managedFields') in (None, []))
+
+
 def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
     if not inventory_status(kube, items)['ready']:
         raise PolicyError('smoke requires all dedicated policies and bindings to be ready')
@@ -533,6 +549,7 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
             value = smoke_success_object(response)
             metadata = value.get('metadata')
             passed = (response.returncode == 0 and type(metadata) is dict and
+                      smoke_dry_run_identity(value, metadata) and
                       value.get('apiVersion') == case['object']['apiVersion'] and
                       value.get('kind') == case['object']['kind'] and
                        metadata.get('namespace') == case['object']['metadata']['namespace'] and

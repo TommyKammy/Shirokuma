@@ -426,6 +426,8 @@ class SmokeTests(unittest.TestCase):
             {'externalName': 'outside.example.invalid'},
             {'loadBalancerIP': '192.0.2.1'},
             {'loadBalancerSourceRanges': ['0.0.0.0/0']},
+            {'loadBalancerClass': 'example.invalid/external'},
+            {'allocateLoadBalancerNodePorts': True},
         ):
             kube = FakeKubernetes(ready=True)
             reference = FakeKubernetes(ready=True)
@@ -707,6 +709,59 @@ class SmokeTests(unittest.TestCase):
                 with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
+
+    def test_success_cannot_claim_a_persisted_dry_run_object(self):
+        for mutation in (
+            lambda reply: reply['metadata'].update(uid='unexpected-uid'),
+            lambda reply: reply['metadata'].update(resourceVersion='42'),
+            lambda reply: reply['metadata'].update(generation=1),
+            lambda reply: reply['metadata'].update(creationTimestamp='2026-10-04T00:00:00Z'),
+            lambda reply: reply['metadata'].update(ownerReferences=[{'uid': 'unexpected-uid'}]),
+            lambda reply: reply.update(status={'phase': 'Running'}),
+        ):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                original = reference.smoke_request(value)
+                if original.returncode != 0:
+                    return original
+                reply = copy.deepcopy(value)
+                mutation(reply)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                policy.smoke(kube, items())
+            self.assertEqual(len(kube.calls), 1)
+
+    def test_success_allows_empty_dry_run_identity_defaults(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def defaulted(value):
+            original = reference.smoke_request(value)
+            if original.returncode != 0:
+                return original
+            reply = copy.deepcopy(value)
+            reply['metadata'].update(uid='', resourceVersion='', generation=0,
+                                     creationTimestamp=None, managedFields=[])
+            reply['status'] = {}
+            return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+        kube.smoke_failure = defaulted
+        self.assertEqual(policy.smoke(kube, items())['passed_cases'], 15)
+
+    def test_service_dry_run_identity_is_checked_too(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def persisted_service(value):
+            original = reference.smoke_request(value)
+            if original.returncode != 0 or value['kind'] != 'Service':
+                return original
+            reply = copy.deepcopy(value)
+            reply['metadata']['resourceVersion'] = '42'
+            return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+        kube.smoke_failure = persisted_service
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items())
+        self.assertEqual(len(kube.calls), 2)
 
     def test_smoke_cannot_create_real_objects_or_access_other_namespaces(self):
         client = object.__new__(policy.Kubernetes)
