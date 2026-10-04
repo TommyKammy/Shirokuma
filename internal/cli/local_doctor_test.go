@@ -252,6 +252,28 @@ func TestLocalFluxOptionalCatalogRequiresPositiveGeneration(t *testing.T) {
 	}
 }
 
+func TestLocalFluxOptionalCatalogRejectsIncompleteConditions(t *testing.T) {
+	const original = `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}`
+	for _, conditions := range []string{`null`, `[]`, `[null]`, `[{}]`, `[{"type":"Ready"}]`} {
+		replacement := `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":` + conditions + `}`
+		resources := strings.Replace(localFluxJSON(), original, replacement, 1)
+		if resources == localFluxJSON() {
+			t.Fatal("catalog fixture was not changed")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: resources},
+		}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("catalog conditions %s accepted: %#v", conditions, check)
+		}
+	}
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: localControllerJSON()}, {output: localFluxJSON()},
+	}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("complete catalog conditions rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)

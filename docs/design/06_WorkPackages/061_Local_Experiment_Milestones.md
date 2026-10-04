@@ -5,12 +5,37 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.204"
+version: "5.206"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: fixed Pod termination-message reply (offline)
+
+WP-L2-POL-001: two fake successful Pod replies redirected termination-message
+capture or log fallback and advanced to later smoke cases before repair. The
+fixed comparator refuses both while accepting absent and normal API defaults;
+native 59 tests passed. Initial focused test used the wrong class; corrected
+negative failed before repair. Dedicated Colima was read-only observed stopped;
+no live API, unknown-request replay, retained data/backup mutation or GitHub
+write. Offline fixtures cannot authenticate producers, prove full effective
+object equality, verify live defaulting, clear strict admission or grant
+operator acceptance. Revert only the scoped guard/test if necessary; preserve
+pending intents. Direct original Vault sync remains pending outside checkout.
+
+## 2026-10-04: independent optional Flux catalog conditions (offline)
+
+WP-L0-GITOPS-001: a present catalog with null, empty or incomplete fake
+conditions degrades under the unchanged local doctor; current Ready remains
+informational. Focused Go test, full Go suite (866), vet, design-context and
+secret-filename checks passed. Dedicated Colima remained stopped; no live
+inventory, reconciliation, unknown-request replay, retained data/backup
+mutation or GitHub write. Offline fixtures cannot authenticate Git/API, prove
+atomic inventory, clear strict admission or grant operator acceptance. Revert
+only this test if needed, preserving evidence. Original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-04: fixed Pod claims and independent FinOps review (offline)
 

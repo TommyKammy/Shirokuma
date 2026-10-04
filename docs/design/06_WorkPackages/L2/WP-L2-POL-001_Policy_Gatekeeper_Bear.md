@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.78"
+version: "0.79"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed Pod termination message controls (offline)
+
+Two fake successful replies redirected the container termination-message path
+or enabled log fallback; both reached later smoke cases before the fixed reply
+check refused them. Absent and normal API defaults remain accepted. An initial
+focused invocation named the wrong test class; the corrected negative failed
+before repair and the native 59-test suite passed after. The dedicated Colima
+profile was observed stopped; no live API, unknown-request replay, retained
+data/backup mutation or GitHub write. This scoped check does not authenticate
+the API, prove complete effective-object equality or verify live defaulting;
+strict admission and operator acceptance remain open. Revert only this guard
+and test if necessary, retaining pending intents. Direct original Vault sync
+remains pending outside the approved checkout.
 
 ## 2026-10-04: fixed Pod resource and scheduling controls (offline)
 
