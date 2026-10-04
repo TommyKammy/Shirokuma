@@ -137,6 +137,16 @@ class HistoryTests(unittest.TestCase):
             H.render([(0, (first, digest)), (1, (first, digest))])
         self.assertIn('保存FinOps観測履歴', H.render(H.parse(encoded([first, report(processes())]))))
 
+    def test_reordered_json_members_do_not_make_duplicate_observations(self):
+        first = report()
+        # The wire bytes differ while the report and its canonical digest do not.
+        reordered = dict(reversed(list(first.items())))
+        self.assertNotEqual(encoded(first), encoded(reordered))
+        with self.assertRaises(H.HistoryError):
+            H.parse(encoded([first, reordered]))
+        self.assertIn('保存FinOps観測履歴',
+                      H.render(H.parse(encoded([first, report(processes())]))))
+
     def test_offline_html_declares_no_external_resources_or_script(self):
         html = H.render(H.parse(encoded([report(), report(processes())])))
         self.assertIn('Content-Security-Policy', html)

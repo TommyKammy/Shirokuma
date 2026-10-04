@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.216"
+version: "5.217"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent canonical FinOps saved-history identity (offline)
+
+WP-L6-FIN-001: reordered JSON members of an otherwise identical saved report
+cannot create a second observation; the unchanged canonical digest guard
+rejects the pair and still renders distinct saved reports. `make
+test-local-finops` passed 192 tests (seven Linux-only skips). Dedicated Colima
+was observed stopped; no collection or retained report/volume/backup mutation.
+AgentHouse usage remains `null / NOT_MEASURED`. This offline regression does not
+authenticate report producers, measure usage or establish operator acceptance.
+Roll back the independent test alone if needed, preserving historical reports.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: bounded Pod tolerations and independent Flux Stalled duplicates (offline)
 

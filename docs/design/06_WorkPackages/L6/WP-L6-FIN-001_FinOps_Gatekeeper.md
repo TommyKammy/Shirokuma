@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.71"
+version: "0.72"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: canonical duplicate saved history (offline)
+
+An independent history regression verifies that reversing JSON object member
+order does not turn a saved observation into a second observation. The existing
+parser rejects the pair by canonical digest, while a genuinely distinct pair
+renders. `make test-local-finops` passed 192 tests (seven Linux-only skips).
+No reader change, new collection or retained report/volume/backup mutation;
+the dedicated Colima profile was observed stopped. AgentHouse usage stays
+`null / NOT_MEASURED`. This does not authenticate saved producers, measure
+present usage or establish operator acceptance. Revert only the test if needed;
+preserve reports. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: separate saved-history reader review (offline)
 
