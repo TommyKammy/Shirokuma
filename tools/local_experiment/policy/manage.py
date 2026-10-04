@@ -505,7 +505,9 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
     if (type(containers) is not list or len(containers) != 1 or
             type(containers[0]) is not dict or
             any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostPID', 'hostIPC', 'shareProcessNamespace')) or
-            any(spec.get(key) not in (None, []) for key in ('volumes', 'initContainers', 'ephemeralContainers', 'hostAliases')) or
+             any(spec.get(key) not in (None, []) for key in
+                 ('volumes', 'initContainers', 'ephemeralContainers', 'hostAliases',
+                  'resourceClaims', 'schedulingGates')) or
              spec.get('imagePullSecrets') not in (None, []) or
              spec.get('nodeSelector') not in (None, {}) or
               spec.get('affinity') not in (None, {}) or

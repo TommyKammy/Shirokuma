@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.77"
+version: "0.78"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed Pod resource and scheduling controls (offline)
+
+Two unsubmitted successful Pod replies introduced a named resource claim or a
+scheduling gate and reached later smoke requests before the scoped reply check
+refused them. Absent and empty API defaults remain accepted. The initial focused
+command named the wrong test class; the corrected negative failed twice before
+repair and the native 58-test suite passed afterward. This does not authenticate
+the API, prove complete effective-object equality or verify live defaulting.
+`make verify-local-experiment`, design-context, secret-filename and diff checks
+passed. The dedicated Colima profile was observed stopped; no live admission, unknown
+request replay, retained data/backup mutation or GitHub write. Strict admission
+and operator acceptance remain open. Revert only this guard/test if necessary;
+preserve pending requests. Direct original Vault sync remains pending outside
+the approved checkout.
 
 ## 2026-10-04: successful Pod lifetime and priority (offline)
 

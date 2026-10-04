@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.203"
+version: "5.204"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: fixed Pod claims and independent FinOps review (offline)
+
+WP-L2-POL-001: fake successful Pod replies carrying unsubmitted resource claims
+or scheduling gates advanced to later smoke cases before repair; the fixed
+comparator now refuses both, retaining absent/empty defaults. The initial
+focused command used the wrong test class; the corrected negative failed before
+repair and 58 native tests passed after. Separately WP-L6-FIN-001's saved
+selection/order/digest and per-report storage rendering were inspected without
+a reader change; 191 FinOps tests passed (seven Linux-only skips).
+`make verify-local-experiment`, design-context, secret-filename and diff checks
+passed; its synthetic failure-path output is not live evidence. Dedicated
+Colima was read-only observed stopped. No live API, collection, unknown-request
+replay, retained report/volume/backup mutation or GitHub write. AgentHouse usage
+remains `null / NOT_MEASURED`. Offline checks cannot authenticate producers,
+prove complete effective-object equality, measure usage, clear strict admission
+or grant operator acceptance. Revert only the scoped policy guard/test if
+necessary; preserve saved reports and pending intents. Direct original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-04: Pod lifetime and independent Flux catalog generation (offline)
 

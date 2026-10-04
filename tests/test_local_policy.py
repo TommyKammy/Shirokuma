@@ -821,6 +821,38 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
 
+    def test_pod_success_does_not_add_resource_claims_or_scheduling_gates(self):
+        for field, injected in (
+            ('resourceClaims', [{'name': 'device', 'resourceClaimName': 'device-claim'}]),
+            ('schedulingGates', [{'name': 'example.test/hold'}]),
+        ):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec'][field] = injected
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
+        for defaults in ({}, {'resourceClaims': [], 'schedulingGates': []}):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def defaulted(value):
+                original = reference.smoke_request(value)
+                if original.returncode != 0:
+                    return original
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec'].update(defaults)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = defaulted
+            with self.subTest(defaults=defaults):
+                self.assertEqual(policy.smoke(kube, items())['passed_cases'], 15)
+
     def test_pod_success_does_not_change_lifetime_or_priority(self):
         for field, injected in (('terminationGracePeriodSeconds', 0),
                                 ('terminationGracePeriodSeconds', 3600),
