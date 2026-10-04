@@ -512,8 +512,10 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
               spec.get('topologySpreadConstraints') not in (None, []) or
               spec.get('overhead') not in (None, {}) or
              spec.get('schedulerName', 'default-scheduler') != 'default-scheduler' or
-             spec.get('priorityClassName', '') != '' or
-             spec.get('runtimeClassName') is not None or
+              spec.get('priorityClassName', '') != '' or
+              (spec.get('priority') is not None and
+               (type(spec['priority']) is not int or spec['priority'] != 0)) or
+              spec.get('runtimeClassName') is not None or
              spec.get('serviceAccountName', 'default') != 'default' or
              spec.get('serviceAccount', 'default') != 'default' or
              spec.get('nodeName', '') != '' or
@@ -524,7 +526,10 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
               spec.get('setHostnameAsFQDN', False) is not False or
               spec.get('enableServiceLinks', True) is not True or
               spec.get('hostUsers', True) is not True or
-              spec.get('activeDeadlineSeconds') is not None or
+               spec.get('activeDeadlineSeconds') is not None or
+               (spec.get('terminationGracePeriodSeconds') is not None and
+                (type(spec['terminationGracePeriodSeconds']) is not int or
+                 spec['terminationGracePeriodSeconds'] != 30)) or
               spec.get('readinessGates') not in (None, []) or
               spec.get('restartPolicy') != 'Never' or
              spec.get('automountServiceAccountToken') is not False or

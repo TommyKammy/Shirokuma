@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.76"
+version: "0.77"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: successful Pod lifetime and priority (offline)
+
+Three fake successful replies changed the fixed Pod's termination grace period
+or scheduling priority and advanced to later smoke requests before repair. The
+scoped comparator now accepts absent or expected API defaults (30 seconds and
+integer zero), refusing changed or malformed values. Native 57 tests and full
+local regression passed. Dedicated Colima was observed stopped; no live API,
+pending-request replay, retained data/backup mutation or GitHub write. Live
+defaulting, producer identity, complete object equality, strict admission and
+operator acceptance remain open. Revert only this comparator/test if necessary;
+preserve saved intents. Direct original Vault sync remains pending outside the
+approved checkout.
 
 ## 2026-10-04: successful Pod probe injection (offline)
 

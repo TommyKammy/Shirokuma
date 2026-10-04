@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.202"
+version: "5.203"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: Pod lifetime and independent Flux catalog generation (offline)
+
+WP-L2-POL-001: three fake successful Pod replies changed termination grace
+period or scheduling priority and reached later cases before the fixed-corpus
+check rejected them; absent and expected API defaults remain accepted. Native
+57 tests passed. Independently WP-L0-GITOPS-001 pins the unchanged doctor's
+degraded result for absent, zero, negative or null optional catalog generation;
+focused/full Go suite (865) and vet passed. `make verify-local-experiment` first
+failed in an unrelated gateway process-group test with a transient macOS
+`PermissionError`; its isolated rerun and the full local regression rerun passed.
+Dedicated Colima was observed stopped; no live API/inventory, replay,
+reconciliation, retained data/backup mutation or GitHub write. These offline
+checks do not authenticate producers, prove full effective-object equality or
+atomic inventory, clear strict admission or grant operator acceptance. Roll
+back only the scoped comparator/tests or independent Flux test; preserve old
+evidence and pending requests. Direct original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: fixed Pod probes and optional Flux generation (offline)
 
