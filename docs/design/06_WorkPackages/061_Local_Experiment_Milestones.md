@@ -12,6 +12,24 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: legacy native smoke mixed transport (offline)
+
+WP-L2-POL-001: four test-owned allowed dry-run replies with nonempty stderr,
+duplicate identity, oversized output or non-JSON numeric constants advanced
+past the allowed case before repair. The bounded strict success decoder now
+rejects them before its existing shallow name/namespace check. Independently,
+a recognized denial carrying a success payload was counted as passed; denial
+now requires empty stdout. All five negatives failed before repair. Native
+policy suite passed (19 tests). The dedicated Colima profile was observed
+stopped; no live API request, unknown-request replay, retained volume/backup
+change or GitHub write. These fixtures do not authenticate the producer or
+prove effective Pod equality, atomic inventory, strict admission or operator
+acceptance. `make verify-local-experiment` passed (121 suites, 4071 executed),
+as did design-context (89 documents), secret-filename and diff checks; ignored
+log: `tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-102/verify-local.log`.
+Revert only these guards/tests if needed, preserving prior intents and evidence.
+Direct original Vault synchronization remains pending outside the approved checkout.
+
 ## 2026-10-04: scoped policy and independent GitOps numeric underflow (offline)
 
 WP-L2-POL-001: three fake scoped JSON replies with nonzero values rounded to

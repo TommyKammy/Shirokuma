@@ -255,6 +255,23 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_success_with_conflicting_transport_data_is_not_a_pass(self):
+        for variant in ('stderr', 'duplicate', 'oversize', 'constant'):
+            kube = FakeKubernetes(ready=True)
+            def response(value):
+                raw = json.dumps(value)
+                stdout = {'stderr': raw,
+                          'duplicate': raw.replace('"kind": "Pod"', '"kind": "Service", "kind": "Pod"'),
+                          'oversize': raw + ' ' * (2 * 1024 * 1024),
+                          'constant': raw[:-1] + ',"ext":NaN}'}[variant]
+                return SimpleNamespace(returncode=0, stdout=stdout,
+                                       stderr='warning' if variant == 'stderr' else '')
+            kube.smoke_failure = response
+            with self.subTest(variant=variant):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
     def test_corpus_uses_server_dry_run_and_exact_own_policy_denials(self):
         kube = FakeKubernetes(ready=True)
         result = policy.smoke(kube, items())
@@ -290,6 +307,20 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(events[-1]['case'], 'deny-privileged')
         self.assertEqual(events[-1]['result'], 'failed')
         self.assertEqual(len(events), 3)
+
+    def test_denial_with_success_payload_does_not_count_as_policy_pass(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def mixed(value):
+            result = reference.smoke_request(value)
+            if result.returncode != 0:
+                return SimpleNamespace(returncode=result.returncode,
+                                       stderr=result.stderr, stdout=json.dumps(value))
+            return result
+        kube.smoke_failure = mixed
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items())
+        self.assertEqual(len(kube.calls), 3)
 
     def test_smoke_cannot_create_real_objects_or_access_other_namespaces(self):
         client = object.__new__(policy.Kubernetes)

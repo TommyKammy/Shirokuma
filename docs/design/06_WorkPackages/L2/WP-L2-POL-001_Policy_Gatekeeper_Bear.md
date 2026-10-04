@@ -12,6 +12,30 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-04: legacy native smoke success transport (offline)
+
+Four test-owned successful dry-run replies with nonempty stderr, duplicate
+identity keys, oversized output or a Python-only numeric constant advanced
+past the allowed case before repair. The legacy native smoke reader now requires
+empty stderr and bounded, duplicate-free, representable JSON before checking
+the reported name/namespace. The four negatives failed first and the native
+policy suite passed (18 tests). The stopped dedicated lab received no request;
+no retained intent, volume or backup changed. This does not strengthen the
+legacy smoke's shallow effective-object comparison or establish live admission,
+API authenticity, atomic inventory or acceptance. Roll back only this reader
+and test if necessary; do not replay saved unknown requests. Direct original
+Vault sync remains pending outside checkout.
+
+## 2026-10-04: independent legacy smoke denial transport (offline)
+
+A fake recognized policy denial carrying a simultaneous successful Pod payload
+was counted as a pass before repair. The native smoke now requires exactly empty
+stdout for a denial; the negative failed first and the 19-test native suite
+passed. No request was sent to the stopped lab and no retained data changed.
+This is a local transport consistency check, not proof that the API or denial
+producer is authentic. Roll back this single guard/test if needed; do not
+replay saved requests. Direct original Vault sync remains pending.
+
 ## 2026-10-04: scoped API numeric underflow (offline)
 
 Three independent fake scoped API JSON replies contained nonzero exponents

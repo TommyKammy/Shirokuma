@@ -386,6 +386,39 @@ def own_denial(stderr: str, name: str, message: str) -> bool:
     return bool(re.search(pattern, stderr))
 
 
+def smoke_success_object(response):
+    """Only a bounded, unambiguous JSON success can support a smoke claim."""
+    if (response.returncode != 0 or response.stderr != '' or
+            not isinstance(response.stdout, str) or
+            len(response.stdout.encode()) > 2 * 1024 * 1024):
+        return {}
+
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError('duplicate response key')
+            value[key] = item
+        return value
+
+    def numeric(raw):
+        value = float(raw)
+        mantissa = re.split('[eE]', raw, maxsplit=1)[0]
+        if not math.isfinite(value) or (value == 0 and re.search('[1-9]', mantissa)):
+            raise ValueError('non-representable response number')
+        return value
+
+    def constant(_):
+        raise ValueError('non-JSON response constant')
+
+    try:
+        value = json.loads(response.stdout, object_pairs_hook=unique,
+                           parse_float=numeric, parse_constant=constant)
+    except (ValueError, TypeError):
+        return {}
+    return value if type(value) is dict else {}
+
+
 def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
     if not inventory_status(kube, items)['ready']:
         raise PolicyError('smoke requires all dedicated policies and bindings to be ready')
@@ -396,12 +429,10 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
         response = kube.smoke_request(case['object'])
         denied = case['deny_policy']
         if denied:
-            passed = response.returncode != 0 and own_denial(response.stderr, denied, messages[denied])
+            passed = (response.returncode != 0 and response.stdout == '' and
+                      own_denial(response.stderr, denied, messages[denied]))
         else:
-            try:
-                value = json.loads(response.stdout)
-            except (ValueError, TypeError):
-                value = {}
+            value = smoke_success_object(response)
             passed = (response.returncode == 0 and value.get('kind') == case['object']['kind']
                       and value.get('metadata', {}).get('namespace') == case['object']['metadata']['namespace']
                       and value.get('metadata', {}).get('name') == case['object']['metadata']['name'])
