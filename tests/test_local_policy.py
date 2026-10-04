@@ -255,6 +255,45 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_success_does_not_accept_changed_policy_relevant_fields(self):
+        mutations = (
+            lambda pod: pod['spec']['containers'][0].update(image='unexpected:latest'),
+            lambda pod: pod['spec'].update(hostNetwork=True),
+            lambda pod: pod['spec']['containers'][0].update(resources={}),
+            lambda pod: pod['spec'].update(initContainers=[{'name': 'extra'}]),
+            lambda pod: pod['spec']['containers'][0]['securityContext'].update(privileged=True),
+            lambda pod: pod['spec']['containers'][0].update(ports=[{'hostPort': 8080}]),
+        )
+        for mutate in mutations:
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                mutate(reply)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutate):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
+    def test_service_success_does_not_accept_public_service_mutation(self):
+        for mutate in (lambda service: service['spec'].update(type='LoadBalancer'),
+                       lambda service: service['spec'].update(externalIPs=['192.0.2.1']),
+                       lambda service: service['spec']['ports'][0].update(nodePort=30001)):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != 'Service':
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                mutate(reply)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutate):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
     def test_deep_success_extension_is_a_failed_case(self):
         kube = FakeKubernetes(ready=True)
         def deep(value):

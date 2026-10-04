@@ -12,6 +12,20 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-04: legacy native smoke policy-feature comparison (offline)
+
+The legacy smoke accepted a successful Pod or Service reply with the same
+identity but changed image, host network, resources, init container, privilege,
+host port, Service type, external IP or node port. A fixed-corpus comparator
+now refuses these policy-relevant changes while allowing unrelated API defaults.
+Nine disposable negative replies fail after one or two fake requests; the
+24-test native suite and local regression passed. Dedicated Colima was observed
+stopped. No live API, saved request replay, retained volume or backup mutation.
+This is **not** full effective-object equality, API authenticity, live admission,
+strict gate or operator acceptance. Roll back only the comparator/tests if
+needed and preserve saved intents. Original Vault sync remains pending outside
+the approved checkout.
+
 ## 2026-10-04: deeply nested native success transport (offline)
 
 A test-owned success with a 1100-level unknown extension raised an uncaught

@@ -419,6 +419,46 @@ def smoke_success_object(response):
     return value if type(value) is dict else {}
 
 
+def smoke_success_scope(value: dict, submitted: dict) -> bool:
+    """Check the policy-relevant fields of a successful legacy smoke reply.
+
+    API defaulting may add unrelated fields; it must not change the controls
+    exercised by this fixed corpus. This is not full effective-object equality.
+    """
+    spec = value.get('spec')
+    if type(spec) is not dict:
+        return False
+    original = submitted['spec']
+    if submitted['kind'] == 'Service':
+        return (spec.get('type') == original.get('type', 'ClusterIP') and
+                spec.get('externalIPs', []) == original.get('externalIPs', []) and
+                type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
+                all(type(port) is dict and port.get('port') == expected['port'] and
+                    port.get('targetPort') == expected['targetPort'] and
+                    port.get('nodePort', 0) in (0, None)
+                    for port, expected in zip(spec['ports'], original['ports'])))
+    if submitted['kind'] != 'Pod':
+        return False
+    containers = spec.get('containers')
+    if (type(containers) is not list or len(containers) != 1 or
+            type(containers[0]) is not dict or
+            any(spec.get(key, False) is not False for key in ('hostNetwork', 'hostPID', 'hostIPC')) or
+            any(spec.get(key) not in (None, []) for key in ('volumes', 'initContainers', 'ephemeralContainers')) or
+            spec.get('restartPolicy') != 'Never' or
+            spec.get('automountServiceAccountToken') is not False):
+        return False
+    actual, expected = containers[0], original['containers'][0]
+    return (all(actual.get(key) == expected[key] for key in ('name', 'image', 'imagePullPolicy', 'command')) and
+            actual.get('resources') == expected['resources'] and
+            type(actual.get('securityContext')) is dict and
+            all(actual['securityContext'].get(key) == val
+                for key, val in expected['securityContext'].items()) and
+            actual['securityContext'].get('privileged', False) is False and
+            type(actual.get('ports', [])) is list and
+            all(type(port) is dict and port.get('hostPort', 0) in (0, None)
+                for port in actual.get('ports', [])))
+
+
 def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
     if not inventory_status(kube, items)['ready']:
         raise PolicyError('smoke requires all dedicated policies and bindings to be ready')
@@ -438,7 +478,8 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
                       value.get('apiVersion') == case['object']['apiVersion'] and
                       value.get('kind') == case['object']['kind'] and
                       metadata.get('namespace') == case['object']['metadata']['namespace'] and
-                      metadata.get('name') == case['object']['metadata']['name'])
+                      metadata.get('name') == case['object']['metadata']['name'] and
+                      smoke_success_scope(value, case['object']))
         row = {'case': case['case'], 'result': 'passed' if passed else 'failed',
                'expected_policy': denied, 'server_dry_run': True,
                'namespace': case['object']['metadata']['namespace'],

@@ -12,6 +12,19 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: legacy smoke policy-relevant success fields (offline)
+
+WP-L2-POL-001: a successful fake Pod/Service dry-run could preserve identity
+while changing image, network, privilege, resources or public Service controls.
+The legacy smoke now compares fixed-corpus policy-relevant fields, without
+claiming full effective-object equality or authenticating its producer. Nine
+test-owned mutations fail after one or two fake requests; 24 native tests and
+`make verify-local-experiment` passed. Dedicated Colima was observed stopped;
+no live admission, unknown-request replay, retained data/backup change or
+GitHub write. Strict admission and operator acceptance remain open. Revert only
+the comparator/tests if necessary, retaining prior intents. Direct original
+Vault synchronization remains pending outside the checkout.
+
 ## 2026-10-04: native success nesting and independent FinOps boundary (offline)
 
 WP-L2-POL-001: a 1100-level extension on a fake successful dry-run caused an
