@@ -387,6 +387,32 @@ func TestLocalFluxControllerRejectsRepeatedAvailable(t *testing.T) {
 	}
 }
 
+func TestLocalFluxControllerRejectsRepeatedProgressing(t *testing.T) {
+	const progressing = `{"type":"Progressing","status":"True"}`
+	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"} {
+		member := healthyLocalWorkload("Deployment", "flux-system", name)
+		for _, extra := range []string{progressing, `{"type":"Progressing","status":"False"}`} {
+			changed := strings.Replace(member, progressing, progressing+`,`+extra, 1)
+			if changed == member {
+				t.Fatal("fixture was not changed")
+			}
+			controllers := strings.Replace(localControllerJSON(), member, changed, 1)
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+				{output: controllers}, {output: localFluxJSON()},
+			}}, localExperimentContext, true)
+			if check.Status != "degraded" {
+				t.Fatalf("%s duplicate Progressing %s accepted: %#v", name, extra, check)
+			}
+		}
+	}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: localControllerJSON()}, {output: localFluxJSON()},
+	}}, localExperimentContext, true)
+	if check.Status != "informational" {
+		t.Fatalf("unique controller conditions rejected: %#v", check)
+	}
+}
+
 func TestLocalFluxSourceRejectsRepeatedReady(t *testing.T) {
 	const source = `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1}`
 	const ready = `{"type":"Ready","status":"True","observedGeneration":1}`

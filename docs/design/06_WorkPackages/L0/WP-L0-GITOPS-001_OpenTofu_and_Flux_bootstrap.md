@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.128"
+version: "0.129"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent duplicate controller Progressing (offline)
+
+An independent fake inventory pins the unchanged local doctor's degraded
+result for identical or contradictory repeated `Progressing` conditions on
+each of the four fixed Flux controllers; unique conditions remain
+informational. Focused Go and full package tests passed. Colima was observed
+stopped: no live Git/API inventory, reconciliation, retained data/backup
+mutation or GitHub write. Fake inventory cannot authenticate producers, prove
+atomic state, clear strict admission or grant operator acceptance. Revert only
+the test if needed; preserve saved evidence. Original Vault sync pending.
 
 ## 2026-10-05: independent duplicate source reconciliation (offline)
 

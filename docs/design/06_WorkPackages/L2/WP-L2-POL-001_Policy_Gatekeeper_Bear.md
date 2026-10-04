@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.92"
+version: "0.93"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: malformed success-text refusal (offline)
+
+A test-owned successful reply containing a raw unpaired Unicode surrogate
+raised `UnicodeEncodeError` before the smoke could report a policy mismatch.
+The focused negative failed first; success parsing now refuses unencodable
+text through the ordinary dry-run mismatch path. Native policy suite (72)
+and full local regression passed. Colima was observed stopped: no live admission, saved-request replay,
+retained data/backup mutation or GitHub write. This is defensive handling of a
+malformed fake response, not evidence of live API producer authenticity,
+complete effective-object equality or strict/operator acceptance. Roll back
+only the scoped text guard and test if needed, preserving saved intents.
+Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: bounded single-line denial wrapper (offline)
 

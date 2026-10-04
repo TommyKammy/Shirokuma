@@ -392,8 +392,13 @@ def own_denial(stderr: str, name: str, message: str) -> bool:
 def smoke_success_object(response):
     """Only a bounded, unambiguous JSON success can support a smoke claim."""
     if (response.returncode != 0 or response.stderr != '' or
-            not isinstance(response.stdout, str) or
-            len(response.stdout.encode()) > 2 * 1024 * 1024):
+            not isinstance(response.stdout, str)):
+        return {}
+    try:
+        if len(response.stdout.encode('utf-8')) > 2 * 1024 * 1024:
+            return {}
+    except UnicodeError:
+        # An undecodable API reply must not abort the smoke with a raw exception.
         return {}
 
     def unique(pairs):

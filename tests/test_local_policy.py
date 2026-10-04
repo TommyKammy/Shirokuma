@@ -255,6 +255,17 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_malformed_unicode_success_reply_fails_closed(self):
+        kube = FakeKubernetes(ready=True)
+        def changed(value):
+            reply = copy.deepcopy(value)
+            reply['metadata']['annotations'] = {'unexpected': '\ud800'}
+            return SimpleNamespace(returncode=0, stdout=json.dumps(reply, ensure_ascii=False), stderr='')
+        kube.smoke_failure = changed
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items())
+        self.assertEqual(len(kube.calls), 1)
+
     def test_pod_success_refuses_unsubmitted_pod_level_resources(self):
         for resources in ({'requests': {'cpu': '8'}},
                           {'limits': {'memory': '8Gi'}}, True):

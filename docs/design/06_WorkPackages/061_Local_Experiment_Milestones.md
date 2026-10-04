@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.222"
+version: "5.223"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: malformed policy success text and independent Flux duplicates (offline)
+
+WP-L2-POL-001: raw unpaired Unicode in a fake successful dry-run caused an
+uncaught encoding error before a scoped fail-closed reply guard; the focused
+negative failed first, and 72 native policy tests passed after repair.
+Independently WP-L0-GITOPS-001 pins degraded results for repeated identical
+or contradictory `Progressing` on all four Flux controllers; 875 Go CLI tests
+passed. Dedicated Colima was observed stopped; no live API/Git inventory,
+saved-request replay, reconcile, retained data/backup mutation or GitHub
+write. Offline fixtures do not authenticate producers, prove atomic inventory
+or full effective-object equality, clear strict admission or establish
+operator acceptance. `make verify-local-experiment`, design-context (89
+documents), secret-filename and diff checks passed; synthetic failure-path
+output is not live evidence. Roll back the text guard/test or independent Flux test
+only; preserve saved evidence. Direct original Vault sync pending outside
+checkout.
 
 ## 2026-10-05: denial wrapper and independent Flux source ambiguity (offline)
 
