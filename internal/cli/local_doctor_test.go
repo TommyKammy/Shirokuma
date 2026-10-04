@@ -2023,6 +2023,35 @@ func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 	}
 }
 
+func TestLocalFluxRejectsDuplicatedClearedReplicaFailure(t *testing.T) {
+	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"} {
+		member := healthyLocalWorkload("Deployment", "flux-system", name)
+		for _, second := range []string{"False", "True"} {
+			first := `{"type":"ReplicaFailure","status":"False"}`
+			duplicate := fmt.Sprintf(`{"type":"ReplicaFailure","status":%q}`, second)
+			mutated := strings.Replace(member, `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+first+`,`+duplicate, 1)
+			controllers := strings.Replace(localControllerJSON(), member, mutated, 1)
+			if controllers == localControllerJSON() {
+				t.Fatal("controller fixture did not change")
+			}
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+				{output: controllers}, {output: localFluxJSON()},
+			}}, localExperimentContext, true)
+			if check.Status != "degraded" {
+				t.Fatalf("%s duplicate ReplicaFailure=%s accepted: %#v", name, second, check)
+			}
+		}
+	}
+	member := healthyLocalWorkload("Deployment", "flux-system", "source-controller")
+	controllers := strings.Replace(localControllerJSON(), member,
+		strings.Replace(member, `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"ReplicaFailure","status":"False"}`, 1), 1)
+	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: controllers}, {output: localFluxJSON()},
+	}}, localExperimentContext, true); check.Status != "informational" {
+		t.Fatalf("single cleared ReplicaFailure rejected: %#v", check)
+	}
+}
+
 func TestLocalLakehouseRejectsDuplicatedConditionTypes(t *testing.T) {
 	for _, workload := range []struct{ name, check string }{{"polaris", "polaris"}, {"trino-local", "trino"}} {
 		for _, condition := range []string{"Available", "Progressing"} {

@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.228"
+version: "5.229"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: non-unicast ClusterIP and independent Flux failure duplicates (offline)
+
+WP-L2-POL-001: eight fake successful Service replies claiming unspecified or
+multicast IPv4/IPv6 cluster addresses advanced before a scoped guard rejected
+them; focused negatives failed first, then 75 native policy tests passed.
+WP-L0-GITOPS-001: independent fake lists confirm duplicate cleared/conflicting
+ReplicaFailure on all four controllers degrades under the unchanged doctor;
+single cleared remains informational. Focused/full Go tests (879), vet,
+`make verify-local-experiment`, design-context (89 documents), secret-filename
+and diff checks passed. Dedicated Colima was observed stopped; no live API/Git
+inventory, reconciliation, saved-request replay, retained data/backup mutation
+or GitHub write. Offline fixtures cannot authenticate producers, prove atomic
+inventory or full effective-object equality, validate actual CIDR allocation,
+clear strict admission or grant operator acceptance. Roll back only the scoped
+policy guard/test or independent Flux test; preserve prior evidence. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: mapped Service addresses and suspended-root conditions (offline)
 

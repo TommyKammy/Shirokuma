@@ -823,6 +823,28 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_rejects_non_unicast_cluster_address(self):
+        # A syntactically valid address is not necessarily a usable Service
+        # destination. These cannot represent an allocated unicast ClusterIP.
+        for address, family in (('0.0.0.0', 'IPv4'), ('224.0.0.1', 'IPv4'),
+                                ('::', 'IPv6'), ('ff02::1', 'IPv6')):
+            for field in ('clusterIP', 'clusterIPs'):
+                kube = FakeKubernetes(ready=True)
+                reference = FakeKubernetes(ready=True)
+                def changed(value):
+                    if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                            value['spec'].get('externalIPs')):
+                        return reference.smoke_request(value)
+                    reply = copy.deepcopy(value)
+                    reply['spec'][field] = address if field == 'clusterIP' else [address]
+                    reply['spec']['ipFamilies'] = [family]
+                    return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+                kube.smoke_failure = changed
+                with self.subTest(address=address, field=field):
+                    with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                        policy.smoke(kube, items())
+                    self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_accepts_address_matching_family(self):
         for address, family in (('192.0.2.1', 'IPv4'), ('2001:db8::1', 'IPv6')):
             kube = FakeKubernetes(ready=True)

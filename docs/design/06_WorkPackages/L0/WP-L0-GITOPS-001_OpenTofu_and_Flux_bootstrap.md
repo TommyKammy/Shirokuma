@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.134"
+version: "0.135"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent cleared ReplicaFailure duplicates (offline)
+
+An independent fake controller inventory pins the unchanged doctor's degraded
+result for identical cleared or conflicting duplicate ReplicaFailure conditions
+on each of the four fixed Flux Deployments; one cleared condition remains
+informational. Focused and full Go tests (879), vet and full local regression
+passed. Dedicated Colima was observed stopped; no live API/Git inventory or
+reconciliation, retained data/backup mutation or GitHub write. Fake responses
+cannot authenticate producers, establish atomic inventory or operator
+acceptance. Revert only this test if needed; preserve earlier evidence. Direct
+original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-05: suspended root duplicate reconciliation (offline)
 
