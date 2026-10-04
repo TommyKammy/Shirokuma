@@ -443,10 +443,10 @@ def service_address_family_consistent(spec: dict) -> bool:
             parsed = ipaddress.ip_address(address)
         except (ValueError, TypeError):
             return False
-        # A successful ClusterIP reply must describe a unicast destination;
-        # accepting an unspecified or multicast value would make the smoke
-        # claim depend on an impossible allocation.
-        if parsed.is_unspecified or parsed.is_multicast:
+        # Host-only, link-local, unspecified and multicast destinations cannot
+        # support the fixed Service's claimed routable ClusterIP allocation.
+        if (parsed.is_unspecified or parsed.is_multicast or parsed.is_loopback or
+                parsed.is_link_local):
             return False
         # A mapped IPv4 address has version 6 in ipaddress, but does not
         # establish an ordinary single-stack IPv6 Service allocation.

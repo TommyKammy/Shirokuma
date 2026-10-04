@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.229"
+version: "5.230"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: host-local Service addresses and separate FinOps review (offline)
+
+WP-L2-POL-001: eight fake successful loopback/link-local IPv4/IPv6 ClusterIP
+claims advanced through the smoke before repair. The focused negative failed
+first; the scoped guard and 76 native tests passed, as did `make
+verify-local-experiment`. Independently WP-L6-FIN-001 saved-history selection,
+digest, ordering and per-report storage rendering were inspected without reader
+changes; `make test-local-finops` passed 194 tests (seven Linux-only skips).
+Dedicated Colima was observed stopped; no live API/inventory, collection,
+request replay, retained report/volume/backup mutation or GitHub write.
+AgentHouse usage remains `null / NOT_MEASURED`. Offline fixtures do not
+authenticate producers, validate allocation, measure current usage, establish
+full effective-object equality, clear strict admission or grant operator
+acceptance. Roll back only the policy guard/test if necessary; preserve saved
+reports and intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: non-unicast ClusterIP and independent Flux failure duplicates (offline)
 

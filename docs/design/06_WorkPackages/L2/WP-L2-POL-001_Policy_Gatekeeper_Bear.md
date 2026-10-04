@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.96"
+version: "0.97"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: host-local dry-run ClusterIP refusal (offline)
+
+Eight fixed-Service fake successful replies claimed IPv4/IPv6 loopback or
+link-local addresses in `clusterIP` or `clusterIPs` despite matching family.
+The focused negative failed in all eight cases before a scoped address guard;
+the 76-test native policy suite and local regression passed after repair.
+Ordinary IPv4/IPv6 positives remain accepted. Dedicated Colima was observed
+stopped; no live API, saved-request replay, retained data/backup mutation or
+GitHub write. The address classification is an offline assumption, not a
+service-CIDR allocation check, producer authentication, full effective-object
+equality, strict admission or operator acceptance. Revert only this scoped
+guard/test if necessary, preserving pending intents and historical evidence.
+Direct original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-05: non-unicast dry-run ClusterIP refusal (offline)
 

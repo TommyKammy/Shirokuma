@@ -845,6 +845,28 @@ class SmokeTests(unittest.TestCase):
                         policy.smoke(kube, items())
                     self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_rejects_host_local_cluster_address(self):
+        # Neither loopback nor link-local addresses can be a Service VIP,
+        # even when their syntax and ipFamilies agree.
+        for address, family in (('127.0.0.1', 'IPv4'), ('169.254.1.2', 'IPv4'),
+                                ('::1', 'IPv6'), ('fe80::1', 'IPv6')):
+            for field in ('clusterIP', 'clusterIPs'):
+                kube = FakeKubernetes(ready=True)
+                reference = FakeKubernetes(ready=True)
+                def changed(value):
+                    if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                            value['spec'].get('externalIPs')):
+                        return reference.smoke_request(value)
+                    reply = copy.deepcopy(value)
+                    reply['spec'][field] = address if field == 'clusterIP' else [address]
+                    reply['spec']['ipFamilies'] = [family]
+                    return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+                kube.smoke_failure = changed
+                with self.subTest(address=address, field=field):
+                    with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                        policy.smoke(kube, items())
+                    self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_accepts_address_matching_family(self):
         for address, family in (('192.0.2.1', 'IPv4'), ('2001:db8::1', 'IPv6')):
             kube = FakeKubernetes(ready=True)
