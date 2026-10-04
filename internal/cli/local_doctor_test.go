@@ -3255,6 +3255,31 @@ func TestLocalExperimentScopeRejectsRemoteOrMalformedEndpoints(t *testing.T) {
 	}
 }
 
+func TestLocalExperimentScopeRejectsLookalikeLoopbackEndpoints(t *testing.T) {
+	// A dedicated context name alone cannot make a non-loopback or scoped
+	// endpoint local. Do not resolve hostnames or accept numeric lookalikes.
+	for _, endpoint := range []string{
+		"https://127.0.0.1.example:6443", "https://localhost.example:6443",
+		"https://127.0.0.1.:6443", "https://0177.0.0.1:6443",
+		"https://[::1%25lo0]:6443", "https://[2001:db8::1]:6443",
+		"https://192.0.2.1:6443",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			runner := &fakeRunner{responses: []fakeResponse{{output: endpoint}}}
+			check := checkLocalExperimentScope(context.Background(), runner, localExperimentContext)
+			if check.Status != "degraded" || len(runner.calls) != 1 {
+				t.Fatalf("lookalike endpoint accepted: %#v calls=%v", check, runner.calls)
+			}
+		})
+	}
+	for _, endpoint := range []string{"https://127.0.0.2:6443", "https://[0:0:0:0:0:0:0:1]:6443"} {
+		check := checkLocalExperimentScope(context.Background(), &fakeRunner{responses: []fakeResponse{{output: endpoint}}}, localExperimentContext)
+		if check.Status != "healthy" {
+			t.Fatalf("literal loopback rejected: %s: %#v", endpoint, check)
+		}
+	}
+}
+
 func TestLocalLakehouseRejectsMissingStaleOrFailedWorkloads(t *testing.T) {
 	cases := []struct {
 		name string

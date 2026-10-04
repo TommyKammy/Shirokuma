@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.232"
+version: "5.233"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent local-doctor endpoint boundary (offline)
+
+WP-L0-GITOPS-001: fake context outputs confirm the unchanged doctor degrades
+seven loopback lookalikes or remote endpoints, and accepts two additional
+literal loopbacks. Focused/full Go tests (888), vet and design-context (89
+documents) passed. Colima was observed stopped; no live API/Git read,
+reconciliation, saved-request replay, retained data/backup mutation or GitHub
+write. These fixtures cannot authenticate the context, prove atomic state,
+clear strict admission or establish operator acceptance. Revert only this
+independent test if necessary; keep prior evidence. Direct original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-05: embedded-IPv4 IPv6 Service claims (offline)
 

@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.136"
+version: "0.137"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent loopback endpoint lookalikes (offline)
+
+The unchanged local doctor degrades seven fake remote, scoped or hostname
+lookalike API endpoints even with the dedicated context name, and accepts two
+additional literal loopback addresses. Focused and full Go tests (888) and vet
+passed. No DNS resolution, live API/Git read or reconciliation occurred;
+Colima was observed stopped. Synthetic context output cannot authenticate the
+actual cluster or Git source, establish atomic inventory, clear strict admission
+or grant operator acceptance. Revert only this independent test if necessary;
+preserve historical evidence. Direct original Vault sync remains pending.
 
 ## 2026-10-05: independent dev ReplicaFailure ambiguity (offline)
 
