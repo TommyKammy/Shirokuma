@@ -29,17 +29,27 @@ func localControllerJSON() string {
 
 func TestLocalFluxRequiresControllerAPIVersion(t *testing.T) {
 	for _, version := range []string{``, `"v1"`, `null`} {
-		replacement := ``
-		if version != `` {
-			replacement = `"apiVersion":` + version + `,`
+		for _, name := range []string{"source-controller", "notification-controller"} {
+			replacement := ``
+			if version != `` {
+				replacement = `"apiVersion":` + version + `,`
+			}
+			member := healthyLocalWorkload("Deployment", "flux-system", name)
+			controllers := strings.Replace(localControllerJSON(), member,
+				strings.Replace(member, `"apiVersion":"apps/v1",`, replacement, 1), 1)
+			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+				{output: controllers}, {output: localFluxJSON()},
+			}}, localExperimentContext, true)
+			if check.Status != "degraded" {
+				t.Fatalf("%s API version %q accepted: %#v", name, version, check)
+			}
 		}
-		controllers := strings.Replace(localControllerJSON(), `"apiVersion":"apps/v1",`, replacement, 1)
-		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
-			{output: controllers}, {output: localFluxJSON()},
-		}}, localExperimentContext, true)
-		if check.Status != "degraded" {
-			t.Fatalf("controller API version %q accepted: %#v", version, check)
-		}
+	}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: localControllerJSON()}, {output: localFluxJSON()},
+	}}, localExperimentContext, true)
+	if check.Status != "informational" {
+		t.Fatalf("valid controller versions rejected: %#v", check)
 	}
 }
 

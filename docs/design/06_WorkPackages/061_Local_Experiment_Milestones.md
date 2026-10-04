@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.182"
+version: "5.183"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent last-controller GitOps identity (offline)
+
+WP-L0-GITOPS-001: extended the fixed local Flux doctor regression to exercise
+missing, wrong and null API versions on the last controller as well as the
+first. All six fake inventory cases degrade; the unchanged complete list remains
+informational. No reader behavior changed. Focused Go test, full Go tests (857),
+vet and diff check passed. Dedicated Colima remained stopped. No live inventory,
+reconciliation, retained data/backup mutation, unknown-request replay or GitHub
+write. Offline fixtures do not authenticate producers, prove atomic inventory,
+clear strict admission or establish operator acceptance. Revert only the test
+extension if necessary, preserving old evidence. Direct original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-04: legacy Pod lifecycle and Service traffic hints (offline)
 

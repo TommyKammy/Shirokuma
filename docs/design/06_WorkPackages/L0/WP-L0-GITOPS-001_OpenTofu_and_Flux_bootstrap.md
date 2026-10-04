@@ -5,12 +5,26 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.107"
+version: "0.108"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: last Flux controller API-version regression (offline)
+
+Independently of the policy smoke changes, the fixed-profile Flux doctor was
+checked against a missing, wrong or null API version on the **last** of four
+controllers, not only the first. The existing guard degrades each fake list;
+the valid list remains informational. No doctor implementation changed. The
+focused Go test, `go test ./... -count=1` (857 tests), `go vet ./...` and diff
+check passed. Dedicated Colima remained stopped; no live inventory, Git/API
+write, reconciliation, retained data/backup mutation or unknown-request replay.
+These fixtures cannot authenticate remote identity, prove atomic inventory,
+clear strict admission or establish acceptance. Roll back only this test
+extension if needed; preserve saved evidence. Original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-04: local lakehouse workload API-version identity (offline)
 
