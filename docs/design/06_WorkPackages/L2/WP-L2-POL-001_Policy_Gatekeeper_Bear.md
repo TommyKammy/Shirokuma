@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.86"
+version: "0.87"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: bounded default Pod tolerations (offline)
+
+The fixed Pod's successful fake dry-run previously accepted an added scheduling
+toleration. A negative advanced to later cases before repair. The comparison
+now permits absent/empty tolerations or at most one each of the exact standard
+300-second NoExecute not-ready/unreachable defaults; arbitrary, duplicate,
+changed-effect and boolean-duration tolerations fail. This is an offline
+defaulting assumption, not a live API observation. Native policy tests and
+local regression passed. Dedicated Colima was observed stopped; no request
+replay, retained data/backup mutation or GitHub write. Producer authenticity,
+full effective-object equality, strict admission and operator acceptance remain
+open. Revert only this helper and regression if necessary, preserving saved
+intents. Direct original Vault sync remains pending outside the checkout.
 
 ## 2026-10-04: fixed-name dry-run reply metadata (offline)
 

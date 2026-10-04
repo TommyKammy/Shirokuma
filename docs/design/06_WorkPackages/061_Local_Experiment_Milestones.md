@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.215"
+version: "5.216"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: bounded Pod tolerations and independent Flux Stalled duplicates (offline)
+
+WP-L2-POL-001: an unsubmitted fake successful Pod toleration advanced beyond
+the first smoke case before repair. The fixed comparator now accepts only absent,
+empty or the two distinct standard NoExecute 300-second default tolerations;
+arbitrary/duplicate/malformed scheduling permissions are refused. Native 67-test
+suite and `make verify-local-experiment` passed. Independently WP-L0-GITOPS-001 pins
+the unchanged doctor's degraded result for identical or contradictory duplicate
+optional-catalog Stalled conditions; focused and full Go tests, vet,
+design-context (89 documents), secret-filename and diff checks passed. Dedicated Colima
+was observed stopped. No live API/inventory, saved request replay, reconciliation,
+retained data/backup mutation or GitHub write. Offline defaults are assumptions;
+producer authenticity, full effective-object equality, atomic inventory, strict
+admission and operator acceptance remain open. Roll back only the scoped guard/
+test or independent Flux regression, retaining saved evidence. Direct original
+Vault sync remains pending outside the checkout.
 
 ## 2026-10-04: fixed-name dry-run metadata and independent FinOps review (offline)
 

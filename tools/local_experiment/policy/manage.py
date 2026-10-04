@@ -454,6 +454,25 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                 same_json(left, right) for left, right in zip(actual, expected))
         return actual == expected
 
+    def default_tolerations_only(actual):
+        # Kubernetes may add these two NoExecute defaults to an otherwise
+        # untolerated Pod. Other scheduling permissions were not submitted.
+        if actual is None:
+            return True
+        if type(actual) is not list or len(actual) > 2:
+            return False
+        expected = ({'key': key, 'operator': 'Exists', 'effect': 'NoExecute',
+                     'tolerationSeconds': 300}
+                    for key in ('node.kubernetes.io/not-ready', 'node.kubernetes.io/unreachable'))
+        remaining = list(expected)
+        for item in actual:
+            match = next((index for index, default in enumerate(remaining)
+                          if same_json(item, default)), None)
+            if match is None:
+                return False
+            remaining.pop(match)
+        return True
+
     spec = value.get('spec')
     if type(spec) is not dict:
         return False
@@ -511,6 +530,7 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                   'resourceClaims', 'schedulingGates')) or
              spec.get('imagePullSecrets') not in (None, []) or
              spec.get('nodeSelector') not in (None, {}) or
+              not default_tolerations_only(spec.get('tolerations')) or
               spec.get('affinity') not in (None, {}) or
               spec.get('topologySpreadConstraints') not in (None, []) or
               spec.get('overhead') not in (None, {}) or

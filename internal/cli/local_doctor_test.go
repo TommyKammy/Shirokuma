@@ -354,6 +354,23 @@ func TestLocalFluxOptionalCatalogRejectsDuplicateReconciliationCondition(t *test
 	}
 }
 
+func TestLocalFluxOptionalCatalogRejectsDuplicateStalledCondition(t *testing.T) {
+	const ready = `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}`
+	const cleared = `{"type":"Stalled","status":"False","observedGeneration":1}`
+	for _, extra := range []string{cleared, `{"type":"Stalled","status":"True","observedGeneration":1}`} {
+		resources := strings.Replace(localFluxJSON(), ready+`]}`, ready+`,`+cleared+`,`+extra+`]}`, 1)
+		if resources == localFluxJSON() {
+			t.Fatal("catalog fixture was not changed")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: resources},
+		}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("duplicate Stalled %s accepted: %#v", extra, check)
+		}
+	}
+}
+
 func TestLocalFluxControllerRejectsRepeatedAvailable(t *testing.T) {
 	const available = `{"type":"Available","status":"True"}`
 	for _, extra := range []string{available, `{"type":"Available","status":"False"}`} {
