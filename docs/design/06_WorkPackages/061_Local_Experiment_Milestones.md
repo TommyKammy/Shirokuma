@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.180"
+version: "5.181"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Service internal-routing reply controls (offline)
+
+WP-L2-POL-001: four fake successful Service replies added client-IP affinity,
+affinity configuration, not-ready endpoint publication or Local internal traffic
+routing and reached later cases before repair. The fixed-corpus comparison now
+refuses them after the second fake request. Native suite passed (33 tests), as
+did design-context and secret-filename checks. Dedicated Colima remained
+stopped. No live admission, unknown-request replay, retained data/backup
+mutation or GitHub write. Offline replies cannot authenticate the producer,
+prove full object equality, clear strict admission or establish operator
+acceptance. Revert only this guard/test if necessary; preserve pending intents
+and evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: legacy Pod DNS and hostname reply controls (offline)
 

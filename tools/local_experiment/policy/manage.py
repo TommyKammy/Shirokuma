@@ -435,8 +435,12 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                  spec.get('externalName') in (None, '') and
                  spec.get('loadBalancerIP') in (None, '') and
                  spec.get('loadBalancerSourceRanges') in (None, []) and
-                 spec.get('selector') in (None, {}) and
-                type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
+                  spec.get('selector') in (None, {}) and
+                  spec.get('sessionAffinity', 'None') == 'None' and
+                  spec.get('sessionAffinityConfig') is None and
+                  spec.get('publishNotReadyAddresses', False) is False and
+                  spec.get('internalTrafficPolicy', 'Cluster') == 'Cluster' and
+                 type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
                 all(type(port) is dict and type(port.get('port')) is int and
                     port['port'] == expected['port'] and
                     type(port.get('targetPort')) is int and

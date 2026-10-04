@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.62"
+version: "0.63"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Service internal-routing reply controls (offline)
+
+Four separate fake successful replies added client-IP affinity, affinity
+configuration, not-ready endpoint publication or Local internal traffic routing
+to the fixed ClusterIP Service. Each reached later smoke cases before repair;
+the bounded comparator now refuses them after the second request and tolerates
+only the inert Kubernetes defaults. Native suite (33 tests), design-context and
+secret-filename checks passed. Lab remained stopped; no live request, retained
+data/backup mutation or unknown-request replay. This comparison does not
+authenticate the producer or establish full effective-object equality, strict
+admission or operator acceptance. Revert only the guard/test if necessary and
+preserve old evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: legacy Pod DNS and hostname reply controls (offline)
 
