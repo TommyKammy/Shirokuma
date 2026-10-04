@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.191"
+version: "5.192"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent Flux version and FinOps equal-time controls (offline)
+
+WP-L0-GITOPS-001: the resource API-version regression now covers each of the
+three named Kustomizations as well as the source; 12 missing/wrong/null fake
+variants degrade without changing the doctor. Focused test, full Go suite
+(859) and vet passed. Separately WP-L6-FIN-001 pins existing refusal of
+reversed selection indices at equal observation timestamps; the unchanged
+saved pair renders and 191 FinOps tests passed (seven Linux-only skips).
+Dedicated Colima was read-only observed stopped. No live API, reconciliation,
+collection, unknown-request replay, retained report/volume/backup mutation or
+GitHub write. AgentHouse usage remains `null / NOT_MEASURED`. Offline fixtures
+cannot authenticate producers, establish atomic state, measure current usage,
+clear strict admission or establish operator acceptance. Revert only the two
+test extensions if needed, preserving historical evidence. Direct original
+Vault synchronization remains pending outside the approved checkout.
 
 ## 2026-10-04: independent legacy Service dual-stack reply control (offline)
 

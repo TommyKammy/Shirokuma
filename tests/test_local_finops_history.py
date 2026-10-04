@@ -106,6 +106,14 @@ class HistoryTests(unittest.TestCase):
             with self.subTest(indices=[item[0] for item in invalid]), self.assertRaises(H.HistoryError):
                 H.render(invalid)
 
+    def test_direct_renderer_preserves_input_order_for_equal_observation_times(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        self.assertEqual([index for index, _ in entries], [0, 1])
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
+        # Equal timestamps must not be used to reorder the original selection.
+        with self.assertRaises(H.HistoryError):
+            H.render(list(reversed(entries)))
+
     def test_direct_renderer_refuses_boolean_and_float_selection_aliases(self):
         entries = H.parse(encoded([report(), report(processes())]))
         for alias in (False, 0.0):

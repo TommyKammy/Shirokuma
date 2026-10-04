@@ -86,22 +86,27 @@ func localFluxJSON() string {
 }
 
 func TestLocalFluxRequiresResourceAPIVersion(t *testing.T) {
-	for _, tc := range []struct{ kind, expected string }{
-		{"GitRepository", "source.toolkit.fluxcd.io/v1"},
-		{"Kustomization", "kustomize.toolkit.fluxcd.io/v1"},
+	for _, tc := range []struct{ kind, name, expected string }{
+		{"GitRepository", "flux-system", "source.toolkit.fluxcd.io/v1"},
+		{"Kustomization", "flux-system", "kustomize.toolkit.fluxcd.io/v1"},
+		{"Kustomization", "shirokuma-catalog", "kustomize.toolkit.fluxcd.io/v1"},
+		{"Kustomization", "shirokuma-dev", "kustomize.toolkit.fluxcd.io/v1"},
 	} {
 		for _, version := range []string{"", "v1", "null"} {
-			original := `"apiVersion":"` + tc.expected + `","kind":"` + tc.kind + `"`
-			replacement := `"kind":"` + tc.kind + `"`
+			original := `"apiVersion":"` + tc.expected + `","kind":"` + tc.kind + `","metadata":{"name":"` + tc.name + `"`
+			replacement := `"kind":"` + tc.kind + `","metadata":{"name":"` + tc.name + `"`
 			if version != "" {
 				replacement = `"apiVersion":` + version + `,` + replacement
 			}
 			resources := strings.Replace(localFluxJSON(), original, replacement, 1)
+			if resources == localFluxJSON() {
+				t.Fatalf("fixture did not contain %s/%s", tc.kind, tc.name)
+			}
 			check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
 				{output: localControllerJSON()}, {output: resources},
 			}}, localExperimentContext, true)
 			if check.Status != "degraded" {
-				t.Fatalf("%s version %q accepted: %#v", tc.kind, version, check)
+				t.Fatalf("%s/%s version %q accepted: %#v", tc.kind, tc.name, version, check)
 			}
 		}
 	}

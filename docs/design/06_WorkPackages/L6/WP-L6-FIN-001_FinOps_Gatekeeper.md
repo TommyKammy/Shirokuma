@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.67"
+version: "0.68"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: independent equal-time saved selection order (offline)
+
+A direct-render regression now pins refusal of reversing two different saved
+reports with equal observation timestamps: selection index remains the
+tie-breaker. The unchanged ordered pair renders. `make test-local-finops`
+passed 191 tests (seven Linux-only skips); no reader, report or collection
+changed. Dedicated Colima was observed stopped; AgentHouse usage stays `null /
+NOT_MEASURED`. This cannot authenticate saved producers, measure present usage
+or establish operator acceptance. Revert only the test if needed and retain
+reports. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: separate saved-history inspection after scope label fix (offline)
 
