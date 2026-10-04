@@ -4,13 +4,28 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-04
-version: "5.221"
+updated: 2026-10-05
+version: "5.222"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: denial wrapper and independent Flux source ambiguity (offline)
+
+WP-L2-POL-001: three fake same-line unrelated denial prefixes passed the native
+matcher before repair; the focused negative failed first, then 71 policy tests
+and `make verify-local-experiment` passed after restricting the wrapper to bare
+or kubectl Forbidden. Independently WP-L0-GITOPS-001 now pins the unchanged
+doctor's degraded result for duplicate Stalled/Reconciling source conditions;
+focused Go and full local regression passed. Dedicated Colima was observed
+stopped; no live API/Git inventory, replay, reconcile, retained data/backup
+mutation or GitHub write. Offline fixtures cannot authenticate producers or
+prove atomic inventory, full effective objects, strict admission or operator
+acceptance. Revert only the matcher/test or independent Flux test if needed;
+preserve saved evidence. Direct original Vault sync remains pending outside
+checkout.
 
 ## 2026-10-04: Pod-level resources and separate FinOps history review (offline)
 

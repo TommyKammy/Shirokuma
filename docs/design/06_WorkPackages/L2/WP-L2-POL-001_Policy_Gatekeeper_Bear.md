@@ -4,13 +4,27 @@ doc_id: "WP-L2-POL-001"
 title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-04
-version: "0.91"
+updated: 2026-10-05
+version: "0.92"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: bounded single-line denial wrapper (offline)
+
+A fake policy denial prefixed on the same line by an unrelated RBAC claim,
+BadRequest wrapper or warning passed the prior matcher; three focused negatives
+failed before repair. Only the bare dedicated denial or the observed kubectl
+`Error from server (Forbidden): ` wrapper now counts. Native policy tests (71)
+and `make verify-local-experiment` passed. Colima was observed stopped; no live
+dry-run or request replay, retained data/backup mutation or GitHub write. The
+strict wrapper is an offline assumption: if live kubectl emits another valid
+format, capture and evaluate it rather than widening to arbitrary prefixes.
+This does not authenticate the producer, clear strict admission or grant
+operator acceptance. Roll back only matcher/test if needed; preserve saved
+intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: fixed Pod-level resource reply control (offline)
 

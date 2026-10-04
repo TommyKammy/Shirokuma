@@ -1198,6 +1198,18 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(len(kube.calls), 3)
         self.assertEqual(events[-1]['result'], 'failed')
 
+    def test_denial_with_unrelated_single_line_prefix_is_not_a_policy_pass(self):
+        name = policy.NAMES[0]
+        message = 'Privileged containers are forbidden.'
+        denial = f"ValidatingAdmissionPolicy '{name}' with binding '{name}' denied request: {message}"
+        for stderr in (f'RBAC denied this request; {denial}',
+                       f'Error from server (BadRequest): {denial}',
+                       f'warning: admission was bypassed; {denial}'):
+            with self.subTest(stderr=stderr):
+                self.assertFalse(policy.own_denial(stderr, name, message))
+        self.assertTrue(policy.own_denial(denial, name, message))
+        self.assertTrue(policy.own_denial(f'Error from server (Forbidden): {denial}\n', name, message))
+
     def test_unrelated_rejection_halts_without_claiming_negative_success(self):
         kube = FakeKubernetes(ready=True)
         def bad(value):

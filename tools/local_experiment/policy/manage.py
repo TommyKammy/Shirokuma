@@ -382,9 +382,9 @@ def smoke_cases(image: str) -> list[dict]:
 def own_denial(stderr: str, name: str, message: str) -> bool:
     if name not in NAMES or not isinstance(message, str) or not message:
         return False
-    # kubectl may prefix the admission error, but a second diagnostic line is
-    # not evidence that this policy alone denied the request.
-    pattern = (r"[^\r\n]*ValidatingAdmissionPolicy ['\"]" + re.escape(name) + r"['\"] with binding ['\"]"
+    # Admit only the observed kubectl Forbidden wrapper (or the bare API
+    # denial). Arbitrary text on the same line is not policy evidence.
+    pattern = (r"(?:Error from server \(Forbidden\): )?ValidatingAdmissionPolicy ['\"]" + re.escape(name) + r"['\"] with binding ['\"]"
                + re.escape(name) + r"['\"] denied request: " + re.escape(message) + r'(?:\r?\n)?\Z')
     return bool(re.fullmatch(pattern, stderr))
 

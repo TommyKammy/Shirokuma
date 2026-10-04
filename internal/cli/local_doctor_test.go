@@ -415,6 +415,37 @@ func TestLocalFluxSourceRejectsRepeatedReady(t *testing.T) {
 	}
 }
 
+func TestLocalFluxSourceRejectsRepeatedReconciliationConditions(t *testing.T) {
+	const source = `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1}`
+	const ready = `"conditions":[{"type":"Ready","status":"True","observedGeneration":1}`
+	for _, condition := range []string{
+		`{"type":"Stalled","status":"False","observedGeneration":1}`,
+		`{"type":"Reconciling","status":"False","observedGeneration":1}`,
+	} {
+		original := localFluxJSON()
+		start := strings.Index(original, source)
+		if start < 0 {
+			t.Fatal("source fixture missing")
+		}
+		end := strings.Index(original[start:], `},{"apiVersion":"kustomize.toolkit.fluxcd.io/v1"`)
+		if end < 0 {
+			t.Fatal("source fixture missing")
+		}
+		member := original[start : start+end]
+		changed := strings.Replace(member, ready+`]`, ready+`,`+condition+`,`+condition+`]`, 1)
+		if changed == member {
+			t.Fatal("source conditions not changed")
+		}
+		resources := strings.Replace(original, member, changed, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: resources},
+		}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("repeated source reconciliation %s accepted: %#v", condition, check)
+		}
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)

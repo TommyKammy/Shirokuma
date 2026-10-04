@@ -4,13 +4,24 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-04
-version: "0.127"
+updated: 2026-10-05
+version: "0.128"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent duplicate source reconciliation (offline)
+
+An independent fake inventory now pins the unchanged doctor's degraded result
+for identical repeated cleared Stalled or Reconciling conditions on the fixed
+GitRepository source. Focused Go and full local regression passed. Dedicated
+Colima was observed stopped: no live Git/API inventory, reconciliation, retained
+data/backup mutation or GitHub write. This tests ambiguity refusal, not producer
+authenticity, atomic inventory, strict admission or operator acceptance. Revert
+only the test if necessary; preserve saved evidence. Original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-04: independent duplicate catalog Stalled (offline)
 
