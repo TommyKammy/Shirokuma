@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.213"
+version: "5.214"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: typed Pod resource and independent Flux duplicates (offline)
+
+WP-L2-POL-001: a synthetic submitted integer resource value was accepted when
+the fake reply substituted boolean true; the focused negative failed before
+the recursive typed comparison fix. Native 65 tests passed. Independently
+WP-L0-GITOPS-001 pins refusal of repeated cleared or stale optional-catalog
+Reconciling conditions; the unchanged doctor degrades at inventory completeness,
+not at a condition-specific diagnostic. Focused/full Go tests (872), vet and
+`make verify-local-experiment` passed. Dedicated Colima was observed stopped;
+no live API, reconciliation, replay, retained data/backup mutation or GitHub
+write. Neither fixture authenticates producers, proves atomic inventory or full
+effective-object equality, clears strict admission or grants operator acceptance.
+Revert only the scoped guard/test or independent Flux test if needed; retain
+saved evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent optional Flux reconciliation (offline)
 

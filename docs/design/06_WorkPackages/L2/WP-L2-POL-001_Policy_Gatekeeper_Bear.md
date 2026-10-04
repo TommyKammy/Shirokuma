@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.84"
+version: "0.85"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: typed submitted container resource reply (offline)
+
+A test-owned submitted resource value of integer `1` was accepted as boolean
+`true` in a fake successful Pod reply because Python dict equality conflated
+their values. The focused negative failed first; the scoped comparator now uses
+its existing recursive typed JSON equality for submitted resources. The fixed
+smoke corpus uses string quantities and was not changed. Native policy suite
+(65 tests), full local regression and Go suite/vet passed. Dedicated Colima was
+observed stopped; no live API, saved-request replay, retained data/backup
+mutation or GitHub write. This direct helper regression does not establish
+live resource defaulting, authenticated producers, full effective-object
+equality, strict admission or operator acceptance. Roll back only the resource
+comparison/test if necessary; preserve saved evidence. Original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-04: fixed Pod OS reply constraint (offline)
 

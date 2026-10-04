@@ -287,6 +287,15 @@ class SmokeTests(unittest.TestCase):
                 policy.smoke(kube, items())
             self.assertEqual(len(kube.calls), 1)
 
+    def test_pod_success_rejects_resource_json_type_alias(self):
+        kube = FakeKubernetes(ready=True)
+        submitted = policy.smoke_cases(kube.image())[0]['object']
+        submitted['spec']['containers'][0]['resources']['requests']['cpu'] = 1
+        reply = copy.deepcopy(submitted)
+        self.assertTrue(policy.smoke_success_scope(reply, submitted))
+        reply['spec']['containers'][0]['resources']['requests']['cpu'] = True
+        self.assertFalse(policy.smoke_success_scope(reply, submitted))
+
     def test_service_success_rejects_boolean_node_port_alias(self):
         kube = FakeKubernetes(ready=True)
         reference = FakeKubernetes(ready=True)

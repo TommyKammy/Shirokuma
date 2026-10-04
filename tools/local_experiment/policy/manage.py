@@ -557,7 +557,7 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
              actual.get('volumeMounts') in (None, []) and
              actual.get('volumeDevices') in (None, []) and
              actual.get('env') in (None, []) and actual.get('envFrom') in (None, []) and
-            actual.get('resources') == expected['resources'] and
+             same_json(actual.get('resources'), expected['resources']) and
             type(actual.get('securityContext')) is dict and
             all(same_json(actual['securityContext'].get(key), val)
                 for key, val in expected['securityContext'].items()) and
