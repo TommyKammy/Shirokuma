@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.162"
+version: "5.163"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: scoped policy and independent GitOps numeric underflow (offline)
+
+WP-L2-POL-001: three fake scoped JSON replies with nonzero values rounded to
+zero passed before repair. The reader rejects non-representable values while
+retaining genuine zero; 58 observer tests passed. Separately WP-L0-GITOPS-001:
+two fake inventory extensions with nonzero underflow passed before repair; the
+bounded decoder now retains number lexemes and rejects underflow as well as
+overflow, with genuine zero/finite exponent controls, 855 Go tests and vet
+passing. `make verify-local-experiment`, design-context (89 documents),
+secret-filename and diff checks passed. Its synthetic failure-path output is
+not live runtime evidence. The dedicated Colima profile was
+read-only observed stopped. No live admission, Git/API inventory, reconciliation,
+unknown-request replay, retained request/report/volume/backup change or GitHub
+write. Offline checks cannot authenticate producers, prove atomic inventory,
+clear strict admission or establish operator acceptance. Roll back only the
+two readers and regressions if needed; retain pending intents and historical
+evidence. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent escaped GitOps inventory keys (offline)
 

@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.104"
+version: "0.105"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: non-representable inventory numbers (offline)
+
+Two independently constructed complete-list replies with nonzero numeric
+underflow in ignored list/member extensions incorrectly passed the JSON token
+walk before repair. Both negative cases failed first; the decoder now retains
+number lexemes through the bounded walk and refuses zero-rounded nonzero and
+overflowing values, retaining genuine zero and finite exponent compatibility.
+Full Go tests (855) and vet passed. Dedicated Colima remained stopped; no Git/API inventory,
+reconciliation, retained volume or backup was touched. Fake lists do not
+authenticate remote state, prove atomic inventory, clear strict admission or
+establish acceptance. Roll back only the decoder/test if needed; keep saved
+evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: escaped duplicate inventory claims (offline)
 

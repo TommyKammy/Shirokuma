@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.49"
+version: "0.50"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: scoped API numeric underflow (offline)
+
+Three independent fake scoped API JSON replies contained nonzero exponents
+rounded to zero by Python's float parser, including ignored nested extensions.
+All three negative cases failed before repair. The reader now refuses such
+lossy values and accepts an actual zero exponent; 58 observer tests passed.
+No request was sent to the stopped dedicated lab and no retained data or
+backup was touched. Fake transport checks cannot authenticate the API, prove
+atomic inventory, clear strict admission or establish operator acceptance.
+Roll back only the parser and regression if needed, preserving saved pending
+intents without replay. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: dry-run success JSON numeric transport (offline)
 

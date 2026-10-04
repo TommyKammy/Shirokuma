@@ -2762,6 +2762,8 @@ func TestLocalLakehouseRejectsIncompleteAndDuplicateInventory(t *testing.T) {
 		{"non-json-member-extension", `{"items":[{"metadata":{"name":"other"},"extension":Infinity}]}`, "not valid JSON"},
 		{"overflow-list-extension", `{"items":[],"extension":{"value":1e999}}`, "incomplete"},
 		{"overflow-member-extension", `{"items":[{"metadata":{"name":"other"},"extension":-1e999}]}`, "incomplete"},
+		{"underflow-list-extension", `{"items":[],"extension":{"value":1e-999}}`, "incomplete"},
+		{"underflow-member-extension", `{"items":[{"metadata":{"name":"other"},"extension":-1e-999}]}`, "incomplete"},
 		{"wrong-api-version", `{"apiVersion":"v2","items":[]}`, "incomplete"},
 		{"duplicate", `{"items":[` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `,` + healthyLocalWorkload("StatefulSet", "shirokuma-storage", "seaweedfs") + `]}`, "duplicated"},
 	} {
@@ -2778,6 +2780,17 @@ func TestLocalLakehouseRejectsIncompleteAndDuplicateInventory(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLocalInventoryAllowsRepresentableExtensionNumbers(t *testing.T) {
+	for _, raw := range []string{
+		`{"items":[],"extension":{"value":0e-999}}`,
+		`{"items":[],"extension":{"value":1.25e2}}`,
+	} {
+		if !localInventoryUniqueFields([]byte(raw)) {
+			t.Fatalf("representable inventory extension refused: %s", raw)
+		}
 	}
 }
 

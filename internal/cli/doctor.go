@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -684,6 +686,7 @@ func localInventoryCanonicalFields(raw json.RawMessage, keys []string) bool {
 // identity, condition, or pagination field as a complete observation.
 func localInventoryUniqueFields(raw []byte) bool {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
 	// Unknown extensions are inspected too. Bound nesting before recursing so
 	// a malformed remote response cannot exhaust the doctor's stack.
 	const maxInventoryDepth = 64
@@ -695,6 +698,14 @@ func localInventoryUniqueFields(raw []byte) bool {
 		}
 		delim, ok := token.(json.Delim)
 		if !ok {
+			if number, ok := token.(json.Number); ok {
+				parsed, err := strconv.ParseFloat(string(number), 64)
+				mantissa := strings.SplitN(strings.ToLower(string(number)), "e", 2)[0]
+				if err != nil || math.IsInf(parsed, 0) || math.IsNaN(parsed) ||
+					(parsed == 0 && strings.ContainsAny(mantissa, "123456789")) {
+					return false
+				}
+			}
 			// Go also replaces malformed escaped surrogates in values. An
 			// ignored extension must not silently make a lossy list complete.
 			if text, ok := token.(string); ok && strings.ContainsRune(text, utf8.RuneError) {

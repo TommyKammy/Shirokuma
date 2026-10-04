@@ -188,8 +188,9 @@ class Kubernetes:
 
         def finite_float(raw):
             value = float(raw)
-            if not math.isfinite(value):
-                raise PolicyError('scoped Kubernetes response contains non-finite JSON number')
+            mantissa = re.split('[eE]', raw, maxsplit=1)[0]
+            if not math.isfinite(value) or (value == 0 and re.search('[1-9]', mantissa)):
+                raise PolicyError('scoped Kubernetes response contains non-representable JSON number')
             return value
 
         value = json.loads(result.stdout, object_pairs_hook=unique_keys,
