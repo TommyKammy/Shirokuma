@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.219"
+version: "5.220"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: unambiguous native denial and independent history review (offline)
+
+WP-L2-POL-001: matching a denial embedded in multi-line stderr previously
+advanced the fake smoke. Three negatives failed before repair; the scoped
+matcher now refuses extra error/duplicate lines while allowing a single-line
+kubectl prefix and terminal newline. The full fake smoke records failure at
+request three. Native policy suite (69), `make verify-local-experiment`,
+design-context (89 documents), secret-filename and diff checks passed.
+Independently, WP-L6-FIN-001 saved-history selection, digest and per-report
+storage coverage were reviewed without reader changes; 194 FinOps tests passed
+(seven Linux-only skips). Dedicated Colima was observed stopped; no live API,
+new collection, unknown-request replay, retained report/volume/backup mutation
+or GitHub write. AgentHouse usage remains `null / NOT_MEASURED`. Offline
+fixtures cannot authenticate producers, verify live kubectl denial format,
+establish atomic inventory/full effective-object equality, measure usage,
+clear strict admission or grant operator acceptance. Roll back only the scoped
+policy matcher/test if needed; preserve saved intents and reports. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: container restart rules and independent numeric history (offline)
 

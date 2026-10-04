@@ -5,12 +5,29 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.89"
+version: "0.90"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: single-line policy denial evidence (offline)
+
+The fixed native smoke previously counted a recognized admission denial even
+when stderr included an unrelated error before or after it, or repeated the
+denial. Three test-owned negatives failed before repair. The bounded denial
+matcher now allows a kubectl single-line prefix and optional terminal newline,
+but no second diagnostic line. A fake full smoke stops on its third request and
+records failure; 69 native tests, local regression, design-context and secret
+filename checks passed. Dedicated Colima was observed stopped; no live request,
+unknown-request replay, retained data/backup mutation or GitHub write. This
+cannot authenticate stderr's producer or verify live kubectl formatting;
+strict admission and operator acceptance remain open. If actual kubectl emits
+multiple legitimate lines, investigate the captured format before changing the
+matcher, rather than treating an ambiguous denial as a pass. Revert only this
+matcher/test if necessary, preserving saved intents. Original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-04: fixed container restart-rule reply control (offline)
 

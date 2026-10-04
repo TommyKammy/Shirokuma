@@ -1153,6 +1153,32 @@ class SmokeTests(unittest.TestCase):
             self.assertFalse(policy.own_denial(stderr, name, message))
         self.assertTrue(policy.own_denial(f'ValidatingAdmissionPolicy "{name}" with binding "{name}" denied request: {message}', name, message))
 
+    def test_denial_with_additional_error_lines_is_not_a_policy_pass(self):
+        name = policy.NAMES[0]
+        message = 'Privileged containers are forbidden.'
+        denial = f"ValidatingAdmissionPolicy '{name}' with binding '{name}' denied request: {message}"
+        for stderr in (f'Forbidden: unrelated failure\n{denial}',
+                       f'{denial}\nForbidden: unrelated failure',
+                       f'{denial}\n{denial}'):
+            with self.subTest(stderr=stderr):
+                self.assertFalse(policy.own_denial(stderr, name, message))
+        self.assertTrue(policy.own_denial(f'Error from server (Forbidden): {denial}\n', name, message))
+
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def mixed(value):
+            result = reference.smoke_request(value)
+            if result.returncode != 0:
+                return SimpleNamespace(returncode=1, stdout='',
+                                       stderr=result.stderr + '\nForbidden: unrelated failure')
+            return result
+        kube.smoke_failure = mixed
+        events = []
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items(), record=events.append)
+        self.assertEqual(len(kube.calls), 3)
+        self.assertEqual(events[-1]['result'], 'failed')
+
     def test_unrelated_rejection_halts_without_claiming_negative_success(self):
         kube = FakeKubernetes(ready=True)
         def bad(value):
