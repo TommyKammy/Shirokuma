@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.52"
+version: "0.53"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: Pod-level security context in legacy smoke (offline)
+
+Three fake successful Pod replies changed `runAsUser`, `runAsNonRoot`, or
+`seccompProfile` without changing the identity or container controls. Before
+the repair the smoke progressed to a third request; it now refuses each after
+the first. The focused native suite passed (24 tests). An initial test fixture
+also mutated a Service lacking Pod security context and raised KeyError; the
+fixture was corrected before confirming the regression. Dedicated Colima was
+observed stopped. No live request, saved replay, retained data or backup change.
+This compares fixed-corpus fields only, not full effective-object equality,
+API authenticity, strict admission or operator acceptance. Revert only the
+comparison/test if needed, keeping historical intents. Original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-04: legacy native smoke policy-feature comparison (offline)
 

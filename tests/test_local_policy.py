@@ -262,13 +262,18 @@ class SmokeTests(unittest.TestCase):
             lambda pod: pod['spec']['containers'][0].update(resources={}),
             lambda pod: pod['spec'].update(initContainers=[{'name': 'extra'}]),
             lambda pod: pod['spec']['containers'][0]['securityContext'].update(privileged=True),
+            lambda pod: pod['spec']['securityContext'].update(runAsUser=0),
+            lambda pod: pod['spec']['securityContext'].update(runAsNonRoot=False),
+            lambda pod: pod['spec']['securityContext'].update(seccompProfile={'type': 'Unconfined'}),
+            lambda pod: pod['spec']['containers'][0]['securityContext'].update(capabilities={'add': ['SYS_ADMIN'], 'drop': ['ALL']}),
             lambda pod: pod['spec']['containers'][0].update(ports=[{'hostPort': 8080}]),
         )
         for mutate in mutations:
             kube = FakeKubernetes(ready=True)
             def changed(value):
                 reply = copy.deepcopy(value)
-                mutate(reply)
+                if reply['kind'] == 'Pod':
+                    mutate(reply)
                 return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
             kube.smoke_failure = changed
             with self.subTest(mutation=mutate):

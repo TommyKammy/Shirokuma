@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.165"
+version: "5.166"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy smoke Pod security context (offline)
+
+WP-L2-POL-001: three disposable fake success replies changed the Pod's
+`runAsUser`, `runAsNonRoot` or seccomp profile while preserving name and
+container controls. Before repair the smoke reached a third fake request;
+the fixed-corpus comparison now rejects each at the first. Native focused
+tests passed (24). Dedicated Colima was observed stopped. An initially
+incorrect fixture tried to mutate a Service and errored; it was corrected
+before the actual failing regression was recorded. No live admission, replay,
+retained data/backup mutation or GitHub write. This is neither complete
+effective-object equality nor authenticated admission/strict/operator
+acceptance. Revert the comparator/test only; retain saved intents. Original
+Vault synchronization is pending outside checkout.
 
 ## 2026-10-04: independent direct FinOps history render boundary (offline)
 
