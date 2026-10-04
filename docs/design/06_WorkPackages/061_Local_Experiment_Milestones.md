@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.233"
+version: "5.234"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent Service-family and mapped-endpoint guards (offline)
+
+WP-L2-POL-001: two fake successful Service replies claimed an address without
+an `ipFamilies` entry and advanced before the bounded guard; three earlier
+positive fixtures were updated to supply the matching family. Policy focused
+80 tests and full local regression passed. WP-L0-GITOPS-001: an independently
+tested IPv4-mapped IPv6 loopback endpoint passed the doctor until a literal-form
+guard refused it; shortened/numeric IPv4 lookalikes already failed. Focused Go
+checks passed. Colima observed stopped; no live admission, Git/API inventory,
+reconcile, saved request replay, retained data/backup mutation or GitHub write.
+Actual Service defaulting and context authenticity remain unverified; no strict
+gate or operator acceptance claim. Revert only the scoped guards/tests if
+needed, preserving saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: independent local-doctor endpoint boundary (offline)
 

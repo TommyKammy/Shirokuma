@@ -77,7 +77,10 @@ func checkLocalExperimentScope(ctx context.Context, runner commandRunner, kubeCo
 		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
 	}
 	ip := net.ParseIP(endpoint.Hostname())
-	if endpoint.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
+	// IPv4-mapped IPv6 may report loopback after unmapping, but is not a
+	// literal address in either of the dedicated endpoint forms.
+	if (strings.Contains(endpoint.Hostname(), ":") && ip != nil && ip.To4() != nil) ||
+		(endpoint.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback())) {
 		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
 	}
 	return doctorCheck{Name: "local-scope", Status: "healthy", Summary: "Dedicated context uses a loopback HTTPS Kubernetes API endpoint; diagnostics are read-only"}

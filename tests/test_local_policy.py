@@ -721,6 +721,8 @@ class SmokeTests(unittest.TestCase):
                     return reference.smoke_request(value)
                 reply = copy.deepcopy(value)
                 reply['spec']['clusterIPs'] = addresses
+                if addresses:
+                    reply['spec']['ipFamilies'] = ['IPv6' if ':' in addresses[0] else 'IPv4']
                 return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
             kube.smoke_failure = changed
             with self.subTest(addresses=addresses):
@@ -752,7 +754,8 @@ class SmokeTests(unittest.TestCase):
                     value['spec'].get('externalIPs')):
                 return reference.smoke_request(value)
             reply = copy.deepcopy(value)
-            reply['spec'].update(clusterIP='192.0.2.1', clusterIPs=['192.0.2.1'])
+            reply['spec'].update(clusterIP='192.0.2.1', clusterIPs=['192.0.2.1'],
+                                 ipFamilies=['IPv4'])
             return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
         kube.smoke_failure = changed
         self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
@@ -796,6 +799,27 @@ class SmokeTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
             kube.smoke_failure = changed
             with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
+    def test_service_success_rejects_address_without_family(self):
+        # A claimed allocation without ipFamilies cannot be checked against
+        # the fixed single-stack Service's address family.
+        for field, address in (('clusterIP', '192.0.2.1'),
+                               ('clusterIPs', ['192.0.2.1'])):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                        value['spec'].get('externalIPs')):
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'][field] = address
+                reply['spec'].pop('ipFamilies', None)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(field=field):
                 with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)

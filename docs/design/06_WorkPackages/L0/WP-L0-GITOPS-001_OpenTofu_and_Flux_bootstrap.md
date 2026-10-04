@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.137"
+version: "0.138"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: mapped loopback endpoint ambiguity (offline)
+
+An independent fake context endpoint using IPv4-mapped IPv6 loopback passed
+the local doctor before the literal-form guard; two shortened/numeric IPv4
+lookalikes were already rejected. Focused Go tests pass after refusing the
+mapped form while preserving ordinary IPv4/IPv6 literal loopbacks. This is
+offline parsing only: context identity, live API/Git provenance, strict gate
+and operator acceptance remain unverified. Colima stayed stopped; no reconcile,
+retained data/backup change or GitHub write. Roll back only the guard/test if
+necessary and preserve historical evidence. Original Vault sync pending.
 
 ## 2026-10-05: independent loopback endpoint lookalikes (offline)
 

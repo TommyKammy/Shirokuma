@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.99"
+version: "0.100"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: Service reply address-family evidence (offline)
+
+Two fake successful fixed-Service replies claimed a ClusterIP in one address
+field without `ipFamilies`; both advanced before the fail-closed guard. The
+three older positive fixtures were made explicit about the matching family;
+an address-free reply still permits omitted family. Focused policy tests (80)
+and local regression passed. This assumes an allocated Service reply declares
+its family; actual API defaulting remains unverified. Colima remained stopped;
+no live admission, saved request replay, retained data/backup mutation or
+GitHub write. This does not prove response authenticity, CIDR allocation,
+effective-object equality or operator acceptance. Revert only the family guard
+and fixtures if live evidence contradicts the assumption; preserve saved
+intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: embedded-IPv4 IPv6 ClusterIP refusal (offline)
 

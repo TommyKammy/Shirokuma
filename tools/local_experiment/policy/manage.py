@@ -434,6 +434,8 @@ def service_address_family_consistent(spec: dict) -> bool:
     addresses = ([spec['clusterIP']] if spec.get('clusterIP') else [])
     if type(spec.get('clusterIPs')) is list:
         addresses += spec['clusterIPs']
+    if addresses and expected_version is None:
+        return False
     for address in addresses:
         # Python's ipaddress accepts IPv6 interface zone identifiers, but a
         # Service ClusterIP is a plain address, never an interface-scoped one.
