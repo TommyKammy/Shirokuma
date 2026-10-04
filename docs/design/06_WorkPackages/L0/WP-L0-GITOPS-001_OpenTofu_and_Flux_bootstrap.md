@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.122"
+version: "0.123"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: independent duplicate controller Available (offline)
+
+A fake controller inventory confirms the unchanged local doctor degrades both
+identical and contradictory duplicate `Available` conditions. Focused/full Go
+tests (869), vet and local regression passed. Dedicated Colima was observed
+stopped; no live inventory or
+reconciliation, retained data/backup mutation or GitHub write. Fake inventory
+does not authenticate producers, prove atomic state, clear strict admission or
+grant operator acceptance. Revert only this test if needed, preserving prior
+evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-04: identical optional catalog Ready duplicates (offline)
 

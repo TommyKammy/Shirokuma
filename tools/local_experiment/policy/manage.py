@@ -544,9 +544,11 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
     return (all(actual.get(key) == expected[key] for key in ('name', 'image', 'imagePullPolicy', 'command')) and
             actual.get('args') in (None, []) and actual.get('workingDir', '') == '' and
              actual.get('lifecycle') is None and
-              all(actual.get(field) is None for field in
-                  ('livenessProbe', 'readinessProbe', 'startupProbe')) and
-              actual.get('terminationMessagePath', '/dev/termination-log') == '/dev/termination-log' and
+               all(actual.get(field) is None for field in
+                   ('livenessProbe', 'readinessProbe', 'startupProbe')) and
+               actual.get('restartPolicy') is None and
+               actual.get('resizePolicy') in (None, []) and
+               actual.get('terminationMessagePath', '/dev/termination-log') == '/dev/termination-log' and
               actual.get('terminationMessagePolicy', 'File') == 'File' and
               actual.get('stdin', False) is False and actual.get('tty', False) is False and
              actual.get('stdinOnce', False) is False and

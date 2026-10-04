@@ -821,6 +821,29 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
 
+    def test_pod_success_does_not_add_container_restart_or_resize_controls(self):
+        for field, injected in (
+            ('restartPolicy', 'Always'),
+            ('resizePolicy', [{'resourceName': 'cpu', 'restartPolicy': 'RestartContainer'}]),
+        ):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['containers'][0][field] = injected
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
+        submitted = policy.smoke_cases('example.test/image@sha256:' + 'a' * 64)[0]['object']
+        for defaults in ({}, {'resizePolicy': []}):
+            reply = copy.deepcopy(submitted)
+            reply['spec']['containers'][0].update(defaults)
+            self.assertTrue(policy.smoke_success_scope(reply, submitted))
+
     def test_pod_success_does_not_add_resource_claims_or_scheduling_gates(self):
         for field, injected in (
             ('resourceClaims', [{'name': 'device', 'resourceClaimName': 'device-claim'}]),

@@ -311,6 +311,22 @@ func TestLocalFluxOptionalCatalogRejectsRepeatedIdenticalReady(t *testing.T) {
 	}
 }
 
+func TestLocalFluxControllerRejectsRepeatedAvailable(t *testing.T) {
+	const available = `{"type":"Available","status":"True"}`
+	for _, extra := range []string{available, `{"type":"Available","status":"False"}`} {
+		controllers := strings.Replace(localControllerJSON(), available, available+`,`+extra, 1)
+		if controllers == localControllerJSON() {
+			t.Fatal("controller fixture was not changed")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: controllers}, {output: localFluxJSON()},
+		}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("repeated Available %s accepted: %#v", extra, check)
+		}
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)

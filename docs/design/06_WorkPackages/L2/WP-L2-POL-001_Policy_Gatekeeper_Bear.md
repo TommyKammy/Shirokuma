@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.81"
+version: "0.82"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed Pod container restart/resize reply controls (offline)
+
+Two fake successful replies introduced unsubmitted container `restartPolicy`
+or `resizePolicy` and reached later smoke cases before repair. The fixed-corpus
+reply check now refuses both, while accepting absent and empty resize defaults.
+The negative failed before repair; native policy tests (62) passed afterward.
+Dedicated Colima was read-only observed stopped; no API request, unknown-request
+replay, retained data/backup mutation or GitHub write. This does not authenticate
+the producer, verify live defaulting, prove full effective-object equality,
+strict admission or operator acceptance. Revert only this guard/test if needed;
+preserve pending intents. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: explicit Pod host binding helper (offline)
 

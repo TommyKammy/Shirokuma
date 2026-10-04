@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.209"
+version: "5.210"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: container reply controls and independent Flux duplicates (offline)
+
+WP-L2-POL-001: fake successful Pod replies adding container restart/resize
+controls advanced before a fixed-corpus guard rejected them; absent/empty resize
+defaults remain accepted. The negative failed before repair; 62 native tests
+passed. Independently WP-L0-GITOPS-001 pins the unchanged doctor's degraded
+result for identical or contradictory duplicate controller Available conditions
+in fake inventory. Focused/full Go tests (869), vet,
+`make verify-local-experiment`, design-context (89 documents) and
+secret-filename scan passed; synthetic failure-path output is not live
+evidence. Dedicated Colima was read-only
+observed stopped; no live API/inventory, reconciliation, unknown-request replay,
+retained data/backup mutation or GitHub write. Offline checks cannot authenticate
+producers, prove full effective-object equality or atomic inventory, clear strict
+admission or grant operator acceptance. Revert only the scoped policy guard/test
+or independent Flux test if needed; preserve saved evidence. Original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-04: independent identical Flux Ready duplicates (offline)
 
