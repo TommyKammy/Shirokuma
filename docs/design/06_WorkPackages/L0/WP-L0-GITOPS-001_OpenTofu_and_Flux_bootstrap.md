@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.116"
+version: "0.117"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: optional catalog current Ready boundary (offline)
+
+An independent fake-list regression pins the unchanged doctor's degraded
+result when the present optional catalog has a stale, failed, or missing Ready
+condition. The earlier absent and current-ready cases remain separate. Focused
+Go checks, full Go suite and vet passed. Dedicated Colima stayed stopped; no
+live inventory or reconciliation, request replay, retained data/backup mutation
+or GitHub write. A fake status does not authenticate the producer, prove an
+atomic list, clear strict admission or establish operator acceptance. Revert
+only this test if necessary, preserving historical evidence. Direct original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-04: present optional Flux catalog readiness (offline)
 
