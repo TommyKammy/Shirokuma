@@ -318,6 +318,22 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
 
+    def test_pod_success_does_not_accept_injected_identity_or_placement(self):
+        for mutation in ({'serviceAccountName': 'privileged'},
+                         {'nodeName': 'other-node'},
+                         {'imagePullSecrets': [{'name': 'other-secret'}]},
+                         {'dnsPolicy': 'Default'}):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                reply['spec'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
     def test_deep_success_extension_is_a_failed_case(self):
         kube = FakeKubernetes(ready=True)
         def deep(value):

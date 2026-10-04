@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.55"
+version: "0.56"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Pod identity and placement reply controls (offline)
+
+Four test-owned successful replies injected a service account, node binding,
+image pull secret or alternate DNS policy; each advanced through the fake smoke
+before repair. The fixed-corpus success check now rejects these changes, while
+allowing the inert Kubernetes default service account and ClusterFirst DNS.
+The regression failed first and then the 26 native tests and local regression
+passed. The dedicated Colima profile was observed stopped. No live API call,
+request replay, retained report/volume/backup mutation or GitHub write. This
+is not full effective-object equality, authenticated admission, strict-gate or
+operator acceptance. Roll back only this comparator/test if needed; preserve
+pending intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: legacy Service routing reply comparison (offline)
 
