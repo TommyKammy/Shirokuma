@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.169"
+version: "5.170"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Service routing reply controls (offline)
+
+WP-L2-POL-001: two fake successful replies changed a Service's protocol or
+selector while preserving its existing checked fields and advanced to the
+remaining corpus. The negative failed before repair; the fixed-corpus
+comparator now requires TCP, no new selector, and integer port identities.
+Native policy tests (25) and `make verify-local-experiment` passed; expected
+synthetic failure output is not live evidence. Dedicated Colima was observed
+stopped. No live API, unknown-request replay, retained volume/backup change or
+GitHub write. This is not full effective-object equality, authenticated API,
+strict admission or operator acceptance. Revert only the comparator/test if
+needed; retain pending intents. Original Vault sync remains pending outside
+the checkout.
 
 ## 2026-10-04: legacy smoke namespace/host-alias controls (offline)
 

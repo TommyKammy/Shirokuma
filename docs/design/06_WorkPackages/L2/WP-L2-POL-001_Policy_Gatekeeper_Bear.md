@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.54"
+version: "0.55"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Service routing reply comparison (offline)
+
+A test-owned successful Service reply could change TCP to UDP or introduce a
+selector while keeping the checked port numbers and identity; both advanced
+through the remaining fake corpus before repair. The fixed-corpus comparison
+now requires TCP (including its Kubernetes default), no added selector, and
+integer port identities rather than boolean equivalents. The two negative
+cases failed before repair; 25 native tests and `make verify-local-experiment`
+passed after repair. Dedicated Colima was observed stopped; no live admission,
+saved request replay, retained data/backup mutation or GitHub write. This is
+not full effective-object equality or authenticated API/strict/operator
+acceptance. Roll back only the scoped comparator and regression if needed;
+preserve pending intents. Direct original Vault synchronization remains
+pending outside this checkout.
 
 ## 2026-10-04: Pod namespace and host-alias dry-run controls (offline)
 

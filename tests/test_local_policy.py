@@ -283,8 +283,12 @@ class SmokeTests(unittest.TestCase):
 
     def test_service_success_does_not_accept_public_service_mutation(self):
         for mutate in (lambda service: service['spec'].update(type='LoadBalancer'),
-                       lambda service: service['spec'].update(externalIPs=['192.0.2.1']),
-                       lambda service: service['spec']['ports'][0].update(nodePort=30001)):
+                        lambda service: service['spec'].update(externalIPs=['192.0.2.1']),
+                        lambda service: service['spec']['ports'][0].update(nodePort=30001),
+                        lambda service: service['spec']['ports'][0].update(protocol='UDP'),
+                        lambda service: service['spec']['ports'][0].update(port=True),
+                        lambda service: service['spec']['ports'][0].update(targetPort=True),
+                        lambda service: service['spec'].update(selector={'app': 'other'})):
             kube = FakeKubernetes(ready=True)
             reference = FakeKubernetes(ready=True)
             def changed(value):
