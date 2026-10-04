@@ -4,13 +4,23 @@ doc_id: "WP-L6-FIN-001"
 title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-04
-version: "0.76"
+updated: 2026-10-05
+version: "0.77"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: separate saved-history inspection (offline)
+
+Independently reviewed direct saved-report selection, digest validation,
+chronology and per-report storage rendering. No new defect established and no
+reader or retained report changed. `make test-local-finops` passed 194 tests
+(seven Linux-only skips). Colima was observed stopped; no collection or retained
+volume/backup mutation. AgentHouse usage remains `null / NOT_MEASURED`;
+producer authenticity, present usage and operator acceptance remain unverified.
+No runtime rollback; preserve saved reports. Original Vault sync pending.
 
 ## 2026-10-04: separate saved-history review after resource guard (offline)
 

@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.223"
+version: "5.224"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: Flux ambiguity coverage and separate FinOps inspection (offline)
+
+WP-L0-GITOPS-001: expanded independent fake inventories to cover duplicate
+Available conditions on all four fixed controllers and contradictory duplicate
+Stalled/Reconciling source conditions. Unchanged doctor degrades each; focused
+and full Go tests/vet plus `make verify-local-experiment` passed. Separately WP-L6-FIN-001 saved selection, canonical
+digest, chronology and per-report storage scope were inspected without reader
+changes; 194 FinOps tests passed (seven Linux-only skips). Dedicated Colima was
+observed stopped. No live inventory/reconciliation, collection, unknown-request
+replay, retained data/backup mutation or GitHub write. AgentHouse usage stays
+`null / NOT_MEASURED`. Offline tests cannot authenticate producers, establish
+atomic inventory, measure current usage, clear strict admission or establish
+operator acceptance. Revert only Flux test extensions if needed; preserve saved
+reports and intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: malformed policy success text and independent Flux duplicates (offline)
 

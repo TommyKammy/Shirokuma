@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.129"
+version: "0.130"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent condition ambiguity coverage (offline)
+
+The unchanged doctor degrades identical and contradictory duplicate Available
+conditions on each of the four fixed controllers, and duplicate cleared versus
+current Stalled/Reconciling conditions on the fixed source. The expanded fake
+inventories remain independent of live Git/API state. Focused and full Go tests
+and vet passed. Colima was observed stopped; no live inventory or reconciliation,
+retained data/backup mutation or GitHub write. No producer authenticity, atomic
+inventory, strict admission or operator acceptance is established. Revert only
+the test extension if necessary, preserving saved evidence. Original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-05: independent duplicate controller Progressing (offline)
 
