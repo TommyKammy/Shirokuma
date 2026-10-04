@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.79"
+version: "0.80"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: Pod port comparator boundary (offline)
+
+The fixed smoke Pod has no ports, but the comparator helper previously accepted
+changed containerPort/protocol, injected hostIP and boolean hostPort when a
+submitted Pod did declare a port. A direct synthetic submitted-port regression
+failed in all four cases before repair. The helper now preserves submitted port
+fields and permits only inert absent/default hostPort, hostIP and protocol
+values. Native policy suite (60 tests) passed. Dedicated Colima was read-only
+observed stopped; no live API, unknown-request replay, retained data/backup
+mutation or GitHub write. This extends helper safety, not the fixed corpus or
+live defaulting evidence; producer identity, full effective-object equality,
+strict admission and operator acceptance remain open. Revert only this helper
+and test if needed; preserve pending requests. Original Vault sync pending.
 
 ## 2026-10-04: fixed Pod termination message controls (offline)
 

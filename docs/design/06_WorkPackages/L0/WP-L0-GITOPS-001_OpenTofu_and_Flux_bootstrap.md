@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.120"
+version: "0.121"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: optional catalog conflicting Ready (offline)
+
+An independent fake-list regression confirms the unchanged local doctor
+degrades a present optional catalog reporting a second conflicting Ready
+condition (False or stale), rather than trusting the first current True. No
+reader behavior changed. Focused/full Go tests (867) and vet passed.
+Dedicated Colima was observed stopped; no live
+inventory, reconciliation, retained data/backup mutation or GitHub write.
+This fake inventory cannot authenticate API/Git or establish atomic state,
+strict admission or operator acceptance. Revert only the scoped test if
+needed; retain earlier evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: optional catalog incomplete conditions (offline)
 

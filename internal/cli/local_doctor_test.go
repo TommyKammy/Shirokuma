@@ -274,6 +274,27 @@ func TestLocalFluxOptionalCatalogRejectsIncompleteConditions(t *testing.T) {
 	}
 }
 
+func TestLocalFluxOptionalCatalogRejectsConflictingReady(t *testing.T) {
+	const ready = `{"type":"Ready","status":"True","observedGeneration":1}`
+	const catalog = `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[` + ready + `]}`
+	for _, extra := range []string{
+		`{"type":"Ready","status":"False","observedGeneration":1}`,
+		`{"type":"Ready","status":"True","observedGeneration":0}`,
+	} {
+		resources := strings.Replace(localFluxJSON(), catalog,
+			`"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[`+ready+`,`+extra+`]}`, 1)
+		if resources == localFluxJSON() {
+			t.Fatal("catalog fixture was not changed")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: resources},
+		}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("conflicting Ready accepted: %#v", check)
+		}
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)

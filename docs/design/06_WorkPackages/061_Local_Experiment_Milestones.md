@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.206"
+version: "5.207"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: scoped Pod port helper and independent Flux Ready (offline)
+
+WP-L2-POL-001: a direct submitted-port comparator regression failed for four
+routing/type mutations before repair; the fixed portless smoke corpus remains
+unchanged. Native policy suite (60 tests) passed. Independently WP-L0-GITOPS-001
+pins the unchanged doctor's degraded result for contradictory optional catalog
+Ready conditions. Focused/full Go tests (867), vet, `make
+verify-local-experiment`, design-context (89 documents), secret-filename and
+diff checks passed. Synthetic failure-path output is not live evidence.
+Dedicated Colima was read-only observed stopped; no live
+API, reconciliation, unknown-request replay, retained data/backup mutation or
+GitHub write. Offline tests do not authenticate producers, prove full effective
+objects or atomic inventory, clear strict admission or establish operator
+acceptance. Roll back only the helper/test or independent Flux test if needed;
+preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-04: fixed Pod termination-message reply (offline)
 

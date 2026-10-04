@@ -561,8 +561,14 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
             actual['securityContext'].get('privileged', False) is False and
             type(actual.get('ports', [])) is list and
             len(actual.get('ports', [])) == len(expected.get('ports', [])) and
-            all(type(port) is dict and port.get('hostPort', 0) in (0, None)
-                for port in actual.get('ports', [])))
+             all(type(port) is dict and
+                 all(same_json(port.get(key), item) for key, item in submitted_port.items()) and
+                 set(port) - set(submitted_port) <= {'hostPort', 'hostIP', 'protocol'} and
+                 (port.get('hostPort') is None or
+                  (type(port['hostPort']) is int and port['hostPort'] == 0)) and
+                 port.get('hostIP', '') == '' and
+                 port.get('protocol', 'TCP') == submitted_port.get('protocol', 'TCP')
+                 for port, submitted_port in zip(actual.get('ports', []), expected.get('ports', []))))
 
 
 def smoke_dry_run_identity(value: dict, metadata: dict) -> bool:

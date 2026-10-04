@@ -886,6 +886,21 @@ class SmokeTests(unittest.TestCase):
             with self.subTest(defaults=defaults):
                 self.assertEqual(policy.smoke(kube, items())['passed_cases'], 15)
 
+    def test_pod_port_comparison_preserves_submitted_routing(self):
+        submitted = policy.smoke_cases('example.test/image@sha256:' + 'a' * 64)[0]['object']
+        submitted['spec']['containers'][0]['ports'] = [
+            {'containerPort': 8080, 'protocol': 'TCP'}]
+        reply = copy.deepcopy(submitted)
+        self.assertTrue(policy.smoke_success_scope(reply, submitted))
+        reply['spec']['containers'][0]['ports'][0]['hostPort'] = 0
+        self.assertTrue(policy.smoke_success_scope(reply, submitted))
+        for field, injected in (('hostPort', False), ('containerPort', 9090),
+                                ('protocol', 'UDP'), ('hostIP', '0.0.0.0')):
+            changed = copy.deepcopy(reply)
+            changed['spec']['containers'][0]['ports'][0][field] = injected
+            with self.subTest(field=field):
+                self.assertFalse(policy.smoke_success_scope(changed, submitted))
+
     def test_pod_success_does_not_change_lifetime_or_priority(self):
         for field, injected in (('terminationGracePeriodSeconds', 0),
                                 ('terminationGracePeriodSeconds', 3600),
