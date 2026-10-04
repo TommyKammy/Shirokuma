@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.60"
+version: "0.61"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: direct saved-history selection type (offline)
+
+An independent direct-render regression pins the existing rejection of
+boolean and floating selection indices that compare equal to integer zero.
+The original two reports still render; 20 focused history tests and 189 FinOps
+tests passed (seven Linux-only skips). No
+reader or renderer behavior changed, no collection or retained report/volume/
+backup mutation. The dedicated lab was observed stopped and AgentHouse usage
+remains `null / NOT_MEASURED`. This fixture cannot authenticate saved reports,
+measure current usage or establish operator acceptance. Revert only the test
+if necessary; preserve saved reports. Original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: direct saved-history deep-extension check (offline)
 

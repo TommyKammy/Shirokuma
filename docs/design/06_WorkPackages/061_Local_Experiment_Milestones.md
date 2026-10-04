@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.170"
+version: "5.171"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent FinOps selection type boundary (offline)
+
+WP-L6-FIN-001: a direct-render regression confirms that `False` and `0.0`
+cannot stand in for a saved-history selection index of integer zero, despite
+equal comparison in the preliminary index set. The original report pair still
+renders; 20 focused history tests and 189 FinOps tests passed (seven Linux-only
+skips). No FinOps reader/renderer change,
+collection or retained report/volume/backup mutation. AgentHouse usage remains
+`null / NOT_MEASURED`. The dedicated Colima lab was observed stopped. This
+test does not authenticate saved producers, measure current usage or establish
+operator acceptance. Roll back only the test if needed, preserving reports.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: legacy Service routing reply controls (offline)
 

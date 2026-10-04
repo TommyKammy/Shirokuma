@@ -92,9 +92,19 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual([item[0] for item in entries], [1, 0])
         self.assertIn('保存FinOps観測履歴', H.render(entries))
         for invalid in ([entries[0], entries[0]], list(reversed(entries)),
-                        [(2, entries[0][1]), entries[1]]):
+                         [(2, entries[0][1]), entries[1]]):
             with self.subTest(indices=[item[0] for item in invalid]), self.assertRaises(H.HistoryError):
                 H.render(invalid)
+
+    def test_direct_renderer_refuses_boolean_and_float_selection_aliases(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        for alias in (False, 0.0):
+            changed = [(alias, entries[0][1]), entries[1]]
+            # Both compare equal to integer zero, including in the preliminary
+            # set comparison; the explicit index type must still reject them.
+            with self.subTest(alias=alias), self.assertRaises(H.HistoryError):
+                H.render(changed)
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
 
     def test_repeated_saved_report_is_not_a_second_observation(self):
         first = report()
