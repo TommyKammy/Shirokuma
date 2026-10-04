@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.73"
+version: "0.74"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy success selector-label and port-name boundary (offline)
+
+The fixed smoke previously accepted fake successful Pod/Service responses with
+an extra unsubmitted label, or a named port on the fixed unnamed Service.
+Either can change selector-based routing while the submitted identity survives.
+The reply check now requires exact submitted labels and refuses a newly named
+port (absent/empty remains inert). Native 53 tests and the local regression
+passed. Dedicated Colima was observed stopped; no API requests, saved-request
+replay, retained data/backup mutation or GitHub write. This conservative fixed
+corpus check cannot authenticate the API, validate live defaulting, establish
+effective-object equality, clear strict admission or grant operator acceptance.
+Roll back only the scoped comparison/tests if necessary, preserving saved
+intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: legacy Service external routing defaults (offline)
 

@@ -493,8 +493,9 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                     port['port'] == expected['port'] and
                     type(port.get('targetPort')) is int and
                     port['targetPort'] == expected['targetPort'] and
-                    port.get('protocol', 'TCP') == 'TCP' and
-                    port.get('appProtocol') is None and
+                     port.get('protocol', 'TCP') == 'TCP' and
+                     port.get('name') in (None, '') and
+                     port.get('appProtocol') is None and
                     (port.get('nodePort') is None or
                      (type(port.get('nodePort')) is int and port['nodePort'] == 0))
                     for port, expected in zip(spec['ports'], original['ports'])))
@@ -589,8 +590,7 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
                        metadata.get('namespace') == case['object']['metadata']['namespace'] and
                        metadata.get('name') == case['object']['metadata']['name'] and
                        type(metadata.get('labels')) is dict and
-                       all(metadata['labels'].get(key) == label
-                           for key, label in case['object']['metadata']['labels'].items()) and
+                        metadata['labels'] == case['object']['metadata']['labels'] and
                        smoke_success_scope(value, case['object']))
         row = {'case': case['case'], 'result': 'passed' if passed else 'failed',
                'expected_policy': denied, 'server_dry_run': True,

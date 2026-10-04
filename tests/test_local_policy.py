@@ -320,6 +320,21 @@ class SmokeTests(unittest.TestCase):
                 policy.smoke(kube, items())
             self.assertEqual(len(kube.calls), 1 if kind == 'Pod' else 2)
 
+    def test_success_does_not_add_unsubmitted_selector_labels(self):
+        for kind in ('Pod', 'Service'):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != kind:
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['metadata']['labels']['app.kubernetes.io/name'] = 'other-workload'
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(kind=kind), self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                policy.smoke(kube, items())
+            self.assertEqual(len(kube.calls), 1 if kind == 'Pod' else 2)
+
     def test_success_does_not_accept_changed_policy_relevant_fields(self):
         mutations = (
             lambda pod: pod['spec']['containers'][0].update(image='unexpected:latest'),
@@ -405,8 +420,9 @@ class SmokeTests(unittest.TestCase):
                         lambda service: service['spec']['ports'][0].update(nodePort=30001),
                         lambda service: service['spec']['ports'][0].update(protocol='UDP'),
                         lambda service: service['spec']['ports'][0].update(port=True),
-                        lambda service: service['spec']['ports'][0].update(targetPort=True),
-                        lambda service: service['spec'].update(selector={'app': 'other'})):
+                         lambda service: service['spec']['ports'][0].update(targetPort=True),
+                         lambda service: service['spec']['ports'][0].update(name='other-route'),
+                         lambda service: service['spec'].update(selector={'app': 'other'})):
             kube = FakeKubernetes(ready=True)
             reference = FakeKubernetes(ready=True)
             def changed(value):

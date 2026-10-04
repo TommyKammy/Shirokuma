@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.197"
+version: "5.198"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy successful reply routing identifiers (offline)
+
+WP-L2-POL-001: fixed Pod/Service fake successes can no longer add an
+unsubmitted selector label or name the fixed unnamed Service port while
+passing the smoke check. Native 53 tests and `make verify-local-experiment`
+passed. Dedicated Colima was observed stopped; no live admission, unknown
+request replay, retained data/backup mutation or GitHub write. Offline checks
+cannot authenticate a producer, establish effective-object equality, clear
+strict admission or grant operator acceptance. Revert only the scoped guard
+and regression tests if needed; preserve pending intents. Original Vault sync
+remains pending outside the approved checkout.
 
 ## 2026-10-04: independent optional Flux absence (offline)
 
