@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.181"
+version: "5.182"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy Pod lifecycle and Service traffic hints (offline)
+
+WP-L2-POL-001: test-owned successful replies added a Pod active deadline or
+readiness gate and, independently, Service traffic distribution or port
+application protocol. Each passed the earlier fixed-corpus comparison and
+advanced to later fake requests before repair; all four are now refused after
+one Pod or two Service requests. The native 35-test suite passed. The dedicated
+Colima profile was observed stopped; no live API, unknown-request replay,
+retained data/backup mutation or GitHub write. This cannot authenticate the
+producer, establish full object equality, strict admission or operator
+acceptance. Revert the scoped comparator/tests only if necessary; preserve
+pending intents and previous evidence. Direct original Vault sync remains
+pending outside checkout.
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. Synthetic
+failure-path output in the local suite is not live admission evidence.
 
 ## 2026-10-04: legacy Service internal-routing reply controls (offline)
 

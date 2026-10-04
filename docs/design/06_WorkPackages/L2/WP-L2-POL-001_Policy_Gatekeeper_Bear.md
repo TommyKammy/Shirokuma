@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.63"
+version: "0.64"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Pod lifecycle and Service traffic hints (offline)
+
+Two fake successful Pod replies injected an active deadline or readiness gate;
+two independent Service replies injected traffic distribution or a per-port
+application protocol. All four advanced to later fake smoke cases before the
+fixed-corpus comparison refused them after the first Pod or second Service
+request. The native 35-test suite, `make verify-local-experiment`, design-context,
+secret-filename and diff checks passed. Dedicated Colima was read-only
+observed stopped; there was no live admission, pending-request replay, retained
+data/backup mutation or GitHub write. These subset checks do not authenticate
+the API, prove full effective-object equality, clear strict admission or grant
+operator acceptance. Revert only these guards/tests if necessary; preserve
+historical intents and evidence. Direct original Vault sync remains pending
+outside this checkout.
 
 ## 2026-10-04: legacy Service internal-routing reply controls (offline)
 

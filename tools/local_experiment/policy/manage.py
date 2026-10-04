@@ -440,12 +440,14 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                   spec.get('sessionAffinityConfig') is None and
                   spec.get('publishNotReadyAddresses', False) is False and
                   spec.get('internalTrafficPolicy', 'Cluster') == 'Cluster' and
-                 type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
+                  spec.get('trafficDistribution') is None and
+                  type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
                 all(type(port) is dict and type(port.get('port')) is int and
                     port['port'] == expected['port'] and
                     type(port.get('targetPort')) is int and
                     port['targetPort'] == expected['targetPort'] and
                     port.get('protocol', 'TCP') == 'TCP' and
+                    port.get('appProtocol') is None and
                     port.get('nodePort', 0) in (0, None)
                     for port, expected in zip(spec['ports'], original['ports'])))
     if submitted['kind'] != 'Pod':
@@ -471,6 +473,8 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
               spec.get('setHostnameAsFQDN', False) is not False or
               spec.get('enableServiceLinks', True) is not True or
               spec.get('hostUsers', True) is not True or
+              spec.get('activeDeadlineSeconds') is not None or
+              spec.get('readinessGates') not in (None, []) or
               spec.get('restartPolicy') != 'Never' or
              spec.get('automountServiceAccountToken') is not False or
              type(spec.get('securityContext')) is not dict or

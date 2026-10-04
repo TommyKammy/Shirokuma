@@ -300,6 +300,21 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
 
+    def test_pod_success_does_not_add_lifecycle_controls(self):
+        for mutation in ({'activeDeadlineSeconds': 1},
+                         {'readinessGates': [{'conditionType': 'example.invalid/ready'}]}):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
     def test_service_success_does_not_accept_public_service_mutation(self):
         for mutate in (lambda service: service['spec'].update(type='LoadBalancer'),
                         lambda service: service['spec'].update(externalIPs=['192.0.2.1']),
@@ -354,6 +369,25 @@ class SmokeTests(unittest.TestCase):
                     return reference.smoke_request(value)
                 reply = copy.deepcopy(value)
                 reply['spec'].update(mutation)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
+    def test_service_success_does_not_add_traffic_hints(self):
+        for mutation in ('distribution', 'application-protocol'):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if value['kind'] != 'Service':
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                if mutation == 'distribution':
+                    reply['spec']['trafficDistribution'] = 'PreferClose'
+                else:
+                    reply['spec']['ports'][0]['appProtocol'] = 'kubernetes.io/h2c'
                 return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
             kube.smoke_failure = changed
             with self.subTest(mutation=mutation):
