@@ -22,9 +22,25 @@ func healthyLocalWorkload(kind, namespace, name string) string {
 func localControllerJSON() string {
 	var controllers []string
 	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"} {
-		controllers = append(controllers, healthyLocalWorkload("Deployment", "flux-system", name))
+		controllers = append(controllers, strings.Replace(healthyLocalWorkload("Deployment", "flux-system", name), `{"kind":`, `{"apiVersion":"apps/v1","kind":`, 1))
 	}
 	return `{"items":[` + strings.Join(controllers, ",") + `]}`
+}
+
+func TestLocalFluxRequiresControllerAPIVersion(t *testing.T) {
+	for _, version := range []string{``, `"v1"`, `null`} {
+		replacement := ``
+		if version != `` {
+			replacement = `"apiVersion":` + version + `,`
+		}
+		controllers := strings.Replace(localControllerJSON(), `"apiVersion":"apps/v1",`, replacement, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: controllers}, {output: localFluxJSON()},
+		}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("controller API version %q accepted: %#v", version, check)
+		}
+	}
 }
 
 func localFluxJSON() string {
@@ -2282,13 +2298,13 @@ func TestLocalFluxRejectsWrongControllerIdentity(t *testing.T) {
 
 func TestLocalFluxRejectsWrongControllerAPIVersion(t *testing.T) {
 	for _, version := range []string{"v1", "batch/v1"} {
-		controllers := strings.Replace(localControllerJSON(), `"kind":"Deployment"`, `"apiVersion":"`+version+`","kind":"Deployment"`, 1)
+		controllers := strings.Replace(localControllerJSON(), `"apiVersion":"apps/v1"`, `"apiVersion":"`+version+`"`, 1)
 		runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
 		if check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true); check.Status != "degraded" || !strings.Contains(check.Summary, "source-controller") {
 			t.Fatalf("wrong controller version %q accepted: %#v", version, check)
 		}
 	}
-	controllers := strings.Replace(localControllerJSON(), `"kind":"Deployment"`, `"apiVersion":"apps/v1","kind":"Deployment"`, 1)
+	controllers := localControllerJSON()
 	if check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}, localExperimentContext, true); check.Status != "informational" {
 		t.Fatalf("apps/v1 controller rejected: %#v", check)
 	}
@@ -2366,7 +2382,7 @@ func TestLocalFluxRejectsDuplicateControllerWithoutReadingSources(t *testing.T) 
 	controllers := strings.Replace(localControllerJSON(), `"name":"notification-controller"`, `"name":"source-controller"`, 1)
 	runner := &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: localFluxJSON()}}}
 	check := checkFluxForProfile(context.Background(), runner, localExperimentContext, true)
-	if check.Status != "degraded" || !strings.Contains(check.Summary, "missing required") {
+	if check.Status != "degraded" || (!strings.Contains(check.Summary, "missing required") && !strings.Contains(check.Summary, "response was incomplete")) {
 		t.Fatalf("duplicate controller passed: %#v", check)
 	}
 	// A missing fixed controller is already sufficient to reject the inventory.

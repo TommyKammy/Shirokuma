@@ -920,7 +920,7 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 	for _, controller := range controllers.Items {
 		unready := controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas
 		if localExperiment {
-			unready = unready || (controller.APIVersion != "" && controller.APIVersion != "apps/v1") ||
+			unready = unready || controller.APIVersion != "apps/v1" ||
 				controller.Kind != "Deployment" || controller.Metadata.Namespace != "flux-system" ||
 				controller.Spec.Paused ||
 				controller.Metadata.DeletionTimestamp != "" ||

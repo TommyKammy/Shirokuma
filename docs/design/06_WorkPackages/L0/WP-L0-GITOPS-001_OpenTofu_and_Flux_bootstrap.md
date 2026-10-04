@@ -5,12 +5,30 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.105"
+version: "0.106"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: local Flux controller API-version identity (offline)
+
+The local doctor previously accepted a test-owned complete controller list
+whose source-controller omitted `apiVersion`. The negative failed before the
+fix; the fixed-profile check now requires `apps/v1`, including on all four
+controllers. Controller fixtures were updated to include their declared API
+version, and two existing tests adjusted to target that updated fixture.
+Focused Flux tests (80), full Go tests (856), vet, local regression,
+design-context and secret-filename checks passed. Ignored regression log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-106/verify-local.log`.
+Dedicated Colima
+was observed stopped; no live inventory, reconciliation, retained data or
+backup change. This does not authenticate remote identity, prove an atomic
+inventory, clear strict admission or establish operator acceptance. Generic
+doctor behavior is unchanged. Roll back the local-profile check/test only if
+needed; retain saved evidence. Original Vault synchronization remains pending
+outside checkout.
 
 ## 2026-10-04: non-representable inventory numbers (offline)
 

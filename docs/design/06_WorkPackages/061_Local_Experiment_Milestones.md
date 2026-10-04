@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.166"
+version: "5.167"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: local Flux controller API-version identity (offline)
+
+WP-L0-GITOPS-001: a complete test-owned list with a controller missing
+`apiVersion` was accepted before repair. The fixed local-profile Flux doctor
+now requires `apps/v1` for all four controllers, with compatible fixture and
+existing test updates. Focused Flux tests (80), full Go tests (856), vet,
+local regression, design-context and secret-filename checks passed. Ignored log:
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-106/verify-local.log`.
+The dedicated Colima profile was observed stopped. No live inventory,
+reconciliation, retained data/backup mutation or GitHub write. This fake
+inventory cannot authenticate a producer, prove atomic state, clear strict
+admission or establish operator acceptance. Generic doctor is unchanged.
+Revert the local-profile check/tests only; preserve evidence. Direct original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-04: legacy smoke Pod security context (offline)
 
