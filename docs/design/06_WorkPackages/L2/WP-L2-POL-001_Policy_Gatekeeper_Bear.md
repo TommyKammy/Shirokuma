@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.72"
+version: "0.73"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy Service external routing defaults (offline)
+
+Two fake successful fixed ClusterIP replies added `externalTrafficPolicy: Local`
+or a nonzero `healthCheckNodePort` and passed the previous comparison. The smoke
+now refuses both after the second request, while absent, inert `Cluster` and
+integer zero defaults still pass. Native policy suite (52 tests) and local
+regression passed. Dedicated Colima was observed stopped; no live admission,
+unknown-request replay, retained data/backup mutation or GitHub write. These
+offline replies do not authenticate the API, verify live defaulting, prove full
+effective-object equality, clear strict admission or establish operator
+acceptance. Revert only the scoped comparator/tests if needed, preserving
+historical intents and evidence. Direct original Vault sync remains pending
+outside the approved checkout.
 
 ## 2026-10-04: legacy Service address/family agreement (offline)
 

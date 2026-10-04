@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.195"
+version: "5.196"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: Service external routing and independent FinOps review (offline)
+
+WP-L2-POL-001: two fake successful ClusterIP replies with Local external
+routing or nonzero health-check port advanced through the corpus before repair;
+the scoped comparator now refuses them on the second request and retains inert
+defaults. The initial focused invocation used the wrong test class; corrected
+focused and full native 52 tests and `make verify-local-experiment` passed.
+Independently WP-L6-FIN-001 saved-history selection, digest/order and per-report
+storage cells were reviewed without a reader change; 191 FinOps tests passed
+(seven Linux-only skips). Dedicated Colima was read-only observed stopped; no
+live API, collection, pending-request replay, retained report/volume/backup
+mutation or GitHub write. AgentHouse usage remains `null / NOT_MEASURED`.
+Offline results cannot authenticate producers, prove complete effective-object
+equality, measure current usage, clear strict admission or grant operator
+acceptance. Revert only the scoped policy guard/tests if needed; keep saved
+reports and pending intents. Original Vault synchronization remains pending
+outside this checkout.
 
 ## 2026-10-04: Service address-family consistency and optional Flux scope (offline)
 

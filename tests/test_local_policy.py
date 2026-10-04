@@ -445,9 +445,11 @@ class SmokeTests(unittest.TestCase):
 
     def test_service_success_does_not_add_internal_routing_controls(self):
         for mutation in ({'sessionAffinity': 'ClientIP'},
-                         {'sessionAffinityConfig': {'clientIP': {'timeoutSeconds': 10800}}},
-                         {'publishNotReadyAddresses': True},
-                         {'internalTrafficPolicy': 'Local'}):
+                          {'sessionAffinityConfig': {'clientIP': {'timeoutSeconds': 10800}}},
+                          {'publishNotReadyAddresses': True},
+                          {'internalTrafficPolicy': 'Local'},
+                          {'externalTrafficPolicy': 'Local'},
+                          {'healthCheckNodePort': 30001}):
             kube = FakeKubernetes(ready=True)
             reference = FakeKubernetes(ready=True)
             def changed(value):
@@ -461,6 +463,23 @@ class SmokeTests(unittest.TestCase):
                 with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
+
+    def test_service_success_accepts_inert_external_routing_defaults(self):
+        for defaults in ({}, {'externalTrafficPolicy': 'Cluster'},
+                         {'healthCheckNodePort': 0},
+                         {'externalTrafficPolicy': 'Cluster', 'healthCheckNodePort': 0}):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                        value['spec'].get('externalIPs')):
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'].update(defaults)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(defaults=defaults):
+                self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
 
     def test_service_success_does_not_enable_dual_stack(self):
         for mutation in ({'ipFamilyPolicy': 'RequireDualStack'},

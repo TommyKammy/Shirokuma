@@ -469,9 +469,12 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                    spec.get('selector') in (None, {}) and
                   spec.get('sessionAffinity', 'None') == 'None' and
                   spec.get('sessionAffinityConfig') is None and
-                  spec.get('publishNotReadyAddresses', False) is False and
-                   spec.get('internalTrafficPolicy', 'Cluster') == 'Cluster' and
-                    spec.get('ipFamilyPolicy', 'SingleStack') == 'SingleStack' and
+                   spec.get('publishNotReadyAddresses', False) is False and
+                    spec.get('internalTrafficPolicy', 'Cluster') == 'Cluster' and
+                    spec.get('externalTrafficPolicy') in (None, 'Cluster') and
+                    (spec.get('healthCheckNodePort') is None or
+                     (type(spec['healthCheckNodePort']) is int and spec['healthCheckNodePort'] == 0)) and
+                     spec.get('ipFamilyPolicy', 'SingleStack') == 'SingleStack' and
                     ('ipFamilies' not in spec or
                      (type(spec['ipFamilies']) is list and len(spec['ipFamilies']) == 1 and
                       spec['ipFamilies'][0] in ('IPv4', 'IPv6'))) and
