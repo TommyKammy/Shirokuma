@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.220"
+version: "5.221"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: Pod-level resources and separate FinOps history review (offline)
+
+WP-L2-POL-001: an unsubmitted Pod-level resource request/limit advanced through
+the fake smoke before a scoped reply guard rejected it; the focused negative
+failed first, and the 70-test native policy suite passed after repair. Empty
+Pod-level defaults remain allowed as an offline assumption. Independently,
+WP-L6-FIN-001 saved-history selection, canonical digest, chronology and
+per-report storage cells were inspected without a reader change; 194 FinOps
+tests passed (seven Linux-only skips). `make verify-local-experiment` passed.
+Dedicated Colima was observed stopped; no live API, collection, unknown-request
+replay, retained report/volume/backup mutation or GitHub write. AgentHouse usage
+remains `null / NOT_MEASURED`. Offline checks cannot authenticate producers,
+prove complete effective-object equality, measure present usage, clear strict
+admission or grant operator acceptance. Revert only the policy guard/test if
+needed; preserve saved reports and intents. Direct original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-04: unambiguous native denial and independent history review (offline)
 

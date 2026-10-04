@@ -530,6 +530,7 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
              any(spec.get(key) not in (None, []) for key in
                  ('volumes', 'initContainers', 'ephemeralContainers', 'hostAliases',
                   'resourceClaims', 'schedulingGates')) or
+             spec.get('resources') not in (None, {}) or
              spec.get('imagePullSecrets') not in (None, []) or
              spec.get('nodeSelector') not in (None, {}) or
               not default_tolerations_only(spec.get('tolerations')) or

@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.90"
+version: "0.91"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed Pod-level resource reply control (offline)
+
+An unsubmitted nonempty Pod-level `spec.resources` in a fake successful dry-run
+advanced beyond the first smoke case before repair; the focused negative failed
+first. The fixed Pod reply now refuses added Pod-level requests/limits and
+malformed values, while allowing absent/null/empty defaults. Native policy
+suite (70) and local regression passed. Dedicated Colima was observed stopped;
+no live API, pending-request replay, retained volume/backup mutation or GitHub
+write. Empty defaulting is an offline assumption, not authenticated API evidence
+or complete effective-object equality. Strict admission and operator acceptance
+remain open. Revert only the scoped guard/test if necessary, preserving saved
+intents. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: single-line policy denial evidence (offline)
 
