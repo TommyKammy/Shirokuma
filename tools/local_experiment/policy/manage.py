@@ -517,6 +517,7 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
               spec.get('priorityClassName', '') != '' or
               (spec.get('priority') is not None and
                (type(spec['priority']) is not int or spec['priority'] != 0)) or
+              spec.get('preemptionPolicy', 'PreemptLowerPriority') != 'PreemptLowerPriority' or
               spec.get('runtimeClassName') is not None or
              spec.get('serviceAccountName', 'default') != 'default' or
              spec.get('serviceAccount', 'default') != 'default' or

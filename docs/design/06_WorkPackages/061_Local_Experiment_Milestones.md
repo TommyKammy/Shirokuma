@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.210"
+version: "5.211"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: Pod preemption and independent Flux source duplicates (offline)
+
+WP-L2-POL-001: fake successful Pod replies introduced `preemptionPolicy:
+Never`, boolean or explicit null and reached later requests before a fixed
+guard rejected them; absent/defaulted `PreemptLowerPriority` remains accepted.
+The negative failed before repair; 63 native tests passed. Independently
+WP-L0-GITOPS-001 pins the unchanged doctor's degraded result for identical
+or contradictory duplicate source Ready conditions. Focused and full Go tests,
+vet, `make verify-local-experiment`, design-context and secret-filename scan
+passed; synthetic failure-path output is not live evidence. Dedicated Colima
+was read-only observed stopped. No live API/inventory, reconciliation, saved
+request replay, retained data/backup mutation or GitHub write. Offline checks
+cannot authenticate producers, prove complete effective objects or atomic
+inventory, clear strict admission or grant operator acceptance. Roll back only
+the scoped policy guard/test or independent Flux test; retain saved evidence
+and pending intents. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: container reply controls and independent Flux duplicates (offline)
 

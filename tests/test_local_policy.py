@@ -844,6 +844,26 @@ class SmokeTests(unittest.TestCase):
             reply['spec']['containers'][0].update(defaults)
             self.assertTrue(policy.smoke_success_scope(reply, submitted))
 
+    def test_pod_success_does_not_change_preemption_policy(self):
+        for injected in ('Never', False, None):
+            kube = FakeKubernetes(ready=True)
+            def changed(value):
+                reply = copy.deepcopy(value)
+                if reply['kind'] == 'Pod':
+                    reply['spec']['preemptionPolicy'] = injected
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(injected=injected):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
+        submitted = policy.smoke_cases('example.test/image@sha256:' + 'a' * 64)[0]['object']
+        for default in ({}, {'preemptionPolicy': 'PreemptLowerPriority'}):
+            reply = copy.deepcopy(submitted)
+            reply['spec'].update(default)
+            self.assertTrue(policy.smoke_success_scope(reply, submitted))
+
     def test_pod_success_does_not_add_resource_claims_or_scheduling_gates(self):
         for field, injected in (
             ('resourceClaims', [{'name': 'device', 'resourceClaimName': 'device-claim'}]),

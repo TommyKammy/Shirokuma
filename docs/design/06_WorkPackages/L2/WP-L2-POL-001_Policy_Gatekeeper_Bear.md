@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.82"
+version: "0.83"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: fixed Pod preemption reply control (offline)
+
+Three fake successful Pod replies introduced `preemptionPolicy: Never`, a
+boolean or explicit null and advanced past the first case before repair. The
+fixed-corpus check now requires the absent or Kubernetes default
+`PreemptLowerPriority` value; the focused negative failed before repair and
+63 native policy tests passed afterward. The dedicated Colima profile was
+read-only observed stopped. No live API request, saved-request replay,
+retained data/backup mutation or GitHub write. This default is an offline
+assumption, not a live defaulting observation or proof of producer identity,
+complete effective-object equality, strict admission or operator acceptance.
+Rollback: revert only the scoped guard/test, retaining pending intents.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: fixed Pod container restart/resize reply controls (offline)
 

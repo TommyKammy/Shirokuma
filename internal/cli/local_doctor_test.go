@@ -327,6 +327,34 @@ func TestLocalFluxControllerRejectsRepeatedAvailable(t *testing.T) {
 	}
 }
 
+func TestLocalFluxSourceRejectsRepeatedReady(t *testing.T) {
+	const source = `"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1}`
+	const ready = `{"type":"Ready","status":"True","observedGeneration":1}`
+	for _, extra := range []string{ready, `{"type":"Ready","status":"False","observedGeneration":1}`} {
+		original := localFluxJSON()
+		start := strings.Index(original, source)
+		if start < 0 {
+			t.Fatal("source fixture missing")
+		}
+		end := strings.Index(original[start:], `},{"apiVersion":"kustomize.toolkit.fluxcd.io/v1"`)
+		if end < 0 {
+			t.Fatal("source boundary missing")
+		}
+		member := original[start : start+end]
+		changed := strings.Replace(member, `"conditions":[`+ready+`]`, `"conditions":[`+ready+`,`+extra+`]`, 1)
+		if changed == member {
+			t.Fatal("source conditions not changed")
+		}
+		resources := strings.Replace(original, member, changed, 1)
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: resources},
+		}}, localExperimentContext, true)
+		if check.Status != "degraded" {
+			t.Fatalf("repeated source Ready %s accepted: %#v", extra, check)
+		}
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)
