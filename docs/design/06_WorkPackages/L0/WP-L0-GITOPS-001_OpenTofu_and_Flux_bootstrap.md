@@ -5,12 +5,26 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.130"
+version: "0.131"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent dev workload condition duplicates (offline)
+
+The existing local doctor now has explicit fake-list regressions for identical
+and contradictory duplicate Available/Progressing conditions on both dev
+Deployments. A duplicate makes the shared dev inventory incomplete: all three
+dev checks degrade while the separate storage check remains healthy. A first
+test incorrectly assumed only the affected Deployment would degrade; corrected
+the assertion to match the actual list-level fail-closed contract. No doctor
+behavior changed. Dedicated Colima was observed stopped; no live inventory,
+reconciliation, retained data/backup mutation or GitHub write. These synthetic
+lists do not authenticate Kubernetes, establish atomic inventory or operator
+acceptance. Revert only this test if needed; retain saved evidence. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: independent condition ambiguity coverage (offline)
 

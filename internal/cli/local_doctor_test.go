@@ -2024,12 +2024,35 @@ func TestLocalFluxRejectsDuplicatedConditionTypes(t *testing.T) {
 }
 
 func TestLocalLakehouseRejectsDuplicatedConditionTypes(t *testing.T) {
-	responses := localWorkloadResponses()
-	for i := range responses {
-		responses[i].output = strings.Replace(responses[i].output, `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},{"type":"Available","status":"True"}`, 1)
-		checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
-		if i == 1 && checks[2].Status != "degraded" {
-			t.Fatalf("duplicate dev deployment condition accepted: %#v", checks)
+	for _, workload := range []struct{ name, check string }{{"polaris", "polaris"}, {"trino-local", "trino"}} {
+		for _, condition := range []string{"Available", "Progressing"} {
+			for _, status := range []string{"True", "False"} {
+				responses := localWorkloadResponses()
+				original := healthyLocalWorkload("Deployment", "shirokuma-dev", workload.name)
+				entry := fmt.Sprintf(`{"type":%q,"status":"True"}`, condition)
+				duplicate := fmt.Sprintf(`{"type":%q,"status":%q}`, condition, status)
+				mutated := strings.Replace(original, entry, entry+","+duplicate, 1)
+				if mutated == original || !strings.Contains(responses[1].output, original) {
+					t.Fatalf("missing target fixture %s %s", workload.name, condition)
+				}
+				responses[1].output = strings.Replace(responses[1].output, original, mutated, 1)
+				checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+				found := false
+				for _, check := range checks {
+					if check.Name == workload.check {
+						found = true
+						if check.Status != "degraded" {
+							t.Fatalf("%s duplicate %s=%s accepted: %#v", workload.name, condition, status, checks)
+						}
+					} else if check.Name == "seaweedfs" && check.Status != "healthy" ||
+						check.Name != "seaweedfs" && check.Status != "degraded" {
+						t.Fatalf("%s duplicate %s=%s unexpected inventory scope: %#v", workload.name, condition, status, checks)
+					}
+				}
+				if !found {
+					t.Fatalf("missing workload check %s: %#v", workload.check, checks)
+				}
+			}
 		}
 	}
 	checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: localWorkloadResponses()}, localExperimentContext)

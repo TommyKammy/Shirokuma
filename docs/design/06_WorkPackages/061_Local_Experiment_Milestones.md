@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.224"
+version: "5.225"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: dev workload duplicate-condition coverage (offline)
+
+WP-L0-GITOPS-001: independent fake dev lists now exercise repeated identical
+and contradictory Available/Progressing on Polaris and Trino Deployments.
+Unchanged doctor degrades the entire dev list but preserves the separate
+storage check; the initial test's target-only assumption failed and was
+corrected. Focused/full Go CLI tests and vet, `make verify-local-experiment`,
+and diff check passed. Separately WP-L6-FIN-001 direct saved-history binding,
+ordering and per-report storage scope were inspected with no reader change;
+194 FinOps tests passed (seven Linux-only skips). AgentHouse usage remains
+`null / NOT_MEASURED`. Dedicated Colima was observed stopped. No live inventory,
+reconciliation, retained data/backup mutation or GitHub write. Offline lists
+and saved reports cannot authenticate producers, prove atomic state, measure
+present usage, clear strict admission or
+establish operator acceptance. Revert only the test if necessary; preserve
+saved evidence and reports. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: Flux ambiguity coverage and separate FinOps inspection (offline)
 
