@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-04: remaining controller version regression (offline)
+
+The fixed local doctor now exercises absent, wrong and null API versions for
+the kustomize and helm controllers as well as the previously covered source and
+notification controllers. All fake variants degrade; the reader is unchanged.
+Focused Go test, full Go suite (857) and vet passed. The dedicated Colima
+profile was observed stopped; no live inventory, reconcile, unknown-request
+replay, retained data/backup mutation or GitHub write. Fake responses cannot
+authenticate Kubernetes/Git, prove atomic inventory, strict admission or
+operator acceptance. Rollback is this test extension only, retaining earlier
+evidence. Original Vault sync remains pending outside checkout.
+
 ## 2026-10-04: both namespace reads and last workload version (offline)
 
 The fixed-profile workload API-version regression now mutates a storage

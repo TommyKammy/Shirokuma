@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-04: remaining Flux controller version regression (offline)
+
+WP-L0-GITOPS-001: fake missing, wrong and null API versions now also cover
+kustomize-controller and helm-controller, completing the four fixed controller
+names in the existing version test. All degrade; no reader change. Focused Go
+test, full Go suite (857) and vet passed. Dedicated Colima remained stopped;
+no live API, reconcile, saved-request replay, retained data/backup mutation or
+GitHub write. Fake responses cannot authenticate Kubernetes or Git, prove
+atomic inventory, strict admission or operator acceptance. Revert only the
+test extension if needed; preserve historical evidence. Vault sync pending.
+
 ## 2026-10-04: independent legacy policy JSON type checks (offline)
 
 WP-L2-POL-001: fake successful Pod replies changed four submitted security

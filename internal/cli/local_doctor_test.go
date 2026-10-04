@@ -29,7 +29,7 @@ func localControllerJSON() string {
 
 func TestLocalFluxRequiresControllerAPIVersion(t *testing.T) {
 	for _, version := range []string{``, `"v1"`, `null`} {
-		for _, name := range []string{"source-controller", "notification-controller"} {
+		for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"} {
 			replacement := ``
 			if version != `` {
 				replacement = `"apiVersion":` + version + `,`
