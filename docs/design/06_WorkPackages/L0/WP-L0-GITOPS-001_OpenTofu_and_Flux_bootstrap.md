@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.124"
+version: "0.125"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: optional catalog reconciliation conditions (offline)
+
+An independent fake inventory confirms the unchanged doctor degrades a
+present optional catalog with current Stalled=True or Reconciling=Unknown,
+even if Ready=True. Cleared Stalled and stale Reconciling retain the fixed
+root's informational result. Focused/full Go tests and vet passed; Colima was
+observed stopped. No live Git/API inventory, reconciliation, retained data or
+backup mutation, or GitHub write. Fake responses cannot authenticate the
+producer, prove atomic inventory, strict admission or operator acceptance.
+Revert only this test if needed, retaining prior evidence. Direct original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent duplicate source Ready (offline)
 

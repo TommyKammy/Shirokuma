@@ -311,6 +311,30 @@ func TestLocalFluxOptionalCatalogRejectsRepeatedIdenticalReady(t *testing.T) {
 	}
 }
 
+func TestLocalFluxOptionalCatalogReportsUnresolvedReconciliation(t *testing.T) {
+	const ready = `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}`
+	for _, tc := range []struct {
+		condition string
+		status    string
+	}{
+		{`{"type":"Stalled","status":"True","observedGeneration":1}`, "degraded"},
+		{`{"type":"Reconciling","status":"Unknown","observedGeneration":1}`, "degraded"},
+		{`{"type":"Stalled","status":"False","observedGeneration":1}`, "informational"},
+		{`{"type":"Reconciling","status":"True","observedGeneration":0}`, "informational"},
+	} {
+		resources := strings.Replace(localFluxJSON(), ready+`]}`, ready+`,`+tc.condition+`]}`, 1)
+		if resources == localFluxJSON() {
+			t.Fatal("catalog fixture was not changed")
+		}
+		check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+			{output: localControllerJSON()}, {output: resources},
+		}}, localExperimentContext, true)
+		if check.Status != tc.status || (tc.status == "degraded" && !strings.Contains(check.Summary, "unresolved reconciliation")) {
+			t.Fatalf("optional catalog condition %s: %#v", tc.condition, check)
+		}
+	}
+}
+
 func TestLocalFluxControllerRejectsRepeatedAvailable(t *testing.T) {
 	const available = `{"type":"Available","status":"True"}`
 	for _, extra := range []string{available, `{"type":"Available","status":"False"}`} {

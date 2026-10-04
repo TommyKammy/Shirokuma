@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.212"
+version: "5.213"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent optional Flux reconciliation (offline)
+
+WP-L0-GITOPS-001: the unchanged doctor degrades current Stalled=True or
+Reconciling=Unknown on a present optional catalog even with Ready=True;
+cleared or stale controls remain informational. Focused and full Go tests,
+vet and `make verify-local-experiment` passed, as did the separate native
+policy suite (64 tests) for the earlier WP-L2-POL-001 guard. Dedicated Colima
+was observed stopped. No live API/inventory, reconciliation, unknown-request
+replay, retained data/backup mutation or GitHub write. Offline tests cannot
+authenticate producers, prove atomic inventory or full effective Pod equality,
+clear strict admission or establish operator acceptance. Revert only the
+independent Flux test if needed; preserve saved evidence. Original Vault sync
+remains pending outside this checkout.
 
 ## 2026-10-04: fixed Pod OS reply constraint (offline)
 
