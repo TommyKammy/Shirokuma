@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.80"
+version: "0.81"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: explicit Pod host binding helper (offline)
+
+A direct submitted-port fixture with an explicit hostPort/hostIP failed the
+comparator's positive check before repair: the helper incorrectly required the
+portless smoke corpus's inert host defaults even for submitted host bindings.
+It now preserves explicit submitted bindings by exact typed comparison, while
+still allowing only inert defaults when the input omits them. Four changed or
+malformed binding replies are refused; 61 native policy tests and
+`make verify-local-experiment` passed. Dedicated Colima was observed stopped;
+no live API, saved-request replay, retained data/backup mutation or GitHub
+write. This is helper coverage, not a new fixed smoke case or proof of live
+defaulting, producer identity, full effective-object equality, strict admission
+or operator acceptance. Revert only the helper/test if needed; keep historical
+intents. Direct original Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: Pod port comparator boundary (offline)
 

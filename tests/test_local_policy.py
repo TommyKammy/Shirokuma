@@ -901,6 +901,19 @@ class SmokeTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertFalse(policy.smoke_success_scope(changed, submitted))
 
+    def test_pod_port_comparison_preserves_explicit_host_binding(self):
+        submitted = policy.smoke_cases('example.test/image@sha256:' + 'a' * 64)[0]['object']
+        port = {'containerPort': 8080, 'hostPort': 18080, 'hostIP': '127.0.0.1'}
+        submitted['spec']['containers'][0]['ports'] = [port]
+        reply = copy.deepcopy(submitted)
+        self.assertTrue(policy.smoke_success_scope(reply, submitted))
+        for field, injected in (('hostPort', 0), ('hostPort', False),
+                                ('hostIP', ''), ('hostIP', '0.0.0.0')):
+            changed = copy.deepcopy(reply)
+            changed['spec']['containers'][0]['ports'][0][field] = injected
+            with self.subTest(field=field, injected=injected):
+                self.assertFalse(policy.smoke_success_scope(changed, submitted))
+
     def test_pod_success_does_not_change_lifetime_or_priority(self):
         for field, injected in (('terminationGracePeriodSeconds', 0),
                                 ('terminationGracePeriodSeconds', 3600),

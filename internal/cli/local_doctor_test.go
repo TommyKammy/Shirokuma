@@ -295,6 +295,22 @@ func TestLocalFluxOptionalCatalogRejectsConflictingReady(t *testing.T) {
 	}
 }
 
+func TestLocalFluxOptionalCatalogRejectsRepeatedIdenticalReady(t *testing.T) {
+	const ready = `{"type":"Ready","status":"True","observedGeneration":1}`
+	const original = `"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[` + ready + `]}`
+	changed := strings.Replace(localFluxJSON(), original,
+		`"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[`+ready+`,`+ready+`]}`, 1)
+	if changed == localFluxJSON() {
+		t.Fatal("catalog fixture was not changed")
+	}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: localControllerJSON()}, {output: changed},
+	}}, localExperimentContext, true)
+	if check.Status != "degraded" {
+		t.Fatalf("repeated identical Ready accepted: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)

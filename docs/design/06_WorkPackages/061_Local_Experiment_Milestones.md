@@ -5,12 +5,37 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.207"
+version: "5.209"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent identical Flux Ready duplicates (offline)
+
+WP-L0-GITOPS-001: an independent fake inventory confirms the unchanged doctor
+degrades a present optional catalog reporting two identical current Ready
+conditions. Focused and full Go tests (868), vet, design-context (89 documents)
+and secret-filename scan passed. Dedicated Colima was observed stopped; no live
+inventory/reconciliation, retained data/backup mutation or GitHub write.
+Offline responses cannot authenticate Git/API or prove atomic inventory,
+strict admission or operator acceptance. Revert only the test if needed;
+preserve evidence. Direct original Vault sync remains pending outside checkout.
+
+## 2026-10-04: submitted Pod host binding helper (offline)
+
+WP-L2-POL-001: a test-owned explicitly host-bound Pod port failed the prior
+helper's positive comparison. The fixed helper retains the submitted typed
+hostPort/hostIP and refuses four changed or malformed binding replies while
+preserving inert defaults for omitted fields. Native policy suite (61 tests)
+and `make verify-local-experiment` passed; its synthetic failure-path output
+is not live evidence. Dedicated Colima was read-only observed stopped; no live
+API, unknown-request replay, retained data/backup mutation or GitHub write.
+Offline checks do not authenticate the response or prove full effective-object
+equality, strict admission or operator acceptance. Roll back only the helper
+and test if necessary, keeping historical evidence. Original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-04: scoped Pod port helper and independent Flux Ready (offline)
 
