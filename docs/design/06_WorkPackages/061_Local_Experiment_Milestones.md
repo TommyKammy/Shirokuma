@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.173"
+version: "5.174"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy container execution and independent FinOps binding (offline)
+
+WP-L2-POL-001: five fake successful Pod replies injected args, workingDir,
+lifecycle, stdin or TTY and reached the third fake request before repair. The
+fixed-corpus comparator now rejects them after the first; 28 native tests
+passed. Independently WP-L6-FIN-001 pins existing direct saved-history refusal
+of a valid report modified after selection but paired with its old digest;
+the unchanged pair still renders (21 focused tests, 190 FinOps tests with
+seven Linux-only skips). `make verify-local-experiment` and diff check passed.
+Dedicated Colima was read-only observed stopped. No live admission, collection,
+unknown-request replay, retained request/report/volume/backup mutation or
+GitHub write. Offline fixtures cannot authenticate producers, prove full
+effective-object equality, measure current AgentHouse usage (`null /
+NOT_MEASURED`), clear strict admission or establish operator acceptance.
+Roll back the scoped policy guard/test or independent FinOps test only if
+necessary; preserve historical reports and pending intents. Direct original
+Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: legacy Pod scheduling/environment and separate FinOps review (offline)
 

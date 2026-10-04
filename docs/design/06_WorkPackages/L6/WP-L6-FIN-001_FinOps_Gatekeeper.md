@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.62"
+version: "0.63"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: direct saved-history report binding (offline)
+
+A separate direct-render regression changes a valid selected report's model
+name after parsing while retaining the original digest. Existing binding
+rejects it; the unchanged pair still renders. Focused history (21 tests) and
+`make test-local-finops` (190 tests, seven Linux-only skips) passed. No FinOps
+reader or retained report changed, no collection or retained volume/backup
+mutation; AgentHouse usage remains `null / NOT_MEASURED`. This cannot
+authenticate saved producers, measure current usage or establish operator
+acceptance. Revert only this test if needed, retaining historical reports.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent saved-history read-only review (offline)
 

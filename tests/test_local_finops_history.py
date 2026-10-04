@@ -46,6 +46,16 @@ class HistoryTests(unittest.TestCase):
                 H.render(changed)
         self.assertIn('保存FinOps観測履歴', H.render(entries))
 
+    def test_direct_renderer_refuses_valid_report_changed_after_selection(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        index, (original, digest) = entries[0]
+        changed = json.loads(json.dumps(original))
+        changed['inference']['groups'][0]['model_name'] = 'different-saved-model'
+        C.validate_public(changed)
+        with self.assertRaises(H.HistoryError):
+            H.render([(index, (changed, digest)), entries[1]])
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
+
     def test_direct_renderer_bounds_malformed_selection_shape(self):
         entries = H.parse(encoded([report(), report(processes())]))
         for malformed in ((), (0,), (0, ()), (0, (entries[0][1][0],)),
