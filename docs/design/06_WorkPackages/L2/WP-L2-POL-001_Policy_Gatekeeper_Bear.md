@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.51"
+version: "0.52"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: deeply nested native success transport (offline)
+
+A test-owned success with a 1100-level unknown extension raised an uncaught
+`RecursionError` after one fake dry-run rather than recording a failed case.
+The negative failed first; the bounded native success decoder now treats JSON
+decoder recursion failure as an invalid reply. Focused native suite: 22 tests.
+No live request was sent to the stopped dedicated lab; no saved intent, volume
+or backup was changed. This does not authenticate the API, compare effective
+objects, clear strict admission or establish acceptance. Roll back only the
+reader guard/test if needed, preserving pending intents without replay.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-04: native smoke API version identity (offline)
 

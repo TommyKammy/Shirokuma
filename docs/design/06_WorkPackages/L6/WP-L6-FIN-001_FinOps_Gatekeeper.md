@@ -5,12 +5,22 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.59"
+version: "0.60"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: independent saved-history nesting regression (offline)
+
+A test-owned two-report input with a 1100-level unknown extension is rejected
+as `FINOPS_HISTORY_INVALID` by the existing parser; the original pair still
+renders. Focused history: 18 tests. No FinOps reader or retained report changed,
+no collection or retained volume/backup mutation occurred. AgentHouse usage
+remains `null / NOT_MEASURED`. This cannot authenticate saved producers, measure
+present usage or establish acceptance. Roll back only the test if necessary;
+keep saved reports. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: representable saved-history subnormal boundary (offline)
 

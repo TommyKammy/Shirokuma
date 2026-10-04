@@ -165,6 +165,16 @@ class HistoryTests(unittest.TestCase):
         with self.assertRaises(H.HistoryError):
             H.parse(original.replace(b'0.5', b'2e-324', 1))
 
+    def test_deep_saved_extension_is_bounded_without_partial_html(self):
+        original = encoded([report(), report(processes())])
+        forged = original.replace(b'"inference": {',
+                                  b'"untrusted_extension": ' + b'[' * 1100 + b'0' + b']' * 1100 +
+                                  b', "inference": {', 1)
+        self.assertNotEqual(original, forged)
+        with self.assertRaises(H.HistoryError):
+            H.parse(forged)
+        self.assertIn('保存FinOps観測履歴', H.render(H.parse(original)))
+
     def test_overflowing_float_cannot_become_saved_infinite_measurement(self):
         original = encoded([report(), report(processes())])
         self.assertIn(b'0.5', original)

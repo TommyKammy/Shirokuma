@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.164"
+version: "5.165"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: native success nesting and independent FinOps boundary (offline)
+
+WP-L2-POL-001: a 1100-level extension on a fake successful dry-run caused an
+uncaught recursion error after one simulated request; the negative failed before
+the native success decoder began treating it as a failed case (22 native tests
+passed). Independently WP-L6-FIN-001 pins existing saved-history rejection of a
+deep unknown extension (18 focused history tests passed); no FinOps reader
+changed. Dedicated Colima read-only status returned not running. No live API,
+collection, unknown-request replay, retained report/request/volume/backup
+mutation or GitHub write. Offline checks cannot authenticate producers, prove
+effective-object equality, measure present usage, clear strict admission or
+grant operator acceptance. AgentHouse usage remains `null / NOT_MEASURED`.
+Revert only the native guard/test and independent FinOps test if needed;
+preserve saved reports and pending intents. Direct original Vault sync remains
+pending outside this checkout.
+`make verify-local-experiment`, `make test-local-finops` (187 tests, seven
+Linux-only skips), `make verify-design-context` (89 documents) and `make
+check-no-secret-filenames` passed. Expected synthetic failure output in the
+local suite is not live runtime evidence.
 
 ## 2026-10-04: native API-version identity and independent FinOps boundary (offline)
 

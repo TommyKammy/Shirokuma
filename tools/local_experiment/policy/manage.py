@@ -414,7 +414,7 @@ def smoke_success_object(response):
     try:
         value = json.loads(response.stdout, object_pairs_hook=unique,
                            parse_float=numeric, parse_constant=constant)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, RecursionError):
         return {}
     return value if type(value) is dict else {}
 

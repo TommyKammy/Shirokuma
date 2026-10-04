@@ -255,6 +255,17 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_deep_success_extension_is_a_failed_case(self):
+        kube = FakeKubernetes(ready=True)
+        def deep(value):
+            raw = json.dumps(value)
+            return SimpleNamespace(returncode=0, stderr='',
+                                   stdout=raw[:-1] + ',"extension":' + '[' * 1100 + '0' + ']' * 1100 + '}')
+        kube.smoke_failure = deep
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items())
+        self.assertEqual(len(kube.calls), 1)
+
     def test_success_with_wrong_api_version_is_not_a_pass(self):
         kube = FakeKubernetes(ready=True)
         reference = FakeKubernetes(ready=True)
