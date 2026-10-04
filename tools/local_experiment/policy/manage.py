@@ -522,9 +522,12 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
             passed = (response.returncode == 0 and type(metadata) is dict and
                       value.get('apiVersion') == case['object']['apiVersion'] and
                       value.get('kind') == case['object']['kind'] and
-                      metadata.get('namespace') == case['object']['metadata']['namespace'] and
-                      metadata.get('name') == case['object']['metadata']['name'] and
-                      smoke_success_scope(value, case['object']))
+                       metadata.get('namespace') == case['object']['metadata']['namespace'] and
+                       metadata.get('name') == case['object']['metadata']['name'] and
+                       type(metadata.get('labels')) is dict and
+                       all(metadata['labels'].get(key) == label
+                           for key, label in case['object']['metadata']['labels'].items()) and
+                       smoke_success_scope(value, case['object']))
         row = {'case': case['case'], 'result': 'passed' if passed else 'failed',
                'expected_policy': denied, 'server_dry_run': True,
                'namespace': case['object']['metadata']['namespace'],

@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.184"
+version: "5.185"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: legacy success scope label and independent FinOps inspection (offline)
+
+WP-L2-POL-001: successful fake Pod/Service replies with changed submitted
+scope labels advanced to later cases before repair. The fixed smoke now refuses
+both; 37 native policy tests passed. Independently, WP-L6-FIN-001 direct saved
+history binding, selection order and storage scope were inspected without a
+reader change; 190 FinOps tests passed (seven Linux-only skips). Dedicated
+Colima was observed stopped. No live admission, collection, unknown-request
+replay, retained report/volume/backup mutation or GitHub write. AgentHouse
+usage remains `null / NOT_MEASURED`. Offline tests cannot authenticate API or
+saved producers, prove full object equality, measure current usage, clear
+strict admission or establish operator acceptance. Revert only the policy
+guard/test if needed; preserve intents and historical reports. Direct original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-04: legacy Pod topology and overhead reply controls (offline)
 

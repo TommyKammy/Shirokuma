@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.65"
+version: "0.66"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: legacy success scope label binding (offline)
+
+A fake successful Pod or Service reply changed the submitted scope label while
+retaining API version, kind, name, namespace and spec. Both advanced to later
+fake cases before repair; the smoke now requires every submitted label to be
+preserved (extra API labels remain possible). The native 37-test suite passed.
+The dedicated lab was observed stopped; no live API request, unknown-request
+replay or retained data/backup change. This checks a fixed input label only;
+it is not API producer authentication, complete effective-object equality,
+strict admission or operator acceptance. Revert only this label comparison and
+test if needed; preserve old intents. Direct Vault sync remains pending.
 
 ## 2026-10-04: legacy Pod topology and overhead reply controls (offline)
 
