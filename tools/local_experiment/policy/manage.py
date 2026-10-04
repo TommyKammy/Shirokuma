@@ -448,6 +448,10 @@ def service_address_family_consistent(spec: dict) -> bool:
         if (parsed.is_unspecified or parsed.is_multicast or parsed.is_loopback or
                 parsed.is_link_local):
             return False
+        # The IPv4 limited broadcast destination is not classified as any of
+        # those by ipaddress, but cannot be an allocated unicast Service VIP.
+        if parsed == ipaddress.IPv4Address('255.255.255.255'):
+            return False
         # A mapped IPv4 address has version 6 in ipaddress, but does not
         # establish an ordinary single-stack IPv6 Service allocation.
         if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped is not None:

@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-05: limited-broadcast Service address refusal (offline)
+
+The fixed Service smoke accepted a fake successful reply claiming
+`255.255.255.255` in either cluster address field; both focused negatives
+failed before repair. The scoped comparator now refuses this IPv4 limited
+broadcast destination, which `ipaddress` does not mark multicast or
+unspecified. The native 77-test suite and local regression passed. Colima was
+observed stopped; no live API, request replay, retained data/backup mutation
+or GitHub write. This does not verify actual CIDR allocation, API authenticity,
+full effective-object equality or strict/operator acceptance. Revert only the
+guard/test if needed; preserve saved intents. Original Vault sync pending.
+
 ## 2026-10-05: host-local dry-run ClusterIP refusal (offline)
 
 Eight fixed-Service fake successful replies claimed IPv4/IPv6 loopback or

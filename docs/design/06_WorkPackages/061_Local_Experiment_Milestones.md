@@ -12,6 +12,22 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-05: limited-broadcast Service reply and separate history review (offline)
+
+WP-L2-POL-001: both fake successful Service replies claiming the IPv4 limited
+broadcast destination advanced before the scoped guard; the focused negatives
+failed first. Native policy tests (77) and `make verify-local-experiment`
+passed. Separately, WP-L6-FIN-001 direct saved-history selection, canonical
+digest, chronology and per-report storage rendering were inspected without
+reader changes; 194 FinOps tests passed (seven Linux-only skips). Dedicated
+Colima was observed stopped; no live API or Git inventory, collection, saved
+request replay, retained data/backup mutation or GitHub write. AgentHouse
+usage remains `null / NOT_MEASURED`. Offline fixtures do not authenticate
+producers, validate Service CIDR allocation, prove effective-object equality,
+measure current usage, clear strict admission or grant operator acceptance.
+Roll back only the scoped Service guard/test if necessary; preserve saved
+intents and reports. Direct original Vault sync remains pending outside checkout.
+
 ## 2026-10-05: host-local Service addresses and separate FinOps review (offline)
 
 WP-L2-POL-001: eight fake successful loopback/link-local IPv4/IPv6 ClusterIP

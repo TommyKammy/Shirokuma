@@ -12,6 +12,16 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-05: independent saved-history review during Service repair (offline)
+
+Inspected direct history selection, canonical digest binding, ordering and
+per-report storage scope independently of the policy change. No new reader
+defect was established; no report, collector or volume was changed. The 194
+FinOps tests passed (seven Linux-only skips), as did the local regression.
+Colima was observed stopped. AgentHouse usage remains `null / NOT_MEASURED`;
+producer authenticity, current usage and operator acceptance remain open.
+No runtime rollback; retain saved reports. Original Vault sync pending.
+
 ## 2026-10-05: independent saved-history inspection after Service guard (offline)
 
 Inspected direct selection, canonical digest, observation ordering and

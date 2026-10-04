@@ -867,6 +867,26 @@ class SmokeTests(unittest.TestCase):
                         policy.smoke(kube, items())
                     self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_rejects_limited_broadcast_cluster_address(self):
+        # ipaddress does not classify the IPv4 limited broadcast destination
+        # as multicast, unspecified, loopback or link-local.
+        for field in ('clusterIP', 'clusterIPs'):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(value):
+                if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                        value['spec'].get('externalIPs')):
+                    return reference.smoke_request(value)
+                reply = copy.deepcopy(value)
+                reply['spec'][field] = '255.255.255.255' if field == 'clusterIP' else ['255.255.255.255']
+                reply['spec']['ipFamilies'] = ['IPv4']
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_accepts_address_matching_family(self):
         for address, family in (('192.0.2.1', 'IPv4'), ('2001:db8::1', 'IPv6')):
             kube = FakeKubernetes(ready=True)
