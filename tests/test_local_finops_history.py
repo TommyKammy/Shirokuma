@@ -137,6 +137,16 @@ class HistoryTests(unittest.TestCase):
             H.parse(forged)
         self.assertEqual(len(H.parse(original)), 2)
 
+    def test_escaped_duplicate_key_cannot_override_saved_observation(self):
+        original = encoded([report(), report(processes())])
+        self.assertIn(b'"inference": {', original)
+        # Raw bytes differ; decoded JSON member names are identical. Reject
+        # before selecting or digesting either saved report.
+        forged = original.replace(b'"inference": {', b'"infer\\u0065nce": {}, "inference": {', 1)
+        with self.assertRaises(H.HistoryError):
+            H.parse(forged)
+        self.assertEqual(len(H.parse(original)), 2)
+
     def test_nonzero_float_underflow_cannot_become_saved_zero_usage(self):
         original = encoded([report(), report(processes())])
         self.assertIn(b'0.5', original)

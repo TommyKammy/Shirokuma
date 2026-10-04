@@ -5,12 +5,37 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.160"
+version: "5.161"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: dry-run numeric transport and independent history key (offline)
+
+WP-L2-POL-001: a focused parser check exposed acceptance of nonzero JSON
+underflow as zero before repair. The dry-run success reader now rejects it,
+non-JSON constants and overflowing exponents before Pod comparison; six fake
+malformed success replies remain unknown/pending after one simulated request.
+The Pod envelope already refused those extension claims, so this is transport
+hardening, not a newly established workload denial. Observer suite: 57 tests.
+Independently WP-L6-FIN-001 pins existing refusal of a decoded duplicate saved
+`inference` key spelled with a JSON Unicode escape. Focused history: 16 tests;
+FinOps: 185 tests, seven Linux-only skips. No FinOps behavior changed.
+`make verify-local-experiment`, `make verify-design-context` (89 documents),
+`make check-no-secret-filenames` and `git diff --check` passed. The ignored
+local verification log is
+`tmp/local-experiment/autonomous-runner/run-s56x9_ej/attempt-100/verify-local.log`;
+its simulated failure-path output is not live runtime evidence. Dedicated
+Colima was read-only observed stopped. No live admission, collection, unknown
+request replay, retained report/request/volume/backup mutation or GitHub write.
+AgentHouse usage remains `null / NOT_MEASURED`. Offline checks cannot
+authenticate producers, measure current usage, establish atomic inventory,
+clear strict admission or grant operator acceptance. Roll back only the policy
+reader/test and independent FinOps test if needed; preserve saved reports and
+pending intents. Direct original Vault synchronization remains pending outside
+this checkout.
 
 ## 2026-10-04: independent FinOps saved-history exponent boundary (offline)
 

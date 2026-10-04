@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.57"
+version: "0.58"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-04: escaped duplicate saved-history key (offline)
+
+An independently encoded two-report input with `infer\u0065nce` and `inference`
+on the same saved report is rejected by the existing decoded-key uniqueness
+check; the original reports still parse. Focused history 16 tests and FinOps
+185 tests passed (seven Linux-only skips). No parser, renderer or retained
+report changed. Dedicated Colima remained stopped; no collection or volume/
+backup mutation. AgentHouse retained usage remains `null / NOT_MEASURED`.
+This fixture does not authenticate the producer, measure present-day usage or
+establish acceptance. Roll back only the regression test if necessary; retain
+saved reports. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-04: independent saved-history overflow regression (offline)
 

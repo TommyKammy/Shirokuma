@@ -451,6 +451,27 @@ class ObserverTests(unittest.TestCase):
         with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
         self.assertIsNotNone(observer.receipt()['pending'])
 
+    def test_allowed_response_json_transport_refuses_nonfinite_numbers(self):
+        # A JSON-looking success reply is not JSON if it contains Python's
+        # nonstandard constants, or an exponent overflowing binary64.
+        for suffix in ('"extension":NaN,', '"extension":Infinity,',
+                       '"extension":-Infinity,', '"extension":1e999,',
+                       '"extension":-1e999,', '"extension":1e-999,'):
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(ValueError):
+                    O.parse_allowed_response('{'+suffix+'"kind":"Pod"}')
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                kube.respond=lambda body: SimpleNamespace(returncode=0,
+                    stdout='{'+suffix+json.dumps(body)[1:],stderr='')
+                with self.assertRaises(O.CandidateObservationError):observer.verify(progress=lambda v:None)
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(len(kube.requests),1)
+        kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+        self.assertEqual(O.parse_allowed_response('{"generation":1.25e2}'), {'generation':125.0})
+        self.assertEqual(O.parse_allowed_response('{"generation":0e-999}'), {'generation':0.0})
+        self.assertEqual(observer.verify(progress=lambda v:None)['admission'],'allowed')
+
     def test_allowed_response_cannot_inject_pod_identity_or_scheduling(self):
         for changes in ({'serviceAccountName':'admin'}, {'nodeName':'other-node'},
                         {'nodeSelector':{'role':'privileged'}},

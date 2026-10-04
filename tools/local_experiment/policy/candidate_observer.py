@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import re
 import uuid
 
@@ -36,6 +37,22 @@ def unique_object(pairs):
             raise ValueError('duplicate response key')
         result[key] = value
     return result
+
+
+def parse_allowed_response(raw):
+    """Decode a dry-run success without accepting Python-only numeric values."""
+    def finite_float(text):
+        value = float(text)
+        mantissa = re.split('[eE]', text, maxsplit=1)[0]
+        if not math.isfinite(value) or (value == 0 and re.search('[1-9]', mantissa)):
+            raise ValueError('non-representable response number')
+        return value
+
+    def invalid_constant(_):
+        raise ValueError('non-JSON response constant')
+
+    return json.loads(raw, object_pairs_hook=unique_object,
+                      parse_float=finite_float, parse_constant=invalid_constant)
 
 
 def identity(value):
@@ -406,7 +423,7 @@ class CandidateObserver:
             admission, reported = 'unknown', []
             if type(response.returncode) is int and response.returncode == 0:
                 try:
-                    value = json.loads(response.stdout, object_pairs_hook=unique_object)
+                    value = parse_allowed_response(response.stdout)
                 except (TypeError, ValueError):
                     value = None
                 if response.stderr == '' and allowed_pod_matches(value, self._body):

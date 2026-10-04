@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.48"
+version: "0.49"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-04: dry-run success JSON numeric transport (offline)
+
+The dry-run success decoder now refuses Python-only `NaN`/`Infinity`, overflowing
+exponents and nonzero numbers underflowing to zero before the Pod comparator.
+An isolated parser test caught the underflow before repair; the new parser
+boundary also checks finite exponents and genuine zero. Six fake malformed
+success replies remain unknown/pending after exactly one simulated request,
+without replay. Focused observer 57 tests passed. Dedicated Colima was observed
+stopped; no live admission, retained requests, volumes or backups changed.
+These malformed extensions were already refused by the Pod envelope; this
+change strengthens transport validation rather than demonstrating a previously
+allowed workload. Fake responses do not authenticate the API, establish atomic
+inventory, clear strict admission or grant operator acceptance. Roll back only
+the dry-run decoder/test if needed and preserve pending intents. Original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-04: overflowing JSON exponent in scoped API (offline)
 
