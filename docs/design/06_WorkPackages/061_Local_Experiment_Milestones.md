@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.198"
+version: "5.199"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent present optional Flux catalog (offline)
+
+WP-L0-GITOPS-001: an unchanged doctor degrades two fake inventories with a
+present suspended or terminating optional catalog, while a ready catalog and
+the independently tested absent catalog preserve informational fixed-root
+status. Focused Go tests, full Go suite (863) and vet passed. Dedicated Colima
+remained stopped; no live inventory/reconciliation, unknown-request replay,
+retained data/backup mutation or GitHub write. Offline fixtures cannot
+authenticate producers, establish atomic inventory, clear strict admission or
+prove operator acceptance. Revert only the new test if needed; preserve old
+evidence. Direct Vault sync remains pending outside this checkout.
 
 ## 2026-10-04: legacy successful reply routing identifiers (offline)
 
