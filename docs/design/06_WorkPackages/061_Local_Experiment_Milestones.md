@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-04
-version: "5.196"
+version: "5.197"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-04: independent optional Flux absence (offline)
+
+WP-L0-GITOPS-001: a complete fake resource inventory without the optional
+catalog Kustomization retains the unchanged local doctor's informational result.
+Focused Go test, full Go suite (862) and vet passed. Dedicated Colima remained
+stopped; no live Git/API inventory, reconciliation, pending-request replay,
+retained data/backup mutation or GitHub write. This does not prove a catalog
+installation, source authenticity, atomic inventory, strict admission or
+operator acceptance. Revert only this test if needed, preserving evidence.
+Direct original Vault sync remains pending outside the checkout.
 
 ## 2026-10-04: Service external routing and independent FinOps review (offline)
 

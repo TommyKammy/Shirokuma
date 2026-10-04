@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-04
-version: "0.114"
+version: "0.115"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-04: absent optional catalog does not fail fixed Flux scope (offline)
+
+An independent complete fake resource list without the optional catalog
+Kustomization retains the unchanged local doctor's informational status for
+the suspended root. Focused Go test, full Go suite (862) and vet passed. This
+pins only the local fixed source/root/dev scope, not a live catalog installation
+or correct reconciliation. Dedicated Colima was observed stopped; no live
+inventory, Git access, reconciliation, retained data/backup mutation or GitHub
+write. Fake replies cannot authenticate producers, prove atomic inventory,
+clear strict admission or establish operator acceptance. Revert only the test
+if necessary; preserve historical evidence. Direct Vault sync remains pending.
 
 ## 2026-10-04: optional catalog namespace boundary (offline)
 

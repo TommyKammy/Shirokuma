@@ -172,6 +172,20 @@ func TestLocalFluxOptionalCatalogDoesNotImposeFixedNamespace(t *testing.T) {
 	}
 }
 
+func TestLocalFluxOptionalCatalogMayBeAbsent(t *testing.T) {
+	const catalog = `,{"apiVersion":"kustomize.toolkit.fluxcd.io/v1","kind":"Kustomization","metadata":{"name":"shirokuma-catalog","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}`
+	resources := strings.Replace(localFluxJSON(), catalog, "", 1)
+	if resources == localFluxJSON() {
+		t.Fatal("catalog fixture was not removed")
+	}
+	check := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{
+		{output: localControllerJSON()}, {output: resources},
+	}}, localExperimentContext, true)
+	if check.Status != "informational" {
+		t.Fatalf("absent optional catalog changed fixed Flux scope: %#v", check)
+	}
+}
+
 func TestLocalFluxRejectsIncompleteConditions(t *testing.T) {
 	for _, extra := range []string{`null`, `{}`, `{"type":"Ready"}`, `{"status":"True"}`, `{"type":"Other","status":"bogus"}`} {
 		controllers := strings.Replace(localControllerJSON(), `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+extra, 1)
