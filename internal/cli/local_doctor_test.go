@@ -2119,6 +2119,32 @@ func TestLocalLakehouseRejectsDuplicateStatefulSetConditions(t *testing.T) {
 	}
 }
 
+func TestLocalLakehouseRejectsDuplicateClearedReplicaFailure(t *testing.T) {
+	for _, name := range []string{"polaris", "trino-local"} {
+		for _, second := range []string{"False", "True"} {
+			responses := localWorkloadResponses()
+			member := healthyLocalWorkload("Deployment", "shirokuma-dev", name)
+			first := `{"type":"ReplicaFailure","status":"False"}`
+			duplicate := fmt.Sprintf(`{"type":"ReplicaFailure","status":%q}`, second)
+			mutated := strings.Replace(member, `{"type":"Available","status":"True"}`, `{"type":"Available","status":"True"},`+first+`,`+duplicate, 1)
+			if mutated == member || !strings.Contains(responses[1].output, member) {
+				t.Fatalf("missing Deployment fixture %s", name)
+			}
+			responses[1].output = strings.Replace(responses[1].output, member, mutated, 1)
+			checks := checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext)
+			for _, check := range checks {
+				want := "degraded"
+				if check.Name == "seaweedfs" {
+					want = "healthy"
+				}
+				if check.Status != want {
+					t.Fatalf("%s duplicate ReplicaFailure=%s: unexpected check %#v", name, second, checks)
+				}
+			}
+		}
+	}
+}
+
 func TestLocalDeclaredSourceRejectsCompetingRevisionSelectors(t *testing.T) {
 	for _, selector := range []string{"tag", "semver", "commit", "name"} {
 		var list map[string]interface{}

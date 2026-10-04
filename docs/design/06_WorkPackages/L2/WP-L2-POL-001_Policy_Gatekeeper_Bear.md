@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.97"
+version: "0.98"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: reserved IPv4 Service address refusal (offline)
+
+Six fake successful fixed-Service replies claiming addresses in 0/8 or 240/4
+advanced past the Service request before repair. The bounded address check now
+rejects these special-use blocks, including limited broadcast, without broadly
+rejecting documentation/test IPv4 addresses. Focused negatives failed before
+the change; 78 native policy tests, 880 Go tests, vet and local regression
+passed. Dedicated Colima was observed stopped; no live admission or saved
+request replay, retained data/backup mutation or GitHub write. This does not
+validate the actual Service CIDR, authenticate API replies, prove effective
+object equality, clear strict admission or grant operator acceptance. Roll
+back only the address guard/test if needed; preserve saved intents. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: limited-broadcast Service address refusal (offline)
 

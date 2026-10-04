@@ -5,12 +5,24 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.135"
+version: "0.136"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent dev ReplicaFailure ambiguity (offline)
+
+Fake dev inventory for each fixed Deployment now covers repeated cleared and
+contradictory `ReplicaFailure` conditions. The unchanged local doctor degrades
+the shared dev list while retaining the independent storage check healthy.
+Focused and full Go tests (880), vet and local regression passed. Colima was
+observed stopped; no live API/Git read or reconciliation, retained data/backup
+mutation or GitHub write. Offline lists cannot authenticate producers, prove
+atomic inventory, clear strict admission or grant operator acceptance. Revert
+only this test if necessary; preserve earlier evidence. Direct original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: independent cleared ReplicaFailure duplicates (offline)
 

@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.230"
+version: "5.231"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: reserved IPv4 replies and independent dev Flux failures (offline)
+
+WP-L2-POL-001: six fake successful Service replies in the 0/8 and 240/4
+special-use blocks advanced before a bounded address guard; focused negatives
+failed first, then 78 native tests passed. WP-L0-GITOPS-001: independent fake
+dev Deployment lists with repeated cleared or contradictory ReplicaFailure
+degrade under the unchanged doctor while storage remains healthy. Focused/full
+Go tests (880), vet, `make verify-local-experiment`, design-context (89
+documents), secret-filename and diff checks passed. Dedicated Colima was
+observed stopped; no live API/Git read, reconciliation, saved-request replay,
+retained data/backup mutation or GitHub write. Neither offline fixture proves
+producer authenticity, actual Service CIDR allocation, atomic inventory,
+effective-object equality, strict admission or operator acceptance. Revert
+only the scoped policy guard/test or independent Flux test if needed; preserve
+prior evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: limited-broadcast Service reply and separate history review (offline)
 

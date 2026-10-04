@@ -887,6 +887,27 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_rejects_reserved_ipv4_cluster_address(self):
+        # 0/8 (other than the already rejected unspecified address) and 240/4
+        # are not ordinary allocatable IPv4 unicast Service destinations.
+        for address in ('0.1.2.3', '240.0.0.1', '255.255.255.254'):
+            for field in ('clusterIP', 'clusterIPs'):
+                kube = FakeKubernetes(ready=True)
+                reference = FakeKubernetes(ready=True)
+                def changed(value):
+                    if (value['kind'] != 'Service' or value['spec'].get('type') != 'ClusterIP' or
+                            value['spec'].get('externalIPs')):
+                        return reference.smoke_request(value)
+                    reply = copy.deepcopy(value)
+                    reply['spec'][field] = address if field == 'clusterIP' else [address]
+                    reply['spec']['ipFamilies'] = ['IPv4']
+                    return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+                kube.smoke_failure = changed
+                with self.subTest(address=address, field=field):
+                    with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                        policy.smoke(kube, items())
+                    self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_accepts_address_matching_family(self):
         for address, family in (('192.0.2.1', 'IPv4'), ('2001:db8::1', 'IPv6')):
             kube = FakeKubernetes(ready=True)
