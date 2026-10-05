@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.377"
+version: "5.378"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: reject NUL-bearing Pod mount paths (offline)
+
+WP-L6-FIN-001 now refuses NUL-bearing extra Pod mount destinations before
+lexical normalization. Four synthetic fixed-workload negatives failed before
+repair; storage-focused 42 cases passed afterward. Dedicated Colima was
+observed stopped; no live collection, retained report/volume/backup change,
+unknown request replay or GitHub write. AgentHouse remains `null /
+NOT_MEASURED`. This offline guard cannot establish API provenance, mount
+health or operator acceptance. Revert only the scoped guard/test if needed;
+preserve saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: named Trino probe port binding (offline)
 

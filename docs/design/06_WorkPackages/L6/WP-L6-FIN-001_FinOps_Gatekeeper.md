@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.177"
+version: "0.178"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: reject NUL-bearing Pod mount paths (offline)
+
+Four synthetic fixed-workload Pod snapshots with an extra mount destination
+containing a NUL byte were incorrectly classified as observed or
+`no_direct_pvc`. All four negative subcases failed before repair; the
+primary-container mount inventory now rejects such destinations before
+normalizing paths. Storage-focused 42 cases pass. The dedicated Colima
+profile was observed stopped; no live collection, retained report/volume/
+backup mutation or AgentHouse used-byte measurement (`null / NOT_MEASURED`).
+This is an offline shape check, not API authentication, filesystem resolution,
+live mount health or operator acceptance. Revert only the scoped path guard/
+fixture if required, keeping saved reports. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: fixed PVC parent mount overlap (offline)
 

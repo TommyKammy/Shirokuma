@@ -47,6 +47,16 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_primary_mount_rejects_nul_path(self):
+        for component in S.TARGETS:
+            data = deepcopy(objects(component))
+            spec = data[1][0]['spec']
+            spec['volumes'].append({'name': 'scratch', 'emptyDir': {}})
+            spec['containers'][0]['volumeMounts'].append(
+                {'name': 'scratch', 'mountPath': '/unrelated\x00suffix'})
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+
     def test_primary_mount_must_resolve_to_pod_volume(self):
         for component in S.TARGETS:
             data = deepcopy(objects(component))

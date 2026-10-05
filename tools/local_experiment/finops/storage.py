@@ -146,7 +146,8 @@ def _snapshot(component, workload, pods, replica=None):
     require(len(volume_names) == len(volumes) and
             all(type(m.get('name')) is str and m['name'] in volume_names for m in mounts) and
               all(type(m.get('mountPath')) is str and m['mountPath'].startswith('/') and
-                  not m['mountPath'].startswith('//') for m in mounts) and
+                  not m['mountPath'].startswith('//') and '\x00' not in m['mountPath']
+                  for m in mounts) and
             len({posixpath.normpath(m['mountPath']) for m in mounts}) == len(mounts))
     claims = [v for v in volumes if type(v) is dict and 'persistentVolumeClaim' in v]
     if kind == 'Deployment':
