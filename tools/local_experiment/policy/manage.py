@@ -188,7 +188,13 @@ class Kubernetes:
             return value
 
         if not result.stdout.strip():
-            return None  # kubectl --ignore-not-found emits no object for a missing resource.
+            # Only the dedicated missing-resource read has an empty success
+            # contract. A blank mutation reply must not certify its result.
+            if (result.stdout == '' and len(args) == 6 and args[0] == 'get'
+                    and args[1] in RESOURCES.values() and args[2] in NAMES
+                    and args[3:] == ['--ignore-not-found', '-o', 'json']):
+                return None
+            raise PolicyError('scoped Kubernetes response has no JSON object')
         def invalid_constant(value):
             raise PolicyError('scoped Kubernetes response contains non-JSON numeric constant')
 

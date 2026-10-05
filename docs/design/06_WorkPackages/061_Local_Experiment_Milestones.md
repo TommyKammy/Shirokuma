@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.252"
+version: "5.253"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: bounded missing-policy response meaning (offline)
+
+WP-L2-POL-001: only an exact empty successful dedicated missing-policy read
+can mean absent; blank create/delete or whitespace-only reads fail closed.
+Focused native policy tests (92) passed. The first full regression failed two
+legacy observer expectations for blank unrelated Pod reads; after restricting
+those expectations to fail closed, the full local regression passed. Dedicated Colima observed stopped;
+no API call, saved-request replay, retained data/backup mutation or GitHub
+write. Offline replies do not authenticate producers or establish strict
+admission/operator acceptance. Revert the response guard/test only if needed;
+preserve saved intents. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: independent FinOps saved-history boundary audit (offline)
 

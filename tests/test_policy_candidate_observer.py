@@ -105,7 +105,8 @@ class ObserverTests(unittest.TestCase):
         for raw in ('', '\n'):
             with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
                     returncode=0, stdout=raw)):
-                self.assertIsNone(reader.json_request(args))
+                with self.assertRaises(O.M.PolicyError):
+                    reader.json_request(args)
 
     def test_kubernetes_reader_refuses_non_json_numeric_constants(self):
         reader = object.__new__(O.M.Kubernetes)

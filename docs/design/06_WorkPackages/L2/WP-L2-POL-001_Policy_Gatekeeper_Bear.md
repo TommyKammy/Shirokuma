@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.115"
+version: "0.116"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: empty native response scope (offline)
+
+Only an exactly empty successful dedicated `get --ignore-not-found` reply now
+represents a missing policy. A whitespace-only read or blank create/delete
+reply raises PolicyError instead of allowing a missing-resource or mutation
+claim. Synthetic positive/negative replies passed 92 native policy tests.
+Colima was freshly observed stopped; no live API request, replay, policy
+mutation, retained data or backup change. This cannot authenticate responses
+or clear strict admission/operator acceptance. Roll back only the scoped
+empty-reply guard and test if the actual kubectl contract differs; preserve
+saved intents. The first full regression exposed a legacy observer test
+expecting empty replies for an unrelated Pod read; its expectation was
+restricted to fail closed, without changing observer behavior. The full local
+regression then passed. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: bounded scoped policy JSON reads (offline)
 

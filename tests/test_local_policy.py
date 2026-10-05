@@ -221,6 +221,22 @@ class ActivationTests(unittest.TestCase):
 
 
 class ScopedResponseTests(unittest.TestCase):
+    def test_only_exact_missing_resource_read_accepts_empty_success(self):
+        client = object.__new__(policy.Kubernetes)
+        client.request = mock.Mock(return_value=SimpleNamespace(
+            stdout='', stderr='', returncode=0))
+        read = ['get', policy.RESOURCES[policy.POLICY], policy.NAMES[0],
+                '--ignore-not-found', '-o', 'json']
+        self.assertIsNone(client.json_request(read))
+        for args, stdout in ((read, '  \n'),
+                             (['create', '-f', '-', '-o', 'json'], ''),
+                             (['delete', '--raw=/dedicated', '-f', '-'], ''),
+                             (['get', policy.RESOURCES[policy.POLICY], policy.NAMES[0], '-o', 'json'], '')):
+            with self.subTest(args=args, stdout=stdout):
+                client.request.return_value = SimpleNamespace(stdout=stdout, stderr='', returncode=0)
+                with self.assertRaisesRegex(policy.PolicyError, 'no JSON object'):
+                    client.json_request(args)
+
     def test_json_request_bounds_utf8_and_rejects_malformed_replies(self):
         client = object.__new__(policy.Kubernetes)
         for stdout, status in (
