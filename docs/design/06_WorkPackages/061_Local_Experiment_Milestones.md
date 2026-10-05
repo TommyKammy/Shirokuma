@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.381"
+version: "5.382"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed storage API versions and PV Bound phase (offline)
+
+WP-L6-FIN-001 refuses explicitly contradictory API versions on four fixed
+workloads' returned objects and an explicitly non-Bound PV phase behind either
+Bound directory-mounted PVC, including on the second PV read. Fourteen type
+and ten phase negatives failed before repair; matching types/Bound phases and
+minimal omission controls pass. Focused storage 47 and FinOps 261 cases pass
+(seven Linux-only skips), as do `make verify-local-experiment`, design-context,
+secret scan and diff check. The verifier's fake Dagster worker failure is an
+intentional negative diagnostic.
+Dedicated Colima was freshly observed stopped; no live API, collection,
+retained report/volume/backup mutation or AgentHouse used-byte measurement
+(`null / NOT_MEASURED`). These offline checks do not authenticate the API,
+establish atomicity or operator acceptance. Revert only scoped guards/tests
+if needed, retaining saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: typed Bound PV claim reference (offline)
 

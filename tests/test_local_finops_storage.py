@@ -47,6 +47,22 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_fixed_storage_objects_reject_contradictory_api_version(self):
+        for component in S.TARGETS:
+            original = objects(component)
+            for index, expected in ((0, 'apps/v1'), (1, 'v1'), (2, 'apps/v1'),
+                                    (3, 'v1'), (4, 'v1')):
+                if original[index] is None:
+                    continue
+                data = deepcopy(original)
+                obj = data[index][0] if index == 1 else data[index]
+                obj['apiVersion'] = 'v1' if expected == 'apps/v1' else 'apps/v1'
+                with self.subTest(component=component, index=index), self.assertRaises(S.StorageError):
+                    projected(component, data)
+                obj['apiVersion'] = expected
+                self.assertEqual(projected(component, data)['state'],
+                                 'observed' if S.TARGETS[component][-1] else 'no_direct_pvc')
+
     def test_kubernetes_object_names_require_dns_subdomain_labels(self):
         for invalid in ('bad..name', 'bad.-name', 'bad-.name', 'a' * 64 + '.pv', 'pv.' + 'a' * 64):
             data = deepcopy(objects('seaweedfs'))
@@ -70,6 +86,16 @@ class StorageTests(unittest.TestCase):
                 projected('seaweedfs', data)
         data[4]['spec']['claimRef'].update(kind='PersistentVolumeClaim', apiVersion='v1')
         self.assertEqual(projected('seaweedfs', data)['state'], 'observed')
+
+    def test_bound_claim_rejects_non_bound_pv_phase(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            for phase in ('Available', 'Released', 'Failed', None, False):
+                data = deepcopy(objects(component))
+                data[4]['status'] = {'phase': phase}
+                with self.subTest(component=component, phase=phase), self.assertRaises(S.StorageError):
+                    projected(component, data)
+            data[4]['status'] = {'phase': 'Bound'}
+            self.assertEqual(projected(component, data)['state'], 'observed')
 
     def test_primary_mount_rejects_nul_path(self):
         for component in S.TARGETS:
@@ -480,6 +506,24 @@ class StorageTests(unittest.TestCase):
                 backend.now.return_value = NOW
                 backend.storage_get.side_effect = changed
                 with self.subTest(component=component, field=field), self.assertRaisesRegex(
+                        S.StorageError, 'IDENTITY_CHANGED'):
+                    S._collect_one(backend, component)
+
+    def test_storage_collection_refuses_pv_losing_bound_phase(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            w, pods, _, pvc, pv = objects(component)
+            pv['status'] = {'phase': 'Bound'}
+            for phase in ('Available', 'Released', 'Failed', None):
+                later = deepcopy(pv)
+                later['status']['phase'] = phase
+                responses = [w, {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': pods},
+                             pvc, pv, deepcopy(w),
+                             {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': deepcopy(pods)},
+                             deepcopy(pvc), later]
+                backend = Mock()
+                backend.now.return_value = NOW
+                backend.storage_get.side_effect = responses
+                with self.subTest(component=component, phase=phase), self.assertRaisesRegex(
                         S.StorageError, 'IDENTITY_CHANGED'):
                     S._collect_one(backend, component)
 

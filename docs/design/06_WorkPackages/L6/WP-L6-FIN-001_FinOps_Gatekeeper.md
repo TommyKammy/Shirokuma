@@ -5,12 +5,33 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.181"
+version: "0.182"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: typed fixed API objects and Bound PV phase (offline)
+
+Fourteen synthetic fixed workload/Pod/ReplicaSet/PVC/PV objects with explicit
+API versions contradicting their fixed endpoint previously projected as
+observed or `no_direct_pvc`; the scoped metadata reader now rejects those
+versions. Optional omitted versions and matching explicit versions pass.
+Separately, ten Bound-PVC fixtures with an explicitly Available, Released,
+Failed or malformed PV phase previously projected as observed. A Bound claim
+now requires an explicitly supplied PV phase to be Bound at projection and
+on the second read; omission remains supported for minimal fixtures. Negative
+cases failed before repair; focused storage 47 and FinOps 261 cases pass
+(seven Linux-only skips). Post-change `make verify-local-experiment`,
+design-context, secret scan and diff check pass; the verifier's fake Dagster
+worker failure is an intentional negative diagnostic. The
+dedicated Colima profile was freshly observed stopped. No live API collection,
+volume traversal, retained report/backup mutation or AgentHouse used-byte
+measurement (`null / NOT_MEASURED`). Typed offline replies and two reads do
+not authenticate Kubernetes, provide an atomic sample, prove mount health or
+establish operator acceptance. Roll back only these two guards and tests if
+necessary; preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bound PV claim-reference type (offline)
 

@@ -69,8 +69,10 @@ def unknown(component, reason):
 
 def _meta(obj, kind, namespace, expected=None):
     # Kubernetes list items may omit kind; the enclosing fixed typed endpoint
-    # supplies it. Reject a contradictory explicit kind.
-    require(type(obj) is dict and obj.get('kind', kind) == kind and type(obj.get('metadata')) is dict)
+    # supplies it. Reject contradictory explicit kind or API version.
+    api_version = 'apps/v1' if kind in ('StatefulSet', 'Deployment', 'ReplicaSet') else 'v1'
+    require(type(obj) is dict and obj.get('kind', kind) == kind and
+            obj.get('apiVersion', api_version) == api_version and type(obj.get('metadata')) is dict)
     meta = obj['metadata']
     require(meta.get('namespace') == namespace and
             (expected is None or meta.get('name') == expected) and meta.get('deletionTimestamp') is None)
@@ -265,6 +267,9 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
             require(type(volume) is str and name(volume))
             p = _meta(pv, 'PersistentVolume', None, volume)
             pv_spec = pv.get('spec', {}); require(type(pv_spec) is dict)
+            # An explicitly non-Bound PV cannot support this Bound PVC reference.
+            pv_status = pv.get('status', {})
+            require(type(pv_status) is dict and pv_status.get('phase', 'Bound') == 'Bound')
             ref = pv_spec.get('claimRef', {}); pv_capacity = pv_spec.get('capacity', {})
             require(type(ref) is dict and type(pv_capacity) is dict)
             require(ref.get('namespace') == ns and ref.get('name') == claim and
@@ -412,6 +417,9 @@ def _collect_one(backend, component):
             def pv_state(item):
                 spec = item.get('spec', {})
                 require(type(spec) is dict and type(spec.get('capacity', {})) is dict,
+                        'IDENTITY_CHANGED')
+                status = item.get('status', {})
+                require(type(status) is dict and status.get('phase', 'Bound') == 'Bound',
                         'IDENTITY_CHANGED')
                 return (item['metadata']['uid'], spec.get('claimRef'),
                         spec.get('capacity', {}).get('storage'),
