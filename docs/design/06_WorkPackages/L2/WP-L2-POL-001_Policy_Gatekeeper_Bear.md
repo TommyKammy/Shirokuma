@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.193"
+version: "0.194"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bounded Trino resource budget and placement source (offline)
+
+A synthetic same-name Deployment with a fixed image but an oversized request,
+extra device claim, or foreign placement could supply the smoke image. Three
+resource and six placement negatives failed before repair. Present resources
+must now match the dedicated manifest's requests/limits; absent resources remain
+compatible with minimal fixtures. Scheduler, node selector, toleration, affinity,
+topology and priority overrides are refused. `make test-local-policy` (166) and
+`make verify-local-experiment` passed. Colima was freshly observed stopped;
+no live API/admission, retained workload or backup mutation. This does not
+authenticate the API or establish strict live admission/operator acceptance.
+Restore only the image reader and regression fixtures if needed; retain saved
+requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed Trino probe and port source (offline)
 

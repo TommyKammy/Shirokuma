@@ -534,8 +534,10 @@ class Kubernetes:
                      pod_spec.get('automountServiceAccountToken') is not False or
                      pod_spec.get('serviceAccountName', 'default') != 'default' or
                      pod_spec.get('serviceAccount', 'default') != 'default' or
-                     any(field in pod_spec for field in ('hostAliases', 'dnsConfig',
-                                                          'runtimeClassName', 'nodeName')) or
+                     any(field in pod_spec for field in (
+                         'hostAliases', 'dnsConfig', 'runtimeClassName', 'nodeName',
+                         'nodeSelector', 'schedulerName', 'tolerations', 'affinity',
+                         'topologySpreadConstraints', 'priorityClassName')) or
                      pod_spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
                      any(pod_spec.get(field, False) is not False
                          for field in ('hostNetwork', 'hostPID', 'hostIPC'))):
@@ -603,6 +605,13 @@ class Kubernetes:
                      'command', 'args', 'workingDir', 'lifecycle', 'envFrom',
                      'volumeDevices', 'stdin', 'stdinOnce', 'tty')):
                 raise PolicyError('smoke requires the local Trino container execution')
+            # The image source must not silently require more resources or
+            # attach a device claim than the dedicated local manifest.
+            resources = containers[0].get('resources')
+            if resources is not None and (type(resources) is not dict or resources != {
+                    'requests': {'cpu': '1', 'memory': '2Gi'},
+                    'limits': {'cpu': '8', 'memory': '16Gi'}}):
+                raise PolicyError('smoke requires the local Trino resource budget')
             # Probes run in the container's security context. Do not borrow
             # the image from a template that replaces an HTTP check with an
             # executable command or sends it to a different endpoint.

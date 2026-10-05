@@ -115,6 +115,10 @@ def _retention(workload):
     template = workload.get('spec', {}).get('volumeClaimTemplates', [])
     require(type(template) is list and len(template) == 1 and
             template[0].get('metadata', {}).get('name') in ('seaweedfs-data', 'data'))
+    # Both fixed StatefulSets mount the claim as a directory; the template
+    # must not request a Block volume even when a current PVC says Filesystem.
+    require(type(template[0].get('spec')) is dict and
+            template[0]['spec'].get('volumeMode') in (None, 'Filesystem'))
     prune = template[0]['metadata'].get('annotations', {}).get('kustomize.toolkit.fluxcd.io/prune')
     require(prune in (None, 'disabled'))
     return dict(when_deleted=policy['whenDeleted'], when_scaled=policy['whenScaled'], template_prune=prune)

@@ -1197,11 +1197,36 @@ class ScopedResponseTests(unittest.TestCase):
         client.json_request.return_value = with_groups
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         client.json_request.return_value = valid
+        for resources in ({'requests': {'cpu': '100', 'memory': '2Gi'}},
+                          {'limits': {'cpu': '8', 'memory': '16Gi'},
+                           'requests': {'cpu': '1', 'memory': '2Gi'},
+                           'claims': [{'name': 'device'}]},
+                          {'limits': {'cpu': '8', 'memory': '16Gi'},
+                           'requests': {'cpu': '1', 'memory': '2Gi', 'example.com/gpu': '1'}}):
+            with self.subTest(resources=resources):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['containers'][0]['resources'] = resources
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['containers'][0]['resources'] = {
+            'requests': {'cpu': '1', 'memory': '2Gi'},
+            'limits': {'cpu': '8', 'memory': '16Gi'}}
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        client.json_request.return_value = valid
         for override in ({'hostAliases': [{'ip': '127.0.0.1', 'hostnames': ['metadata']}]},
                          {'dnsConfig': {'nameservers': ['8.8.8.8']}},
                          {'dnsPolicy': 'Default'},
                          {'runtimeClassName': 'foreign-runtime'},
-                         {'nodeName': 'foreign-node'}):
+                         {'nodeName': 'foreign-node'},
+                         {'nodeSelector': {'kubernetes.io/hostname': 'foreign-node'}},
+                         {'schedulerName': 'foreign-scheduler'},
+                         {'tolerations': [{'operator': 'Exists'}]},
+                         {'affinity': {'nodeAffinity': {}}},
+                         {'topologySpreadConstraints': [{'maxSkew': 1}]},
+                         {'priorityClassName': 'high-priority'}):
             with self.subTest(pod_override=override):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec'].update(override)

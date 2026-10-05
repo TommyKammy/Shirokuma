@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.150"
+version: "0.151"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: directory-mounted claim template mode (offline)
+
+A synthetic Block-mode StatefulSet claim template previously passed the fixed
+storage reference even when its current PVC/PV were Filesystem. Both fixed
+directory-mounted claims now require an absent/default or explicit Filesystem
+template mode; negatives failed first for both components. `make
+test-local-finops` (225; seven Linux-only skips) and the full local verifier
+passed. No API collection, retained PVC, report or backup mutation. This
+offline consistency check does not authenticate the source, scan the volume or
+measure AgentHouse used bytes (`null / NOT_MEASURED`). Restore only the template
+guard/test if needed, preserving stored evidence. Original Vault sync pending.
 
 ## 2026-10-06: bound PV Filesystem mode (offline)
 

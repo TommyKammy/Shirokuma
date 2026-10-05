@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.338"
+version: "5.339"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: smoke budget/placement and FinOps template mode (offline)
+
+WP-L2-POL-001: three synthetic resource-budget/claim deviations and six
+placement overrides supplied the fixed Trino smoke image before repair; the
+reader now refuses them, while the repository-shaped resources pass. WP-L6-FIN-001:
+both fixed directory-mounted StatefulSets now reject a Block-mode claim
+template even if the current PVC/PV are Filesystem; explicit Filesystem passes.
+The negative fixtures failed before repair. Focused policy suite 166 and FinOps
+suite 225 (seven Linux-only skips), `make verify-local-experiment` and diff
+check passed. Dedicated Colima was freshly observed stopped. No live API,
+admission, collection, unknown-request replay, retained report/volume/backup
+mutation or GitHub write. Offline checks cannot authenticate the producers,
+prove strict live admission or measure AgentHouse bytes (`null / NOT_MEASURED`),
+and do not establish operator acceptance. Revert only scoped guards/tests if
+necessary, preserving saved requests and reports. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: Trino smoke probe and port source filters (offline)
 
