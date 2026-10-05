@@ -169,16 +169,13 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
         # Resolve each ancestor separately: O_NOFOLLOW on the final directory
         # alone does not protect against a symlink earlier in the path.
         parent_fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+        ancestors = []
         try:
             for component in MANIFEST.parent.parts[1:]:
                 next_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                                   dir_fd=parent_fd)
-                os.close(parent_fd)
+                ancestors.append((parent_fd, component, next_fd))
                 parent_fd = next_fd
-        except BaseException:
-            os.close(parent_fd)
-            raise
-        try:
             parent = os.fstat(parent_fd)
             fd = os.open(MANIFEST.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                          dir_fd=parent_fd)
@@ -197,10 +194,18 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
                 if ((after.st_dev, after.st_ino) != (entry.st_dev, entry.st_ino) or
                         (parent.st_dev, parent.st_ino) != (current_parent.st_dev, current_parent.st_ino)):
                     raise PolicyError('dedicated manifest path changed during bounded read')
+                for ancestor_fd, component, child_fd in ancestors:
+                    linked = os.stat(component, dir_fd=ancestor_fd, follow_symlinks=False)
+                    opened = os.fstat(child_fd)
+                    if (not stat.S_ISDIR(linked.st_mode) or
+                            (linked.st_dev, linked.st_ino) != (opened.st_dev, opened.st_ino)):
+                        raise PolicyError('dedicated manifest ancestor changed during bounded read')
             finally:
                 os.close(fd)
         finally:
             os.close(parent_fd)
+            for ancestor_fd, _, _ in reversed(ancestors):
+                os.close(ancestor_fd)
         value = json.loads(raw.decode('utf-8'), object_pairs_hook=unique_keys)
     except (OSError, UnicodeError, ValueError, TypeError, RecursionError) as exc:
         if isinstance(exc, PolicyError):

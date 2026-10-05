@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.136"
+version: "0.137"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: post-read manifest ancestor linkage (offline)
+
+The manifest reader pinned directory descriptors during traversal but checked
+only the final parent after reading. An ancestor replaced with a symlink to its
+original directory could retain the same final parent inode. The reader now
+checks every retained parent/child directory entry after the bounded read and
+before source projection. A disposable swap during `os.read` is refused before
+source access; the real manifest and 113 focused policy tests passed, as did
+`make verify-local-experiment`. Dedicated Colima was freshly observed stopped;
+no live admission, saved-request replay, retained data/backup mutation or
+GitHub write. This does not prevent a swap after the checks, authenticate the
+checkout or decoder, or establish strict admission/operator acceptance. Roll
+back only the directory-chain check/test if needed; preserve saved intents.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-05: observer guard snapshot correlation (offline)
 

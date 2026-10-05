@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.274"
+version: "5.275"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: manifest ancestor relink guard and independent FinOps review (offline)
+
+WP-L2-POL-001: a symlink to the original directory installed in an ancestor
+during the bounded manifest read retained the final parent identity; a
+disposable regression now fails before source projection under a full retained
+directory-chain check. The real manifest and 113 policy tests passed.
+Independently WP-L6-FIN-001 reviewed saved-history bounds, digest, order and
+per-report storage scope without code changes; 204 FinOps tests passed (seven
+Linux-only skips). Full `make verify-local-experiment` and diff check passed.
+Dedicated Colima freshly observed stopped; no live API, collection, unknown
+request replay, retained data/backup mutation or GitHub write. Neither
+non-atomic pathname checks nor offline fixtures prove producer authenticity,
+strict admission, current AgentHouse usage (`null / NOT_MEASURED`) or operator
+acceptance. Roll back only the scoped policy guard/test if needed; preserve
+saved requests and reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: correlated policy observer guards and independent FinOps review (offline)
 

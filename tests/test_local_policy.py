@@ -328,6 +328,34 @@ class ManifestTests(unittest.TestCase):
                 with self.assertRaises(policy.PolicyError):
                     policy.load_manifest()
 
+    def test_manifest_refuses_ancestor_relinked_during_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            slot = root / 'slot'
+            parent = slot / 'parent'
+            parent.mkdir(parents=True)
+            (parent / 'manifest.json').write_bytes(policy.MANIFEST.read_bytes())
+            real_read = os.read
+            changed = False
+
+            def relink_after_open(fd, size):
+                nonlocal changed
+                raw = real_read(fd, size)
+                if not changed:
+                    changed = True
+                    slot.rename(root / 'original')
+                    slot.symlink_to(root / 'original', target_is_directory=True)
+                return raw
+
+            # The final parent still has the same inode via the new symlink;
+            # checking only that parent would certify the replaced path.
+            with mock.patch.object(policy, 'MANIFEST', parent / 'manifest.json'), \
+                 mock.patch.object(policy.os, 'read', side_effect=relink_after_open), \
+                 mock.patch.object(policy, 'source_policies', side_effect=AssertionError('source reached')):
+                with self.assertRaises(policy.PolicyError):
+                    policy.load_manifest()
+            self.assertTrue(changed)
+
 
 class ActivationTests(unittest.TestCase):
     def test_all_policies_compile_before_any_binding_is_activated(self):
