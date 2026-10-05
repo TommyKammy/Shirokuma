@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.178"
+version: "0.179"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: reject invalid dotted Kubernetes storage names (offline)
+
+Three synthetic Bound PV names with empty or hyphen-edged DNS-subdomain
+segments passed the fixed storage reference projection before repair. The
+shared Kubernetes object-name validator now checks each segment, retaining
+valid dotted names. `make test-local-finops` passed 258 cases (seven Linux-only
+skips); `make verify-local-experiment` passed. Dedicated Colima was observed
+stopped. No live API, collection, retained report/volume/backup mutation or
+AgentHouse used-byte measurement (`null / NOT_MEASURED`). Offline names do not
+authenticate the API, prove mount health or confer operator acceptance. Restore
+only the scoped validator/test if needed and retain saved evidence. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: reject NUL-bearing Pod mount paths (offline)
 

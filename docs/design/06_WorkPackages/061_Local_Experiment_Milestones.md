@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.378"
+version: "5.379"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded storage names and fixed Trino projection (offline)
+
+WP-L6-FIN-001 refuses three malformed dotted DNS-subdomain PV names while a
+valid dotted PV name passes. Separately WP-L2-POL-001 requires the six-key
+Trino ConfigMap projection: omitting `items` no longer lends the smoke image.
+Both negatives failed before repair. Focused FinOps 258 cases (seven Linux-only
+skips), policy 166 cases and `make verify-local-experiment` passed; the full
+verifier's fake-worker failure is an intentional negative diagnostic. Dedicated
+Colima was observed stopped; no live API/admission, unknown request replay,
+collection, retained report/volume/backup mutation or GitHub write. Offline
+source guards cannot authenticate producers, establish strict admission,
+measure AgentHouse used bytes (`null / NOT_MEASURED`) or grant operator
+acceptance. Restore only these guards/tests if needed, preserving saved inputs.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: reject NUL-bearing Pod mount paths (offline)
 

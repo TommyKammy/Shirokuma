@@ -1172,7 +1172,13 @@ class ScopedResponseTests(unittest.TestCase):
                                                  'securityContext': {'runAsNonRoot': True, 'runAsUser': 10000,
                                                                      'seccompProfile': {'type': 'RuntimeDefault'}},
                                                   'volumes': [
-                                                      {'name': 'config', 'configMap': {'name': 'trino-local-config'}},
+                                                       {'name': 'config', 'configMap': {
+                                                           'name': 'trino-local-config',
+                                                           'items': [{'key': path.removeprefix('catalog/'), 'path': path}
+                                                                     for path in ('config.properties', 'node.properties',
+                                                                                  'jvm.config', 'log.properties',
+                                                                                  'catalog/iceberg.properties',
+                                                                                  'catalog/tpch.properties')]}},
                                                       {'name': 'tmp', 'emptyDir': {'sizeLimit': '1Gi'}},
                                                       {'name': 'data', 'emptyDir': {'sizeLimit': '2Gi'}}],
                                                   'containers': [
@@ -1236,8 +1242,13 @@ class ScopedResponseTests(unittest.TestCase):
             with self.subTest(template_extra=extra), self.assertRaises(policy.PolicyError):
                 client.image()
         config_paths = ('config.properties', 'node.properties', 'jvm.config',
-                        'log.properties', 'catalog/iceberg.properties',
-                        'catalog/tpch.properties')
+                         'log.properties', 'catalog/iceberg.properties',
+                         'catalog/tpch.properties')
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['volumes'][0]['configMap'].pop('items', None)
+        client.json_request.return_value = reply
+        with self.assertRaisesRegex(policy.PolicyError, 'smoke requires local config or ephemeral volumes'):
+            client.image()
         explicit = copy.deepcopy(valid)
         config = explicit['spec']['template']['spec']['volumes'][0]['configMap']
         config['items'] = [{'key': path.removeprefix('catalog/'), 'path': path}

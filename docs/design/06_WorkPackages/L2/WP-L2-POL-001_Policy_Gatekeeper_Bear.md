@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.218"
+version: "0.219"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: require fixed Trino ConfigMap projection (offline)
+
+A synthetic same-image Trino source without ConfigMap `items` lent the smoke
+image before repair, implicitly mounting every ConfigMap key rather than the
+six paths in the repository Deployment. The source now requires those six
+key/path entries. A manifest-shaped fixture passes; focused policy 166 cases
+and `make verify-local-experiment` passed. The verifier's fake Dagster worker
+failure is an intentional negative diagnostic. No live admission/API, saved
+request replay, retained data/backup mutation or GitHub write. This guard
+cannot authenticate the source, prove strict admission or establish operator
+acceptance. Revert only the scoped projection guard/test if necessary;
+preserve saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: named Trino probe port binding (offline)
 

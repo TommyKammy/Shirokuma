@@ -48,7 +48,8 @@ def uid(value):
 
 
 def name(value):
-    require(type(value) is str and re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?', value))
+    require(type(value) is str and len(value) <= 253 and re.fullmatch(
+        r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*', value))
     return value
 
 

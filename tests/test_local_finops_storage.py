@@ -47,6 +47,18 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_kubernetes_object_names_require_dns_subdomain_labels(self):
+        for invalid in ('bad..name', 'bad.-name', 'bad-.name'):
+            data = deepcopy(objects('seaweedfs'))
+            data[4]['metadata']['name'] = invalid
+            data[3]['spec']['volumeName'] = invalid
+            with self.subTest(invalid=invalid), self.assertRaises(S.StorageError):
+                projected('seaweedfs', data)
+        data = deepcopy(objects('seaweedfs'))
+        data[4]['metadata']['name'] = 'pvc.valid-name'
+        data[3]['spec']['volumeName'] = 'pvc.valid-name'
+        self.assertEqual(projected('seaweedfs', data)['pv']['name'], 'pvc.valid-name')
+
     def test_primary_mount_rejects_nul_path(self):
         for component in S.TARGETS:
             data = deepcopy(objects(component))
