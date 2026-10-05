@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.336"
+version: "5.337"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed Trino smoke volumes and bound PV mode (offline)
+
+WP-L2-POL-001: the smoke-image reader now requires the three named config/tmp/data
+volumes and their three fixed mounts, not just valid individual entries. Synthetic
+same-name Deployments missing one of either are refused; policy suite 166 passed.
+WP-L6-FIN-001: a synthetic Bound directory-mounted PVC backed by a Block-mode
+PV was incorrectly projected as observed before repair. Projection now refuses
+Block mode on the PV as well as the PVC; absent/default and explicit Filesystem
+PV modes pass. FinOps suite 224 passed (seven Linux-only skips). The full
+`make verify-local-experiment` and `git diff --check` passed; its fake Dagster
+failure trace is intentional. Dedicated Colima was freshly observed stopped.
+No live admission/API, Docker collection, unknown-request replay, retained
+report/volume/backup mutation or GitHub write. Offline checks do not authenticate
+producers, establish strict live admission, measure AgentHouse bytes (`null /
+NOT_MEASURED`) or confer operator acceptance. Restore only the scoped guards/
+tests if needed; preserve saved evidence and backups. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: bounded smoke container execution and independent FinOps check (offline)
 

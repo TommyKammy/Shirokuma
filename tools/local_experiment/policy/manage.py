@@ -542,6 +542,9 @@ class Kubernetes:
                 raise PolicyError('smoke requires the isolated local Trino pod template')
             volumes = pod_spec.get('volumes', [])
             if (type(volumes) is not list or
+                       any(type(volume) is not dict or type(volume.get('name')) is not str
+                           for volume in volumes) or
+                       {volume['name'] for volume in volumes} != {'config', 'tmp', 'data'} or
                       any(type(volume) is not dict or
                           not any(set(volume) == {'name', source} and
                                   type(volume[source]) is dict and
@@ -605,7 +608,9 @@ class Kubernetes:
             mounts = containers[0].get('volumeMounts', [])
             expected_paths = {'config': '/etc/trino', 'tmp': '/tmp', 'data': '/var/trino'}
             if (type(mounts) is not list or
-                    len({mount.get('name') for mount in mounts if type(mount) is dict}) != len(mounts) or
+                     {mount.get('name') for mount in mounts if type(mount) is dict} !=
+                     set(expected_paths) or
+                     len({mount.get('name') for mount in mounts if type(mount) is dict}) != len(mounts) or
                     any(type(mount) is not dict or
                         set(mount) - {'name', 'mountPath', 'readOnly'} or
                         mount.get('name') not in expected_paths or

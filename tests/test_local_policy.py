@@ -1169,9 +1169,16 @@ class ScopedResponseTests(unittest.TestCase):
                                         'spec': {'automountServiceAccountToken': False,
                                                  'securityContext': {'runAsNonRoot': True, 'runAsUser': 10000,
                                                                      'seccompProfile': {'type': 'RuntimeDefault'}},
-                                                 'containers': [
+                                                  'volumes': [
+                                                      {'name': 'config', 'configMap': {'name': 'trino-local-config'}},
+                                                      {'name': 'tmp', 'emptyDir': {'sizeLimit': '1Gi'}},
+                                                      {'name': 'data', 'emptyDir': {'sizeLimit': '2Gi'}}],
+                                                  'containers': [
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64,
-              'imagePullPolicy': 'Never', 'securityContext': {
+               'imagePullPolicy': 'Never', 'volumeMounts': [
+                   {'name': 'config', 'mountPath': '/etc/trino', 'readOnly': True},
+                   {'name': 'tmp', 'mountPath': '/tmp'},
+                   {'name': 'data', 'mountPath': '/var/trino'}], 'securityContext': {
                   'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True,
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
@@ -1258,16 +1265,26 @@ class ScopedResponseTests(unittest.TestCase):
                 with self.assertRaises(policy.PolicyError):
                     client.image()
         reply = copy.deepcopy(valid)
-        reply['spec']['template']['spec']['volumes'] = [
-            {'name': 'tmp', 'emptyDir': {'sizeLimit': '1Gi'}}]
-        client.json_request.return_value = reply
-        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
-        reply['spec']['template']['spec']['volumes'] = [
-            {'name': 'config', 'configMap': {'name': 'trino-local-config'}}]
-        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         reply['spec']['template']['spec']['volumes'][0]['configMap']['items'] = [
             {'key': 'iceberg.properties', 'path': 'catalog/iceberg.properties'}]
+        client.json_request.return_value = reply
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for missing in ('config', 'tmp', 'data'):
+            with self.subTest(missing_volume=missing):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['volumes'] = [
+                    item for item in reply['spec']['template']['spec']['volumes'] if item['name'] != missing]
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+            with self.subTest(missing_mount=missing):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['containers'][0]['volumeMounts'] = [
+                    item for item in reply['spec']['template']['spec']['containers'][0]['volumeMounts']
+                    if item['name'] != missing]
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
         for mounts in ([{'name': 'foreign', 'mountPath': '/etc/trino'}],
                        [{'name': 'config', 'mountPath': '/etc/trino', 'subPath': 'secret'}],
                        [{'name': 'config', 'mountPath': '/etc/trino', 'readOnly': False}],
@@ -1276,25 +1293,13 @@ class ScopedResponseTests(unittest.TestCase):
                         {'name': 'config', 'mountPath': '/tmp'}], None):
             with self.subTest(mounts=mounts):
                 reply = copy.deepcopy(valid)
-                reply['spec']['template']['spec']['volumes'] = [
-                    {'name': 'config', 'configMap': {'name': 'trino-local-config'}}]
                 reply['spec']['template']['spec']['containers'][0]['volumeMounts'] = mounts
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()
         reply = copy.deepcopy(valid)
-        reply['spec']['template']['spec']['volumes'] = [
-            {'name': 'config', 'configMap': {'name': 'trino-local-config'}}]
-        reply['spec']['template']['spec']['containers'][0]['volumeMounts'] = [
-            {'name': 'config', 'mountPath': '/etc/trino', 'readOnly': True}]
+        reply['spec']['template']['spec']['volumes'][2]['emptyDir'] = {}
         client.json_request.return_value = reply
-        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
-        reply['spec']['template']['spec']['volumes'].extend([
-            {'name': 'tmp', 'emptyDir': {'sizeLimit': '1Gi'}},
-            {'name': 'data', 'emptyDir': {}}])
-        reply['spec']['template']['spec']['containers'][0]['volumeMounts'].extend([
-            {'name': 'tmp', 'mountPath': '/tmp'},
-            {'name': 'data', 'mountPath': '/var/trino'}])
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         reply['spec']['template']['spec']['containers'][0]['volumeMounts'][0]['name'] = []
         with self.assertRaises(policy.PolicyError):

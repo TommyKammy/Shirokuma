@@ -86,6 +86,15 @@ class StorageTests(unittest.TestCase):
             data[3]['spec'].pop('volumeMode')
             self.assertEqual(projected(component, data)['state'], 'observed')
 
+    def test_bound_directory_claim_cannot_resolve_to_block_mode_pv(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            data = deepcopy(objects(component))
+            data[4]['spec']['volumeMode'] = 'Block'
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+            data[4]['spec']['volumeMode'] = 'Filesystem'
+            self.assertEqual(projected(component, data)['state'], 'observed')
+
     def test_pending_retained_claim_zero_pods_not_zero_capacity(self):
         data=list(objects('seaweedfs'));data[0]['spec']['replicas']=0;data[1]=[]
         data[3]['spec'].pop('volumeName');data[3]['status']={'phase':'Pending'};data[4]=None

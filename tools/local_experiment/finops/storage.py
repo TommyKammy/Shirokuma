@@ -151,6 +151,8 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
             p = _meta(pv, 'PersistentVolume', None, volume)
             ref = pv.get('spec', {}).get('claimRef', {})
             require(ref.get('namespace') == ns and ref.get('name') == claim and ref.get('uid') == c['uid'])
+            # Directory-mounted claims cannot be backed by a block-mode PV.
+            require(pv['spec'].get('volumeMode') in (None, 'Filesystem'))
             policy = pv['spec'].get('persistentVolumeReclaimPolicy')
             require(policy in ('Delete', 'Retain', 'Recycle'))
             value['pv'] = dict(name=volume, uid=p['uid'], capacity_bytes=quantity(

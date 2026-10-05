@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.149"
+version: "0.150"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: bound PV Filesystem mode (offline)
+
+A synthetic Bound directory-mounted PVC resolving to a Block-mode PV previously
+became an observed fixed storage reference. The projection now rejects this
+contradiction; absent/default and explicit Filesystem PV modes pass. The negative
+failed before repair, the 224-test FinOps suite (seven Linux skips) and full
+local verification passed. No live API, retained storage/report/backup change,
+or AgentHouse volume scan; its bytes remain `null / NOT_MEASURED`. This does not
+authenticate the API or measure usage. Roll back only the projection/test,
+preserving stored evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: separate saved/reference boundary check (offline)
 

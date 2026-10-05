@@ -5,12 +5,22 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.191"
+version: "0.192"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: complete smoke volume reference (offline)
+
+The fixed Trino smoke-image source requires all three expected config/tmp/data
+volumes and mounts. A same-name synthetic Deployment with a digest-shaped image
+but missing one reference no longer supplies the smoke image; 166 policy tests
+and the full local verifier passed. Dedicated Colima was observed stopped; no
+live admission or retained request/volume/backup mutation. This is not API
+authenticity, strict admission or operator acceptance. Roll back only the scoped
+reader/test while preserving saved evidence. Original Vault sync pending.
 
 ## 2026-10-06: restrict smoke-source container execution (offline)
 
