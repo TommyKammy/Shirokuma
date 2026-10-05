@@ -160,6 +160,20 @@ class StorageTests(unittest.TestCase):
                 projected(component, data)
         self.assertEqual(projected('trino')['state'], 'no_direct_pvc')
 
+    def test_deployment_replicaset_selector_must_select_reported_pod(self):
+        for component in ('polaris', 'trino'):
+            data = deepcopy(objects(component))
+            data[2]['spec'] = {'selector': {'matchLabels': {
+                **data[0]['spec']['selector']['matchLabels'], 'pod-template-hash': 'owned'}}}
+            data[1][0]['metadata']['labels']['pod-template-hash'] = 'owned'
+            self.assertEqual(projected(component, data)['state'], 'no_direct_pvc')
+            for selector in ({'matchLabels': {'pod-template-hash': 'foreign'}},
+                             {'matchLabels': {}}, None, {'matchExpressions': []}):
+                changed = deepcopy(data)
+                changed[2]['spec']['selector'] = selector
+                with self.subTest(component=component, selector=selector), self.assertRaises(S.StorageError):
+                    projected(component, changed)
+
     def test_lost_claim_retains_reference_without_claiming_live_pv(self):
         data=list(objects('seaweedfs'));data[3]['status']['phase']='Lost';data[4]=None
         value=projected('seaweedfs',data)

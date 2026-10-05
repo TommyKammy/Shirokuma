@@ -109,6 +109,16 @@ def _snapshot(component, workload, pods, replica=None):
         rs = _meta(replica, 'ReplicaSet', ns)
         _owner(pod, 'ReplicaSet', rs['uid'], rs['name'])
         _owner(replica, 'Deployment', w['uid'], workload_name)
+        # An owned ReplicaSet with a foreign selector does not establish that
+        # this Pod belongs to the fixed Deployment's selected replica chain.
+        if 'spec' in replica:
+            rs_spec = replica['spec']
+            require(type(rs_spec) is dict and type(rs_spec.get('selector')) is dict)
+            rs_selector = rs_spec['selector']
+            rs_labels = rs_selector.get('matchLabels')
+            require(set(rs_selector) == {'matchLabels'} and type(rs_labels) is dict and
+                    all(rs_labels.get(key) == value for key, value in selector.items()) and
+                    all(labels.get(key) == value for key, value in rs_labels.items()))
     spec = pod.get('spec')
     require(type(spec) is dict)
     containers = spec.get('containers'); volumes = spec.get('volumes', [])

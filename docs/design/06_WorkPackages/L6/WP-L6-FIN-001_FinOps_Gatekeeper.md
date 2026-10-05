@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.160"
+version: "0.161"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: owned ReplicaSet selector must select storage Pod (offline)
+
+An owned ReplicaSet with a foreign, empty or malformed explicit selector could
+lend a Pod's UID to a fixed Deployment storage reference. Eight synthetic
+negatives failed before repair; the reader now checks a present ReplicaSet
+matchLabels selector against both the workload selector and selected Pod labels.
+Minimal fixtures with no ReplicaSet spec remain supported. `make
+test-local-finops` passed 238 cases (seven Linux-only skips). No live collection
+or retained report/PVC/backup change. Sequential offline reads cannot authenticate
+the API, make a snapshot atomic or measure AgentHouse used bytes (`null /
+NOT_MEASURED`). Restore only the scoped selector guard/test if necessary;
+preserve saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: typed fixed storage reference envelopes (offline)
 

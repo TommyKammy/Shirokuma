@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.352"
+version: "5.353"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed storage ReplicaSet selection (offline)
+
+WP-L6-FIN-001: an owned but foreign-selecting ReplicaSet no longer certifies a
+fixed Deployment's Pod storage reference. Eight negatives failed before repair;
+238 focused FinOps tests passed (seven Linux-only skips), as did `make
+verify-local-experiment` (intentional fake Dagster worker negative diagnostic)
+and `git diff --check`. Dedicated Colima was
+observed stopped earlier this invocation; no live API, report/volume/backup
+mutation, unknown-request replay or GitHub write. This is not authenticated or
+atomic cluster evidence, AgentHouse byte measurement (`null / NOT_MEASURED`) or
+operator acceptance. Revert only the selector guard/test if needed, preserving
+saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: typed storage envelopes and fixed Trino controller (offline)
 
