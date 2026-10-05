@@ -5,12 +5,36 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.379"
+version: "5.381"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: typed Bound PV claim reference (offline)
+
+WP-L6-FIN-001 now refuses a Bound PV claimRef explicitly identifying a Pod
+or `apps/v1` while matching the fixed PVC UID/name. Both negatives failed
+before repair; absent and correct type pass. Focused FinOps 259 tests passed
+(seven Linux-only skips). Post-change `make verify-local-experiment`,
+design-context, secret scan and diff check pass; the verifier's fake-worker
+failure is an intentional negative diagnostic. No live API, collection, retained report/volume/
+backup change or AgentHouse used-byte measurement (`null / NOT_MEASURED`).
+Offline shape checks do not authenticate Kubernetes or confer operator
+acceptance. Restore only the scoped guard/test if necessary; preserve saved
+evidence. Original Vault sync pending outside checkout.
+
+## 2026-10-06: per-segment Kubernetes storage name limit (offline)
+
+WP-L6-FIN-001 now rejects dotted PV names with a 64-character segment;
+63-character labels remain accepted. Two negative fixtures failed before repair;
+focused FinOps 258 cases pass (seven Linux-only skips). Colima was freshly
+observed stopped. No live API, collection, retained report/volume/backup
+mutation or AgentHouse used-byte measurement (`null / NOT_MEASURED`). This
+offline validation cannot authenticate a producer, prove mount health or grant
+operator acceptance. Roll back only the scoped validator/test if needed,
+preserving saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded storage names and fixed Trino projection (offline)
 

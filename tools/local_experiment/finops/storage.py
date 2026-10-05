@@ -49,7 +49,8 @@ def uid(value):
 
 def name(value):
     require(type(value) is str and len(value) <= 253 and re.fullmatch(
-        r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*', value))
+        r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?'
+        r'(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*', value))
     return value
 
 
@@ -266,7 +267,10 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
             pv_spec = pv.get('spec', {}); require(type(pv_spec) is dict)
             ref = pv_spec.get('claimRef', {}); pv_capacity = pv_spec.get('capacity', {})
             require(type(ref) is dict and type(pv_capacity) is dict)
-            require(ref.get('namespace') == ns and ref.get('name') == claim and ref.get('uid') == c['uid'])
+            require(ref.get('namespace') == ns and ref.get('name') == claim and
+                    ref.get('uid') == c['uid'] and
+                    ref.get('kind', 'PersistentVolumeClaim') == 'PersistentVolumeClaim' and
+                    ref.get('apiVersion', 'v1') == 'v1')
             # Directory-mounted claims cannot be backed by a block-mode PV.
             require(pv_spec.get('volumeMode') in (None, 'Filesystem'))
             policy = pv_spec.get('persistentVolumeReclaimPolicy')

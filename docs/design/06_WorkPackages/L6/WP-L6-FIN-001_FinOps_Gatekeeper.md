@@ -5,12 +5,41 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.179"
+version: "0.181"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: bound PV claim-reference type (offline)
+
+Two synthetic Bound PV claimRefs with the expected PVC namespace/name/UID but
+explicit `Pod` kind or `apps/v1` API version previously certified the fixed
+reference. Optional present kind/version now must identify a v1 PVC; omission
+and explicit correct values pass. Both negatives failed before repair; focused
+FinOps 259 tests pass (seven Linux-only skips). Post-change
+`make verify-local-experiment`, design-context, secret scan and diff check
+pass; the verifier prints an intentional fake-worker negative diagnostic.
+No live PV/PVC read, volume
+scan, retained report/backup change or AgentHouse used-byte measurement
+(`null / NOT_MEASURED`). This offline shape check cannot authenticate the API
+or establish operator acceptance. Revert only this guard/test if needed;
+preserve saved records. Original Vault sync pending outside checkout.
+
+## 2026-10-06: bound each dotted storage-name segment (offline)
+
+Two synthetic Bound PV names with a 64-character segment passed the fixed
+reference inventory despite staying under the total 253-character limit.
+The shared PV/PVC/storage-class name validator now limits each DNS-subdomain
+segment to 63 characters; a 63-character segment still passes. Both negatives
+failed before repair; focused FinOps 258 tests and the full local verifier
+pass (seven Linux-only FinOps skips).
+Dedicated Colima was freshly observed stopped; no live collection, retained
+report/volume/backup change or AgentHouse used-byte measurement (`null /
+NOT_MEASURED`). This does not authenticate Kubernetes, verify mounts or confer
+operator acceptance. Revert only the validator/test if necessary; preserve
+saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: reject invalid dotted Kubernetes storage names (offline)
 

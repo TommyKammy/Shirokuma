@@ -48,7 +48,7 @@ def projected(component, data=None):
 
 class StorageTests(unittest.TestCase):
     def test_kubernetes_object_names_require_dns_subdomain_labels(self):
-        for invalid in ('bad..name', 'bad.-name', 'bad-.name'):
+        for invalid in ('bad..name', 'bad.-name', 'bad-.name', 'a' * 64 + '.pv', 'pv.' + 'a' * 64):
             data = deepcopy(objects('seaweedfs'))
             data[4]['metadata']['name'] = invalid
             data[3]['spec']['volumeName'] = invalid
@@ -58,6 +58,18 @@ class StorageTests(unittest.TestCase):
         data[4]['metadata']['name'] = 'pvc.valid-name'
         data[3]['spec']['volumeName'] = 'pvc.valid-name'
         self.assertEqual(projected('seaweedfs', data)['pv']['name'], 'pvc.valid-name')
+        data[4]['metadata']['name'] = 'a' * 63 + '.pv'
+        data[3]['spec']['volumeName'] = 'a' * 63 + '.pv'
+        self.assertEqual(projected('seaweedfs', data)['pv']['name'], 'a' * 63 + '.pv')
+
+    def test_bound_pv_claim_reference_has_pvc_type(self):
+        for field, invalid in (('kind', 'Pod'), ('apiVersion', 'apps/v1')):
+            data = deepcopy(objects('seaweedfs'))
+            data[4]['spec']['claimRef'][field] = invalid
+            with self.subTest(field=field), self.assertRaises(S.StorageError):
+                projected('seaweedfs', data)
+        data[4]['spec']['claimRef'].update(kind='PersistentVolumeClaim', apiVersion='v1')
+        self.assertEqual(projected('seaweedfs', data)['state'], 'observed')
 
     def test_primary_mount_rejects_nul_path(self):
         for component in S.TARGETS:
