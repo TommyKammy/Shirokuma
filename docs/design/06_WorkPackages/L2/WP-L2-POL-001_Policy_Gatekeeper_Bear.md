@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.124"
+version: "0.125"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: scoped smoke image source identity (offline)
+
+The smoke image reader previously accepted a pinned Trino image from a
+malformed or differently named/namespace Deployment response. It now requires
+the `apps/v1` Deployment identity in the dedicated namespace, and refuses a
+terminating Deployment before selecting the image. Synthetic mismatches and
+the valid fixture pass 101 focused policy tests and the local verifier. Colima
+was freshly observed stopped; no live API/dry-run, request replay, retained
+data/backup change or GitHub write. This cannot authenticate kubectl or prove
+current Trino readiness, live admission, strict gating or operator acceptance.
+Revert only the scoped source guard/test if the real read contract differs;
+preserve saved intents and reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: disposable candidate absence and smoke image failures (offline)
 

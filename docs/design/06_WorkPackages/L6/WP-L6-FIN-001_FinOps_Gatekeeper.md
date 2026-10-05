@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.90"
+version: "0.91"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: malformed saved history UTF-8 (offline)
+
+Independent saved-history fixtures now pin rejection of stray and incomplete
+UTF-8 sequences while a valid two-report control still parses. Collection is
+disabled during the negative tests; the unchanged parser emits HistoryError.
+Focused history 30 tests and the full local verifier passed. No current usage collection, retained report,
+volume or backup mutation; dedicated Colima was observed stopped. AgentHouse
+bytes remain `null / NOT_MEASURED`. This input boundary cannot authenticate
+saved producers or grant operator acceptance. Revert only the regression if
+needed; preserve retained reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: saved-history CLI complete-output byte cap (offline)
 

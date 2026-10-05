@@ -212,6 +212,19 @@ class HistoryTests(unittest.TestCase):
             with self.assertRaises(H.HistoryError):
                 H.parse(oversized)
 
+    def test_malformed_saved_utf8_cannot_be_rendered_or_trigger_collection(self):
+        valid = encoded([report(), report(processes())])
+        # Both a stray continuation byte and an incomplete multibyte scalar
+        # must be rejected before any saved report is displayed.
+        for payload in (valid[:-1] + b'\x80' + valid[-1:],
+                        valid[:-1] + b'\xe2\x82' + valid[-1:]):
+            with self.subTest(payload=payload[-6:]), patch(
+                    'tools.local_experiment.finops.run.collect',
+                    side_effect=AssertionError('collection')):
+                with self.assertRaises(H.HistoryError):
+                    H.parse(payload)
+        self.assertEqual(len(H.parse(valid)), 2)
+
     def test_direct_render_output_cap_counts_utf8_and_returns_no_partial_html(self):
         entries = H.parse(encoded([report(), report(processes())]))
         with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):

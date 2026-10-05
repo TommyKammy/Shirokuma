@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.262"
+version: "5.263"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: smoke Deployment identity and independent saved UTF-8 rejection (offline)
+
+WP-L2-POL-001: the smoke image reader now rejects wrong kind/version,
+namespace/name and terminating Deployment responses even if they carry a
+plausible pinned Trino image. Focused policy 101 tests passed. Independently
+WP-L6-FIN-001: saved-history input now has explicit stray/incomplete UTF-8
+negative fixtures and valid two-report control; focused history 30 tests
+passed without a parser change. Full `make verify-local-experiment` passed
+after both increments; design-context, secret scan and diff check passed.
+The first standalone `make scan-secrets` attempt had no Make target; the
+repository's `scripts/verify_supply_chain.py scan-secrets --repo .` passed.
+Dedicated Colima was observed stopped. No live API, collection, retained
+data/backup mutation or GitHub write. Offline fixtures neither authenticate
+producers nor prove strict admission, current AgentHouse bytes (`null /
+NOT_MEASURED`) or operator acceptance. Roll back only scoped guard/tests;
+preserve historical records. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: candidate absence preflight and independent smoke image guard (offline)
 

@@ -289,6 +289,12 @@ class Kubernetes:
     def image(self) -> str:
         deployment = self.json_request(['-n', NAMESPACE, 'get', 'deployment', 'trino-local', '-o', 'json'])
         try:
+            metadata = deployment['metadata']
+            if (deployment.get('apiVersion') != 'apps/v1' or deployment.get('kind') != 'Deployment'
+                    or type(metadata) is not dict or metadata.get('name') != 'trino-local'
+                    or metadata.get('namespace') != NAMESPACE
+                    or metadata.get('deletionTimestamp') is not None):
+                raise PolicyError('smoke requires the dedicated local Trino deployment')
             containers = deployment['spec']['template']['spec']['containers']
             if type(containers) is not list or any(type(item) is not dict for item in containers):
                 raise PolicyError('smoke requires a well-formed local Trino deployment')

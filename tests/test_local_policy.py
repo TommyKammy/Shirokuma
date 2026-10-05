@@ -287,7 +287,9 @@ class ActivationTests(unittest.TestCase):
 class ScopedResponseTests(unittest.TestCase):
     def test_smoke_image_requires_one_well_formed_local_trino_container(self):
         client = object.__new__(policy.Kubernetes)
-        valid = {'spec': {'template': {'spec': {'containers': [
+        valid = {'apiVersion': 'apps/v1', 'kind': 'Deployment',
+                 'metadata': {'name': 'trino-local', 'namespace': policy.NAMESPACE},
+                 'spec': {'template': {'spec': {'containers': [
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
@@ -295,6 +297,19 @@ class ScopedResponseTests(unittest.TestCase):
                       {'spec': {'template': {'spec': {'containers': [{'name': 'trino'}]}}}},
                       {'spec': {'template': {'spec': {'containers': [None]}}}}):
             with self.subTest(reply=reply):
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+
+        for field, value in (('apiVersion', 'v1'), ('kind', 'Pod'),
+                             ('metadata', {'name': 'other', 'namespace': policy.NAMESPACE}),
+                             ('metadata', {'name': 'trino-local', 'namespace': 'default'}),
+                             ('metadata', {'name': 'trino-local', 'namespace': policy.NAMESPACE,
+                                           'deletionTimestamp': '2026-10-05T00:00:00Z'}),
+                             ('metadata', [])):
+            with self.subTest(field=field, value=value):
+                reply = copy.deepcopy(valid)
+                reply[field] = value
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()
