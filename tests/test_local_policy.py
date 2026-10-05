@@ -990,6 +990,53 @@ class ScopedResponseTests(unittest.TestCase):
 
 
 class RollbackTests(unittest.TestCase):
+    def test_replaced_binding_between_preflight_and_delete_is_preserved(self):
+        for field, replacement in (('uid', 'replacement-uid'), ('resourceVersion', '13')):
+            with self.subTest(field=field):
+                kube = FakeKubernetes(ready=True)
+                first = next(x for x in items() if x['kind'] == policy.BINDING)
+                key = (policy.BINDING, first['metadata']['name'])
+                original_get = kube.get
+                reads = 0
+
+                def replace_after_preflight(kind, name):
+                    nonlocal reads
+                    if kind == policy.BINDING and name == first['metadata']['name']:
+                        reads += 1
+                        if reads == 2:
+                            kube.objects[key]['metadata'][field] = replacement
+                    return original_get(kind, name)
+
+                kube.get = replace_after_preflight
+                events = []
+                with self.assertRaisesRegex(policy.PolicyError, 'changed since rollback preflight'):
+                    policy.rollback_bindings(kube, items(), record=events.append)
+                self.assertEqual(kube.calls, [])
+                self.assertEqual(events, [])
+                self.assertEqual(kube.objects[key]['metadata'][field], replacement)
+
+    def test_binding_created_after_absence_preflight_is_not_deleted(self):
+        kube = FakeKubernetes(ready=True)
+        first = next(x for x in items() if x['kind'] == policy.BINDING)
+        key = (policy.BINDING, first['metadata']['name'])
+        new_binding = kube.objects.pop(key)
+        original_get = kube.get
+        reads = 0
+
+        def appear_after_preflight(kind, name):
+            nonlocal reads
+            if (kind, name) == key:
+                reads += 1
+                if reads == 2:
+                    kube.objects[key] = new_binding
+            return original_get(kind, name)
+
+        kube.get = appear_after_preflight
+        with self.assertRaisesRegex(policy.PolicyError, 'changed since rollback preflight'):
+            policy.rollback_bindings(kube, items())
+        self.assertEqual(kube.calls, [])
+        self.assertEqual(kube.objects[key], new_binding)
+
     def test_later_binding_missing_delete_precondition_prevents_partial_rollback(self):
         for field, invalid in (('uid', None), ('resourceVersion', 'not-a-version')):
             with self.subTest(field=field):

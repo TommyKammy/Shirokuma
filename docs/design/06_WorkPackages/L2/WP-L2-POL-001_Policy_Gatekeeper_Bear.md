@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.155"
+version: "0.156"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: rollback rechecks preflight binding identity (offline)
+
+An owned binding replaced or updated between the initial rollback preflight and
+its delete-phase read could be deleted using the newer object's UID/version;
+a binding absent at preflight could also appear and be removed. Disposable
+regressions reproduced both cases before repair. Rollback now retains each
+preflight absence or UID/resource-version pair and refuses a different
+delete-phase observation, while atomic delete preconditions still protect the
+subsequent request. `make test-local-policy` passed 141 tests and `make
+verify-local-experiment` passed. Dedicated
+Colima was observed stopped; no live API request, retained intent/data or backup
+mutation. A change after this recheck can still cause a partial rollback; the
+operation is not transactional and live admission/operator acceptance remain
+unverified. Restore only the scoped identity recheck and tests if needed;
+preserve saved intents. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: rollback validates all delete preconditions first (offline)
 

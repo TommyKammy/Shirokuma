@@ -633,17 +633,24 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
 
 def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clock=time.monotonic, pause=time.sleep):
     bindings = [x for x in items if x['kind'] == BINDING]
+    preflight = {}
     for expected in bindings:
         current = kube.get(BINDING, expected['metadata']['name'])
         if current is not None:
             assert_owned(current, expected)
             # Validate all atomic-delete inputs before deleting any binding.
-            binding_delete_preconditions(current)
+            preflight[expected['metadata']['name']] = binding_delete_preconditions(current)
+        else:
+            preflight[expected['metadata']['name']] = None
     for expected in bindings:
         current = kube.get(BINDING, expected['metadata']['name'])
+        if current is not None:
+            assert_owned(current, expected)
+        identity = binding_delete_preconditions(current) if current is not None else None
+        if identity != preflight[expected['metadata']['name']]:
+            raise PolicyError('binding changed since rollback preflight')
         if current is None:
             continue
-        assert_owned(current, expected)
         uid = current['metadata'].get('uid')
         kube.delete_binding(current, expected)
         deadline = clock() + 30

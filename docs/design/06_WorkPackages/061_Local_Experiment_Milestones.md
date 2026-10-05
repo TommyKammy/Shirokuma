@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.295"
+version: "5.296"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: rollback preflight identity retained and separate FinOps review (offline)
+
+WP-L2-POL-001: a binding changed between preflight and delete-phase read (or
+created after an absent preflight) previously could be removed. Synthetic
+negatives failed before repair; rollback now refuses mismatched absence or
+UID/resource-version identity. Focused policy 141 tests and `make
+verify-local-experiment` passed. Independently
+WP-L6-FIN-001 reviewed saved-history digest/selection and per-report storage
+scope; 207 tests passed (seven Linux-only skips), with no collection or reader
+change. Dedicated Colima was freshly observed stopped; no live API, unknown
+request replay, retained data/backup mutation or GitHub write. A later
+concurrent change can still produce partial rollback. Live strict admission,
+producer authentication, current AgentHouse usage (`null / NOT_MEASURED`) and
+operator acceptance remain open. Revert only the scoped rollback guard/tests
+if necessary; preserve saved intents and reports. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-06: rollback preflight completeness and separate FinOps review (offline)
 
