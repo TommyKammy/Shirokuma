@@ -12,6 +12,19 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-05: manifest ancestor traversal (offline)
+
+The bounded manifest reader previously followed a symlink in an ancestor above
+its immediate parent. It now opens every parent component from `/` using
+directory-relative, non-following descriptors before opening the manifest.
+A synthetic ancestor-link negative and the real 16-item manifest pass their
+respective rejection/positive checks; 111 focused policy tests passed. This
+does not authenticate the checkout, prevent all concurrent path swaps or
+same-UID content edits, or prove live admission. The dedicated Colima profile
+was observed stopped; no retained intents, data or backups were changed.
+Rollback only this traversal and its regression if necessary; keep historical
+records. Original Vault sync pending outside checkout.
+
 ## 2026-10-05: immediate manifest parent identity (offline)
 
 A symlinked immediate parent of the dedicated manifest previously passed the

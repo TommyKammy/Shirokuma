@@ -166,7 +166,18 @@ def load_manifest() -> list[dict]:
         # The dedicated manifest is small and checked into this checkout. Do
         # not follow a replacement link or read an unbounded local file before
         # comparing its projection to the repository source.
-        parent_fd = os.open(MANIFEST.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        # Resolve each ancestor separately: O_NOFOLLOW on the final directory
+        # alone does not protect against a symlink earlier in the path.
+        parent_fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            for component in MANIFEST.parent.parts[1:]:
+                next_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                  dir_fd=parent_fd)
+                os.close(parent_fd)
+                parent_fd = next_fd
+        except BaseException:
+            os.close(parent_fd)
+            raise
         try:
             parent = os.fstat(parent_fd)
             fd = os.open(MANIFEST.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,

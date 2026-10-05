@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-05: independent saved-history recheck (offline)
+
+Rechecked the bounded strict-JSON input, saved digest/index binding, ordered
+rendering and per-report coverage separation without modifying the reader.
+The 204 FinOps tests passed (seven Linux-only skips), including saved input
+negatives. No new collection or current-volume measurement was performed;
+AgentHouse bytes remain `null / NOT_MEASURED`. Saved values cannot establish
+their producer's authenticity or operator acceptance. No code rollback for
+this read-only review; preserve reports and backups. Original Vault sync
+pending outside checkout.
+
 ## 2026-10-05: independent saved-history boundary review (offline)
 
 Reviewed the direct renderer's validated index/digest binding and chronological

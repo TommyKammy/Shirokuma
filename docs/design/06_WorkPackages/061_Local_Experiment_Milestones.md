@@ -12,6 +12,22 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-05: manifest ancestor traversal and independent FinOps check (offline)
+
+WP-L2-POL-001: a symlink above the immediate parent of the dedicated manifest
+previously escaped the final-component-only guard. Directory-relative,
+non-following traversal from `/` now rejects the ancestor link before source
+projection. The real 16-item manifest and 111 focused policy tests passed.
+Independently, WP-L6-FIN-001 saved-history parser and renderer boundaries were
+reviewed and the 204-test FinOps suite passed (seven Linux-only skips); no
+FinOps reader or report changed. Full `make verify-local-experiment` passed.
+Dedicated Colima was observed stopped; no live API, collection, replay,
+retained data/backup mutation or GitHub write. Traversal does not authenticate
+the checkout, prevent all races or prove admission. FinOps saved inputs do not
+prove present AgentHouse usage (`null / NOT_MEASURED`) or operator acceptance.
+Rollback only the policy traversal/test if required; preserve saved intents
+and reports. Original Vault sync pending outside checkout.
+
 ## 2026-10-05: immediate manifest parent and independent history review (offline)
 
 WP-L2-POL-001: a symlinked immediate manifest parent reached source projection
