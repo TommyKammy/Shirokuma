@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.186"
+version: "0.187"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke source volume mount scope (offline)
+
+Six synthetic mount lists used an unowned volume, config subPath, writable or
+redirected config, duplicate mount, or malformed mount list to supply the fixed
+smoke image before repair. The reader now restricts present mounts to the
+dedicated config/tmp/data paths, requires config read-only and rejects mount
+extensions; the repository's three-mount shape passes. Focused policy suite
+passed 166 tests and `make verify-local-experiment` passed. The dedicated
+Colima profile was observed stopped; no live API, admission or saved request
+was touched. This is not API authentication or strict live admission. Restore
+only the mount guard/test if necessary, preserving saved requests. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: legacy service account alias in smoke source (offline)
 

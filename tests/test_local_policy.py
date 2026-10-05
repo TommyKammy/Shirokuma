@@ -1224,6 +1224,37 @@ class ScopedResponseTests(unittest.TestCase):
         reply['spec']['template']['spec']['volumes'] = [
             {'name': 'config', 'configMap': {'name': 'trino-local-config'}}]
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for mounts in ([{'name': 'foreign', 'mountPath': '/etc/trino'}],
+                       [{'name': 'config', 'mountPath': '/etc/trino', 'subPath': 'secret'}],
+                       [{'name': 'config', 'mountPath': '/etc/trino', 'readOnly': False}],
+                       [{'name': 'config', 'mountPath': '/host', 'readOnly': True}],
+                       [{'name': 'config', 'mountPath': '/etc/trino', 'readOnly': True},
+                        {'name': 'config', 'mountPath': '/tmp'}], None):
+            with self.subTest(mounts=mounts):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['volumes'] = [
+                    {'name': 'config', 'configMap': {'name': 'trino-local-config'}}]
+                reply['spec']['template']['spec']['containers'][0]['volumeMounts'] = mounts
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['volumes'] = [
+            {'name': 'config', 'configMap': {'name': 'trino-local-config'}}]
+        reply['spec']['template']['spec']['containers'][0]['volumeMounts'] = [
+            {'name': 'config', 'mountPath': '/etc/trino', 'readOnly': True}]
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        reply['spec']['template']['spec']['volumes'].extend([
+            {'name': 'tmp', 'emptyDir': {'sizeLimit': '1Gi'}},
+            {'name': 'data', 'emptyDir': {}}])
+        reply['spec']['template']['spec']['containers'][0]['volumeMounts'].extend([
+            {'name': 'tmp', 'mountPath': '/tmp'},
+            {'name': 'data', 'mountPath': '/var/trino'}])
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        reply['spec']['template']['spec']['containers'][0]['volumeMounts'][0]['name'] = []
+        with self.assertRaises(policy.PolicyError):
+            client.image()
         for field, value in (('runAsNonRoot', False), ('runAsNonRoot', 1),
                              ('runAsUser', 0), ('runAsUser', True),
                              ('seccompProfile', {'type': 'Unconfined'})):

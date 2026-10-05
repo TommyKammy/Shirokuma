@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.144"
+version: "0.145"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: independent pre-epoch offset regression (offline)
+
+An offset-form Docker creation time that normalizes before the Unix epoch
+already fails with a scoped `SAMPLE_INVALID`; a focused regression now pins
+this boundary while an ordinary timestamp remains observed. The existing
+reader needed no change. `make test-local-finops` passed 222 tests (seven
+Linux-only skips), and `make verify-local-experiment` passed. No Docker
+collection, retained volume/report or backup change; AgentHouse usage remains
+`null / NOT_MEASURED`. This does not authenticate the daemon or grant scan
+permission. Restore only the new test if needed; retain saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: volume creation must precede reference sampling (offline)
 

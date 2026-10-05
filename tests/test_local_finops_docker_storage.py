@@ -64,6 +64,14 @@ class DockerStorageTests(unittest.TestCase):
         self.assertEqual(projected(data)['volume_created_at'],
                          '2026-09-19T00:00:00.000000000Z')
 
+    def test_pre_epoch_docker_creation_is_a_scoped_invalid_sample(self):
+        data = fixture()
+        data[2][0]['CreatedAt'] = '1970-01-01T00:30:00+01:00'
+        with self.assertRaisesRegex(D.DockerStorageError, '^SAMPLE_INVALID$'):
+            projected(data)
+        data[2][0]['CreatedAt'] = '2026-09-19T00:00:00Z'
+        self.assertEqual(projected(data)['state'], 'observed')
+
     def test_foreign_context_owner_image_mount_and_source_fail_closed(self):
         changes=[lambda x:x[0][0]['Endpoints']['docker'].update(Host='tcp://elsewhere'),
                  lambda x:x[1][0]['Config']['Labels'].update({D.AH.LABEL:'foreign'}),

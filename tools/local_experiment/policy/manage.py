@@ -561,10 +561,25 @@ class Kubernetes:
                 raise PolicyError('smoke requires the non-root local Trino pod context')
             containers = pod_spec['containers']
             if (type(containers) is not list or len(containers) != 1 or
-                     type(containers[0]) is not dict or
-                     any(type(pod_spec[field]) is not list or pod_spec[field]
-                         for field in ('initContainers', 'ephemeralContainers') if field in pod_spec)):
+                      type(containers[0]) is not dict or
+                      any(type(pod_spec[field]) is not list or pod_spec[field]
+                          for field in ('initContainers', 'ephemeralContainers') if field in pod_spec)):
                 raise PolicyError('smoke requires a well-formed local Trino deployment')
+            # A safe source is insufficient if it is mounted at an unexpected
+            # location, writable over configuration, or through a subPath.
+            mounts = containers[0].get('volumeMounts', [])
+            expected_paths = {'config': '/etc/trino', 'tmp': '/tmp', 'data': '/var/trino'}
+            if (type(mounts) is not list or
+                    len({mount.get('name') for mount in mounts if type(mount) is dict}) != len(mounts) or
+                    any(type(mount) is not dict or
+                        set(mount) - {'name', 'mountPath', 'readOnly'} or
+                        mount.get('name') not in expected_paths or
+                        mount.get('name') not in {volume['name'] for volume in volumes} or
+                        mount.get('mountPath') != expected_paths[mount['name']] or
+                        (mount['name'] == 'config' and mount.get('readOnly') is not True) or
+                        (mount['name'] != 'config' and mount.get('readOnly', False) is not False)
+                        for mount in mounts)):
+                raise PolicyError('smoke requires local Trino volume mounts')
             # A digest alone does not establish that the dedicated workload
             # uses the locally imported image instead of pulling remotely.
             if containers[0].get('imagePullPolicy') != 'Never':

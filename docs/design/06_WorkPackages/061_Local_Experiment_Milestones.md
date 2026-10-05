@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.331"
+version: "5.332"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: smoke volume mounts and independent pre-epoch guard (offline)
+
+WP-L2-POL-001: six synthetic unsafe/malformed Trino volumeMount sources
+previously supplied the fixed smoke image; the repository's config/tmp/data
+mount shape passes the new bounded source guard (166 policy tests). Independently
+WP-L6-FIN-001's existing pre-epoch timestamp refusal gained a regression (222
+FinOps tests, seven Linux-only skips). `make verify-local-experiment` passed;
+the dedicated Colima profile was freshly observed stopped. No live API,
+admission, Docker collection, unknown-request replay, retained volume/report/
+request/backup mutation or GitHub write. Offline checks neither authenticate
+the API or daemon, prove strict admission, measure AgentHouse bytes (`null /
+NOT_MEASURED`) nor grant operator acceptance. Restore only the scoped policy
+guard/tests or FinOps regression if necessary, preserving saved evidence.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke service-account alias and volume chronology (offline)
 
