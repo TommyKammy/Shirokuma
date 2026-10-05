@@ -1197,6 +1197,17 @@ class ScopedResponseTests(unittest.TestCase):
         client.json_request.return_value = with_groups
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         client.json_request.return_value = valid
+        # A same-image Pod can change its DNS identity without custom dnsConfig
+        # or host networking. The fixed smoke source does not set these fields.
+        for override in ({'hostname': 'foreign'}, {'subdomain': 'foreign'},
+                         {'setHostnameAsFQDN': True}, {'hostUsers': False}):
+            with self.subTest(pod_identity=override):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec'].update(override)
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        client.json_request.return_value = valid
         for resources in ({'requests': {'cpu': '100', 'memory': '2Gi'}},
                           {'limits': {'cpu': '8', 'memory': '16Gi'},
                            'requests': {'cpu': '1', 'memory': '2Gi'},

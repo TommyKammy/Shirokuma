@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.340"
+version: "5.341"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Pod identity smoke-source scope (offline)
+
+WP-L2-POL-001: four synthetic Trino Pod template DNS identity or user-namespace
+overrides supplied the pinned smoke image before repair; now refused, while the
+manifest-shaped fixture passes (policy suite 166). No live admission/API,
+request replay, retained volume/backup mutation or GitHub write. This cannot
+authenticate Kubernetes or prove strict admission/operator acceptance. Revert
+only this scoped guard/test if required; original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: FinOps PVC/PV mode continuity (offline)
 

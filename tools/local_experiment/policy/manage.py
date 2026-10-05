@@ -535,7 +535,8 @@ class Kubernetes:
                      pod_spec.get('serviceAccountName', 'default') != 'default' or
                      pod_spec.get('serviceAccount', 'default') != 'default' or
                      any(field in pod_spec for field in (
-                         'hostAliases', 'dnsConfig', 'runtimeClassName', 'nodeName',
+                          'hostAliases', 'dnsConfig', 'hostname', 'subdomain',
+                          'setHostnameAsFQDN', 'hostUsers', 'runtimeClassName', 'nodeName',
                          'nodeSelector', 'schedulerName', 'tolerations', 'affinity',
                          'topologySpreadConstraints', 'priorityClassName')) or
                      pod_spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or

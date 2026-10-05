@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.194"
+version: "0.195"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke-source Pod DNS identity and user namespace (offline)
+
+Four synthetic same-name Deployment Pod templates with custom hostname,
+subdomain, FQDN behavior or user namespace supplied the fixed smoke image before
+repair. The reader now rejects these unowned fields, absent in the repository
+Trino manifest. `make test-local-policy` passed 166 tests. Dedicated Colima was
+observed stopped; no live API/admission, retained data/backup mutation or
+request replay. An offline source guard cannot authenticate the API or prove
+strict live admission/operator acceptance. Restore only the scoped reader/test
+if needed, retaining saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded Trino resource budget and placement source (offline)
 
