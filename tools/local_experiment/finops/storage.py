@@ -305,8 +305,9 @@ def _collect_one(backend, component):
     labels = 'app.kubernetes.io/name=' + workload
     if label: labels += ',app.kubernetes.io/component=' + label
     listed = backend.storage_get(f'/api/v1/namespaces/{ns}/pods?labelSelector={quote(labels,safe="")}&limit=2')
-    require(listed.get('kind') == 'PodList' and listed.get('apiVersion') == 'v1' and
+    require(type(listed) is dict and listed.get('kind') == 'PodList' and listed.get('apiVersion') == 'v1' and
             type(listed.get('items')) is list and len(listed['items']) <= 1 and
+            all(type(p) is dict and type(p.get('metadata')) is dict for p in listed['items']) and
             _complete_pod_list(listed), 'TARGET_AMBIGUOUS')
     pods = listed['items']; replica = None
     if kind == 'Deployment' and pods:
@@ -318,14 +319,20 @@ def _collect_one(backend, component):
     pvc = pv = None
     if claim:
         pvc = backend.storage_get(f'/api/v1/namespaces/{ns}/persistentvolumeclaims/{claim}')
-        volume = pvc.get('spec', {}).get('volumeName')
-        if volume and pvc.get('status', {}).get('phase') == 'Bound':
+        _meta(pvc, 'PersistentVolumeClaim', ns, claim)
+        spec = pvc.get('spec', {}); status = pvc.get('status', {})
+        require(type(spec) is dict and type(status) is dict)
+        volume = spec.get('volumeName')
+        require(volume is None or (type(volume) is str and (not volume or name(volume))))
+        if volume and status.get('phase') == 'Bound':
             pv = backend.storage_get(f'/api/v1/persistentvolumes/{name(volume)}')
     after = backend.storage_get(f'/apis/apps/v1/namespaces/{ns}/{path}/{workload}')
     after_pods = backend.storage_get(f'/api/v1/namespaces/{ns}/pods?labelSelector={quote(labels,safe="")}&limit=2')
-    require(after_pods.get('kind') == 'PodList' and after_pods.get('apiVersion') == 'v1' and
+    require(type(after_pods) is dict and after_pods.get('kind') == 'PodList' and after_pods.get('apiVersion') == 'v1' and
             type(after_pods.get('items')) is list and
-            len(after_pods['items']) <= 1 and _complete_pod_list(after_pods), 'IDENTITY_CHANGED')
+            len(after_pods['items']) <= 1 and
+            all(type(p) is dict and type(p.get('metadata')) is dict for p in after_pods['items']) and
+            _complete_pod_list(after_pods), 'IDENTITY_CHANGED')
     after_replica = backend.storage_get(f'/apis/apps/v1/namespaces/{ns}/replicasets/{replica["metadata"]["name"]}') if replica else None
     if pvc:
         later = backend.storage_get(f'/api/v1/namespaces/{ns}/persistentvolumeclaims/{claim}')

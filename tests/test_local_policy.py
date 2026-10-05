@@ -1193,6 +1193,17 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for annotations in ({'sidecar.istio.io/inject': 'true'},
+                            {'shirokuma.dev/foreign': 'true'}, None, []):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template']['metadata']['annotations'] = annotations
+            client.json_request.return_value = reply
+            with self.subTest(annotations=annotations), self.assertRaises(policy.PolicyError):
+                client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['metadata']['annotations'] = {}
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         # A pinned image from a paused, scaled-out or rolling-update source is
         # not the dedicated one-replica Recreate smoke workload.
         for override in ({'replicas': 0}, {'replicas': 2}, {'replicas': True},

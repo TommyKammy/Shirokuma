@@ -524,14 +524,18 @@ class Kubernetes:
                     ('paused' in deployment_spec and deployment_spec['paused'] is not False)):
                 raise PolicyError('smoke requires the one-replica local Trino deployment')
             selector = deployment_spec['selector']
-            labels = deployment_spec['template']['metadata']['labels']
+            template_metadata = deployment_spec['template']['metadata']
+            labels = template_metadata['labels']
             owner_labels = metadata.get('labels')
             expected_owner = {'app.kubernetes.io/name': 'trino-local',
                               'app.kubernetes.io/part-of': 'shirokuma',
                               'shirokuma.dev/scope': 'local-experiment'}
             if (type(selector) is not dict or selector != {
                      'matchLabels': {'app.kubernetes.io/name': 'trino-local'}} or
-                     type(labels) is not dict or type(owner_labels) is not dict or
+                      type(labels) is not dict or type(owner_labels) is not dict or
+                      ('annotations' in template_metadata and
+                       (type(template_metadata['annotations']) is not dict or
+                        template_metadata['annotations'])) or
                      any(labels.get(key) != value or owner_labels.get(key) != value
                          for key, value in expected_owner.items()) or
                      labels.get('shirokuma.dev/object-storage-client') != 'true'):

@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.201"
+version: "0.202"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed smoke template annotations (offline)
+
+Four synthetic same-image Trino Deployment templates with extra or malformed
+Pod annotations supplied the pinned smoke image before repair. The source
+reader now requires absent or empty annotations; the repository template has
+none. The negative fixtures failed first and the 166-test policy suite passed.
+No live API/admission, saved request replay, retained data/backup mutation or
+GitHub write. An offline source filter does not authenticate Kubernetes or
+establish strict live admission or operator acceptance. Revert only the scoped
+source filter/test if needed; keep saved requests. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: fixed smoke Deployment controller shape (offline)
 

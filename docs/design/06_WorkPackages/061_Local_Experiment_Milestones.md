@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.355"
+version: "5.356"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: typed first storage replies and smoke annotations (offline)
+
+WP-L6-FIN-001: malformed first claim envelopes and first/second PodList replies
+now fail with scoped errors rather than untyped exceptions before further
+reads. WP-L2-POL-001: same-image Trino templates with Pod annotations cannot
+supply the smoke image. Negative fixtures failed before repair; focused suites
+passed (FinOps 242, seven Linux-only skips; policy 166); `make
+verify-local-experiment` and `git diff --check` passed (the fake Dagster worker
+failure in verifier output is an intentional negative diagnostic). Dedicated Colima was
+freshly observed stopped. No live API, collection, admission, unknown-request
+replay, volume/backup/report mutation or GitHub write. Offline tests cannot
+authenticate sources, prove strict admission, measure AgentHouse used bytes
+(`null / NOT_MEASURED`) or confer operator acceptance. Restore only the scoped
+collector and reader changes/tests if needed, keeping saved evidence. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: typed second PVC/PV reads (offline)
 

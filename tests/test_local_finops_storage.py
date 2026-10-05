@@ -314,6 +314,39 @@ class StorageTests(unittest.TestCase):
             with self.subTest(index=index, mutate=mutate), self.assertRaises(S.StorageError):
                 S._collect_one(backend, 'seaweedfs')
 
+    def test_storage_collection_refuses_malformed_first_claim_before_pv_read(self):
+        w, p, _, c, v = objects('seaweedfs')
+        original = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p}, c, v,
+                    deepcopy(w), {'kind':'PodList','apiVersion':'v1','metadata':{},'items':deepcopy(p)},
+                    deepcopy(c), deepcopy(v)]
+        for mutation in (lambda item: item.update(spec=None),
+                         lambda item: item.update(status=None),
+                         lambda item: item['spec'].update(volumeName=['invalid']),
+                         lambda item: item['status'].update(phase=[])):
+            responses = deepcopy(original)
+            mutation(responses[2])
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.storage_get.side_effect = responses
+            with self.subTest(mutation=mutation), self.assertRaises(S.StorageError):
+                S._collect_one(backend, 'seaweedfs')
+
+    def test_storage_collection_refuses_untyped_pod_list_and_pod_entry(self):
+        w, p, _, c, v = objects('seaweedfs')
+        original = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p}, c, v,
+                    deepcopy(w), {'kind':'PodList','apiVersion':'v1','metadata':{},'items':deepcopy(p)},
+                    deepcopy(c), deepcopy(v)]
+        for index, malformed in ((1, None), (1, []), (1, {'kind':'PodList','apiVersion':'v1',
+                                  'items':[None]}), (5, None), (5, [])):
+            responses = deepcopy(original)
+            responses[index] = malformed
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.storage_get.side_effect = responses
+            with self.subTest(index=index, malformed=malformed), self.assertRaisesRegex(
+                    S.StorageError, 'TARGET_AMBIGUOUS' if index == 1 else 'IDENTITY_CHANGED'):
+                S._collect_one(backend, 'seaweedfs')
+
     def test_storage_collection_requires_typed_second_pod_list(self):
         w, p, _, c, v = objects('seaweedfs')
         responses = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p},

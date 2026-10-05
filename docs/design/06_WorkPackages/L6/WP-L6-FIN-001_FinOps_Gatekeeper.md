@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.163"
+version: "0.164"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: typed first claim and PodList envelopes (offline)
+
+Malformed first PVC spec/status replies previously raised unscoped exceptions
+before PV lookup; untyped first/second PodList envelopes did likewise. The
+collector now validates these shapes before nested access or further reads,
+including a malformed first Pod entry and non-string PV name. Negative fixtures
+failed before repair; focused FinOps suite passed 242 tests (seven Linux-only
+skips). The dedicated Colima profile was observed stopped; no live API, volume
+traversal, retained report/backup mutation or GitHub write. This is not atomic
+or authenticated sampling, AgentHouse usage measurement (`null / NOT_MEASURED`)
+or operator acceptance. Revert only the scoped collector guards/tests if needed,
+preserving saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: typed second bound-reference reads (offline)
 
