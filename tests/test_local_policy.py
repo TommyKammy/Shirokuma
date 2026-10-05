@@ -1167,7 +1167,8 @@ class ScopedResponseTests(unittest.TestCase):
                                                                 'app.kubernetes.io/part-of': 'shirokuma',
                                                                 'shirokuma.dev/scope': 'local-experiment'}},
                                         'spec': {'containers': [
-            {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64}]}}}}
+            {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64,
+             'imagePullPolicy': 'Never'}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for references in ([{'apiVersion': 'v1', 'kind': 'ConfigMap', 'name': 'other',
@@ -1267,6 +1268,18 @@ class ScopedResponseTests(unittest.TestCase):
             with self.subTest(containers=containers):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec']['containers'] = containers
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+
+        for pull_policy in (None, 'Always', 'IfNotPresent', False, []):
+            with self.subTest(imagePullPolicy=pull_policy):
+                reply = copy.deepcopy(valid)
+                container = reply['spec']['template']['spec']['containers'][0]
+                if pull_policy is None:
+                    del container['imagePullPolicy']
+                else:
+                    container['imagePullPolicy'] = pull_policy
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()

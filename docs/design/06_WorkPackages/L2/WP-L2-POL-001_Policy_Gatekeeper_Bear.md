@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.178"
+version: "0.179"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke image requires local-only pull policy (offline)
+
+The fixed, persisted Trino Deployment could supply a digest-shaped smoke image
+even if its only container omitted `imagePullPolicy` or selected `Always` or
+`IfNotPresent`. The reader now requires the repository Trino manifest's `Never`
+setting; five synthetic malformed/remote-capable pull-policy cases are refused
+and the local-only control passes. `make test-local-policy` passed 166 tests and
+`make verify-local-experiment` passed. The dedicated Colima profile was freshly
+observed stopped. No API call, dry-run, image import, policy mutation or retained
+data/backup change. This does not prove image bytes are present on a node, API
+authenticity, live strict admission or operator acceptance. Revert only the
+lookup guard/test if necessary, retaining saved requests. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: smoke image excludes controller-owned Deployment (offline)
 

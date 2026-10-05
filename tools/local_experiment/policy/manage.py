@@ -530,11 +530,15 @@ class Kubernetes:
             pod_spec = deployment['spec']['template']['spec']
             containers = pod_spec['containers']
             if (type(containers) is not list or len(containers) != 1 or
-                    type(containers[0]) is not dict or
-                    any(type(pod_spec[field]) is not list or pod_spec[field]
-                        for field in ('initContainers', 'ephemeralContainers') if field in pod_spec)):
+                     type(containers[0]) is not dict or
+                     any(type(pod_spec[field]) is not list or pod_spec[field]
+                         for field in ('initContainers', 'ephemeralContainers') if field in pod_spec)):
                 raise PolicyError('smoke requires a well-formed local Trino deployment')
-            images = [item.get('image') for item in containers if item.get('name') == 'trino']
+            # A digest alone does not establish that the dedicated workload
+            # uses the locally imported image instead of pulling remotely.
+            if containers[0].get('imagePullPolicy') != 'Never':
+                raise PolicyError('smoke requires the local Trino image pull policy')
+            images = [containers[0].get('image')] if containers[0].get('name') == 'trino' else []
         except (TypeError, KeyError):
             raise PolicyError('smoke requires a well-formed local Trino deployment') from None
         if (len(images) != 1 or type(images[0]) is not str or
