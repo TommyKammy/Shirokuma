@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.216"
+version: "0.217"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bounded Trino Deployment response envelope (offline)
+
+Two synthetic same-image Deployment replies with foreign top-level fields
+previously supplied a smoke image. The source now permits only the standard
+Deployment envelope (including optional status); an ordinary status control
+still passes. Both negatives failed before repair; focused policy 166 cases
+pass. No live API/admission, rollout, retained data/backup mutation, unknown
+request replay or GitHub write. This bounds the offline response shape but
+cannot authenticate the server, establish strict admission or grant operator
+acceptance. Restore only the scoped envelope guard/test if needed; retain
+saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: scoped malformed Trino mount diagnostics (offline)
 

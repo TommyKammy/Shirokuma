@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.375"
+version: "5.376"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded Trino Deployment response envelope (offline)
+
+WP-L2-POL-001 now refuses unexpected top-level fields on the same-image
+Deployment response while accepting optional ordinary status. Two synthetic
+negatives failed before repair; focused policy 166 cases and post-change
+`make verify-local-experiment` passed, as did design-context, scoped secret
+scan and `git diff --check`. The full verifier's fake-worker failure output is
+an intentional negative diagnostic, not a failed suite. Its private log is
+under `tmp/local-experiment/autonomous-runner/run-qjiwuw2k/attempt-110/`.
+No live API/admission, unknown-request replay, retained data/backup mutation or
+GitHub write. An offline envelope guard cannot authenticate the producer,
+establish strict admission or confer operator acceptance. Revert only this
+scoped guard/test if necessary, preserving saved requests. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: Trino mount diagnostic and fixed PVC parent overlap (offline)
 

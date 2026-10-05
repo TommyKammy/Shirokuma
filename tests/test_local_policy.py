@@ -1194,6 +1194,18 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for extra in ({'foreignEnvelope': {'enabled': True}},
+                      {'items': []}):
+            reply = copy.deepcopy(valid)
+            reply.update(extra)
+            client.json_request.return_value = reply
+            with self.subTest(top_level=extra), self.assertRaises(policy.PolicyError):
+                client.image()
+        reply = copy.deepcopy(valid)
+        reply['status'] = {'replicas': 1}
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        client.json_request.return_value = valid
         for malformed in ([], {}, None, 7):
             reply = copy.deepcopy(valid)
             reply['spec']['template']['spec']['containers'][0]['volumeMounts'][0]['name'] = malformed

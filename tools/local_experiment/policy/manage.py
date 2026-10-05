@@ -503,7 +503,8 @@ class Kubernetes:
         deployment = self.json_request(['-n', NAMESPACE, 'get', 'deployment', 'trino-local', '-o', 'json'])
         try:
             metadata = deployment['metadata']
-            if (deployment.get('apiVersion') != 'apps/v1' or deployment.get('kind') != 'Deployment'
+            if (set(deployment) - {'apiVersion', 'kind', 'metadata', 'spec', 'status'} or
+                      deployment.get('apiVersion') != 'apps/v1' or deployment.get('kind') != 'Deployment'
                      or type(metadata) is not dict or metadata.get('name') != 'trino-local'
                      or metadata.get('namespace') != NAMESPACE
                       or metadata.get('deletionTimestamp') is not None
