@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.279"
+version: "5.280"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: policy source ancestor linkage (offline)
+
+WP-L2-POL-001: the bounded source reader now rejects linked directory
+ancestors before opening the source and rechecks directory linkage after
+reading it. Disposable linked-ancestor and post-read relink negatives, the
+real source, 118 policy tests, full `make verify-local-experiment`,
+design-context, secret scan and diff check passed. Dedicated Colima was
+freshly observed stopped; no live admission, unknown request replay, retained
+data/backup mutation or GitHub write. This does not make the kubectl pathname
+decode atomic, rule out ABA, authenticate the producer or establish strict
+admission/operator acceptance. Revert only the source reader/test if needed;
+preserve saved intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: bounded source snapshot and identity (offline)
 

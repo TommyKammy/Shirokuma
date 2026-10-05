@@ -346,6 +346,36 @@ class ManifestTests(unittest.TestCase):
             with mock.patch.object(policy, 'SOURCE', source):
                 self.assertEqual(policy.source_snapshot()[0], original)
 
+    def test_source_refuses_linked_ancestor_and_post_read_relink(self):
+        original = policy.SOURCE.read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real = root / 'real'
+            real.mkdir()
+            (real / 'source.yaml').write_bytes(original)
+            link = root / 'link'
+            link.symlink_to(real, target_is_directory=True)
+            with mock.patch.object(policy, 'SOURCE', link / 'source.yaml'):
+                with self.assertRaises(policy.PolicyError):
+                    policy.source_snapshot()
+
+            parent = root / 'parent'
+            parent.mkdir()
+            (parent / 'source.yaml').write_bytes(original)
+            moved = root / 'moved'
+            read = policy.os.read
+
+            def relink(fd, size):
+                raw = read(fd, size)
+                parent.rename(moved)
+                parent.symlink_to(moved, target_is_directory=True)
+                return raw
+
+            with mock.patch.object(policy, 'SOURCE', parent / 'source.yaml'), \
+                 mock.patch.object(policy.os, 'read', side_effect=relink):
+                with self.assertRaisesRegex(policy.PolicyError, 'ancestor changed'):
+                    policy.source_snapshot()
+
     def test_manifest_refuses_symlink_and_oversize_before_projection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

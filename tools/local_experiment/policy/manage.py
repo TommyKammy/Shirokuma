@@ -154,25 +154,44 @@ def render_native(source: list[dict], source_digest: str | None = None) -> dict:
 
 
 def source_snapshot() -> tuple[bytes, tuple[int, int]]:
-    """Read bounded source bytes and opened-file identity without following a final link."""
+    """Read bounded source bytes from a checked directory chain without links."""
     try:
-        fd = os.open(SOURCE, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        parent_fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+        ancestors = []
         try:
-            before = os.fstat(fd)
-            if not stat.S_ISREG(before.st_mode) or before.st_size > 256 * 1024:
-                raise PolicyError('repository policy source is not a bounded regular file')
-            raw = os.read(fd, 256 * 1024 + 1)
-            after = os.fstat(fd)
-            entry = os.stat(SOURCE, follow_symlinks=False)
-            if (len(raw) > 256 * 1024 or len(raw) != before.st_size or
-                    (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
-                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) or
-                    not stat.S_ISREG(entry.st_mode) or
-                    (after.st_dev, after.st_ino) != (entry.st_dev, entry.st_ino)):
-                raise PolicyError('repository policy source changed during projection')
-            return raw, (after.st_dev, after.st_ino)
+            for component in SOURCE.parent.parts[1:]:
+                next_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                  dir_fd=parent_fd)
+                ancestors.append((parent_fd, component, next_fd))
+                parent_fd = next_fd
+            fd = os.open(SOURCE.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=parent_fd)
+            try:
+                before = os.fstat(fd)
+                if not stat.S_ISREG(before.st_mode) or before.st_size > 256 * 1024:
+                    raise PolicyError('repository policy source is not a bounded regular file')
+                raw = os.read(fd, 256 * 1024 + 1)
+                after = os.fstat(fd)
+                entry = os.stat(SOURCE.name, dir_fd=parent_fd, follow_symlinks=False)
+                if (len(raw) > 256 * 1024 or len(raw) != before.st_size or
+                        (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) or
+                        not stat.S_ISREG(entry.st_mode) or
+                        (after.st_dev, after.st_ino) != (entry.st_dev, entry.st_ino)):
+                    raise PolicyError('repository policy source changed during projection')
+                for ancestor_fd, component, child_fd in ancestors:
+                    linked = os.stat(component, dir_fd=ancestor_fd, follow_symlinks=False)
+                    opened = os.fstat(child_fd)
+                    if (not stat.S_ISDIR(linked.st_mode) or
+                            (linked.st_dev, linked.st_ino) != (opened.st_dev, opened.st_ino)):
+                        raise PolicyError('repository policy source ancestor changed during projection')
+                return raw, (after.st_dev, after.st_ino)
+            finally:
+                os.close(fd)
         finally:
-            os.close(fd)
+            os.close(parent_fd)
+            for ancestor_fd, _, _ in reversed(ancestors):
+                os.close(ancestor_fd)
     except OSError:
         raise PolicyError('repository policy source could not be read') from None
 

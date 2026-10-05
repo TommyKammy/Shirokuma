@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.140"
+version: "0.141"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: source ancestor linkage (offline)
+
+The bounded native policy source snapshot now opens each directory component
+without following links and rechecks its linkage after the read. A disposable
+linked ancestor and a post-read replacement with a link to the original
+directory both fail closed; the real source and 118 policy tests pass. Full
+`make verify-local-experiment`, design-context, secret scan and diff check
+passed. Dedicated Colima was observed stopped; no live admission, retained
+data/backup mutation or unknown-request replay. Source decoding still invokes
+kubectl by pathname; sequential snapshots cannot defeat ABA races or prove
+decoder authenticity, strict admission or operator acceptance. Revert only
+the source reader and test if required; preserve saved intents and reports.
+Original Vault synchronization pending outside this checkout.
 
 ## 2026-10-05: bounded source snapshot and same-byte replacement (offline)
 
