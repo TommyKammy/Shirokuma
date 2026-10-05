@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.169"
+version: "0.170"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed PVC source read-only override (offline)
+
+The fixed directory mount alone previously accepted a PVC volume source
+marked read-only or carrying an unexamined extra source field. Six synthetic
+negative subcases failed before repair. The source now requires the fixed
+claim name and only an absent or explicit false `readOnly`; normal explicit
+false remains accepted. Focused FinOps 249 cases passed (seven Linux-only
+skips). This does not verify live mount behavior, measure used bytes or
+authenticate Kubernetes. No retained volume/report/backup change or VM start;
+AgentHouse remains `null / NOT_MEASURED`. Revert only this source guard/test
+if necessary, preserving saved records. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: fixed claim exposures in other Pod containers (offline)
 

@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.362"
+version: "5.363"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed writable PVC source (offline)
+
+WP-L6-FIN-001 refuses a read-only, mistyped or extra-field PVC volume source
+despite an otherwise correct main-container directory mount. Six disposable
+negatives failed before repair; explicit false and the existing omission pass.
+Focused FinOps 249 cases passed (seven Linux-only skips); full
+`make verify-local-experiment` also passed after this incremental PVC source
+check (the fake Dagster worker failure is an intentional negative diagnostic).
+No live API, collection, retained volume/report/backup change,
+unknown-request replay or used-byte measurement (`null / NOT_MEASURED` for
+AgentHouse). This offline guard cannot establish live mount semantics, source
+authenticity or operator acceptance. Revert only this guard/test if necessary;
+preserve saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: Trino source lifetime and secondary PVC exposure (offline)
 

@@ -160,6 +160,8 @@ def _snapshot(component, workload, pods, replica=None):
                 len(claims) == 1 and claims[0].get('name') == volume and
                 type(claims[0]['persistentVolumeClaim']) is dict and
                 claims[0]['persistentVolumeClaim'].get('claimName') == claim and
+                set(claims[0]['persistentVolumeClaim']) <= {'claimName', 'readOnly'} and
+                claims[0]['persistentVolumeClaim'].get('readOnly', False) is False and
                 len(claim_mounts) == 1 and claim_mounts[0].get('mountPath') == mount and
                 set(claim_mounts[0]) <= {'name', 'mountPath', 'readOnly'} and
                 claim_mounts[0].get('readOnly', False) is False and

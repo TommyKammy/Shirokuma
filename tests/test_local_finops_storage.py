@@ -220,6 +220,19 @@ class StorageTests(unittest.TestCase):
             with self.subTest(component=component), self.assertRaises(S.StorageError):
                 projected(component, data)
 
+    def test_fixed_claim_source_cannot_be_read_only_or_retargeted(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            for source in ({'claimName': S.TARGETS[component][-1], 'readOnly': True},
+                           {'claimName': S.TARGETS[component][-1], 'readOnly': 'false'},
+                           {'claimName': S.TARGETS[component][-1], 'other': 'foreign'}):
+                data = deepcopy(objects(component))
+                data[1][0]['spec']['volumes'][0]['persistentVolumeClaim'] = source
+                with self.subTest(component=component, source=source), self.assertRaises(S.StorageError):
+                    projected(component, data)
+            data = deepcopy(objects(component))
+            data[1][0]['spec']['volumes'][0]['persistentVolumeClaim']['readOnly'] = False
+            self.assertEqual(projected(component, data)['state'], 'observed')
+
     def test_fixed_claim_cannot_be_exposed_by_other_container(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             for field, mapping in (('initContainers', 'volumeMounts'),
