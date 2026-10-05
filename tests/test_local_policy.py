@@ -986,6 +986,21 @@ class SmokeTests(unittest.TestCase):
             with self.subTest(family=family):
                 self.assertEqual(policy.smoke(kube, items())['passed_cases'], len(kube.calls))
 
+    def test_service_success_rejects_empty_cluster_ips_with_allocated_ip(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def changed(request):
+            if (request['kind'] != 'Service' or request['spec'].get('type') != 'ClusterIP' or
+                    request['spec'].get('externalIPs')):
+                return reference.smoke_request(request)
+            reply = copy.deepcopy(request)
+            reply['spec'].update(clusterIP='192.0.2.1', clusterIPs=[], ipFamilies=['IPv4'])
+            return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+        kube.smoke_failure = changed
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items())
+        self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_rejects_unsubmitted_port_routing_fields(self):
         # A fake successful ServicePort must not carry Pod-style host routing
         # fields or future unexamined keys while claiming the fixed port passed.

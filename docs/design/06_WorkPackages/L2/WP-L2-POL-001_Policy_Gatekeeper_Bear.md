@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.107"
+version: "0.108"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: fixed Service allocated-address consistency (offline)
+
+A synthetic successful fixed-Service reply claimed a nonempty `clusterIP`
+but an explicitly empty `clusterIPs` list; the smoke verifier accepted it
+before the negative test and now refuses that contradiction. The previously
+supported projected response with only `clusterIPs` remains accepted; a first
+attempt to require both fields failed its existing positive test and was
+narrowed without weakening the new negative. Native policy tests (86),
+FinOps independent focused tests (194, seven Linux-only skips), design-context
+and full local regression passed. Dedicated Colima was observed stopped; no
+live admission, saved-request replay, retained data/backup mutation or GitHub
+write. This is fake-reply consistency, not API authenticity, present readiness,
+strict admission or operator acceptance. Revert only the scoped consistency
+guard/test if actual dedicated API defaulting requires it; preserve pending
+requests. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: fixed Pod spec/container key boundary (offline)
 

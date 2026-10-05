@@ -545,6 +545,8 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                            for address in spec['clusterIPs']))) and
                      ('clusterIP' not in spec or
                       (type(spec['clusterIP']) is str and spec['clusterIP'] != 'None')) and
+                      ('clusterIPs' not in spec or spec['clusterIPs'] or
+                       not spec.get('clusterIP')) and
                       (not spec.get('clusterIPs') or
                        spec.get('clusterIP') in (None, spec['clusterIPs'][0])) and
                       service_address_family_consistent(spec) and

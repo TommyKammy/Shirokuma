@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.241"
+version: "5.242"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: fixed Service allocated-address consistency (offline)
+
+WP-L2-POL-001: a fake successful Service reply with an allocated `clusterIP`
+and explicitly empty `clusterIPs` passed before a scoped consistency guard.
+The negative now fails closed; an existing projected single-field response
+remains compatible after narrowing an initially overstrict attempt. Native
+policy 86 tests, independent FinOps 194 tests (seven Linux skips),
+design-context and full local regression passed. Dedicated Colima was observed
+stopped. No live API/admission, unknown-request replay, retained data/backup
+mutation or GitHub write. This cannot authenticate the reply or establish
+atomic inventory, strict admission or operator acceptance. Roll back the
+Service guard/test only if needed, keeping saved requests intact. Original
+Vault synchronization remains pending outside checkout.
 
 ## 2026-10-05: local doctor hostname scope (offline)
 
