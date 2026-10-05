@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.373"
+version: "5.374"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded Trino Pod and container field envelopes (offline)
+
+WP-L2-POL-001 refuses unknown Pod-spec and container fields on a same-image
+smoke source. Four synthetic negative variants were accepted before repair;
+after repair, focused policy 166 cases and `make verify-local-experiment`
+passed. A syntax error in the first combined edit was corrected before the
+successful reruns. The Dagster fake-worker failure printed by the full verifier
+is an intentional negative diagnostic. Colima was freshly observed stopped;
+no live admission, saved request replay or retained data/backup mutation.
+Offline source checks do not prove Kubernetes authenticity, strict admission
+or operator acceptance. Roll back only scoped guards/tests; preserve saved
+records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded Trino Deployment spec envelope (offline)
 

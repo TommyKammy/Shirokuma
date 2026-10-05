@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.214"
+version: "0.215"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bounded Trino Pod and container field envelopes (offline)
+
+Two unknown Pod-spec fields and two unknown container fields on same-image
+synthetic Deployments lent the smoke image before repair. Both nested objects
+now refuse fields outside their known manifest/default envelopes. The initial
+combined edit had a syntax error; after correction, focused policy 166 cases
+and `make verify-local-experiment` passed (the Dagster fake-worker failure in
+its output is an expected negative diagnostic). Dedicated Colima was freshly
+observed stopped. No live admission, unknown-request replay, retained data or
+backup mutation. This does not authenticate the source or establish strict
+admission or operator acceptance. Revert only these scoped guards/tests if
+needed, preserving saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded Trino Deployment spec envelope (offline)
 

@@ -561,6 +561,12 @@ class Kubernetes:
             # Do not borrow an image from a same-name workload whose Pod
             # template escapes the local Trino runtime isolation contract.
             if (type(pod_spec) is not dict or
+                     set(pod_spec) - {
+                         'automountServiceAccountToken', 'serviceAccountName',
+                         'serviceAccount', 'dnsPolicy', 'restartPolicy',
+                         'terminationGracePeriodSeconds', 'hostNetwork', 'hostPID',
+                         'hostIPC', 'securityContext', 'volumes', 'containers',
+                         'initContainers', 'ephemeralContainers'} or
                      pod_spec.get('automountServiceAccountToken') is not False or
                      pod_spec.get('serviceAccountName', 'default') != 'default' or
                      pod_spec.get('serviceAccount', 'default') != 'default' or
@@ -644,14 +650,16 @@ class Kubernetes:
                 raise PolicyError('smoke requires a well-formed local Trino deployment')
             # The fixed image is not evidence of the fixed workload if the
             # container can run another command, hook, or bulk environment
-            # source. None of these fields occurs in the local Trino manifest.
-            if any(field in containers[0] for field in (
-                     'command', 'args', 'workingDir', 'lifecycle', 'envFrom',
-                     'volumeDevices', 'resizePolicy', 'stdin', 'stdinOnce', 'tty')) or (
+            # source. Accept only the known manifest/default field envelope.
+            if (set(containers[0]) - {
+                    'name', 'image', 'imagePullPolicy', 'env', 'volumeMounts',
+                    'securityContext', 'resources', 'startupProbe', 'readinessProbe',
+                    'livenessProbe', 'ports', 'terminationMessagePath',
+                    'terminationMessagePolicy'} or (
                       'terminationMessagePath' in containers[0] and
                       containers[0]['terminationMessagePath'] != '/dev/termination-log') or (
                       'terminationMessagePolicy' in containers[0] and
-                      containers[0]['terminationMessagePolicy'] != 'File'):
+                      containers[0]['terminationMessagePolicy'] != 'File')):
                 raise PolicyError('smoke requires the local Trino container execution')
             # The image source must not silently require more resources or
             # attach a device claim than the dedicated local manifest.

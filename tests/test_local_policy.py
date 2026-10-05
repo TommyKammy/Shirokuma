@@ -1194,6 +1194,20 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for field, value in (('unknownExecution', {'enabled': True}),
+                             ('deviceOverride', '/dev/foreign')):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template']['spec']['containers'][0][field] = value
+            client.json_request.return_value = reply
+            with self.subTest(container_field=field), self.assertRaises(policy.PolicyError):
+                client.image()
+        for field, value in (('unknownRuntime', {'enabled': True}),
+                             ('hostNamespaceOverride', True)):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template']['spec'][field] = value
+            client.json_request.return_value = reply
+            with self.subTest(pod_field=field), self.assertRaises(policy.PolicyError):
+                client.image()
         for extra in ({'status': {'phase': 'Running'}},
                       {'unknown': {'image': 'foreign'}}):
             reply = copy.deepcopy(valid)
