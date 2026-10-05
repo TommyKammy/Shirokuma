@@ -212,6 +212,19 @@ class HistoryTests(unittest.TestCase):
             with self.assertRaises(H.HistoryError):
                 H.parse(oversized)
 
+    def test_direct_render_output_cap_counts_utf8_and_returns_no_partial_html(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):
+            html = H.render(entries)
+            size = len(html.encode('utf-8'))
+            self.assertGreater(size, len(html))
+            with patch.object(H, 'MAX_OUTPUT_BYTES', size):
+                self.assertEqual(H.render(entries), html)
+            # A character-count bound would incorrectly admit this output.
+            with patch.object(H, 'MAX_OUTPUT_BYTES', size - 1):
+                with self.assertRaises(H.HistoryError):
+                    H.render(entries)
+
     def test_distinct_saved_reports_reach_exact_selection_limit_without_collection(self):
         base = report()
         samples = [C.build_report(base['components'], base['disks'], base['inference'],

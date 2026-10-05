@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.259"
+version: "5.260"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: policy response diagnostics and independent saved output bound (offline)
+
+WP-L2-POL-001: malformed status/metadata cannot certify type-check readiness;
+clean JSON output with nonempty stderr cannot certify a scoped policy read or
+mutation. Fake negatives failed before repair. Focused policy 99 and observer/
+CLI 128 tests passed after correcting fake replies missing stderr. The first
+full regression failed on those fixtures; the full local verifier passed on rerun.
+Independently WP-L6-FIN-001 pinned the existing saved HTML UTF-8 output cap;
+197 FinOps tests passed (seven Linux-only skips). Dedicated Colima was observed
+stopped. No live API, collection, request replay, retained data/backup mutation
+or GitHub write. AgentHouse usage is `null / NOT_MEASURED`. Offline responses
+cannot authenticate producers, prove strict admission or grant operator
+acceptance. Roll back only scoped policy guards/tests or the independent FinOps
+regression; preserve saved reports and intents. Original Vault sync pending.
 
 ## 2026-10-05: native response ambiguity and independent saved-index controls (offline)
 

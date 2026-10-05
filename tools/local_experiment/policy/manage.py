@@ -174,6 +174,8 @@ def assert_owned(current: dict, expected: dict) -> None:
 
 def typecheck(current: dict) -> str:
     status, metadata = current.get('status', {}), current.get('metadata', {})
+    if type(status) is not dict or type(metadata) is not dict:
+        return 'pending'
     checked = status.get('typeChecking')
     generation = metadata.get('generation')
     if (not isinstance(checked, dict) or type(generation) is not int or generation < 1
@@ -209,7 +211,8 @@ class Kubernetes:
                        len(result.stdout.encode('utf-8')) <= 2 * 1024 * 1024)
         except UnicodeError:
             bounded = False
-        if type(result.returncode) is not int or result.returncode != 0 or not bounded:
+        if (type(result.returncode) is not int or result.returncode != 0 or
+                result.stderr != '' or not bounded):
             raise PolicyError('scoped Kubernetes request failed or exceeded its response limit')
         def unique_keys(pairs):
             value = {}

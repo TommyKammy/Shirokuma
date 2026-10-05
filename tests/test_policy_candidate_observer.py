@@ -87,11 +87,11 @@ class ObserverTests(unittest.TestCase):
                     '{"metadata":{"uid":"first","uid":"second"}}',
                     '{"items":[{"metadata":{"name":"first","name":"second"}}]}'):
             with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
-                    returncode=0, stdout=raw)):
+                    returncode=0, stdout=raw, stderr='')):
                 with self.assertRaises(O.M.PolicyError):
                     reader.json_request(['get', 'namespace'])
         with patch.object(reader, 'request', return_value=SimpleNamespace(
-                returncode=0, stdout='{"metadata":{"uid":"first"}}')):
+                returncode=0, stdout='{"metadata":{"uid":"first"}}', stderr='')):
             self.assertEqual(reader.json_request(['get', 'namespace']), {'metadata': {'uid': 'first'}})
 
     def test_kubernetes_reader_distinguishes_absent_output_from_json_null(self):
@@ -99,12 +99,12 @@ class ObserverTests(unittest.TestCase):
         args = ['get', 'pod', 'missing', '--ignore-not-found', '-o', 'json']
         for raw in ('null', ' null\n'):
             with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
-                    returncode=0, stdout=raw)):
+                    returncode=0, stdout=raw, stderr='')):
                 with self.assertRaises(O.M.PolicyError):
                     reader.json_request(args)
         for raw in ('', '\n'):
             with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
-                    returncode=0, stdout=raw)):
+                    returncode=0, stdout=raw, stderr='')):
                 with self.assertRaises(O.M.PolicyError):
                     reader.json_request(args)
 
@@ -114,11 +114,11 @@ class ObserverTests(unittest.TestCase):
                     '{"metadata":{"uid":Infinity}}',
                     '{"items":[{"extension":-Infinity}]}'):
             with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
-                    returncode=0, stdout=raw)):
+                    returncode=0, stdout=raw, stderr='')):
                 with self.assertRaises(O.M.PolicyError):
                     reader.json_request(['get', 'namespace'])
         with patch.object(reader, 'request', return_value=SimpleNamespace(
-                returncode=0, stdout='{"items":[{"extension":0}]}')):
+                returncode=0, stdout='{"items":[{"extension":0}]}', stderr='')):
             self.assertEqual(reader.json_request(['get', 'namespace']), {'items': [{'extension': 0}]})
 
     def test_kubernetes_reader_refuses_overflowing_json_numbers(self):
@@ -126,11 +126,11 @@ class ObserverTests(unittest.TestCase):
         for raw in ('{"extension":1e999}', '{"metadata":{"generation":-1e999}}',
                     '{"items":[{"extension":1e999}]}'):
             with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
-                    returncode=0, stdout=raw)):
+                    returncode=0, stdout=raw, stderr='')):
                 with self.assertRaises(O.M.PolicyError):
                     reader.json_request(['get', 'namespace'])
         with patch.object(reader, 'request', return_value=SimpleNamespace(
-                returncode=0, stdout='{"extension":1.25e2}')):
+                returncode=0, stdout='{"extension":1.25e2}', stderr='')):
             self.assertEqual(reader.json_request(['get', 'namespace']), {'extension': 125.0})
 
     def test_kubernetes_reader_refuses_nonzero_underflow_in_extensions(self):
@@ -138,11 +138,11 @@ class ObserverTests(unittest.TestCase):
         for raw in ('{"extension":1e-999}', '{"metadata":{"extension":-1e-999}}',
                     '{"items":[{"extension":1e-999}]}'):
             with self.subTest(raw=raw), patch.object(reader, 'request', return_value=SimpleNamespace(
-                    returncode=0, stdout=raw)):
+                    returncode=0, stdout=raw, stderr='')):
                 with self.assertRaises(O.M.PolicyError):
                     reader.json_request(['get', 'namespace'])
         with patch.object(reader, 'request', return_value=SimpleNamespace(
-                returncode=0, stdout='{"extension":0e-999}')):
+                returncode=0, stdout='{"extension":0e-999}', stderr='')):
             self.assertEqual(reader.json_request(['get', 'namespace']), {'extension': 0.0})
 
     def test_incomplete_limitrange_inventory_never_becomes_ready(self):

@@ -5,12 +5,32 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.121"
+version: "0.122"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: type-check shape and scoped stderr controls (offline)
+
+A synthetic policy with malformed `status` or `metadata` previously raised an
+uncaught attribute error in the readiness helper; it now remains pending. The
+existing warning-list guard already refused empty malformed warning values;
+an independent regression pins that behavior. Separately, a successful scoped
+JSON policy read or create with diagnostic stderr previously counted as clean;
+the dedicated reader now refuses it (including the empty missing-policy read).
+The negative cases failed before repair; policy 99 and observer/CLI 128 tests
+passed after repair. The first broad regression found 20 observer fixture errors
+because older fake subprocess replies omitted stderr; their fake transport
+shape was corrected without relaxing the new guard; the full local verifier
+passed on rerun. Dedicated Colima was
+observed stopped; no API call, policy activation, saved-request replay or
+retained data/backup change. The empty-stderr requirement is a conservative
+offline assumption; live kubectl warnings and producer authenticity are not
+verified, nor are strict admission or operator acceptance. Revert only these
+scoped guards/tests if the actual API contract differs; preserve saved intents.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: nested native response ambiguity controls (offline)
 

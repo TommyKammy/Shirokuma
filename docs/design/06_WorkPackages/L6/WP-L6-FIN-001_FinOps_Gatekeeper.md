@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.88"
+version: "0.89"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: independent saved HTML byte-limit control (offline)
+
+The unchanged direct history renderer accepts output at the UTF-8 byte cap and
+refuses one byte below the actual output size, even though its character count
+is smaller. An independent fixture forbids collection; 197 FinOps tests passed
+(seven Linux-only skips). No new collection or retained report/volume/backup
+mutation; dedicated Colima was observed stopped. AgentHouse bytes remain
+`null / NOT_MEASURED`. This does not authenticate saved producers, measure
+current usage or establish operator acceptance. Revert only the regression if
+needed; preserve saved reports. Original Vault sync remains pending.
 
 ## 2026-10-05: independent saved-selection numeric aliases (offline)
 

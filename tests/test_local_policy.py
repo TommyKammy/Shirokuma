@@ -241,6 +241,25 @@ class ActivationTests(unittest.TestCase):
         value['status'].pop('observedGeneration')
         self.assertEqual(policy.typecheck(value), 'pending')
 
+    def test_malformed_empty_warning_shapes_never_certify_typecheck(self):
+        value = admitted(items()[0])
+        for warnings in ('', {}, None, False, 0):
+            with self.subTest(warnings=warnings):
+                value['status']['typeChecking']['expressionWarnings'] = warnings
+                self.assertNotEqual(policy.typecheck(value), 'complete')
+                kube = FakeKubernetes(ready=True)
+                kube.objects[(policy.POLICY, items()[0]['metadata']['name'])] = copy.deepcopy(value)
+                self.assertFalse(policy.inventory_status(kube, items())['ready'])
+
+    def test_malformed_typecheck_status_fails_closed(self):
+        original = admitted(items()[0])
+        for status, metadata in (([], original['metadata']), (None, original['metadata']),
+                                 (original['status'], []), (original['status'], None)):
+            with self.subTest(status=status, metadata=metadata):
+                value = copy.deepcopy(original)
+                value['status'], value['metadata'] = status, metadata
+                self.assertEqual(policy.typecheck(value), 'pending')
+
     def test_empty_server_selector_defaults_do_not_require_overwrite(self):
         value, expected = admitted(items()[0]), items()[0]
         value['spec']['matchConstraints']['objectSelector'] = {}
@@ -252,6 +271,20 @@ class ActivationTests(unittest.TestCase):
 
 
 class ScopedResponseTests(unittest.TestCase):
+    def test_success_with_stderr_cannot_certify_policy_read_or_mutation(self):
+        client = object.__new__(policy.Kubernetes)
+        read = ['get', policy.RESOURCES[policy.POLICY], policy.NAMES[0],
+                '--ignore-not-found', '-o', 'json']
+        for args, stdout in ((read, ''), (read, '{}'),
+                             (['create', '-f', '-', '-o', 'json'], '{}')):
+            with self.subTest(args=args, stdout=stdout):
+                client.request = mock.Mock(return_value=SimpleNamespace(
+                    returncode=0, stdout=stdout, stderr='Warning: unexamined API output'))
+                with self.assertRaises(policy.PolicyError):
+                    client.json_request(args)
+        client.request.return_value = SimpleNamespace(returncode=0, stdout='{}', stderr='')
+        self.assertEqual(client.json_request(read), {})
+
     def test_only_exact_missing_resource_read_accepts_empty_success(self):
         client = object.__new__(policy.Kubernetes)
         client.request = mock.Mock(return_value=SimpleNamespace(
