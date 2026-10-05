@@ -855,6 +855,52 @@ class ActivationTests(unittest.TestCase):
             policy.apply_policies(kube, items())
         self.assertFalse(any(action == 'create' for action, _, _ in kube.calls))
 
+    def test_policy_presence_drift_after_final_scan_prevents_creation(self):
+        target = items()[0]
+        key = (target['kind'], target['metadata']['name'])
+        for initially_present in (False, True):
+            with self.subTest(initially_present=initially_present):
+                kube = FakeKubernetes()
+                if initially_present:
+                    kube.objects[key] = admitted(target)
+                original = kube.get
+                reads = 0
+
+                def changed(kind, name):
+                    nonlocal reads
+                    if (kind, name) == key:
+                        reads += 1
+                        if reads == 3:
+                            if initially_present:
+                                kube.objects.pop(key)
+                            else:
+                                kube.objects[key] = admitted(target)
+                    return original(kind, name)
+
+                kube.get = changed
+                with self.assertRaisesRegex(policy.PolicyError, 'changed since activation preflight'):
+                    policy.apply_policies(kube, items())
+                self.assertFalse(any(action == 'create' for action, _, _ in kube.calls))
+
+    def test_existing_binding_disappearing_after_final_scan_is_not_recreated(self):
+        kube = FakeKubernetes(ready=True)
+        key = (policy.BINDING, policy.NAMES[0])
+        original = kube.get
+        reads = 0
+
+        def disappearing(kind, name):
+            nonlocal reads
+            if (kind, name) == key:
+                reads += 1
+                if reads == 3:
+                    kube.objects.pop(key)
+            return original(kind, name)
+
+        kube.get = disappearing
+        with self.assertRaisesRegex(policy.PolicyError, 'changed since activation preflight'):
+            policy.apply_policies(kube, items())
+        self.assertFalse(any(action == 'create' for action, _, _ in kube.calls))
+
     def test_partial_or_duplicate_activation_inventory_cannot_report_ready(self):
         baseline = items()
         for supplied in (baseline[:-1], baseline + [baseline[0]],

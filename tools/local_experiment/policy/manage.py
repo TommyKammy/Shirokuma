@@ -649,6 +649,9 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
         missing = []
         for expected in selected:
             current = kube.get(kind, expected['metadata']['name'])
+            key = (kind, expected['metadata']['name'])
+            if (current is not None) != (key in preflight_present):
+                raise PolicyError('dedicated resource changed since activation preflight')
             if current is None:
                 missing.append(expected)
             else:

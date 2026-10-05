@@ -5,12 +5,29 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.165"
+version: "0.166"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: activation per-kind presence continuity (offline)
+
+The per-kind read could silently adopt an owned policy appearing after the
+final whole-inventory scan, or recreate one that disappeared; an existing
+binding could likewise disappear before the binding phase. Synthetic policy
+appearance/disappearance negatives failed before repair. The per-kind read now
+requires the same preflight presence before it creates anything in that kind;
+binding disappearance is also refused. The two new regressions pass, the
+focused policy suite passed 157 tests and `make verify-local-experiment`
+passed. An independent, unchanged FinOps suite passed 207 tests (seven
+Linux-only skips), without collection. Dedicated Colima was observed stopped;
+no live API, unknown-request replay, retained volume/backup change or GitHub
+write. Sequential reads remain non-atomic: changes after the read, live strict
+admission, AgentHouse volume bytes and operator acceptance are unverified.
+Restore only this presence guard/tests if needed; retain saved intents and
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: activation preflight presence continuity (offline)
 
