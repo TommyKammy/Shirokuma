@@ -93,7 +93,7 @@ def _snapshot(component, workload, pods, replica=None):
     require(type(pods) is list and len(pods) <= 1, 'TARGET_AMBIGUOUS')
     if not pods:
         require(kind == 'StatefulSet' and workload.get('spec', {}).get('replicas') == 0)
-        return (w['uid'], None, None, _retention(workload))
+        return (w['uid'], None, None, _retention(workload, volume))
     pod = pods[0]; meta = _meta(pod, 'Pod', ns)
     labels = meta.get('labels', {})
     require(type(labels) is dict and all(labels.get(key) == value for key, value in selector.items()))
@@ -116,15 +116,15 @@ def _snapshot(component, workload, pods, replica=None):
         require(len(claims) == 1 and claims[0].get('name') == volume and
                 claims[0]['persistentVolumeClaim'].get('claimName') == claim and
                 len([m for m in mounts if m.get('name') == volume and m.get('mountPath') == mount]) == 1)
-    return (w['uid'], meta['uid'], claim if claims else None, _retention(workload) if kind == 'StatefulSet' else None)
+    return (w['uid'], meta['uid'], claim if claims else None, _retention(workload, volume) if kind == 'StatefulSet' else None)
 
 
-def _retention(workload):
+def _retention(workload, volume):
     policy = workload.get('spec', {}).get('persistentVolumeClaimRetentionPolicy', {})
     require(policy.get('whenDeleted') in ('Retain', 'Delete') and policy.get('whenScaled') in ('Retain', 'Delete'))
     template = workload.get('spec', {}).get('volumeClaimTemplates', [])
     require(type(template) is list and len(template) == 1 and
-            template[0].get('metadata', {}).get('name') in ('seaweedfs-data', 'data'))
+             template[0].get('metadata', {}).get('name') == volume)
     # Both fixed StatefulSets mount the claim as a directory; the template
     # must not request a Block volume even when a current PVC says Filesystem.
     require(type(template[0].get('spec')) is dict and

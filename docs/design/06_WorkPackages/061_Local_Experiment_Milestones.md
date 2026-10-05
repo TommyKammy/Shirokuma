@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.343"
+version: "5.344"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed FinOps claim-template ownership (offline)
+
+WP-L6-FIN-001: two synthetic cross-workload claim-template names previously
+certified the fixed PVC reference; both fail after binding the template to its
+mounted volume. Focused FinOps suite passed 229 cases (seven Linux-only skips).
+Dedicated Colima was freshly observed stopped; no live API, volume scan,
+retained report/volume/backup mutation or GitHub write. Offline references
+cannot authenticate the API, measure AgentHouse bytes (`null / NOT_MEASURED`)
+or establish operator acceptance. Revert only the scoped guard/test if needed,
+preserving saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: isolated Trino smoke image source (offline)
 

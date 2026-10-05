@@ -104,6 +104,14 @@ class StorageTests(unittest.TestCase):
             data[0]['spec']['volumeClaimTemplates'][0]['spec']['volumeMode'] = 'Filesystem'
             self.assertEqual(projected(component, data)['state'], 'observed')
 
+    def test_claim_template_must_match_fixed_workload_volume(self):
+        for component, foreign in (('seaweedfs', 'data'),
+                                   ('polaris-postgresql', 'seaweedfs-data')):
+            data = deepcopy(objects(component))
+            data[0]['spec']['volumeClaimTemplates'][0]['metadata']['name'] = foreign
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+
     def test_pending_retained_claim_zero_pods_not_zero_capacity(self):
         data=list(objects('seaweedfs'));data[0]['spec']['replicas']=0;data[1]=[]
         data[3]['spec'].pop('volumeName');data[3]['status']={'phase':'Pending'};data[4]=None

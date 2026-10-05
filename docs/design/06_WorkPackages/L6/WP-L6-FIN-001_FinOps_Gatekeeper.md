@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.153"
+version: "0.154"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed claim-template ownership (offline)
+
+Both fixed StatefulSets previously accepted the other's claim-template name
+while projecting their own bound PVC. Two synthetic negatives failed before
+requiring the template name to match that workload's mounted volume; the
+normal and zero-Pod fixtures still pass. `make test-local-finops` passed 229
+cases (seven Linux-only skips). Dedicated Colima was freshly observed stopped;
+no API collection, disk traversal, retained report/volume/backup mutation or
+GitHub write. This checks a reference shape only, not API authenticity, live
+storage or AgentHouse bytes (`null / NOT_MEASURED`). Restore only the scoped
+template guard/test if needed; retain saved reports. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: typed second reads of fixed storage references (offline)
 
