@@ -584,6 +584,7 @@ def require_complete_inventory(items: list[dict]) -> None:
 
 
 def inventory_status(kube, items: list[dict]) -> dict:
+    require_complete_inventory(items)
     rows = []
     for expected in items:
         current = kube.get(expected['kind'], expected['metadata']['name'])
@@ -610,7 +611,9 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
         else:
             missing.append(expected)
     for expected in missing:
-        kube.create(expected, dry_run=True)
+        # A successful transport alone cannot certify what the API validated.
+        # Check every dry-run reply before the first persistent creation.
+        assert_owned(kube.create(expected, dry_run=True), expected)
     for kind in (POLICY, BINDING):
         selected = [item for item in items if item['kind'] == kind]
         missing = []

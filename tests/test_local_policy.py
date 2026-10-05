@@ -730,6 +730,35 @@ class ManifestTests(unittest.TestCase):
 
 
 class ActivationTests(unittest.TestCase):
+    def test_direct_status_refuses_incomplete_inventory_before_read(self):
+        kube = FakeKubernetes(ready=True)
+        for supplied in ([], items()[:-1], items() + [items()[0]]):
+            with self.subTest(count=len(supplied)), self.assertRaises(policy.PolicyError):
+                policy.inventory_status(kube, supplied)
+            self.assertEqual(kube.calls, [])
+        self.assertTrue(policy.inventory_status(kube, items())['ready'])
+
+    def test_mismatched_dry_run_reply_prevents_any_persistent_creation(self):
+        for mismatch in ('missing', 'foreign', 'spec'):
+            with self.subTest(mismatch=mismatch):
+                kube = FakeKubernetes()
+                original = kube.create
+                def corrupt(value, *, dry_run=False):
+                    reply = original(value, dry_run=dry_run)
+                    if dry_run and value['kind'] == policy.BINDING and value['metadata']['name'] == policy.NAMES[-1]:
+                        if mismatch == 'missing':
+                            return None
+                        if mismatch == 'foreign':
+                            reply['metadata']['labels']['shirokuma.dev/policy-owner'] = 'foreign'
+                        else:
+                            reply['spec']['policyName'] = 'other-policy'
+                    return reply
+                kube.create = corrupt
+                with self.assertRaises(policy.PolicyError):
+                    policy.apply_policies(kube, items())
+                self.assertEqual(kube.objects, {})
+                self.assertTrue(all(action == 'dry-run' for action, _, _ in kube.calls))
+
     def test_partial_or_duplicate_activation_inventory_cannot_report_ready(self):
         baseline = items()
         for supplied in (baseline[:-1], baseline + [baseline[0]],

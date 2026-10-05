@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.297"
+version: "5.298"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: policy dry-run reply and direct status inventory (offline)
+
+WP-L2-POL-001: missing, foreign or altered dry-run replies now stop activation
+before persistent creation, and direct status refuses an empty, partial or
+duplicate inventory before reads. The negative fixtures failed before repair;
+146 focused policy tests and `make verify-local-experiment` passed.
+Independently WP-L6-FIN-001's unchanged 207 tests passed (seven Linux-only
+skips). Dedicated Colima was freshly observed stopped; no live API, new
+collection, unknown-request replay, retained data/backup mutation or GitHub
+write. No live strict admission, server authentication, current AgentHouse
+usage (`null / NOT_MEASURED`) or operator acceptance is established. Revert
+only the scoped policy guards/tests if necessary; preserve historical intents
+and reports. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: complete policy operation inventory (offline)
 

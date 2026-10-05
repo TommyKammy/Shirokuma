@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.157"
+version: "0.158"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: validate dry-run replies and direct status inventory (offline)
+
+Activation previously ignored successful server dry-run bodies, allowing a
+missing, foreign or altered reply to precede persistent creation. It now
+checks each reply against the expected owned policy/binding before creating
+anything. Independently, direct `inventory_status` could declare an empty or
+partial inventory ready (vacuous `all`); it now requires the complete unique
+16-item inventory before any read. Both negatives failed before repair; the
+normal fake activation/status pass with 146 policy tests and the full local
+verifier. The dedicated Colima profile was freshly observed stopped; no live
+API, saved-request replay, retained data or backup mutation. This does not
+authenticate the server, prove live admission or make activation atomic;
+operator acceptance remains open. Roll back only these two guards and tests
+if needed, preserving saved intents. Original Vault sync pending outside this
+checkout.
 
 ## 2026-10-06: complete caller inventory before activation or rollback (offline)
 
