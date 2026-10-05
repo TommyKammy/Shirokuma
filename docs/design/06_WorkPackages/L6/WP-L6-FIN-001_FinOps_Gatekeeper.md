@@ -5,12 +5,21 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.126"
+version: "0.127"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: independent offline suite after policy rollback result change
+
+The unchanged 207-test FinOps suite passed (seven Linux-only skips), separate
+from WP-L2-POL-001's rollback retention claim correction. No collection,
+saved-report or reader change; dedicated Colima was observed stopped. AgentHouse
+volume bytes remain `null / NOT_MEASURED` pending authenticated VM measurement,
+worker cleanup and backup recovery. No FinOps rollback needed; preserve saved
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent saved-history boundary recheck (offline)
 

@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.309"
+version: "5.310"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: rollback policy-retention claim and separate FinOps check (offline)
+
+WP-L2-POL-001: rollback no longer claims policy definitions were retained
+merely because it deleted only bindings. Missing, foreign and unpersisted
+definitions yield `policy_definitions_retained: false` after binding removal;
+the normal owned inventory still yields true. Policy suite passed 163 tests.
+Independently, WP-L6-FIN-001's unchanged offline suite passed 207 tests
+(seven Linux-only skips) without collection. Dedicated Colima was freshly
+observed stopped. Sequential reads do not prove an atomic snapshot, live
+strict admission, AgentHouse usage (`null / NOT_MEASURED`) or operator
+acceptance. No retained data/backup mutation, replay or GitHub write.
+Roll back only the retention-result check/test if needed; preserve saved
+intents/reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: rollback completion recheck and independent FinOps review (offline)
 

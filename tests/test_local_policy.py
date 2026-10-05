@@ -1458,9 +1458,26 @@ class RollbackTests(unittest.TestCase):
         kube = FakeKubernetes(ready=True)
         result = policy.rollback_bindings(kube, items())
         self.assertTrue(result['bindings_removed'])
+        self.assertTrue(result['policy_definitions_retained'])
         self.assertEqual(len(kube.objects), 8)
         self.assertEqual({kind for kind, _ in kube.objects}, {policy.POLICY})
         self.assertEqual({(action, kind) for action, kind, _ in kube.calls}, {('delete', policy.BINDING)})
+
+    def test_rollback_does_not_claim_missing_or_replaced_policies_retained(self):
+        for replacement in (None, 'foreign', 'unpersisted'):
+            with self.subTest(replacement=replacement):
+                kube = FakeKubernetes(ready=True)
+                key = (policy.POLICY, policy.NAMES[0])
+                if replacement is None:
+                    kube.objects.pop(key)
+                elif replacement == 'foreign':
+                    kube.objects[key]['metadata']['labels'].clear()
+                else:
+                    kube.objects[key]['metadata'].pop('uid')
+                result = policy.rollback_bindings(kube, items())
+                self.assertTrue(result['bindings_removed'])
+                self.assertFalse(result['policy_definitions_retained'])
+                self.assertEqual(len([key for key in kube.objects if key[0] == policy.BINDING]), 0)
 
     def test_any_foreign_binding_prevents_partial_rollback(self):
         kube = FakeKubernetes(ready=True)

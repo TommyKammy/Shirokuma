@@ -768,7 +768,21 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
     for expected in bindings:
         if kube.get(BINDING, expected['metadata']['name']) is not None:
             raise PolicyError('binding remains after deletion; rollback is incomplete')
-    return {'bindings_removed': True, 'policy_definitions_retained': True, 'namespace': NAMESPACE}
+    # Rollback does not delete policies, but that alone cannot prove they are
+    # still present: another actor may have removed or replaced a definition.
+    # Keep binding removal successful while reporting unverified retention.
+    policies_retained = True
+    for expected in (item for item in items if item['kind'] == POLICY):
+        current = kube.get(POLICY, expected['metadata']['name'])
+        if current is None:
+            policies_retained = False
+            continue
+        try:
+            assert_owned(current, expected)
+            persistent_identity(current)
+        except PolicyError:
+            policies_retained = False
+    return {'bindings_removed': True, 'policy_definitions_retained': policies_retained, 'namespace': NAMESPACE}
 
 
 def smoke_cases(image: str) -> list[dict]:

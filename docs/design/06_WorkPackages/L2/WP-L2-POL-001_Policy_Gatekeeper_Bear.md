@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.169"
+version: "0.170"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: rollback policy-retention claim (offline)
+
+Rollback previously returned `policy_definitions_retained: true` solely because
+it did not issue policy deletes, even when a definition was missing, foreign or
+without persistent identity. The final read now marks retention false in those
+cases while allowing the scoped binding rollback to finish; it does not
+silently restore definitions. Synthetic negative and normal rollback tests pass.
+The separate FinOps 207-test suite passed (seven Linux-only skips), without
+collection or changes to saved reports. Dedicated Colima was observed stopped;
+no live admission, retained data/backup mutation, unknown-request replay or
+GitHub write. Final reads are sequential, not an atomic cluster snapshot or
+server authentication. Strict live admission and operator acceptance remain
+open. Revert only this result check/test if necessary; preserve saved intents.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: final rollback binding inventory (offline)
 
