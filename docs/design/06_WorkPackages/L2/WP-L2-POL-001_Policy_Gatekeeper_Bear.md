@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.133"
+version: "0.134"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: immediate manifest parent identity (offline)
+
+A symlinked immediate parent of the dedicated manifest previously passed the
+bounded file reader and reached source projection. The negative failed first;
+the reader now opens that directory without following its final symlink, reads
+the file relative to the directory descriptor, and checks the file and parent
+entry identities after reading. File metadata also includes ctime in the
+before/after check. The real manifest, 110 focused policy tests and full local
+verifier passed. This
+does not pin higher ancestors, guarantee atomic contents against a same-UID
+writer, or authenticate the source/tool. Colima remained stopped; no live
+admission, retained data/backup mutation or replay. Roll back only the scoped
+reader and regression if needed; keep historical intents. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-05: bounded dedicated manifest descriptor (offline)
 

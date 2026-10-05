@@ -166,19 +166,30 @@ def load_manifest() -> list[dict]:
         # The dedicated manifest is small and checked into this checkout. Do
         # not follow a replacement link or read an unbounded local file before
         # comparing its projection to the repository source.
-        fd = os.open(MANIFEST, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        parent_fd = os.open(MANIFEST.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            before = os.fstat(fd)
-            if not stat.S_ISREG(before.st_mode) or before.st_size > 256 * 1024:
-                raise PolicyError('dedicated manifest is not a bounded regular file')
-            raw = os.read(fd, 256 * 1024 + 1)
-            after = os.fstat(fd)
-            if (len(raw) > 256 * 1024 or len(raw) != before.st_size or
-                    (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) !=
-                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)):
-                raise PolicyError('dedicated manifest changed during bounded read')
+            parent = os.fstat(parent_fd)
+            fd = os.open(MANIFEST.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=parent_fd)
+            try:
+                before = os.fstat(fd)
+                if not stat.S_ISREG(before.st_mode) or before.st_size > 256 * 1024:
+                    raise PolicyError('dedicated manifest is not a bounded regular file')
+                raw = os.read(fd, 256 * 1024 + 1)
+                after = os.fstat(fd)
+                if (len(raw) > 256 * 1024 or len(raw) != before.st_size or
+                        (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+                    raise PolicyError('dedicated manifest changed during bounded read')
+                entry = os.stat(MANIFEST.name, dir_fd=parent_fd, follow_symlinks=False)
+                current_parent = os.stat(MANIFEST.parent, follow_symlinks=False)
+                if ((after.st_dev, after.st_ino) != (entry.st_dev, entry.st_ino) or
+                        (parent.st_dev, parent.st_ino) != (current_parent.st_dev, current_parent.st_ino)):
+                    raise PolicyError('dedicated manifest path changed during bounded read')
+            finally:
+                os.close(fd)
         finally:
-            os.close(fd)
+            os.close(parent_fd)
         value = json.loads(raw.decode('utf-8'), object_pairs_hook=unique_keys)
     except (OSError, UnicodeError, ValueError, TypeError, RecursionError) as exc:
         if isinstance(exc, PolicyError):

@@ -285,6 +285,18 @@ class ManifestTests(unittest.TestCase):
                 with self.assertRaises(policy.PolicyError):
                     policy.load_manifest()
 
+    def test_manifest_refuses_symlink_parent_before_projection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real = root / 'real'
+            real.mkdir()
+            (real / 'manifest.json').write_bytes(policy.MANIFEST.read_bytes())
+            (root / 'linked').symlink_to(real, target_is_directory=True)
+            with mock.patch.object(policy, 'MANIFEST', root / 'linked' / 'manifest.json'), \
+                 mock.patch.object(policy, 'source_policies', side_effect=AssertionError('unexpected source read')):
+                with self.assertRaises(policy.PolicyError):
+                    policy.load_manifest()
+
 
 class ActivationTests(unittest.TestCase):
     def test_all_policies_compile_before_any_binding_is_activated(self):

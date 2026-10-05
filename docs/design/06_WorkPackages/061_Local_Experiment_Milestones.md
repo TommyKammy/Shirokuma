@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.271"
+version: "5.272"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: immediate manifest parent and independent history review (offline)
+
+WP-L2-POL-001: a symlinked immediate manifest parent reached source projection
+before the negative regression and now fails under an anchored parent descriptor;
+file and parent entry identity are checked after the bounded read. Focused
+policy 110 tests passed. Separately WP-L6-FIN-001: reviewed saved-history
+selection/digest, ordering and per-report storage without a reader change;
+FinOps 204 tests passed (seven Linux-only skips); the full
+`make verify-local-experiment` and diff check passed. Colima was freshly observed
+stopped; no live API, collection, unknown-request replay, retained data/backup
+mutation or GitHub write. An immediate parent check does not authenticate
+higher ancestors, simultaneous contents, source tools or producers; offline
+checks do not prove strict admission, AgentHouse bytes (`null / NOT_MEASURED`)
+or operator acceptance. Roll back only the scoped manifest guard/test if its
+input contract changes; preserve historical intents and saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: bounded native manifest descriptor (offline)
 
