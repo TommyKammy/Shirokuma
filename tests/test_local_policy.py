@@ -1200,6 +1200,14 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for generation in (0, -1, True, '1', None):
+            reply = copy.deepcopy(valid)
+            reply['metadata']['generation'] = generation
+            client.json_request.return_value = reply
+            with self.subTest(generation=generation), self.assertRaises(policy.PolicyError):
+                client.image()
+        reply['metadata']['generation'] = 1
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for extra in ({'foreignEnvelope': {'enabled': True}},
                       {'items': []}):
             reply = copy.deepcopy(valid)

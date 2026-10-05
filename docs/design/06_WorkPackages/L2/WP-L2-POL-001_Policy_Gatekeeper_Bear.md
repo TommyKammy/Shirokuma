@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.219"
+version: "0.220"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: typed Trino Deployment generation (offline)
+
+Five synthetic same-image Trino Deployment replies with an explicit zero,
+negative, boolean, string or null metadata generation lent the fixed smoke
+image before repair. The source reader now rejects malformed present
+generations; omission in minimal fixtures and a positive integer pass.
+Focused policy 166 cases, post-change `make verify-local-experiment`,
+design-context, secret scan and diff check pass (the verifier's fake Dagster
+worker failure is an intentional negative diagnostic). No live API/admission, unknown-request replay,
+retained request/backup change or GitHub write. This offline metadata guard
+cannot authenticate the API, establish strict live admission or grant operator
+acceptance. Revert only this guard/test if necessary, preserving saved
+requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: require fixed Trino ConfigMap projection (offline)
 
