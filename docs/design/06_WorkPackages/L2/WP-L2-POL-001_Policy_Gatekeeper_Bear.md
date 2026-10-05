@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.146"
+version: "0.147"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: complete unique native allowlist inventory (offline)
+
+The Kubernetes bridge now refuses a caller-supplied certified inventory unless
+all eight policy and eight binding identities occur exactly once. Previously a
+duplicate could silently replace an entry when the list became a map. Missing,
+duplicate, unexpected and malformed identities fail before any scoped request;
+the unchanged 16-item projection remains accepted without another manifest read.
+`make test-local-policy` passed 127 tests and `make verify-local-experiment`
+passed. The dedicated Colima profile was freshly observed stopped: no API,
+admission activation, retained intent or backup change. This guards a local
+constructor boundary, not producer authenticity or live strict admission.
+Revert only the constructor guard/test if required; preserve saved intents.
+Original Vault sync pending outside this checkout.
 
 ## 2026-10-05: owned native admission allowlist snapshot (offline)
 

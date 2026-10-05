@@ -141,6 +141,18 @@ class ManifestTests(unittest.TestCase):
             kube.create(original, dry_run=True)
         self.assertEqual(request.call_args.args[1], original)
 
+    def test_kubernetes_allowlist_refuses_incomplete_or_duplicate_inventory(self):
+        certified = items()
+        for altered in (certified[:-1], certified[:-1] + [copy.deepcopy(certified[0])],
+                        certified[:-1] + [dict(certified[-1], kind='Pod')],
+                        certified[:-1] + [{'kind': policy.POLICY, 'metadata': {'name': []}}]):
+            with self.subTest(last=altered[-1]), mock.patch.object(
+                    policy, 'load_manifest', side_effect=AssertionError('second read')):
+                with self.assertRaises(policy.PolicyError):
+                    policy.Kubernetes(altered)
+        with mock.patch.object(policy, 'load_manifest', side_effect=AssertionError('second read')):
+            self.assertEqual(len(policy.Kubernetes(certified).expected), 16)
+
     def test_local_source_decoder_requires_document_separators(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]

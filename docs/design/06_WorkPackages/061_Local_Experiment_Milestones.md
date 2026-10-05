@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.286"
+version: "5.287"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: unique native inventory and independent FinOps review (offline)
+
+WP-L2-POL-001: the certified Kubernetes allowlist constructor rejects missing,
+duplicate, unexpected and malformed identities rather than silently collapsing
+duplicate entries. The real 16-item projection and 127 focused policy tests
+passed. Separately WP-L6-FIN-001 reviewed saved-history digest and storage
+coverage without a reader change; 206 FinOps tests passed (seven Linux-only
+skips). `make verify-local-experiment` and diff check passed. Dedicated Colima
+was freshly observed stopped. No live API, collection, unknown-request replay,
+retained data/backup mutation or GitHub write. This offline inventory does not
+authenticate a source or prove strict admission; AgentHouse usage is still
+`null / NOT_MEASURED`, and operator acceptance remains open. Revert only the
+scoped constructor guard/test if required; preserve reports and intents.
+Original Vault sync pending outside this checkout.
 
 ## 2026-10-05: owned policy allowlist and saved signed-zero correlation (offline)
 

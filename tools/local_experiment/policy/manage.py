@@ -342,8 +342,17 @@ class Kubernetes:
         spec.loader.exec_module(self.scope)
         # Own the certified snapshot: callers retaining its mutable list/dicts
         # must not be able to change the request allowlist after construction.
-        self.expected = {(x['kind'], x['metadata']['name']): copy.deepcopy(x) for x in
-                          (load_manifest() if expected_items is None else expected_items)}
+        items = load_manifest() if expected_items is None else expected_items
+        keys = {(kind, name) for kind in RESOURCES for name in NAMES}
+        if (type(items) is not list or len(items) != len(keys) or
+                any(type(x) is not dict or type(x.get('metadata')) is not dict or
+                    type(x.get('kind')) is not str or
+                    type(x['metadata'].get('name')) is not str for x in items)):
+            raise PolicyError('certified policy inventory is incomplete or malformed')
+        actual = [(x['kind'], x['metadata']['name']) for x in items]
+        if set(actual) != keys or len(set(actual)) != len(actual):
+            raise PolicyError('certified policy inventory has duplicate or unexpected identities')
+        self.expected = {key: copy.deepcopy(item) for key, item in zip(actual, items)}
 
     def request(self, args: list[str], body: dict | None = None):
         self.scope.check_context()
