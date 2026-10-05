@@ -138,6 +138,21 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
     require(component in TARGETS)
     a = _snapshot(component, *before); b = _snapshot(component, *after)
     require(a == b, 'IDENTITY_CHANGED')
+    # UIDs alone do not pin a live object's spec or its ownership/selection.
+    # Ignore status/resourceVersion (which may advance independently), but do
+    # not publish the first reference if its scoped source changed mid-read.
+    for original, later in zip(before, after):
+        if original is None:
+            continue
+        if type(original) is list:
+            pairs = zip(original, later)
+        else:
+            pairs = ((original, later),)
+        for first_obj, last_obj in pairs:
+            require(_same_json(first_obj.get('spec'), last_obj.get('spec')) and
+                    _same_json(first_obj['metadata'].get('labels'), last_obj['metadata'].get('labels')) and
+                    _same_json(first_obj['metadata'].get('ownerReferences'),
+                               last_obj['metadata'].get('ownerReferences')), 'IDENTITY_CHANGED')
     ns, kind, _, _, _, _, _, claim = TARGETS[component]
     start, end = U.stamp(request_started_at), U.stamp(observed_at)
     require(0 <= end[1]-start[1] <= 30*10**9, 'SAMPLE_INVALID')

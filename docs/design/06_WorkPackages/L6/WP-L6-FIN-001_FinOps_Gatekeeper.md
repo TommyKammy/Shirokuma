@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.154"
+version: "0.155"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed storage source continuity (offline)
+
+Eight synthetic changes to a workload's replicas or a selected Pod's spec,
+labels or owner references retained their UIDs and previously published the
+earlier fixed reference. Two-read projection now requires JSON-type-exact
+continuity of workload, selected Pod and ReplicaSet specs, labels and owner
+references, without comparing independently moving status/resourceVersion.
+Negatives failed before repair; focused FinOps suite passed 230 cases (seven
+Linux-only skips), and `make verify-local-experiment` passed. Dedicated Colima
+was observed stopped; no live collection,
+volume scan or retained report/backup modification. This is not an atomic or
+authenticated API snapshot, AgentHouse byte measurement (`null / NOT_MEASURED`)
+or operator acceptance. Revert only the scoped continuity guard/test if needed;
+retain saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed claim-template ownership (offline)
 

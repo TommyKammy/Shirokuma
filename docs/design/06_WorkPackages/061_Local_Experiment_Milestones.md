@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.345"
+version: "5.346"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed FinOps storage source continuity (offline)
+
+WP-L6-FIN-001: eight synthetic same-UID workload/Pod scope drifts passed
+before repair. The two-read reference projection now checks specs, labels and
+owner references without treating moving status/resourceVersion as identity.
+Focused FinOps suite passed 230 cases (seven Linux-only skips); the full local
+verifier passed (fake Dagster failure diagnostic is intentional). Dedicated
+Colima was observed stopped; no live collection, retained report/volume/backup
+mutation or GitHub write. This does not authenticate the API, provide an atomic
+snapshot, measure AgentHouse bytes (`null / NOT_MEASURED`) or establish operator
+acceptance. Restore only the scoped guard/test if necessary and keep saved
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: Trino smoke-source readiness and placement (offline)
 

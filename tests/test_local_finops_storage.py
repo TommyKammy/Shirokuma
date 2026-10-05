@@ -223,6 +223,37 @@ class StorageTests(unittest.TestCase):
         with self.assertRaisesRegex(S.StorageError, 'IDENTITY_CHANGED'):
             S._collect_one(backend, 'seaweedfs')
 
+    def test_storage_collection_refuses_changed_workload_or_pod_scope(self):
+        for component in ('seaweedfs', 'trino'):
+            w, pods, replica, pvc, pv = objects(component)
+            first = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':pods}]
+            if replica is not None:
+                first.append(replica)
+            if pvc is not None:
+                first.extend((pvc, pv))
+            first.extend((deepcopy(w), {'kind':'PodList','apiVersion':'v1','metadata':{},'items':deepcopy(pods)}))
+            if replica is not None:
+                first.append(deepcopy(replica))
+            if pvc is not None:
+                first.extend((deepcopy(pvc), deepcopy(pv)))
+            later_workload = 4 if pvc is not None else 3
+            # The fixed UIDs and projected claim chain remain unchanged in each case.
+            for index, mutate in (
+                (later_workload, lambda x: x['spec'].update(replicas=2)),
+                (later_workload + 1, lambda x: x['items'][0]['spec'].update(nodeName='foreign')),
+                (later_workload + 1, lambda x: x['items'][0]['metadata']['labels'].update(zone='foreign')),
+                (later_workload + 1, lambda x: x['items'][0]['metadata']['ownerReferences'].append(
+                    {'kind':'ReplicaSet','controller':False,'uid':Q})),
+            ):
+                changed = deepcopy(first)
+                mutate(changed[index])
+                backend = Mock()
+                backend.now.return_value = NOW
+                backend.storage_get.side_effect = changed
+                with self.subTest(component=component, index=index, mutate=mutate), self.assertRaisesRegex(
+                        S.StorageError, 'IDENTITY_CHANGED'):
+                    S._collect_one(backend, component)
+
     def test_transport_reason_and_cleanup_boundary(self):
         backend=Mock();backend.now.return_value=NOW
         for exception,expected in ((R.U.PodUsageError('READ_TIMEOUT'),'READ_TIMEOUT'),
