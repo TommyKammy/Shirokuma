@@ -528,6 +528,13 @@ class Kubernetes:
                          for key, value in expected_owner.items())):
                 raise PolicyError('smoke requires the dedicated local Trino selector')
             pod_spec = deployment['spec']['template']['spec']
+            # Do not borrow an image from a same-name workload whose Pod
+            # template escapes the local Trino runtime isolation contract.
+            if (type(pod_spec) is not dict or
+                    pod_spec.get('automountServiceAccountToken') is not False or
+                    any(pod_spec.get(field, False) is not False
+                        for field in ('hostNetwork', 'hostPID', 'hostIPC'))):
+                raise PolicyError('smoke requires the isolated local Trino pod template')
             containers = pod_spec['containers']
             if (type(containers) is not list or len(containers) != 1 or
                      type(containers[0]) is not dict or

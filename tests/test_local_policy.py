@@ -1166,11 +1166,31 @@ class ScopedResponseTests(unittest.TestCase):
                             'template': {'metadata': {'labels': {'app.kubernetes.io/name': 'trino-local',
                                                                 'app.kubernetes.io/part-of': 'shirokuma',
                                                                 'shirokuma.dev/scope': 'local-experiment'}},
-                                        'spec': {'containers': [
+                                        'spec': {'automountServiceAccountToken': False, 'containers': [
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64,
              'imagePullPolicy': 'Never'}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for field, value in (('automountServiceAccountToken', None),
+                             ('automountServiceAccountToken', True),
+                             ('automountServiceAccountToken', 0),
+                             ('hostNetwork', True), ('hostPID', True), ('hostIPC', True),
+                             ('hostNetwork', None), ('hostPID', 0), ('hostIPC', [])):
+            with self.subTest(pod_field=field, value=value):
+                reply = copy.deepcopy(valid)
+                pod = reply['spec']['template']['spec']
+                if value is None and field == 'automountServiceAccountToken':
+                    del pod[field]
+                else:
+                    pod[field] = value
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        for field in ('hostNetwork', 'hostPID', 'hostIPC'):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template']['spec'][field] = False
+            client.json_request.return_value = reply
+            self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for references in ([{'apiVersion': 'v1', 'kind': 'ConfigMap', 'name': 'other',
                              'uid': 'foreign', 'controller': True}],
                            [None], None, {}):

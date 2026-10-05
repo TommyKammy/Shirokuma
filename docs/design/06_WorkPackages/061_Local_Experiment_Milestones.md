@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.324"
+version: "5.325"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: isolated smoke source and separate saved FinOps review (offline)
+
+WP-L2-POL-001: the fixed Trino smoke image lookup now refuses source Pod
+templates with service-account token mounting or host namespace access;
+synthetic negative and explicit-false controls pass (166 policy tests). The
+repository Deployment template explicitly disables token mounting and omits
+host namespace flags. WP-L6-FIN-001: separately reviewed unchanged detached
+history digest/selection and Docker reference-versus-usage boundaries;
+`make test-local-finops` passed 214 tests (seven Linux-only skips). The broader
+`make verify-local-experiment` and `git diff --check` passed. The dedicated
+Colima profile was freshly observed stopped. No collection or
+live API/admission, image import, request replay, retained report/volume/backup
+mutation or GitHub write. Neither offline check authenticates producers, proves
+current cluster state or measures AgentHouse (`null / NOT_MEASURED`); operator
+acceptance remains open. Roll back only the scoped policy source guard/test if
+necessary; retain saved intents and reports. Original Vault sync pending.
 
 ## 2026-10-06: local-only smoke image pull policy and independent FinOps check (offline)
 

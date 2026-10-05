@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.179"
+version: "0.180"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke source Pod isolation (offline)
+
+The fixed Deployment image lookup previously accepted a local-only image from
+a template that enabled host network/PID/IPC or mounted a service-account token.
+The lookup now requires the manifest's explicit `automountServiceAccountToken:
+false` and absent or strictly false host-namespace flags. Synthetic negative
+and explicit-false controls pass in `make test-local-policy` (166 tests). The
+dedicated Colima profile was observed stopped; no API, dry-run, image import,
+retained data or backup mutation occurred. This is a conservative smoke-image
+source check, not proof that the Pod is running, the server is authentic or
+strict live admission works. Restore only the scoped lookup/test if necessary;
+preserve saved intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke image requires local-only pull policy (offline)
 
