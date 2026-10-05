@@ -997,6 +997,30 @@ class ActivationTests(unittest.TestCase):
         with self.assertRaisesRegex(policy.PolicyError, 'type checking changed'):
             policy.apply_policies(kube, items())
         self.assertFalse(any(call[0] == 'create' and call[1] == policy.BINDING
+                              for call in kube.calls))
+
+    def test_binding_appearing_during_policy_recheck_prevents_binding_creation(self):
+        kube = FakeKubernetes(ready=True)
+        target = next(x for x in items() if x['kind'] == policy.BINDING)
+        key = (target['kind'], target['metadata']['name'])
+        for binding in [key for key in kube.objects if key[0] == policy.BINDING]:
+            del kube.objects[binding]
+        original = kube.get
+        policy_reads = 0
+
+        def late_binding(kind, name):
+            nonlocal policy_reads
+            if kind == policy.POLICY:
+                policy_reads += 1
+                # The final policy pass follows the binding inventory pass.
+                if policy_reads == 33:
+                    kube.objects[key] = admitted(target)
+            return original(kind, name)
+
+        kube.get = late_binding
+        with self.assertRaisesRegex(policy.PolicyError, 'changed since activation preflight'):
+            policy.apply_policies(kube, items())
+        self.assertFalse(any(call[0] == 'create' and call[1] == policy.BINDING
                              for call in kube.calls))
 
     def test_binding_replacement_at_final_inventory_cannot_certify_ready(self):

@@ -668,6 +668,18 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
                 pin_identity(current, expected)
                 if typecheck(current) != 'complete':
                     raise PolicyError('policy type checking changed before binding activation')
+            # The policy pass itself can outlive the binding scan. Refuse a
+            # binding appearing, disappearing or changing during that pass
+            # before creating the first binding.
+            for expected in selected:
+                current = kube.get(BINDING, expected['metadata']['name'])
+                key = (BINDING, expected['metadata']['name'])
+                if current is not None:
+                    assert_owned(current, expected)
+                if (current is not None) != (key in preflight_present):
+                    raise PolicyError('dedicated resource changed since activation preflight')
+                if current is not None:
+                    pin_identity(current, expected)
         for expected in missing:
             current = kube.create(expected)
             assert_owned(current, expected)

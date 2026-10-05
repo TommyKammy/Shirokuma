@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.307"
+version: "5.308"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: post-policy binding continuity and independent FinOps verification (offline)
+
+WP-L2-POL-001: a synthetic binding appeared during the policy recheck after
+the binding scan. Before repair, creation failed with `name already exists`;
+activation now rechecks the entire binding inventory before its first binding
+create. The policy suite passed 161 tests. Independently WP-L6-FIN-001's
+unchanged saved-history/storage suite passed 207 tests (seven Linux-only skips),
+without collection or reader change. `make verify-local-experiment` and diff
+check passed. Dedicated Colima was freshly observed stopped; no live API,
+unknown-request replay, retained report/volume/backup mutation or GitHub write.
+Sequential scans remain non-atomic; live strict admission, AgentHouse bytes
+(`null / NOT_MEASURED`) and operator acceptance remain open. Roll back only
+the binding recheck/test if needed; preserve saved intents and reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: pre-binding policy drift and independent FinOps check (offline)
 

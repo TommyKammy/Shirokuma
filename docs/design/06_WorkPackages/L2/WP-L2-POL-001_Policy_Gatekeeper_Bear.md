@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.167"
+version: "0.168"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: binding continuity after policy recheck (offline)
+
+A binding introduced during the final policy ownership/type-check pass was
+previously detected only by the attempted binding create (`name already
+exists`), after the binding scan had completed. A fake API negative failed
+before repair. Activation now scans all bindings again after the policy pass,
+checking ownership, preflight presence and pinned UID before its first binding
+create. The 161 policy tests, independent 207 FinOps tests (seven Linux-only
+skips), `make verify-local-experiment` and diff check passed. Dedicated Colima
+was freshly observed stopped; no live API, unknown-request replay, retained
+volume/backup mutation or GitHub write. Sequential reads still race subsequent
+changes; live strict admission and operator acceptance remain open. Revert only
+this recheck and its regression if necessary, preserving saved intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: pre-binding policy recheck (offline)
 
