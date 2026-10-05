@@ -5,12 +5,29 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.180"
+version: "0.181"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke source requires restricted Trino security context (offline)
+
+The pinned-image reader accepted a synthetic same-name Deployment with root,
+unconfined or privileged Trino Pod/container context. Nine negative cases failed
+before the guard. It now requires the manifest's non-root UID and RuntimeDefault
+seccomp, disabled escalation, read-only root filesystem and dropped capabilities;
+container identity/seccomp overrides, missing fields and Python boolean/number
+aliases are refused. The explicit
+unprivileged `privileged: false` default remains valid. `make test-local-policy`
+passed 166 cases after repair; `make verify-local-experiment` passed. Dedicated
+Colima was freshly observed stopped;
+no API, dry-run, image import, retained request/data or backup mutation.
+This is an offline source filter, not authenticated API provenance, proof of
+current deployment security or strict admission. Revert only this reader guard
+and regression fixture if necessary; retain prior requests. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: smoke source Pod isolation (offline)
 

@@ -1166,11 +1166,50 @@ class ScopedResponseTests(unittest.TestCase):
                             'template': {'metadata': {'labels': {'app.kubernetes.io/name': 'trino-local',
                                                                 'app.kubernetes.io/part-of': 'shirokuma',
                                                                 'shirokuma.dev/scope': 'local-experiment'}},
-                                        'spec': {'automountServiceAccountToken': False, 'containers': [
+                                        'spec': {'automountServiceAccountToken': False,
+                                                 'securityContext': {'runAsNonRoot': True, 'runAsUser': 10000,
+                                                                     'seccompProfile': {'type': 'RuntimeDefault'}},
+                                                 'containers': [
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64,
-             'imagePullPolicy': 'Never'}]}}}}
+              'imagePullPolicy': 'Never', 'securityContext': {
+                  'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True,
+                  'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for field, value in (('runAsNonRoot', False), ('runAsNonRoot', 1),
+                             ('runAsUser', 0), ('runAsUser', True),
+                             ('seccompProfile', {'type': 'Unconfined'})):
+            with self.subTest(pod_security=field, value=value):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['securityContext'][field] = value
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        for field in ('runAsNonRoot', 'runAsUser', 'seccompProfile'):
+            with self.subTest(missing_pod_security=field):
+                reply = copy.deepcopy(valid)
+                del reply['spec']['template']['spec']['securityContext'][field]
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        for field, value in (('privileged', True), ('runAsUser', 0),
+                             ('runAsNonRoot', False), ('seccompProfile', {'type': 'Unconfined'}),
+                             ('allowPrivilegeEscalation', True),
+                             ('readOnlyRootFilesystem', False),
+                             ('capabilities', {'add': ['SYS_ADMIN'], 'drop': ['ALL']})):
+            with self.subTest(container_security=field, value=value):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['containers'][0]['securityContext'][field] = value
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        for field in ('allowPrivilegeEscalation', 'readOnlyRootFilesystem', 'capabilities'):
+            with self.subTest(missing_container_security=field):
+                reply = copy.deepcopy(valid)
+                del reply['spec']['template']['spec']['containers'][0]['securityContext'][field]
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
         for field, value in (('automountServiceAccountToken', None),
                              ('automountServiceAccountToken', True),
                              ('automountServiceAccountToken', 0),

@@ -531,10 +531,17 @@ class Kubernetes:
             # Do not borrow an image from a same-name workload whose Pod
             # template escapes the local Trino runtime isolation contract.
             if (type(pod_spec) is not dict or
-                    pod_spec.get('automountServiceAccountToken') is not False or
-                    any(pod_spec.get(field, False) is not False
-                        for field in ('hostNetwork', 'hostPID', 'hostIPC'))):
+                     pod_spec.get('automountServiceAccountToken') is not False or
+                     any(pod_spec.get(field, False) is not False
+                         for field in ('hostNetwork', 'hostPID', 'hostIPC'))):
                 raise PolicyError('smoke requires the isolated local Trino pod template')
+            pod_security = pod_spec.get('securityContext')
+            if (type(pod_security) is not dict or
+                    pod_security.get('runAsNonRoot') is not True or
+                    type(pod_security.get('runAsUser')) is not int or
+                    pod_security['runAsUser'] != 10000 or
+                    pod_security.get('seccompProfile') != {'type': 'RuntimeDefault'}):
+                raise PolicyError('smoke requires the non-root local Trino pod context')
             containers = pod_spec['containers']
             if (type(containers) is not list or len(containers) != 1 or
                      type(containers[0]) is not dict or
@@ -545,6 +552,16 @@ class Kubernetes:
             # uses the locally imported image instead of pulling remotely.
             if containers[0].get('imagePullPolicy') != 'Never':
                 raise PolicyError('smoke requires the local Trino image pull policy')
+            container_security = containers[0].get('securityContext')
+            if (type(container_security) is not dict or
+                    container_security.get('privileged', False) is not False or
+                    'runAsUser' in container_security or
+                    'runAsNonRoot' in container_security or
+                    'seccompProfile' in container_security or
+                    container_security.get('allowPrivilegeEscalation') is not False or
+                    container_security.get('readOnlyRootFilesystem') is not True or
+                    container_security.get('capabilities') != {'drop': ['ALL']}):
+                raise PolicyError('smoke requires the restricted local Trino container')
             images = [containers[0].get('image')] if containers[0].get('name') == 'trino' else []
         except (TypeError, KeyError):
             raise PolicyError('smoke requires a well-formed local Trino deployment') from None

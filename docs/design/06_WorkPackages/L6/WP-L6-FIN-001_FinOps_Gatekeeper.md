@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.138"
+version: "0.139"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: canonical fixed Docker volume reference (offline)
+
+Three synthetic inspect replies with matching AgentHouse volume-name suffixes
+but foreign, repeated-separator or parent-traversal mountpoint paths previously
+passed the reference check. The reference reader now requires the exact Docker
+named-volume path; its container mount source must still match the volume
+mountpoint. This does not traverse the volume, measure bytes or establish daemon
+authenticity. `make test-local-finops` initially failed on all three negatives;
+the 215-case suite passed after repair (seven Linux-only skips), as did
+`make verify-local-experiment`.
+No collection or retained report/volume/backup mutation; AgentHouse used bytes
+remain `null / NOT_MEASURED`. Revert only this path guard/test if needed and
+preserve historical reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: separate saved-history boundary verification (offline)
 

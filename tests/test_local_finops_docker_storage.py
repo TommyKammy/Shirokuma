@@ -61,6 +61,16 @@ class DockerStorageTests(unittest.TestCase):
                 data=fixture();change(data)
                 with self.assertRaises(D.DockerStorageError):projected(data)
 
+    def test_volume_reference_refuses_noncanonical_mountpoint(self):
+        for mountpoint in ('/var/lib/docker/volumes/foreign/../' + D.AH.VOLUME + '/_data',
+                           '/var/lib/docker/volumes//' + D.AH.VOLUME + '/_data',
+                           '/var/lib/docker/volumes/foreign/' + D.AH.VOLUME + '/_data'):
+            with self.subTest(mountpoint=mountpoint):
+                data = fixture()
+                data[2][0]['Mountpoint'] = mountpoint
+                data[1][0]['Mounts'][0]['Source'] = mountpoint
+                with self.assertRaises(D.DockerStorageError): projected(data)
+
     def test_before_after_identity_and_mount_drift_refused(self):
         for index,change in ((1,lambda x:x[0].update(Id='b'*64)),
                              (1,lambda x:x[0]['State'].update(Running=True)),

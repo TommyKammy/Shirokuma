@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.325"
+version: "5.326"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: restricted smoke source and canonical FinOps volume reference (offline)
+
+WP-L2-POL-001: synthetic root, unconfined and privileged same-name Trino
+Deployment contexts supplied the fixed smoke image before a bounded security
+context guard (nine failing negatives). Container identity/seccomp overrides
+also fail closed. WP-L6-FIN-001: three synthetic Docker
+inspect mountpoint aliases with the fixed volume suffix passed the reference
+check before requiring the exact named-volume path. Both readers now refuse
+these inputs; no live API or Docker collection was made. Focused policy and
+FinOps suites passed (166 and 215 cases, seven Linux-only FinOps skips), as did
+`make verify-local-experiment` and `git diff --check`. The
+dedicated Colima profile was freshly observed stopped. No unknown request
+replay, retained report/volume/backup mutation or GitHub write. Neither guard
+authenticates an API/daemon or proves present runtime shape; strict live
+admission, AgentHouse usage (`null / NOT_MEASURED`) and operator acceptance
+remain open. Restore only the scoped reader/test guards if needed, preserving
+saved reports and requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: isolated smoke source and separate saved FinOps review (offline)
 

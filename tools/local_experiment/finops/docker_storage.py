@@ -75,8 +75,9 @@ def _identity(container, volume):
             and volume.get('Driver') == 'local' and volume.get('Scope') == 'local')
     created = created_at(volume.get('CreatedAt'))
     mountpoint = volume.get('Mountpoint')
-    require(type(mountpoint) is str and mountpoint.startswith('/var/lib/docker/volumes/') and
-            mountpoint.endswith('/' + AH.VOLUME + '/_data'))
+    # A matching suffix under another directory is not the fixed named volume.
+    require(type(mountpoint) is str and
+            mountpoint == '/var/lib/docker/volumes/' + AH.VOLUME + '/_data')
     mounts = container.get('Mounts')
     require(type(mounts) is list and len(mounts) == 1)
     mount = mounts[0]
