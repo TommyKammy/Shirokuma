@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.175"
+version: "0.176"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke Deployment selector bound to Trino template (offline)
+
+The fixed Trino image lookup accepted a persisted same-name Deployment selecting
+different Pods (or no matching Pods). Four fake-API selector/template negatives
+failed before repair. It now requires the exact dedicated `trino-local` selector
+and its label on the template, while allowing other template labels. Missing or
+malformed selector/template labels also fail. The checked selector matches the
+repository's local Trino Deployment manifest; the 166-test policy suite passed.
+Colima was freshly observed stopped: this does not prove live deployment shape,
+API authenticity, image execution or strict admission. No API calls, policy
+resources, retained data, requests or backups were changed. Revert only the
+scoped image guard/test if necessary, preserving historical intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke Deployment persisted identity (offline)
 

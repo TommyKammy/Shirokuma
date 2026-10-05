@@ -511,6 +511,14 @@ class Kubernetes:
             # A named, digest-shaped object is not enough to identify an
             # existing Deployment returned by the scoped API read.
             persistent_identity(deployment)
+            # The image must belong to the fixed local Trino workload, not a
+            # same-name Deployment selecting another set of Pods (or none).
+            selector = deployment['spec']['selector']
+            labels = deployment['spec']['template']['metadata']['labels']
+            if (type(selector) is not dict or selector != {
+                    'matchLabels': {'app.kubernetes.io/name': 'trino-local'}} or
+                    type(labels) is not dict or labels.get('app.kubernetes.io/name') != 'trino-local'):
+                raise PolicyError('smoke requires the dedicated local Trino selector')
             pod_spec = deployment['spec']['template']['spec']
             containers = pod_spec['containers']
             if (type(containers) is not list or len(containers) != 1 or

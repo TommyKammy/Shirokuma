@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.318"
+version: "5.319"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed smoke image selector and independent FinOps check (offline)
+
+WP-L2-POL-001: a same-name persisted Deployment with a different or empty Pod
+selector previously supplied the smoke image; four synthetic negatives failed
+before binding the reader to the fixed local Trino selector and matching
+template label. The repository Deployment manifest has that selector. Focused
+policy tests passed (166). Independently WP-L6-FIN-001's unchanged saved-history
+and volume-reference suite passed 212 tests (seven Linux-only skips), without
+collection or changing its reader. `make verify-local-experiment`,
+`make verify-design-context` and `git diff --check` passed; the verifier's
+intentional fake Dagster failure emitted diagnostic text without failing its
+tests. Dedicated Colima was freshly observed
+stopped; no live API, admission, retained report/volume/backup mutation,
+unknown-request replay or GitHub write. Offline checks do not authenticate the
+API, prove current Deployment shape or strict admission, measure AgentHouse
+usage (`null / NOT_MEASURED`) or establish operator acceptance. Revert only
+the image selector guard/test if needed; preserve saved reports and requests.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: persisted smoke image source and independent FinOps selection check (offline)
 

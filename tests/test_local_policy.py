@@ -1159,10 +1159,42 @@ class ScopedResponseTests(unittest.TestCase):
         valid = {'apiVersion': 'apps/v1', 'kind': 'Deployment',
                  'metadata': {'name': 'trino-local', 'namespace': policy.NAMESPACE,
                               'uid': 'trino-uid', 'resourceVersion': '42'},
-                 'spec': {'template': {'spec': {'containers': [
+                  'spec': {'selector': {'matchLabels': {'app.kubernetes.io/name': 'trino-local'}},
+                           'template': {'metadata': {'labels': {'app.kubernetes.io/name': 'trino-local',
+                                                               'shirokuma.dev/scope': 'local-experiment'}},
+                                        'spec': {'containers': [
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for selector, labels in (({'matchLabels': {'app.kubernetes.io/name': 'other'}},
+                                  {'app.kubernetes.io/name': 'other'}),
+                                 ({'matchLabels': {'app.kubernetes.io/name': 'trino-local'}},
+                                  {'app.kubernetes.io/name': 'other'}),
+                                 ({'matchExpressions': []}, {'app.kubernetes.io/name': 'trino-local'}),
+                                 ({'matchLabels': {'app.kubernetes.io/name': 'trino-local',
+                                                   'unexpected': 'other'}},
+                                  {'app.kubernetes.io/name': 'trino-local', 'unexpected': 'other'})):
+            with self.subTest(selector=selector, labels=labels):
+                reply = copy.deepcopy(valid)
+                reply['spec']['selector'] = selector
+                reply['spec']['template']['metadata']['labels'] = labels
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        for field in ('selector', 'template'):
+            with self.subTest(missing=field):
+                reply = copy.deepcopy(valid)
+                del reply['spec'][field]
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        for labels in (None, [], {}, {'app.kubernetes.io/name': False}):
+            with self.subTest(labels=labels):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['metadata']['labels'] = labels
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
         for field, value in (('uid', None), ('uid', []), ('resourceVersion', None),
                              ('resourceVersion', '0'), ('resourceVersion', 'not-persisted')):
             with self.subTest(identity=field, value=value):
