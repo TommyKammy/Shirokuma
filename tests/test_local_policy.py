@@ -990,6 +990,25 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_service_success_rejects_unexamined_spec_fields(self):
+        # A newly introduced Service spec field is not automatically safe just
+        # because the known routing fields still match the submitted request.
+        for value in (None, {'enabled': True}):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(request):
+                if (request['kind'] != 'Service' or request['spec'].get('type') != 'ClusterIP' or
+                        request['spec'].get('externalIPs')):
+                    return reference.smoke_request(request)
+                reply = copy.deepcopy(request)
+                reply['spec']['unexaminedRouting'] = value
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 2)
+
     def test_service_success_does_not_add_traffic_hints(self):
         for mutation in ('distribution', 'application-protocol'):
             kube = FakeKubernetes(ready=True)

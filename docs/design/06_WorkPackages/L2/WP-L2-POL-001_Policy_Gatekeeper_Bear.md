@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.104"
+version: "0.105"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: fixed Service spec key boundary (offline)
+
+Two fake successful fixed-Service replies added an unknown top-level spec key
+with null or nonempty content; both passed before a scoped allowlist rejected
+them. The negative failed first, then 83 native policy tests and the local
+regression passed. This intentionally fails closed on future defaulted Service
+spec keys until their effect is examined; known fields and fixed successes
+remain accepted. Colima was observed stopped; no live API request, saved-request
+replay, retained data/backup change or GitHub write. This does not authenticate
+the response, establish full effective-object equality, clear strict admission
+or grant operator acceptance. Revert only this Service key guard/test if live
+defaulting invalidates the assumption; preserve saved intents. Direct original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-05: ServicePort presence-only routing controls (offline)
 

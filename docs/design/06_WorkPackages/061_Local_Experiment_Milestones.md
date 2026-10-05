@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.238"
+version: "5.239"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: Service spec key boundary and independent history check (offline)
+
+WP-L2-POL-001: two fake successful fixed-Service replies carrying unknown
+top-level spec fields (null and nonempty) passed until a scoped allowlist;
+negative failed first, then 83 native policy tests and `make
+verify-local-experiment` passed. Independently WP-L6-FIN-001: direct saved
+history selection, chronology, digest binding and per-report storage were
+inspected without a reader change; 194 FinOps tests passed (seven Linux-only
+skips). Dedicated Colima was observed stopped. No live API, new collection,
+unknown-request replay, retained data/backup mutation or GitHub write.
+Offline replies and saved reports cannot authenticate producers, prove full
+effective-object equality, measure present usage, clear strict admission or
+grant operator acceptance. Revert only the scoped Service guard/test if needed;
+preserve saved requests and reports. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-05: independent presence-only port and encoded endpoint controls (offline)
 

@@ -510,7 +510,17 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
         return False
     original = submitted['spec']
     if submitted['kind'] == 'Service':
-        return (spec.get('type') == original.get('type', 'ClusterIP') and
+        # This fixed corpus cannot classify an unexamined Service spec key as
+        # harmless defaulting, even if all known routing fields still match.
+        return (set(spec) <= {
+                    'type', 'externalIPs', 'externalName', 'loadBalancerIP',
+                    'loadBalancerSourceRanges', 'loadBalancerClass',
+                    'allocateLoadBalancerNodePorts', 'selector', 'sessionAffinity',
+                    'sessionAffinityConfig', 'publishNotReadyAddresses',
+                    'internalTrafficPolicy', 'externalTrafficPolicy',
+                    'healthCheckNodePort', 'ipFamilyPolicy', 'ipFamilies',
+                    'clusterIPs', 'clusterIP', 'trafficDistribution', 'ports'} and
+                spec.get('type') == original.get('type', 'ClusterIP') and
                   spec.get('externalIPs', []) == original.get('externalIPs', []) and
                  spec.get('externalName') in (None, '') and
                   spec.get('loadBalancerIP') in (None, '') and
