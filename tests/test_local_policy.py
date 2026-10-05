@@ -730,6 +730,32 @@ class ManifestTests(unittest.TestCase):
 
 
 class ActivationTests(unittest.TestCase):
+    def test_terminating_policy_or_binding_cannot_certify_ready_inventory(self):
+        for kind in (policy.POLICY, policy.BINDING):
+            with self.subTest(kind=kind):
+                kube = FakeKubernetes(ready=True)
+                key = (kind, policy.NAMES[-1])
+                kube.objects[key]['metadata']['deletionTimestamp'] = '2026-10-06T00:00:00Z'
+                with self.assertRaises(policy.PolicyError):
+                    policy.inventory_status(kube, items())
+                with self.assertRaises(policy.PolicyError):
+                    policy.apply_policies(kube, items())
+                self.assertEqual(kube.calls, [])
+
+    def test_terminating_dry_run_reply_prevents_persistent_creation(self):
+        kube = FakeKubernetes()
+        original = kube.create
+        def terminating(value, *, dry_run=False):
+            reply = original(value, dry_run=dry_run)
+            if dry_run and value['kind'] == policy.BINDING and value['metadata']['name'] == policy.NAMES[-1]:
+                reply['metadata']['deletionTimestamp'] = '2026-10-06T00:00:00Z'
+            return reply
+        kube.create = terminating
+        with self.assertRaises(policy.PolicyError):
+            policy.apply_policies(kube, items())
+        self.assertEqual(kube.objects, {})
+        self.assertTrue(all(action == 'dry-run' for action, _, _ in kube.calls))
+
     def test_direct_status_refuses_incomplete_inventory_before_read(self):
         kube = FakeKubernetes(ready=True)
         for supplied in ([], items()[:-1], items() + [items()[0]]):

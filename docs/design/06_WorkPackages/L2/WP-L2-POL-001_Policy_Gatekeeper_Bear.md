@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.159"
+version: "0.160"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: terminating resources cannot certify readiness (offline)
+
+An otherwise matching policy or binding with a non-null deletionTimestamp
+previously passed ownership and could make inventory status ready, or pass
+activation preflight; a synthetic terminating dry-run reply could also precede
+persistent creates. Both negatives failed before repair. The shared ownership
+guard now refuses these observations; the normal owned inventory and activation
+remain valid. Focused policy 149 tests and the full local verifier passed.
+Dedicated Colima was observed stopped; no live API, activation, unknown-request
+replay or retained data/backup mutation. Offline fake replies do not authenticate
+the API, make activation atomic or prove live strict admission/operator acceptance.
+Restore only this ownership check and tests if necessary; preserve historical
+intents. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: whole-inventory rollback identity recheck (offline)
 

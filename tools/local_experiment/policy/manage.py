@@ -332,6 +332,7 @@ def assert_owned(current: dict, expected: dict) -> None:
         same_spec = False
     if (current.get('apiVersion') != API or current.get('kind') != expected['kind']
             or metadata.get('name') != desired['name']
+            or metadata.get('deletionTimestamp') is not None
             or any(metadata['labels'].get(key) != value for key, value in LABELS.items())
             or any(metadata['annotations'].get(key) != value for key, value in desired['annotations'].items())
             or not same_spec):
