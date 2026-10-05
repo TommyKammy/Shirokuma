@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.196"
+version: "0.197"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke-source placement and readiness fields (offline)
+
+Four synthetic same-name Trino Deployment templates with Pod priority,
+preemption, overhead or custom readiness gates supplied the fixed smoke image
+before repair. The source reader now refuses those unowned fields, absent from
+the local manifest. The negatives failed first and `make test-local-policy`
+passed 166 tests afterward. Dedicated Colima remained stopped; no live API,
+admission, retained data/backup modification or request replay. This does not
+authenticate the source or prove strict live admission/operator acceptance.
+Restore only the source guard/test if needed; preserve saved requests. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke source process and service isolation (offline)
 

@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.344"
+version: "5.345"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Trino smoke-source readiness and placement (offline)
+
+WP-L2-POL-001: four synthetic Pod-template priority, preemption, overhead and
+readiness overrides previously supplied a fixed smoke image; they now fail.
+Focused policy suite passed 166 cases; dedicated Colima remained stopped.
+No live API/admission, unknown-request replay, retained data/backup mutation
+or GitHub write. This cannot authenticate a source or establish strict live
+admission/operator acceptance. Restore only the scoped reader/test if needed;
+preserve saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed FinOps claim-template ownership (offline)
 

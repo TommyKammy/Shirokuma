@@ -1239,8 +1239,11 @@ class ScopedResponseTests(unittest.TestCase):
                          {'schedulerName': 'foreign-scheduler'},
                          {'tolerations': [{'operator': 'Exists'}]},
                          {'affinity': {'nodeAffinity': {}}},
-                         {'topologySpreadConstraints': [{'maxSkew': 1}]},
-                         {'priorityClassName': 'high-priority'}):
+                          {'topologySpreadConstraints': [{'maxSkew': 1}]},
+                          {'priorityClassName': 'high-priority'},
+                          {'priority': 1000}, {'preemptionPolicy': 'Never'},
+                          {'overhead': {'cpu': '1'}},
+                          {'readinessGates': [{'conditionType': 'foreign'}]}):
             with self.subTest(pod_override=override):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec'].update(override)

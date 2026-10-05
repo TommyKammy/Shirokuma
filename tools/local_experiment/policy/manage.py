@@ -537,10 +537,12 @@ class Kubernetes:
                      any(field in pod_spec for field in (
                           'hostAliases', 'dnsConfig', 'hostname', 'subdomain',
                            'setHostnameAsFQDN', 'hostUsers', 'shareProcessNamespace',
-                           'imagePullSecrets', 'enableServiceLinks',
-                           'runtimeClassName', 'nodeName',
-                         'nodeSelector', 'schedulerName', 'tolerations', 'affinity',
-                         'topologySpreadConstraints', 'priorityClassName')) or
+                            'imagePullSecrets', 'enableServiceLinks',
+                            'runtimeClassName', 'nodeName',
+                            'nodeSelector', 'schedulerName', 'tolerations', 'affinity',
+                          'topologySpreadConstraints', 'priorityClassName',
+                          'priority', 'preemptionPolicy', 'overhead',
+                          'readinessGates')) or
                      pod_spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
                      any(pod_spec.get(field, False) is not False
                          for field in ('hostNetwork', 'hostPID', 'hostIPC'))):
