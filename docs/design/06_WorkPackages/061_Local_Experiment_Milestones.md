@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.327"
+version: "5.328"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: restricted Trino volume sources and Docker driver options (offline)
+
+WP-L2-POL-001: five synthetic alternative volume-source shapes previously
+supplied the fixed smoke image; only well-formed ConfigMap/emptyDir sources
+now pass (166 policy tests). Independently WP-L6-FIN-001: four synthetic
+Docker local-driver option shapes previously passed the metadata-only fixed
+volume reference; absent/empty options remain valid (217 FinOps tests, seven
+Linux-only skips). Both regressions failed before repair. Dedicated Colima was
+freshly observed stopped. No live API, Docker collection, image import,
+unknown-request replay, retained data/report/volume/backup mutation or GitHub
+write. Offline filters do not authenticate API/daemon, prove strict live
+admission, measure AgentHouse usage (`null / NOT_MEASURED`) or grant operator
+acceptance. Restore only the two scoped filters/tests if needed, preserving
+saved intents and reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: scoped Docker socket and host-mounted smoke source (offline)
 

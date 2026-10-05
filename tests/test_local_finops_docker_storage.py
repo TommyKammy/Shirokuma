@@ -71,6 +71,18 @@ class DockerStorageTests(unittest.TestCase):
                 data[1][0]['Mounts'][0]['Source'] = mountpoint
                 with self.assertRaises(D.DockerStorageError): projected(data)
 
+    def test_volume_reference_refuses_driver_options_without_measuring(self):
+        for options in ({'type': 'none', 'device': '/host/data', 'o': 'bind'},
+                        {'device': '/host/data'}, [], False):
+            with self.subTest(options=options):
+                data = fixture()
+                data[2][0]['Options'] = options
+                with self.assertRaises(D.DockerStorageError): projected(data)
+        for options in (None, {}):
+            data = fixture()
+            data[2][0]['Options'] = options
+            self.assertIsNone(projected(data)['used_bytes'])
+
     def test_context_reference_refuses_foreign_or_alias_socket(self):
         for host in ('unix:///tmp/foreign/.colima/mac-studio-solo/docker.sock',
                      'unix:///Users/example/other/.colima/mac-studio-solo/docker.sock',

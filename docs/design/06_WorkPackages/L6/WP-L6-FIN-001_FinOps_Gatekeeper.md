@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.140"
+version: "0.141"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: refuse Docker local-driver options in metadata reference (offline)
+
+The fixed volume reference previously accepted a local-driver volume with
+bind/device options, even though the separate traversal preflight refused it.
+Four fake option shapes failed before the reference guard; absent and empty
+options still pass. `make test-local-finops` passed 217 cases (seven Linux-only
+skips). No collection or retained volume/report/backup modification; used bytes
+remain `null / NOT_MEASURED`. This does not authenticate a daemon, check actual
+mount topology, authorize traversal or prove backup recovery. Restore only the
+reference guard/test if necessary; preserve historical reports. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: bound Docker context socket reference (offline)
 

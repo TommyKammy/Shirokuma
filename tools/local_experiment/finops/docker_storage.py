@@ -74,7 +74,9 @@ def _identity(container, volume):
             config.get('Labels', {}).get(AH.LABEL) == 'agenthouse-local' and
             config.get('Image') == AH.IMAGE and type(state.get('Running')) is bool)
     require(volume.get('Name') == AH.VOLUME and volume.get('Labels', {}).get(AH.LABEL) == 'agenthouse-local'
-            and volume.get('Driver') == 'local' and volume.get('Scope') == 'local')
+            and volume.get('Driver') == 'local' and volume.get('Scope') == 'local'
+            and (volume.get('Options') is None or
+                 type(volume.get('Options')) is dict and not volume['Options']))
     created = created_at(volume.get('CreatedAt'))
     mountpoint = volume.get('Mountpoint')
     # A matching suffix under another directory is not the fixed named volume.

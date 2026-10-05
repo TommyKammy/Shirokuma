@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.182"
+version: "0.183"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke image volume sources limited (offline)
+
+Five fake Deployment volume lists using projected service-account tokens, PVC,
+CSI, mixed sources or no source supplied the pinned smoke image before repair.
+The reader now accepts only one well-formed ConfigMap or emptyDir source per
+volume, consistent with the local Trino manifest; both permitted controls pass.
+`make test-local-policy` passed 166 tests after the expected failing negatives.
+Dedicated Colima was observed stopped; no live API, dry-run, retained resource,
+backup or request change. This does not verify the manifest in the current
+cluster, authenticate an API or establish strict live admission. Revert only
+the image-source filter/test if needed, preserving saved intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke image rejects host-mounted source Pods (offline)
 
