@@ -5,12 +5,40 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.310"
+version: "5.312"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: FinOps direct-render report snapshot (offline)
+
+WP-L6-FIN-001: direct saved-history rendering previously displayed a
+caller-mutated model name under an earlier checked report digest. The fake
+mutation failed before repair; rendering now uses detached canonical JSON
+for every validated report. Focused FinOps tests passed 208 cases (seven
+Linux-only skips). This does not authenticate saved producer data or current
+resource usage; AgentHouse volume bytes remain `null / NOT_MEASURED`.
+`make verify-local-experiment`, design-context, secret scan and diff check
+passed after both scoped fixes; the initial FinOps negative failed as expected
+after correcting the test's mistaken helper reference.
+Dedicated Colima was freshly observed stopped. No collection, replay, retained
+report/volume/backup mutation or GitHub write. Revert only this renderer
+snapshot/test if needed; retain saved reports. Original Vault sync pending.
+
+## 2026-10-06: post-retention rollback scan and independent FinOps check (offline)
+
+WP-L2-POL-001: an owned binding reappearing during policy-retention reads
+previously allowed rollback to report `bindings_removed: true`; the negative
+failed before repair. A second complete binding scan refuses this result;
+policy focused tests passed (164). Separately WP-L6-FIN-001's unchanged
+offline suite passed 207 tests (seven Linux-only skips), without collection.
+Dedicated Colima was freshly observed stopped; no live API, replay, retained
+data/backup mutation or GitHub write. Sequential reads cannot certify atomic
+absence, live strict admission, current AgentHouse bytes (`null / NOT_MEASURED`)
+or operator acceptance. Roll back only the second scan/test if required;
+preserve saved requests and reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: rollback policy-retention claim and separate FinOps check (offline)
 

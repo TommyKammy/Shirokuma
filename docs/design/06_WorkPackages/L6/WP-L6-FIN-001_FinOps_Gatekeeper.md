@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.127"
+version: "0.128"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: detached saved-history rendering (offline)
+
+The direct offline renderer validated a caller-owned report and its saved
+digest, then read that mutable report again to produce HTML. A test-owned
+mutation between those steps put a different model name under the original
+digest; the negative failed before repair. Rendering now uses a detached
+canonical JSON snapshot made when each digest is checked. The FinOps suite
+passed 208 tests (seven Linux-only skips). No collection or saved report,
+volume or backup modification; dedicated Colima was observed stopped. This
+increment also passed `make verify-local-experiment`, design-context, secret
+scan and diff check. The initial negative used a wrong test helper reference;
+after correction it reproduced the mutated output before repair. This does
+not authenticate saved report provenance, establish atomic external
+reads, measure AgentHouse (`null / NOT_MEASURED`), or imply operator acceptance.
+Rollback: restore only the direct-render snapshot/test; keep saved reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent offline suite after policy rollback result change
 

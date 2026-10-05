@@ -171,6 +171,7 @@ def render(entries):
         if {item[0] for item in entries} != set(range(len(entries))): raise HistoryError()
         previous = None
         seen = set()
+        pinned = []
         for selected_index, (report, saved_digest) in entries:
             if type(selected_index) is not int or not 0 <= selected_index < len(entries): raise HistoryError()
             C.validate_public(report)
@@ -182,8 +183,13 @@ def render(entries):
                     saved_digest != hashlib.sha256(canonical).hexdigest(): raise HistoryError()
             if saved_digest in seen: raise HistoryError()
             seen.add(saved_digest)
+            # Direct callers own mutable dicts. Render only detached bytes
+            # bound to the checked digest, never those caller-owned objects.
+            pinned.append((selected_index, (
+                json.loads(canonical, parse_float=C.finite_json_float), saved_digest)))
     except (TypeError, ValueError, UnicodeError, OverflowError, KeyError, IndexError, RecursionError):
         raise HistoryError() from None
+    entries = pinned
     sections, navigation = [], []
     for order, (selected_index, (report, digest)) in enumerate(entries, 1):
         C.validate_public(report)

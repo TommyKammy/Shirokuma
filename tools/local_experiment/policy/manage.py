@@ -765,9 +765,12 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
     # Per-delete absence is not a final inventory: an earlier name can be
     # recreated while later deletions are still in progress. Do not claim a
     # complete rollback if any dedicated name is present at this final scan.
-    for expected in bindings:
-        if kube.get(BINDING, expected['metadata']['name']) is not None:
-            raise PolicyError('binding remains after deletion; rollback is incomplete')
+    def confirm_bindings_absent():
+        for expected in bindings:
+            if kube.get(BINDING, expected['metadata']['name']) is not None:
+                raise PolicyError('binding remains after deletion; rollback is incomplete')
+
+    confirm_bindings_absent()
     # Rollback does not delete policies, but that alone cannot prove they are
     # still present: another actor may have removed or replaced a definition.
     # Keep binding removal successful while reporting unverified retention.
@@ -782,6 +785,9 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
             persistent_identity(current)
         except PolicyError:
             policies_retained = False
+    # Policy reads may take time; an earlier binding could return while we
+    # assess retention. Recheck before reporting removal (still not atomic).
+    confirm_bindings_absent()
     return {'bindings_removed': True, 'policy_definitions_retained': policies_retained, 'namespace': NAMESPACE}
 
 

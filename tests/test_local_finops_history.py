@@ -66,6 +66,23 @@ class HistoryTests(unittest.TestCase):
             H.render([(index, (changed, digest)), entries[1]])
         self.assertIn('保存FinOps観測履歴', H.render(entries))
 
+    def test_direct_renderer_displays_pinned_report_not_later_caller_mutation(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        original_time = H.H._time
+        changed = False
+
+        def mutate_after_validation(value):
+            nonlocal changed
+            if not changed:
+                changed = True
+                entries[0][1][0]['inference']['groups'][0]['model_name'] = 'mutated-after-digest'
+            return original_time(value)
+
+        with patch.object(H.H, '_time', side_effect=mutate_after_validation):
+            html = H.render(entries)
+        self.assertTrue(changed)
+        self.assertNotIn('mutated-after-digest', html)
+
     def test_direct_renderer_bounds_malformed_selection_shape(self):
         entries = H.parse(encoded([report(), report(processes())]))
         for malformed in ((), (0,), (0, ()), (0, (entries[0][1][0],)),

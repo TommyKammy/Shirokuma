@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.170"
+version: "0.171"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: binding returns during retention inspection (offline)
+
+An owned binding reappearing while rollback checked retained policy definitions
+previously yielded `bindings_removed: true`. A fake API negative failed before
+repair. A second full-name absence scan after retention inspection now rejects
+that result; 164 policy tests pass. The independent FinOps 207-test offline
+suite passed (seven Linux-only skips), without collecting or changing saved
+reports. Dedicated Colima was freshly observed stopped; no live API, replay,
+retained volume/backup mutation or GitHub write. These sequential reads are
+not atomic and cannot certify future absence, live strict admission or operator
+acceptance. Revert only the added scan/test if necessary, retaining saved
+intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: rollback policy-retention claim (offline)
 
