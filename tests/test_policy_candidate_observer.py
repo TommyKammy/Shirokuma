@@ -950,6 +950,25 @@ class ObserverTests(unittest.TestCase):
             with self.assertRaises(O.CandidateObservationError):self.observer.verify(progress=lambda v:None)
         self.assertEqual(self.kube.requests,[])
 
+    def test_guard_binds_items_and_digest_to_one_snapshot(self):
+        self.ready()
+        original=O.M.load_manifest_snapshot
+        with patch.object(O.M,'load_manifest_snapshot',wraps=original) as snapshots:
+            self.observer._guard()
+        self.assertEqual(snapshots.call_count,1)
+        self.assertEqual(self.kube.requests,[])
+
+    def test_guard_refuses_same_items_with_changed_manifest_bytes(self):
+        self.ready()
+        original=O.M.load_manifest_snapshot
+        def changed_digest():
+            items,_=original()
+            return items,'0'*64
+        with patch.object(O.M,'load_manifest_snapshot',side_effect=changed_digest):
+            with self.assertRaises(O.CandidateObservationError):
+                self.observer.verify(progress=lambda value:None)
+        self.assertEqual(self.kube.requests,[])
+
     def test_collision_never_adopted_or_deleted(self):
         self.kube.present=True
         with self.assertRaises(O.CandidateObservationError):self.ready()

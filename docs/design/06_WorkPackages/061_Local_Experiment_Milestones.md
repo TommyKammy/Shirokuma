@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.273"
+version: "5.274"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: correlated policy observer guards and independent FinOps review (offline)
+
+WP-L2-POL-001: both Gatekeeper guards and the caller-Pod guard now compare
+manifest items and digest from one validated snapshot per guard. Before/after
+observations remain independent. Digest-only drift negatives and positive
+fake controls passed; focused policy 112, Gatekeeper 22 and candidate-observer
+61 tests passed. Independently WP-L6-FIN-001 reviewed saved-history bounds,
+ordering, digest and storage scope without code changes; 204 FinOps tests
+passed (seven Linux-only skips). Full `make verify-local-experiment` passed.
+Dedicated Colima freshly observed stopped; no live API, collection, unknown
+request replay, retained data/backup mutation or GitHub write. Separate
+snapshots and offline tests cannot authenticate producers, prove strict
+admission, measure present AgentHouse usage (`null / NOT_MEASURED`) or grant
+operator acceptance. Roll back only the observer guards/tests if necessary;
+preserve historical requests, reports and backups. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-05: validated native manifest report and observer digest (offline)
 

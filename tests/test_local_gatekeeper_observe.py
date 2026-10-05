@@ -128,6 +128,36 @@ class GatekeeperTests(unittest.TestCase):
         with self.assertRaises(G.GatekeeperError):
             observer.verify()
 
+    def test_verify_binds_manifest_items_and_digest_per_guard_snapshot(self):
+        kube = FakeKube()
+        observer = G.GatekeeperObserver(kube)
+        observer.observe()
+        original = G.MANAGE.load_manifest_snapshot
+        with patch.object(G.MANAGE, 'load_manifest_snapshot', wraps=original) as snapshots:
+            self.assertEqual(observer.verify()['result'], 'passed')
+        # Before and after the requests are separate observations, but neither
+        # guard may combine items and a digest from different reads.
+        self.assertEqual(snapshots.call_count, 2)
+        self.assertEqual(len(kube.requests), 15)
+
+    def test_final_manifest_digest_drift_fails_without_claiming_pass(self):
+        kube = FakeKube()
+        observer = G.GatekeeperObserver(kube)
+        observer.observe()
+        original = G.MANAGE.load_manifest_snapshot
+        calls = 0
+        def changed_after_requests():
+            nonlocal calls
+            calls += 1
+            items, digest = original()
+            return items, digest if calls == 1 else '0' * 64
+        with patch.object(G.MANAGE, 'load_manifest_snapshot', side_effect=changed_after_requests):
+            with self.assertRaises(G.GatekeeperError) as error:
+                observer.verify()
+        self.assertEqual(calls, 2)
+        self.assertEqual(len(kube.requests), 15)
+        self.assertEqual(error.exception.receipt['result'], 'failed')
+
     def test_missing_identity_typechecking_or_foreign_owner_stops_before_probes(self):
         for mode in ['missing', 'missing_uid', 'pending', 'warning', 'owner']:
             kube = FakeKube()

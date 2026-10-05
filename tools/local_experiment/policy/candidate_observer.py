@@ -405,7 +405,8 @@ class CandidateObserver:
 
     def _guard(self):
         self._unchanged_body()
-        require(M.load_manifest() == self._items and G._source_hashes() == self._sources, 'POLICY_SOURCE_CHANGED')
+        items, manifest_digest = M.load_manifest_snapshot()
+        require(items == self._items and G._source_hashes(manifest_digest) == self._sources, 'POLICY_SOURCE_CHANGED')
         current = self._baseline()
         require(current == self._initial, 'BASELINE_CHANGED')
         return current

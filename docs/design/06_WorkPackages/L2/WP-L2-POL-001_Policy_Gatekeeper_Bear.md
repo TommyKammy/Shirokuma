@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.135"
+version: "0.136"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: observer guard snapshot correlation (offline)
+
+Gatekeeper's before/after dry-run guards and the one-Pod observer previously
+compared validated manifest items and a manifest digest from separate reads.
+Each guard now compares items and digest from the same bounded validated
+snapshot; before and after remain separate observations. Fake digest-only drift
+fails without a passed receipt (the fixed corpus may already have sent its
+requests), and caller-Pod drift stops before its request. Focused native 112,
+Gatekeeper 22 and candidate-observer 61 tests and full local verification
+passed. The dedicated Colima profile was freshly observed stopped; no live
+API, unknown-request replay, retained data/backup mutation or GitHub write.
+This does not make separate snapshots atomic, authenticate their producers,
+establish strict admission or grant operator acceptance. Revert only the
+observer guards and tests if needed; preserve saved intents. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-05: validated manifest digest and independent observer path (offline)
 

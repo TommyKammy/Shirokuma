@@ -200,8 +200,9 @@ class GatekeeperObserver:
         self.outcome = 'running'
         sent = False
         try:
-            _require(_source_hashes() == self.sources, 'policy source changed after observation')
-            _require(MANAGE.load_manifest() == self.items, 'native manifest changed after observation')
+            items, manifest_digest = MANAGE.load_manifest_snapshot()
+            _require(items == self.items, 'native manifest changed after observation')
+            _require(_source_hashes(manifest_digest) == self.sources, 'policy source changed after observation')
             _require(MANAGE.inventory_status(self.kube, self.items) == self.initial
                      and self.kube.image() == self.image, 'native policy identity or image changed after observation')
             messages = {item['metadata']['name']: item['spec']['validations'][0]['message']
@@ -233,8 +234,10 @@ class GatekeeperObserver:
                 self.pending = None
                 notify()
                 sent = False
-            _require(_source_hashes() == self.sources and MANAGE.inventory_status(self.kube, self.items) == self.initial,
-                     'native baseline changed during dry-run verification')
+            final_items, final_digest = MANAGE.load_manifest_snapshot()
+            _require(final_items == self.items and _source_hashes(final_digest) == self.sources
+                     and MANAGE.inventory_status(self.kube, self.items) == self.initial,
+                      'native baseline changed during dry-run verification')
             self.outcome = 'passed'
             sent = True  # Final receipt has not yet been durably confirmed.
             notify()
