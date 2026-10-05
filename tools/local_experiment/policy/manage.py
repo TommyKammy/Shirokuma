@@ -74,8 +74,16 @@ def source_policies() -> list[dict]:
     def invalid_constant(_):
         raise PolicyError('local source decoding contains non-JSON number')
 
+    def finite_float(raw):
+        value = float(raw)
+        mantissa = re.split('[eE]', raw, maxsplit=1)[0]
+        if not math.isfinite(value) or (value == 0 and re.search('[1-9]', mantissa)):
+            raise PolicyError('local source decoding contains non-representable JSON number')
+        return value
+
     remaining, result = value.stdout, []
-    decoder = json.JSONDecoder(object_pairs_hook=unique_keys, parse_constant=invalid_constant)
+    decoder = json.JSONDecoder(object_pairs_hook=unique_keys, parse_constant=invalid_constant,
+                               parse_float=finite_float)
     try:
         while remaining.strip():
             item, end = decoder.raw_decode(remaining.lstrip())

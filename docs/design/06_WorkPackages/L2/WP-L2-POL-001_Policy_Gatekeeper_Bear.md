@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.118"
+version: "0.119"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: non-representable local source numbers (offline)
+
+The local source decoder previously accepted valid JSON exponent tokens that
+Python rounded to infinity or zero, despite rejecting literal NaN. A seven-item
+synthetic inventory reproduced three such cases before repair; the decoder now
+refuses overflow and nonzero underflow while retaining ordinary finite floats.
+`make test-local-policy` passed 95 tests and `make verify-local-experiment`
+passed. Dedicated Colima was observed stopped; no API request, policy
+activation, unknown-request replay, retained data/backup mutation or GitHub
+write. This does not authenticate the decoder producer, prove live admission or
+grant operator acceptance. Revert only the scoped float parser/test if the
+local decoder contract changes; preserve the manifest and saved intents.
+Original Vault sync remains pending outside the checkout.
 
 ## 2026-10-05: local CEL source decoder boundary (offline)
 

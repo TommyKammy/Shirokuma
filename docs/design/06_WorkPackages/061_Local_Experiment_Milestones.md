@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.256"
+version: "5.257"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: local policy numeric decoding and independent FinOps review (offline)
+
+WP-L2-POL-001: three exponent tokens in a synthetic seven-policy source
+inventory previously rounded to infinity or zero. The decoder now refuses
+non-representable floats while accepting a finite control. Focused policy
+95 tests and `make verify-local-experiment` passed. Independently,
+WP-L6-FIN-001: reviewed bounded saved-history parsing/rendering, digest
+binding, ordering and per-report storage scope without a reader change;
+195 FinOps tests passed (seven Linux-only skips). Dedicated Colima was freshly
+observed stopped. No live API, collection, unknown-request replay, retained
+data/backup mutation or GitHub write. AgentHouse bytes remain `null /
+NOT_MEASURED`. Offline tests do not authenticate producers, measure present
+usage, prove strict admission or grant operator acceptance. Roll back only
+the scoped source decoder/test if needed; preserve manifest, intents and saved
+reports. Original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-05: local CEL source decoding guard (offline)
 

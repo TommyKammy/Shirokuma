@@ -99,6 +99,23 @@ class Clock:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_local_source_decoder_refuses_nonrepresentable_floats(self):
+        source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
+                   'spec': {}} for name in policy.BASE_NAMES]
+        for number in ('1e999', '-1e999', '1e-999'):
+            with self.subTest(number=number):
+                encoded = [json.dumps(item) for item in source]
+                encoded[0] = encoded[0].replace('"spec": {}', '"spec": {"value": ' + number + '}')
+                reply = SimpleNamespace(stdout='\n'.join(encoded), stderr='', returncode=0)
+                with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+                    with self.assertRaises(policy.PolicyError):
+                        policy.source_policies()
+        encoded = [json.dumps(item) for item in source]
+        encoded[0] = encoded[0].replace('"spec": {}', '"spec": {"value": 1.25e-2}')
+        reply = SimpleNamespace(stdout='\n'.join(encoded), stderr='', returncode=0)
+        with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+            self.assertEqual(policy.source_policies()[0]['spec']['value'], 0.0125)
+
     def test_local_source_decoder_refuses_malformed_or_ambiguous_output(self):
         for stdout, status in (
             ('{', 0), ('null', 0), ('{"metadata":null}', 0),
