@@ -1322,8 +1322,10 @@ class ScopedResponseTests(unittest.TestCase):
                           {'topologySpreadConstraints': [{'maxSkew': 1}]},
                           {'priorityClassName': 'high-priority'},
                           {'priority': 1000}, {'preemptionPolicy': 'Never'},
-                          {'overhead': {'cpu': '1'}},
-                          {'readinessGates': [{'conditionType': 'foreign'}]}):
+                           {'overhead': {'cpu': '1'}},
+                           {'readinessGates': [{'conditionType': 'foreign'}]},
+                           {'schedulingGates': [{'name': 'foreign'}]},
+                           {'resourceClaims': [{'name': 'device', 'resourceClaimName': 'foreign'}]}):
             with self.subTest(pod_override=override):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec'].update(override)

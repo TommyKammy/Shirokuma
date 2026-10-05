@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.203"
+version: "0.204"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke source refuses scheduling gates and device claims (offline)
+
+Two same-image Pod templates with scheduling gates or Pod-level resource claims
+previously lent the fixed Trino smoke image. Disposable negatives failed before
+the guard; the source now refuses both overrides absent from the local manifest.
+`make test-local-policy` passed 166 cases. No live admission/API, image import,
+request replay or retained data/backup mutation. Offline source checks cannot
+authenticate Kubernetes or establish strict admission/operator acceptance.
+Restore only the scoped reader/test if needed, keeping saved requests. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed smoke template metadata (offline)
 

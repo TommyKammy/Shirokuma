@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.165"
+version: "0.166"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed StatefulSet claim inventory excludes generic ephemeral PVCs (offline)
+
+Both fixed StatefulSet references previously accepted an additional generic
+ephemeral volume that provisions a second PVC outside the two-claim inventory.
+Two disposable negatives failed before the guard; the reader now refuses such
+volumes while retaining the fixed mounted PVC. `make test-local-finops` passed
+245 cases (seven Linux-only skips). Dedicated Colima was freshly observed
+stopped; no live API, collection, disk traversal, report/volume/backup mutation
+or unknown-request replay. This does not measure AgentHouse used bytes (`null /
+NOT_MEASURED`), authenticate the API or establish operator acceptance. Revert
+only the scoped reader/test if necessary, preserving saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed storage Pod-name continuity (offline)
 

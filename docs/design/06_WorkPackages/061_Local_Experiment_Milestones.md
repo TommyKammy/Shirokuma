@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.358"
+version: "5.359"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed ephemeral claim and Trino Pod overrides (offline)
+
+WP-L6-FIN-001: a fixed StatefulSet with an additional generic ephemeral PVC
+can no longer claim the two-PVC reference inventory is complete. WP-L2-POL-001:
+a same-image Trino Pod template with scheduling gates or device claims cannot
+lend the fixed smoke image. Negatives failed before repair. Focused FinOps 245
+(seven Linux-only skips) and policy 166 passed; `make verify-local-experiment`
+and `git diff --check` passed (the fake Dagster worker failure in verifier output
+is an intentional negative diagnostic). Dedicated Colima was freshly
+observed stopped; no live API/admission, collection, unknown-request replay,
+retained report/volume/backup mutation or GitHub write. Offline checks cannot
+authenticate sources, measure AgentHouse used bytes (`null / NOT_MEASURED`),
+prove strict live admission or confer operator acceptance. Revert only scoped
+guards/tests if necessary, preserving saved inputs. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: fixed Trino template metadata and storage name continuity (offline)
 

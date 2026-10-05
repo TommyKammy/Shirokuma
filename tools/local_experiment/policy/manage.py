@@ -560,7 +560,7 @@ class Kubernetes:
                             'nodeSelector', 'schedulerName', 'tolerations', 'affinity',
                           'topologySpreadConstraints', 'priorityClassName',
                           'priority', 'preemptionPolicy', 'overhead',
-                          'readinessGates')) or
+                           'readinessGates', 'schedulingGates', 'resourceClaims')) or
                       pod_spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
                       pod_spec.get('restartPolicy', 'Always') != 'Always' or
                       ('terminationGracePeriodSeconds' in pod_spec and

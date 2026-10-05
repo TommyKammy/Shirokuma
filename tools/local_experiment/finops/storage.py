@@ -140,7 +140,10 @@ def _snapshot(component, workload, pods, replica=None):
         require(not claims and all(type(v) is dict and 'ephemeral' not in v for v in volumes) and
                 all(type(v) is dict for v in mounts))
     else:
-        require(len(claims) == 1 and claims[0].get('name') == volume and
+        # A generic ephemeral volume provisions another PVC. The fixed two-PVC
+        # inventory cannot describe that additional claim as part of this row.
+        require(all(type(v) is dict and 'ephemeral' not in v for v in volumes) and
+                len(claims) == 1 and claims[0].get('name') == volume and
                 type(claims[0]['persistentVolumeClaim']) is dict and
                 claims[0]['persistentVolumeClaim'].get('claimName') == claim and
                 len([m for m in mounts if m.get('name') == volume and m.get('mountPath') == mount]) == 1)

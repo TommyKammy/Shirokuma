@@ -187,6 +187,15 @@ class StorageTests(unittest.TestCase):
                 projected(component, data)
         self.assertEqual(projected('trino')['state'], 'no_direct_pvc')
 
+    def test_fixed_statefulset_refuses_additional_ephemeral_claim(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            data = deepcopy(objects(component))
+            data[1][0]['spec']['volumes'].append({
+                'name': 'scratch', 'ephemeral': {'volumeClaimTemplate': {
+                    'spec': {'resources': {'requests': {'storage': '1Gi'}}}}}})
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+
     def test_deployment_replicaset_selector_must_select_reported_pod(self):
         for component in ('polaris', 'trino'):
             data = deepcopy(objects(component))
