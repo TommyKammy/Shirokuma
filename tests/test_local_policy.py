@@ -1165,7 +1165,8 @@ class ScopedResponseTests(unittest.TestCase):
                   'spec': {'selector': {'matchLabels': {'app.kubernetes.io/name': 'trino-local'}},
                             'template': {'metadata': {'labels': {'app.kubernetes.io/name': 'trino-local',
                                                                 'app.kubernetes.io/part-of': 'shirokuma',
-                                                                'shirokuma.dev/scope': 'local-experiment'}},
+                                                                'shirokuma.dev/scope': 'local-experiment',
+                                                                'shirokuma.dev/object-storage-client': 'true'}},
                                         'spec': {'automountServiceAccountToken': False,
                                                  'securityContext': {'runAsNonRoot': True, 'runAsUser': 10000,
                                                                      'seccompProfile': {'type': 'RuntimeDefault'}},
@@ -1192,6 +1193,17 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for label_value in (None, 'false', False):
+            reply = copy.deepcopy(valid)
+            labels = reply['spec']['template']['metadata']['labels']
+            if label_value is None:
+                labels.pop('shirokuma.dev/object-storage-client')
+            else:
+                labels['shirokuma.dev/object-storage-client'] = label_value
+            client.json_request.return_value = reply
+            with self.subTest(object_storage_label=label_value), self.assertRaises(policy.PolicyError):
+                client.image()
+        client.json_request.return_value = valid
         with_groups = copy.deepcopy(valid)
         with_groups['spec']['template']['spec']['securityContext'].update(runAsGroup=10000, fsGroup=10000)
         client.json_request.return_value = with_groups

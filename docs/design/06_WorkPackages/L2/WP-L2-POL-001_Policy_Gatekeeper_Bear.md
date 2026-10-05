@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.197"
+version: "0.198"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: Trino object-storage-client source label (offline)
+
+Three same-name synthetic templates missing or changing the manifest's
+`shirokuma.dev/object-storage-client: "true"` label previously lent their
+image to the smoke candidate. The source reader now refuses them; negatives
+failed before repair, then the 166-case policy suite and full local verifier
+passed. This changes
+neither existing workload nor admission. No live API, retained data/backup
+mutation, unknown-request replay or GitHub write. Offline source validation
+cannot authenticate Kubernetes or establish strict admission/operator
+acceptance. Revert only the label guard/test if needed and retain saved
+requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke-source placement and readiness fields (offline)
 

@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.346"
+version: "5.347"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Trino object-storage-client smoke source (offline)
+
+WP-L2-POL-001: three synthetic same-name templates missing or changing the
+manifest's object-storage-client label previously supplied the smoke image;
+the source reader now rejects them. Negatives failed before repair, then the
+166-case policy suite and full local verifier passed (the fake Dagster failure
+diagnostic is intentional). No live API/admission, unknown-request replay,
+retained volume/backup mutation or GitHub write. This does not authenticate
+the source or establish strict admission/operator acceptance. Restore only
+the scoped guard/test if required; original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: fixed FinOps storage source continuity (offline)
 

@@ -525,7 +525,8 @@ class Kubernetes:
                      'matchLabels': {'app.kubernetes.io/name': 'trino-local'}} or
                      type(labels) is not dict or type(owner_labels) is not dict or
                      any(labels.get(key) != value or owner_labels.get(key) != value
-                         for key, value in expected_owner.items())):
+                         for key, value in expected_owner.items()) or
+                     labels.get('shirokuma.dev/object-storage-client') != 'true'):
                 raise PolicyError('smoke requires the dedicated local Trino selector')
             pod_spec = deployment['spec']['template']['spec']
             # Do not borrow an image from a same-name workload whose Pod
