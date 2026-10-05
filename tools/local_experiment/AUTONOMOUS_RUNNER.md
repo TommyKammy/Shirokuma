@@ -143,6 +143,11 @@ OAuth and `run` paths; installed CLI behavior must be confirmed separately.
   `PROCESS_STOPPED_REMOTE_UNCONFIRMED`, inspect the service/session and the
   checkout before any manual resumption. Never blindly rerun an unknown RPC,
   SQL operation or retained-data mutation.
+- A group-signal race can yield `ProcessLookupError` or (on macOS, including
+  a zombie leader) `PermissionError`. The first case reaps the local child
+  with a bound; permission denial and an unreaped child stop as
+  `PROCESS_STOPPED_REMOTE_UNCONFIRMED`. Neither case authorizes replay or
+  establishes that a shared server-side session has stopped.
 - Maximum invocation/time limits are local scheduling guards, not a hard
   billing cap or a guarantee that a model/provider request cannot outlive the
   runner. `AGENTS.md` and the checkpoint are not enforcement against an

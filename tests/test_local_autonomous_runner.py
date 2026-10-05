@@ -334,6 +334,26 @@ class AutonomousRunnerTests(unittest.TestCase):
                 R.terminate(process)
         self.assertEqual(kill.call_count, 2)
 
+    def test_termination_signal_races_are_classified_without_replay(self):
+        for error in (ProcessLookupError(), PermissionError()):
+            with self.subTest(error=type(error).__name__):
+                process = mock.Mock(pid=123)
+                with mock.patch.object(R.os, 'killpg', side_effect=error) as kill:
+                    if isinstance(error, PermissionError):
+                        with self.assertRaisesRegex(R.RunnerError, 'PROCESS_STOPPED_REMOTE_UNCONFIRMED'):
+                            R.terminate(process)
+                        process.wait.assert_not_called()
+                    else:
+                        R.terminate(process)
+                        process.wait.assert_called_once_with(timeout=3)
+                kill.assert_called_once()
+
+        process = mock.Mock(pid=123)
+        process.wait.side_effect = [subprocess.TimeoutExpired('fixture', 3)]
+        with mock.patch.object(R.os, 'killpg', side_effect=[None, PermissionError()]):
+            with self.assertRaisesRegex(R.RunnerError, 'PROCESS_STOPPED_REMOTE_UNCONFIRMED'):
+                R.terminate(process)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -278,7 +278,18 @@ def terminate(process: subprocess.Popen) -> None:
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
+        # The child may have exited between poll and signal. Still reap it;
+        # the caller must treat the interrupted request as unconfirmed.
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            raise RunnerError('PROCESS_STOPPED_REMOTE_UNCONFIRMED') from None
         return
+    except PermissionError:
+        # In particular, Darwin can reject a group signal after the leader
+        # becomes a zombie. Do not turn this into a successful cancellation or
+        # leak an unclassified traceback in place of the runner stop reason.
+        raise RunnerError('PROCESS_STOPPED_REMOTE_UNCONFIRMED') from None
     try:
         process.wait(timeout=3)
     except subprocess.TimeoutExpired:
@@ -286,6 +297,8 @@ def terminate(process: subprocess.Popen) -> None:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            raise RunnerError('PROCESS_STOPPED_REMOTE_UNCONFIRMED') from None
         try:
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:

@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-05: continuation runner local signal race (offline)
+
+The prior host-shutdown stop exposed an unhandled macOS `killpg`
+`PermissionError` after the CLI child had exited, leaving the original run
+without a summary. The local runner now maps permission-denied termination to
+`PROCESS_STOPPED_REMOTE_UNCONFIRMED` and bounds the reap when the process group
+is already gone. Isolated signal-race regressions and the runner's 18 native
+tests passed. This does not repair or rewrite the old missing summary, cancel a
+shared OpenCode server session, or authorize replay. Dedicated Colima was
+observed stopped; no model request, GitHub write or retained data/backup
+mutation. Roll back only the termination-race change if needed; preserve the
+original run evidence. Direct original Vault sync remains pending outside the
+noninteractive checkout.
+
 ## 2026-10-05: Pod reply keys and independent endpoint controls (offline)
 
 WP-L2-POL-001: four fake Pod replies added unexamined spec or container keys;
