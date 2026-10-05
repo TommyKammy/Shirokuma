@@ -162,6 +162,13 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
             value[key] = item
         return value
 
+    def finite_json_float(number):
+        parsed = float(number)
+        mantissa = re.split('[eE]', number, maxsplit=1)[0]
+        if not math.isfinite(parsed) or (parsed == 0 and re.search('[1-9]', mantissa)):
+            raise PolicyError('dedicated manifest contains non-representable JSON number')
+        return parsed
+
     try:
         # The dedicated manifest is small and checked into this checkout. Do
         # not follow a replacement link or read an unbounded local file before
@@ -206,7 +213,12 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
             os.close(parent_fd)
             for ancestor_fd, _, _ in reversed(ancestors):
                 os.close(ancestor_fd)
-        value = json.loads(raw.decode('utf-8'), object_pairs_hook=unique_keys)
+        # Python's decoder accepts NaN/Infinity even though they are not JSON.
+        # Do not certify a non-JSON artifact as the dedicated source projection.
+        value = json.loads(raw.decode('utf-8'), object_pairs_hook=unique_keys,
+                           parse_constant=lambda _: (_ for _ in ()).throw(
+                               PolicyError('dedicated manifest contains non-JSON number')),
+                           parse_float=finite_json_float)
     except (OSError, UnicodeError, ValueError, TypeError, RecursionError) as exc:
         if isinstance(exc, PolicyError):
             raise

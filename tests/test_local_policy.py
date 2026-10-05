@@ -259,6 +259,20 @@ class ManifestTests(unittest.TestCase):
                          with self.assertRaises(policy.PolicyError):
                              policy.load_manifest()
 
+    def test_manifest_rejects_non_json_and_nonrepresentable_numbers_before_source(self):
+        original = policy.MANIFEST.read_text()
+        for altered in (original.replace('"kind": "List"', '"kind": NaN', 1),
+                        original.replace('"kind": "List"', '"kind": Infinity', 1),
+                        original.replace('"kind": "List"', '"kind": 1e9999', 1),
+                        original.replace('"kind": "List"', '"kind": 1e-9999', 1)):
+            with self.subTest(value=altered[0:70]), tempfile.TemporaryDirectory() as directory:
+                manifest = Path(directory) / 'manifest.json'
+                manifest.write_text(altered)
+                with mock.patch.object(policy, 'MANIFEST', manifest), \
+                     mock.patch.object(policy, 'source_policies', side_effect=AssertionError('source reached')):
+                    with self.assertRaises(policy.PolicyError):
+                        policy.load_manifest()
+
     def test_manifest_digest_tracks_validated_bytes_not_later_path(self):
         source = policy.source_policies()
         original = policy.MANIFEST.read_bytes()

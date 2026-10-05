@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.275"
+version: "5.276"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: strict manifest numbers and independent FinOps boundary review (offline)
+
+WP-L2-POL-001: reject non-JSON numeric constants and float overflow/underflow
+in the bounded native manifest before source projection; 114 focused tests
+and full `make verify-local-experiment` passed. Independently WP-L6-FIN-001
+reviewed strict saved-history bounds, digest/index checks and per-report
+storage coverage; 204 tests passed (seven Linux-only skips), without a reader
+change. The dedicated Colima profile was freshly observed stopped. No live
+API, collection, retained data/backup mutation, unknown request replay or
+GitHub write. Offline parsing cannot prove source authenticity, atomic
+pathnames, live admission or operator acceptance; AgentHouse bytes remain
+`null / NOT_MEASURED`. Roll back only the policy numeric guard/test if needed;
+preserve historical reports/intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: manifest ancestor relink guard and independent FinOps review (offline)
 

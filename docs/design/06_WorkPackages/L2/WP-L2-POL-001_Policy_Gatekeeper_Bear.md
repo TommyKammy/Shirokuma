@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.137"
+version: "0.138"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: strict numeric manifest decoding (offline)
+
+The bounded manifest reader now refuses Python's non-JSON `NaN`/`Infinity`
+tokens and floating-point overflow/underflow before decoding the repository
+source. Disposable replacements and the real 16-item manifest passed 114
+focused tests; full local verification passed. Independently reviewed FinOps
+saved-history bounds and per-report coverage (204 tests, seven Linux-only
+skips), without a FinOps behavior change. Dedicated Colima was observed
+stopped; no live admission, collection, unknown-request replay or retained
+data/backup mutation. Strict JSON does not authenticate the source decoder,
+resolve concurrent pathname races or prove admission/operator acceptance.
+Rollback only this numeric guard and test if needed; preserve saved intents.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-05: post-read manifest ancestor linkage (offline)
 
