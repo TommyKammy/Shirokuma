@@ -211,7 +211,9 @@ class GatekeeperObserver:
                 notify()
                 sent = True
                 result = self.kube.smoke_request(copy.deepcopy(case['object']))
-                _require(len(result.stdout) <= 2 * 1024 * 1024 and len(result.stderr) <= 2 * 1024 * 1024,
+                _require(type(result.stdout) is str and type(result.stderr) is str and
+                         len(result.stdout.encode('utf-8')) <= 2 * 1024 * 1024 and
+                         len(result.stderr.encode('utf-8')) <= 2 * 1024 * 1024,
                          'native dry-run response exceeds its bound')
                 expected = case['deny_policy']
                 if expected:

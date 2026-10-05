@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.113"
+version: "0.114"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: bounded Gatekeeper response bytes (offline)
+
+The advisory observer previously counted Unicode characters rather than UTF-8
+bytes when bounding a native dry-run reply. A synthetic reply exceeding 2 MiB
+in bytes but not characters was admitted to the response parser. It now checks
+both text streams as UTF-8 bytes before classification; non-text and unpaired
+surrogate replies fail with an unknown pending candidate. The fake 15-case
+positive path remains valid. Gatekeeper 19 and native policy 90 tests passed.
+Dedicated Colima was observed stopped; no API request, policy mutation, saved
+request replay or retained data/backup change. Byte bounds do not authenticate
+the producer, clear strict admission or grant operator acceptance. Roll back
+only the Gatekeeper bound and regression if needed; preserve historical intents.
+Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: Gatekeeper shares native success evidence (offline)
 

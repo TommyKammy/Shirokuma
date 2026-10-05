@@ -217,6 +217,21 @@ class GatekeeperTests(unittest.TestCase):
         self.assertEqual(caught.exception.receipt['results'][-1]['admission'], 'unknown')
         self.assertEqual(len(kube.requests), 3)
 
+    def test_response_bound_counts_utf8_bytes_and_refuses_malformed_text(self):
+        for stdout, stderr in (("é" * (1024 * 1024 + 1), ''),
+                               ('', "é" * (1024 * 1024 + 1)),
+                               (b'not text', ''), ('', b'not text'),
+                               ('\ud800', ''), ('', '\ud800')):
+            kube = FakeKube()
+            observer = G.GatekeeperObserver(kube)
+            observer.observe()
+            kube.override = lambda value: SimpleNamespace(returncode=0, stdout=stdout, stderr=stderr)
+            with self.subTest(stdout_type=type(stdout), stderr_type=type(stderr)), self.assertRaises(G.GatekeeperError) as caught:
+                observer.verify()
+            self.assertEqual(len(kube.requests), 1)
+            self.assertEqual(caught.exception.receipt['pending']['outcome'], 'unknown')
+            self.assertEqual(caught.exception.receipt['results'], [])
+
     def test_signalled_denial_is_unknown_even_with_matching_stderr(self):
         for exit_code in (-9, None, True):
             kube = FakeKube()

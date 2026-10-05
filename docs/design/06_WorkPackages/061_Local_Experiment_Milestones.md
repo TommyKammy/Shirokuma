@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.248"
+version: "5.249"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: advisory dry-run UTF-8 response bound (offline)
+
+WP-L2-POL-001: Gatekeeper's 2 MiB response guard now counts UTF-8 bytes,
+refusing oversized multibyte text, non-text and malformed Unicode while
+preserving an unknown pending candidate. The fake 15-case positive path and
+focused Gatekeeper 19/native policy 90 tests passed. Dedicated Colima was
+observed stopped. No live API, saved-request replay, retained data/backup
+mutation or GitHub write. A synthetic response cannot authenticate the API,
+clear strict admission or establish operator acceptance. Revert only the
+observer bound/test if necessary; retain prior evidence. Direct original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: advisory native success alignment and separate FinOps check (offline)
 
