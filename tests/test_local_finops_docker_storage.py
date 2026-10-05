@@ -130,7 +130,10 @@ class DockerStorageTests(unittest.TestCase):
                      'unix:///Users/example/other/.colima/mac-studio-solo/docker.sock',
                      'unix:///Users/example/../.colima/mac-studio-solo/docker.sock',
                      'unix:///Users//.colima/mac-studio-solo/docker.sock',
-                     'unix:///Users/./.colima/mac-studio-solo/docker.sock'):
+                     'unix:///Users/./.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/example../.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/example\nother/.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/example%2fother/.colima/mac-studio-solo/docker.sock'):
             with self.subTest(host=host):
                 data = fixture()
                 data[0][0]['Endpoints']['docker']['Host'] = host

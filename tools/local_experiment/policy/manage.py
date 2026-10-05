@@ -549,7 +549,26 @@ class Kubernetes:
                       any('configMap' in volume and (
                           volume['name'] != 'config' or
                           volume['configMap'].get('name') != 'trino-local-config' or
-                          volume['configMap'].get('optional', False) is not False)
+                          volume['configMap'].get('optional', False) is not False or
+                          set(volume['configMap']) - {'name', 'optional', 'items'} or
+                          ('items' in volume['configMap'] and (
+                              type(volume['configMap']['items']) is not list or
+                              any(type(item) is not dict or set(item) != {'key', 'path'} or
+                                  type(item['key']) is not str or
+                                  type(item['path']) is not str or
+                                  item['key'] != item['path'].removeprefix('catalog/') or
+                                  item['path'] not in {
+                                      'config.properties', 'node.properties', 'jvm.config',
+                                      'log.properties', 'catalog/iceberg.properties',
+                                      'catalog/tpch.properties'}
+                                  for item in volume['configMap']['items']))))
+                          for volume in volumes) or
+                      any('emptyDir' in volume and (
+                          volume['name'] not in {'tmp', 'data'} or
+                          set(volume['emptyDir']) - {'sizeLimit'} or
+                          ('sizeLimit' in volume['emptyDir'] and
+                           volume['emptyDir']['sizeLimit'] !=
+                           {'tmp': '1Gi', 'data': '2Gi'}[volume['name']]))
                           for volume in volumes)):
                 raise PolicyError('smoke requires local config or ephemeral volumes')
             pod_security = pod_spec.get('securityContext')

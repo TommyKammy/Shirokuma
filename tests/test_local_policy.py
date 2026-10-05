@@ -1208,6 +1208,13 @@ class ScopedResponseTests(unittest.TestCase):
                           [{'name': 'config', 'configMap': {'name': 'other-config'}}],
                           [{'name': 'config', 'configMap': {}}],
                           [{'name': 'config', 'configMap': {'name': 'trino-local-config', 'optional': True}}],
+                          [{'name': 'config', 'configMap': {'name': 'trino-local-config', 'defaultMode': 0o777}}],
+                          [{'name': 'config', 'configMap': {'name': 'trino-local-config', 'items':
+                              [{'key': 'config.properties', 'path': 'catalog/iceberg.properties'}]}}],
+                          [{'name': 'config', 'configMap': {'name': 'trino-local-config', 'items': None}}],
+                          [{'name': 'tmp', 'emptyDir': {'medium': 'Memory'}}],
+                          [{'name': 'data', 'emptyDir': {'sizeLimit': '10Gi'}}],
+                          [{'name': 'other', 'emptyDir': {}}],
                           [{'name': 'tmp', 'emptyDir': {}}, {'name': 'tmp', 'emptyDir': {}}],
                           [{'name': 'untyped'}], [None], None, {}):
             with self.subTest(volumes=volumes):
@@ -1223,6 +1230,9 @@ class ScopedResponseTests(unittest.TestCase):
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         reply['spec']['template']['spec']['volumes'] = [
             {'name': 'config', 'configMap': {'name': 'trino-local-config'}}]
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        reply['spec']['template']['spec']['volumes'][0]['configMap']['items'] = [
+            {'key': 'iceberg.properties', 'path': 'catalog/iceberg.properties'}]
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for mounts in ([{'name': 'foreign', 'mountPath': '/etc/trino'}],
                        [{'name': 'config', 'mountPath': '/etc/trino', 'subPath': 'secret'}],

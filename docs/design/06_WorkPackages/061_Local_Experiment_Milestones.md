@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.332"
+version: "5.333"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: smoke volume payloads and Docker context segment (offline)
+
+WP-L2-POL-001: seven synthetic fixed-Trino volume-source deviations (ConfigMap
+mode/remapping and emptyDir medium, size or ownership) are refused; a valid
+catalog item still passes. WP-L6-FIN-001: synthetic control characters, encoded
+separator and traversal-like user segments cannot supply the scoped Docker
+context socket. Focused suites passed (policy 166; FinOps 222 with seven Linux
+skips) and `make verify-local-experiment` passed. Dedicated Colima was freshly
+observed stopped; no live API, Docker collection, unknown-request replay,
+retained volume/report/request/backup mutation or GitHub write. These offline
+guards do not authenticate the API or daemon, establish live strict admission,
+measure AgentHouse (`null / NOT_MEASURED`) or confer operator acceptance. Revert
+only the scoped guards/tests if needed; retain saved evidence. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: smoke volume mounts and independent pre-epoch guard (offline)
 

@@ -46,9 +46,12 @@ def _context(raw):
     require(type(docker) is dict)
     host = docker.get('Host')
     # A suffix match alone also accepts a socket in an unrelated directory.
+    # Reject control characters and traversal-like user segments as well.
     # This is a path scope check, not authentication of the daemon at the path.
-    require(type(host) is str and re.fullmatch(
-        r'unix:///Users/[^/\.][^/]*/\.colima/mac-studio-solo/docker\.sock', host) is not None)
+    match = (re.fullmatch(
+        r'unix:///Users/([A-Za-z0-9][A-Za-z0-9._-]*)/\.colima/mac-studio-solo/docker\.sock', host)
+        if type(host) is str else None)
+    require(match is not None and '..' not in match[1])
     return host
 
 

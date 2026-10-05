@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.145"
+version: "0.146"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: constrain Docker context user segment (offline)
+
+The metadata-only fixed context socket check accepted a synthetic newline,
+encoded separator or traversal-like sequence within the user segment. The
+reader now accepts a bounded ASCII account-name shape and refuses embedded
+`..`; three new negative cases pass the 222-test FinOps suite (seven Linux-only
+skips). This is pathname scope only, not daemon authentication, host user
+identity verification or permission to scan the retained volume. No Docker
+collection, volume traversal or backup change; AgentHouse bytes remain
+`null / NOT_MEASURED`. Restore only the socket guard/test if needed and retain
+saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent pre-epoch offset regression (offline)
 

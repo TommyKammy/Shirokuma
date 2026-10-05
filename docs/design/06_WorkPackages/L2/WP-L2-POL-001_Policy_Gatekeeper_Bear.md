@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.187"
+version: "0.188"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bound fixed smoke volume payloads (offline)
+
+The source-image reader accepted synthetic ConfigMap default-mode and key/path
+remapping and memory-backed or oversized emptyDir definitions. It now permits
+only the fixed Trino config item destinations and bounded tmp/data volume
+options; absent optional item/size fields remain compatible with prior fixtures.
+Seven negative variants and a valid catalog item passed the 166-test policy
+suite; the broader local verifier passed. This is an offline filter, not
+authentication of the Kubernetes API or live admission. No request was replayed
+or retained resource changed. Restore only this reader/test if necessary and
+preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke source volume mount scope (offline)
 
