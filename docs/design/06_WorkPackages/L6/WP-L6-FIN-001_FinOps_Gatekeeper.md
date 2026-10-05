@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.131"
+version: "0.132"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: independent caller selection replacement regression (offline)
+
+The direct history renderer refuses a caller replacing its second selected
+entry with the first while the first detached snapshot is being validated.
+The new regression passed against the unchanged reader; focused FinOps suite
+passed 212 tests (seven Linux-only skips). This does not make concurrent
+serialization atomic or authenticate saved producer data. No collection or
+retained report, volume or backup mutation; AgentHouse bytes remain `null /
+NOT_MEASURED`. Revert only this regression if needed, preserving saved reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: later saved-history report mutation regression (offline)
 

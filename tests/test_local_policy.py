@@ -1157,11 +1157,20 @@ class ScopedResponseTests(unittest.TestCase):
     def test_smoke_image_requires_one_well_formed_local_trino_container(self):
         client = object.__new__(policy.Kubernetes)
         valid = {'apiVersion': 'apps/v1', 'kind': 'Deployment',
-                 'metadata': {'name': 'trino-local', 'namespace': policy.NAMESPACE},
+                 'metadata': {'name': 'trino-local', 'namespace': policy.NAMESPACE,
+                              'uid': 'trino-uid', 'resourceVersion': '42'},
                  'spec': {'template': {'spec': {'containers': [
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for field, value in (('uid', None), ('uid', []), ('resourceVersion', None),
+                             ('resourceVersion', '0'), ('resourceVersion', 'not-persisted')):
+            with self.subTest(identity=field, value=value):
+                reply = copy.deepcopy(valid)
+                reply['metadata'][field] = value
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
         for reply in ({}, {'spec': None}, {'spec': {'template': {'spec': {'containers': None}}}},
                       {'spec': {'template': {'spec': {'containers': [{'name': 'trino'}]}}}},
                       {'spec': {'template': {'spec': {'containers': [None]}}}}):

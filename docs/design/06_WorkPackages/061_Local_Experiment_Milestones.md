@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.317"
+version: "5.318"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: persisted smoke image source and independent FinOps selection check (offline)
+
+WP-L2-POL-001: a same-name Trino Deployment reply without persisted UID or
+resourceVersion could supply the smoke image. Five synthetic negatives failed
+before requiring persistent identity; the 166-test policy suite passed after
+repair. Separately WP-L6-FIN-001: a regression replacing the later caller-owned
+history selection during validation passes the unchanged defensive renderer;
+the FinOps suite passes 212 tests (seven Linux-only skips). Dedicated Colima
+was freshly observed stopped. `make verify-local-experiment` and diff check
+passed. No live API, admission, collection, unknown
+request replay, retained report/volume/backup mutation or GitHub write. These
+offline checks do not prove API/producer authenticity, atomic concurrent reads,
+live strict admission, AgentHouse usage (`null / NOT_MEASURED`) or operator
+acceptance. Revert only the scoped image guard/test or independent history
+regression if needed; preserve saved requests and reports. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent FinOps later-report mutation regression (offline)
 

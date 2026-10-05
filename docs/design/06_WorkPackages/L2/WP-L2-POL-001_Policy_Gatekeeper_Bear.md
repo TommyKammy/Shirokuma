@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.174"
+version: "0.175"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke Deployment persisted identity (offline)
+
+The bounded Trino image lookup previously accepted a same-name, digest-shaped
+synthetic Deployment reply with missing or malformed UID/resourceVersion. Five
+fake negatives failed before the guard; the lookup now requires persisted API
+identity before using the image for the fixed dry-run corpus. The existing
+single-container, namespace and digest checks remain. Focused policy suite:
+166 tests passed. Dedicated Colima was freshly observed stopped; this is not
+API authenticity, live admission or proof of current deployment readiness.
+No policy objects, saved requests, volumes or backups were changed. Restore
+only the lookup guard/test if necessary; keep prior evidence. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: malformed optional smoke container lists (offline)
 

@@ -120,6 +120,26 @@ class HistoryTests(unittest.TestCase):
                 H.render(entries)
         self.assertTrue(changed)
 
+    def test_direct_renderer_refuses_caller_replacing_later_selection_during_validation(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        original_validate = C.validate_public
+        changed = False
+
+        def replace_later_selection(value):
+            nonlocal changed
+            result = original_validate(value)
+            if not changed:
+                changed = True
+                # The caller owns the outer list as well as its reports. A
+                # repeated first selection must not be rendered as two samples.
+                entries[1] = entries[0]
+            return result
+
+        with patch.object(C, 'validate_public', side_effect=replace_later_selection):
+            with self.assertRaises(H.HistoryError):
+                H.render(entries)
+        self.assertTrue(changed)
+
     def test_direct_renderer_bounds_malformed_selection_shape(self):
         entries = H.parse(encoded([report(), report(processes())]))
         for malformed in ((), (0,), (0, ()), (0, (entries[0][1][0],)),

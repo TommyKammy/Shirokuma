@@ -506,8 +506,11 @@ class Kubernetes:
             if (deployment.get('apiVersion') != 'apps/v1' or deployment.get('kind') != 'Deployment'
                     or type(metadata) is not dict or metadata.get('name') != 'trino-local'
                     or metadata.get('namespace') != NAMESPACE
-                    or metadata.get('deletionTimestamp') is not None):
+                     or metadata.get('deletionTimestamp') is not None):
                 raise PolicyError('smoke requires the dedicated local Trino deployment')
+            # A named, digest-shaped object is not enough to identify an
+            # existing Deployment returned by the scoped API read.
+            persistent_identity(deployment)
             pod_spec = deployment['spec']['template']['spec']
             containers = pod_spec['containers']
             if (type(containers) is not list or len(containers) != 1 or
