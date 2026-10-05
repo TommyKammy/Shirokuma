@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.339"
+version: "5.340"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: FinOps PVC/PV mode continuity (offline)
+
+WP-L6-FIN-001: six synthetic two-read PVC/PV mode or storage-class drifts
+formerly produced an earlier fixed Filesystem reference; the second read now
+refuses them. Focused FinOps suite 226 passed (seven Linux-only skips). Dedicated
+Colima was freshly observed stopped; no live API, retained data/backup/report
+mutation or GitHub write. This does not authenticate sources, measure AgentHouse
+bytes (`null / NOT_MEASURED`) or establish operator acceptance. Restore only
+the scoped check/test if needed; original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke budget/placement and FinOps template mode (offline)
 

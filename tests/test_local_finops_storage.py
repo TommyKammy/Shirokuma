@@ -169,6 +169,25 @@ class StorageTests(unittest.TestCase):
         backend.storage_get.side_effect=RuntimeError('SECRET')
         self.assertTrue(all(row['reason']=='READ_FAILED' for row in S.collect(backend)['components']))
 
+    def test_storage_collection_rejects_storage_semantics_changed_between_reads(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            w, p, _, c, v = objects(component)
+            original = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p},
+                        c, v, deepcopy(w),
+                        {'kind':'PodList','apiVersion':'v1','metadata':{},'items':deepcopy(p)},
+                        deepcopy(c), deepcopy(v)]
+            for index, field, value in ((-2, 'volumeMode', 'Block'),
+                                        (-2, 'storageClassName', 'foreign'),
+                                        (-1, 'volumeMode', 'Block')):
+                changed = deepcopy(original)
+                changed[index]['spec'][field] = value
+                backend = Mock()
+                backend.now.return_value = NOW
+                backend.storage_get.side_effect = changed
+                with self.subTest(component=component, field=field), self.assertRaisesRegex(
+                        S.StorageError, 'IDENTITY_CHANGED'):
+                    S._collect_one(backend, component)
+
     def test_transport_reason_and_cleanup_boundary(self):
         backend=Mock();backend.now.return_value=NOW
         for exception,expected in ((R.U.PodUsageError('READ_TIMEOUT'),'READ_TIMEOUT'),

@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.151"
+version: "0.152"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: storage semantics stable across scoped reads (offline)
+
+The two-read fixed PVC/PV inventory previously accepted a later Block-mode PVC
+or PV, or a changed PVC storage class, while publishing the earlier Filesystem
+reference. Six synthetic drift cases failed before repair; the second reads now
+compare those fields. `make test-local-finops` passed 226 cases (seven Linux-only
+skips). No API collection or retained volume/report/backup mutation; this does
+not authenticate Kubernetes or measure AgentHouse bytes (`null / NOT_MEASURED`).
+Revert only the scoped continuity fields/test if needed and retain saved reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: directory-mounted claim template mode (offline)
 
