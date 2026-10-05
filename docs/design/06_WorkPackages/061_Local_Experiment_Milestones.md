@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.348"
+version: "5.349"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: FinOps component and node page completeness (offline)
+
+WP-L6-FIN-001: independent CPU/memory PodList and local NodeList readers now
+refuse falsey malformed pagination and non-map metadata before metrics or Pod
+reads. Negatives failed before repair; explicit empty-string pages pass.
+`make test-local-finops` passed 233 tests (seven Linux-only skips) and `make
+verify-local-experiment` passed (intentional fake Dagster failure diagnostic).
+Dedicated
+Colima was freshly observed stopped; no live API, collection, retained report/
+volume/backup mutation or GitHub write. Offline fixtures cannot authenticate
+the API, make samples atomic or measure AgentHouse used bytes (`null /
+NOT_MEASURED`), and do not establish operator acceptance. Restore only these
+two guards/tests if necessary, preserving saved evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: typed FinOps pagination and Trino termination source (offline)
 

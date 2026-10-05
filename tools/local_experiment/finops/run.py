@@ -39,7 +39,16 @@ def _json(raw):
             C.require(key not in value, 'READ_FAILED'); value[key] = item
         return value
     return json.loads(raw, object_pairs_hook=pairs,
-                      parse_constant=lambda _: (_ for _ in ()).throw(C.FinOpsError('READ_FAILED')))
+                       parse_constant=lambda _: (_ for _ in ()).throw(C.FinOpsError('READ_FAILED')))
+
+
+def _complete_list(value, kind):
+    if type(value) is not dict:
+        return False
+    metadata = value.get('metadata', {})
+    return (value.get('kind') == kind and value.get('apiVersion') == 'v1' and
+            type(metadata) is dict and metadata.get('continue', '') == '' and
+            type(metadata.get('continue', '')) is str and type(value.get('items')) is list)
 
 
 def inference_sql(end):
@@ -133,9 +142,7 @@ class Backend:
         self.server = U._local_server(deadline=deadline, environment=self.environment)
         try:
             nodes = self._read('/api/v1/nodes', deadline)
-            C.require(nodes.get('kind') == 'NodeList' and nodes.get('apiVersion') == 'v1' and
-                      not nodes.get('metadata', {}).get('continue') and len(nodes.get('items', [])) == 1,
-                      'SCOPE_INVALID')
+            C.require(_complete_list(nodes, 'NodeList') and len(nodes['items']) == 1, 'SCOPE_INVALID')
             info = nodes['items'][0]['status']['nodeInfo']
             C.require(info.get('architecture') == 'arm64' and 'k3s' in info.get('kubeletVersion', ''), 'SCOPE_INVALID')
         except BaseException:
@@ -149,10 +156,9 @@ class Backend:
         if component == 'polaris': labels += ',app.kubernetes.io/component=catalog-server'
         selector = quote(labels, safe='')
         value = self._read(f'/api/v1/namespaces/{namespace}/pods?labelSelector={selector}&limit=2', deadline)
-        C.require(value.get('kind') == 'PodList' and value.get('apiVersion') == 'v1' and
-                  type(value.get('items')) is list, 'SCOPE_INVALID')
+        C.require(_complete_list(value, 'PodList'), 'SCOPE_INVALID')
         items = value['items']
-        C.require(not value.get('metadata', {}).get('continue') and len(items) <= 1, 'TARGET_AMBIGUOUS')
+        C.require(len(items) <= 1, 'TARGET_AMBIGUOUS')
         C.require(len(items) == 1, 'TARGET_MISSING')
         before = items[0]
         identity, _ = C._identity(component, before)

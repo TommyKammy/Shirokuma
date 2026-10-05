@@ -5,12 +5,31 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.156"
+version: "0.157"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: typed component PodList and independent NodeList guard (offline)
+
+The CPU/memory component reader (distinct from fixed storage inventory) accepted
+falsey non-string PodList continuation tokens and could fetch metrics for an
+incomplete page. Its separate local NodeList scope guard likewise accepted
+falsey malformed continuation tokens before attempting a Pod read. Both readers
+now require map metadata and absent or empty-string continuation; non-map
+metadata yields a scoped failure rather than an attribute error. Negative
+fixtures failed before repair; valid empty-string pages pass. `make
+test-local-finops` passed 233 tests (seven Linux-only skips); `make
+verify-local-experiment` also passed (its fake Dagster failure is an intentional
+negative diagnostic). Dedicated Colima
+was freshly observed stopped; no live collection, AgentHouse scan, retained
+report/volume/backup mutation or GitHub write. This is neither API
+authentication nor atomic sampling; AgentHouse used bytes remain `null /
+NOT_MEASURED`, and operator acceptance remains open. Roll back only the
+component/NodeList guard and tests if needed; preserve saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: complete typed PodList pagination (offline)
 

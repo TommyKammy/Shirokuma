@@ -171,6 +171,22 @@ class RuntimeTests(unittest.TestCase):
                 backend.component('trino')
             self.assertEqual(read.call_count, 1)
 
+    def test_malformed_pod_list_page_never_fetches_metrics(self):
+        for metadata in (None, [], {'continue': None}, {'continue': False},
+                         {'continue': 0}, {'continue': []}, {'continue': 'next'}):
+            with self.subTest(metadata=metadata):
+                backend = R.Backend(); backend.server = 'https://127.0.0.1:6443'
+                with patch.object(backend, '_read', return_value={'kind': 'PodList', 'apiVersion': 'v1',
+                        'metadata': metadata, 'items': [pod('trino')]}) as read, \
+                        self.assertRaises(R.C.FinOpsError):
+                    backend.component('trino')
+                self.assertEqual(read.call_count, 1)
+        backend = R.Backend(); backend.server = 'https://127.0.0.1:6443'
+        with patch.object(backend, '_read', side_effect=[{'kind': 'PodList', 'apiVersion': 'v1',
+                'metadata': {'continue': ''}, 'items': [pod('trino')]}, metrics('trino'), pod('trino')]) as read:
+            backend.component('trino')
+        self.assertEqual(read.call_count, 3)
+
     def test_polaris_selector_keeps_bootstrap_out_without_client_side_filtering(self):
         server = pod('polaris'); bootstrap = deepcopy(server)
         bootstrap['metadata']['name'] = 'polaris-bootstrap-abc12'
@@ -209,6 +225,28 @@ class RuntimeTests(unittest.TestCase):
                 self.assertRaises(R.C.FinOpsError):
             backend.component('trino')
         self.assertIsNone(backend.server); self.assertEqual(read.call_count, 1)
+
+    def test_malformed_node_page_refuses_pod_read_and_clears_server(self):
+        for metadata in (None, [], {'continue': None}, {'continue': False},
+                         {'continue': 0}, {'continue': 'next'}):
+            with self.subTest(metadata=metadata):
+                backend = R.Backend()
+                nodes = {'kind': 'NodeList', 'apiVersion': 'v1', 'metadata': metadata,
+                         'items': [{'status': {'nodeInfo': {'architecture': 'arm64', 'kubeletVersion': 'k3s'}}}]}
+                with patch.object(R.U, '_local_server', return_value='https://127.0.0.1:6443'), \
+                        patch.object(backend, '_read', return_value=nodes) as read, \
+                        self.assertRaises(R.C.FinOpsError):
+                    backend.component('trino')
+                self.assertIsNone(backend.server)
+                self.assertEqual(read.call_count, 1)
+        backend = R.Backend()
+        nodes = {'kind': 'NodeList', 'apiVersion': 'v1', 'metadata': {'continue': ''},
+                 'items': [{'status': {'nodeInfo': {'architecture': 'arm64', 'kubeletVersion': 'k3s'}}}]}
+        with patch.object(R.U, '_local_server', return_value='https://127.0.0.1:6443'), \
+                patch.object(backend, '_read', return_value=nodes) as read:
+            backend._guard(100)
+        self.assertEqual(read.call_count, 1)
+        self.assertEqual(backend.server, 'https://127.0.0.1:6443')
 
     def test_agenthouse_fixed_read_reuses_client_without_starting_and_rejects_foreign_port(self):
         context = [{'Endpoints':{'docker':{'Host':'unix:///Users/test/.colima/mac-studio-solo/docker.sock'}}}]
