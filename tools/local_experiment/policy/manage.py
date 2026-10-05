@@ -384,8 +384,9 @@ def own_denial(stderr: str, name: str, message: str) -> bool:
         return False
     # Admit only the observed kubectl Forbidden wrapper (or the bare API
     # denial). Arbitrary text on the same line is not policy evidence.
-    pattern = (r"(?:Error from server \(Forbidden\): )?ValidatingAdmissionPolicy ['\"]" + re.escape(name) + r"['\"] with binding ['\"]"
-               + re.escape(name) + r"['\"] denied request: " + re.escape(message) + r'(?:\r?\n)?\Z')
+    pattern = (r"(?:Error from server \(Forbidden\): )?ValidatingAdmissionPolicy (?P<policy_quote>['\"])"
+               + re.escape(name) + r"(?P=policy_quote) with binding (?P<binding_quote>['\"])"
+               + re.escape(name) + r"(?P=binding_quote) denied request: " + re.escape(message) + r'(?:\r?\n)?\Z')
     return bool(re.fullmatch(pattern, stderr))
 
 

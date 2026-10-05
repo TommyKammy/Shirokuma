@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.242"
+version: "5.243"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: balanced denial syntax and separate saved-history review (offline)
+
+WP-L2-POL-001: four mismatched quote pairs around policy/binding names passed
+the fake native denial matcher before repair. A scoped quote-pair check rejects
+them while both balanced quote styles pass; the fake full smoke stops at the
+third request. Focused 87 native tests passed. Independently WP-L6-FIN-001:
+direct saved-history selection/order, digest binding and per-report storage
+scope were reviewed without a reader change; 194 FinOps tests passed (seven
+Linux-only skips); `make verify-local-experiment` passed. Dedicated Colima was observed stopped. No live admission,
+collection, saved-request replay, retained report/volume/backup mutation or
+GitHub write. AgentHouse usage remains `null / NOT_MEASURED`. Offline text
+and saved reports cannot authenticate producers, prove present usage, clear
+strict admission or grant operator acceptance. Roll back only the denial
+matcher/test if necessary; preserve saved reports and intents. Original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: fixed Service allocated-address consistency (offline)
 

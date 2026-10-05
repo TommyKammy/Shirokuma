@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.108"
+version: "0.109"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: balanced native denial identifiers (offline)
+
+The fixed smoke matcher accepted fake denial text with a single-quote opener
+and double-quote closer (or the reverse) around its policy or binding name.
+Four focused negatives failed before repair. The matcher now pairs each name's
+quotes independently; ordinary single- and double-quoted denials still pass.
+The fake full smoke rejects the malformed denial at request three. Native
+policy tests (87) and `make verify-local-experiment` passed. Dedicated Colima was observed stopped; no live API,
+saved-request replay, retained data/backup mutation or GitHub write. This
+matches only a bounded stderr syntax, not the identity of its producer or
+strict admission/operator acceptance. Revert only this matcher/test if actual
+kubectl formatting requires revision; preserve saved requests. Original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: fixed Service allocated-address consistency (offline)
 

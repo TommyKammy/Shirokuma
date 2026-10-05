@@ -1509,6 +1509,38 @@ class SmokeTests(unittest.TestCase):
         self.assertTrue(policy.own_denial(denial, name, message))
         self.assertTrue(policy.own_denial(f'Error from server (Forbidden): {denial}\n', name, message))
 
+    def test_denial_requires_balanced_policy_and_binding_quotes(self):
+        name = policy.NAMES[0]
+        message = 'Privileged containers are forbidden.'
+        for opening, closing in (("'", '"'), ('"', "'")):
+            for location in ('policy', 'binding'):
+                policy_quote = (opening, closing) if location == 'policy' else ("'", "'")
+                binding_quote = (opening, closing) if location == 'binding' else ("'", "'")
+                denial = (f'ValidatingAdmissionPolicy {policy_quote[0]}{name}{policy_quote[1]} '
+                          f'with binding {binding_quote[0]}{name}{binding_quote[1]} '
+                          f'denied request: {message}')
+                with self.subTest(location=location, opening=opening):
+                    self.assertFalse(policy.own_denial(denial, name, message))
+        for quote in ("'", '"'):
+            denial = (f'ValidatingAdmissionPolicy {quote}{name}{quote} with binding '
+                      f'{quote}{name}{quote} denied request: {message}')
+            self.assertTrue(policy.own_denial(denial, name, message))
+
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def malformed(request):
+            response = reference.smoke_request(request)
+            if response.returncode == 0:
+                return response
+            return SimpleNamespace(returncode=response.returncode, stdout='',
+                                   stderr=response.stderr.replace(f"'{name}'", f"'{name}\"", 1))
+        kube.smoke_failure = malformed
+        events = []
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items(), record=events.append)
+        self.assertEqual(len(kube.calls), 3)
+        self.assertEqual(events[-1]['result'], 'failed')
+
     def test_unrelated_rejection_halts_without_claiming_negative_success(self):
         kube = FakeKubernetes(ready=True)
         def bad(value):
