@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.244"
+version: "5.245"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent encoded host diagnostic controls (offline)
+
+WP-L0-GITOPS-001: two encoded IPv4 loopback host forms degrade under the
+unchanged local doctor. Focused scope and full Go CLI tests (909), vet and
+diff check passed. Dedicated Colima was observed stopped; no live API/Git
+read, reconciliation, unknown-request replay, retained data/backup mutation
+or GitHub write. Fake context output cannot authenticate the endpoint or
+prove atomic inventory, strict admission or operator acceptance. Revert only
+the independent test extension if needed; preserve prior evidence. Original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-05: fail-closed non-text denial and independent saved-history checks (offline)
 

@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.143"
+version: "0.144"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: encoded literal-host controls (offline)
+
+Two fake kubeconfig server endpoints with percent-encoded digits or dots in
+an apparent loopback IPv4 host degrade under the unchanged doctor. The
+focused scope test, full Go CLI suite (909) and vet passed. Dedicated Colima
+was observed stopped; no live Kubernetes/Git read or reconciliation. This
+pins a conservative endpoint diagnostic, not server/context authentication,
+atomic inventory, strict admission or operator acceptance. Revert only these
+two test cases if actual dedicated endpoint requirements change; preserve
+previous evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: literal loopback scope for local doctor (offline)
 

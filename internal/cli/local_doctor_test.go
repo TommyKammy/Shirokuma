@@ -3263,6 +3263,7 @@ func TestLocalExperimentScopeRejectsLookalikeLoopbackEndpoints(t *testing.T) {
 		"https://127.0.0.1.example:6443", "https://localhost.example:6443",
 		"https://localhost:6443@remote.example:6443", "https://127.0.0.1:6443@remote.example:6443",
 		"https://localhost%40remote.example:6443", "https://127.0.0.1%2Eexample:6443",
+		"https://%31%32%37.0.0.1:6443", "https://127%2e0.0.1:6443",
 		"https://127.0.0.1%2fremote.example:6443", "https://localhost%3aremote.example:6443",
 		"https://LOCALHOST:6443", "https://[::1%25en0]:6443",
 		"https://127.0.0.1.:6443", "https://0177.0.0.1:6443",
