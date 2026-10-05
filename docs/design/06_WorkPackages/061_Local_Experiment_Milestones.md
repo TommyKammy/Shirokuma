@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.385"
+version: "5.386"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: full fixed claim/backing-volume spec continuity (offline)
+
+WP-L6-FIN-001: four two-read PVC access-mode or PV backing-source drift
+fixtures passed before repair. Full-spec JSON-type-exact continuity now refuses
+these changes without constraining ordinary status/resourceVersion movement.
+Storage-focused 50 tests and `make verify-local-experiment` pass (the fake
+Dagster worker failure is an intentional negative diagnostic).
+Dedicated Colima was freshly observed stopped; no live API, volume traversal,
+retained report/backup mutation or AgentHouse used-byte measurement (`null /
+NOT_MEASURED`). This is neither an atomic/authenticated sample nor operator
+acceptance. Revert only scoped code/tests if needed; preserve saved evidence.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: current Trino rollout generation source (offline)
 

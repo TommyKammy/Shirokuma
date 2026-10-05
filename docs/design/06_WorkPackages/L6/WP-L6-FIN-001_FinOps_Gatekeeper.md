@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.183"
+version: "0.184"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed PVC/PV full-spec read continuity (offline)
+
+Four two-read fixtures previously certified fixed PVC references after the
+claim's access modes or the PV's backing source changed without changing the
+projected UID, class or capacity. The collector now compares the complete
+claim and PV specs with JSON-type-exact equality between reads, while allowing
+status/resourceVersion movement; the existing projected-field and PV phase
+checks remain. Four fixture negatives failed first; storage-focused 50 tests
+and `make verify-local-experiment` pass (its fake Dagster worker failure is an
+intentional negative diagnostic). This is a conservative sequential consistency check, not an
+atomic Kubernetes snapshot or authentication of its producer. Dedicated Colima
+was freshly observed stopped. No live API, volume scan, retained report/backup
+mutation or AgentHouse used-byte measurement (`null / NOT_MEASURED`). Roll back
+only the scoped continuity check/test if necessary, preserving saved evidence.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: explicit fixed storage-class consistency (offline)
 

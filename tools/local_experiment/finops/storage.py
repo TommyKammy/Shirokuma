@@ -419,7 +419,10 @@ def _collect_one(backend, component):
             return (item['metadata']['uid'], spec.get('volumeName'),
                     resources.get('requests', {}).get('storage'), spec.get('storageClassName'),
                     spec.get('volumeMode'), status.get('phase'), capacity.get('storage'))
-        require(_same_json(claim_state(later), claim_state(pvc)), 'IDENTITY_CHANGED')
+        # The projected fields alone do not pin access modes or other PVC
+        # semantics. Status may move, but the entire claim spec must stay put.
+        require(_same_json(claim_state(later), claim_state(pvc)) and
+                _same_json(later['spec'], pvc['spec']), 'IDENTITY_CHANGED')
         if pv:
             later_pv = backend.storage_get(f'/api/v1/persistentvolumes/{name(pv["metadata"]["name"])}')
             _meta(later_pv, 'PersistentVolume', None, pv['metadata']['name'])
@@ -434,6 +437,8 @@ def _collect_one(backend, component):
                          spec.get('capacity', {}).get('storage'),
                          spec.get('persistentVolumeReclaimPolicy'), spec.get('volumeMode'),
                          spec.get('storageClassName'))
-            require(_same_json(pv_state(later_pv), pv_state(pv)), 'IDENTITY_CHANGED')
+            # A stable claimRef/capacity does not pin the backing PV source.
+            require(_same_json(pv_state(later_pv), pv_state(pv)) and
+                    _same_json(later_pv['spec'], pv['spec']), 'IDENTITY_CHANGED')
     return project(component, (before,pods,replica), (after,after_pods['items'],after_replica),
                    pvc=pvc, pv=pv, request_started_at=start, observed_at=backend.now())

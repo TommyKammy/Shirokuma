@@ -528,6 +528,24 @@ class StorageTests(unittest.TestCase):
                         S.StorageError, 'IDENTITY_CHANGED'):
                     S._collect_one(backend, component)
 
+    def test_storage_collection_refuses_unprojected_claim_or_pv_source_drift(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            w, pods, _, pvc, pv = objects(component)
+            original = [w, {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': pods},
+                        pvc, pv, deepcopy(w),
+                        {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': deepcopy(pods)},
+                        deepcopy(pvc), deepcopy(pv)]
+            for index, field, value in ((6, 'accessModes', ['ReadOnlyMany']),
+                                        (7, 'hostPath', {'path': '/different'})):
+                responses = deepcopy(original)
+                responses[index]['spec'][field] = value
+                backend = Mock()
+                backend.now.return_value = NOW
+                backend.storage_get.side_effect = responses
+                with self.subTest(component=component, field=field), self.assertRaisesRegex(
+                        S.StorageError, 'IDENTITY_CHANGED'):
+                    S._collect_one(backend, component)
+
     def test_storage_collection_refuses_pv_losing_bound_phase(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             w, pods, _, pvc, pv = objects(component)
