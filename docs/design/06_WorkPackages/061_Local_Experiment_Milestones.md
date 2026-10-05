@@ -12,6 +12,21 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: fixed Trino template metadata and storage name continuity (offline)
+
+WP-L2-POL-001: five foreign Pod-template metadata fields previously lent a
+same-image Trino source to the smoke; they now fail closed, while optional
+null creationTimestamp passes. WP-L6-FIN-001: a Deployment Pod name changing
+between storage reads with unchanged UID no longer certifies the reference.
+Both negative fixtures failed before repair. Focused suites passed (policy 166,
+FinOps 244 with seven Linux-only skips); `make verify-local-experiment` and
+`git diff --check` passed. Dedicated Colima was freshly observed stopped. No
+live API/admission/collection, unknown-request replay, retained report/volume/
+backup mutation or GitHub write. Offline source checks cannot authenticate the
+cluster, measure AgentHouse used bytes (`null / NOT_MEASURED`) or confer operator
+acceptance. Roll back only these scoped checks/tests if necessary, preserving
+saved records. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: fixed Trino routing-label source (offline)
 
 WP-L2-POL-001: same-image Deployment sources with extra controller or Pod

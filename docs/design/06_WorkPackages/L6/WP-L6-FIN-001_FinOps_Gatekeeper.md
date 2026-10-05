@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: fixed storage Pod-name continuity (offline)
+
+Two reads of the same Deployment Pod UID with different Pod names previously
+certified a storage reference. A negative fixture failed before repair; the
+continuity check now requires unchanged names for each fixed-chain object.
+Replica-chain rename was already rejected by owner-reference continuity.
+Focused FinOps 244 cases (seven Linux-only skips) and local verification passed.
+Dedicated Colima was freshly observed stopped. No live collection, volume scan,
+report/backup mutation or unknown-request replay. Sequential offline reads do
+not authenticate the API, establish atomicity or measure AgentHouse bytes
+(`null / NOT_MEASURED`); operator acceptance remains open. Revert only the
+scoped check/test if needed, preserving saved records. Original Vault sync
+pending outside checkout.
+
 ## 2026-10-06: bounded workload selector expressions (offline)
 
 All four fixed storage reference readers previously certified a Pod under a

@@ -12,6 +12,18 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-06: fixed smoke template metadata (offline)
+
+The same-image Trino source previously accepted five extra Pod-template metadata
+fields (including a foreign name, namespace and owner references). Disposable
+negative cases failed before repair. The source now accepts only the fixed
+labels, absent/empty annotations and an optional null creationTimestamp;
+166 focused policy cases and local verification passed. No live API/admission,
+request replay or retained data/backup change. This filter cannot authenticate
+Kubernetes or establish strict live admission/operator acceptance. Restore only
+the scoped reader/test if needed; keep saved requests. Original Vault sync
+pending outside checkout.
+
 ## 2026-10-06: bounded smoke source routing labels (offline)
 
 A same-image Deployment with an extra controller or Pod-template label could

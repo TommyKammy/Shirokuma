@@ -532,6 +532,9 @@ class Kubernetes:
                               'shirokuma.dev/scope': 'local-experiment'}
             if (type(selector) is not dict or selector != {
                      'matchLabels': {'app.kubernetes.io/name': 'trino-local'}} or
+                       type(template_metadata) is not dict or
+                       set(template_metadata) - {'labels', 'annotations', 'creationTimestamp'} or
+                       template_metadata.get('creationTimestamp') is not None or
                        type(labels) is not dict or type(owner_labels) is not dict or
                        owner_labels != expected_owner or
                        labels != {**expected_owner, 'shirokuma.dev/object-storage-client': 'true'} or

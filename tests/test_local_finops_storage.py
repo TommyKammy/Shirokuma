@@ -47,6 +47,19 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_second_read_cannot_rename_deployment_chain_with_same_uids(self):
+        for index in (1, 2):
+            first = objects('trino')
+            later = deepcopy(first)
+            if index == 1:
+                later[1][0]['metadata']['name'] = 'different-pod'
+            else:
+                later[2]['metadata']['name'] = 'different-replica'
+                later[1][0]['metadata']['ownerReferences'][0]['name'] = 'different-replica'
+            with self.subTest(index=index), self.assertRaises(S.StorageError):
+                S.project('trino', first[:3], later[:3], request_started_at='2026-09-20T00:00:20Z',
+                          observed_at=NOW)
+
     def test_fixed_chain_capacity_and_no_direct_pvc_are_distinct(self):
         for component in S.TARGETS:
             item = projected(component)

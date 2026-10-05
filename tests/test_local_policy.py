@@ -1212,6 +1212,18 @@ class ScopedResponseTests(unittest.TestCase):
         reply['spec']['template']['metadata']['annotations'] = {}
         client.json_request.return_value = reply
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        reply['spec']['template']['metadata']['creationTimestamp'] = None
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for extra in ({'finalizers': ['example.invalid/foreign']},
+                      {'ownerReferences': [{'name': 'foreign'}]},
+                      {'namespace': 'foreign'}, {'name': 'foreign'},
+                      {'generateName': 'foreign-'}):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template']['metadata'].update(extra)
+            client.json_request.return_value = reply
+            with self.subTest(template_metadata=extra), self.assertRaises(policy.PolicyError):
+                client.image()
         # A pinned image from a paused, scaled-out or rolling-update source is
         # not the dedicated one-replica Recreate smoke workload.
         for override in ({'replicas': 0}, {'replicas': 2}, {'replicas': True},
