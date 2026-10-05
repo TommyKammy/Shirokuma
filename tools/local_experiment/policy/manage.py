@@ -545,6 +545,7 @@ class Kubernetes:
                           'priority', 'preemptionPolicy', 'overhead',
                           'readinessGates')) or
                       pod_spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
+                      pod_spec.get('restartPolicy', 'Always') != 'Always' or
                       ('terminationGracePeriodSeconds' in pod_spec and
                        (type(pod_spec['terminationGracePeriodSeconds']) is not int or
                         pod_spec['terminationGracePeriodSeconds'] != 30)) or

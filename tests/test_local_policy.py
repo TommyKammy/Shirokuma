@@ -1220,6 +1220,18 @@ class ScopedResponseTests(unittest.TestCase):
         client.json_request.return_value = reply
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         client.json_request.return_value = valid
+        # A Deployment's default Pod restart policy is Always.
+        for restart in ('Never', 'OnFailure', None, False):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template']['spec']['restartPolicy'] = restart
+            client.json_request.return_value = reply
+            with self.subTest(restart_policy=restart), self.assertRaises(policy.PolicyError):
+                client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['restartPolicy'] = 'Always'
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        client.json_request.return_value = valid
         # A same-image Pod can change its DNS identity without custom dnsConfig
         # or host networking. The fixed smoke source does not set these fields.
         for override in ({'hostname': 'foreign'}, {'subdomain': 'foreign'},

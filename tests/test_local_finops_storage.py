@@ -166,6 +166,18 @@ class StorageTests(unittest.TestCase):
         unknown['components'][0]['pvc']={'secret':'BAD'}
         with self.assertRaises(S.StorageError):S.validate(unknown)
 
+    def test_malformed_saved_storage_rows_fail_with_scoped_error(self):
+        for malformed in (None, False, 0, [], 'trino'):
+            value = S.unknown_all('READ_FAILED')
+            value['components'][0] = malformed
+            with self.subTest(malformed=malformed), self.assertRaises(S.StorageError):
+                S.validate(value)
+        for reason in ([], {}, None, False):
+            value = S.unknown_all('READ_FAILED')
+            value['components'][0]['reason'] = reason
+            with self.subTest(reason=reason), self.assertRaises(S.StorageError):
+                S.validate(value)
+
     def test_v3_roundtrip_render_history_v1_v2_compat(self):
         storage=S.validate(dict(schema_version=1,components=[projected(n) for n in S.TARGETS],limits=S.LIMITS[:]))
         previous=report(processes()); current=C.build_report(previous['components'],previous['disks'],previous['inference'],

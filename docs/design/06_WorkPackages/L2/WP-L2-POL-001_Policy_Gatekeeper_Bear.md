@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.199"
+version: "0.200"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: Deployment smoke restart policy (offline)
+
+Four synthetic same-image Pod templates with a non-Always or malformed restart
+policy supplied the fixed Trino smoke image before repair. Present policy must
+be `Always` (the Deployment default); absent minimal fixtures and explicit
+`Always` pass. `make test-local-policy` passed 166 cases. No live API, admission,
+unknown-request replay or retained data/backup mutation. This source check
+cannot authenticate Kubernetes or prove strict admission/operator acceptance.
+Revert only the scoped reader/test if needed, preserving saved requests.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed Trino smoke-source termination grace (offline)
 

@@ -57,7 +57,8 @@ def quantity(value):
 
 
 def unknown(component, reason):
-    require(component in TARGETS and reason in REASONS)
+    require(type(component) is str and component in TARGETS and
+            type(reason) is str and reason in REASONS)
     return dict(component=component, state='unknown', reason=reason, namespace=TARGETS[component][0],
                 workload_uid=None, pod_uid=None, pvc=None, pv=None, retention=None,
                 request_started_at=None, observed_at=None, used_bytes=None, usage_reason='NOT_MEASURED')
@@ -200,7 +201,8 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
 
 
 def validate_row(row):
-    require(type(row) is dict and row.get('component') in TARGETS and set(row) == set(unknown('trino', 'READ_FAILED')))
+    require(type(row) is dict and type(row.get('component')) is str and
+            row['component'] in TARGETS and set(row) == set(unknown('trino', 'READ_FAILED')))
     component = row['component']
     require(row['namespace'] == TARGETS[component][0] and row['used_bytes'] is None and row['usage_reason'] == 'NOT_MEASURED')
     if row['state'] == 'unknown':
@@ -242,7 +244,8 @@ def validate(value):
     require(type(value) is dict and set(value) == {'schema_version','components','limits'} and
             type(value['schema_version']) is int and value['schema_version'] == 1 and
             value['limits'] == LIMITS and type(value['components']) is list and len(value['components']) == 4)
-    require([v.get('component') for v in value['components']] == list(TARGETS))
+    require(all(type(v) is dict for v in value['components']) and
+            [v.get('component') for v in value['components']] == list(TARGETS))
     return dict(schema_version=1, components=[validate_row(v) for v in value['components']], limits=LIMITS[:])
 
 

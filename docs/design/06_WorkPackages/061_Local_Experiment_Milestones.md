@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.350"
+version: "5.351"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: saved storage shape and Trino restart source (offline)
+
+WP-L6-FIN-001: malformed saved storage rows or unhashable unknown reasons now
+yield scoped failures rather than untyped exceptions (236 focused cases, seven
+Linux-only skips). WP-L2-POL-001: same-image Deployment smoke sources with a
+non-Always restart policy are refused (166 focused cases). Both negatives failed
+before repair. `make verify-local-experiment` passed; its fake Dagster worker
+failure trace is an intentional negative diagnostic.
+Dedicated Colima was freshly observed stopped. No live API/admission, collection,
+request replay, retained report/volume/backup mutation or GitHub write. These
+offline checks do not authenticate the sources, establish live strict admission,
+measure AgentHouse used bytes (`null / NOT_MEASURED`) or confer operator
+acceptance. Restore only scoped guards/tests if necessary, retaining saved
+inputs. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed storage replica and ephemeral claim classification (offline)
 

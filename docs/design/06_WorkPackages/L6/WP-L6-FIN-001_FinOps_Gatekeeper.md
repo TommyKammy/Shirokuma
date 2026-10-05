@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.158"
+version: "0.159"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: malformed saved storage rows fail closed (offline)
+
+An offline negative showed non-object entries in the four fixed storage rows
+raised an unscoped attribute error, and an unhashable unknown reason raised a
+type error. Validate row shape and reason type before field lookup; keep valid
+unknown rows and four-component ordering unchanged. `make test-local-finops`
+passed 236 cases (seven Linux-only skips); full verifier result is in the local
+milestones. Dedicated Colima was observed stopped. No live collection, retained
+report/volume/backup mutation or usage scan. This cannot authenticate saved
+reports or measure AgentHouse used bytes (`null / NOT_MEASURED`); operator
+acceptance remains open. Revert only the scoped guards/test if needed; preserve
+saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded storage replica and generic ephemeral claim scope (offline)
 
