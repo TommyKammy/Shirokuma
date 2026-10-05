@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.166"
+version: "0.167"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed PVC mount exposure (offline)
+
+Both fixed StatefulSet reference rows previously accepted an aliased second
+mount, a subPath mapping or a volumeDevice alongside the expected directory
+mount. Six negative cases failed before repair; only one whole-claim mount at
+the fixed path is now accepted. Focused FinOps 246 cases passed (seven Linux-only
+skips); local verification passed. Dedicated Colima was observed stopped, with
+no API collection, retained volume/report/backup change or disk scan. This is
+not a live mount-health check or AgentHouse byte measurement (`null /
+NOT_MEASURED`). Revert only the scoped guard/test if necessary; keep saved
+records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed StatefulSet claim inventory excludes generic ephemeral PVCs (offline)
 

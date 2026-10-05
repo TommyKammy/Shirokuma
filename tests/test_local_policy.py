@@ -1193,6 +1193,23 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        config_paths = ('config.properties', 'node.properties', 'jvm.config',
+                        'log.properties', 'catalog/iceberg.properties',
+                        'catalog/tpch.properties')
+        explicit = copy.deepcopy(valid)
+        config = explicit['spec']['template']['spec']['volumes'][0]['configMap']
+        config['items'] = [{'key': path.removeprefix('catalog/'), 'path': path}
+                           for path in config_paths]
+        client.json_request.return_value = explicit
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for items in (config['items'][:-1], config['items'] + [config['items'][0]],
+                      config['items'][:1] * 6):
+            reply = copy.deepcopy(explicit)
+            reply['spec']['template']['spec']['volumes'][0]['configMap']['items'] = items
+            client.json_request.return_value = reply
+            with self.subTest(items=items), self.assertRaises(policy.PolicyError):
+                client.image()
+        client.json_request.return_value = valid
         for where in ('metadata', 'template'):
             reply = copy.deepcopy(valid)
             labels = (reply['metadata']['labels'] if where == 'metadata' else
@@ -1463,7 +1480,7 @@ class ScopedResponseTests(unittest.TestCase):
                     client.image()
         reply = copy.deepcopy(valid)
         reply['spec']['template']['spec']['volumes'][0]['configMap']['items'] = [
-            {'key': 'iceberg.properties', 'path': 'catalog/iceberg.properties'}]
+            {'key': path.removeprefix('catalog/'), 'path': path} for path in config_paths]
         client.json_request.return_value = reply
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for missing in ('config', 'tmp', 'data'):

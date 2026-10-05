@@ -586,9 +586,15 @@ class Kubernetes:
                           volume['configMap'].get('name') != 'trino-local-config' or
                           volume['configMap'].get('optional', False) is not False or
                           set(volume['configMap']) - {'name', 'optional', 'items'} or
-                          ('items' in volume['configMap'] and (
-                              type(volume['configMap']['items']) is not list or
-                              any(type(item) is not dict or set(item) != {'key', 'path'} or
+                           ('items' in volume['configMap'] and (
+                               type(volume['configMap']['items']) is not list or
+                               len(volume['configMap']['items']) != 6 or
+                               {item.get('path') for item in volume['configMap']['items']
+                                if type(item) is dict and type(item.get('path')) is str} != {
+                                    'config.properties', 'node.properties', 'jvm.config',
+                                    'log.properties', 'catalog/iceberg.properties',
+                                    'catalog/tpch.properties'} or
+                               any(type(item) is not dict or set(item) != {'key', 'path'} or
                                   type(item['key']) is not str or
                                   type(item['path']) is not str or
                                   item['key'] != item['path'].removeprefix('catalog/') or

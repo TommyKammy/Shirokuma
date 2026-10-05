@@ -196,6 +196,22 @@ class StorageTests(unittest.TestCase):
             with self.subTest(component=component), self.assertRaises(S.StorageError):
                 projected(component, data)
 
+    def test_fixed_claim_mount_cannot_be_aliased_or_remapped(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            for change in ('alias', 'subpath', 'device'):
+                data = deepcopy(objects(component))
+                container = data[1][0]['spec']['containers'][0]
+                if change == 'alias':
+                    container['volumeMounts'].append({
+                        'name': S.TARGETS[component][5], 'mountPath': '/other'})
+                elif change == 'subpath':
+                    container['volumeMounts'][0]['subPath'] = 'other'
+                else:
+                    container['volumeDevices'] = [{'name': S.TARGETS[component][5],
+                                                   'devicePath': '/dev/other'}]
+                with self.subTest(component=component, change=change), self.assertRaises(S.StorageError):
+                    projected(component, data)
+
     def test_deployment_replicaset_selector_must_select_reported_pod(self):
         for component in ('polaris', 'trino'):
             data = deepcopy(objects(component))

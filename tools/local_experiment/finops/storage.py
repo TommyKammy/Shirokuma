@@ -142,11 +142,17 @@ def _snapshot(component, workload, pods, replica=None):
     else:
         # A generic ephemeral volume provisions another PVC. The fixed two-PVC
         # inventory cannot describe that additional claim as part of this row.
+        # Pin the entire claim mount, not merely one matching mount: a second
+        # mount or subPath/device mapping would describe a different exposure.
+        claim_mounts = [m for m in mounts if m.get('name') == volume]
         require(all(type(v) is dict and 'ephemeral' not in v for v in volumes) and
                 len(claims) == 1 and claims[0].get('name') == volume and
                 type(claims[0]['persistentVolumeClaim']) is dict and
                 claims[0]['persistentVolumeClaim'].get('claimName') == claim and
-                len([m for m in mounts if m.get('name') == volume and m.get('mountPath') == mount]) == 1)
+                len(claim_mounts) == 1 and claim_mounts[0].get('mountPath') == mount and
+                set(claim_mounts[0]) <= {'name', 'mountPath', 'readOnly'} and
+                claim_mounts[0].get('readOnly', False) is False and
+                not containers[0].get('volumeDevices'))
     return (w['uid'], meta['uid'], claim if claims else None, _retention(workload, volume) if kind == 'StatefulSet' else None)
 
 

@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.204"
+version: "0.205"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: Trino projected configuration keys (offline)
+
+An explicit configMap `items` projection with omitted or duplicate keys
+previously lent its image to the fixed smoke. Three negatives failed before
+repair. Explicit projections now require the six distinct paths of the local
+manifest; the older minimal fixture without `items` remains supported.
+Focused policy 166 cases and local verification passed. Dedicated Colima was
+stopped; no live API/admission, retained request/backup mutation or image
+import. The offline image source does not authenticate Kubernetes, validate
+current configMap contents or establish operator acceptance. Revert only the
+scoped image check/test if necessary, retaining saved requests. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: smoke source refuses scheduling gates and device claims (offline)
 
