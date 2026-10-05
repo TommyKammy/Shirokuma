@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.211"
+version: "0.212"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed Trino minimum-ready interval (offline)
+
+Three synthetic same-image Deployments with nonzero, negative or boolean
+`minReadySeconds` lent the fixed smoke image before repair. The source now
+requires absent or explicit integer zero, matching the manifest/default;
+focused policy 166 cases passed. No live API/admission, rollout, request/backup
+mutation or unknown-request replay. This filter cannot authenticate Kubernetes,
+prove strict admission or grant operator acceptance. Revert only the scoped
+reader/test if needed, preserving saved requests. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: bounded Trino Pod-template envelope (offline)
 

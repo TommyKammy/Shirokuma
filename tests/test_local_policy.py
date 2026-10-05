@@ -1258,14 +1258,17 @@ class ScopedResponseTests(unittest.TestCase):
             client.image()
         for override in ({'replicas': 0}, {'replicas': 2}, {'replicas': True},
                          {'strategy': {'type': 'RollingUpdate'}},
-                         {'paused': True}, {'paused': None}):
+                         {'paused': True}, {'paused': None},
+                         {'minReadySeconds': 30}, {'minReadySeconds': True},
+                         {'minReadySeconds': -1}):
             reply = copy.deepcopy(valid)
             reply['spec'].update(override)
             client.json_request.return_value = reply
             with self.subTest(deployment=override), self.assertRaises(policy.PolicyError):
                 client.image()
         reply = copy.deepcopy(valid)
-        reply['spec'].update(replicas=1, strategy={'type': 'Recreate'}, paused=False)
+        reply['spec'].update(replicas=1, strategy={'type': 'Recreate'}, paused=False,
+                             minReadySeconds=0)
         client.json_request.return_value = reply
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for label_value in (None, 'false', False):

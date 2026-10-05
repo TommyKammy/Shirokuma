@@ -520,6 +520,9 @@ class Kubernetes:
                     ('replicas' in deployment_spec and
                      (type(deployment_spec['replicas']) is not int or deployment_spec['replicas'] != 1)) or
                     deployment_spec.get('strategy') != {'type': 'Recreate'} or
+                    ('minReadySeconds' in deployment_spec and
+                     (type(deployment_spec['minReadySeconds']) is not int or
+                      deployment_spec['minReadySeconds'] != 0)) or
                     ('paused' in deployment_spec and deployment_spec['paused'] is not False)):
                 raise PolicyError('smoke requires the one-replica local Trino deployment')
             selector = deployment_spec['selector']

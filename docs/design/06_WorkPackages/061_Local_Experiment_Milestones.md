@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.370"
+version: "5.371"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed Trino minimum-ready interval (offline)
+
+WP-L2-POL-001 no longer lends the smoke image from a Deployment changing the
+minimum-ready interval; three synthetic negatives failed before repair and
+explicit default zero passes. Focused policy 166 cases passed.
+`make verify-local-experiment`, `make verify-design-context`, scoped secret
+scan and `git diff --check` passed. The verifier's fake Dagster worker failure
+is an expected negative diagnostic. No live
+API/admission, rollout, unknown-request replay, retained data/backup mutation
+or GitHub write. Offline checks cannot authenticate the source, prove strict
+admission or establish operator acceptance. Restore only the scoped guard/test
+if required; preserve saved requests. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: fixed PVC subdirectory shadowing (offline)
 
