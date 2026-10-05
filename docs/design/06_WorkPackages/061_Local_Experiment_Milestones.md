@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.372"
+version: "5.373"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded Trino Deployment spec envelope (offline)
+
+WP-L2-POL-001 now rejects an unrecognized same-image Deployment spec key;
+the synthetic negative failed before repair and focused policy 166 cases
+passed afterward. The first focused run after editing failed with an
+indentation error; corrected and rerun successfully. No live API/admission,
+unknown-request replay, retained volume/backup mutation or GitHub write.
+The earlier full local verifier predates this envelope-only increment; it is
+not a post-change full verification claim. Offline checks cannot establish
+source authenticity, strict admission or operator acceptance. Restore only
+the scoped guard/test if needed, retaining saved requests. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: ambiguous PVC mount and Trino rollout sources (offline)
 

@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.213"
+version: "0.214"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bounded Trino Deployment spec envelope (offline)
+
+A synthetic same-image Deployment with an unrecognized controller spec field
+lent the fixed smoke image before repair. The source now refuses fields outside
+the eight known Deployment spec keys; optional Kubernetes-default rollout
+fields remain accepted. Focused policy 166 cases passed after the negative
+fixture failed. An earlier indentation error during this increment made the
+first focused run fail to import; it was corrected and the full focused suite
+rerun. No live API/admission, rollout, saved request replay or retained data/
+backup mutation. This is neither producer authentication nor strict admission
+or operator acceptance. Revert only this envelope guard/test if needed; keep
+saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed Trino rollout deadline and revision retention (offline)
 

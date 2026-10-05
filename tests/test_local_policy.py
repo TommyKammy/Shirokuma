@@ -1262,7 +1262,8 @@ class ScopedResponseTests(unittest.TestCase):
                           {'minReadySeconds': 30}, {'minReadySeconds': True},
                           {'minReadySeconds': -1},
                           {'progressDeadlineSeconds': 1}, {'progressDeadlineSeconds': True},
-                          {'revisionHistoryLimit': 0}, {'revisionHistoryLimit': False}):
+                          {'revisionHistoryLimit': 0}, {'revisionHistoryLimit': False},
+                          {'unknownControllerField': {'enabled': True}}):
             reply = copy.deepcopy(valid)
             reply['spec'].update(override)
             client.json_request.return_value = reply

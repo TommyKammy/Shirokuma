@@ -517,6 +517,9 @@ class Kubernetes:
             # same-name Deployment selecting another set of Pods (or none).
             deployment_spec = deployment['spec']
             if (type(deployment_spec) is not dict or
+                    set(deployment_spec) - {'replicas', 'selector', 'template', 'strategy',
+                                            'minReadySeconds', 'paused',
+                                            'progressDeadlineSeconds', 'revisionHistoryLimit'} or
                     ('replicas' in deployment_spec and
                      (type(deployment_spec['replicas']) is not int or deployment_spec['replicas'] != 1)) or
                     deployment_spec.get('strategy') != {'type': 'Recreate'} or
