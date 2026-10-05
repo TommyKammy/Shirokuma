@@ -381,8 +381,11 @@ def collect(backend):
 
 def _complete_pod_list(response):
     metadata = response.get('metadata', {})
-    return type(metadata) is dict and metadata.get('continue', '') == '' and type(
-        metadata.get('continue', '')) is str
+    return (type(metadata) is dict and metadata.get('continue', '') == '' and
+            type(metadata.get('continue', '')) is str and
+            # No continuation token cannot describe unreturned selected Pods.
+            ('remainingItemCount' not in metadata or
+             (type(metadata['remainingItemCount']) is int and metadata['remainingItemCount'] == 0)))
 
 
 def _collect_one(backend, component):

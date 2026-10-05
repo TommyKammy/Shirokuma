@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.190"
+version: "0.191"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: contradictory fixed PodList remaining count (offline)
+
+On either collection read, a fixed PodList with no continuation token and
+`remainingItemCount=1` previously certified a possibly incomplete selected
+Pod set. A present remaining count now has to be integer zero, not a boolean
+or text; absence and zero pass. Six synthetic negative cases failed before
+repair; storage-focused 56 cases pass. The full local verifier described in
+the next entry predates this follow-up. Dedicated Colima remained Stopped;
+there was no live API, saved report/volume/backup mutation or AgentHouse
+used-byte measurement (`null / NOT_MEASURED`). The negative checks cannot
+authenticate a Kubernetes list or establish an atomic sample; operator
+acceptance remains open. Restore only the scoped list check/test if needed;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: bound claim reported capacity versus backing volume (offline)
 

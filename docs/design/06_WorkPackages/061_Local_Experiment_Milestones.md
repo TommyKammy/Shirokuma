@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.392"
+version: "5.393"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed PodList remaining-count consistency (offline)
+
+WP-L6-FIN-001 refuses a no-continuation-token PodList claiming unreturned
+items, or a boolean/text remaining count. Six negatives failed before repair;
+storage-focused 56 cases pass. The full verifier below ran before this
+follow-up. Dedicated Colima remained Stopped. No live API, retained report,
+volume/backup changes or AgentHouse used-byte claim (`null / NOT_MEASURED`).
+This does not authenticate the Kubernetes producer, prove an atomic list or
+grant operator acceptance. Revert only this bounded list guard/test if needed;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: two independent reference consistency guards (offline)
 

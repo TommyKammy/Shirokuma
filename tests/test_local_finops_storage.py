@@ -521,6 +521,26 @@ class StorageTests(unittest.TestCase):
         backend.storage_get.side_effect=RuntimeError('SECRET')
         self.assertTrue(all(row['reason']=='READ_FAILED' for row in S.collect(backend)['components']))
 
+    def test_storage_list_refuses_contradictory_remaining_count(self):
+        w, pods, _, pvc, pv = objects('seaweedfs')
+        original = [w, {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': pods},
+                    pvc, pv, deepcopy(w),
+                    {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': deepcopy(pods)},
+                    deepcopy(pvc), deepcopy(pv)]
+        for index in (1, 5):
+            for remaining in (1, True, '0'):
+                replies = deepcopy(original)
+                replies[index]['metadata']['remainingItemCount'] = remaining
+                backend = Mock()
+                backend.now.return_value = NOW
+                backend.storage_get.side_effect = replies
+                with self.subTest(index=index, remaining=remaining), self.assertRaises(S.StorageError):
+                    S._collect_one(backend, 'seaweedfs')
+        original[1]['metadata']['remainingItemCount'] = 0
+        original[5]['metadata']['remainingItemCount'] = 0
+        backend.storage_get.side_effect = original
+        self.assertEqual(S._collect_one(backend, 'seaweedfs')['state'], 'observed')
+
     def test_storage_collection_rejects_storage_semantics_changed_between_reads(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             w, p, _, c, v = objects(component)
