@@ -1,5 +1,6 @@
 """Scoped native admission bridge tests; no cluster requests or mutations."""
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -255,8 +256,26 @@ class ManifestTests(unittest.TestCase):
                     manifest.write_text(altered)
                     with mock.patch.object(policy, 'MANIFEST', manifest), \
                          mock.patch.object(policy, 'source_policies', return_value=source):
-                        with self.assertRaises(policy.PolicyError):
-                            policy.load_manifest()
+                         with self.assertRaises(policy.PolicyError):
+                             policy.load_manifest()
+
+    def test_manifest_digest_tracks_validated_bytes_not_later_path(self):
+        source = policy.source_policies()
+        original = policy.MANIFEST.read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / 'manifest.json'
+            manifest.write_bytes(original)
+
+            def replace_after_read():
+                manifest.write_bytes(b'{}')
+                return source
+
+            with mock.patch.object(policy, 'MANIFEST', manifest), \
+                 mock.patch.object(policy, 'source_policies', side_effect=replace_after_read):
+                values, digest = policy.load_manifest_snapshot()
+            self.assertEqual(len(values), 16)
+            self.assertEqual(digest, hashlib.sha256(original).hexdigest())
+            self.assertNotEqual(digest, hashlib.sha256(manifest.read_bytes()).hexdigest())
 
     def test_manifest_refuses_symlink_and_oversize_before_projection(self):
         with tempfile.TemporaryDirectory() as directory:

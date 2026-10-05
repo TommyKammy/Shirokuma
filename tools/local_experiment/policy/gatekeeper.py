@@ -79,9 +79,9 @@ def _hash(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
-def _source_hashes():
+def _source_hashes(manifest_digest=None):
     return {'kyverno_source': hashlib.sha256(MANAGE.SOURCE.read_bytes()).hexdigest(),
-            'native_manifest': hashlib.sha256(MANAGE.MANIFEST.read_bytes()).hexdigest(),
+            'native_manifest': manifest_digest if manifest_digest is not None else MANAGE.load_manifest_snapshot()[1],
             'local_authorization_adr': hashlib.sha256(ADR.read_bytes()).hexdigest()}
 
 
@@ -154,7 +154,7 @@ class GatekeeperObserver:
 
     def observe(self):
         _require(self.initial is None, 'gatekeeper observation cannot be repeated')
-        items = MANAGE.load_manifest()
+        items, manifest_digest = MANAGE.load_manifest_snapshot()
         status = MANAGE.inventory_status(self.kube, items)
         _require(status['ready'] is True, 'dedicated native baseline is not ready')
         identities = [row.get('uid') for row in status['resources']]
@@ -167,7 +167,7 @@ class GatekeeperObserver:
         candidates = candidate_inputs(image)
         cases = MANAGE.smoke_cases(image)
         _require(len(cases) == 15 and len(candidates) == 15, 'unexpected native dry-run corpus size')
-        self.items, self.cases, self.initial, self.sources, self.image = items, cases, status, _source_hashes(), image
+        self.items, self.cases, self.initial, self.sources, self.image = items, cases, status, _source_hashes(manifest_digest), image
         return {'schema_version': 1, 'observed_at': _stamp(), 'authority': 'advisory_only',
                 'baseline_ready': True, 'protected_namespace': MANAGE.NAMESPACE,
                 'policy_sources': dict(self.sources), 'rules': copy.deepcopy(RULES),

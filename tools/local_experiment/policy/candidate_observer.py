@@ -390,7 +390,8 @@ class CandidateObserver:
         self._observe_attempted = True
         try:
             self._unchanged_body()
-            self._items = M.load_manifest(); self._sources = G._source_hashes()
+            self._items, manifest_digest = M.load_manifest_snapshot()
+            self._sources = G._source_hashes(manifest_digest)
             self._initial = self._baseline()
             self._receipt.update(baseline_before=self._initial, policy_sources=self._sources)
             self._receipt['absence_before'] = self._absent()

@@ -153,7 +153,7 @@ def render_native(source: list[dict]) -> dict:
     return {'apiVersion': 'v1', 'kind': 'List', 'items': items}
 
 
-def load_manifest() -> list[dict]:
+def load_manifest_snapshot() -> tuple[list[dict], str]:
     def unique_keys(pairs):
         value = {}
         for key, item in pairs:
@@ -208,7 +208,11 @@ def load_manifest() -> list[dict]:
         raise PolicyError('dedicated manifest is not valid JSON') from None
     if value != render_native(source_policies()):
         raise PolicyError('dedicated manifest differs from the exact repository CEL projection')
-    return value['items']
+    return value['items'], hashlib.sha256(raw).hexdigest()
+
+
+def load_manifest() -> list[dict]:
+    return load_manifest_snapshot()[0]
 
 
 def canonical_spec(spec: dict) -> dict:
@@ -908,9 +912,9 @@ def main() -> int:
         private_write(output / 'summary.json', report)
     lock = None
     try:
-        items, kube = load_manifest(), Kubernetes()
+        (items, manifest_digest), kube = load_manifest_snapshot(), Kubernetes()
         report.update(source_sha256=hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
-                      manifest_sha256=hashlib.sha256(MANIFEST.read_bytes()).hexdigest())
+                       manifest_sha256=manifest_digest)
         if args.command in {'apply', 'rollback-bindings'}:
             descriptor = os.open(STATE / '.mutation.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
             lock = os.fdopen(descriptor, 'r+')

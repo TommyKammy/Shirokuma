@@ -5,12 +5,31 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.134"
+version: "0.135"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: validated manifest digest and independent observer path (offline)
+
+The native management report formerly hashed `MANIFEST.read_bytes()` after a
+bounded, non-following validated read, so a replacement pathname could produce
+a digest unrelated to the 16 policy items used. `load_manifest_snapshot` now
+returns both the validated items and the SHA-256 of those same bytes. Independently,
+the fixed-corpus and caller-Pod observers bind their initial digest to their
+validated item snapshot; later source checks validate a fresh snapshot instead
+of directly hashing an unchecked pathname. A disposable replacement-after-read
+test checks the original digest and a linked-path observer negative refuses the
+link. Focused policy suites and full local verification passed; a first test
+command used two nonexistent unittest module names and was corrected without
+changing code. Dedicated Colima observed stopped; no live API, admission,
+unknown-request replay, retained data/backup change or GitHub write. This does
+not make independent snapshots atomic, authenticate producers or establish
+strict admission. Roll back the scoped loader/report/observer changes together
+if needed; retain saved intents. Original Vault synchronization pending outside
+this checkout.
 
 ## 2026-10-05: manifest ancestor traversal (offline)
 

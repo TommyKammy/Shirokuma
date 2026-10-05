@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -61,6 +62,18 @@ class FakeKube:
 
 
 class GatekeeperTests(unittest.TestCase):
+    def test_source_hashes_refuse_linked_manifest_instead_of_hashing_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / 'target.json'
+            target.write_bytes(G.MANAGE.MANIFEST.read_bytes())
+            link = root / 'manifest.json'
+            link.symlink_to(target)
+            with patch.object(G.MANAGE, 'MANIFEST', link), \
+                 patch.object(G.MANAGE, 'source_policies', side_effect=AssertionError('source reached')):
+                with self.assertRaises(G.MANAGE.PolicyError):
+                    G._source_hashes()
+
     def test_neutral_features_do_not_reveal_host_answers_names_or_raw_manifests(self):
         observer = G.GatekeeperObserver(FakeKube())
         value = observer.observe()

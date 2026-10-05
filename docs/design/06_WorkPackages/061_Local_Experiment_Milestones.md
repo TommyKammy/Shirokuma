@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.272"
+version: "5.273"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: validated native manifest report and observer digest (offline)
+
+WP-L2-POL-001: management reporting now hashes the exact bounded manifest
+bytes used for validated policy items instead of reopening an unchecked path.
+Separately, fixed-corpus and caller-Pod observers bind their initial digest to
+their validated items and check later digest snapshots through the guarded
+reader. Disposable post-read replacement and symlink negatives passed, as did
+focused policy checks and `make verify-local-experiment`. Initial focused
+commands named nonexistent unittest modules; corrected discovery/module runs
+passed. Colima was observed stopped; no live API, collection, request replay,
+retained data/backup mutation or GitHub write. Nonatomic independent snapshots,
+source decoder/producer authenticity and strict admission remain unproved;
+AgentHouse usage remains `null / NOT_MEASURED`. Roll back the loader/report and
+observer changes together, preserving retained evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-05: manifest ancestor traversal and independent FinOps check (offline)
 
