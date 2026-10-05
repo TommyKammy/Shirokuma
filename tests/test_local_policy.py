@@ -1349,6 +1349,11 @@ class ScopedResponseTests(unittest.TestCase):
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['activeDeadlineSeconds'] = 1
+        client.json_request.return_value = reply
+        with self.assertRaises(policy.PolicyError):
+            client.image()
         client.json_request.return_value = valid
         reply = copy.deepcopy(valid)
         reply['spec']['template']['spec']['dnsPolicy'] = 'ClusterFirst'
@@ -1361,6 +1366,7 @@ class ScopedResponseTests(unittest.TestCase):
                              ('volumeDevices', [{'name': 'data', 'devicePath': '/dev/data'}]),
                              ('terminationMessagePath', '/etc/trino/catalog/iceberg.properties'),
                              ('terminationMessagePolicy', 'FallbackToLogsOnError'),
+                             ('resizePolicy', [{'resourceName': 'memory', 'restartPolicy': 'RestartContainer'}]),
                              ('stdin', True), ('stdinOnce', True), ('tty', True)):
             with self.subTest(container_execution=field):
                 reply = copy.deepcopy(valid)

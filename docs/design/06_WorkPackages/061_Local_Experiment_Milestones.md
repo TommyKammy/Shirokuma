@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.361"
+version: "5.362"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Trino source lifetime and secondary PVC exposure (offline)
+
+WP-L2-POL-001 refuses fixed smoke image sources with an active Pod deadline or
+container resize policy; WP-L6-FIN-001 refuses secondary init/debug mounts of
+the fixed SeaweedFS/PostgreSQL claims. Six disposable negative subcases failed
+before repair. Focused policy 166 and FinOps 248 (seven Linux-only skips) passed;
+`make verify-local-experiment`, design-context, secret scan and diff check passed
+(the fake Dagster worker failure is an intentional negative test diagnostic).
+The dedicated Colima profile was freshly observed stopped. No live API,
+admission, collection, unknown-request replay or retained volume/report/backup
+mutation. These offline checks cannot authenticate sources, establish strict
+admission, measure AgentHouse used bytes (`null / NOT_MEASURED`) or confer
+operator acceptance. Roll back only the scoped guards/tests if needed, retaining
+saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed PVC volume-name and smoke termination-message source (offline)
 

@@ -144,6 +144,16 @@ def _snapshot(component, workload, pods, replica=None):
         # inventory cannot describe that additional claim as part of this row.
         # Pin the entire claim mount, not merely one matching mount: a second
         # mount or subPath/device mapping would describe a different exposure.
+        # Init/debug containers can mount the same Pod volume independently.
+        for field in ('initContainers', 'ephemeralContainers'):
+            others = spec.get(field, [])
+            require(type(others) is list)
+            for other in others:
+                require(type(other) is dict)
+                for mapping in ('volumeMounts', 'volumeDevices'):
+                    entries = other.get(mapping, [])
+                    require(type(entries) is list and all(type(entry) is dict and
+                            entry.get('name') != volume for entry in entries))
         claim_mounts = [m for m in mounts if m.get('name') == volume]
         require(all(type(v) is dict and 'ephemeral' not in v for v in volumes) and
                 sum(v.get('name') == volume for v in volumes) == 1 and

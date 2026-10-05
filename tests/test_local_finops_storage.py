@@ -220,6 +220,19 @@ class StorageTests(unittest.TestCase):
             with self.subTest(component=component), self.assertRaises(S.StorageError):
                 projected(component, data)
 
+    def test_fixed_claim_cannot_be_exposed_by_other_container(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            for field, mapping in (('initContainers', 'volumeMounts'),
+                                   ('initContainers', 'volumeDevices'),
+                                   ('ephemeralContainers', 'volumeMounts'),
+                                   ('ephemeralContainers', 'volumeDevices')):
+                data = deepcopy(objects(component))
+                data[1][0]['spec'][field] = [{'name': 'other', mapping: [{
+                    'name': S.TARGETS[component][5],
+                    'mountPath' if mapping == 'volumeMounts' else 'devicePath': '/other'}]}]
+                with self.subTest(component=component, field=field, mapping=mapping), self.assertRaises(S.StorageError):
+                    projected(component, data)
+
     def test_deployment_replicaset_selector_must_select_reported_pod(self):
         for component in ('polaris', 'trino'):
             data = deepcopy(objects(component))

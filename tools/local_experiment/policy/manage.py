@@ -560,7 +560,8 @@ class Kubernetes:
                             'nodeSelector', 'schedulerName', 'tolerations', 'affinity',
                           'topologySpreadConstraints', 'priorityClassName',
                           'priority', 'preemptionPolicy', 'overhead',
-                           'readinessGates', 'schedulingGates', 'resourceClaims')) or
+                            'readinessGates', 'schedulingGates', 'resourceClaims')) or
+                      'activeDeadlineSeconds' in pod_spec or
                       pod_spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
                       pod_spec.get('restartPolicy', 'Always') != 'Always' or
                       ('terminationGracePeriodSeconds' in pod_spec and
@@ -636,7 +637,7 @@ class Kubernetes:
             # source. None of these fields occurs in the local Trino manifest.
             if any(field in containers[0] for field in (
                      'command', 'args', 'workingDir', 'lifecycle', 'envFrom',
-                     'volumeDevices', 'stdin', 'stdinOnce', 'tty')) or (
+                     'volumeDevices', 'resizePolicy', 'stdin', 'stdinOnce', 'tty')) or (
                       'terminationMessagePath' in containers[0] and
                       containers[0]['terminationMessagePath'] != '/dev/termination-log') or (
                       'terminationMessagePolicy' in containers[0] and

@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.206"
+version: "0.207"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed smoke source lifetime and resize controls (offline)
+
+A same-image Trino source with a one-second Pod active deadline or a container
+resize policy previously lent its image to the fixed smoke. Both disposable
+negatives failed before the guard; the source now refuses these overrides.
+Focused policy 166 cases passed. No live admission/API, image import, unknown
+request replay or retained data/backup change. This offline source filter does
+not authenticate the API or prove strict live admission or operator acceptance.
+Roll back only the scoped source check/test if necessary, preserving saved
+requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke-source termination-message defaults (offline)
 

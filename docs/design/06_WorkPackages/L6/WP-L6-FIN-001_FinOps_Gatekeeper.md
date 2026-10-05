@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.168"
+version: "0.169"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed claim exposures in other Pod containers (offline)
+
+The fixed SeaweedFS and PostgreSQL PVC inventory previously certified a
+single main-container mount even when an init or ephemeral/debug container
+mounted the same Pod volume elsewhere. Four disposable negatives failed before
+repair. Other containers may exist, but their mount/device lists must not
+expose the fixed claim; malformed lists fail closed. Focused FinOps 248 cases
+passed (seven Linux-only skips). No live collection, retained volume traversal,
+report/backup mutation or used-byte measurement; AgentHouse remains `null /
+NOT_MEASURED`. This inventory cannot authenticate Kubernetes or establish an
+atomic runtime snapshot or operator acceptance. Roll back only this scoped
+guard/test if needed, retaining saved records. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: fixed PVC volume-name shadowing (offline)
 
