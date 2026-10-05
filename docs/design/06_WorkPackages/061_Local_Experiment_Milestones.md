@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.277"
+version: "5.278"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent FinOps saved integer spelling (offline)
+
+WP-L6-FIN-001: a saved report differing only in the integer spelling `-0`
+versus `0` cannot become a second observation under the unchanged canonical
+history reader. The negative and distinct two-report control passed; 205 FinOps
+tests passed (seven Linux-only skips). Dedicated Colima was observed stopped;
+no collection, retained report/volume/backup mutation or GitHub write. Present
+AgentHouse bytes remain `null / NOT_MEASURED`; saved values do not authenticate
+producers or grant operator acceptance. Revert only the independent test;
+preserve reports and prior evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: native source projection consistency (offline)
 

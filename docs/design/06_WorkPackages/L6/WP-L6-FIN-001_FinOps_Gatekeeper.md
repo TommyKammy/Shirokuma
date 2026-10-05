@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.100"
+version: "0.101"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: independent saved integer spelling control (offline)
+
+The unchanged saved-history reader treats `-0` and `0` for a saved restart
+count as the same canonical report, refusing the pair as two observations.
+The negative and a distinct two-report control passed; 205 FinOps tests passed
+(seven Linux-only skips). No collection, retained report/volume/backup change
+or current AgentHouse measurement (`null / NOT_MEASURED`); Colima was freshly
+observed stopped. Saved values do not authenticate producers or grant operator
+acceptance. Revert only the test if necessary; preserve saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: saved-history boundary recheck alongside policy parsing (offline)
 
