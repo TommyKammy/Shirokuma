@@ -102,6 +102,24 @@ class HistoryTests(unittest.TestCase):
         self.assertTrue(changed)
         self.assertNotIn('changed-during-validation', html)
 
+    def test_direct_renderer_refuses_later_report_changed_before_its_snapshot(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        original_validate = C.validate_public
+        changed = False
+
+        def change_later_report(value):
+            nonlocal changed
+            result = original_validate(value)
+            if not changed:
+                changed = True
+                entries[1][1][0]['inference']['groups'][0]['model_name'] = 'changed-before-later-snapshot'
+            return result
+
+        with patch.object(C, 'validate_public', side_effect=change_later_report):
+            with self.assertRaises(H.HistoryError):
+                H.render(entries)
+        self.assertTrue(changed)
+
     def test_direct_renderer_bounds_malformed_selection_shape(self):
         entries = H.parse(encoded([report(), report(processes())]))
         for malformed in ((), (0,), (0, ()), (0, (entries[0][1][0],)),

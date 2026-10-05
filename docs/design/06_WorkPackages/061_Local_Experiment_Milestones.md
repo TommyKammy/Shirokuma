@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.316"
+version: "5.317"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent FinOps later-report mutation regression (offline)
+
+WP-L6-FIN-001: changing a later caller-owned report while direct history
+rendering validates an earlier one causes digest rejection before any HTML is
+returned. The existing detached-snapshot reader required no modification;
+the FinOps focused suite passed 211 tests (seven Linux-only skips). No saved
+report, volume or backup mutation or collection. This is not concurrent
+serialization atomicity or producer authentication; AgentHouse usage remains
+`null / NOT_MEASURED`. Revert only the regression test if needed; preserve
+saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: optional smoke container list shape (offline)
 

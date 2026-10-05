@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.130"
+version: "0.131"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: later saved-history report mutation regression (offline)
+
+An independent test changes the second caller-owned report while validation
+of the first report is in progress. The direct history renderer rejects the
+second report's now-stale digest before emitting HTML; the existing reader
+needed no modification. The FinOps offline suite passes 211 tests (seven
+Linux-only skips). This does not make an individual concurrent serialization
+atomic or authenticate saved producer data. No collection or saved reports,
+volumes or backups were modified; AgentHouse bytes remain `null /
+NOT_MEASURED`. Revert only this test if necessary, retaining saved reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: direct history validation uses detached report (offline)
 
