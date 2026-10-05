@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.209"
+version: "0.210"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed smoke image requires Recreate strategy (offline)
+
+The same-image Trino Deployment without `strategy` passed the source check,
+although Kubernetes defaults omission to RollingUpdate rather than the fixed
+manifest's Recreate. A synthetic negative failed before repair; the source
+now requires explicit `Recreate`. Focused policy 166 cases passed. No live
+API/admission, rollout, retained request/backup mutation or unknown-request
+replay. This source check is not cluster authentication or operator acceptance.
+Restore the scoped check/fixture alone if needed; preserve saved requests.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed Trino scratch budget in image source (offline)
 

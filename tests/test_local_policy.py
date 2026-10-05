@@ -1162,7 +1162,8 @@ class ScopedResponseTests(unittest.TestCase):
                                'labels': {'app.kubernetes.io/name': 'trino-local',
                                           'app.kubernetes.io/part-of': 'shirokuma',
                                           'shirokuma.dev/scope': 'local-experiment'}},
-                  'spec': {'selector': {'matchLabels': {'app.kubernetes.io/name': 'trino-local'}},
+                  'spec': {'strategy': {'type': 'Recreate'},
+                           'selector': {'matchLabels': {'app.kubernetes.io/name': 'trino-local'}},
                             'template': {'metadata': {'labels': {'app.kubernetes.io/name': 'trino-local',
                                                                 'app.kubernetes.io/part-of': 'shirokuma',
                                                                 'shirokuma.dev/scope': 'local-experiment',
@@ -1243,6 +1244,11 @@ class ScopedResponseTests(unittest.TestCase):
                 client.image()
         # A pinned image from a paused, scaled-out or rolling-update source is
         # not the dedicated one-replica Recreate smoke workload.
+        reply = copy.deepcopy(valid)
+        reply['spec'].pop('strategy')
+        client.json_request.return_value = reply
+        with self.assertRaises(policy.PolicyError):
+            client.image()
         for override in ({'replicas': 0}, {'replicas': 2}, {'replicas': True},
                          {'strategy': {'type': 'RollingUpdate'}},
                          {'paused': True}, {'paused': None}):

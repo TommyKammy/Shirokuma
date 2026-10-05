@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.365"
+version: "5.366"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: explicit Recreate for fixed smoke image source (offline)
+
+WP-L2-POL-001 now refuses a Trino Deployment omitting `strategy` rather than
+assuming the fixed manifest's Recreate semantics; Kubernetes omission defaults
+to RollingUpdate. The negative failed before repair; focused policy 166 and
+`make verify-local-experiment` passed afterward (its Dagster fake-worker
+failure is an intentional negative diagnostic). No live API/admission, rollout, retained data/backup change
+or unknown-request replay. This does not authenticate the source or prove
+strict admission or operator acceptance. Restore only the scoped guard/test
+if needed, keeping saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: unambiguous PVC Pod references and bounded Trino scratch source (offline)
 
