@@ -102,6 +102,30 @@ class Clock:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_cli_uses_certified_items_for_digest_and_kubernetes_allowlist(self):
+        certified = items()
+        digest = certified[0]['metadata']['annotations']['shirokuma.dev/source-sha256']
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(policy, 'STATE', Path(directory)), \
+                mock.patch.object(policy, 'load_manifest_snapshot', return_value=(certified, 'b' * 64)) as load, \
+                mock.patch.object(policy, 'Kubernetes') as kube, \
+                mock.patch.object(policy, 'inventory_status', return_value={'ready': True}), \
+                mock.patch.object(policy, 'SOURCE') as source, \
+                mock.patch('sys.argv', ['manage.py', 'status']), \
+                mock.patch('builtins.print') as output:
+            self.assertEqual(policy.main(), 0)
+        load.assert_called_once_with()
+        kube.assert_called_once_with(certified)
+        source.read_bytes.assert_not_called()
+        self.assertEqual(json.loads(output.call_args.args[0])['source_sha256'], digest)
+
+    def test_kubernetes_allowlist_does_not_reload_when_given_certified_items(self):
+        certified = items()
+        with mock.patch.object(policy, 'load_manifest', side_effect=AssertionError('second manifest read')):
+            kube = policy.Kubernetes(certified)
+        self.assertEqual(len(kube.expected), len(certified))
+        self.assertEqual(set(kube.expected), {(item['kind'], item['metadata']['name']) for item in certified})
+
     def test_local_source_decoder_requires_document_separators(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]

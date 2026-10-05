@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.142"
+version: "0.143"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: certified policy CLI allowlist and digest (offline)
+
+The native policy CLI previously validated one manifest/source projection, then
+reloaded the manifest for its Kubernetes create allowlist and reopened the source
+pathname for the reported digest. The CLI now uses the already certified items
+for the allowlist and their checked source annotation for the digest. Isolated
+CLI and constructor regressions ensure neither second read is required. The
+dedicated Colima profile was freshly observed stopped; no Kubernetes operation,
+retained intent, volume or backup was changed. This binds the local CLI's
+reported and authorized inputs to one validated snapshot, not to an
+authenticated producer, an atomic filesystem view, a live admission result or
+operator acceptance. Restore only the CLI snapshot wiring if needed, keeping
+saved intents and historical evidence. Original Vault sync pending outside
+the approved checkout.
 
 ## 2026-10-05: decode the checked source bytes (offline)
 

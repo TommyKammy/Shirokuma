@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.282"
+version: "5.283"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: certified policy CLI snapshot wiring and independent storage boundary (offline)
+
+WP-L2-POL-001: the CLI now passes the validated native manifest items to its
+Kubernetes allowlist and reports the checked source annotation digest rather
+than reopening the source or manifest pathname after certification. The real
+projection and isolated CLI/constructor regressions passed; the policy suite
+and full local verifier passed. Independently, WP-L6-FIN-001's 205 FinOps
+tests passed (seven Linux-only skips); reviewing saved-history scope and the
+AgentHouse volume gate yielded no justified new measurement or reader change.
+Dedicated Colima was observed stopped. No live API/admission, collection,
+retained data/backup mutation or GitHub write. AgentHouse bytes remain
+`null / NOT_MEASURED`; independent VM trust, cleanup and backup recovery remain
+open. Source/decoder authenticity, filesystem ABA and operator acceptance are
+not established. Revert only the scoped CLI wiring/tests if required; preserve
+saved reports and intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: native source decode bound to checked bytes (offline)
 

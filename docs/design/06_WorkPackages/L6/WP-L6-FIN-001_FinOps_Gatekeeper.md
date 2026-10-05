@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-05: independent saved-history and volume gate recheck (offline)
+
+After the policy CLI increment, reviewed the saved-history selected-report
+scope and Docker-volume reference versus usage gate independently. The focused
+FinOps suite passed 205 tests (seven Linux-only skips); no reader change or
+volume measurement was justified. Dedicated Colima was observed stopped, with
+no SSH enrollment, retained volume/backup scan, report mutation or new
+collection. AgentHouse `used_bytes=null / NOT_MEASURED` remains unchanged;
+trusted VM binding, remote worker/cleanup verification and backup recovery
+remain open. No rollback is needed for this review; preserve historical reports.
+Original Vault sync pending outside checkout.
+
 ## 2026-10-05: independent volume acceptance boundary recheck (offline)
 
 After the policy source increment, independently checked the AgentHouse

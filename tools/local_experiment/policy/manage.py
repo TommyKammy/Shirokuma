@@ -328,12 +328,13 @@ def typecheck(current: dict) -> str:
 
 
 class Kubernetes:
-    def __init__(self):
+    def __init__(self, expected_items: list[dict] | None = None):
         path = ROOT / 'tools/local_experiment/local_experiment.py'
         spec = importlib.util.spec_from_file_location('local_policy_scope', path)
         self.scope = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.scope)
-        self.expected = {(x['kind'], x['metadata']['name']): x for x in load_manifest()}
+        self.expected = {(x['kind'], x['metadata']['name']): x for x in
+                         (load_manifest() if expected_items is None else expected_items)}
 
     def request(self, args: list[str], body: dict | None = None):
         self.scope.check_context()
@@ -986,8 +987,12 @@ def main() -> int:
         private_write(output / 'summary.json', report)
     lock = None
     try:
-        (items, manifest_digest), kube = load_manifest_snapshot(), Kubernetes()
-        report.update(source_sha256=hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
+        items, manifest_digest = load_manifest_snapshot()
+        kube = Kubernetes(items)
+        # The validated projection already binds every source annotation to
+        # the checked source snapshot. Do not reopen a mutable pathname for a
+        # digest or independently reload the allowlist after certification.
+        report.update(source_sha256=items[0]['metadata']['annotations']['shirokuma.dev/source-sha256'],
                        manifest_sha256=manifest_digest)
         if args.command in {'apply', 'rollback-bindings'}:
             descriptor = os.open(STATE / '.mutation.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
