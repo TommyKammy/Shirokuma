@@ -285,6 +285,20 @@ class ActivationTests(unittest.TestCase):
 
 
 class ScopedResponseTests(unittest.TestCase):
+    def test_smoke_image_requires_one_well_formed_local_trino_container(self):
+        client = object.__new__(policy.Kubernetes)
+        valid = {'spec': {'template': {'spec': {'containers': [
+            {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64}]}}}}
+        client.json_request = mock.Mock(return_value=valid)
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for reply in ({}, {'spec': None}, {'spec': {'template': {'spec': {'containers': None}}}},
+                      {'spec': {'template': {'spec': {'containers': [{'name': 'trino'}]}}}},
+                      {'spec': {'template': {'spec': {'containers': [None]}}}}):
+            with self.subTest(reply=reply):
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+
     def test_success_with_stderr_cannot_certify_policy_read_or_mutation(self):
         client = object.__new__(policy.Kubernetes)
         read = ['get', policy.RESOURCES[policy.POLICY], policy.NAMES[0],
@@ -306,7 +320,17 @@ class ScopedResponseTests(unittest.TestCase):
         read = ['get', policy.RESOURCES[policy.POLICY], policy.NAMES[0],
                 '--ignore-not-found', '-o', 'json']
         self.assertIsNone(client.json_request(read))
+        candidate = ['-n', policy.NAMESPACE, 'get', 'pod',
+                     'shirokuma-policy-candidate-' + 'a' * 32,
+                     '--ignore-not-found', '-o', 'json']
+        # The candidate preflight performs this exact absent-Pod read before
+        # it can durably record and send a server dry-run request.
+        self.assertIsNone(client.json_request(candidate))
         for args, stdout in ((read, '  \n'),
+                             (candidate, '  \n'),
+                             (candidate[:5] + ['-o', 'json'], ''),
+                             (candidate[:4] + ['other'] + candidate[5:], ''),
+                             (['-n', 'default', *candidate[2:]], ''),
                              (['create', '-f', '-', '-o', 'json'], ''),
                              (['delete', '--raw=/dedicated', '-f', '-'], ''),
                              (['get', policy.RESOURCES[policy.POLICY], policy.NAMES[0], '-o', 'json'], '')):

@@ -5,12 +5,29 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.123"
+version: "0.124"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: disposable candidate absence and smoke image failures (offline)
+
+The scoped JSON reader rejected kubectl's empty successful missing-Pod reply,
+so a fresh disposable candidate could not pass its preflight absence check.
+An exact namespace/name/arguments-only exception now accepts that reply as
+absence; whitespace, another name/namespace and blank mutations still fail.
+Separately, malformed Trino deployment container responses now produce a
+controlled PolicyError instead of an uncaught indexing/type exception. Both
+negative regressions failed before repair; focused native policy 101 and
+candidate observer 59 tests passed, as did the full local verifier. Dedicated
+Colima was freshly observed stopped; no live API request, server dry-run,
+saved-request replay or retained data/backup mutation. These offline replies
+do not authenticate kubectl or prove live admission, strict gate or operator
+acceptance. Roll back only the respective narrow reader/image guards if the
+actual scoped API contract differs; preserve saved intents and reports.
+Original Vault sync pending outside the checkout.
 
 ## 2026-10-05: local source decoder diagnostic channel (offline)
 

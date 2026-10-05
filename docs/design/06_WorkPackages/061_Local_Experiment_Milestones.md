@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.261"
+version: "5.262"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: candidate absence preflight and independent smoke image guard (offline)
+
+WP-L2-POL-001: repaired the empty successful disposable-Pod read contract
+needed for candidate absence preflight without permitting empty general reads
+or mutations. Independently malformed local Trino deployment replies now fail
+with PolicyError in smoke image selection. Both negatives failed before repair;
+focused native policy 101 and candidate observer 59 tests and the full local
+verifier passed. Dedicated Colima was freshly observed stopped; no live API,
+dry-run, saved-request replay, retained data/backup mutation or GitHub write.
+Offline contracts do not prove kubectl identity, strict admission or operator
+acceptance; AgentHouse volume usage remains `null / NOT_MEASURED`. Revert only
+the scoped guards/tests if needed; preserve historical intents/reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-05: independent policy decoder and FinOps CLI output guards (offline)
 

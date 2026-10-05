@@ -224,11 +224,17 @@ class Kubernetes:
             return value
 
         if not result.stdout.strip():
-            # Only the dedicated missing-resource read has an empty success
-            # contract. A blank mutation reply must not certify its result.
-            if (result.stdout == '' and len(args) == 6 and args[0] == 'get'
-                    and args[1] in RESOURCES.values() and args[2] in NAMES
-                    and args[3:] == ['--ignore-not-found', '-o', 'json']):
+            # An absent policy or disposable candidate Pod is reported as an
+            # empty successful get by kubectl. No other blank read or mutation
+            # can certify an outcome, including a request in another namespace.
+            policy_read = (len(args) == 6 and args[0] == 'get'
+                           and args[1] in RESOURCES.values() and args[2] in NAMES
+                           and args[3:] == ['--ignore-not-found', '-o', 'json'])
+            candidate_read = (len(args) == 8 and args[:4] == ['-n', NAMESPACE, 'get', 'pod']
+                              and type(args[4]) is str
+                              and re.fullmatch(r'shirokuma-policy-candidate-[0-9a-f]{32}', args[4])
+                              and args[5:] == ['--ignore-not-found', '-o', 'json'])
+            if result.stdout == '' and (policy_read or candidate_read):
                 return None
             raise PolicyError('scoped Kubernetes response has no JSON object')
         def invalid_constant(value):
@@ -282,8 +288,15 @@ class Kubernetes:
 
     def image(self) -> str:
         deployment = self.json_request(['-n', NAMESPACE, 'get', 'deployment', 'trino-local', '-o', 'json'])
-        images = [item['image'] for item in deployment['spec']['template']['spec']['containers'] if item['name'] == 'trino']
-        if len(images) != 1 or not re.fullmatch(r'shirokuma\.local/trino@sha256:[0-9a-f]{64}', images[0]):
+        try:
+            containers = deployment['spec']['template']['spec']['containers']
+            if type(containers) is not list or any(type(item) is not dict for item in containers):
+                raise PolicyError('smoke requires a well-formed local Trino deployment')
+            images = [item.get('image') for item in containers if item.get('name') == 'trino']
+        except (TypeError, KeyError):
+            raise PolicyError('smoke requires a well-formed local Trino deployment') from None
+        if (len(images) != 1 or type(images[0]) is not str or
+                not re.fullmatch(r'shirokuma\.local/trino@sha256:[0-9a-f]{64}', images[0])):
             raise PolicyError('smoke requires the existing local immutable Trino image')
         return images[0]
 
