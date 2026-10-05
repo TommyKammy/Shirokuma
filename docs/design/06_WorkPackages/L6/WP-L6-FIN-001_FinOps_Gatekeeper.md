@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.128"
+version: "0.129"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: independent single-report snapshot regression (offline)
+
+A direct renderer mutation test confirms the existing `validate_public` deep
+copy prevents later changes to a caller-owned model name from reaching HTML.
+The test passed before any renderer edit; no new defect or collection is claimed.
+The FinOps suite passed 209 tests (seven Linux-only skips), and the local
+verifier passed with the new regression. Colima was observed stopped;
+saved reports, volumes and backups were untouched. This does not authenticate
+report provenance or measure AgentHouse (`null / NOT_MEASURED`). Revert only the
+regression test if necessary; retain saved reports. Original Vault sync pending.
 
 ## 2026-10-06: detached saved-history rendering (offline)
 

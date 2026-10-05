@@ -50,6 +50,20 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(html.count('<th scope="row">Polaris</th>'), 1)
         self.assertEqual(html.count('<th scope="row">SeaweedFS</th>'), 1)
 
+    def test_direct_render_does_not_display_mutation_after_validation(self):
+        value = report()
+        original = value['inference']['groups'][0]['model_name']
+        actual_time = R._time
+
+        def mutate(stamp):
+            value['inference']['groups'][0]['model_name'] = 'changed-after-validation'
+            return actual_time(stamp)
+
+        with patch.object(R, '_time', side_effect=mutate):
+            html = R.render(value)
+        self.assertIn(escape(original, quote=True), html)
+        self.assertNotIn('changed-after-validation', html)
+
     def test_zero_measurements_are_visible_and_unknown_is_not_zero(self):
         args = component_args(); args['metrics']['containers'][0]['usage'] = {'cpu':'0','memory':'0'}
         value = report(); value['components'][0] = C.project_component('trino', **args)

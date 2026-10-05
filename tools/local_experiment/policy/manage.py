@@ -718,6 +718,20 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
     # rollback while a dedicated binding remains active (or delete one twice).
     require_complete_inventory(items)
     bindings = [x for x in items if x.get('kind') == BINDING]
+    policies = [x for x in items if x['kind'] == POLICY]
+    # Retention is a continuity claim, not just a matching definition at the
+    # end of rollback. Capture the owned persisted UID before any deletion.
+    policy_uids = {}
+    for expected in policies:
+        name = expected['metadata']['name']
+        current = kube.get(POLICY, name)
+        try:
+            if current is None:
+                raise PolicyError('policy absent at rollback preflight')
+            assert_owned(current, expected)
+            policy_uids[name] = persistent_identity(current)[0]
+        except PolicyError:
+            policy_uids[name] = None
     preflight = {}
     for expected in bindings:
         current = kube.get(BINDING, expected['metadata']['name'])
@@ -775,14 +789,15 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
     # still present: another actor may have removed or replaced a definition.
     # Keep binding removal successful while reporting unverified retention.
     policies_retained = True
-    for expected in (item for item in items if item['kind'] == POLICY):
+    for expected in policies:
         current = kube.get(POLICY, expected['metadata']['name'])
-        if current is None:
+        if current is None or policy_uids[expected['metadata']['name']] is None:
             policies_retained = False
             continue
         try:
             assert_owned(current, expected)
-            persistent_identity(current)
+            if persistent_identity(current)[0] != policy_uids[expected['metadata']['name']]:
+                policies_retained = False
         except PolicyError:
             policies_retained = False
     # Policy reads may take time; an earlier binding could return while we

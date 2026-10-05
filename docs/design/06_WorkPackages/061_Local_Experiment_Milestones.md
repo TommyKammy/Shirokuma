@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.312"
+version: "5.313"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: rollback policy UID continuity and independent FinOps regression (offline)
+
+WP-L2-POL-001: a same-spec policy replacement during binding deletion falsely
+claimed policy definitions were retained. The fake negative failed before the
+pre-delete UID observation and final comparison; a status-only version change
+remains allowed. Focused policy tests passed (166). Independently,
+WP-L6-FIN-001's single-report direct-render mutation regression passed against
+the existing defensive deep copy; 209 FinOps tests passed (seven Linux-only
+skips), with no FinOps reader change or collection.
+`make verify-local-experiment` passed. Dedicated Colima was freshly observed
+stopped; no live API, unknown-request replay, retained report/volume/backup
+mutation or GitHub write. Sequential reads do not prove atomic retention,
+live strict admission, current AgentHouse bytes (`null / NOT_MEASURED`) or
+operator acceptance. Revert only the scoped policy guard/tests or FinOps test
+if needed; preserve saved intents/reports. Original Vault sync pending.
 
 ## 2026-10-06: FinOps direct-render report snapshot (offline)
 

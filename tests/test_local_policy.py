@@ -1495,6 +1495,34 @@ class RollbackTests(unittest.TestCase):
                 self.assertFalse(result['policy_definitions_retained'])
                 self.assertEqual(len([key for key in kube.objects if key[0] == policy.BINDING]), 0)
 
+    def test_rollback_does_not_claim_same_spec_new_uid_policy_retained(self):
+        kube = FakeKubernetes(ready=True)
+        key = (policy.POLICY, policy.NAMES[0])
+        original_delete = kube.delete_binding
+
+        def replace_definition(current, expected):
+            original_delete(current, expected)
+            kube.objects[key]['metadata']['uid'] = 'replacement-policy-uid'
+
+        kube.delete_binding = replace_definition
+        result = policy.rollback_bindings(kube, items())
+        self.assertTrue(result['bindings_removed'])
+        self.assertFalse(result['policy_definitions_retained'])
+
+    def test_rollback_retention_uses_uid_not_status_resource_version(self):
+        kube = FakeKubernetes(ready=True)
+        key = (policy.POLICY, policy.NAMES[0])
+        original_delete = kube.delete_binding
+
+        def update_status(current, expected):
+            original_delete(current, expected)
+            kube.objects[key]['metadata']['resourceVersion'] = '42'
+
+        kube.delete_binding = update_status
+        result = policy.rollback_bindings(kube, items())
+        self.assertTrue(result['bindings_removed'])
+        self.assertTrue(result['policy_definitions_retained'])
+
     def test_any_foreign_binding_prevents_partial_rollback(self):
         kube = FakeKubernetes(ready=True)
         key = (policy.BINDING, policy.NAMES[-1])

@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.171"
+version: "0.172"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: policy UID continuity in rollback retention (offline)
+
+A fake API replaced a policy during the first binding deletion with the same
+owned spec but a different UID. Before repair rollback removed the bindings yet
+incorrectly reported `policy_definitions_retained: true`; the negative failed.
+Rollback now observes each owned persisted policy UID before binding deletion
+and requires the same UID at its final retention read. A status-only
+resourceVersion update remains valid. Focused policy tests passed (166) and
+`make verify-local-experiment` passed. Dedicated Colima was freshly observed
+stopped; no live API, retained data/backup mutation or request replay. Sequential
+reads cannot prove atomic retention or live strict admission. Restore only the
+UID continuity check/tests if needed, preserving saved intents. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: binding returns during retention inspection (offline)
 
