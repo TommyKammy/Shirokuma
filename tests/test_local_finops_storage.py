@@ -47,6 +47,24 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_bound_pv_explicit_storage_class_matches_claim(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            data = deepcopy(objects(component))
+            data[4]['spec']['storageClassName'] = 'foreign-class'
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+            data[4]['spec']['storageClassName'] = 'local-path'
+            self.assertEqual(projected(component, data)['state'], 'observed')
+
+    def test_fixed_claim_template_class_matches_bound_claim(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            data = deepcopy(objects(component))
+            data[0]['spec']['volumeClaimTemplates'][0]['spec']['storageClassName'] = 'foreign-class'
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+            data[0]['spec']['volumeClaimTemplates'][0]['spec']['storageClassName'] = 'local-path'
+            self.assertEqual(projected(component, data)['state'], 'observed')
+
     def test_fixed_storage_objects_reject_contradictory_api_version(self):
         for component in S.TARGETS:
             original = objects(component)
@@ -499,7 +517,8 @@ class StorageTests(unittest.TestCase):
                         deepcopy(c), deepcopy(v)]
             for index, field, value in ((-2, 'volumeMode', 'Block'),
                                         (-2, 'storageClassName', 'foreign'),
-                                        (-1, 'volumeMode', 'Block')):
+                                        (-1, 'volumeMode', 'Block'),
+                                        (-1, 'storageClassName', 'foreign')):
                 changed = deepcopy(original)
                 changed[index]['spec'][field] = value
                 backend = Mock()

@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.182"
+version: "0.183"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: explicit fixed storage-class consistency (offline)
+
+Both fixed Bound PVCs previously projected as observed with a PV explicitly
+declaring another storage class; likewise their StatefulSet claim template
+could explicitly declare another class. Four negative fixture subcases failed
+before repair. Present PV/template classes now must match the PVC class; absent
+PV/template fields remain supported in minimal replies. The second PV read
+also refuses class drift before publishing a reference. Focused FinOps 264
+tests, `make verify-local-experiment`, design-context, scoped secret scan and
+diff check pass (seven Linux-only FinOps skips; the verifier's fake Dagster
+worker failure is an intentional negative diagnostic). The dedicated Colima
+profile was freshly observed stopped; no API collection, retained volume/report/backup mutation
+or AgentHouse used-byte measurement (`null / NOT_MEASURED`). Offline class
+consistency does not authenticate Kubernetes, provide an atomic sample or
+establish operator acceptance. Restore only these scoped guards/tests if
+necessary; preserve saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: typed fixed API objects and Bound PV phase (offline)
 

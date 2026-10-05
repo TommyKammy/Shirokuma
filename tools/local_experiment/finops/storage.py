@@ -262,6 +262,11 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
         require(info['storage_class'] is None or name(info['storage_class']))
         # Both fixed claims are mounted at directory paths, never via volumeDevices.
         require(info['volume_mode'] in (None, 'Filesystem'))
+        # An explicit template class cannot certify a PVC in another class.
+        template_spec = before[0]['spec']['volumeClaimTemplates'][0]['spec']
+        template_class = template_spec.get('storageClassName')
+        require(template_class is None or
+                (name(template_class) and template_class == info['storage_class']))
         value['pvc'] = info
         if phase == 'Bound':
             require(type(volume) is str and name(volume))
@@ -278,6 +283,10 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
                     ref.get('apiVersion', 'v1') == 'v1')
             # Directory-mounted claims cannot be backed by a block-mode PV.
             require(pv_spec.get('volumeMode') in (None, 'Filesystem'))
+            # If the PV reports a class, it must not contradict the class of
+            # the bound claim. Older minimal replies may omit the PV field.
+            pv_class = pv_spec.get('storageClassName')
+            require(pv_class is None or (name(pv_class) and pv_class == info['storage_class']))
             policy = pv_spec.get('persistentVolumeReclaimPolicy')
             require(policy in ('Delete', 'Retain', 'Recycle'))
             value['pv'] = dict(name=volume, uid=p['uid'], capacity_bytes=quantity(
@@ -422,8 +431,9 @@ def _collect_one(backend, component):
                 require(type(status) is dict and status.get('phase', 'Bound') == 'Bound',
                         'IDENTITY_CHANGED')
                 return (item['metadata']['uid'], spec.get('claimRef'),
-                        spec.get('capacity', {}).get('storage'),
-                        spec.get('persistentVolumeReclaimPolicy'), spec.get('volumeMode'))
+                         spec.get('capacity', {}).get('storage'),
+                         spec.get('persistentVolumeReclaimPolicy'), spec.get('volumeMode'),
+                         spec.get('storageClassName'))
             require(_same_json(pv_state(later_pv), pv_state(pv)), 'IDENTITY_CHANGED')
     return project(component, (before,pods,replica), (after,after_pods['items'],after_replica),
                    pvc=pvc, pv=pv, request_started_at=start, observed_at=backend.now())

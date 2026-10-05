@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.383"
+version: "5.384"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed PV/template storage-class consistency (offline)
+
+WP-L6-FIN-001 now refuses a Bound PV or fixed StatefulSet claim template with
+an explicit storage class different from the fixed PVC; absent PV/template
+classes remain supported. Four fixture negatives failed before repair, and a
+second-read PV class drift is refused. Focused FinOps 264 cases passed (seven
+Linux-only skips), as did `make verify-local-experiment`, design-context,
+scoped secret scan and diff check; the fake Dagster worker error is an
+intentional negative diagnostic. Dedicated Colima was freshly observed stopped.
+No live API, collection, retained report/volume/backup mutation or AgentHouse used-byte
+measurement (`null / NOT_MEASURED`). These offline checks cannot authenticate
+the producer, prove atomicity or grant operator acceptance. Revert only scoped
+guards/tests if needed, preserving saved evidence. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: typed Trino Deployment generation (offline)
 
