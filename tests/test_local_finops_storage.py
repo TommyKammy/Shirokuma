@@ -81,7 +81,8 @@ class StorageTests(unittest.TestCase):
     def test_fixed_pvc_rejects_lexical_alias_of_mount_destination(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             mount = S.TARGETS[component][6]
-            for alias in (mount + '/', mount + '/.', mount + '/../' + mount.rsplit('/', 1)[-1]):
+            for alias in (mount + '/', mount + '/.', mount + '/../' + mount.rsplit('/', 1)[-1],
+                          '/' + mount):
                 data = deepcopy(objects(component))
                 data[1][0]['spec']['volumes'].append({'name': 'scratch', 'emptyDir': {}})
                 data[1][0]['spec']['containers'][0]['volumeMounts'].append(
@@ -98,7 +99,8 @@ class StorageTests(unittest.TestCase):
         for component in ('seaweedfs', 'polaris-postgresql'):
             mount = S.TARGETS[component][6]
             for shadow in (mount + '/scratch', mount + '/scratch/../scratch',
-                           mount + '-other/../' + mount.rsplit('/', 1)[-1] + '/scratch'):
+                           mount + '-other/../' + mount.rsplit('/', 1)[-1] + '/scratch',
+                           '/' + mount + '/scratch'):
                 data = deepcopy(objects(component))
                 data[1][0]['spec']['volumes'].append({'name': 'scratch', 'emptyDir': {}})
                 data[1][0]['spec']['containers'][0]['volumeMounts'].append(

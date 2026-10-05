@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.371"
+version: "5.372"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: ambiguous PVC mount and Trino rollout sources (offline)
+
+WP-L6-FIN-001 refuses double-leading-slash Pod mounts rather than trusting
+implementation-defined path semantics beside fixed claims; four negative
+fixtures failed before repair. Separately WP-L2-POL-001 refuses same-image
+Trino Deployments changing the default rollout deadline or revision retention;
+four negatives failed before repair, explicit defaults pass. Focused FinOps
+255 tests (seven Linux-only skips) and policy 166 passed. Full
+`make verify-local-experiment`, design-context, scoped secret scan and
+`git diff --check` passed; the verifier's Dagster fake-worker failure is an
+intentional negative diagnostic. Dedicated Colima
+was freshly observed stopped. No live API/admission, volume collection,
+unknown-request replay, retained report/volume/backup mutation or GitHub
+write. Offline guards cannot authenticate their producers, measure AgentHouse
+used bytes (`null / NOT_MEASURED`), prove strict live admission or grant
+operator acceptance. Roll back only scoped guards/tests if necessary;
+preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed Trino minimum-ready interval (offline)
 

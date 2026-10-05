@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.212"
+version: "0.213"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed Trino rollout deadline and revision retention (offline)
+
+Four same-image synthetic Deployments with altered or boolean
+`progressDeadlineSeconds` / `revisionHistoryLimit` supplied the fixed smoke
+image before repair. The image source now requires omitted or Kubernetes
+defaults (600 and 10) with exact integer types; explicit defaults pass.
+Focused policy 166 cases passed. No live API/admission, rollout, unknown
+request replay, or retained data/backup mutation. This does not authenticate
+the source, prove strict admission or establish operator acceptance. Revert
+only the scoped guard/test if needed, retaining saved requests. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: fixed Trino minimum-ready interval (offline)
 

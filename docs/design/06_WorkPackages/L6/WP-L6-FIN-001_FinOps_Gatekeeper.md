@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.175"
+version: "0.176"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: ambiguous double-slash PVC mount paths (offline)
+
+Four synthetic same-Pod mounts at `//data` or `//data/scratch` (and the
+PostgreSQL equivalents) passed the fixed claim inventory before repair.
+POSIX permits implementation-defined interpretation of exactly two leading
+slashes, so the inventory now refuses all double-slash mount destinations
+instead of certifying them as separate from the claim. The negatives failed
+first; focused FinOps 255 tests passed (seven Linux-only skips). Dedicated
+Colima was freshly observed stopped; no live API, scan, retained report,
+volume or backup mutation, or AgentHouse byte measurement (`null /
+NOT_MEASURED`). Lexical refusal is not mount-health or API authentication or
+operator acceptance. Revert only the scoped guard/test if needed, retaining
+saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed PVC subdirectory shadowing (offline)
 
