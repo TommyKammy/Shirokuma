@@ -657,6 +657,17 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
             else:
                 assert_owned(current, expected)
                 pin_identity(current, expected)
+        if kind == BINDING:
+            # Type-check completed before this binding scan. Refuse policy
+            # drift discovered here before making any binding persistent.
+            for expected in (item for item in items if item['kind'] == POLICY):
+                current = kube.get(POLICY, expected['metadata']['name'])
+                if current is None:
+                    raise PolicyError('policy disappeared before binding activation')
+                assert_owned(current, expected)
+                pin_identity(current, expected)
+                if typecheck(current) != 'complete':
+                    raise PolicyError('policy type checking changed before binding activation')
         for expected in missing:
             current = kube.create(expected)
             assert_owned(current, expected)

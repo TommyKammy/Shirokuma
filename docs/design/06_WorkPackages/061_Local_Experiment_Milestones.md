@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.306"
+version: "5.307"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: pre-binding policy drift and independent FinOps check (offline)
+
+WP-L2-POL-001: a synthetic owner drift during the binding scan previously
+created a binding before final inventory rejected the policy; its negative
+failed before repair. A pre-binding policy ownership/UID/type-check scan now
+refuses the drift and stale observed generation before any binding create.
+`make test-local-policy` (160), `make test-local-finops` (207; seven Linux-only
+skips), `make verify-local-experiment`, design-context and `git diff --check` passed. The separate
+WP-L6-FIN-001 check made no collection or reader change. Dedicated Colima was
+freshly observed stopped; no live API, replay, retained data/backup mutation
+or GitHub write. Sequential reads are not atomic; live strict admission,
+AgentHouse bytes (`null / NOT_MEASURED`) and operator acceptance remain open.
+Revert only the pre-binding guard/tests if needed, preserving saved intents and
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: per-kind activation presence and separate FinOps regression (offline)
 

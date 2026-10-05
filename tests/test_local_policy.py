@@ -949,6 +949,54 @@ class ActivationTests(unittest.TestCase):
         with self.assertRaisesRegex(policy.PolicyError, 'changed|identity'):
             policy.apply_policies(kube, items())
         self.assertFalse(any(call[0] == 'create' and call[1] == policy.BINDING
+                              for call in kube.calls))
+
+    def test_policy_drift_during_binding_scan_prevents_binding_creation(self):
+        kube = FakeKubernetes(ready=True)
+        for key in list(kube.objects):
+            if key[0] == policy.BINDING:
+                del kube.objects[key]
+        original = kube.get
+        changed = False
+        binding_reads = 0
+        target = (policy.POLICY, policy.NAMES[0])
+
+        def drift(kind, name):
+            nonlocal changed, binding_reads
+            if kind == policy.BINDING:
+                binding_reads += 1
+                if binding_reads == 17:
+                    changed = True
+                    kube.objects[target]['metadata']['labels']['shirokuma.dev/policy-owner'] = 'foreign'
+            return original(kind, name)
+
+        kube.get = drift
+        with self.assertRaises(policy.PolicyError):
+            policy.apply_policies(kube, items())
+        self.assertTrue(changed)
+        self.assertFalse(any(call[0] == 'create' and call[1] == policy.BINDING
+                             for call in kube.calls))
+
+    def test_policy_typecheck_stale_at_binding_phase_prevents_binding_creation(self):
+        kube = FakeKubernetes(ready=True)
+        for key in list(kube.objects):
+            if key[0] == policy.BINDING:
+                del kube.objects[key]
+        original = kube.get
+        binding_reads = 0
+
+        def stale(kind, name):
+            nonlocal binding_reads
+            if kind == policy.BINDING:
+                binding_reads += 1
+                if binding_reads == 17:
+                    kube.objects[(policy.POLICY, policy.NAMES[0])]['metadata']['generation'] = 2
+            return original(kind, name)
+
+        kube.get = stale
+        with self.assertRaisesRegex(policy.PolicyError, 'type checking changed'):
+            policy.apply_policies(kube, items())
+        self.assertFalse(any(call[0] == 'create' and call[1] == policy.BINDING
                              for call in kube.calls))
 
     def test_binding_replacement_at_final_inventory_cannot_certify_ready(self):
