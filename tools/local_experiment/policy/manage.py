@@ -21,6 +21,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import time
 import uuid
@@ -162,8 +163,24 @@ def load_manifest() -> list[dict]:
         return value
 
     try:
-        value = json.loads(MANIFEST.read_text(), object_pairs_hook=unique_keys)
-    except (OSError, ValueError, TypeError, RecursionError) as exc:
+        # The dedicated manifest is small and checked into this checkout. Do
+        # not follow a replacement link or read an unbounded local file before
+        # comparing its projection to the repository source.
+        fd = os.open(MANIFEST, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            before = os.fstat(fd)
+            if not stat.S_ISREG(before.st_mode) or before.st_size > 256 * 1024:
+                raise PolicyError('dedicated manifest is not a bounded regular file')
+            raw = os.read(fd, 256 * 1024 + 1)
+            after = os.fstat(fd)
+            if (len(raw) > 256 * 1024 or len(raw) != before.st_size or
+                    (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) !=
+                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)):
+                raise PolicyError('dedicated manifest changed during bounded read')
+        finally:
+            os.close(fd)
+        value = json.loads(raw.decode('utf-8'), object_pairs_hook=unique_keys)
+    except (OSError, UnicodeError, ValueError, TypeError, RecursionError) as exc:
         if isinstance(exc, PolicyError):
             raise
         raise PolicyError('dedicated manifest is not valid JSON') from None

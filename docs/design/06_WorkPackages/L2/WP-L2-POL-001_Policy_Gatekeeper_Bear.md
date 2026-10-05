@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.132"
+version: "0.133"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: bounded dedicated manifest descriptor (offline)
+
+The exact-projection manifest reader now opens a non-following, nonblocking
+descriptor and requires a regular file of at most 256 KiB, an exact single
+read and stable descriptor metadata before JSON decoding. Synthetic symlink,
+oversize and FIFO replacements fail before source projection (the FIFO does
+not block waiting for a writer); ordinary and duplicate-key controls remain.
+Focused 109 native policy tests and the local verifier passed; Colima was
+observed stopped. No live admission, replay or retained data/backup change.
+This pins the opened file, not its parent-directory provenance or concurrent
+same-size in-place content edits; repository/tool authenticity and strict
+admission are still unverified. Roll back only this reader and its fixtures
+if the manifest input contract changes; preserve existing intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: strict source separators and manifest key identity (offline)
 

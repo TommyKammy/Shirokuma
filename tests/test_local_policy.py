@@ -2,7 +2,9 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -230,10 +232,13 @@ class ManifestTests(unittest.TestCase):
         source = policy.source_policies()
         mutated = policy.render_native(source)
         mutated['items'][0]['spec']['matchConstraints']['namespaceSelector'] = {}
-        with mock.patch.object(policy.MANIFEST.__class__, 'read_text', return_value=json.dumps(mutated)), \
+        with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(policy, 'source_policies', return_value=source):
-            with self.assertRaisesRegex(policy.PolicyError, 'exact repository'):
-                policy.load_manifest()
+            manifest = Path(directory) / 'manifest.json'
+            manifest.write_text(json.dumps(mutated))
+            with mock.patch.object(policy, 'MANIFEST', manifest):
+                with self.assertRaisesRegex(policy.PolicyError, 'exact repository'):
+                    policy.load_manifest()
 
     def test_manifest_cannot_hide_duplicate_equal_keys(self):
         source = policy.source_policies()
@@ -245,10 +250,40 @@ class ManifestTests(unittest.TestCase):
             with self.subTest(altered=altered[:100]):
                 self.assertNotEqual(altered, original)
                 self.assertEqual(json.loads(altered), json.loads(original))
-                with mock.patch.object(policy.MANIFEST.__class__, 'read_text', return_value=altered), \
-                     mock.patch.object(policy, 'source_policies', return_value=source):
-                    with self.assertRaises(policy.PolicyError):
-                        policy.load_manifest()
+                with tempfile.TemporaryDirectory() as directory:
+                    manifest = Path(directory) / 'manifest.json'
+                    manifest.write_text(altered)
+                    with mock.patch.object(policy, 'MANIFEST', manifest), \
+                         mock.patch.object(policy, 'source_policies', return_value=source):
+                        with self.assertRaises(policy.PolicyError):
+                            policy.load_manifest()
+
+    def test_manifest_refuses_symlink_and_oversize_before_projection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / 'target.json'
+            target.write_bytes(policy.MANIFEST.read_bytes())
+            link = root / 'manifest.json'
+            link.symlink_to(target)
+            with mock.patch.object(policy, 'MANIFEST', link), \
+                 mock.patch.object(policy, 'source_policies', side_effect=AssertionError('unexpected source read')):
+                with self.assertRaises(policy.PolicyError):
+                    policy.load_manifest()
+            link.unlink()
+            link.write_bytes(b' ' * (256 * 1024 + 1))
+            with mock.patch.object(policy, 'MANIFEST', link), \
+                 mock.patch.object(policy, 'source_policies', side_effect=AssertionError('unexpected source read')):
+                with self.assertRaises(policy.PolicyError):
+                    policy.load_manifest()
+
+    def test_manifest_refuses_fifo_without_waiting_for_writer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / 'manifest.json'
+            os.mkfifo(manifest)
+            with mock.patch.object(policy, 'MANIFEST', manifest), \
+                 mock.patch.object(policy, 'source_policies', side_effect=AssertionError('unexpected source read')):
+                with self.assertRaises(policy.PolicyError):
+                    policy.load_manifest()
 
 
 class ActivationTests(unittest.TestCase):

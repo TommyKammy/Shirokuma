@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.270"
+version: "5.271"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: bounded native manifest descriptor (offline)
+
+WP-L2-POL-001: dedicated exact-projection manifest reads now refuse symlink,
+oversize and FIFO replacements through a non-following/nonblocking bounded
+regular-file descriptor; duplicate-key and normal controls remain. Focused
+109 policy tests and `make verify-local-experiment` passed. Dedicated Colima
+was observed stopped. No live admission, unknown request replay, retained
+data/backup mutation or GitHub write. A descriptor snapshot does not certify
+parent path or producer authenticity, simultaneous in-place contents, strict
+admission or operator acceptance. Roll back only the reader and tests; retain
+historical records. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: strict source framing and independent manifest key boundary (offline)
 
