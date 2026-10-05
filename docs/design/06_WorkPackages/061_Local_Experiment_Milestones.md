@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.296"
+version: "5.297"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: complete policy operation inventory (offline)
+
+WP-L2-POL-001: a partial or duplicate caller inventory could report successful
+rollback while dedicated bindings remained. A negative reproduced the gap;
+activation and rollback now refuse missing, duplicate and malformed fixed
+identities before cluster I/O. Policy 144 tests and `make verify-local-experiment`
+passed. Independently WP-L6-FIN-001's 207 offline tests passed (seven Linux-only
+skips), without collecting or changing its reader. Dedicated Colima was freshly
+observed stopped; no live API, replay, retained data/backup mutation or GitHub
+write. This does not authenticate producers, make rollback transactional, prove
+live strict admission, measure AgentHouse usage (`null / NOT_MEASURED`) or grant
+operator acceptance. Revert only the inventory guard/tests if needed and retain
+saved reports/intents. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: rollback preflight identity retained and separate FinOps review (offline)
 

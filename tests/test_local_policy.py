@@ -730,6 +730,16 @@ class ManifestTests(unittest.TestCase):
 
 
 class ActivationTests(unittest.TestCase):
+    def test_partial_or_duplicate_activation_inventory_cannot_report_ready(self):
+        baseline = items()
+        for supplied in (baseline[:-1], baseline + [baseline[0]],
+                         [x for x in baseline if x['kind'] == policy.POLICY]):
+            with self.subTest(count=len(supplied)):
+                kube = FakeKubernetes(ready=False)
+                with self.assertRaises(policy.PolicyError):
+                    policy.apply_policies(kube, supplied)
+                self.assertEqual(kube.calls, [])
+
     def test_all_policies_compile_before_any_binding_is_activated(self):
         kube = FakeKubernetes()
         events = []
@@ -990,6 +1000,26 @@ class ScopedResponseTests(unittest.TestCase):
 
 
 class RollbackTests(unittest.TestCase):
+    def test_incomplete_or_duplicate_binding_inventory_cannot_report_success(self):
+        baseline = items()
+        bindings = [x for x in baseline if x['kind'] == policy.BINDING]
+        for supplied in (baseline[:-1], baseline + [bindings[0]],
+                         [x for x in baseline if x['kind'] != policy.BINDING]):
+            with self.subTest(count=len(supplied)):
+                kube = FakeKubernetes(ready=True)
+                with self.assertRaises(policy.PolicyError):
+                    policy.rollback_bindings(kube, supplied)
+                self.assertEqual(kube.calls, [])
+                self.assertEqual(len([key for key in kube.objects if key[0] == policy.BINDING]), 8)
+
+    def test_unhashable_binding_name_fails_before_any_read(self):
+        supplied = items()
+        next(x for x in supplied if x['kind'] == policy.BINDING)['metadata']['name'] = []
+        kube = FakeKubernetes(ready=True)
+        with self.assertRaises(policy.PolicyError):
+            policy.rollback_bindings(kube, supplied)
+        self.assertEqual(kube.calls, [])
+
     def test_replaced_binding_between_preflight_and_delete_is_preserved(self):
         for field, replacement in (('uid', 'replacement-uid'), ('resourceVersion', '13')):
             with self.subTest(field=field):

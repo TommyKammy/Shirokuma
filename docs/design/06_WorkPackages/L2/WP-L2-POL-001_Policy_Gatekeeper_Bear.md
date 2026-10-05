@@ -5,12 +5,29 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.156"
+version: "0.157"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: complete caller inventory before activation or rollback (offline)
+
+Direct callers could pass 15 of 16 native items (or no bindings) and obtain a
+successful but incomplete rollback; duplicate entries could also attempt a
+second delete. A regression reproduced this before repair. Both activation and
+rollback now require each of the eight fixed policies and eight bindings exactly
+once, with typed identities, before any scoped cluster read or write. The
+constructor's separate certified snapshot check remains in force; this guard
+does not authenticate the caller's source. `make test-local-policy` passed 144
+tests, `make verify-local-experiment` passed, and the independent FinOps suite
+passed 207 tests (seven Linux-only skips). Colima was freshly observed stopped;
+no live API call, intent replay, retained data or backup change. Concurrent
+changes can still yield partial rollback despite atomic delete preconditions;
+strict live admission and operator acceptance remain open. Restore only the
+inventory guard and tests if necessary; preserve saved intents. Original Vault
+sync pending outside this checkout.
 
 ## 2026-10-06: rollback rechecks preflight binding identity (offline)
 

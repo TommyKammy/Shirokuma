@@ -567,6 +567,22 @@ class Kubernetes:
         return self.request(['-n', namespace, 'create', '--dry-run=server', '-f', '-', '-o', 'json'], value)
 
 
+def require_complete_inventory(items: list[dict]) -> None:
+    """Refuse partial/duplicated dedicated input before any cluster operation."""
+    if type(items) is not list or len(items) != 2 * len(NAMES):
+        raise PolicyError('policy operation requires the complete dedicated inventory')
+    identities = []
+    for item in items:
+        if type(item) is not dict or type(item.get('metadata')) is not dict:
+            raise PolicyError('policy operation requires the complete dedicated inventory')
+        kind, name = item.get('kind'), item['metadata'].get('name')
+        if type(kind) is not str or type(name) is not str:
+            raise PolicyError('policy operation requires the complete dedicated inventory')
+        identities.append((kind, name))
+    if set(identities) != {(kind, name) for kind in (POLICY, BINDING) for name in NAMES}:
+        raise PolicyError('policy operation requires the complete dedicated inventory')
+
+
 def inventory_status(kube, items: list[dict]) -> dict:
     rows = []
     for expected in items:
@@ -584,6 +600,7 @@ def inventory_status(kube, items: list[dict]) -> dict:
 
 
 def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=time.monotonic, pause=time.sleep):
+    require_complete_inventory(items)
     # Preflight every existing name before creating even an inert definition.
     missing = []
     for expected in items:
@@ -632,7 +649,10 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
 
 
 def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clock=time.monotonic, pause=time.sleep):
-    bindings = [x for x in items if x['kind'] == BINDING]
+    # A partial or repeated caller inventory must not return a successful
+    # rollback while a dedicated binding remains active (or delete one twice).
+    require_complete_inventory(items)
+    bindings = [x for x in items if x.get('kind') == BINDING]
     preflight = {}
     for expected in bindings:
         current = kube.get(BINDING, expected['metadata']['name'])
