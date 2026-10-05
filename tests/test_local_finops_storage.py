@@ -58,6 +58,22 @@ class StorageTests(unittest.TestCase):
                 with self.subTest(component=component, change=change), self.assertRaises(S.StorageError):
                     projected(component, data)
 
+    def test_fixed_pvc_rejects_lexical_alias_of_mount_destination(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            mount = S.TARGETS[component][6]
+            for alias in (mount + '/', mount + '/.', mount + '/../' + mount.rsplit('/', 1)[-1]):
+                data = deepcopy(objects(component))
+                data[1][0]['spec']['volumes'].append({'name': 'scratch', 'emptyDir': {}})
+                data[1][0]['spec']['containers'][0]['volumeMounts'].append(
+                    {'name': 'scratch', 'mountPath': alias})
+                with self.subTest(component=component, alias=alias), self.assertRaises(S.StorageError):
+                    projected(component, data)
+            data = deepcopy(objects(component))
+            data[1][0]['spec']['volumes'].append({'name': 'scratch', 'emptyDir': {}})
+            data[1][0]['spec']['containers'][0]['volumeMounts'].append(
+                {'name': 'scratch', 'mountPath': '/unrelated'})
+            self.assertEqual(projected(component, data)['state'], 'observed')
+
     def test_second_read_cannot_rename_deployment_chain_with_same_uids(self):
         for index in (1, 2):
             first = objects('trino')

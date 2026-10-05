@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.366"
+version: "5.367"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed PVC lexical mount destination aliases (offline)
+
+WP-L6-FIN-001 now rejects non-claim mounts lexically aliasing either fixed
+PVC directory (trailing slash, dot or parent component). Six negative fixture
+cases failed before repair; unrelated mounts still pass. Focused FinOps 252
+(seven Linux-only skips) and `make verify-local-experiment` passed; the fake
+Dagster worker failure printed by the verifier is an expected negative case.
+Dedicated Colima was observed stopped. No API collection, retained volume/
+report/backup change or AgentHouse volume byte measurement (`null /
+NOT_MEASURED`). Lexical normalization is neither symlink resolution nor
+source authentication, live mount validation or operator acceptance. Revert
+only this scoped guard/test if needed; preserve saved records. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: explicit Recreate for fixed smoke image source (offline)
 

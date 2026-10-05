@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.172"
+version: "0.173"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: lexical mount destination aliases (offline)
+
+The fixed PVC Pod inventory accepted a second non-claim mount at `/data/`,
+`/data/.` or the corresponding PostgreSQL directory, while also certifying
+the claim at the same directory. Six disposable negative fixtures failed
+before repair. Primary-container mount destinations must now be absolute and
+unique after POSIX lexical normalization; an unrelated mount still passes.
+Focused FinOps 252 cases (seven Linux-only skips) and the full local verifier
+passed. The Dagster fake-worker failure in verifier output is an expected
+negative diagnostic. Dedicated Colima was observed stopped; there was no
+collection, volume traversal, retained report/backup mutation or used-byte
+measurement (AgentHouse remains `null / NOT_MEASURED`). This guard cannot
+resolve symlinks, authenticate Kubernetes or prove live mount semantics or
+operator acceptance. Restore only the reader/test change if necessary and
+preserve retained records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: ambiguous Pod volume/destination refusal (offline)
 
