@@ -1342,7 +1342,8 @@ class ScopedResponseTests(unittest.TestCase):
                            {'overhead': {'cpu': '1'}},
                            {'readinessGates': [{'conditionType': 'foreign'}]},
                            {'schedulingGates': [{'name': 'foreign'}]},
-                           {'resourceClaims': [{'name': 'device', 'resourceClaimName': 'foreign'}]}):
+                            {'resourceClaims': [{'name': 'device', 'resourceClaimName': 'foreign'}]},
+                            {'os': {'name': 'windows'}}, {'os': {'name': 'linux'}}):
             with self.subTest(pod_override=override):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec'].update(override)

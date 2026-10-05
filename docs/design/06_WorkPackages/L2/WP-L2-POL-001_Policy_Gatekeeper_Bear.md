@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.207"
+version: "0.208"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed smoke source refuses Pod OS override (offline)
+
+Two same-image Trino templates with explicit Linux/Windows Pod OS constraints
+lent the fixed smoke image before repair; both negatives now fail closed. The
+repository template omits this field. Focused policy 166 cases and the local
+verifier passed. No live API/admission, image import, request replay or retained
+data/backup change. This source check does not authenticate Kubernetes or prove
+strict live admission/operator acceptance. Revert only the scoped guard/test
+if necessary, preserving saved requests. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: fixed smoke source lifetime and resize controls (offline)
 

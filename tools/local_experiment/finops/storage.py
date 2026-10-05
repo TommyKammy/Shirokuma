@@ -158,6 +158,7 @@ def _snapshot(component, workload, pods, replica=None):
         require(all(type(v) is dict and 'ephemeral' not in v for v in volumes) and
                 sum(v.get('name') == volume for v in volumes) == 1 and
                 len(claims) == 1 and claims[0].get('name') == volume and
+                set(claims[0]) == {'name', 'persistentVolumeClaim'} and
                 type(claims[0]['persistentVolumeClaim']) is dict and
                 claims[0]['persistentVolumeClaim'].get('claimName') == claim and
                 set(claims[0]['persistentVolumeClaim']) <= {'claimName', 'readOnly'} and

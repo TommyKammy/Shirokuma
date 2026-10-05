@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.170"
+version: "0.171"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: exclusive fixed claim volume source (offline)
+
+Eight synthetic fixed-volume replies with an additional emptyDir, Secret,
+ConfigMap or unknown field passed before repair. The two directory-mounted
+StatefulSet claims now require only `name` and `persistentVolumeClaim` on the
+enclosing Pod volume. `make test-local-finops` passed 250 cases (seven Linux-only
+skips); `make verify-local-experiment` passed. Dedicated Colima was freshly
+observed stopped. No API collection, disk traversal, retained report/volume/
+backup mutation or used-byte measurement (`null / NOT_MEASURED`). This offline
+shape guard does not authenticate Kubernetes or prove live mount semantics or
+operator acceptance. Roll back only the scoped guard/test if needed, retaining
+saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed PVC source read-only override (offline)
 

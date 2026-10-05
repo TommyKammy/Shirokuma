@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.363"
+version: "5.364"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: exclusive claim source and fixed Trino Pod OS (offline)
+
+WP-L6-FIN-001 refuses an additional field/source on either fixed PVC Pod
+volume; eight synthetic negatives failed before repair. Independently,
+WP-L2-POL-001 refuses a same-image Trino source with explicit Pod OS; two
+negatives failed before repair. Focused FinOps 250 (seven Linux-only skips),
+policy 166 and `make verify-local-experiment` passed (the fake Dagster worker
+failure is an intentional negative diagnostic). Dedicated Colima was freshly
+observed stopped. No live API/admission, collection, unknown-request replay,
+retained volume/report/backup mutation or GitHub write. Offline guards cannot
+authenticate sources, prove strict admission, measure AgentHouse used bytes
+(`null / NOT_MEASURED`) or confer operator acceptance. Restore only the scoped
+guards/tests if needed, retaining saved records. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: fixed writable PVC source (offline)
 

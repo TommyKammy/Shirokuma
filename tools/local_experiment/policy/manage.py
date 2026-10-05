@@ -553,7 +553,7 @@ class Kubernetes:
                      pod_spec.get('serviceAccountName', 'default') != 'default' or
                      pod_spec.get('serviceAccount', 'default') != 'default' or
                      any(field in pod_spec for field in (
-                          'hostAliases', 'dnsConfig', 'hostname', 'subdomain',
+                           'hostAliases', 'dnsConfig', 'hostname', 'subdomain', 'os',
                            'setHostnameAsFQDN', 'hostUsers', 'shareProcessNamespace',
                             'imagePullSecrets', 'enableServiceLinks',
                             'runtimeClassName', 'nodeName',

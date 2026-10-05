@@ -233,6 +233,15 @@ class StorageTests(unittest.TestCase):
             data[1][0]['spec']['volumes'][0]['persistentVolumeClaim']['readOnly'] = False
             self.assertEqual(projected(component, data)['state'], 'observed')
 
+    def test_fixed_claim_volume_cannot_have_another_source(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            for field, value in (('emptyDir', {}), ('secret', {'secretName': 'foreign'}),
+                                 ('configMap', {'name': 'foreign'}), ('extra', False)):
+                data = deepcopy(objects(component))
+                data[1][0]['spec']['volumes'][0][field] = value
+                with self.subTest(component=component, field=field), self.assertRaises(S.StorageError):
+                    projected(component, data)
+
     def test_fixed_claim_cannot_be_exposed_by_other_container(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             for field, mapping in (('initContainers', 'volumeMounts'),
