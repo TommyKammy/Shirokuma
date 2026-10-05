@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.292"
+version: "5.293"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: exact native source projection and independent FinOps regression (offline)
+
+WP-L2-POL-001: a synthetic source projection with `false` changed to `0`
+or `1` changed to `true` previously passed Python dict equality. Both
+negative cases failed before repair; the bounded native manifest reader now
+compares JSON-exact serialized structures before certifying the projection.
+The generated manifest has no affected field. Policy focused 136 tests and
+`make verify-local-experiment` passed. Independently WP-L6-FIN-001's 207
+offline tests passed (seven Linux-only skips), without reader or collection
+change. Dedicated Colima was observed stopped; no live API, unknown-request
+replay, retained data/backup mutation or GitHub write. Source authenticity,
+live strict admission, current AgentHouse usage (`null / NOT_MEASURED`), backup
+recovery and operator acceptance remain open. Roll back only the scoped
+projection comparator/test if necessary; preserve saved intents and reports.
+Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: JSON-exact owned policy and independent FinOps boundary (offline)
 

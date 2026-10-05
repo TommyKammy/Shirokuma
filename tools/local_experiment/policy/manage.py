@@ -287,7 +287,11 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
     source = source_policies(source_before)
     if source_snapshot() != (source_before, source_identity):
         raise PolicyError('repository policy source changed during projection')
-    if value != render_native(source, hashlib.sha256(source_before).hexdigest()):
+    # Python dict equality treats false == 0 and true == 1; a decoded
+    # manifest must match the projected JSON types before it is certified.
+    if (json.dumps(value, sort_keys=True, allow_nan=False) !=
+            json.dumps(render_native(source, hashlib.sha256(source_before).hexdigest()),
+                       sort_keys=True, allow_nan=False)):
         raise PolicyError('dedicated manifest differs from the exact repository CEL projection')
     return value['items'], hashlib.sha256(raw).hexdigest()
 

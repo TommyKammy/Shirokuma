@@ -415,7 +415,26 @@ class ManifestTests(unittest.TestCase):
                     with mock.patch.object(policy, 'MANIFEST', manifest), \
                          mock.patch.object(policy, 'source_policies', return_value=source):
                          with self.assertRaises(policy.PolicyError):
-                             policy.load_manifest()
+                              policy.load_manifest()
+
+    def test_manifest_refuses_boolean_number_alias_in_projection(self):
+        original = policy.render_native
+        source_bytes, _ = policy.source_snapshot()
+        source = policy.source_policies(source_bytes)
+        digest = hashlib.sha256(source_bytes).hexdigest()
+        expected = original(source, digest)
+        expected['items'][0]['spec']['syntheticBoundary'] = {'enabled': False, 'count': 1}
+        for field, replacement in (('enabled', 0), ('count', True)):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                altered = copy.deepcopy(expected)
+                altered['items'][0]['spec']['syntheticBoundary'][field] = replacement
+                self.assertEqual(altered, expected)  # Python equality aliases bool and number.
+                manifest = Path(directory) / 'manifest.json'
+                manifest.write_text(json.dumps(altered))
+                with mock.patch.object(policy, 'MANIFEST', manifest), \
+                     mock.patch.object(policy, 'render_native', return_value=expected):
+                    with self.assertRaisesRegex(policy.PolicyError, 'differs from'):
+                        policy.load_manifest_snapshot()
 
     def test_manifest_rejects_non_json_and_nonrepresentable_numbers_before_source(self):
         original = policy.MANIFEST.read_text()

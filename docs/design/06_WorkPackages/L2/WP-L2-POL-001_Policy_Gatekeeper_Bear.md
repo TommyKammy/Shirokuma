@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.152"
+version: "0.153"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: JSON-exact source projection certification (offline)
+
+The bounded native manifest reader previously certified a synthetic projected
+boolean replaced by numeric zero (and numeric one replaced by `true`), because
+Python dict equality aliases these JSON types. A negative test reproduced both
+false acceptances; certification now compares canonical serialized JSON before
+returning the checked snapshot and digest. The current generated manifest has
+no affected boolean/numeric field; the normal projection and 136 focused
+tests pass, as does the full local verifier. Colima was freshly observed
+stopped; no live API, admission or retained input/backup mutation. This guards
+local projection equality, not producer authenticity, live strict admission or
+operator acceptance. Revert only the projection comparator/test if needed;
+preserve saved intents. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: exact owned spec and rollback identity (offline)
 
