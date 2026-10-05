@@ -5,12 +5,30 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.148"
+version: "0.149"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed protected-namespace smoke request corpus (offline)
+
+The native bridge previously checked only namespace, kind and disposable name
+for protected-namespace server dry-runs. It now compares the entire submitted
+request against the generated 14-case protected corpus, permitting only the
+disposable name and a local immutable Trino image digest as variables. The
+fixed mutable-image negative is still admitted for its expected policy denial.
+Malformed image, altered metadata, execution controls and JSON type aliases
+are refused before any request. The first test run exposed the deliberate
+mutable-image case; a corrected check and 129 policy tests pass. `make
+verify-local-experiment` passed. The dedicated Colima profile was freshly
+observed stopped; no API call, intent replay, retained data or backup mutation.
+The caller-provided digest is not authenticated by this bridge: the smoke
+workflow obtains it from the scoped Deployment read. No live admission or
+operator acceptance was established. Revert only this guarded request boundary
+and test if required, preserving saved intents. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-06: fixed outside-namespace dry-run control (offline)
 

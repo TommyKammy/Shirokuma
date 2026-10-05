@@ -173,6 +173,33 @@ class ManifestTests(unittest.TestCase):
                     kube.smoke_request(altered)
             self.assertEqual(request.call_count, 1)
 
+    def test_protected_namespace_smoke_is_only_the_fixed_corpus(self):
+        kube = policy.Kubernetes(items())
+        corpus = policy.smoke_cases(IMAGE)[:-1]
+        with mock.patch.object(kube, 'request', return_value='dry-run') as request:
+            for case in corpus:
+                self.assertEqual(kube.smoke_request(case['object']), 'dry-run')
+            accepted = request.call_count
+            for changed in (
+                    lambda x: x['spec'].update(hostNetwork='yes'),
+                    lambda x: x['metadata'].update(annotations={'extra': 'value'}),
+                    lambda x: x['spec']['containers'][0].update(image='other/image@sha256:' + 'a' * 64),
+                    lambda x: x['spec'].update(automountServiceAccountToken=0),
+                    lambda x: x['spec']['containers'].append(copy.deepcopy(x['spec']['containers'][0]))):
+                altered = copy.deepcopy(corpus[0]['object'])
+                changed(altered)
+                with self.assertRaises(policy.PolicyError):
+                    kube.smoke_request(altered)
+            for kind, change in (
+                    ('Service', lambda x: x['spec'].update(type='ExternalName')),
+                    ('Ingress', lambda x: x['spec'].update(ingressClassName='other'))):
+                altered = copy.deepcopy(next(case['object'] for case in corpus
+                                             if case['object']['kind'] == kind))
+                change(altered)
+                with self.subTest(kind=kind), self.assertRaises(policy.PolicyError):
+                    kube.smoke_request(altered)
+            self.assertEqual(request.call_count, accepted)
+
     def test_local_source_decoder_requires_document_separators(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]

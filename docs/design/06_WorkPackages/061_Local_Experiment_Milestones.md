@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.288"
+version: "5.289"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed protected policy corpus and independent saved-history review (offline)
+
+WP-L2-POL-001: protected-namespace dry-runs now accept only the generated
+fixed corpus with disposable name and bounded immutable local image as
+variables; altered requests fail before the scoped request. The first test
+run exposed the expected mutable-image negative, then 129 policy tests and
+`make verify-local-experiment` passed. Separately WP-L6-FIN-001 reviewed
+saved-history identity/order and per-report storage scope without reader
+changes; 207 FinOps tests passed (seven Linux-only skips). Dedicated Colima
+was freshly observed stopped; no API, collection, unknown-request replay,
+retained data/backup mutation or GitHub write. No live strict admission,
+producer authentication, present AgentHouse usage (`null / NOT_MEASURED`) or
+operator acceptance established. Revert only the policy guard/test if needed;
+preserve historical reports and intents. Original Vault sync pending outside
+this checkout.
 
 ## 2026-10-06: fixed default-namespace policy control and independent FinOps digest (offline)
 

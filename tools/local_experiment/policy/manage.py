@@ -481,7 +481,31 @@ class Kubernetes:
                 or type(metadata.get('name')) is not str
                 or not re.fullmatch(r'shirokuma-policy-smoke-[0-9a-f]{12}', metadata['name'])):
             raise PolicyError('smoke request escaped its disposable namespace scope')
-        if namespace == 'default':
+        if namespace == NAMESPACE:
+            # The protected dry-runs must exercise exactly the generated
+            # corpus, not an arbitrary object bearing a disposable name.
+            try:
+                image = value['spec']['containers'][0]['image'] if value['kind'] == 'Pod' else None
+                if image is not None and (type(image) is not str or not re.fullmatch(
+                        r'shirokuma\.local/trino@sha256:[0-9a-f]{64}', image)):
+                    if image == 'shirokuma.local/trino:dryrun-only':
+                        image = None
+                    else:
+                        raise ValueError('unbounded image')
+                cases = smoke_cases(image or 'shirokuma.local/trino@sha256:' + '0' * 64)
+                identical = False
+                for case in cases[:-1]:
+                    expected = case['object']
+                    expected['metadata']['name'] = metadata['name']
+                    if (json.dumps(value, sort_keys=True, allow_nan=False) ==
+                            json.dumps(expected, sort_keys=True, allow_nan=False)):
+                        identical = True
+                        break
+            except (KeyError, IndexError, TypeError, ValueError, UnicodeError, RecursionError):
+                identical = False
+            if not identical:
+                raise PolicyError('protected namespace is limited to the fixed smoke corpus')
+        else:
             # Do not let a caller use the outside-namespace control to dry-run
             # an unrelated Pod. Only the generated mutable-image control is in
             # scope, with its disposable name as the sole variable field.
