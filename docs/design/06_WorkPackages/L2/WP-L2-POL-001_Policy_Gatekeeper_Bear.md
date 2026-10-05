@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.164"
+version: "0.165"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: activation preflight presence continuity (offline)
+
+An exactly matching binding appearing during server dry-runs previously passed
+the final scan, allowing policy creation despite the changed preflight inventory.
+A disappearing pre-existing policy was also not rejected at that scan. Both
+synthetic cases now refuse activation before any persistent create, while the
+normal activation and the foreign-object refusal still pass. The first negative
+failed before repair; `make test-local-policy` passed 156 tests and `make
+verify-local-experiment` passed after repair. Colima was freshly observed stopped;
+no live API call, retained volume/backup mutation, request replay or GitHub
+write. Sequential reads do not establish atomicity, source/API identity or live
+strict admission; races after the scan and operator acceptance remain open.
+Restore only the presence guard and regressions if necessary, preserving saved
+intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: recheck full inventory after activation dry-runs (offline)
 

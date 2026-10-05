@@ -817,6 +817,44 @@ class ActivationTests(unittest.TestCase):
         self.assertFalse(any(action == 'create' for action, _, _ in kube.calls))
         self.assertFalse(any(kind == policy.POLICY for kind, _ in kube.objects))
 
+    def test_matching_binding_appearing_during_dry_runs_prevents_policy_creation(self):
+        kube = FakeKubernetes()
+        original = kube.create
+        target = items()[-1]
+
+        def late_owned(value, *, dry_run=False):
+            reply = original(value, dry_run=dry_run)
+            if dry_run and value['kind'] == target['kind'] and value['metadata']['name'] == target['metadata']['name']:
+                kube.objects[(target['kind'], target['metadata']['name'])] = admitted(target)
+            return reply
+
+        kube.create = late_owned
+        with self.assertRaisesRegex(policy.PolicyError, 'changed since activation preflight'):
+            policy.apply_policies(kube, items())
+        self.assertFalse(any(action == 'create' for action, _, _ in kube.calls))
+        self.assertFalse(any(kind == policy.POLICY for kind, _ in kube.objects))
+
+    def test_existing_policy_disappearing_during_dry_runs_prevents_creation(self):
+        kube = FakeKubernetes()
+        target = items()[0]
+        key = (target['kind'], target['metadata']['name'])
+        kube.objects[key] = admitted(target)
+        original = kube.get
+        reads = 0
+
+        def disappearing(kind, name):
+            nonlocal reads
+            if (kind, name) == key:
+                reads += 1
+                if reads == 2:
+                    kube.objects.pop(key)
+            return original(kind, name)
+
+        kube.get = disappearing
+        with self.assertRaisesRegex(policy.PolicyError, 'changed since activation preflight'):
+            policy.apply_policies(kube, items())
+        self.assertFalse(any(action == 'create' for action, _, _ in kube.calls))
+
     def test_partial_or_duplicate_activation_inventory_cannot_report_ready(self):
         baseline = items()
         for supplied in (baseline[:-1], baseline + [baseline[0]],

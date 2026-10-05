@@ -619,11 +619,13 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
 
     # Preflight every existing name before creating even an inert definition.
     missing = []
+    preflight_present = set()
     for expected in items:
         current = kube.get(expected['kind'], expected['metadata']['name'])
         if current is not None:
             assert_owned(current, expected)
             pin_identity(current, expected)
+            preflight_present.add((expected['kind'], expected['metadata']['name']))
         else:
             missing.append(expected)
     for expected in missing:
@@ -635,8 +637,12 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
     # behind before the binding phase discovers it.
     for expected in items:
         current = kube.get(expected['kind'], expected['metadata']['name'])
+        key = (expected['kind'], expected['metadata']['name'])
         if current is not None:
             assert_owned(current, expected)
+        if (current is not None) != (key in preflight_present):
+            raise PolicyError('dedicated resource changed since activation preflight')
+        if current is not None:
             pin_identity(current, expected)
     for kind in (POLICY, BINDING):
         selected = [item for item in items if item['kind'] == kind]

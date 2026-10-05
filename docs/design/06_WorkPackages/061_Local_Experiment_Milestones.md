@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.304"
+version: "5.305"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: activation preflight presence continuity and independent FinOps check (offline)
+
+WP-L2-POL-001: an exactly matching binding appearing during final dry-runs
+previously passed the ownership scan and allowed policy creation; a policy
+disappearing after preflight likewise went unnoticed at that scan. Synthetic
+negatives now refuse both before any persistent create; the first failed before
+repair. `make test-local-policy` passed 156 tests and `make
+verify-local-experiment` passed. Separately WP-L6-FIN-001's unchanged saved
+history/storage suite passed 207 tests (seven Linux-only skips). Dedicated
+Colima was freshly observed stopped. No live API, collection, unknown-request
+replay, retained volume/backup mutation or GitHub write. Scans are sequential,
+not atomic or authenticated; live strict admission, AgentHouse bytes (`null /
+NOT_MEASURED`) and operator acceptance remain open. Restore only the policy
+presence guard/tests if necessary; preserve saved intents and FinOps reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: activation post-dry-run inventory and independent FinOps check (offline)
 
