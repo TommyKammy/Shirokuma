@@ -215,14 +215,16 @@ class GatekeeperObserver:
                          'native dry-run response exceeds its bound')
                 expected = case['deny_policy']
                 if expected:
-                    matched = result.returncode != 0 and MANAGE.own_denial(result.stderr, expected, messages[expected])
+                    matched = (type(result.returncode) is int and result.returncode > 0 and
+                               MANAGE.own_denial(result.stderr, expected, messages[expected]))
                     admission = 'denied' if matched else 'unknown'
                 else:
                     try:
                         value = json.loads(result.stdout)
                     except (ValueError, TypeError):
                         value = {}
-                    matched = (result.returncode == 0 and isinstance(value, dict)
+                    matched = (type(result.returncode) is int and result.returncode == 0 and
+                               isinstance(value, dict)
                                and value.get('kind') == case['object']['kind']
                                and value.get('metadata', {}).get('namespace') == case['object']['metadata']['namespace']
                                and value.get('metadata', {}).get('name') == case['object']['metadata']['name'])

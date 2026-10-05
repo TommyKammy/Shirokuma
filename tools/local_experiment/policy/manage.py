@@ -393,7 +393,8 @@ def own_denial(stderr: str, name: str, message: str) -> bool:
 
 def smoke_success_object(response):
     """Only a bounded, unambiguous JSON success can support a smoke claim."""
-    if (response.returncode != 0 or response.stderr != '' or
+    if (type(response.returncode) is not int or response.returncode != 0 or
+            response.stderr != '' or
             not isinstance(response.stdout, str)):
         return {}
     try:
@@ -703,12 +704,16 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
         response = kube.smoke_request(case['object'])
         denied = case['deny_policy']
         if denied:
-            passed = (response.returncode != 0 and response.stdout == '' and
-                      own_denial(response.stderr, denied, messages[denied]))
+            # A negative subprocess return code denotes a signal, not an API
+            # rejection, even if stderr contains an otherwise matching denial.
+            passed = (type(response.returncode) is int and response.returncode > 0 and
+                       response.stdout == '' and
+                       own_denial(response.stderr, denied, messages[denied]))
         else:
             value = smoke_success_object(response)
             metadata = value.get('metadata')
-            passed = (response.returncode == 0 and type(metadata) is dict and
+            passed = (type(response.returncode) is int and response.returncode == 0 and
+                       type(metadata) is dict and
                       smoke_dry_run_identity(value, metadata) and
                       value.get('apiVersion') == case['object']['apiVersion'] and
                       value.get('kind') == case['object']['kind'] and

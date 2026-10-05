@@ -5,12 +5,35 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.245"
+version: "5.247"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: typed native success exit status (offline)
+
+WP-L2-POL-001: separately, boolean `False` previously compared equal to zero
+and could classify a fake success as allowed in both smoke and Gatekeeper.
+Typed integer-zero checks refuse the first reply; 94 focused tests and
+`make verify-local-experiment` passed.
+Dedicated Colima remained stopped; no live admission, unknown-request replay,
+retained data/backup mutation or GitHub write. Fake replies cannot authenticate
+API identity, clear strict admission or grant operator acceptance. Revert only
+the success-path checks/tests if needed; preserve saved evidence. Direct original
+Vault synchronization remains pending outside checkout.
+
+## 2026-10-05: interrupted policy subprocess cannot verify denial (offline)
+
+WP-L2-POL-001: both native smoke and Gatekeeper observer now require a positive
+integer kubectl exit status for a matching policy denial. Fake signal, missing
+and boolean return codes with matching stderr fail/are unknown at request three;
+92 focused tests passed. Dedicated Colima was observed stopped; no live API,
+unknown-request replay, retained data/backup mutation or GitHub write. Fake
+replies do not authenticate producers, prove strict admission or grant operator
+acceptance. Roll back only the scoped status guards/tests if necessary; preserve
+saved requests. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: independent encoded host diagnostic controls (offline)
 

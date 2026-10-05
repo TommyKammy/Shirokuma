@@ -184,6 +184,39 @@ class GatekeeperTests(unittest.TestCase):
         self.assertFalse(caught.exception.receipt['authority_granted'])
         self.assertEqual(caught.exception.receipt['results'][0]['admission'], 'unknown')
 
+    def test_signalled_denial_is_unknown_even_with_matching_stderr(self):
+        for exit_code in (-9, None, True):
+            kube = FakeKube()
+            observer = G.GatekeeperObserver(kube)
+            observer.observe()
+            original = kube.smoke_request
+            def interrupted(value):
+                response = original(value)
+                if len(kube.requests) == 3:
+                    return SimpleNamespace(returncode=exit_code, stdout='', stderr=response.stderr)
+                return response
+            kube.smoke_request = interrupted
+            with self.subTest(exit_code=exit_code), self.assertRaises(G.GatekeeperError) as caught:
+                observer.verify()
+            receipt = caught.exception.receipt
+            self.assertEqual(receipt['results'][-1]['admission'], 'unknown')
+            self.assertFalse(receipt['results'][-1]['matched_host_expectation'])
+            self.assertEqual(len(kube.requests), 3)
+
+    def test_boolean_success_status_is_unknown_not_allowed(self):
+        kube = FakeKube()
+        observer = G.GatekeeperObserver(kube)
+        observer.observe()
+        original = kube.smoke_request
+        def malformed(value):
+            response = original(value)
+            return SimpleNamespace(returncode=False, stdout=response.stdout, stderr=response.stderr)
+        kube.smoke_request = malformed
+        with self.assertRaises(G.GatekeeperError) as caught:
+            observer.verify()
+        self.assertEqual(caught.exception.receipt['results'][0]['admission'], 'unknown')
+        self.assertEqual(len(kube.requests), 1)
+
     def test_transport_failure_and_signal_keep_unknown_pending_candidate(self):
         class Signal(BaseException):
             pass

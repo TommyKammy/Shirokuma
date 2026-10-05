@@ -1491,6 +1491,36 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(len(kube.calls), 3)
         self.assertEqual(events[-1]['result'], 'failed')
 
+    def test_signalled_dry_run_is_not_a_verified_denial(self):
+        for exit_code in (-9, None, True):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def interrupted(request):
+                response = reference.smoke_request(request)
+                if response.returncode != 0:
+                    return SimpleNamespace(returncode=exit_code, stdout='', stderr=response.stderr)
+                return response
+            kube.smoke_failure = interrupted
+            events = []
+            with self.subTest(exit_code=exit_code):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items(), record=events.append)
+                self.assertEqual(len(kube.calls), 3)
+                self.assertEqual(events[-1]['result'], 'failed')
+
+    def test_boolean_success_status_is_not_an_allowed_dry_run(self):
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def malformed(request):
+            response = reference.smoke_request(request)
+            return SimpleNamespace(returncode=False, stdout=response.stdout, stderr=response.stderr)
+        kube.smoke_failure = malformed
+        events = []
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items(), record=events.append)
+        self.assertEqual(len(kube.calls), 1)
+        self.assertEqual(events[-1]['result'], 'failed')
+
     def test_denial_with_additional_error_lines_is_not_a_policy_pass(self):
         name = policy.NAMES[0]
         message = 'Privileged containers are forbidden.'

@@ -5,12 +5,37 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.110"
+version: "0.112"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: typed success exit status (offline)
+
+Separately from denial matching, a synthetic successful reply with boolean
+`False` return status was accepted as zero by both the legacy smoke and
+Gatekeeper observer. Both now require an actual integer zero before classifying
+the reply as allowed. Fake first-request regressions fail/mark unknown; 94
+focused tests and `make verify-local-experiment` passed. Dedicated Colima remained stopped; no live API or saved
+request replay. This does not authenticate the response or establish strict
+admission/operator acceptance. Roll back only the typed-status guard/tests if
+necessary; preserve saved evidence. Original Vault sync remains pending.
+
+## 2026-10-05: interrupted native dry-run is not a denial (offline)
+
+Both the legacy smoke and Gatekeeper observer previously treated any nonzero
+process return code as a policy denial if stderr matched. A signal-terminated
+kubectl (`-9`), missing return code or boolean return code must not establish
+admission: both paths now require a positive integer exit status. Fake request
+three retains the authentic-looking denial text but records failure/unknown;
+92 focused native tests passed before the separate success-path increment.
+Dedicated Colima was observed stopped. No live
+API request, replay or retained data/backup mutation. This cannot authenticate
+the denial producer, establish strict admission or grant operator acceptance.
+Roll back only the two exit-status checks/tests if needed; keep saved intents.
+Original Vault synchronization remains pending outside the checkout.
 
 ## 2026-10-05: malformed native denial output (offline)
 
