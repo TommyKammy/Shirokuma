@@ -292,6 +292,28 @@ class StorageTests(unittest.TestCase):
         with self.assertRaisesRegex(S.StorageError, 'IDENTITY_CHANGED'):
             S._collect_one(backend, 'seaweedfs')
 
+    def test_storage_collection_refuses_malformed_later_claim_and_volume(self):
+        w, p, _, c, v = objects('seaweedfs')
+        original = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p}, c, v,
+                    deepcopy(w), {'kind':'PodList','apiVersion':'v1','metadata':{},'items':deepcopy(p)},
+                    deepcopy(c), deepcopy(v)]
+        for index, mutate in (
+            (6, lambda item: item.update(spec=None)),
+            (6, lambda item: item['spec'].update(resources=None)),
+            (6, lambda item: item['spec']['resources'].update(requests=None)),
+            (6, lambda item: item.update(status=None)),
+            (6, lambda item: item['status'].update(capacity=None)),
+            (7, lambda item: item.update(spec=None)),
+            (7, lambda item: item['spec'].update(capacity=None)),
+        ):
+            responses = deepcopy(original)
+            mutate(responses[index])
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.storage_get.side_effect = responses
+            with self.subTest(index=index, mutate=mutate), self.assertRaises(S.StorageError):
+                S._collect_one(backend, 'seaweedfs')
+
     def test_storage_collection_requires_typed_second_pod_list(self):
         w, p, _, c, v = objects('seaweedfs')
         responses = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p},

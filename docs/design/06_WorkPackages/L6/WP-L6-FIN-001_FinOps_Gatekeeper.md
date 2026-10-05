@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.162"
+version: "0.163"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: typed second bound-reference reads (offline)
+
+Seven malformed later PVC/PV envelopes raised unscoped exceptions in the
+collector's continuity comparison. Each later read now checks nested maps
+before comparing the same scoped fields; valid and JSON-type-drift fixtures
+still behave as before. Negative fixtures failed before repair; focused FinOps
+suite passed 240 cases (seven Linux-only skips), and the local verifier passed
+(its fake Dagster worker failure is intentional test diagnostic). No live API,
+volume scan or retained report/backup change; dedicated Colima remained stopped.
+This is not atomic or authenticated sampling or AgentHouse used-byte measurement
+(`null / NOT_MEASURED`). Restore only the continuity guards/test if necessary;
+preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: typed bound claim/PV envelopes (offline)
 

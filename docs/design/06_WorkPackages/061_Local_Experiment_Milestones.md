@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.354"
+version: "5.355"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: typed second PVC/PV reads (offline)
+
+WP-L6-FIN-001: seven malformed later PVC/PV shapes now fail with a scoped
+continuity error, not an attribute error. Negatives failed before repair;
+focused FinOps suite passed 240 tests (seven Linux-only skips) and `make
+verify-local-experiment` passed (intentional fake Dagster failure diagnostic).
+Dedicated Colima was observed stopped earlier this invocation. No live API,
+volume scan, unknown-request replay, retained report/backup mutation or GitHub
+write. Offline sequential reads do not authenticate the API, measure AgentHouse
+used bytes (`null / NOT_MEASURED`) or confer operator acceptance. Restore only
+scoped continuity guards/tests if needed, retaining saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded PVC/PV envelope projection (offline)
 

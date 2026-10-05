@@ -331,19 +331,25 @@ def _collect_one(backend, component):
         later = backend.storage_get(f'/api/v1/namespaces/{ns}/persistentvolumeclaims/{claim}')
         _meta(later, 'PersistentVolumeClaim', ns, claim)
         def claim_state(item):
-            return (item.get('metadata', {}).get('uid'), item.get('spec', {}).get('volumeName'),
-                     item.get('spec', {}).get('resources', {}).get('requests', {}).get('storage'),
-                     item.get('spec', {}).get('storageClassName'), item.get('spec', {}).get('volumeMode'),
-                     item.get('status', {}).get('phase'), item.get('status', {}).get('capacity', {}).get('storage'))
+            spec = item.get('spec', {}); status = item.get('status', {})
+            require(type(spec) is dict and type(status) is dict, 'IDENTITY_CHANGED')
+            resources = spec.get('resources', {}); capacity = status.get('capacity', {})
+            require(type(resources) is dict and type(resources.get('requests', {})) is dict and
+                    type(capacity) is dict, 'IDENTITY_CHANGED')
+            return (item['metadata']['uid'], spec.get('volumeName'),
+                    resources.get('requests', {}).get('storage'), spec.get('storageClassName'),
+                    spec.get('volumeMode'), status.get('phase'), capacity.get('storage'))
         require(_same_json(claim_state(later), claim_state(pvc)), 'IDENTITY_CHANGED')
         if pv:
             later_pv = backend.storage_get(f'/api/v1/persistentvolumes/{name(pv["metadata"]["name"])}')
             _meta(later_pv, 'PersistentVolume', None, pv['metadata']['name'])
             def pv_state(item):
-                return (item.get('metadata', {}).get('uid'), item.get('spec', {}).get('claimRef'),
-                         item.get('spec', {}).get('capacity', {}).get('storage'),
-                         item.get('spec', {}).get('persistentVolumeReclaimPolicy'),
-                         item.get('spec', {}).get('volumeMode'))
+                spec = item.get('spec', {})
+                require(type(spec) is dict and type(spec.get('capacity', {})) is dict,
+                        'IDENTITY_CHANGED')
+                return (item['metadata']['uid'], spec.get('claimRef'),
+                        spec.get('capacity', {}).get('storage'),
+                        spec.get('persistentVolumeReclaimPolicy'), spec.get('volumeMode'))
             require(_same_json(pv_state(later_pv), pv_state(pv)), 'IDENTITY_CHANGED')
     return project(component, (before,pods,replica), (after,after_pods['items'],after_replica),
                    pvc=pvc, pv=pv, request_started_at=start, observed_at=backend.now())
