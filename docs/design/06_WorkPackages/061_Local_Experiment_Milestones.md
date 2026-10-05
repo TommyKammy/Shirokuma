@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.276"
+version: "5.277"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: native source projection consistency (offline)
+
+WP-L2-POL-001: the native manifest projection now refuses a source-byte change
+across local CEL decoding, binding rendered source annotations to the checked
+snapshot instead of a later pathname read. A disposable replacement negative,
+115 focused policy tests and `make verify-local-experiment` passed. Dedicated
+Colima was freshly observed stopped; no live admission, request replay, retained
+data/backup mutation or GitHub write. Sequential reads do not prevent ABA
+replacement or authenticate source/decoder; strict admission and operator
+acceptance remain unproved. Roll back only the consistency guard/test; preserve
+saved intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: strict manifest numbers and independent FinOps boundary review (offline)
 

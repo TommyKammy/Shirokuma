@@ -113,8 +113,8 @@ def source_policies() -> list[dict]:
     return result
 
 
-def render_native(source: list[dict]) -> dict:
-    digest = hashlib.sha256(SOURCE.read_bytes()).hexdigest()
+def render_native(source: list[dict], source_digest: str | None = None) -> dict:
+    digest = source_digest if source_digest is not None else hashlib.sha256(SOURCE.read_bytes()).hexdigest()
     items = []
     expanded = []
     for original in source:
@@ -223,7 +223,16 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
         if isinstance(exc, PolicyError):
             raise
         raise PolicyError('dedicated manifest is not valid JSON') from None
-    if value != render_native(source_policies()):
+    # kubectl decodes the source by pathname. Do not bind its projected items
+    # to a digest obtained from a different version of that pathname.
+    try:
+        source_before = SOURCE.read_bytes()
+        source = source_policies()
+        if SOURCE.read_bytes() != source_before:
+            raise PolicyError('repository policy source changed during projection')
+    except OSError:
+        raise PolicyError('repository policy source could not be read') from None
+    if value != render_native(source, hashlib.sha256(source_before).hexdigest()):
         raise PolicyError('dedicated manifest differs from the exact repository CEL projection')
     return value['items'], hashlib.sha256(raw).hexdigest()
 

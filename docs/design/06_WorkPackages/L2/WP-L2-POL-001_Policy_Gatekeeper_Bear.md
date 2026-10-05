@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.138"
+version: "0.139"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: source projection digest consistency (offline)
+
+The native manifest comparison previously decoded the seven CEL sources and
+then hashed the source pathname independently; a source replacement during the
+local decode could bind the projected items to different bytes. The comparison
+now checks source bytes before and after decoding and hashes the first snapshot
+for the rendered annotations. A disposable changed-source negative and normal
+projection pass; 115 focused tests and the full local verifier passed. Dedicated
+Colima was freshly observed stopped; no live admission, request replay, retained
+data/backup mutation or GitHub write. This is a sequential check, not atomic
+source identity or decoder authenticity; ABA swaps, symlinks, strict admission
+and operator acceptance remain unproved. Revert only the scoped consistency
+guard/test if necessary and preserve historical intents. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-05: strict numeric manifest decoding (offline)
 

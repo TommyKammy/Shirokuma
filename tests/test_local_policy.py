@@ -291,6 +291,19 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(digest, hashlib.sha256(original).hexdigest())
             self.assertNotEqual(digest, hashlib.sha256(manifest.read_bytes()).hexdigest())
 
+    def test_manifest_refuses_source_changed_during_local_decode(self):
+        original = policy.SOURCE.read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source.yaml'
+            source.write_bytes(original)
+
+            decoded = policy.source_policies()
+            with mock.patch.object(policy, 'SOURCE', source), \
+                 mock.patch.object(policy, 'source_policies', side_effect=lambda: (
+                     source.write_bytes(b'different source'), decoded)[1]):
+                with self.assertRaisesRegex(policy.PolicyError, 'changed during projection'):
+                    policy.load_manifest_snapshot()
+
     def test_manifest_refuses_symlink_and_oversize_before_projection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
