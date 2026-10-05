@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.161"
+version: "0.162"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: typed bound claim/PV envelopes (offline)
+
+Six malformed nested PVC request/status-capacity and PV spec/claimRef/capacity
+replies raised unscoped attribute errors before repair. Direct projection now
+requires maps before dereferencing those fields; valid bound references retain
+their existing capacity and retention semantics. `make test-local-finops` passed
+239 cases (seven Linux-only skips). Dedicated Colima was freshly observed
+stopped; no live API, PVC/volume traversal, retained report/backup mutation or
+GitHub write. Offline checks cannot authenticate the API, measure AgentHouse
+used bytes (`null / NOT_MEASURED`) or confer operator acceptance. Restore only
+this scoped envelope guard/test if necessary, preserving saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: owned ReplicaSet selector must select storage Pod (offline)
 

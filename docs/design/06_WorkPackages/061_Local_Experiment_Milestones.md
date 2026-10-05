@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.353"
+version: "5.354"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded PVC/PV envelope projection (offline)
+
+WP-L6-FIN-001: six malformed nested bound PVC/PV reply shapes failed with
+untyped exceptions before scoped map checks. Focused FinOps suite passed 239
+tests (seven Linux-only skips), and `git diff --check` passed. Dedicated Colima
+was freshly observed stopped. No live API, volume traversal, retained report/
+backup mutation or GitHub write. This cannot authenticate the API, measure
+AgentHouse used bytes (`null / NOT_MEASURED`) or confer operator acceptance.
+Restore only the scoped guards/tests if needed; preserve saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed storage ReplicaSet selection (offline)
 

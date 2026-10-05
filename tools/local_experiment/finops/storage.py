@@ -190,8 +190,11 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
         c = _meta(pvc, 'PersistentVolumeClaim', ns, claim)
         spec = pvc.get('spec', {}); status = pvc.get('status', {})
         require(type(spec) is dict and type(status) is dict)
-        request = quantity(spec.get('resources', {}).get('requests', {}).get('storage'))
-        capacity = status.get('capacity', {}).get('storage')
+        resources = spec.get('resources', {}); capacity_map = status.get('capacity', {})
+        require(type(resources) is dict and type(resources.get('requests', {})) is dict and
+                type(capacity_map) is dict)
+        request = quantity(resources.get('requests', {}).get('storage'))
+        capacity = capacity_map.get('storage')
         capacity = quantity(capacity) if capacity is not None else None
         phase = status.get('phase'); require(phase in ('Bound', 'Pending', 'Lost'))
         volume = spec.get('volumeName')
@@ -205,14 +208,16 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
         if phase == 'Bound':
             require(type(volume) is str and name(volume))
             p = _meta(pv, 'PersistentVolume', None, volume)
-            ref = pv.get('spec', {}).get('claimRef', {})
+            pv_spec = pv.get('spec', {}); require(type(pv_spec) is dict)
+            ref = pv_spec.get('claimRef', {}); pv_capacity = pv_spec.get('capacity', {})
+            require(type(ref) is dict and type(pv_capacity) is dict)
             require(ref.get('namespace') == ns and ref.get('name') == claim and ref.get('uid') == c['uid'])
             # Directory-mounted claims cannot be backed by a block-mode PV.
-            require(pv['spec'].get('volumeMode') in (None, 'Filesystem'))
-            policy = pv['spec'].get('persistentVolumeReclaimPolicy')
+            require(pv_spec.get('volumeMode') in (None, 'Filesystem'))
+            policy = pv_spec.get('persistentVolumeReclaimPolicy')
             require(policy in ('Delete', 'Retain', 'Recycle'))
             value['pv'] = dict(name=volume, uid=p['uid'], capacity_bytes=quantity(
-                pv['spec'].get('capacity', {}).get('storage')), reclaim_policy=policy)
+                pv_capacity.get('storage')), reclaim_policy=policy)
         else:
             require(pv is None and (volume is None or name(volume)))
         value['retention'] = a[3]

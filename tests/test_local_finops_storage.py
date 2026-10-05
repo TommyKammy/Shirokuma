@@ -150,6 +150,20 @@ class StorageTests(unittest.TestCase):
             with self.subTest(component=component, index=index, mutate=mutate), self.assertRaises(S.StorageError):
                 projected(component, data)
 
+    def test_malformed_claim_and_volume_envelopes_fail_with_scoped_error(self):
+        for index, mutate in (
+            (3, lambda pvc: pvc['spec'].update(resources=None)),
+            (3, lambda pvc: pvc['spec'].update(resources={'requests': None})),
+            (3, lambda pvc: pvc['status'].update(capacity=None)),
+            (4, lambda pv: pv.update(spec=None)),
+            (4, lambda pv: pv['spec'].update(claimRef=None)),
+            (4, lambda pv: pv['spec'].update(capacity=None)),
+        ):
+            data = deepcopy(objects('seaweedfs'))
+            mutate(data[index])
+            with self.subTest(index=index, mutate=mutate), self.assertRaises(S.StorageError):
+                projected('seaweedfs', data)
+
     def test_deployment_ephemeral_claim_is_not_no_direct_pvc(self):
         for component in ('polaris', 'trino'):
             data = deepcopy(objects(component))
