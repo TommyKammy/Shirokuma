@@ -78,6 +78,19 @@ def mlflow_usage_complete():
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_component_lists_refuse_unreturned_items_and_pagination_aliases(self):
+        for kind in ('PodList', 'NodeList'):
+            valid = {'kind': kind, 'apiVersion': 'v1', 'items': [], 'metadata': {}}
+            for key, value in (('remainingItemCount', 1), ('remainingItemCount', True),
+                               ('remainingItemCount', '0'), ('Continue', 'next'),
+                               ('RemainingItemCount', 1)):
+                reply = deepcopy(valid)
+                reply['metadata'][key] = value
+                with self.subTest(kind=kind, key=key, value=value):
+                    self.assertFalse(R._complete_list(reply, kind))
+            valid['metadata']['remainingItemCount'] = 0
+            self.assertTrue(R._complete_list(valid, kind))
+
     def backend(self):
         value = Mock()
         value.now.return_value = NOW

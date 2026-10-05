@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.393"
+version: "5.394"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent FinOps list completeness guards (offline)
+
+WP-L6-FIN-001 refuses case-variant continuation/count keys in fixed storage
+PodList reads (eight negative subcases failed before repair). Separately the
+CPU/memory PodList and local NodeList reader refuses nonzero/noninteger
+remaining counts and pagination aliases (ten negatives failed before repair).
+Canonical absent/zero count passes; focused FinOps 273 tests and
+`make verify-local-experiment` pass (seven Linux-only skips; intentional fake
+Dagster worker failure diagnostic). Dedicated Colima was freshly listed Stopped. No live API,
+retained report/volume/backup mutation or AgentHouse used-byte measurement
+(`null / NOT_MEASURED`). Offline lists do not establish producer authenticity,
+atomicity or operator acceptance. Revert only the scoped guards/tests, keeping
+saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed PodList remaining-count consistency (offline)
 

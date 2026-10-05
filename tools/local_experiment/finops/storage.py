@@ -381,7 +381,10 @@ def collect(backend):
 
 def _complete_pod_list(response):
     metadata = response.get('metadata', {})
-    return (type(metadata) is dict and metadata.get('continue', '') == '' and
+    return (type(metadata) is dict and
+            not any(type(key) is str and key.lower() in ('continue', 'remainingitemcount')
+                    and key not in ('continue', 'remainingItemCount') for key in metadata) and
+            metadata.get('continue', '') == '' and
             type(metadata.get('continue', '')) is str and
             # No continuation token cannot describe unreturned selected Pods.
             ('remainingItemCount' not in metadata or

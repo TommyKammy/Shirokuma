@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.191"
+version: "0.192"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed list pagination source ambiguity (offline)
+
+Two independent readers now refuse case-variant pagination keys rather than
+accepting a list with a hidden continuation or outstanding count. The fixed
+storage PodList reader rejected eight negative first/second-read fixtures after
+repair. Separately the CPU/memory PodList and local NodeList completeness reader
+rejects a positive, boolean or textual `remainingItemCount`, plus pagination
+aliases; ten negative fixtures failed before repair. Canonical absent or integer
+zero count passes. Focused FinOps 273 cases pass (seven Linux-only skips), as
+does `make verify-local-experiment` (intentional fake Dagster worker failure
+diagnostic).
+Dedicated Colima was freshly listed Stopped; no live API, report/volume/backup
+mutation or AgentHouse used-byte measurement (`null / NOT_MEASURED`). These
+synthetic checks neither authenticate list producers nor establish atomicity or
+operator acceptance. Revert only these two scoped guards/tests if needed,
+preserving saved records; original Vault sync pending outside checkout.
 
 ## 2026-10-06: contradictory fixed PodList remaining count (offline)
 
