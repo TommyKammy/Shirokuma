@@ -1217,6 +1217,13 @@ class ScopedResponseTests(unittest.TestCase):
                 client.image()
         reply['status']['observedGeneration'] = 2
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for status in ({}, {'replicas': 1}, {'availableReplicas': 1}):
+            reply = copy.deepcopy(valid)
+            reply['metadata']['generation'] = 2
+            reply['status'] = status
+            client.json_request.return_value = reply
+            with self.subTest(missing_observed_generation=status), self.assertRaises(policy.PolicyError):
+                client.image()
         reply['status'] = None
         with self.assertRaises(policy.PolicyError):
             client.image()

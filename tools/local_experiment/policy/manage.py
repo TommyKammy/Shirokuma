@@ -517,6 +517,11 @@ class Kubernetes:
             # reconciled this spec; do not lend its image to the smoke.
             if 'status' in deployment and type(deployment['status']) is not dict:
                 raise PolicyError('smoke requires the current local Trino rollout generation')
+            if ('status' in deployment and 'generation' in metadata and
+                    'observedGeneration' not in deployment['status']):
+                # A status-bearing response cannot establish that its controller
+                # has observed an explicitly versioned template without this field.
+                raise PolicyError('smoke requires the current local Trino rollout generation')
             if 'status' in deployment and 'observedGeneration' in deployment['status']:
                 observed = deployment['status']['observedGeneration']
                 if (type(observed) is not int or type(metadata.get('generation')) is not int or

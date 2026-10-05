@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.391"
+version: "5.392"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: two independent reference consistency guards (offline)
+
+WP-L2-POL-001 refuses a status-bearing fixed Trino Deployment with explicit
+generation but no observed generation (three failing-before-fix negatives;
+focused policy 166 pass). WP-L6-FIN-001 refuses a Bound PVC reporting more
+provisioned bytes than its backing PV declares (two failing-before-fix
+negatives; storage-focused 55 pass). A request larger than the PV during
+expansion is not rejected solely for that reason. The full local verifier
+passes after both fixes; its fake Dagster worker failure is an intentional
+negative diagnostic. Dedicated Colima was freshly listed Stopped. No live
+API/admission, retained volume/report/backup mutation, unknown-request replay
+or AgentHouse usage measurement (`null / NOT_MEASURED`). These offline
+checks do not authenticate producers, prove atomicity/physical occupancy or
+grant operator acceptance. Revert only the relevant guard/test if needed;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed storage finalizer continuity (offline)
 

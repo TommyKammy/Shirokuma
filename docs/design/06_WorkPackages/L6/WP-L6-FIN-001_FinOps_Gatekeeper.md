@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.189"
+version: "0.190"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: bound claim reported capacity versus backing volume (offline)
+
+Both fixed Bound PVC fixtures previously reported 21Gi provisioned capacity
+against a 20Gi PV and still published an observed reference. Reject the
+contradiction, but do not require the request to fit the PV during an
+in-progress expansion; a missing PVC status capacity remains unknown rather
+than invented. The two negative fixtures failed before repair; storage-focused
+55 cases and the full local verifier pass (fake Dagster worker failure is an
+intentional negative diagnostic). Colima was observed Stopped. No live API,
+retained report/volume/backup mutation, volume traversal or AgentHouse bytes
+measurement (`null / NOT_MEASURED`). This is not an atomic/authenticated
+capacity observation or physical used-byte/backup acceptance. Restore only
+the scoped consistency guard/test if needed, preserving saved records;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed storage finalizer continuity (offline)
 

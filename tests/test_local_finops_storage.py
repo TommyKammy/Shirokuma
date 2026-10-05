@@ -47,6 +47,19 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_bound_claim_reported_capacity_cannot_exceed_backing_pv(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            data = deepcopy(objects(component))
+            data[3]['status']['capacity']['storage'] = '21Gi'
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+            data[3]['status']['capacity']['storage'] = '20Gi'
+            self.assertEqual(projected(component, data)['state'], 'observed')
+            data[3]['spec']['resources']['requests']['storage'] = '21Gi'
+            self.assertEqual(projected(component, data)['state'], 'observed')
+            data[3]['status']['capacity'] = {}
+            self.assertIsNone(projected(component, data)['pvc']['capacity_bytes'])
+
     def test_bound_pv_explicit_storage_class_matches_claim(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             data = deepcopy(objects(component))

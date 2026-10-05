@@ -299,8 +299,13 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
             require(pv_class is None or (name(pv_class) and pv_class == info['storage_class']))
             policy = pv_spec.get('persistentVolumeReclaimPolicy')
             require(policy in ('Delete', 'Retain', 'Recycle'))
-            value['pv'] = dict(name=volume, uid=p['uid'], capacity_bytes=quantity(
-                pv_capacity.get('storage')), reclaim_policy=policy)
+            backing_capacity = quantity(pv_capacity.get('storage'))
+            # The claim's reported provisioned capacity cannot be larger than
+            # the capacity declared by the volume to which it is bound. The
+            # request itself may be larger during an in-progress expansion.
+            require(capacity is None or capacity <= backing_capacity)
+            value['pv'] = dict(name=volume, uid=p['uid'], capacity_bytes=backing_capacity,
+                               reclaim_policy=policy)
         else:
             require(pv is None and (volume is None or name(volume)))
         value['retention'] = a[3]
