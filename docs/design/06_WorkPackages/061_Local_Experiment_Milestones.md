@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.326"
+version: "5.327"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: scoped Docker socket and host-mounted smoke source (offline)
+
+WP-L6-FIN-001: Docker metadata-only volume reference now refuses foreign or
+aliased same-suffix context sockets (216 FinOps cases, seven Linux-only skips).
+WP-L2-POL-001: fixed Trino smoke image no longer comes from a hostPath-mounted
+Pod template or malformed volume list; benign emptyDir remains valid (focused
+policy suite passed). Dedicated Colima was freshly observed stopped.
+`make verify-local-experiment` and `git diff --check` passed. Neither
+offline guard authenticates a daemon/API or proves current runtime, live strict
+admission, AgentHouse usage (`null / NOT_MEASURED`) or operator acceptance.
+No collection, live API, unknown-request replay, retained report/request,
+volume or backup mutation, or GitHub write. Restore only these two readers and
+tests if necessary, preserving saved evidence. Original Vault sync pending.
 
 ## 2026-10-06: restricted smoke source and canonical FinOps volume reference (offline)
 

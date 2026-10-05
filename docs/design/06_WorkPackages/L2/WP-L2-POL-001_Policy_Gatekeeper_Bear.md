@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.181"
+version: "0.182"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke image rejects host-mounted source Pods (offline)
+
+The same-name Trino Deployment image could be borrowed from a Pod template
+with a hostPath volume despite its restricted container context. The reader
+now rejects malformed volume lists and any hostPath entry; the manifest's
+ConfigMap and emptyDir volumes remain allowed. Synthetic hostPath and malformed
+negatives and an emptyDir control pass in `make test-local-policy`. No API,
+dry-run, request replay, image import or retained data/backup change. This is
+not current workload verification, server authentication or strict live
+admission. Revert only the scoped reader/test if needed; preserve saved
+intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke source requires restricted Trino security context (offline)
 

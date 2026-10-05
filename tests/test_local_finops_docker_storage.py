@@ -71,6 +71,17 @@ class DockerStorageTests(unittest.TestCase):
                 data[1][0]['Mounts'][0]['Source'] = mountpoint
                 with self.assertRaises(D.DockerStorageError): projected(data)
 
+    def test_context_reference_refuses_foreign_or_alias_socket(self):
+        for host in ('unix:///tmp/foreign/.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/example/other/.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/example/../.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users//.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/./.colima/mac-studio-solo/docker.sock'):
+            with self.subTest(host=host):
+                data = fixture()
+                data[0][0]['Endpoints']['docker']['Host'] = host
+                with self.assertRaises(D.DockerStorageError): projected(data)
+
     def test_before_after_identity_and_mount_drift_refused(self):
         for index,change in ((1,lambda x:x[0].update(Id='b'*64)),
                              (1,lambda x:x[0]['State'].update(Running=True)),

@@ -1176,6 +1176,19 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for volumes in ([{'name': 'host', 'hostPath': {'path': '/var/run'}}],
+                        [None], None, {}):
+            with self.subTest(volumes=volumes):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['volumes'] = volumes
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['volumes'] = [
+            {'name': 'tmp', 'emptyDir': {'sizeLimit': '1Gi'}}]
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for field, value in (('runAsNonRoot', False), ('runAsNonRoot', 1),
                              ('runAsUser', 0), ('runAsUser', True),
                              ('seccompProfile', {'type': 'Unconfined'})):

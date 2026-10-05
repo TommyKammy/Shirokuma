@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.139"
+version: "0.140"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: bound Docker context socket reference (offline)
+
+The metadata-only AgentHouse reference accepted a same-suffix socket in a
+foreign directory. It now requires the canonical single-user Colima socket
+shape; synthetic foreign, nested and traversal aliases fail, and the fixed
+fixture passes. `make test-local-finops` passed 216 cases (seven Linux-only
+skips). This is a pathname scope check, **not** daemon/VM authentication or
+permission to traverse the retained volume. No collection, report, volume or
+backup mutation; used bytes remain `null / NOT_MEASURED`. Restore only this
+reference guard and test if needed; preserve saved reports. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: canonical fixed Docker volume reference (offline)
 

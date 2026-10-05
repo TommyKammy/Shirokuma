@@ -41,8 +41,10 @@ def _context(raw):
     obj = _object(raw)
     require(obj.get('Name') == AH.CONTEXT)
     host = obj.get('Endpoints', {}).get('docker', {}).get('Host')
-    require(type(host) is str and host.startswith('unix://') and
-            host.endswith('/.colima/mac-studio-solo/docker.sock'))
+    # A suffix match alone also accepts a socket in an unrelated directory.
+    # This is a path scope check, not authentication of the daemon at the path.
+    require(type(host) is str and re.fullmatch(
+        r'unix:///Users/[^/\.][^/]*/\.colima/mac-studio-solo/docker\.sock', host) is not None)
     return host
 
 

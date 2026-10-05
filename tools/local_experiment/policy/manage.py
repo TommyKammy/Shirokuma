@@ -535,6 +535,11 @@ class Kubernetes:
                      any(pod_spec.get(field, False) is not False
                          for field in ('hostNetwork', 'hostPID', 'hostIPC'))):
                 raise PolicyError('smoke requires the isolated local Trino pod template')
+            volumes = pod_spec.get('volumes', [])
+            if (type(volumes) is not list or
+                    any(type(volume) is not dict or 'hostPath' in volume
+                        for volume in volumes)):
+                raise PolicyError('smoke cannot source an image from a host-mounted pod')
             pod_security = pod_spec.get('securityContext')
             if (type(pod_security) is not dict or
                     pod_security.get('runAsNonRoot') is not True or
