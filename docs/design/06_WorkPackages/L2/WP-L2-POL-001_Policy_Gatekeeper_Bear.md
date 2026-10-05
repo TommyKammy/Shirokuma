@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.173"
+version: "0.174"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: malformed optional smoke container lists (offline)
+
+The smoke image reader treated falsey non-list `initContainers` and
+`ephemeralContainers` values as absence. It now requires either an absent field
+or an empty list; nonempty lists remain refused. Synthetic null/map negatives
+and the empty-list control pass in the 166-test policy suite. The separate
+FinOps offline suite passed 210 tests (seven Linux-only skips) without
+collection. Dedicated Colima was freshly observed stopped. This is response
+shape validation, not proof of live admission or current Deployment safety.
+No retained data/backup or saved intent was changed. Restore only the scoped
+reader/test if needed; original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke image source must be a single-container deployment (offline)
 

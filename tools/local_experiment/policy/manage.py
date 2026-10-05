@@ -512,7 +512,8 @@ class Kubernetes:
             containers = pod_spec['containers']
             if (type(containers) is not list or len(containers) != 1 or
                     type(containers[0]) is not dict or
-                    pod_spec.get('initContainers') or pod_spec.get('ephemeralContainers')):
+                    any(type(pod_spec[field]) is not list or pod_spec[field]
+                        for field in ('initContainers', 'ephemeralContainers') if field in pod_spec)):
                 raise PolicyError('smoke requires a well-formed local Trino deployment')
             images = [item.get('image') for item in containers if item.get('name') == 'trino']
         except (TypeError, KeyError):

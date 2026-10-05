@@ -1198,13 +1198,19 @@ class ScopedResponseTests(unittest.TestCase):
                     client.image()
 
         for extra in ({'initContainers': [{'name': 'setup', 'image': 'unrelated:mutable'}]},
-                      {'ephemeralContainers': [{'name': 'debug', 'image': 'unrelated:mutable'}]}):
+                      {'ephemeralContainers': [{'name': 'debug', 'image': 'unrelated:mutable'}]},
+                      {'initContainers': {}}, {'initContainers': None},
+                      {'ephemeralContainers': {}}, {'ephemeralContainers': None}):
             with self.subTest(extra=extra):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec'].update(extra)
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec'].update(initContainers=[], ephemeralContainers=[])
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
 
     def test_success_with_stderr_cannot_certify_policy_read_or_mutation(self):
         client = object.__new__(policy.Kubernetes)

@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.315"
+version: "5.316"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: optional smoke container list shape (offline)
+
+WP-L2-POL-001: falsey malformed `initContainers`/`ephemeralContainers`
+values no longer pass the pinned image lookup; absent or empty lists remain
+valid. Focused policy suite passed 166 tests. Independently the unchanged
+WP-L6-FIN-001 offline suite passed 210 tests (seven Linux-only skips), without
+collection. Dedicated Colima was freshly observed stopped. No live admission,
+retained data/backup or saved report mutation. Live strict admission and
+AgentHouse volume usage (`null / NOT_MEASURED`) remain unverified. Revert only
+the smoke reader/test if needed; preserve saved intents/reports. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: policy smoke image source excludes additional containers (offline)
 
