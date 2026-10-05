@@ -146,6 +146,7 @@ def _snapshot(component, workload, pods, replica=None):
         # mount or subPath/device mapping would describe a different exposure.
         claim_mounts = [m for m in mounts if m.get('name') == volume]
         require(all(type(v) is dict and 'ephemeral' not in v for v in volumes) and
+                sum(v.get('name') == volume for v in volumes) == 1 and
                 len(claims) == 1 and claims[0].get('name') == volume and
                 type(claims[0]['persistentVolumeClaim']) is dict and
                 claims[0]['persistentVolumeClaim'].get('claimName') == claim and

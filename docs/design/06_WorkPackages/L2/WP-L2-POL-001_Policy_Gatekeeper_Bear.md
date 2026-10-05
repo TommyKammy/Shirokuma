@@ -5,12 +5,22 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.205"
+version: "0.206"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke-source termination-message defaults (offline)
+
+A same-image Trino template could redirect its termination message to a
+configuration path or copy logs to Pod status. Both negatives failed before
+the guard; absent and explicit Kubernetes defaults (`/dev/termination-log`,
+`File`) pass. Focused policy 166 cases passed. No live API, admission or
+request replay; the source cannot authenticate Kubernetes or prove strict
+live admission/operator acceptance. Revert only the scoped filter/test if
+needed, preserving saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: Trino projected configuration keys (offline)
 

@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.167"
+version: "0.168"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed PVC volume-name shadowing (offline)
+
+Two synthetic StatefulSet Pods with an emptyDir reusing the fixed PVC volume
+name previously certified the claim mount. Both negatives failed before the
+guard; the source now requires exactly one volume with the fixed name. Focused
+FinOps 247 cases passed (seven Linux-only skips). Colima was freshly observed
+stopped; no live API, volume scan, retained report/backup modification or
+AgentHouse used-byte measurement (`null / NOT_MEASURED`). This offline check
+does not authenticate a producer or grant operator acceptance. Revert only
+this guard/test if needed, retaining saved inputs. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: fixed PVC mount exposure (offline)
 

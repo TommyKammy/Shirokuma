@@ -636,7 +636,11 @@ class Kubernetes:
             # source. None of these fields occurs in the local Trino manifest.
             if any(field in containers[0] for field in (
                      'command', 'args', 'workingDir', 'lifecycle', 'envFrom',
-                     'volumeDevices', 'stdin', 'stdinOnce', 'tty')):
+                     'volumeDevices', 'stdin', 'stdinOnce', 'tty')) or (
+                      'terminationMessagePath' in containers[0] and
+                      containers[0]['terminationMessagePath'] != '/dev/termination-log') or (
+                      'terminationMessagePolicy' in containers[0] and
+                      containers[0]['terminationMessagePolicy'] != 'File'):
                 raise PolicyError('smoke requires the local Trino container execution')
             # The image source must not silently require more resources or
             # attach a device claim than the dedicated local manifest.

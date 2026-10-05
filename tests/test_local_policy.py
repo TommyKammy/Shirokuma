@@ -1359,6 +1359,8 @@ class ScopedResponseTests(unittest.TestCase):
                              ('workingDir', '/host'), ('lifecycle', {'postStart': {'exec': {'command': ['id']}}}),
                              ('envFrom', [{'secretRef': {'name': 'foreign'}}]),
                              ('volumeDevices', [{'name': 'data', 'devicePath': '/dev/data'}]),
+                             ('terminationMessagePath', '/etc/trino/catalog/iceberg.properties'),
+                             ('terminationMessagePolicy', 'FallbackToLogsOnError'),
                              ('stdin', True), ('stdinOnce', True), ('tty', True)):
             with self.subTest(container_execution=field):
                 reply = copy.deepcopy(valid)
@@ -1366,6 +1368,11 @@ class ScopedResponseTests(unittest.TestCase):
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['containers'][0].update(
+            terminationMessagePath='/dev/termination-log', terminationMessagePolicy='File')
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for probe in ({'exec': {'command': ['/bin/sh', '-c', 'id']}},
                       {'httpGet': {'path': '/foreign', 'port': 'http'}},
                       {'httpGet': {'path': '/v1/info', 'port': 'http',

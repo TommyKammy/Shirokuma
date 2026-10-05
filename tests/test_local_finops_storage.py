@@ -212,6 +212,14 @@ class StorageTests(unittest.TestCase):
                 with self.subTest(component=component, change=change), self.assertRaises(S.StorageError):
                     projected(component, data)
 
+    def test_fixed_claim_volume_name_cannot_be_shadowed(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            data = deepcopy(objects(component))
+            data[1][0]['spec']['volumes'].append({
+                'name': S.TARGETS[component][5], 'emptyDir': {}})
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+
     def test_deployment_replicaset_selector_must_select_reported_pod(self):
         for component in ('polaris', 'trino'):
             data = deepcopy(objects(component))

@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.360"
+version: "5.361"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed PVC volume-name and smoke termination-message source (offline)
+
+WP-L6-FIN-001 refuses a second Pod volume shadowing either fixed claim's
+name. WP-L2-POL-001 refuses a Trino smoke image source redirecting termination
+messages or copying logs into Pod status; explicit Kubernetes defaults pass.
+Four negative subcases failed before repair; focused FinOps 247 (seven Linux-only
+skips), policy 166, `make verify-local-experiment` and `git diff --check`
+passed. The verifier's fake Dagster worker failure is an intentional negative
+diagnostic. Dedicated Colima was freshly observed stopped.
+No live API/admission, collection, unknown-request replay, retained report/
+volume/backup mutation or GitHub write. Offline checks cannot authenticate
+sources, establish strict admission, measure AgentHouse used bytes (`null /
+NOT_MEASURED`) or confer operator acceptance. Restore only these scoped
+guards/tests if necessary, retaining saved evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: fixed claim mount and Trino config projection (offline)
 
