@@ -1452,7 +1452,16 @@ class ScopedResponseTests(unittest.TestCase):
             'httpGet': {'path': '/v1/info', 'port': 'http'}, 'periodSeconds': 5,
             'failureThreshold': 60}
         client.json_request.return_value = reply
+        with self.assertRaises(policy.PolicyError):
+            client.image()
+        reply['spec']['template']['spec']['containers'][0]['ports'] = [
+            {'name': 'http', 'containerPort': 8080}]
+        client.json_request.return_value = reply
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        reply['spec']['template']['spec']['containers'][0]['ports'] = []
+        client.json_request.return_value = reply
+        with self.assertRaises(policy.PolicyError):
+            client.image()
         for ports in ([{'name': 'http', 'containerPort': 8080, 'hostPort': 8080}],
                       [{'name': 'http', 'containerPort': 8080, 'hostIP': '0.0.0.0'}],
                       [{'name': 'http', 'containerPort': 8080, 'protocol': 'UDP'}],

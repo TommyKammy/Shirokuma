@@ -698,13 +698,15 @@ class Kubernetes:
             # the Pod's network namespace or the image digest.
             ports = containers[0].get('ports', [])
             if (type(ports) is not list or len(ports) > 1 or
-                    any(type(port) is not dict or
-                        set(port) - {'name', 'containerPort', 'protocol'} or
-                        port.get('name') != 'http' or
-                        type(port.get('containerPort')) is not int or
-                        port['containerPort'] != 8080 or
-                        port.get('protocol', 'TCP') != 'TCP'
-                        for port in ports)):
+                     any(type(port) is not dict or
+                         set(port) - {'name', 'containerPort', 'protocol'} or
+                         port.get('name') != 'http' or
+                         type(port.get('containerPort')) is not int or
+                         port['containerPort'] != 8080 or
+                         port.get('protocol', 'TCP') != 'TCP'
+                         for port in ports) or
+                     (any(name in containers[0] for name in
+                          ('startupProbe', 'readinessProbe', 'livenessProbe')) and len(ports) != 1)):
                 raise PolicyError('smoke requires local Trino container ports')
             # The named image must not be borrowed from a template redirecting
             # Trino's catalog credentials to literals or other references.

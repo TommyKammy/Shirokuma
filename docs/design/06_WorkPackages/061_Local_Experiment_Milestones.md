@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.376"
+version: "5.377"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: named Trino probe port binding (offline)
+
+WP-L2-POL-001 now refuses a same-image source with a named HTTP probe but
+no declared `http` 8080/TCP port (omitted or empty), retaining support for
+minimal probe-free fixtures. The synthetic negative failed before repair;
+focused policy 166 cases and `make verify-local-experiment` passed after.
+The verifier prints an intentional Dagster fake-worker negative diagnostic.
+Colima was freshly observed stopped. No live API/admission, unknown request
+replay, retained data/backup change or GitHub write. Offline source checks
+cannot authenticate the producer, establish strict admission or constitute
+operator acceptance. Restore only this scoped guard/test if needed; preserve
+saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded Trino Deployment response envelope (offline)
 

@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.217"
+version: "0.218"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: named Trino probe port binding (offline)
+
+A synthetic same-image Deployment with an HTTP probe referencing the named
+`http` port but no declared container port supplied the smoke image before
+repair. The source now requires the fixed 8080/TCP named port whenever any
+of the three HTTP probes is present; a minimal probe-free fixture remains
+supported. Both omitted and empty ports fail, and a matching port passes.
+Focused policy 166 cases and the full local verifier passed after repair;
+the initial negative failed as expected. Dedicated Colima was freshly
+observed stopped. No live admission/API, unknown request replay, retained
+data/backup mutation or GitHub write. This synthetic contract does not
+authenticate Kubernetes, prove strict admission or grant operator acceptance.
+Revert only the scoped port/probe guard and tests if necessary, preserving
+saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded Trino Deployment response envelope (offline)
 
