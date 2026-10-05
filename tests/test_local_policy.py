@@ -1170,6 +1170,19 @@ class ScopedResponseTests(unittest.TestCase):
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for references in ([{'apiVersion': 'v1', 'kind': 'ConfigMap', 'name': 'other',
+                             'uid': 'foreign', 'controller': True}],
+                           [None], None, {}):
+            with self.subTest(ownerReferences=references):
+                reply = copy.deepcopy(valid)
+                reply['metadata']['ownerReferences'] = references
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        reply = copy.deepcopy(valid)
+        reply['metadata']['ownerReferences'] = []
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for location in ('metadata', 'template'):
             for key, value in (('shirokuma.dev/scope', None),
                                ('shirokuma.dev/scope', 'other'),

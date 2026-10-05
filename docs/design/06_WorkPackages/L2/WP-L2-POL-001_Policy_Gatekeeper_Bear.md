@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.177"
+version: "0.178"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke image excludes controller-owned Deployment (offline)
+
+The fixed-name, labelled Deployment could supply a smoke image even with a
+foreign controller ownerReference. Four synthetic nonempty/malformed owner
+reference negatives failed before the reader required absent or empty references;
+both ordinary and explicitly empty owner lists pass. The 166-test focused
+policy suite passed after repair. The dedicated lab was observed stopped; no
+API, dry-run, policy mutation or retained-data/backup change occurred. This
+does not authenticate API responses or establish live strict admission. Revert
+only this guard and its tests if necessary; retain saved requests. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke image source ownership labels (offline)
 

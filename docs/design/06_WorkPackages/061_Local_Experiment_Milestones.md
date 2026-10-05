@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.321"
+version: "5.322"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: smoke image controller ownership boundary (offline)
+
+WP-L2-POL-001: four foreign/malformed Deployment ownerReferences supplied a
+smoke image in synthetic replies before repair. Absent and empty owner lists
+remain valid; the focused policy suite passed 166 cases. Dedicated Colima was
+freshly observed stopped. No live API, dry-run, retained data/backup mutation
+or request replay. Offline labels and owner references do not authenticate the
+API or prove live admission; rollback is limited to the scoped guard/test,
+preserving saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent first-report history snapshot regression (offline)
 
