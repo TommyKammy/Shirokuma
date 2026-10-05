@@ -564,6 +564,26 @@ class StorageTests(unittest.TestCase):
         backend.storage_get.side_effect = responses
         self.assertEqual(S._collect_one(backend, 'seaweedfs')['state'], 'observed')
 
+    def test_storage_collection_refuses_claim_or_volume_metadata_drift(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            w, pods, _, pvc, pv = objects(component)
+            original = [w, {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': pods},
+                        pvc, pv, deepcopy(w),
+                        {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': deepcopy(pods)},
+                        deepcopy(pvc), deepcopy(pv)]
+            for index, field, value in ((6, 'labels', {'owner': 'other'}),
+                                        (6, 'ownerReferences', [{'uid': RS_UID}]),
+                                        (7, 'labels', {'owner': 'other'}),
+                                        (7, 'ownerReferences', [{'uid': RS_UID}])):
+                responses = deepcopy(original)
+                responses[index]['metadata'][field] = value
+                backend = Mock()
+                backend.now.return_value = NOW
+                backend.storage_get.side_effect = responses
+                with self.subTest(component=component, index=index, field=field), self.assertRaisesRegex(
+                        S.StorageError, 'IDENTITY_CHANGED'):
+                    S._collect_one(backend, component)
+
     def test_storage_collection_refuses_pv_losing_bound_phase(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             w, pods, _, pvc, pv = objects(component)

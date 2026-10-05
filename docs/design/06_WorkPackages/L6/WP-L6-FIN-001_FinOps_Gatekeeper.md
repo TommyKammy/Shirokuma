@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.185"
+version: "0.186"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: PVC/PV scope metadata continuity (offline)
+
+Eight fixture variations (two fixed claims, PVC/PV labels or ownerReferences
+changed only on the second read) incorrectly projected observed references
+before repair. The collector now refuses those changes with IDENTITY_CHANGED,
+while allowing status and resourceVersion progress with stable scope metadata.
+Focused FinOps 267 tests pass (seven Linux-only skips); post-change
+`make verify-local-experiment` passes, including an intentional fake Dagster
+worker failure diagnostic. Fresh `colima status --profile mac-studio-solo`
+reported not running. No live Kubernetes API, volume traversal, report or
+backup mutation; AgentHouse remains `null / NOT_MEASURED`. Two sequential
+reads do not authenticate the producer or establish atomicity, physical bytes
+or operator acceptance. Revert only this scoped guard/test if needed and
+preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: status movement control after spec pinning (offline)
 

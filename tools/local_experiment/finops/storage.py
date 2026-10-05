@@ -41,6 +41,12 @@ def _same_json(first, second):
         raise StorageError('IDENTITY_CHANGED') from None
 
 
+def _same_reference_metadata(first, second):
+    # Resource versions can advance with status; ownership and scope cannot.
+    return all(_same_json(first['metadata'].get(field), second['metadata'].get(field))
+               for field in ('labels', 'ownerReferences'))
+
+
 def uid(value):
     try: require(type(value) is str and str(uuid.UUID(value)) == value)
     except (ValueError, TypeError, AttributeError): raise StorageError('SCOPE_INVALID') from None
@@ -421,7 +427,8 @@ def _collect_one(backend, component):
                     spec.get('volumeMode'), status.get('phase'), capacity.get('storage'))
         # The projected fields alone do not pin access modes or other PVC
         # semantics. Status may move, but the entire claim spec must stay put.
-        require(_same_json(claim_state(later), claim_state(pvc)) and
+        require(_same_reference_metadata(pvc, later) and
+                _same_json(claim_state(later), claim_state(pvc)) and
                 _same_json(later['spec'], pvc['spec']), 'IDENTITY_CHANGED')
         if pv:
             later_pv = backend.storage_get(f'/api/v1/persistentvolumes/{name(pv["metadata"]["name"])}')
@@ -438,7 +445,8 @@ def _collect_one(backend, component):
                          spec.get('persistentVolumeReclaimPolicy'), spec.get('volumeMode'),
                          spec.get('storageClassName'))
             # A stable claimRef/capacity does not pin the backing PV source.
-            require(_same_json(pv_state(later_pv), pv_state(pv)) and
+            require(_same_reference_metadata(pv, later_pv) and
+                    _same_json(pv_state(later_pv), pv_state(pv)) and
                     _same_json(later_pv['spec'], pv['spec']), 'IDENTITY_CHANGED')
     return project(component, (before,pods,replica), (after,after_pods['items'],after_replica),
                    pvc=pvc, pv=pv, request_started_at=start, observed_at=backend.now())

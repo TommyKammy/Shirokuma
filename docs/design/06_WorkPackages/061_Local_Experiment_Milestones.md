@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.387"
+version: "5.388"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: PVC/PV scope metadata continuity (offline)
+
+WP-L6-FIN-001 refuses changed PVC/PV labels and ownerReferences between its
+two fixed reads. Eight negative fixtures failed before repair; storage status
+and resourceVersion may still progress without changing identity. Focused
+FinOps 267 tests (seven Linux-only skips) and the full local verifier pass;
+its fake Dagster worker failure is an intentional negative diagnostic. The
+dedicated Colima was freshly observed not running. No live Kubernetes read,
+retained report/volume/backup change or AgentHouse used-byte measurement
+(`null / NOT_MEASURED`). These offline checks do not prove API authenticity,
+atomic snapshots or operator acceptance. Revert only the scoped guard/test
+and preserve saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed storage status-progress control (offline)
 
