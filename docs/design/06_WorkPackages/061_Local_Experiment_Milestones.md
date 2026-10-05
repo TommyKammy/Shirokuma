@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.243"
+version: "5.244"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: fail-closed non-text denial and independent saved-history checks (offline)
+
+WP-L2-POL-001: a non-text fake denial stderr previously raised an uncaught
+`TypeError`; the bounded matcher now refuses it and the full fake smoke
+records failure at request three. Focused and full native policy tests (88),
+`make verify-local-experiment` and independent WP-L6-FIN-001 FinOps tests
+(194; seven Linux-only skips) passed. The FinOps reader was unchanged; its
+saved-history identity, ordering and per-report storage checks remain offline
+only. Colima was observed stopped. No live API, collection, unknown-request
+replay, retained data/backup mutation or GitHub write. Neither fake denials
+nor saved reports authenticate their producers, establish current usage, clear
+strict admission or grant operator acceptance. Roll back only the denial
+guard/test if needed; preserve saved reports and requests. Direct original
+Vault synchronization remains pending outside checkout.
 
 ## 2026-10-05: balanced denial syntax and separate saved-history review (offline)
 

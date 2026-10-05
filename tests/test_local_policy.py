@@ -1471,6 +1471,26 @@ class SmokeTests(unittest.TestCase):
             self.assertFalse(policy.own_denial(stderr, name, message))
         self.assertTrue(policy.own_denial(f'ValidatingAdmissionPolicy "{name}" with binding "{name}" denied request: {message}', name, message))
 
+    def test_nontext_denial_is_a_recorded_smoke_failure(self):
+        name = policy.NAMES[0]
+        message = 'Privileged containers are forbidden.'
+        self.assertFalse(policy.own_denial(None, name, message))
+        self.assertFalse(policy.own_denial(b'denied', name, message))
+
+        kube = FakeKubernetes(ready=True)
+        reference = FakeKubernetes(ready=True)
+        def nontext(request):
+            response = reference.smoke_request(request)
+            if response.returncode != 0:
+                return SimpleNamespace(returncode=1, stdout='', stderr=None)
+            return response
+        kube.smoke_failure = nontext
+        events = []
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items(), record=events.append)
+        self.assertEqual(len(kube.calls), 3)
+        self.assertEqual(events[-1]['result'], 'failed')
+
     def test_denial_with_additional_error_lines_is_not_a_policy_pass(self):
         name = policy.NAMES[0]
         message = 'Privileged containers are forbidden.'

@@ -380,7 +380,8 @@ def smoke_cases(image: str) -> list[dict]:
 
 
 def own_denial(stderr: str, name: str, message: str) -> bool:
-    if name not in NAMES or not isinstance(message, str) or not message:
+    if (name not in NAMES or not isinstance(stderr, str) or
+            not isinstance(message, str) or not message):
         return False
     # Admit only the observed kubectl Forbidden wrapper (or the bare API
     # denial). Arbitrary text on the same line is not policy evidence.

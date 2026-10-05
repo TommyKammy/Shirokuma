@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.109"
+version: "0.110"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: malformed native denial output (offline)
+
+The fixed denial matcher raised a raw `TypeError` on non-text stderr rather
+than recording a failed dry-run case. It now refuses non-text replies, with a
+fake full-smoke regression confirming failure at request three and a recorded
+failed row. Native policy tests (88), separate FinOps tests (194; seven
+Linux-only skips) and `make verify-local-experiment` passed. Colima was
+observed stopped; no live admission, saved-request replay or retained
+data/backup mutation. This tests a malformed transport reply, not producer
+authenticity, strict admission or operator acceptance. Roll back only the type
+guard and test if needed; preserve saved requests. Original Vault sync remains
+pending outside checkout.
 
 ## 2026-10-05: balanced native denial identifiers (offline)
 
