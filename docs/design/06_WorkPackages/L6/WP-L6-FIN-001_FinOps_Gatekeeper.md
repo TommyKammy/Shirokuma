@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.188"
+version: "0.189"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed storage finalizer continuity (offline)
+
+Four separate synthetic second-read finalizer changes on the fixed workload,
+Pod, claim and backing volume previously published the original reference.
+Both paired source and PVC/PV metadata comparisons now refuse these changes.
+All four negatives failed before repair; storage-focused 54 and FinOps 269
+tests pass (seven Linux-only skips). The prior full verifier predates this
+follow-up. No live API, volume/report/backup mutation or used-byte observation;
+finalizer continuity is not a guarantee of retention or atomicity. Revert
+only this scoped guard/test if needed, retaining saved records. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: workload/Pod/ReplicaSet annotation continuity (offline)
 

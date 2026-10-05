@@ -44,7 +44,7 @@ def _same_json(first, second):
 def _same_reference_metadata(first, second):
     # Resource versions can advance with status; ownership and scope cannot.
     return all(_same_json(first['metadata'].get(field), second['metadata'].get(field))
-               for field in ('labels', 'ownerReferences', 'annotations'))
+               for field in ('labels', 'ownerReferences', 'annotations', 'finalizers'))
 
 
 def uid(value):
@@ -244,6 +244,8 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
                     _same_json(first_obj['metadata'].get('labels'), last_obj['metadata'].get('labels')) and
                     _same_json(first_obj['metadata'].get('annotations'),
                                last_obj['metadata'].get('annotations')) and
+                    _same_json(first_obj['metadata'].get('finalizers'),
+                               last_obj['metadata'].get('finalizers')) and
                     _same_json(first_obj['metadata'].get('ownerReferences'),
                                last_obj['metadata'].get('ownerReferences')), 'IDENTITY_CHANGED')
     ns, kind, _, _, _, _, _, claim = TARGETS[component]

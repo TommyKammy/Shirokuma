@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.390"
+version: "5.391"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed storage finalizer continuity (offline)
+
+WP-L6-FIN-001 now rejects changed workload, Pod, PVC or PV finalizers across
+the two reads. Four negatives failed before repair; storage-focused 54 and
+FinOps 269 tests pass (seven Linux-only skips). The full verifier in the next
+entry predates this follow-up. No live API, volume traversal, retained
+report/backup changes or AgentHouse used-byte claim (`null / NOT_MEASURED`).
+Sequential finalizer stability does not prove producer authenticity, retention,
+atomic sampling or operator acceptance. Restore only the scoped guard/test if
+needed; original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed workload annotation continuity (offline)
 

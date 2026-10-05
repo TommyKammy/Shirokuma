@@ -599,6 +599,27 @@ class StorageTests(unittest.TestCase):
                     S.project(component, before, after, pvc=pvc, pv=pv,
                               request_started_at=NOW, observed_at=NOW)
 
+    def test_storage_collection_refuses_finalizer_drift(self):
+        w, pods, _, pvc, pv = objects('seaweedfs')
+        before = (w, pods, None)
+        for index in (0, 1):
+            after = deepcopy(before)
+            target = after[index][0] if index == 1 else after[index]
+            target['metadata']['finalizers'] = ['example.invalid/hold']
+            with self.subTest(source=index), self.assertRaisesRegex(S.StorageError, 'IDENTITY_CHANGED'):
+                S.project('seaweedfs', before, after, pvc=pvc, pv=pv,
+                          request_started_at=NOW, observed_at=NOW)
+        for index in (6, 7):
+            responses = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':pods},
+                         pvc, pv, deepcopy(w),
+                         {'kind':'PodList','apiVersion':'v1','metadata':{},'items':deepcopy(pods)},
+                         deepcopy(pvc), deepcopy(pv)]
+            responses[index]['metadata']['finalizers'] = ['example.invalid/hold']
+            backend = Mock(); backend.now.return_value = NOW
+            backend.storage_get.side_effect = responses
+            with self.subTest(source=index), self.assertRaisesRegex(S.StorageError, 'IDENTITY_CHANGED'):
+                S._collect_one(backend, 'seaweedfs')
+
     def test_storage_collection_refuses_pv_losing_bound_phase(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             w, pods, _, pvc, pv = objects(component)
