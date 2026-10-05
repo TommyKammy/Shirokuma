@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.163"
+version: "0.164"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: recheck full inventory after activation dry-runs (offline)
+
+A foreign binding introduced during the final dry-run could previously leave
+newly created policy definitions before the binding phase discovered it. A
+fake-API regression now requires a whole-inventory ownership and UID recheck
+after dry-runs and before the first persistent create; it leaves no new policy
+definitions. `make test-local-policy` passed 154 cases and `make
+verify-local-experiment` passed. This sequential recheck is not an atomic
+cluster snapshot and cannot prevent a later race or prove live strict admission.
+Dedicated Colima was observed stopped; no live policy write, request replay,
+retained data/backup mutation or GitHub write. Revert only this recheck and
+test if needed; retain saved intents. Original Vault sync pending outside the
+checkout.
 
 ## 2026-10-06: activation resource identity across reads (offline)
 

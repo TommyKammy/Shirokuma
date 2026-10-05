@@ -630,6 +630,14 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
         # A successful transport alone cannot certify what the API validated.
         # Check every dry-run reply before the first persistent creation.
         assert_owned(kube.create(expected, dry_run=True), expected)
+    # Dry-runs are sequential. Recheck every name before the first persistent
+    # create so a late binding change cannot leave newly created definitions
+    # behind before the binding phase discovers it.
+    for expected in items:
+        current = kube.get(expected['kind'], expected['metadata']['name'])
+        if current is not None:
+            assert_owned(current, expected)
+            pin_identity(current, expected)
     for kind in (POLICY, BINDING):
         selected = [item for item in items if item['kind'] == kind]
         missing = []

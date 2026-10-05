@@ -798,6 +798,25 @@ class ActivationTests(unittest.TestCase):
                 self.assertEqual(kube.objects, {})
                 self.assertTrue(all(action == 'dry-run' for action, _, _ in kube.calls))
 
+    def test_binding_change_during_dry_runs_prevents_policy_creation(self):
+        kube = FakeKubernetes()
+        original = kube.create
+        target = items()[-1]
+
+        def late_foreign(value, *, dry_run=False):
+            reply = original(value, dry_run=dry_run)
+            if dry_run and value['kind'] == policy.BINDING and value['metadata']['name'] == target['metadata']['name']:
+                foreign = admitted(target)
+                foreign['metadata']['labels']['shirokuma.dev/policy-owner'] = 'foreign'
+                kube.objects[(target['kind'], target['metadata']['name'])] = foreign
+            return reply
+
+        kube.create = late_foreign
+        with self.assertRaisesRegex(policy.PolicyError, 'refusing overwrite'):
+            policy.apply_policies(kube, items())
+        self.assertFalse(any(action == 'create' for action, _, _ in kube.calls))
+        self.assertFalse(any(kind == policy.POLICY for kind, _ in kube.objects))
+
     def test_partial_or_duplicate_activation_inventory_cannot_report_ready(self):
         baseline = items()
         for supplied in (baseline[:-1], baseline + [baseline[0]],

@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.303"
+version: "5.304"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: activation post-dry-run inventory and independent FinOps check (offline)
+
+WP-L2-POL-001: a fake binding introduced during the final dry-run previously
+allowed policy definitions to be created before ownership failure. A new
+whole-inventory read before the first persistent create refuses this case;
+154 focused policy tests and `make verify-local-experiment` passed. Separately
+WP-L6-FIN-001's unchanged saved-history/storage suite passed 207 tests (seven
+Linux-only skips). Dedicated Colima was observed stopped; no live API,
+unknown-request replay, retained volume/backup mutation or GitHub write. This
+sequential scan is not atomic or source/API authentication, live strict
+admission, present AgentHouse usage (`null / NOT_MEASURED`) or operator
+acceptance. Revert only the scoped policy scan/test if necessary; preserve
+saved reports and intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: activation UID continuity and separate FinOps regression (offline)
 
