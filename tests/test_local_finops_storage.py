@@ -573,8 +573,10 @@ class StorageTests(unittest.TestCase):
                         deepcopy(pvc), deepcopy(pv)]
             for index, field, value in ((6, 'labels', {'owner': 'other'}),
                                         (6, 'ownerReferences', [{'uid': RS_UID}]),
+                                        (6, 'annotations', {'backup': 'disabled'}),
                                         (7, 'labels', {'owner': 'other'}),
-                                        (7, 'ownerReferences', [{'uid': RS_UID}])):
+                                        (7, 'ownerReferences', [{'uid': RS_UID}]),
+                                        (7, 'annotations', {'backup': 'disabled'})):
                 responses = deepcopy(original)
                 responses[index]['metadata'][field] = value
                 backend = Mock()

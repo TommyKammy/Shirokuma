@@ -5,12 +5,21 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.388"
+version: "5.389"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed PVC/PV annotation continuity (offline)
+
+WP-L6-FIN-001: four additional second-read annotation-drift fixtures failed
+before repair. Fixed PVC/PV annotations now join labels/ownerReferences in
+the two-read scope check. Focused FinOps 267 tests pass (seven Linux-only
+skips); the full verifier below predates this follow-up. No live API, volume
+scan or retained data/backup change. Neither producer authenticity nor
+operator acceptance is established; Vault sync pending outside checkout.
 
 ## 2026-10-06: PVC/PV scope metadata continuity (offline)
 

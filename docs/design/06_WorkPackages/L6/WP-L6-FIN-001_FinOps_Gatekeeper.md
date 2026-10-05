@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.186"
+version: "0.187"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed claim/volume annotation continuity (offline)
+
+Four additional second-read PVC/PV annotation changes projected observed
+references before repair. The same scope-metadata comparison now pins
+annotations, including backup-policy hints, without pinning unrelated
+resourceVersion or status progress. Focused FinOps 267 tests pass (seven
+Linux-only skips); full verifier below predates this follow-up. No live API,
+retained report/backup mutation or volume scan, and no physical-byte or
+operator acceptance claim. Undo only this annotation guard/test if needed;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: PVC/PV scope metadata continuity (offline)
 

@@ -44,7 +44,7 @@ def _same_json(first, second):
 def _same_reference_metadata(first, second):
     # Resource versions can advance with status; ownership and scope cannot.
     return all(_same_json(first['metadata'].get(field), second['metadata'].get(field))
-               for field in ('labels', 'ownerReferences'))
+               for field in ('labels', 'ownerReferences', 'annotations'))
 
 
 def uid(value):
