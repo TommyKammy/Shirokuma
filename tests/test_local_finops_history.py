@@ -304,5 +304,25 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), '')
         self.assertEqual(errors.getvalue().strip(), H.ERROR)
 
+    def test_cli_output_limit_includes_terminal_newline(self):
+        data = encoded([report(), report(processes())])
+        html = H.render(H.parse(data))
+        size = len(html.encode('utf-8'))
+        class Input:
+            buffer = io.BytesIO(data)
+        for limit, expected in ((size, 1), (size + 1, 0)):
+            output, errors = io.StringIO(), io.StringIO()
+            Input.buffer = io.BytesIO(data)
+            with self.subTest(limit=limit), patch.object(H, 'MAX_OUTPUT_BYTES', limit), \
+                    patch.object(H.sys, 'stdin', Input()), patch.object(H.sys, 'stdout', output), \
+                    patch.object(H.sys, 'stderr', errors), \
+                    patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):
+                self.assertEqual(H.main([]), expected)
+            if expected:
+                self.assertEqual(output.getvalue(), '')
+                self.assertEqual(errors.getvalue().strip(), H.ERROR)
+            else:
+                self.assertEqual(output.getvalue(), html + '\n')
+
 
 if __name__ == '__main__': unittest.main()

@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.89"
+version: "0.90"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: saved-history CLI complete-output byte cap (offline)
+
+The direct renderer correctly bounded its HTML bytes, but the CLI appended a
+newline after the check and could emit one byte past the configured limit. The
+CLI now checks the full UTF-8 payload before writing; an exact-cap negative
+failed before repair and cap-plus-one succeeds. The 198-test FinOps suite
+passed (seven Linux-only skips), as did the full local verifier. No collection,
+saved report, volume or backup mutation; dedicated Colima observed stopped.
+AgentHouse bytes remain `null / NOT_MEASURED`. This does not authenticate
+producers, measure current usage or grant operator acceptance. Revert only
+this CLI check/test if the output contract changes; preserve reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: independent saved HTML byte-limit control (offline)
 

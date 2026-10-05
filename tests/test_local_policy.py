@@ -99,6 +99,20 @@ class Clock:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_local_source_decoder_refuses_diagnostic_stderr_on_success(self):
+        source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
+                   'spec': {}} for name in policy.BASE_NAMES]
+        stdout = '\n'.join(json.dumps(item) for item in source)
+        for stderr in ('Warning: local decoder ignored a field', ' ', b''):
+            with self.subTest(stderr=stderr):
+                reply = SimpleNamespace(stdout=stdout, stderr=stderr, returncode=0)
+                with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+                    with self.assertRaises(policy.PolicyError):
+                        policy.source_policies()
+        reply = SimpleNamespace(stdout=stdout, stderr='', returncode=0)
+        with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+            self.assertEqual(len(policy.source_policies()), len(policy.BASE_NAMES))
+
     def test_local_source_decoder_refuses_nonrepresentable_floats(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]

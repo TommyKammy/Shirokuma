@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.122"
+version: "0.123"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: local source decoder diagnostic channel (offline)
+
+A successful seven-policy local decoder reply could contain diagnostic stderr
+yet certify an exact source projection. Synthetic warning, whitespace and
+non-text stderr now fail closed; clean output remains accepted. The negatives
+failed before the guard, then 100 native policy tests and the full local
+verifier passed. The dedicated Colima profile was observed stopped; no API
+request, activation, saved-request replay or retained data/backup mutation.
+Revert only this decoder guard/test if actual local kubectl output needs a
+revised contract; preserve the manifest and saved intents. Tool identity,
+live admission, strict gate and operator acceptance remain unverified. Original
+Vault sync remains pending outside the approved checkout.
 
 ## 2026-10-05: type-check shape and scoped stderr controls (offline)
 

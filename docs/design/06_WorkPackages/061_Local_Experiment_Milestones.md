@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.260"
+version: "5.261"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent policy decoder and FinOps CLI output guards (offline)
+
+WP-L2-POL-001: successful local CEL decoder output with nonempty or malformed
+stderr now fails closed rather than certifying source; focused 100 policy tests
+passed. Independently WP-L6-FIN-001: saved-history CLI checks its appended
+newline against the UTF-8 output cap before writing; 198 FinOps tests passed
+(seven Linux-only skips). Both negatives failed before repair; full `make
+verify-local-experiment` passed. Dedicated Colima freshly observed stopped;
+no live API, collection, saved-request replay, retained data/backup mutation
+or GitHub write. Offline fixtures do not authenticate producers, establish
+strict admission, measure current AgentHouse usage (`null / NOT_MEASURED`) or
+grant operator acceptance. Roll back only the respective guards/tests; retain
+historical evidence and reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: policy response diagnostics and independent saved output bound (offline)
 

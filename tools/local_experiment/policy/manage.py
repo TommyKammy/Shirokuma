@@ -61,7 +61,8 @@ def source_policies() -> list[dict]:
         bounded = type(value.stdout) is str and len(value.stdout.encode('utf-8')) <= 256 * 1024
     except UnicodeError:
         bounded = False
-    if type(value.returncode) is not int or value.returncode != 0 or not bounded:
+    if (type(value.returncode) is not int or value.returncode != 0 or
+            value.stderr != '' or not bounded):
         raise PolicyError('local source decoding failed')
     def unique_keys(pairs):
         result = {}

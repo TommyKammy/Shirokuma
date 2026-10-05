@@ -219,6 +219,9 @@ def main(argv=None):
     parser.parse_args(argv)
     try:
         html = render(parse(sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)))
+        # The CLI emits a trailing newline in addition to the direct renderer's
+        # HTML; count the complete wire payload before writing any bytes.
+        if len(html.encode('utf-8')) + 1 > MAX_OUTPUT_BYTES: raise HistoryError()
     except Exception:
         print(ERROR, file=sys.stderr)
         return 1
