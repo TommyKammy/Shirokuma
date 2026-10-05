@@ -1208,6 +1208,18 @@ class ScopedResponseTests(unittest.TestCase):
                 client.image()
         reply['metadata']['generation'] = 1
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for observed in (0, 1, True, '2', None):
+            reply = copy.deepcopy(valid)
+            reply['metadata']['generation'] = 2
+            reply['status'] = {'observedGeneration': observed}
+            client.json_request.return_value = reply
+            with self.subTest(observed_generation=observed), self.assertRaises(policy.PolicyError):
+                client.image()
+        reply['status']['observedGeneration'] = 2
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        reply['status'] = None
+        with self.assertRaises(policy.PolicyError):
+            client.image()
         for extra in ({'foreignEnvelope': {'enabled': True}},
                       {'items': []}):
             reply = copy.deepcopy(valid)

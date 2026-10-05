@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.220"
+version: "0.221"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: current Trino rollout generation source (offline)
+
+Five synthetic same-image Deployments with an explicit stale or mistyped
+`status.observedGeneration` previously lent the fixed smoke image; those
+negatives failed before repair. A present status must be an object, and a
+present observed generation must be a typed match for metadata generation.
+Matching generation and a minimal status-free response pass; focused policy
+166 cases, `make verify-local-experiment`, design-context, scoped secret scan
+and diff check pass (the verifier's fake Dagster worker failure is an
+intentional negative diagnostic). No live admission/API, rollout, unknown-request replay,
+retained data/backup mutation or GitHub write. A matching controller status
+does not authenticate the API, prove rollout health, establish strict
+admission or grant operator acceptance. Revert only the scoped source guard/
+test if necessary, retaining saved requests. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: typed Trino Deployment generation (offline)
 

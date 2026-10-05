@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.384"
+version: "5.385"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: current Trino rollout generation source (offline)
+
+WP-L2-POL-001 refuses a same-image Deployment reporting a stale or mistyped
+observed generation or malformed status; five observed-generation negatives
+failed before repair. Matching generation and status-free fixtures pass;
+focused policy 166 cases, `make verify-local-experiment`, design-context,
+scoped secret scan and diff check pass (fake Dagster worker failure is an
+intentional negative diagnostic). No live API/admission, rollout, unknown-request
+replay, retained data/backup mutation or GitHub write. This offline controller
+status check does not authenticate Kubernetes, prove rollout health, establish
+strict admission or grant operator acceptance. Restore only the scoped guard/
+test if required, preserving saved requests. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: fixed PV/template storage-class consistency (offline)
 

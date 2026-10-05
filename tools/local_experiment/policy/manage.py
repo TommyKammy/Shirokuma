@@ -510,9 +510,18 @@ class Kubernetes:
                        or metadata.get('deletionTimestamp') is not None
                        or ('generation' in metadata and
                            (type(metadata['generation']) is not int or metadata['generation'] < 1))
-                       or type(metadata.get('ownerReferences', [])) is not list
-                      or metadata.get('ownerReferences', [])):
-                raise PolicyError('smoke requires the dedicated local Trino deployment')
+                        or type(metadata.get('ownerReferences', [])) is not list
+                       or metadata.get('ownerReferences', [])):
+                 raise PolicyError('smoke requires the dedicated local Trino deployment')
+            # A controller still observing an older generation has not
+            # reconciled this spec; do not lend its image to the smoke.
+            if 'status' in deployment and type(deployment['status']) is not dict:
+                raise PolicyError('smoke requires the current local Trino rollout generation')
+            if 'status' in deployment and 'observedGeneration' in deployment['status']:
+                observed = deployment['status']['observedGeneration']
+                if (type(observed) is not int or type(metadata.get('generation')) is not int or
+                        observed != metadata['generation']):
+                    raise PolicyError('smoke requires the current local Trino rollout generation')
             # A named, digest-shaped object is not enough to identify an
             # existing Deployment returned by the scoped API read.
             persistent_identity(deployment)
