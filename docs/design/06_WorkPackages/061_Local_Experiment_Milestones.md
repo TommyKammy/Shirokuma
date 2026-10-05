@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.342"
+version: "5.343"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: isolated Trino smoke image source (offline)
+
+WP-L2-POL-001: three synthetic same-name Deployment Pod templates with
+process-namespace sharing, image pull secrets or disabled service links supplied
+the fixed smoke image before repair; these unowned overrides are now refused.
+The minimal valid fixture and focused 166-test policy suite passed. Dedicated
+Colima was observed stopped before this offline increment; no live API,
+admission, request replay, retained volume/backup mutation or GitHub write.
+Offline source checks do not authenticate the API, prove strict live admission
+or confer operator acceptance. Revert only the scoped reader/test if needed,
+preserving saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: typed FinOps reference continuity and PodList response (offline)
 

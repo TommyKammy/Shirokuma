@@ -1200,7 +1200,10 @@ class ScopedResponseTests(unittest.TestCase):
         # A same-image Pod can change its DNS identity without custom dnsConfig
         # or host networking. The fixed smoke source does not set these fields.
         for override in ({'hostname': 'foreign'}, {'subdomain': 'foreign'},
-                         {'setHostnameAsFQDN': True}, {'hostUsers': False}):
+                         {'setHostnameAsFQDN': True}, {'hostUsers': False},
+                         {'shareProcessNamespace': True},
+                         {'imagePullSecrets': [{'name': 'foreign'}]},
+                         {'enableServiceLinks': False}):
             with self.subTest(pod_identity=override):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec'].update(override)

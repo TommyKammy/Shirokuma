@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.195"
+version: "0.196"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke source process and service isolation (offline)
+
+Three synthetic same-name Trino Deployment templates with process-namespace
+sharing, remote image pull secrets, or disabled service environment injection
+previously lent their fixed digest image to the smoke candidate. The local
+source image reader now refuses these unowned Pod template fields; the existing
+minimal valid fixture still passes. The negative cases failed before repair and
+`make test-local-policy` passed 166 tests afterward. No live API, admission,
+request replay, retained data or backup change. This offline check cannot
+authenticate the Deployment or prove strict live admission/operator acceptance.
+Restore only the scoped source filter/test if necessary; retain saved requests.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke-source Pod DNS identity and user namespace (offline)
 
