@@ -46,6 +46,18 @@ class DockerStorageTests(unittest.TestCase):
         self.assertEqual(row['usage_reason'],'NOT_MEASURED')
         self.assertNotIn('/var/lib/docker/volumes/',json.dumps(row))
 
+    def test_volume_creation_offset_rejects_out_of_range_fourteen_hour_minutes(self):
+        for value in ('2026-09-19T14:01:00+14:01',
+                      '2026-09-19T14:59:00-14:59'):
+            with self.subTest(value=value):
+                data = fixture()
+                data[2][0]['CreatedAt'] = value
+                with self.assertRaises(D.DockerStorageError): projected(data)
+        data = fixture()
+        data[2][0]['CreatedAt'] = '2026-09-19T14:00:00+14:00'
+        self.assertEqual(projected(data)['volume_created_at'],
+                         '2026-09-19T00:00:00.000000000Z')
+
     def test_foreign_context_owner_image_mount_and_source_fail_closed(self):
         changes=[lambda x:x[0][0]['Endpoints']['docker'].update(Host='tcp://elsewhere'),
                  lambda x:x[1][0]['Config']['Labels'].update({D.AH.LABEL:'foreign'}),

@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.142"
+version: "0.143"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: Docker creation timestamp offset bound (offline)
+
+Two synthetic inspect timestamps with `+14:01` or `-14:59` offsets were
+incorrectly normalized into apparently valid creation instants. The reference
+reader now accepts at most `14:00` in either direction; the `+14:00` boundary
+still passes. Negatives failed before repair; `make test-local-finops` passed
+219 tests (seven Linux-only skips), and `make verify-local-experiment` passed.
+Dedicated Colima was freshly observed stopped; no Docker collection, volume
+traversal, retained report/volume/backup change or cleanup. This is timestamp
+shape validation, not daemon authentication or AgentHouse measurement (still
+`null / NOT_MEASURED`). Restore only the timestamp parser/test if needed;
+preserve historical reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: malformed Docker inspect envelopes fail closed (offline)
 

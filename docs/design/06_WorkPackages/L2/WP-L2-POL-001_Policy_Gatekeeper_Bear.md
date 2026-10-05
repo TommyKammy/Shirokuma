@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.184"
+version: "0.185"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed smoke source service account (offline)
+
+A synthetic otherwise-matching Trino Deployment selecting a foreign service
+account supplied the fixed smoke image before repair. Its template now allows
+only the repository's absent/default service account, refusing foreign and
+malformed explicit values; the explicit `default` control passes. Four
+negatives failed before repair. `make test-local-policy` passed 166 tests and
+`make verify-local-experiment` passed. Dedicated Colima was freshly observed
+stopped; no live API, dry-run, policy change, unknown request replay or
+retained data/backup mutation. This does not authenticate the API, certify
+the live Deployment or establish strict admission. Revert only the scoped
+source guard/test if needed; retain saved intents. Original Vault sync pending.
 
 ## 2026-10-06: bound smoke ConfigMap source and unique volumes (offline)
 

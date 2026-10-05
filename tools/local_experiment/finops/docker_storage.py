@@ -54,7 +54,7 @@ def _context(raw):
 
 def created_at(value):
     require(type(value) is str and len(value) <= 48, 'SAMPLE_INVALID')
-    match = re.fullmatch(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d{1,9})?(Z|[+-](?:0\d|1[0-4]):[0-5]\d)', value)
+    match = re.fullmatch(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d{1,9})?(Z|[+-](?:(?:0\d|1[0-3]):[0-5]\d|14:00))', value)
     require(match is not None, 'SAMPLE_INVALID')
     try:
         local = datetime.strptime(match[1], '%Y-%m-%dT%H:%M:%S')

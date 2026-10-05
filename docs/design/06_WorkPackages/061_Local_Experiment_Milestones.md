@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.329"
+version: "5.330"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded Docker timestamp and Trino smoke identity (offline)
+
+WP-L6-FIN-001: out-of-range fourteen-hour creation offsets previously passed
+Docker volume reference normalization; two negative cases failed before the
+guard and the `+14:00` control passes (219 FinOps tests, seven Linux-only
+skips). WP-L2-POL-001: a foreign or malformed service-account name in a
+same-name Trino Deployment could previously supply the smoke image; four
+negatives failed before requiring absent/default account (166 policy tests).
+`make verify-local-experiment` passed. Dedicated Colima was freshly observed
+stopped. No live API, Docker collection, unknown-request replay, retained
+report/request/volume/backup mutation or GitHub write. Neither offline guard
+authenticates the producer, establishes strict live admission, measures
+AgentHouse (`null / NOT_MEASURED`) or grants operator acceptance. Restore only
+the scoped guards/tests if necessary; preserve saved evidence. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: bounded policy ConfigMap and Docker inspect shapes (offline)
 
