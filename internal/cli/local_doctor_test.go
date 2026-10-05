@@ -3247,7 +3247,7 @@ func TestLocalExperimentScopeRejectsRemoteOrMalformedEndpoints(t *testing.T) {
 			}
 		})
 	}
-	for _, endpoint := range []string{"https://127.0.0.1:6443", "https://[::1]:6443", "https://localhost:6443"} {
+	for _, endpoint := range []string{"https://127.0.0.1:6443", "https://[::1]:6443"} {
 		runner := &fakeRunner{responses: []fakeResponse{{output: endpoint}}}
 		if check := checkLocalExperimentScope(context.Background(), runner, localExperimentContext); check.Status != "healthy" {
 			t.Fatalf("loopback %s rejected: %#v", endpoint, check)
@@ -3259,6 +3259,7 @@ func TestLocalExperimentScopeRejectsLookalikeLoopbackEndpoints(t *testing.T) {
 	// A dedicated context name alone cannot make a non-loopback or scoped
 	// endpoint local. Do not resolve hostnames or accept numeric lookalikes.
 	for _, endpoint := range []string{
+		"https://localhost:6443",
 		"https://127.0.0.1.example:6443", "https://localhost.example:6443",
 		"https://localhost:6443@remote.example:6443", "https://127.0.0.1:6443@remote.example:6443",
 		"https://localhost%40remote.example:6443", "https://127.0.0.1%2Eexample:6443",

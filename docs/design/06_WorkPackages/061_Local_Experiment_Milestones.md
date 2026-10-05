@@ -12,6 +12,19 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-05: local doctor hostname scope (offline)
+
+WP-L0-GITOPS-001: a named `localhost` HTTPS endpoint is no longer accepted
+as evidence of a loopback API connection; only literal loopback IPv4/IPv6
+addresses pass the read-only scope check. Focused and full Go CLI tests, vet
+and local regression passed. This is a conservative diagnostic change, not a
+kubeconfig or runtime change. Colima was observed stopped. No live API/Git
+read, reconciliation, retained data/backup mutation or GitHub write. IP
+literal alone does not authenticate the server or establish Flux provenance,
+strict admission or operator acceptance. Roll back only the scope check/test
+if the actual dedicated endpoint contract needs revision; preserve previous
+evidence. Original Vault sync remains pending outside checkout.
+
 ## 2026-10-05: continuation runner local signal race (offline)
 
 The prior host-shutdown stop exposed an unhandled macOS `killpg`

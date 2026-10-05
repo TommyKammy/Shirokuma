@@ -12,6 +12,24 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-05: literal loopback scope for local doctor (offline)
+
+The local doctor previously classified `https://localhost:6443` as a loopback
+Kubernetes endpoint solely from the hostname. A mutable resolver/hosts mapping
+can send that hostname elsewhere. The read-only scope check now requires a
+literal loopback IPv4 or IPv6 address and degrades the former localhost
+fixture. The focused Go scope tests, `go test ./...`, `go vet ./...` and the
+local regression passed. This intentionally tightens the diagnostic contract:
+an existing context using localhost now receives a degraded scope report,
+without changing its kubeconfig or issuing a request to it. Dedicated Colima
+was observed stopped; no live API/Git read, reconciliation, retained
+data/backup mutation or GitHub write. A literal address is not proof of API
+server identity, context authenticity, remote revision provenance or strict
+admission. If actual dedicated configurations need a different endpoint,
+inspect their ownership and resolver mapping before revising this diagnostic;
+roll back only the doctor scope/test change, preserving retained evidence.
+Direct original Vault sync remains pending outside checkout.
+
 ## 2026-10-05: independent encoded-authority controls (offline)
 
 The unchanged doctor degrades two further encoded authority separators and
