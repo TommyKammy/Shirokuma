@@ -40,7 +40,11 @@ def _object(raw):
 def _context(raw):
     obj = _object(raw)
     require(obj.get('Name') == AH.CONTEXT)
-    host = obj.get('Endpoints', {}).get('docker', {}).get('Host')
+    endpoints = obj.get('Endpoints')
+    require(type(endpoints) is dict)
+    docker = endpoints.get('docker')
+    require(type(docker) is dict)
+    host = docker.get('Host')
     # A suffix match alone also accepts a socket in an unrelated directory.
     # This is a path scope check, not authentication of the daemon at the path.
     require(type(host) is str and re.fullmatch(
@@ -68,12 +72,14 @@ def _identity(container, volume):
     require(type(container) is dict and type(volume) is dict)
     config = container.get('Config', {}); state = container.get('State', {})
     require(type(config) is dict and type(state) is dict)
+    container_labels, volume_labels = config.get('Labels'), volume.get('Labels')
+    require(type(container_labels) is dict and type(volume_labels) is dict)
     identifier = container.get('Id')
     require(type(identifier) is str and re.fullmatch(r'[0-9a-f]{64}', identifier))
     require(container.get('Name') == '/' + AH.NAME and
-            config.get('Labels', {}).get(AH.LABEL) == 'agenthouse-local' and
+            container_labels.get(AH.LABEL) == 'agenthouse-local' and
             config.get('Image') == AH.IMAGE and type(state.get('Running')) is bool)
-    require(volume.get('Name') == AH.VOLUME and volume.get('Labels', {}).get(AH.LABEL) == 'agenthouse-local'
+    require(volume.get('Name') == AH.VOLUME and volume_labels.get(AH.LABEL) == 'agenthouse-local'
             and volume.get('Driver') == 'local' and volume.get('Scope') == 'local'
             and (volume.get('Options') is None or
                  type(volume.get('Options')) is dict and not volume['Options']))

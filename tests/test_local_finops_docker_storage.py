@@ -83,6 +83,22 @@ class DockerStorageTests(unittest.TestCase):
             data[2][0]['Options'] = options
             self.assertIsNone(projected(data)['used_bytes'])
 
+    def test_malformed_context_and_container_labels_fail_with_scoped_error(self):
+        for index, path, value in ((0, 'Endpoints', []), (0, 'docker', None),
+                                   (1, 'Labels', []), (1, 'Labels', None),
+                                   (2, 'Labels', [])):
+            with self.subTest(index=index, path=path, value=value):
+                data = fixture()
+                if index == 0 and path == 'Endpoints':
+                    data[0][0]['Endpoints'] = value
+                elif index == 0:
+                    data[0][0]['Endpoints']['docker'] = value
+                elif index == 1:
+                    data[1][0]['Config']['Labels'] = value
+                else:
+                    data[2][0]['Labels'] = value
+                with self.assertRaises(D.DockerStorageError): projected(data)
+
     def test_context_reference_refuses_foreign_or_alias_socket(self):
         for host in ('unix:///tmp/foreign/.colima/mac-studio-solo/docker.sock',
                      'unix:///Users/example/other/.colima/mac-studio-solo/docker.sock',

@@ -1181,8 +1181,12 @@ class ScopedResponseTests(unittest.TestCase):
                              {'serviceAccountToken': {'path': 'token'}}]}}],
                          [{'name': 'external', 'persistentVolumeClaim': {'claimName': 'retained'}}],
                          [{'name': 'external', 'csi': {'driver': 'example.local'}}],
-                         [{'name': 'mixed', 'emptyDir': {}, 'secret': {'secretName': 'other'}}],
-                         [{'name': 'untyped'}], [None], None, {}):
+                          [{'name': 'mixed', 'emptyDir': {}, 'secret': {'secretName': 'other'}}],
+                          [{'name': 'config', 'configMap': {'name': 'other-config'}}],
+                          [{'name': 'config', 'configMap': {}}],
+                          [{'name': 'config', 'configMap': {'name': 'trino-local-config', 'optional': True}}],
+                          [{'name': 'tmp', 'emptyDir': {}}, {'name': 'tmp', 'emptyDir': {}}],
+                          [{'name': 'untyped'}], [None], None, {}):
             with self.subTest(volumes=volumes):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec']['volumes'] = volumes

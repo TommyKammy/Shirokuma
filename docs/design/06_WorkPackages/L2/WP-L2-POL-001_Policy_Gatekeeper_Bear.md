@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.183"
+version: "0.184"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bound smoke ConfigMap source and unique volumes (offline)
+
+Four synthetic source lists with a foreign/missing ConfigMap name, optional
+ConfigMap, or repeated volume name supplied the fixed image before repair.
+The source reader now requires the dedicated `config` ConfigMap name, a
+non-optional reference and unique volume names. ConfigMap and emptyDir controls
+pass; `make test-local-policy` (166) and `make verify-local-experiment` pass.
+Dedicated Colima was freshly observed stopped; no live API, dry-run, image
+import or retained request/data/backup mutation. This filter is not live
+admission or API authenticity. Revert only the scoped reader/tests if needed,
+retaining saved intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke image volume sources limited (offline)
 

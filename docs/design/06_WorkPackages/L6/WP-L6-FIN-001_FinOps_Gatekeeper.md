@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.141"
+version: "0.142"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: malformed Docker inspect envelopes fail closed (offline)
+
+Five synthetic malformed context endpoint and container/volume label shapes
+raised untyped attribute errors from direct reference projection before repair.
+They now raise the fixed scoped `DockerStorageError`; valid stopped-container
+metadata still projects without inventing usage. `make test-local-finops`
+passed 218 cases (seven Linux-only skips), and the broader local verifier
+passed. No Docker collection, retained volume/report/backup mutation or
+cleanup. AgentHouse used bytes remain `null / NOT_MEASURED`; this does not
+authenticate the daemon, authorize traversal or prove backup recovery.
+Revert only this reader/test if necessary; preserve saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: refuse Docker local-driver options in metadata reference (offline)
 

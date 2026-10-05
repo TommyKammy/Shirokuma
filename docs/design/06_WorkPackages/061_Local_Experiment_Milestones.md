@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.328"
+version: "5.329"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded policy ConfigMap and Docker inspect shapes (offline)
+
+WP-L2-POL-001: four synthetic foreign/optional ConfigMap or duplicate-volume
+sources supplied the fixed smoke image before repair. The scoped reader now
+rejects them (166 policy tests). WP-L6-FIN-001: five malformed Docker context
+endpoint/label envelopes raised untyped errors before repair; direct projection
+now returns a scoped failure (218 FinOps tests, seven Linux-only skips).
+`make verify-local-experiment` and `git diff --check` passed. Dedicated Colima
+was freshly observed stopped. No API/admission, Docker collection, unknown
+request replay, retained report/request/volume/backup mutation or GitHub write.
+Neither offline check authenticates a source, proves strict live admission or
+measures AgentHouse (`null / NOT_MEASURED`); operator acceptance remains open.
+Restore only the scoped guards/tests if needed, retaining saved evidence.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: restricted Trino volume sources and Docker driver options (offline)
 
