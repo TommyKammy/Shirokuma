@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.152"
+version: "0.153"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: typed second reads of fixed storage references (offline)
+
+Two independent synthetic failures passed before repair: a bound PV claimRef
+field changed from JSON `false` to `0` between reads but Python equality
+certified the old reference, and the later PodList omitted `apiVersion` yet
+certified the original Pod selection. The PVC/PV comparison now preserves JSON
+types, and the second list requires `v1` as well as `PodList`. The fixed valid
+fixture still projects; `make test-local-finops` passed 228 cases (seven
+Linux-only skips), followed by `make verify-local-experiment`. The dedicated
+Colima profile was freshly observed stopped; no API collection, retained
+volume/report/backup modification or usage scan. This is not authenticated
+Kubernetes continuity, an atomic snapshot or AgentHouse byte measurement
+(`null / NOT_MEASURED`); operator acceptance remains open. Revert only these
+two collector guards and their regressions if needed, preserving saved reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: storage semantics stable across scoped reads (offline)
 

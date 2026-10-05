@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 import re
 import uuid
 from urllib.parse import quote
@@ -28,6 +29,15 @@ class StorageError(ValueError):
 
 def require(ok, reason='SCOPE_INVALID'):
     if not ok: raise StorageError(reason)
+
+
+def _same_json(first, second):
+    # Python considers False == 0 and True == 1; API reads must retain JSON types.
+    try:
+        return json.dumps(first, sort_keys=True, allow_nan=False) == json.dumps(
+            second, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError):
+        raise StorageError('IDENTITY_CHANGED') from None
 
 
 def uid(value):
@@ -258,7 +268,8 @@ def _collect_one(backend, component):
             pv = backend.storage_get(f'/api/v1/persistentvolumes/{name(volume)}')
     after = backend.storage_get(f'/apis/apps/v1/namespaces/{ns}/{path}/{workload}')
     after_pods = backend.storage_get(f'/api/v1/namespaces/{ns}/pods?labelSelector={quote(labels,safe="")}&limit=2')
-    require(after_pods.get('kind') == 'PodList' and type(after_pods.get('items')) is list and
+    require(after_pods.get('kind') == 'PodList' and after_pods.get('apiVersion') == 'v1' and
+            type(after_pods.get('items')) is list and
             len(after_pods['items']) <= 1 and not after_pods.get('metadata', {}).get('continue'), 'IDENTITY_CHANGED')
     after_replica = backend.storage_get(f'/apis/apps/v1/namespaces/{ns}/replicasets/{replica["metadata"]["name"]}') if replica else None
     if pvc:
@@ -269,7 +280,7 @@ def _collect_one(backend, component):
                      item.get('spec', {}).get('resources', {}).get('requests', {}).get('storage'),
                      item.get('spec', {}).get('storageClassName'), item.get('spec', {}).get('volumeMode'),
                      item.get('status', {}).get('phase'), item.get('status', {}).get('capacity', {}).get('storage'))
-        require(claim_state(later) == claim_state(pvc), 'IDENTITY_CHANGED')
+        require(_same_json(claim_state(later), claim_state(pvc)), 'IDENTITY_CHANGED')
         if pv:
             later_pv = backend.storage_get(f'/api/v1/persistentvolumes/{name(pv["metadata"]["name"])}')
             _meta(later_pv, 'PersistentVolume', None, pv['metadata']['name'])
@@ -278,6 +289,6 @@ def _collect_one(backend, component):
                          item.get('spec', {}).get('capacity', {}).get('storage'),
                          item.get('spec', {}).get('persistentVolumeReclaimPolicy'),
                          item.get('spec', {}).get('volumeMode'))
-            require(pv_state(later_pv) == pv_state(pv), 'IDENTITY_CHANGED')
+            require(_same_json(pv_state(later_pv), pv_state(pv)), 'IDENTITY_CHANGED')
     return project(component, (before,pods,replica), (after,after_pods['items'],after_replica),
                    pvc=pvc, pv=pv, request_started_at=start, observed_at=backend.now())

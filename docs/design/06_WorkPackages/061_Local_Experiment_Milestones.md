@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.341"
+version: "5.342"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: typed FinOps reference continuity and PodList response (offline)
+
+WP-L6-FIN-001: independent fake second reads replaced a PV claimRef JSON
+boolean with its numerically equal integer, or omitted PodList `apiVersion`;
+both previously certified the older fixed storage reference and failed the new
+negative tests before repair. JSON-type-exact PVC/PV continuity and a typed
+second PodList now refuse them. Focused FinOps suite passed 228 cases (seven
+Linux-only skips); `make verify-local-experiment` passed (intentional fake
+Dagster worker failure is diagnostic output). Dedicated Colima was freshly
+observed stopped. No live API/collection, retained report/volume/backup
+mutation, unknown-request replay or GitHub write. Offline checks do not
+authenticate the API, establish atomic reads, measure AgentHouse bytes
+(`null / NOT_MEASURED`) or confer operator acceptance. Restore only these
+collector guards/tests if necessary and retain saved evidence. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: Pod identity smoke-source scope (offline)
 

@@ -188,6 +188,33 @@ class StorageTests(unittest.TestCase):
                         S.StorageError, 'IDENTITY_CHANGED'):
                     S._collect_one(backend, component)
 
+    def test_storage_collection_refuses_json_type_alias_in_pv_reference(self):
+        w, p, _, c, v = objects('seaweedfs')
+        v['spec']['claimRef']['resourceVersion'] = False
+        later_pv = deepcopy(v)
+        later_pv['spec']['claimRef']['resourceVersion'] = 0
+        responses = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p},
+                     c, v, deepcopy(w),
+                     {'kind':'PodList','apiVersion':'v1','metadata':{},'items':deepcopy(p)},
+                     deepcopy(c), later_pv]
+        backend = Mock()
+        backend.now.return_value = NOW
+        backend.storage_get.side_effect = responses
+        with self.assertRaisesRegex(S.StorageError, 'IDENTITY_CHANGED'):
+            S._collect_one(backend, 'seaweedfs')
+
+    def test_storage_collection_requires_typed_second_pod_list(self):
+        w, p, _, c, v = objects('seaweedfs')
+        responses = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p},
+                     c, v, deepcopy(w),
+                     {'kind':'PodList','metadata':{},'items':deepcopy(p)},
+                     deepcopy(c), deepcopy(v)]
+        backend = Mock()
+        backend.now.return_value = NOW
+        backend.storage_get.side_effect = responses
+        with self.assertRaisesRegex(S.StorageError, 'IDENTITY_CHANGED'):
+            S._collect_one(backend, 'seaweedfs')
+
     def test_transport_reason_and_cleanup_boundary(self):
         backend=Mock();backend.now.return_value=NOW
         for exception,expected in ((R.U.PodUsageError('READ_TIMEOUT'),'READ_TIMEOUT'),
