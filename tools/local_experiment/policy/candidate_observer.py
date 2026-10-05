@@ -71,7 +71,11 @@ def reported_denials(stderr, name, items):
     https://raw.githubusercontent.com/kubernetes/apiserver/v0.33.4/pkg/admission/plugin/policy/validating/dispatcher.go
     https://raw.githubusercontent.com/kubernetes/kubectl/v0.36.2/pkg/cmd/util/helpers.go
     """
-    if type(stderr) is not str or len(stderr.encode()) > MAX_RESPONSE:
+    try:
+        bounded = type(stderr) is str and len(stderr.encode('utf-8')) <= MAX_RESPONSE
+    except UnicodeError:
+        bounded = False
+    if not bounded:
         return []
     clauses = {}
     invalid_clauses = {}
@@ -416,9 +420,13 @@ class CandidateObserver:
             sent = True; self._receipt['request_count'] = 1
             response = self.kube.request(['-n', M.NAMESPACE, 'create', '--dry-run=server', '-f', '-', '-o', 'json'],
                                          copy.deepcopy(self._body))
-            require(type(response.stdout) is str and type(response.stderr) is str
-                    and len(response.stdout.encode()) <= MAX_RESPONSE and len(response.stderr.encode()) <= MAX_RESPONSE,
-                    'DRY_RUN_RESPONSE_OVERSIZE')
+            try:
+                bounded = (type(response.stdout) is str and type(response.stderr) is str
+                           and len(response.stdout.encode('utf-8')) <= MAX_RESPONSE
+                           and len(response.stderr.encode('utf-8')) <= MAX_RESPONSE)
+            except UnicodeError:
+                bounded = False
+            require(bounded, 'DRY_RUN_RESPONSE_OVERSIZE')
             expected = self._receipt['expected_violation_ids']
             admission, reported = 'unknown', []
             if type(response.returncode) is int and response.returncode == 0:

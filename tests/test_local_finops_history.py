@@ -199,6 +199,18 @@ class HistoryTests(unittest.TestCase):
         too_many = encoded([report()] * 9)
         with self.assertRaises(H.HistoryError): H.parse(too_many)
 
+    def test_utf8_input_limit_is_bytes_not_characters(self):
+        valid = encoded([report(), report(processes())])
+        self.assertEqual(len(H.parse(valid)), 2)
+        # A valid Unicode scalar can occupy four bytes; the parser must bound
+        # the wire input before decoding or rendering even when characters fit.
+        oversized = valid + ('😀' * ((H.MAX_INPUT_BYTES - len(valid)) // 4 + 1)).encode()
+        self.assertGreater(len(oversized), H.MAX_INPUT_BYTES)
+        self.assertLess(len(oversized.decode('utf-8')), H.MAX_INPUT_BYTES)
+        with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):
+            with self.assertRaises(H.HistoryError):
+                H.parse(oversized)
+
     def test_distinct_saved_reports_reach_exact_selection_limit_without_collection(self):
         base = report()
         samples = [C.build_report(base['components'], base['disks'], base['inference'],

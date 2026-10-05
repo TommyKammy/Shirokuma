@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.257"
+version: "5.258"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: advisory Unicode response and independent FinOps byte bound (offline)
+
+WP-L2-POL-001: unpaired Unicode in either synthetic dry-run stream now fails as
+a typed response-boundary error while retaining the pending intent; direct
+denial matching refuses malformed Unicode. Focused observer 59 and native
+policy 95 tests passed. Independently WP-L6-FIN-001 pins the unchanged saved
+history reader's UTF-8 byte cap against a multibyte overlimit payload; focused
+history 27 and FinOps 196 tests passed (seven Linux-only skips).
+`make verify-local-experiment` and diff check passed. Dedicated Colima was
+observed stopped; no live API, collection, request replay, retained data/backup
+mutation or GitHub write. Neither fixture authenticates a producer, measures
+present AgentHouse usage (`null / NOT_MEASURED`), clears strict admission or
+grants operator acceptance. Revert only the observer guard/test or independent
+FinOps test as needed; preserve saved reports/intents. Original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-05: local policy numeric decoding and independent FinOps review (offline)
 

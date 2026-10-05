@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.119"
+version: "0.120"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: malformed advisory dry-run Unicode (offline)
+
+The candidate observer now bounds both dry-run streams with an explicit UTF-8
+encoding check: unpaired Unicode is a typed failed observation with the pending
+request preserved rather than a raw encoding exception. Direct denial matching
+also refuses malformed Unicode. Synthetic stdout/stderr negatives and the
+positive path passed 59 observer tests; `make test-local-policy` passed 95 and
+`make verify-local-experiment` passed. The dedicated Colima profile was observed
+stopped; no API request, replay, retained data/backup mutation or GitHub write.
+Synthetic responses cannot authenticate the server, clear strict admission or
+grant operator acceptance. Revert only the observer guard/test if necessary;
+preserve pending intents. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: non-representable local source numbers (offline)
 

@@ -485,6 +485,23 @@ class ObserverTests(unittest.TestCase):
         self.assertEqual(O.parse_allowed_response('{"generation":0e-999}'), {'generation':0.0})
         self.assertEqual(observer.verify(progress=lambda v:None)['admission'],'allowed')
 
+    def test_unpaired_unicode_in_dry_run_streams_keeps_pending_intent(self):
+        for stream in ('stdout', 'stderr'):
+            with self.subTest(stream=stream):
+                kube=FakeKube();observer=O.CandidateObserver(self.input,kube);observer.observe()
+                def respond(body):
+                    reply=dict(returncode=0,stdout=json.dumps(body),stderr='')
+                    reply[stream]='\ud800'
+                    return SimpleNamespace(**reply)
+                kube.respond=respond
+                with self.assertRaises(O.CandidateObservationError) as caught:
+                    observer.verify(progress=lambda v:None)
+                self.assertEqual(caught.exception.code,'DRY_RUN_RESPONSE_OVERSIZE')
+                self.assertEqual(observer.receipt()['admission'],'unknown')
+                self.assertIsNotNone(observer.receipt()['pending'])
+                self.assertEqual(observer.receipt()['request_count'],1)
+        self.assertEqual(O.reported_denials('\ud800', 'candidate', kube.items), [])
+
     def test_allowed_response_cannot_inject_pod_identity_or_scheduling(self):
         for changes in ({'serviceAccountName':'admin'}, {'nodeName':'other-node'},
                         {'nodeSelector':{'role':'privileged'}},

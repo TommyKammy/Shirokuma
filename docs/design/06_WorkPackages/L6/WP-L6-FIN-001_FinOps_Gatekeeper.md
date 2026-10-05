@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.86"
+version: "0.87"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: independent UTF-8 history input bound (offline)
+
+A multibyte test-owned payload exceeds the saved-history byte cap while its
+character count remains below it. The existing reader refuses it before
+decoding/rendering; a valid two-report control still parses, and collection is
+disabled in the test. Focused history 27 tests, `make test-local-finops` 196
+tests (seven Linux-only skips), and `make verify-local-experiment` passed. The
+dedicated Colima profile was observed stopped; no new collection or retained
+report/volume/backup mutation. AgentHouse bytes remain `null / NOT_MEASURED`.
+Offline bounds do not authenticate saved producers, measure present usage or
+grant operator acceptance. Revert only the independent test if needed; preserve
+saved reports. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: independent offline history boundary review
 
