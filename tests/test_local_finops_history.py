@@ -201,6 +201,18 @@ class HistoryTests(unittest.TestCase):
             self.assertIn('保存FinOps観測履歴',
                           H.render(H.parse(encoded([report(), report(processes())]))))
 
+    def test_signed_float_zero_is_not_an_independent_observation(self):
+        first = encoded(report())
+        self.assertIn(b'0.5', first)
+        positive = first.replace(b'0.5', b'0.0', 1)
+        negative = first.replace(b'0.5', b'-0.0', 1)
+        self.assertNotEqual(positive, negative)
+        with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):
+            with self.assertRaises(H.HistoryError):
+                H.parse(b'[' + positive + b',' + negative + b']')
+            self.assertIn('保存FinOps観測履歴',
+                          H.render(H.parse(encoded([report(), report(processes())]))))
+
     def test_offline_html_declares_no_external_resources_or_script(self):
         html = H.render(H.parse(encoded([report(), report(processes())])))
         self.assertIn('Content-Security-Policy', html)

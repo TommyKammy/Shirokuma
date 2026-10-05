@@ -127,6 +127,20 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(len(kube.expected), len(certified))
         self.assertEqual(set(kube.expected), {(item['kind'], item['metadata']['name']) for item in certified})
 
+    def test_kubernetes_allowlist_owns_certified_items_after_construction(self):
+        certified = items()
+        original = copy.deepcopy(certified[0])
+        kube = policy.Kubernetes(certified)
+        certified[0]['spec']['failurePolicy'] = 'Ignore'
+        certified[0]['metadata']['annotations']['shirokuma.dev/source-sha256'] = '0' * 64
+        key = (original['kind'], original['metadata']['name'])
+        self.assertEqual(kube.expected[key], original)
+        with self.assertRaisesRegex(policy.PolicyError, 'outside the dedicated inventory'):
+            kube.create(certified[0], dry_run=True)
+        with mock.patch.object(kube, 'json_request', return_value={}) as request:
+            kube.create(original, dry_run=True)
+        self.assertEqual(request.call_args.args[1], original)
+
     def test_local_source_decoder_requires_document_separators(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]

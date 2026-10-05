@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.145"
+version: "0.146"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: owned native admission allowlist snapshot (offline)
+
+The Kubernetes bridge now deep-copies certified manifest items at construction;
+later edits to a caller-held list or nested item cannot change the scoped create
+allowlist. A disposable mutation negative refuses altered create requests while
+the original certified request remains allowed by the local guard. The real
+projection, 126 policy tests and full local verifier passed. Dedicated Colima was observed stopped;
+no API request or policy activation was attempted. This guards in-process
+aliasing, not the source producer, Kubernetes response identity, live strict
+admission or operator acceptance. Restore only the constructor/test if needed;
+preserve saved intents. Original Vault sync pending outside this checkout.
 
 ## 2026-10-05: explicit digest at native projection boundary (offline)
 

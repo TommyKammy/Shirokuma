@@ -22,6 +22,22 @@ class HistoryError(ValueError):
     pass
 
 
+def _canonical_bytes(report):
+    # JSON preserves the spelling of signed floating zero after decoding even
+    # though the two values compare equal. It must not create a second sample.
+    def normalize(value):
+        if type(value) is float and value == 0.0:
+            return 0.0
+        if type(value) is dict:
+            return {key: normalize(item) for key, item in value.items()}
+        if type(value) is list:
+            return [normalize(item) for item in value]
+        return value
+
+    return json.dumps(normalize(report), ensure_ascii=True, sort_keys=True,
+                      separators=(',', ':'), allow_nan=False).encode()
+
+
 def parse(raw):
     if type(raw) is not bytes or not 0 < len(raw) <= MAX_INPUT_BYTES: raise HistoryError()
 
@@ -39,7 +55,7 @@ def parse(raw):
         reports = []
         seen = set()
         for item in values:
-            canonical = json.dumps(item, ensure_ascii=True, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+            canonical = _canonical_bytes(item)
             if len(canonical) > C.MAX_PUBLIC_BYTES: raise HistoryError()
             C.validate_public(item)
             digest = hashlib.sha256(canonical).hexdigest()
@@ -161,13 +177,12 @@ def render(entries):
             order_key = (C.stamp(report['observed_at'])[1], selected_index)
             if previous is not None and order_key < previous: raise HistoryError()
             previous = order_key
-            canonical = json.dumps(report, ensure_ascii=True, sort_keys=True,
-                                   separators=(',', ':'), allow_nan=False).encode()
+            canonical = _canonical_bytes(report)
             if len(canonical) > C.MAX_PUBLIC_BYTES or type(saved_digest) is not str or \
                     saved_digest != hashlib.sha256(canonical).hexdigest(): raise HistoryError()
             if saved_digest in seen: raise HistoryError()
             seen.add(saved_digest)
-    except (TypeError, ValueError, UnicodeError, OverflowError, KeyError, IndexError):
+    except (TypeError, ValueError, UnicodeError, OverflowError, KeyError, IndexError, RecursionError):
         raise HistoryError() from None
     sections, navigation = [], []
     for order, (selected_index, (report, digest)) in enumerate(entries, 1):

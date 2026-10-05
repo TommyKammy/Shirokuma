@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.285"
+version: "5.286"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: owned policy allowlist and saved signed-zero correlation (offline)
+
+WP-L2-POL-001: certified native manifest items are copied into the scoped
+Kubernetes create allowlist; caller mutation after construction cannot broaden
+the approved request. Real projection and 126 focused policy tests passed.
+Independently WP-L6-FIN-001: saved `0.0` and `-0.0` cannot be counted as distinct
+reports under history-only canonicalization; distinct-report control and 206
+FinOps tests passed (seven Linux-only skips). Dedicated Colima was freshly
+observed stopped; `make verify-local-experiment` and design-context (89 documents)
+passed. No API, collection, retained report/volume/backup mutation,
+unknown-request replay or GitHub write. AgentHouse bytes remain `null /
+NOT_MEASURED`; offline tests do not authenticate inputs, establish live strict
+admission, current usage or operator acceptance. Revert only scoped constructor
+or history reader/tests if needed; preserve prior reports and intents. Original
+Vault sync pending outside this checkout.
 
 ## 2026-10-05: explicit native projection digest and independent FinOps review (offline)
 

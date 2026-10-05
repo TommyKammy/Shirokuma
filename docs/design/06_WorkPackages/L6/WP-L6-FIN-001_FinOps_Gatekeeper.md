@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.105"
+version: "0.106"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: signed float zero saved-history correlation (offline)
+
+The saved-history parser previously counted otherwise identical reports with
+`0.0` and `-0.0` in a numeric field as two observations because their canonical
+JSON digests differed. History-only canonicalization now maps both to positive
+float zero in the parser and direct renderer; deep malformed direct input still
+fails closed. A distinct two-report control still renders; 206 FinOps tests
+and full local verifier passed (seven Linux-only FinOps skips). No collection, saved report rewrite or
+retained-volume/backup change. Dedicated Colima was observed stopped; AgentHouse
+used bytes remain `null / NOT_MEASURED`. Saved identity cannot authenticate a
+producer, measure present usage or establish operator acceptance. Restore only
+the history reader/test if needed, retaining original reports. Original Vault
+sync pending outside this checkout.
 
 ## 2026-10-05: independent saved coverage and volume boundary review (offline)
 

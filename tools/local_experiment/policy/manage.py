@@ -340,8 +340,10 @@ class Kubernetes:
         spec = importlib.util.spec_from_file_location('local_policy_scope', path)
         self.scope = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.scope)
-        self.expected = {(x['kind'], x['metadata']['name']): x for x in
-                         (load_manifest() if expected_items is None else expected_items)}
+        # Own the certified snapshot: callers retaining its mutable list/dicts
+        # must not be able to change the request allowlist after construction.
+        self.expected = {(x['kind'], x['metadata']['name']): copy.deepcopy(x) for x in
+                          (load_manifest() if expected_items is None else expected_items)}
 
     def request(self, args: list[str], body: dict | None = None):
         self.scope.check_context()
