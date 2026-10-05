@@ -505,8 +505,14 @@ def smoke_success_object(response):
 
     try:
         value = json.loads(response.stdout, object_pairs_hook=unique,
-                           parse_float=numeric, parse_constant=constant)
+                            parse_float=numeric, parse_constant=constant)
     except (ValueError, TypeError, RecursionError):
+        return {}
+    # Escaped lone surrogates survive JSON decoding; refuse them even in
+    # fields the fixed candidate comparison does not otherwise inspect.
+    try:
+        json.dumps(value, ensure_ascii=False).encode('utf-8')
+    except UnicodeError:
         return {}
     return value if type(value) is dict else {}
 

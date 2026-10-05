@@ -1678,6 +1678,20 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 1)
 
+    def test_smoke_success_refuses_unexamined_invalid_unicode(self):
+        kube = FakeKubernetes(ready=True)
+        def response(value):
+            raw = json.dumps(value)
+            return SimpleNamespace(returncode=0, stdout=raw[:-1] + ',"unexamined":"\\ud800"}', stderr='')
+        kube.smoke_failure = response
+        self.assertEqual(policy.smoke_success_object(response(items()[0])), {})
+        with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+            policy.smoke(kube, items())
+        self.assertEqual(len(kube.calls), 1)
+
+        valid = SimpleNamespace(returncode=0, stdout='{"unexamined":"\\ud83d\\ude00"}', stderr='')
+        self.assertEqual(policy.smoke_success_object(valid)['unexamined'], '\U0001f600')
+
     def test_corpus_uses_server_dry_run_and_exact_own_policy_denials(self):
         kube = FakeKubernetes(ready=True)
         result = policy.smoke(kube, items())

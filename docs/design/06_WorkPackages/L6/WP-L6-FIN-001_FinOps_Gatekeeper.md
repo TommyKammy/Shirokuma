@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.93"
+version: "0.94"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: independent noncanonical saved UTF-8 control (offline)
+
+The unchanged saved-history parser rejects an overlong UTF-8 spelling inside
+a model name and accepts the valid two-report control; collection is forbidden
+in the regression. 202 FinOps tests passed (seven Linux-only skips), as did the
+full local verifier. Dedicated Colima remained stopped; no saved report,
+volume or backup change. This does not authenticate report producers, measure
+current AgentHouse bytes (`null / NOT_MEASURED`) or grant operator acceptance.
+Rollback only the independent regression; preserve saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: independent saved model Unicode control (offline)
 

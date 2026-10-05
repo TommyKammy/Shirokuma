@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.266"
+version: "5.267"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: dry-run Unicode guard and independent saved UTF-8 control (offline)
+
+WP-L2-POL-001: the smoke JSON parser now refuses escaped lone surrogates even
+in fields outside the fixed comparison; a valid surrogate pair remains valid.
+The parser negative failed before repair and 104 native policy tests passed.
+Independently WP-L6-FIN-001: an overlong UTF-8 model-name fixture is rejected
+by the unchanged saved-history parser, with valid two-report control; 202
+FinOps tests passed (seven Linux-only skips). Full `make
+verify-local-experiment` passed. Dedicated Colima was freshly observed stopped;
+no live dry-run, new collection, unknown-request replay, retained data/backup
+mutation or GitHub write. Offline inputs do not authenticate producers, clear
+strict admission, measure AgentHouse usage (`null / NOT_MEASURED`) or grant
+operator acceptance. Rollback only the scoped parser guard/regressions;
+preserve historical intents/reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: independent local policy source Unicode boundary (offline)
 

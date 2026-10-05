@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.128"
+version: "0.129"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: dry-run success JSON Unicode boundary (offline)
+
+The separate smoke success decoder admitted an escaped lone surrogate in an
+otherwise valid JSON object. Reject invalid decoded Unicode anywhere before
+comparing a candidate; retain a valid surrogate pair. The parser negative failed
+before repair; 104 native policy tests and the full local verifier passed.
+Dedicated Colima was freshly observed stopped; no live dry-run, admission,
+request replay or retained-data/backup change. This parser boundary does not
+authenticate kubectl or establish live admission or operator acceptance.
+Rollback only the smoke decoder guard/test; preserve saved intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: independent local source decoded Unicode boundary (offline)
 

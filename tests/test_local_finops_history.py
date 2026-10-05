@@ -234,6 +234,17 @@ class HistoryTests(unittest.TestCase):
                     H.parse(payload)
         self.assertEqual(len(H.parse(valid)), 2)
 
+    def test_overlong_saved_utf8_is_not_interpreted_as_report_text(self):
+        valid = encoded([report(), report(processes())])
+        # C0 AF is a noncanonical overlong spelling of '/'. It must not be
+        # normalized into a saved model name or rendered as a valid report.
+        self.assertIn(b'"model_name": "', valid)
+        forged = valid.replace(b'"model_name": "', b'"model_name": "\xc0\xaf', 1)
+        with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):
+            with self.assertRaises(H.HistoryError):
+                H.parse(forged)
+            self.assertEqual(len(H.parse(valid)), 2)
+
     def test_escaped_lone_surrogate_in_saved_model_is_refused(self):
         valid = encoded([report(), report(processes())])
         self.assertIn(b'"model_name": "', valid)
