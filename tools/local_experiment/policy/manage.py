@@ -172,7 +172,12 @@ class Kubernetes:
 
     def json_request(self, args: list[str], body: dict | None = None):
         result = self.request(args, body)
-        if result.returncode or len(result.stdout) > 2 * 1024 * 1024:
+        try:
+            bounded = (type(result.stdout) is str and
+                       len(result.stdout.encode('utf-8')) <= 2 * 1024 * 1024)
+        except UnicodeError:
+            bounded = False
+        if type(result.returncode) is not int or result.returncode != 0 or not bounded:
             raise PolicyError('scoped Kubernetes request failed or exceeded its response limit')
         def unique_keys(pairs):
             value = {}
@@ -194,8 +199,13 @@ class Kubernetes:
                 raise PolicyError('scoped Kubernetes response contains non-representable JSON number')
             return value
 
-        value = json.loads(result.stdout, object_pairs_hook=unique_keys,
-                           parse_constant=invalid_constant, parse_float=finite_float)
+        try:
+            value = json.loads(result.stdout, object_pairs_hook=unique_keys,
+                               parse_constant=invalid_constant, parse_float=finite_float)
+        except (ValueError, TypeError, RecursionError) as exc:
+            if isinstance(exc, PolicyError):
+                raise
+            raise PolicyError('scoped Kubernetes response is not bounded JSON') from None
         if value is None:
             raise PolicyError('scoped Kubernetes response contains explicit JSON null')
         return value

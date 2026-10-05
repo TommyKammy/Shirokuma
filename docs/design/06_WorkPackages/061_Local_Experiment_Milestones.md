@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.250"
+version: "5.251"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: scoped policy JSON response guard (offline)
+
+WP-L2-POL-001: read-only policy JSON replies now require integer-zero status,
+UTF-8 byte bounds and parseable JSON. Synthetic multibyte overflow, invalid
+Unicode, non-text, boolean status and malformed JSON fail closed; a valid
+multibyte reply still passes. Focused policy 91 tests and full local regression
+passed. Colima was observed stopped. No live API, retained data/backup mutation,
+unknown-request replay or GitHub write. Fixture replies cannot authenticate
+the API or prove strict admission/operator acceptance. Roll back only the
+scoped guard and test; preserve historical evidence. Original Vault sync pending.
 
 ## 2026-10-05: independent FinOps saved-history audit (offline)
 

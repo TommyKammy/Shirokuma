@@ -220,6 +220,26 @@ class ActivationTests(unittest.TestCase):
             policy.assert_owned(value, expected)
 
 
+class ScopedResponseTests(unittest.TestCase):
+    def test_json_request_bounds_utf8_and_rejects_malformed_replies(self):
+        client = object.__new__(policy.Kubernetes)
+        for stdout, status in (
+            ('é' * (1024 * 1024 + 1), 0),
+            ('\ud800', 0),
+            (b'{}', 0),
+            ('{}', False),
+            ('{', 0),
+        ):
+            with self.subTest(status=status, size=len(stdout)):
+                client.request = mock.Mock(return_value=SimpleNamespace(
+                    stdout=stdout, stderr='', returncode=status))
+                with self.assertRaises(policy.PolicyError):
+                    client.json_request(['get', 'pods'])
+        client.request = mock.Mock(return_value=SimpleNamespace(
+            stdout='{"value":"é"}', stderr='', returncode=0))
+        self.assertEqual(client.json_request(['get', 'pods']), {'value': 'é'})
+
+
 class RollbackTests(unittest.TestCase):
     def test_only_owned_bindings_are_removed_policies_and_workloads_untouched(self):
         kube = FakeKubernetes(ready=True)

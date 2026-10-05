@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.114"
+version: "0.115"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: bounded scoped policy JSON reads (offline)
+
+The native policy read helper bounded response characters, not UTF-8 bytes,
+and accepted a boolean false subprocess status as success. It now requires an
+integer zero and bounded UTF-8 text; malformed JSON and unpaired Unicode fail
+with a scoped PolicyError rather than a raw parser/encoding exception. Fake
+negative replies and a valid multibyte reply passed 91 policy tests and the
+local regression. Dedicated Colima was observed stopped; no live API or saved
+request replay. This does not authenticate an API response or clear strict
+admission. Roll back only this read guard/test if necessary; preserve saved
+evidence and original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: bounded Gatekeeper response bytes (offline)
 
