@@ -1009,6 +1009,27 @@ class SmokeTests(unittest.TestCase):
                     policy.smoke(kube, items())
                 self.assertEqual(len(kube.calls), 2)
 
+    def test_smoke_success_rejects_unexamined_envelope_and_metadata(self):
+        # A successful response with a new claim is not evidence that the
+        # submitted fixed object was the only effective object inspected.
+        for location, field, payload in (('envelope', 'items', []),
+                                         ('envelope', 'unexpected', None),
+                                         ('metadata', 'unexpected', None),
+                                         ('metadata', 'managedFieldsAlias', [])):
+            kube = FakeKubernetes(ready=True)
+            reference = FakeKubernetes(ready=True)
+            def changed(request):
+                if request['kind'] != 'Pod':
+                    return reference.smoke_request(request)
+                reply = copy.deepcopy(request)
+                (reply if location == 'envelope' else reply['metadata'])[field] = payload
+                return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+            kube.smoke_failure = changed
+            with self.subTest(location=location, field=field):
+                with self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+
     def test_service_success_does_not_add_traffic_hints(self):
         for mutation in ('distribution', 'application-protocol'):
             kube = FakeKubernetes(ready=True)

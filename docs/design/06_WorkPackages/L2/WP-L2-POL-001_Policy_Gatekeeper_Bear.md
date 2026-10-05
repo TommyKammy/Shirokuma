@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.105"
+version: "0.106"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: legacy smoke response envelope (offline)
+
+Four fake successful Pod dry-run replies added unknown top-level or metadata
+claims. All advanced past the first Pod before the guard; the bounded legacy
+smoke comparison now refuses unexamined keys. The negative failed first, then
+84 native policy tests and full local regression passed. The dedicated Colima
+profile was observed stopped; no live admission, pending-request replay,
+retained data/backup mutation or GitHub write. This does not authenticate the
+API or establish full effective-object equality, strict admission or operator
+acceptance. Roll back only this response guard/test if needed and preserve
+saved requests. Direct original Vault synchronization remains pending.
 
 ## 2026-10-05: fixed Service spec key boundary (offline)
 

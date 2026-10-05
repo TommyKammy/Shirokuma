@@ -645,7 +645,13 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
 
 def smoke_dry_run_identity(value: dict, metadata: dict) -> bool:
     """A successful server dry-run is not evidence of a persisted object."""
-    return (value.get('status', {}) == {} and
+    return (set(value) <= {'apiVersion', 'kind', 'metadata', 'spec', 'status'} and
+            set(metadata) <= {'name', 'namespace', 'labels', 'annotations',
+                              'finalizers', 'uid', 'generateName',
+                              'resourceVersion', 'generation', 'creationTimestamp',
+                              'deletionTimestamp', 'deletionGracePeriodSeconds',
+                              'ownerReferences', 'managedFields'} and
+            value.get('status', {}) == {} and
             metadata.get('uid', '') == '' and
             metadata.get('generateName', '') == '' and
             metadata.get('resourceVersion', '') == '' and

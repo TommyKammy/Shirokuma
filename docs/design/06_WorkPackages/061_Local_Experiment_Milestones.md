@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.239"
+version: "5.240"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: legacy policy smoke response envelope (offline)
+
+WP-L2-POL-001: four fake successful Pod responses with unexamined envelope or
+metadata claims advanced past the first case before repair. A bounded key
+guard refuses them; focused 84 native tests and full local regression passed.
+Dedicated Colima was observed stopped. No live admission, saved-request replay,
+retained data/backup mutation or GitHub write. Offline fake responses cannot
+authenticate the API, prove full effective-object equality, clear strict
+admission or grant operator acceptance. Revert only the scoped guard/test if
+needed; preserve previous evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: Service spec key boundary and independent history check (offline)
 
