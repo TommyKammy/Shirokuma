@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.251"
+version: "5.252"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent FinOps saved-history boundary audit (offline)
+
+WP-L6-FIN-001: checked the parser and direct renderer's input/output bounds,
+selected-index ordering, canonical digest correlation, and per-report storage
+scope; no reader change was justified. Focused FinOps 194 tests passed with
+seven Linux-only skips. Colima was observed stopped; no collection or retained
+report/volume/backup mutation. AgentHouse bytes remain `null / NOT_MEASURED`;
+saved producer identity and current usage are not verified. Preserve saved
+reports; no rollback needed. Original Vault sync remains pending.
 
 ## 2026-10-05: scoped policy JSON response guard (offline)
 
