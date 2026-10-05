@@ -799,6 +799,31 @@ class ActivationTests(unittest.TestCase):
         with self.assertRaises(policy.PolicyError):
             policy.assert_owned(value, expected)
 
+    def test_owned_spec_refuses_json_type_aliases_and_malformed_defaults(self):
+        expected = copy.deepcopy(items()[0])
+        expected['spec']['testBoundary'] = {'enabled': False, 'count': 1}
+        for field, replacement in (('enabled', 0), ('count', True)):
+            current = admitted(expected)
+            current['spec']['testBoundary'][field] = replacement
+            self.assertEqual(current['spec'], expected['spec'])  # Python equality is insufficient.
+            with self.subTest(field=field), self.assertRaises(policy.PolicyError):
+                policy.assert_owned(current, expected)
+        for malformed in (None, [], {'matchConstraints': []}):
+            current = admitted(expected)
+            current['spec'] = malformed
+            with self.subTest(spec=malformed), self.assertRaises(policy.PolicyError):
+                policy.assert_owned(current, expected)
+
+    def test_scoped_get_refuses_malformed_identity_before_request(self):
+        client = object.__new__(policy.Kubernetes)
+        client.json_request = mock.Mock(side_effect=AssertionError('request'))
+        for malformed in ([], {}, None, False):
+            with self.subTest(identity=malformed), self.assertRaises(policy.PolicyError):
+                client.get(malformed, policy.NAMES[0])
+            with self.subTest(name=malformed), self.assertRaises(policy.PolicyError):
+                client.get(policy.POLICY, malformed)
+        client.json_request.assert_not_called()
+
 
 class ScopedResponseTests(unittest.TestCase):
     def test_smoke_image_requires_one_well_formed_local_trino_container(self):
@@ -977,6 +1002,18 @@ class RollbackTests(unittest.TestCase):
         current['metadata'].pop('uid')
         with self.assertRaises(policy.PolicyError):
             client.delete_binding(current, expected)
+
+    def test_binding_delete_requires_json_exact_certified_snapshot(self):
+        certified = items()
+        binding = next(x for x in certified if x['kind'] == policy.BINDING)
+        binding['spec']['testBoundary'] = {'enabled': False}
+        client = policy.Kubernetes(certified)
+        changed = copy.deepcopy(binding)
+        changed['spec']['testBoundary']['enabled'] = 0
+        self.assertEqual(changed, binding)  # Python's boolean/number alias.
+        with mock.patch.object(client, 'json_request', side_effect=AssertionError('delete')):
+            with self.assertRaises(policy.PolicyError):
+                client.delete_binding(admitted(changed), changed)
 
 
 class SmokeTests(unittest.TestCase):

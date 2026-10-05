@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.151"
+version: "0.152"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: exact owned spec and rollback identity (offline)
+
+Existing policy/binding preflight now compares the spec after only the documented
+empty selector defaults using JSON-exact semantics; Python boolean/number aliases
+can no longer certify ownership. Malformed spec/defaults fail with `PolicyError`.
+Rollback additionally requires the caller's binding to match the certified
+snapshot JSON-exactly, and scoped policy reads reject malformed identities
+before I/O. Synthetic alias/malformed negatives failed before repair; 135 focused
+policy tests and `make verify-local-experiment` passed afterward. Separately,
+WP-L6-FIN-001's 207 offline tests passed (seven Linux-only skips). Dedicated
+Colima was freshly observed stopped; no live API, admission, collection, unknown
+request replay, retained data/backup mutation or GitHub write. Source/response
+authenticity, live strict admission and operator acceptance remain open. Restore
+only the scoped ownership/read/rollback guards and regressions if needed, keeping
+saved intents. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: JSON-exact create and malformed rollback preflight (offline)
 

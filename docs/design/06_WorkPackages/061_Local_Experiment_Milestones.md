@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.291"
+version: "5.292"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: JSON-exact owned policy and independent FinOps boundary (offline)
+
+WP-L2-POL-001: existing dedicated policy/binding ownership checks now reject
+boolean/number alias specs and malformed selector defaults, rollback compares
+its certified binding JSON-exactly, and malformed policy read identities fail
+before I/O. Synthetic negatives failed first; 135 focused policy tests and
+`make verify-local-experiment` passed. Independently WP-L6-FIN-001's 207 offline
+tests passed (seven Linux-only skips), without new collection or reader change.
+Dedicated Colima was freshly observed stopped; no live API, unknown-request
+replay, retained data/backup mutation or GitHub write. Live strict admission,
+producer authentication, present AgentHouse usage (`null / NOT_MEASURED`) and
+operator acceptance remain open. Roll back only the scoped policy guards/tests
+if necessary, preserving saved intents and reports. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-06: JSON-exact policy allowlist and malformed rollback identity (offline)
 

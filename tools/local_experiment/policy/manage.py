@@ -297,10 +297,14 @@ def load_manifest() -> list[dict]:
 
 
 def canonical_spec(spec: dict) -> dict:
+    if type(spec) is not dict:
+        raise PolicyError('existing dedicated policy has malformed spec')
     result = copy.deepcopy(spec)
     # API-server empty selector defaults do not change the selected namespace.
     for key in ('matchConstraints', 'matchResources'):
         match = result.get(key, {})
+        if type(match) is not dict:
+            raise PolicyError('existing dedicated policy has malformed match constraints')
         if match.get('objectSelector') == {}:
             match.pop('objectSelector')
         if match.get('excludeResourceRules') == []:
@@ -309,13 +313,24 @@ def canonical_spec(spec: dict) -> dict:
 
 
 def assert_owned(current: dict, expected: dict) -> None:
-    metadata = current.get('metadata', {})
+    if type(current) is not dict or type(current.get('metadata')) is not dict:
+        raise PolicyError('existing dedicated policy has malformed metadata')
+    metadata = current['metadata']
     desired = expected['metadata']
+    if type(metadata.get('labels')) is not dict or type(metadata.get('annotations')) is not dict:
+        raise PolicyError('existing dedicated policy has malformed owner metadata')
+    try:
+        # Canonicalize only the API's documented empty selector defaults; compare
+        # the remaining JSON exactly, including boolean versus numeric values.
+        same_spec = (json.dumps(canonical_spec(current.get('spec')), sort_keys=True, allow_nan=False) ==
+                     json.dumps(canonical_spec(expected['spec']), sort_keys=True, allow_nan=False))
+    except (TypeError, ValueError, UnicodeError, RecursionError):
+        same_spec = False
     if (current.get('apiVersion') != API or current.get('kind') != expected['kind']
             or metadata.get('name') != desired['name']
-            or any(metadata.get('labels', {}).get(key) != value for key, value in LABELS.items())
-            or any(metadata.get('annotations', {}).get(key) != value for key, value in desired['annotations'].items())
-            or canonical_spec(current.get('spec', {})) != canonical_spec(expected['spec'])):
+            or any(metadata['labels'].get(key) != value for key, value in LABELS.items())
+            or any(metadata['annotations'].get(key) != value for key, value in desired['annotations'].items())
+            or not same_spec):
         raise PolicyError('existing dedicated policy identity, owner or content differs; refusing overwrite')
 
 
@@ -424,7 +439,7 @@ class Kubernetes:
         return value
 
     def get(self, kind: str, name: str):
-        if kind not in RESOURCES or name not in NAMES:
+        if type(kind) is not str or type(name) is not str or kind not in RESOURCES or name not in NAMES:
             raise PolicyError('policy read is outside the dedicated inventory')
         return self.json_request(['get', RESOURCES[kind], name, '--ignore-not-found', '-o', 'json'])
 
@@ -453,7 +468,13 @@ class Kubernetes:
                 type(expected['metadata'].get('name')) is not str):
             raise PolicyError('rollback only removes dedicated bindings')
         key = (expected['kind'], expected['metadata']['name'])
-        if expected.get('kind') != BINDING or self.expected.get(key) != expected:
+        try:
+            identical = (key in self.expected and
+                         json.dumps(self.expected[key], sort_keys=True, allow_nan=False) ==
+                         json.dumps(expected, sort_keys=True, allow_nan=False))
+        except (TypeError, ValueError, UnicodeError, RecursionError):
+            identical = False
+        if expected['kind'] != BINDING or not identical:
             raise PolicyError('rollback only removes dedicated bindings')
         assert_owned(current, expected)
         uid, version = current['metadata'].get('uid'), current['metadata'].get('resourceVersion')
