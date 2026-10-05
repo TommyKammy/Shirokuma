@@ -1194,6 +1194,14 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for malformed in ([], {}, None, 7):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template']['spec']['containers'][0]['volumeMounts'][0]['name'] = malformed
+            client.json_request.return_value = reply
+            with self.subTest(mount_name=malformed), self.assertRaisesRegex(
+                    policy.PolicyError, 'smoke requires local Trino volume mounts'):
+                client.image()
+        client.json_request.return_value = valid
         for field, value in (('unknownExecution', {'enabled': True}),
                              ('deviceOverride', '/dev/foreign')):
             reply = copy.deepcopy(valid)

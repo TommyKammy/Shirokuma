@@ -732,7 +732,10 @@ class Kubernetes:
             mounts = containers[0].get('volumeMounts', [])
             expected_paths = {'config': '/etc/trino', 'tmp': '/tmp', 'data': '/var/trino'}
             if (type(mounts) is not list or
-                     {mount.get('name') for mount in mounts if type(mount) is dict} !=
+                     any(type(mount) is not dict or
+                         type(mount.get('name')) is not str
+                         for mount in mounts) or
+                      {mount.get('name') for mount in mounts if type(mount) is dict} !=
                      set(expected_paths) or
                      len({mount.get('name') for mount in mounts if type(mount) is dict}) != len(mounts) or
                     any(type(mount) is not dict or

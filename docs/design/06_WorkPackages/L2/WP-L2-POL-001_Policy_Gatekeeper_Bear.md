@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.215"
+version: "0.216"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: scoped malformed Trino mount diagnostics (offline)
+
+Four malformed same-image volume-mount names were refused, but unhashable
+names fell through to the generic malformed Deployment error before the mount
+contract was checked. Validate mount-name types before set operations so all
+four fail with the scoped mount error. The negative diagnostic test failed
+before repair; focused policy 166 cases pass. Dedicated Colima was observed
+stopped. No live admission, unknown-request replay, retained data/backup
+mutation or GitHub write. This does not authenticate the API, prove strict
+admission or grant operator acceptance. Revert only the mount-name guard/test
+if necessary, keeping saved requests. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: bounded Trino Pod and container field envelopes (offline)
 

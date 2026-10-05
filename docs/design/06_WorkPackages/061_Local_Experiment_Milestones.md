@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.374"
+version: "5.375"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Trino mount diagnostic and fixed PVC parent overlap (offline)
+
+WP-L2-POL-001 now classifies malformed same-image mount names under its mount
+error, rather than a generic Deployment error (four negative cases, two failed
+before repair). Independently WP-L6-FIN-001 refuses another Pod volume mounted
+at `/` or a lexical ancestor of either fixed PVC directory (five negative
+subcases failed before repair). Focused policy 166 and FinOps 256 cases passed
+(seven Linux-only skips); `make verify-local-experiment`, design-context,
+scoped secret scan and `git diff --check` passed. The verifier log is private
+under `tmp/local-experiment/autonomous-runner/run-qjiwuw2k/attempt-110/`;
+its deliberately failing fake-worker diagnostics are expected negative tests.
+Dedicated Colima was freshly observed stopped.
+No live API/admission, collection, unknown-request replay, retained data,
+report, volume or backup mutation, or GitHub write. These offline fixtures
+cannot authenticate producers, prove strict admission, measure AgentHouse
+used bytes (`null / NOT_MEASURED`) or confer operator acceptance. Roll back
+only the two scoped guards/tests if necessary, preserving saved records.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded Trino Pod and container field envelopes (offline)
 

@@ -160,8 +160,10 @@ def _snapshot(component, workload, pods, replica=None):
         # Another mount below the claim directory shadows part of its contents;
         # lexical normalization bounds this check without claiming symlink or
         # actual filesystem/mount resolution.
-        require(all(m.get('name') == volume or not
-                    posixpath.normpath(m['mountPath']).startswith(mount + '/')
+        require(all(m.get('name') == volume or not (
+                    posixpath.normpath(m['mountPath']).startswith(mount + '/') or
+                    posixpath.normpath(m['mountPath']) == '/' or
+                    mount.startswith(posixpath.normpath(m['mountPath']) + '/'))
                     for m in mounts))
         # Pin the entire claim mount, not merely one matching mount: a second
         # mount or subPath/device mapping would describe a different exposure.

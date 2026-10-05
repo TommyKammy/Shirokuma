@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.176"
+version: "0.177"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed PVC parent mount overlap (offline)
+
+Synthetic fixed Pod snapshots with a second volume mounted at `/`, a direct
+parent, or a lexical parent alias of the fixed claim mount were previously
+reported as observed. The inventory now refuses mounts covering either fixed
+claim's parent as well as its descendants. Negative fixtures failed before
+repair; focused FinOps 256 cases pass (seven Linux-only skips), and unrelated
+mount siblings remain supported. Dedicated Colima was observed stopped; no
+live API, collection, retained volume/report/backup mutation or AgentHouse
+used-byte measurement (`null / NOT_MEASURED`). Lexical overlap is not symlink
+resolution, source authentication, live mount health or operator acceptance.
+Restore only the scoped guard/test if needed; preserve saved reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: ambiguous double-slash PVC mount paths (offline)
 
