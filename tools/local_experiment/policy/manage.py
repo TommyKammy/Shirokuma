@@ -57,14 +57,38 @@ def source_policies() -> list[dict]:
             '-p', '{}', '-f', str(SOURCE), '-o', 'json'], cwd=ROOT, capture_output=True, text=True, timeout=20)
     except (OSError, subprocess.SubprocessError):
         raise PolicyError('local source decoding did not complete') from None
-    if value.returncode or len(value.stdout) > 256 * 1024:
+    try:
+        bounded = type(value.stdout) is str and len(value.stdout.encode('utf-8')) <= 256 * 1024
+    except UnicodeError:
+        bounded = False
+    if type(value.returncode) is not int or value.returncode != 0 or not bounded:
         raise PolicyError('local source decoding failed')
-    remaining, result, decoder = value.stdout, [], json.JSONDecoder()
-    while remaining.strip():
-        item, end = decoder.raw_decode(remaining.lstrip())
-        result.append(item)
-        remaining = remaining.lstrip()[end:]
-    if ([x.get('metadata', {}).get('name') for x in result] != list(BASE_NAMES)
+    def unique_keys(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise PolicyError('local source decoding contains duplicate keys')
+            result[key] = item
+        return result
+
+    def invalid_constant(_):
+        raise PolicyError('local source decoding contains non-JSON number')
+
+    remaining, result = value.stdout, []
+    decoder = json.JSONDecoder(object_pairs_hook=unique_keys, parse_constant=invalid_constant)
+    try:
+        while remaining.strip():
+            item, end = decoder.raw_decode(remaining.lstrip())
+            result.append(item)
+            remaining = remaining.lstrip()[end:]
+    except (ValueError, TypeError, RecursionError) as exc:
+        if isinstance(exc, PolicyError):
+            raise
+        raise PolicyError('local source decoding returned malformed JSON') from None
+    if (len(result) != len(BASE_NAMES) or any(
+            not isinstance(x, dict) or not isinstance(x.get('metadata'), dict)
+            for x in result) or
+            [x['metadata'].get('name') for x in result] != list(BASE_NAMES)
             or any(x.get('kind') != 'ValidatingPolicy' for x in result)):
         raise PolicyError('unexpected repository policy source inventory')
     return result

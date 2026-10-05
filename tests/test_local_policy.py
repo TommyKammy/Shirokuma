@@ -99,6 +99,20 @@ class Clock:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_local_source_decoder_refuses_malformed_or_ambiguous_output(self):
+        for stdout, status in (
+            ('{', 0), ('null', 0), ('{"metadata":null}', 0),
+            ('{"metadata":{"name":"x","name":"y"}}', 0),
+            ('{"metadata":{"name":"x"},"spec":{"value":NaN}}', 0),
+            ('é' * (128 * 1024 + 1), 0), ('\ud800', 0), (b'{}', 0),
+            ('{}', False),
+        ):
+            with self.subTest(status=status, size=len(stdout)):
+                reply = SimpleNamespace(stdout=stdout, stderr='', returncode=status)
+                with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+                    with self.assertRaises(policy.PolicyError):
+                        policy.source_policies()
+
     def test_manifest_reuses_all_source_cel_without_kyverno_autogen(self):
         sources = policy.source_policies()  # kubectl local decoding only; no API connection.
         actual = policy.load_manifest()

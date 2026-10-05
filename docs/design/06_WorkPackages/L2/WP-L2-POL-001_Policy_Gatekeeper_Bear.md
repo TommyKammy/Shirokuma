@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.117"
+version: "0.118"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: local CEL source decoder boundary (offline)
+
+The local kubectl YAML-to-JSON source decoder now checks UTF-8 byte length,
+integer-zero exit status, unique JSON keys and object/metadata inventory before
+rendering dedicated native policies. Fake malformed, oversized, duplicate-key,
+non-object and non-JSON numeric outputs fail with PolicyError. The real local
+source still projects the existing manifest. Native policy 94 tests and `make
+verify-local-experiment` passed. No API request, policy activation, saved-intent
+replay, retained data/backup mutation or GitHub write; Colima remained stopped.
+This does not authenticate local tools or live policy responses, clear strict
+admission or establish operator acceptance. Roll back only the source decoder
+and regression if actual local kubectl output needs a revised contract; retain
+the existing manifest and saved intents. Original Vault sync pending.
 
 ## 2026-10-05: scoped JSON object shape (offline)
 

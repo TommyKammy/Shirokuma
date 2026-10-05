@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.255"
+version: "5.256"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: local CEL source decoding guard (offline)
+
+WP-L2-POL-001: the independent local YAML-to-JSON decoder now refuses
+oversized UTF-8, malformed, non-object, duplicate-key and non-JSON numeric
+kubectl output before native manifest rendering; the real local projection
+still matches. Native policy 94 tests and `make verify-local-experiment` passed.
+Dedicated Colima remained stopped; no live API, activation, unknown-request
+replay, retained data/backup mutation or GitHub write. Local decoder tests do
+not authenticate tools or live admission and do not grant operator acceptance.
+Revert only the source guard/test if necessary; preserve manifest and intents.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: scoped native JSON object boundary (offline)
 
