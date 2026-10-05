@@ -5,12 +5,21 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.386"
+version: "5.387"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed storage status-progress control (offline)
+
+WP-L6-FIN-001: an independent test-only follow-up confirms a Bound PVC/PV
+may advance resourceVersion and unrelated status details between reads without
+invalidating stable specs. Storage-focused 51 tests pass; the full local
+verifier predates this test-only increment. No live API, retained data or backup
+change. This is not an atomic sample or operator acceptance. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: full fixed claim/backing-volume spec continuity (offline)
 

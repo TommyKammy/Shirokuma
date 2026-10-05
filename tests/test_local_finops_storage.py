@@ -546,6 +546,24 @@ class StorageTests(unittest.TestCase):
                         S.StorageError, 'IDENTITY_CHANGED'):
                     S._collect_one(backend, component)
 
+    def test_storage_collection_allows_status_progress_without_spec_drift(self):
+        w, pods, _, pvc, pv = objects('seaweedfs')
+        pvc['metadata']['resourceVersion'] = '10'
+        pv['metadata']['resourceVersion'] = '11'
+        later_claim, later_pv = deepcopy(pvc), deepcopy(pv)
+        later_claim['metadata']['resourceVersion'] = '12'
+        later_claim['status']['conditions'] = [{'type': 'FileSystemResizePending'}]
+        later_pv['metadata']['resourceVersion'] = '13'
+        later_pv['status'] = {'phase': 'Bound', 'reason': 'controller update'}
+        responses = [w, {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': pods},
+                     pvc, pv, deepcopy(w),
+                     {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': deepcopy(pods)},
+                     later_claim, later_pv]
+        backend = Mock()
+        backend.now.return_value = NOW
+        backend.storage_get.side_effect = responses
+        self.assertEqual(S._collect_one(backend, 'seaweedfs')['state'], 'observed')
+
     def test_storage_collection_refuses_pv_losing_bound_phase(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             w, pods, _, pvc, pv = objects(component)

@@ -5,12 +5,21 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.184"
+version: "0.185"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: status movement control after spec pinning (offline)
+
+A separate positive two-read fixture advances PVC/PV resource versions and
+non-identity status details with unchanged specs and Bound phase; projection
+remains observed. Storage-focused 51 cases pass. The full local verifier below
+ran before this test-only follow-up; no post-follow-up full-verifier claim.
+No API or retained report/backup mutation. Remove only this fixture if needed;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed PVC/PV full-spec read continuity (offline)
 
