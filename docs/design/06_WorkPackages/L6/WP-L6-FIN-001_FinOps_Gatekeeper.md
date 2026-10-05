@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.119"
+version: "0.120"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: independent offline history/storage regression
+
+After the separate policy activation UID fix, the unchanged FinOps suite
+passed 207 tests (seven Linux-only skips) via `make test-local-finops`; the
+full local verifier also passed. A direct unittest invocation of the history
+module failed because its sibling fixture import needs the Make target's test
+path; it was not a product failure. No reader, report, collection or retained
+volume/backup changed; Colima was observed stopped. Docker reference is not
+used bytes: AgentHouse remains `null / NOT_MEASURED` pending authenticated VM
+measurement, worker cleanup and backup recovery. No FinOps rollback; preserve
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: separate saved-history boundary recheck (offline)
 

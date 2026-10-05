@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.162"
+version: "0.163"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: activation resource identity across reads (offline)
+
+An existing policy replaced at the same name between preflight and type-check
+could previously activate bindings; a binding replacement at final inventory
+could certify ready. Two disposable fake-API negatives now refuse changed UIDs
+across preflight, creation, type-check and final inventory. The first negative
+failed before repair; the policy suite passed 153 tests afterward and full
+`make verify-local-experiment` passed. This is not an atomic API snapshot or
+authenticated live admission. Dedicated Colima was observed stopped; no live
+policy write, unknown-request replay, retained volume/backup mutation or
+GitHub write. Revert only the activation UID pin/tests if needed; preserve
+saved intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: nonzero persisted resource version (offline)
 

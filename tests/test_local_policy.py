@@ -824,6 +824,50 @@ class ActivationTests(unittest.TestCase):
         self.assertTrue(policy.apply_policies(kube, items())['ready'])
         self.assertEqual(len(kube.calls), before)
 
+    def test_policy_replacement_during_typecheck_prevents_binding_activation(self):
+        kube = FakeKubernetes(ready=True)
+        for key in list(kube.objects):
+            if key[0] == policy.BINDING:
+                del kube.objects[key]
+        original = kube.get
+        target = (policy.POLICY, policy.NAMES[0])
+        reads = 0
+
+        def replaced(kind, name):
+            nonlocal reads
+            value = original(kind, name)
+            if (kind, name) == target:
+                reads += 1
+                if reads >= 3:
+                    value['metadata']['uid'] = 'replacement-uid'
+            return value
+
+        kube.get = replaced
+        with self.assertRaisesRegex(policy.PolicyError, 'changed|identity'):
+            policy.apply_policies(kube, items())
+        self.assertFalse(any(call[0] == 'create' and call[1] == policy.BINDING
+                             for call in kube.calls))
+
+    def test_binding_replacement_at_final_inventory_cannot_certify_ready(self):
+        kube = FakeKubernetes(ready=True)
+        original = kube.get
+        target = (policy.BINDING, policy.NAMES[0])
+        reads = 0
+
+        def replaced(kind, name):
+            nonlocal reads
+            value = original(kind, name)
+            if (kind, name) == target:
+                reads += 1
+                if reads >= 3:
+                    value['metadata']['uid'] = 'replacement-uid'
+            return value
+
+        kube.get = replaced
+        with self.assertRaisesRegex(policy.PolicyError, 'identity changed'):
+            policy.apply_policies(kube, items())
+        self.assertEqual(kube.calls, [])
+
     def test_wrong_owner_or_content_preflight_prevents_all_creates(self):
         for field in ('owner', 'spec'):
             kube = FakeKubernetes()

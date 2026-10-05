@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.302"
+version: "5.303"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: activation UID continuity and separate FinOps regression (offline)
+
+WP-L2-POL-001: a fake API replacing an existing policy between preflight and
+type-check previously activated bindings; a binding replaced at the final
+inventory could certify ready. Activation now pins each observed UID through
+creation, type-check and final inventory. The first negative failed before
+repair; 153 policy tests and `make verify-local-experiment` passed afterward.
+Separately WP-L6-FIN-001's unchanged saved-history/storage suite passed 207
+tests (seven Linux-only skips), without collecting. An initial direct unittest
+invocation of its history module failed due to the test module's sibling
+import path; its supported Make target passed. Dedicated Colima was observed
+stopped. No live API, pending-request replay, retained volume/backup mutation
+or GitHub write. No atomic inventory, authenticated API, AgentHouse used bytes
+(`null / NOT_MEASURED`) or operator acceptance is established. Roll back only
+the activation guard/test if needed; preserve saved reports/intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: nonzero policy version and independent saved FinOps check (offline)
 

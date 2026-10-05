@@ -608,13 +608,22 @@ def inventory_status(kube, items: list[dict]) -> dict:
 
 def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=time.monotonic, pause=time.sleep):
     require_complete_inventory(items)
+    observed_uids = {}
+
+    def pin_identity(current, expected):
+        uid, _ = persistent_identity(current)
+        key = (expected['kind'], expected['metadata']['name'])
+        if key in observed_uids and observed_uids[key] != uid:
+            raise PolicyError('dedicated resource identity changed during activation')
+        observed_uids[key] = uid
+
     # Preflight every existing name before creating even an inert definition.
     missing = []
     for expected in items:
         current = kube.get(expected['kind'], expected['metadata']['name'])
         if current is not None:
             assert_owned(current, expected)
-            persistent_identity(current)
+            pin_identity(current, expected)
         else:
             missing.append(expected)
     for expected in missing:
@@ -630,11 +639,11 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
                 missing.append(expected)
             else:
                 assert_owned(current, expected)
-                persistent_identity(current)
+                pin_identity(current, expected)
         for expected in missing:
             current = kube.create(expected)
             assert_owned(current, expected)
-            persistent_identity(current)
+            pin_identity(current, expected)
             record({'action': 'created', 'kind': kind, 'name': expected['metadata']['name'], 'uid': current['metadata'].get('uid')})
         if kind == POLICY:
             deadline = clock() + 45
@@ -645,7 +654,7 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
                     if current is None:
                         raise PolicyError('policy disappeared before binding activation')
                     assert_owned(current, expected)
-                    persistent_identity(current)
+                    pin_identity(current, expected)
                     states.append(typecheck(current))
                 if 'warnings' in states:
                     raise PolicyError('policy type checking reported warnings; bindings were not activated')
@@ -656,6 +665,9 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
                 pause(1)
             record({'action': 'type_check_complete', 'policies': len(selected)})
     result = inventory_status(kube, items)
+    for row in result['resources']:
+        if row.get('uid') != observed_uids.get((row['kind'], row['name'])):
+            raise PolicyError('dedicated resource identity changed during activation')
     if not result['ready']:
         raise PolicyError('dedicated admission inventory is not ready')
     return result
