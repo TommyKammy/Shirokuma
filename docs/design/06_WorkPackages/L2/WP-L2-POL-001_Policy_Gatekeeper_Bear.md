@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.127"
+version: "0.128"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: independent local source decoded Unicode boundary (offline)
+
+The local YAML-to-JSON decoder could return seven otherwise correctly named
+policies while an unexamined source spec key contained an escaped lone
+surrogate. It now refuses invalid Unicode before rendering native policies;
+an escaped valid surrogate pair remains accepted. The focused negative failed
+before repair and 103 native tests passed. No lab activation or saved request
+replay; dedicated Colima remained stopped. Offline fixtures do not
+authenticate local kubectl, prove live admission or grant operator acceptance.
+Revert only this local source guard/test if the decoder contract changes;
+preserve existing manifests and intents. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-05: decoded policy response Unicode boundary (offline)
 

@@ -88,9 +88,12 @@ def source_policies() -> list[dict]:
     try:
         while remaining.strip():
             item, end = decoder.raw_decode(remaining.lstrip())
+            # Escape decoding can introduce lone surrogates in otherwise
+            # UTF-8 transport; refuse them before projecting the source.
+            json.dumps(item, ensure_ascii=False).encode('utf-8')
             result.append(item)
             remaining = remaining.lstrip()[end:]
-    except (ValueError, TypeError, RecursionError) as exc:
+    except (ValueError, TypeError, RecursionError, UnicodeError) as exc:
         if isinstance(exc, PolicyError):
             raise
         raise PolicyError('local source decoding returned malformed JSON') from None

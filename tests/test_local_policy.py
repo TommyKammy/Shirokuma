@@ -99,6 +99,26 @@ class Clock:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_local_source_decoder_refuses_escaped_lone_surrogates(self):
+        source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
+                   'spec': {}} for name in policy.BASE_NAMES]
+        encoded = [json.dumps(item) for item in source]
+        for escaped in ('\\ud800', '\\udc00'):
+            changed = encoded.copy()
+            changed[0] = changed[0].replace('"spec": {}',
+                                             '"spec": {"' + escaped + '": "value"}')
+            reply = SimpleNamespace(stdout='\n'.join(changed), stderr='', returncode=0)
+            with self.subTest(escaped=escaped), mock.patch.object(
+                    policy.subprocess, 'run', return_value=reply):
+                with self.assertRaises(policy.PolicyError):
+                    policy.source_policies()
+        changed = encoded.copy()
+        changed[0] = changed[0].replace('"spec": {}',
+                                         '"spec": {"\\ud83d\\ude00": "value"}')
+        reply = SimpleNamespace(stdout='\n'.join(changed), stderr='', returncode=0)
+        with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+            self.assertEqual(policy.source_policies()[0]['spec'], {'😀': 'value'})
+
     def test_local_source_decoder_refuses_diagnostic_stderr_on_success(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]

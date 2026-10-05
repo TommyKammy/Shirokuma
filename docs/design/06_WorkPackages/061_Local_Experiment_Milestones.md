@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.265"
+version: "5.266"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent local policy source Unicode boundary (offline)
+
+WP-L2-POL-001: escaped lone surrogates in unexamined spec keys of the seven
+local decoded policy sources previously passed the source inventory. The
+decoder now refuses invalid Unicode before projection, retaining an escaped
+valid surrogate-pair control. The negative failed first; 103 native policy
+tests, full `make verify-local-experiment`, design-context (89 documents),
+secret scan and diff check passed. Dedicated Colima remained stopped; no API call, policy activation,
+unknown-request replay, retained data/backup mutation or GitHub write. This
+does not authenticate decoder tools, establish strict admission or grant
+operator acceptance. Revert only the source guard/test if necessary; preserve
+manifests and intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: decoded policy Unicode and independent saved-model boundary (offline)
 
