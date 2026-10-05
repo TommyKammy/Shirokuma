@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.210"
+version: "0.211"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bounded Trino Pod-template envelope (offline)
+
+Two synthetic same-image Deployment replies with extra Pod-template fields
+(`status` or an unknown member) lent the fixed smoke image before repair. The
+source now requires exactly `metadata` and `spec` on the Pod template. Focused
+policy 166 cases passed; no live API/admission, image import, saved request
+mutation or unknown-request replay. This fixture check does not authenticate
+Kubernetes, establish strict admission or grant operator acceptance. Revert
+only the scoped guard/test if needed, preserving saved requests. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed smoke image requires Recreate strategy (offline)
 

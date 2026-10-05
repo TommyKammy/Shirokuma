@@ -47,6 +47,26 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_primary_mount_must_resolve_to_pod_volume(self):
+        for component in S.TARGETS:
+            data = deepcopy(objects(component))
+            data[1][0]['spec']['containers'][0]['volumeMounts'].append(
+                {'name': 'unlisted', 'mountPath': '/unlisted'})
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+            data[1][0]['spec']['volumes'].append({'name': 'unlisted', 'emptyDir': {}})
+            with self.subTest(component=component, control=True):
+                self.assertEqual(projected(component, data)['state'],
+                                 'observed' if S.TARGETS[component][-1] else 'no_direct_pvc')
+
+    def test_pod_volume_names_are_valid_dns_labels(self):
+        for component in S.TARGETS:
+            for invalid in ('', 'scratch/other', 'scratch.other', 'Uppercase', '-scratch'):
+                data = deepcopy(objects(component))
+                data[1][0]['spec']['volumes'].append({'name': invalid, 'emptyDir': {}})
+                with self.subTest(component=component, invalid=invalid), self.assertRaises(S.StorageError):
+                    projected(component, data)
+
     def test_fixed_pvc_rejects_ambiguous_pod_volume_and_mount_names(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             for change in (

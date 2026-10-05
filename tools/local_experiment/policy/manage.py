@@ -523,7 +523,10 @@ class Kubernetes:
                     ('paused' in deployment_spec and deployment_spec['paused'] is not False)):
                 raise PolicyError('smoke requires the one-replica local Trino deployment')
             selector = deployment_spec['selector']
-            template_metadata = deployment_spec['template']['metadata']
+            template = deployment_spec['template']
+            if type(template) is not dict or set(template) != {'metadata', 'spec'}:
+                raise PolicyError('smoke requires the dedicated local Trino template')
+            template_metadata = template['metadata']
             labels = template_metadata['labels']
             owner_labels = metadata.get('labels')
             expected_owner = {'app.kubernetes.io/name': 'trino-local',

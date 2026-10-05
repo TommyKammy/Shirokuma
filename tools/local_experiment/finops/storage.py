@@ -138,9 +138,14 @@ def _snapshot(component, workload, pods, replica=None):
     # destination, including lexical aliases of non-PVC mounts at the same
     # directory (e.g. /data and /data/.) in the same container. This is not
     # a filesystem/symlink resolution or live mount-health check.
-    require(all(type(v) is dict and type(v.get('name')) is str for v in volumes) and
-            len({v['name'] for v in volumes}) == len(volumes) and
-            all(type(m.get('mountPath')) is str and m['mountPath'].startswith('/') for m in mounts) and
+    # Pod volume names are DNS_LABELs, unlike PV/PVC names (DNS subdomains).
+    require(all(type(v) is dict and type(v.get('name')) is str and
+                re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', v['name'])
+                for v in volumes))
+    volume_names = {v['name'] for v in volumes}
+    require(len(volume_names) == len(volumes) and
+            all(type(m.get('name')) is str and m['name'] in volume_names for m in mounts) and
+             all(type(m.get('mountPath')) is str and m['mountPath'].startswith('/') for m in mounts) and
             len({posixpath.normpath(m['mountPath']) for m in mounts}) == len(mounts))
     claims = [v for v in volumes if type(v) is dict and 'persistentVolumeClaim' in v]
     if kind == 'Deployment':

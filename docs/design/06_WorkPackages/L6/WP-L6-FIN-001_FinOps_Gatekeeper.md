@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.173"
+version: "0.174"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: resolved mounts and valid Pod volume names (offline)
+
+Four fixed-workload fixtures accepted a primary-container mount naming no Pod
+volume; twenty separate fixtures accepted malformed Pod volume names (empty,
+qualified, uppercase or invalid prefix). Both negative groups failed before
+repair. The inventory now requires every primary mount to resolve to a unique
+Pod volume with a DNS_LABEL name; valid extra emptyDir mounts remain supported
+for all four workloads. Focused FinOps 254 tests passed (seven Linux-only skips).
+Colima was freshly observed stopped; there was no API collection, retained
+volume/report/backup mutation or AgentHouse used-byte measurement (`null /
+NOT_MEASURED`). This checks offline API reply structure, not producer
+authenticity, live mount health or operator acceptance. Revert only the scoped
+reader/tests if necessary, retaining saved evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: lexical mount destination aliases (offline)
 

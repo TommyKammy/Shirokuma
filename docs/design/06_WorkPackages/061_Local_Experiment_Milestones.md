@@ -5,12 +5,38 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.367"
+version: "5.369"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded Trino Pod-template envelope (offline)
+
+WP-L2-POL-001 refuses same-image smoke sources with extra Pod-template fields.
+Two synthetic negatives failed before repair, then focused policy 166 passed.
+An initial full verifier after both changes timed out at the shell's 120-second
+limit during notebook tests; it was not a completed pass. The complete rerun
+with a 300-second limit passed. `make verify-design-context`, scoped secret
+scan and `git diff --check` passed. The Dagster fake-worker failure emitted
+by the verifier is an intentional negative test diagnostic.
+No live API/admission, image import, unknown-request replay, retained request/
+backup mutation or GitHub write. This is not source authentication, strict
+admission or operator acceptance. Revert only the scoped guard/test if needed;
+retain saved requests. Original Vault sync pending outside checkout.
+
+## 2026-10-06: storage mount-source and name validation (offline)
+
+WP-L6-FIN-001 now refuses orphan primary-container mounts and malformed Pod
+volume names across all four fixed workloads. Four orphan and twenty name
+negative fixture subcases failed before repair; listed extra emptyDir mounts
+still pass. Focused FinOps 254 cases passed (seven Linux-only skips). Dedicated
+Colima was freshly observed stopped. No live API/collection, retained report/
+volume/backup mutation, unknown-request replay or AgentHouse used-byte
+measurement (`null / NOT_MEASURED`). This cannot authenticate the API, prove
+mount health or establish operator acceptance. Restore only scoped reader/tests
+if needed; preserve saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed PVC lexical mount destination aliases (offline)
 

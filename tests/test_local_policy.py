@@ -1194,6 +1194,13 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for extra in ({'status': {'phase': 'Running'}},
+                      {'unknown': {'image': 'foreign'}}):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template'].update(extra)
+            client.json_request.return_value = reply
+            with self.subTest(template_extra=extra), self.assertRaises(policy.PolicyError):
+                client.image()
         config_paths = ('config.properties', 'node.properties', 'jvm.config',
                         'log.properties', 'catalog/iceberg.properties',
                         'catalog/tpch.properties')
