@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.349"
+version: "5.350"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed storage replica and ephemeral claim classification (offline)
+
+WP-L6-FIN-001: negative fixtures showed one selected Pod could be certified
+against a workload declaring zero/two or malformed replicas; separately a
+Deployment with a generic ephemeral PVC-producing volume could be labeled
+`no_direct_pvc`. Both are now refused. Zero-Pod/zero-replica StatefulSet
+retained claims remain supported. FinOps focused 234 cases passed (seven Linux
+skips); full local verifier passed, including its expected fake Dagster failure
+diagnostic. Dedicated Colima was freshly observed stopped. No live API,
+retained data/report/backup mutation, volume scan or GitHub write. Offline
+fixtures do not prove API authenticity, atomic sampling, AgentHouse used bytes
+(`null / NOT_MEASURED`) or operator acceptance. Revert only scoped guards/tests
+if necessary and preserve saved evidence. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: FinOps component and node page completeness (offline)
 

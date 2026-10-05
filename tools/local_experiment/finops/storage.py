@@ -91,8 +91,10 @@ def _snapshot(component, workload, pods, replica=None):
     require(type(selector) is dict and selector.get('app.kubernetes.io/name') == workload_name)
     if label: require(selector.get('app.kubernetes.io/component') == label)
     require(type(pods) is list and len(pods) <= 1, 'TARGET_AMBIGUOUS')
+    replicas = workload['spec'].get('replicas')
+    require(type(replicas) is int and replicas == (1 if pods else 0))
     if not pods:
-        require(kind == 'StatefulSet' and workload.get('spec', {}).get('replicas') == 0)
+        require(kind == 'StatefulSet')
         return (w['uid'], None, None, _retention(workload, volume))
     pod = pods[0]; meta = _meta(pod, 'Pod', ns)
     labels = meta.get('labels', {})
@@ -111,7 +113,10 @@ def _snapshot(component, workload, pods, replica=None):
     require(type(mounts) is list and len(mounts) <= 64)
     claims = [v for v in volumes if type(v) is dict and 'persistentVolumeClaim' in v]
     if kind == 'Deployment':
-        require(not claims and all(type(v) is dict for v in mounts))
+        # Generic ephemeral volumes provision PVCs even without an explicit
+        # persistentVolumeClaim entry; they cannot support no_direct_pvc.
+        require(not claims and all(type(v) is dict and 'ephemeral' not in v for v in volumes) and
+                all(type(v) is dict for v in mounts))
     else:
         require(len(claims) == 1 and claims[0].get('name') == volume and
                 claims[0]['persistentVolumeClaim'].get('claimName') == claim and

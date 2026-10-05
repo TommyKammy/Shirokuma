@@ -5,12 +5,30 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.157"
+version: "0.158"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: bounded storage replica and generic ephemeral claim scope (offline)
+
+Two independent synthetic gaps in the fixed four-workload reference inventory
+were reproduced before repair: a single selected Pod passed despite a declared
+zero/two/non-integer replica count, and a Deployment Pod with a generic ephemeral
+PVC-producing volume was labeled `no_direct_pvc`. The reader now requires an
+integer single replica for a selected Pod, preserves the existing zero-Pod/
+zero-replica StatefulSet retained-claim case, and refuses ephemeral claim volumes
+on the two Deployment rows. `make test-local-finops` passed 234 cases (seven
+Linux-only skips); `make verify-local-experiment` passed (the fake Dagster worker
+failure is an intentional negative diagnostic). The dedicated Colima profile
+was freshly observed stopped. No live API, retained PVC/volume/report/backup
+mutation or GitHub write. This is an offline classification guard, not API
+authentication, an atomic snapshot, AgentHouse usage measurement (`null /
+NOT_MEASURED`) or operator acceptance. Revert only these scoped guards and
+tests if needed, preserving saved records. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: typed component PodList and independent NodeList guard (offline)
 

@@ -119,6 +119,29 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(value['state'],'observed');self.assertIsNone(value['pod_uid'])
         self.assertEqual(value['pvc']['requested_bytes'],'21474836480');self.assertIsNone(value['pv'])
 
+    def test_selected_pod_requires_single_declared_replica(self):
+        for component in S.TARGETS:
+            for replicas in (0, 2, False, '1', None):
+                data = deepcopy(objects(component))
+                data[0]['spec']['replicas'] = replicas
+                with self.subTest(component=component, replicas=replicas), self.assertRaises(S.StorageError):
+                    projected(component, data)
+        data = list(deepcopy(objects('seaweedfs')))
+        data[0]['spec']['replicas'] = False
+        data[1] = []
+        with self.assertRaises(S.StorageError):
+            projected('seaweedfs', data)
+
+    def test_deployment_ephemeral_claim_is_not_no_direct_pvc(self):
+        for component in ('polaris', 'trino'):
+            data = deepcopy(objects(component))
+            data[1][0]['spec']['volumes'].append({
+                'name':'scratch', 'ephemeral':{'volumeClaimTemplate':{
+                    'spec':{'resources':{'requests':{'storage':'1Gi'}}}}}})
+            with self.subTest(component=component), self.assertRaises(S.StorageError):
+                projected(component, data)
+        self.assertEqual(projected('trino')['state'], 'no_direct_pvc')
+
     def test_lost_claim_retains_reference_without_claiming_live_pv(self):
         data=list(objects('seaweedfs'));data[3]['status']['phase']='Lost';data[4]=None
         value=projected('seaweedfs',data)
@@ -274,8 +297,9 @@ class StorageTests(unittest.TestCase):
                 backend = Mock()
                 backend.now.return_value = NOW
                 backend.storage_get.side_effect = changed
+                reason = 'SCOPE_INVALID' if index == later_workload else 'IDENTITY_CHANGED'
                 with self.subTest(component=component, index=index, mutate=mutate), self.assertRaisesRegex(
-                        S.StorageError, 'IDENTITY_CHANGED'):
+                        S.StorageError, reason):
                     S._collect_one(backend, component)
 
     def test_transport_reason_and_cleanup_boundary(self):
