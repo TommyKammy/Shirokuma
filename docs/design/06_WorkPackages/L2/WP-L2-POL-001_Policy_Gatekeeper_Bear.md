@@ -5,12 +5,22 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.149"
+version: "0.150"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: malformed dry-run identity fails closed (offline)
+
+After the fixed-corpus increment, independently checked the namespace/kind
+preflight with unhashable and non-string JSON-like values. Lists and mappings
+previously raised a raw `TypeError` during set membership; explicit type checks
+now return `PolicyError` before any request. All 130 focused policy tests pass.
+No live API call, replay, retained report/volume/backup mutation or admission
+claim. Revert only this type guard and regression if required; retain saved
+intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed protected-namespace smoke request corpus (offline)
 

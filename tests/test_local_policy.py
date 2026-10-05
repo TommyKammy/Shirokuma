@@ -200,6 +200,18 @@ class ManifestTests(unittest.TestCase):
                     kube.smoke_request(altered)
             self.assertEqual(request.call_count, accepted)
 
+    def test_smoke_scope_refuses_unhashable_identity_without_request(self):
+        kube = policy.Kubernetes(items())
+        valid = policy.smoke_cases(IMAGE)[0]['object']
+        with mock.patch.object(kube, 'request', side_effect=AssertionError('request')):
+            for field in ('kind', 'namespace'):
+                for malformed in ([], {}, None, False):
+                    value = copy.deepcopy(valid)
+                    target = value if field == 'kind' else value['metadata']
+                    target[field] = malformed
+                    with self.subTest(field=field, malformed=malformed), self.assertRaises(policy.PolicyError):
+                        kube.smoke_request(value)
+
     def test_local_source_decoder_requires_document_separators(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]

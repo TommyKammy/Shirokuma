@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.289"
+version: "5.290"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: malformed policy smoke identity bounded (offline)
+
+WP-L2-POL-001: non-string or unhashable kind/namespace in a synthetic
+smoke request now fails with `PolicyError` before any scoped request rather
+than leaking a raw membership `TypeError`; 130 focused tests passed. The
+preceding fixed-corpus increment passed the full local verifier, and the
+independent WP-L6-FIN-001 saved-history review passed 207 tests (seven
+Linux-only skips). Dedicated Colima was observed stopped; no live admission,
+collection, retained data/backup mutation or unknown-request replay.
+This is not producer authentication, present AgentHouse usage (`null /
+NOT_MEASURED`) or operator acceptance. Revert the identity guard/test only
+if needed, retaining prior reports/intents. Original Vault sync pending.
 
 ## 2026-10-06: fixed protected policy corpus and independent saved-history review (offline)
 

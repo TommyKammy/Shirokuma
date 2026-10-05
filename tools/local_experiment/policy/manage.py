@@ -476,8 +476,8 @@ class Kubernetes:
             raise PolicyError('smoke request escaped its disposable namespace scope')
         metadata = value['metadata']
         namespace = metadata.get('namespace')
-        if (value.get('kind') not in {'Pod', 'Service', 'Ingress'}
-                or namespace not in {NAMESPACE, 'default'}
+        if (type(value.get('kind')) is not str or value['kind'] not in {'Pod', 'Service', 'Ingress'}
+                or type(namespace) is not str or namespace not in {NAMESPACE, 'default'}
                 or type(metadata.get('name')) is not str
                 or not re.fullmatch(r'shirokuma-policy-smoke-[0-9a-f]{12}', metadata['name'])):
             raise PolicyError('smoke request escaped its disposable namespace scope')
