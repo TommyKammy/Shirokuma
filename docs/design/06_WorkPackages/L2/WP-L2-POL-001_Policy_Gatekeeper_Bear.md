@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.200"
+version: "0.201"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed smoke Deployment controller shape (offline)
+
+Six same-image synthetic Deployment replies with scaled-down/out, boolean
+replicas, rolling strategy or malformed/paused controller state lent the fixed
+smoke image before repair. Present controller fields must now match the
+one-replica Recreate manifest and unpaused state; minimal fixtures omitting
+those optional fields and the explicit matching controller pass. The negatives
+failed first; `make test-local-policy` passed 166 cases. No live admission,
+unknown-request replay or retained data/backup mutation. This does not
+authenticate the API or establish live strict admission/operator acceptance.
+Revert only the scoped source filter/test if needed; retain saved requests.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: Deployment smoke restart policy (offline)
 

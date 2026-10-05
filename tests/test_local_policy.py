@@ -1193,6 +1193,20 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        # A pinned image from a paused, scaled-out or rolling-update source is
+        # not the dedicated one-replica Recreate smoke workload.
+        for override in ({'replicas': 0}, {'replicas': 2}, {'replicas': True},
+                         {'strategy': {'type': 'RollingUpdate'}},
+                         {'paused': True}, {'paused': None}):
+            reply = copy.deepcopy(valid)
+            reply['spec'].update(override)
+            client.json_request.return_value = reply
+            with self.subTest(deployment=override), self.assertRaises(policy.PolicyError):
+                client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec'].update(replicas=1, strategy={'type': 'Recreate'}, paused=False)
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for label_value in (None, 'false', False):
             reply = copy.deepcopy(valid)
             labels = reply['spec']['template']['metadata']['labels']

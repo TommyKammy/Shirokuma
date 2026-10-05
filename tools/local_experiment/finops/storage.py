@@ -88,11 +88,13 @@ def _owner(obj, kind, owner_uid, owner_name):
 def _snapshot(component, workload, pods, replica=None):
     ns, kind, workload_name, container_name, label, volume, mount, claim = TARGETS[component]
     w = _meta(workload, kind, ns, workload_name)
-    selector = workload.get('spec', {}).get('selector', {}).get('matchLabels')
+    workload_spec = workload.get('spec')
+    require(type(workload_spec) is dict and type(workload_spec.get('selector')) is dict)
+    selector = workload_spec['selector'].get('matchLabels')
     require(type(selector) is dict and selector.get('app.kubernetes.io/name') == workload_name)
     if label: require(selector.get('app.kubernetes.io/component') == label)
     require(type(pods) is list and len(pods) <= 1, 'TARGET_AMBIGUOUS')
-    replicas = workload['spec'].get('replicas')
+    replicas = workload_spec.get('replicas')
     require(type(replicas) is int and replicas == (1 if pods else 0))
     if not pods:
         require(kind == 'StatefulSet')
@@ -107,11 +109,14 @@ def _snapshot(component, workload, pods, replica=None):
         rs = _meta(replica, 'ReplicaSet', ns)
         _owner(pod, 'ReplicaSet', rs['uid'], rs['name'])
         _owner(replica, 'Deployment', w['uid'], workload_name)
-    spec = pod.get('spec', {}); containers = spec.get('containers'); volumes = spec.get('volumes', [])
+    spec = pod.get('spec')
+    require(type(spec) is dict)
+    containers = spec.get('containers'); volumes = spec.get('volumes', [])
     require(type(containers) is list and len(containers) == 1 and
-            containers[0].get('name') == container_name and type(volumes) is list and len(volumes) <= 64)
+            type(containers[0]) is dict and containers[0].get('name') == container_name and
+            type(volumes) is list and len(volumes) <= 64)
     mounts = containers[0].get('volumeMounts', [])
-    require(type(mounts) is list and len(mounts) <= 64)
+    require(type(mounts) is list and len(mounts) <= 64 and all(type(m) is dict for m in mounts))
     claims = [v for v in volumes if type(v) is dict and 'persistentVolumeClaim' in v]
     if kind == 'Deployment':
         # Generic ephemeral volumes provision PVCs even without an explicit
@@ -120,22 +125,28 @@ def _snapshot(component, workload, pods, replica=None):
                 all(type(v) is dict for v in mounts))
     else:
         require(len(claims) == 1 and claims[0].get('name') == volume and
+                type(claims[0]['persistentVolumeClaim']) is dict and
                 claims[0]['persistentVolumeClaim'].get('claimName') == claim and
                 len([m for m in mounts if m.get('name') == volume and m.get('mountPath') == mount]) == 1)
     return (w['uid'], meta['uid'], claim if claims else None, _retention(workload, volume) if kind == 'StatefulSet' else None)
 
 
 def _retention(workload, volume):
-    policy = workload.get('spec', {}).get('persistentVolumeClaimRetentionPolicy', {})
-    require(policy.get('whenDeleted') in ('Retain', 'Delete') and policy.get('whenScaled') in ('Retain', 'Delete'))
-    template = workload.get('spec', {}).get('volumeClaimTemplates', [])
+    spec = workload['spec']
+    policy = spec.get('persistentVolumeClaimRetentionPolicy', {})
+    require(type(policy) is dict and policy.get('whenDeleted') in ('Retain', 'Delete') and
+            policy.get('whenScaled') in ('Retain', 'Delete'))
+    template = spec.get('volumeClaimTemplates', [])
     require(type(template) is list and len(template) == 1 and
-             template[0].get('metadata', {}).get('name') == volume)
+            type(template[0]) is dict and type(template[0].get('metadata')) is dict and
+            template[0]['metadata'].get('name') == volume)
     # Both fixed StatefulSets mount the claim as a directory; the template
     # must not request a Block volume even when a current PVC says Filesystem.
     require(type(template[0].get('spec')) is dict and
             template[0]['spec'].get('volumeMode') in (None, 'Filesystem'))
-    prune = template[0]['metadata'].get('annotations', {}).get('kustomize.toolkit.fluxcd.io/prune')
+    annotations = template[0]['metadata'].get('annotations', {})
+    require(type(annotations) is dict)
+    prune = annotations.get('kustomize.toolkit.fluxcd.io/prune')
     require(prune in (None, 'disabled'))
     return dict(when_deleted=policy['whenDeleted'], when_scaled=policy['whenScaled'], template_prune=prune)
 

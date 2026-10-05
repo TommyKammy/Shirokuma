@@ -515,8 +515,16 @@ class Kubernetes:
             persistent_identity(deployment)
             # The image must belong to the fixed local Trino workload, not a
             # same-name Deployment selecting another set of Pods (or none).
-            selector = deployment['spec']['selector']
-            labels = deployment['spec']['template']['metadata']['labels']
+            deployment_spec = deployment['spec']
+            if (type(deployment_spec) is not dict or
+                    ('replicas' in deployment_spec and
+                     (type(deployment_spec['replicas']) is not int or deployment_spec['replicas'] != 1)) or
+                    ('strategy' in deployment_spec and
+                     deployment_spec['strategy'] != {'type': 'Recreate'}) or
+                    ('paused' in deployment_spec and deployment_spec['paused'] is not False)):
+                raise PolicyError('smoke requires the one-replica local Trino deployment')
+            selector = deployment_spec['selector']
+            labels = deployment_spec['template']['metadata']['labels']
             owner_labels = metadata.get('labels')
             expected_owner = {'app.kubernetes.io/name': 'trino-local',
                               'app.kubernetes.io/part-of': 'shirokuma',
@@ -528,7 +536,7 @@ class Kubernetes:
                          for key, value in expected_owner.items()) or
                      labels.get('shirokuma.dev/object-storage-client') != 'true'):
                 raise PolicyError('smoke requires the dedicated local Trino selector')
-            pod_spec = deployment['spec']['template']['spec']
+            pod_spec = deployment_spec['template']['spec']
             # Do not borrow an image from a same-name workload whose Pod
             # template escapes the local Trino runtime isolation contract.
             if (type(pod_spec) is not dict or

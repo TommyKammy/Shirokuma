@@ -132,6 +132,24 @@ class StorageTests(unittest.TestCase):
         with self.assertRaises(S.StorageError):
             projected('seaweedfs', data)
 
+    def test_malformed_reference_envelopes_fail_with_scoped_error(self):
+        for component, index, mutate in (
+            ('seaweedfs', 0, lambda w: w.update(spec=None)),
+            ('seaweedfs', 0, lambda w: w['spec'].update(selector=None)),
+            ('seaweedfs', 0, lambda w: w['spec'].update(persistentVolumeClaimRetentionPolicy=None)),
+            ('seaweedfs', 0, lambda w: w['spec'].update(volumeClaimTemplates=[None])),
+            ('seaweedfs', 1, lambda pods: pods[0].update(spec=None)),
+            ('seaweedfs', 1, lambda pods: pods[0]['spec'].update(containers=[None])),
+            ('seaweedfs', 1, lambda pods: pods[0]['spec'].update(volumes=[{'name': 'data', 'persistentVolumeClaim': None}])),
+            ('seaweedfs', 1, lambda pods: pods[0]['spec']['containers'][0].update(volumeMounts=[None])),
+            ('trino', 1, lambda pods: pods[0].update(spec=None)),
+            ('trino', 1, lambda pods: pods[0]['spec'].update(containers=[None])),
+        ):
+            data = deepcopy(objects(component))
+            mutate(data[index])
+            with self.subTest(component=component, index=index, mutate=mutate), self.assertRaises(S.StorageError):
+                projected(component, data)
+
     def test_deployment_ephemeral_claim_is_not_no_direct_pvc(self):
         for component in ('polaris', 'trino'):
             data = deepcopy(objects(component))

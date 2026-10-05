@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.351"
+version: "5.352"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: typed storage envelopes and fixed Trino controller (offline)
+
+WP-L6-FIN-001: ten malformed nested fixed storage references now fail with a
+scoped error rather than an untyped exception (237 FinOps tests; seven Linux-only
+skips). WP-L2-POL-001: a same-image scaled, paused or rolling Deployment cannot
+lend the fixed Trino smoke image (166 policy tests). Both negative fixtures failed
+before repair. `make verify-local-experiment` and `git diff --check` passed;
+the verifier's fake Dagster worker error is an intentional negative diagnostic.
+Dedicated Colima was freshly observed stopped; no live API,
+admission, collection, unknown-request replay, retained report/volume/backup
+mutation or GitHub write. Offline tests cannot authenticate sources, establish
+strict live admission, measure AgentHouse bytes (`null / NOT_MEASURED`) or confer
+operator acceptance. Restore only scoped guards/tests if needed, keeping saved
+inputs. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: saved storage shape and Trino restart source (offline)
 
