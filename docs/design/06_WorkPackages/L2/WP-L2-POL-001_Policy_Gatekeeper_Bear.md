@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.126"
+version: "0.127"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: decoded policy response Unicode boundary (offline)
+
+An escaped lone surrogate in a successful scoped JSON response previously
+passed the reader despite not representing valid UTF-8 text. The reader now
+refuses malformed decoded Unicode anywhere in the object; a valid escaped
+surrogate pair remains accepted. The focused negative failed before repair;
+102 native policy tests passed. Dedicated Colima was freshly observed stopped;
+no live API, dry-run, request replay, retained data/backup mutation or GitHub
+write. Synthetic replies cannot authenticate the API or clear strict admission
+or operator acceptance. Revert only the scoped Unicode guard/test if actual
+API behavior requires a revised contract; preserve saved intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: pinned smoke image source ambiguity controls (offline)
 

@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.92"
+version: "0.93"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: independent saved model Unicode control (offline)
+
+The unchanged saved-history validator rejects escaped lone surrogate model
+names after decoding, while a valid surrogate pair in a distinct report
+parses. The 201-test FinOps suite passed (seven Linux-only skips). No
+collection, retained report/volume/backup mutation or VM start; dedicated
+Colima was freshly observed stopped. Current AgentHouse bytes remain `null /
+NOT_MEASURED`; fixtures cannot authenticate producers or grant operator
+acceptance. Revert only the independent regression if needed; preserve saved
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: malformed direct saved selection index (offline)
 

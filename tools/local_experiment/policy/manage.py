@@ -256,6 +256,13 @@ class Kubernetes:
             raise PolicyError('scoped Kubernetes response is not bounded JSON') from None
         if not isinstance(value, dict):
             raise PolicyError('scoped Kubernetes response is not a JSON object')
+        # JSON escape sequences can decode to lone surrogates even when the
+        # transport itself is valid UTF-8. Refuse malformed text in any field,
+        # including fields a particular caller would not otherwise inspect.
+        try:
+            json.dumps(value, ensure_ascii=False).encode('utf-8')
+        except UnicodeError:
+            raise PolicyError('scoped Kubernetes response contains invalid Unicode') from None
         return value
 
     def get(self, kind: str, name: str):

@@ -234,6 +234,18 @@ class HistoryTests(unittest.TestCase):
                     H.parse(payload)
         self.assertEqual(len(H.parse(valid)), 2)
 
+    def test_escaped_lone_surrogate_in_saved_model_is_refused(self):
+        valid = encoded([report(), report(processes())])
+        self.assertIn(b'"model_name": "', valid)
+        for escaped in (b'\\ud800', b'\\udc00'):
+            forged = valid.replace(b'"model_name": "',
+                                   b'"model_name": "' + escaped, 1)
+            with self.subTest(escaped=escaped), self.assertRaises(H.HistoryError):
+                H.parse(forged)
+        pair = valid.replace(b'"model_name": "',
+                             b'"model_name": "\\ud83d\\ude00', 1)
+        self.assertEqual(len(H.parse(pair)), 2)
+
     def test_direct_render_output_cap_counts_utf8_and_returns_no_partial_html(self):
         entries = H.parse(encoded([report(), report(processes())]))
         with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):

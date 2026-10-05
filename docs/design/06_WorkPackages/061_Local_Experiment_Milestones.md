@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.264"
+version: "5.265"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: decoded policy Unicode and independent saved-model boundary (offline)
+
+WP-L2-POL-001: escaped lone surrogates in fake successful policy JSON replies
+previously passed the scoped reader. A decoded UTF-8 guard refuses malformed
+keys/values and retains a valid surrogate-pair control; the negative failed
+before repair, then 102 native policy tests passed. Independently WP-L6-FIN-001:
+the unchanged saved-history validator rejects escaped lone-surrogate model
+names and accepts a valid pair; 201 FinOps tests passed (seven Linux-only
+skips). Full `make verify-local-experiment`, design-context (89 documents),
+secret scan and diff check passed. Dedicated Colima was freshly observed
+stopped. No live API,
+collection, unknown-request replay, retained data/backup mutation or GitHub
+write. Offline fixtures do not authenticate producers, measure present
+AgentHouse usage (`null / NOT_MEASURED`), clear strict admission or grant
+operator acceptance. Revert only the scoped policy guard/test or independent
+FinOps regression if needed; preserve saved intents and reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: independent saved-selection and image-source boundaries (offline)
 

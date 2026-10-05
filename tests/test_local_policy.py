@@ -384,6 +384,19 @@ class ScopedResponseTests(unittest.TestCase):
             stdout='{"value":"é"}', stderr='', returncode=0))
         self.assertEqual(client.json_request(['get', 'pods']), {'value': 'é'})
 
+    def test_scoped_json_refuses_decoded_lone_surrogates(self):
+        client = object.__new__(policy.Kubernetes)
+        for stdout in ('{"metadata":{"name":"\\ud800"}}',
+                       '{"metadata":{"\\udc00":"value"}}'):
+            with self.subTest(stdout=stdout):
+                client.request = mock.Mock(return_value=SimpleNamespace(
+                    stdout=stdout, stderr='', returncode=0))
+                with self.assertRaises(policy.PolicyError):
+                    client.json_request(['get', 'pods'])
+        client.request.return_value = SimpleNamespace(
+            stdout='{"metadata":{"name":"\\ud83d\\ude00"}}', stderr='', returncode=0)
+        self.assertEqual(client.json_request(['get', 'pods'])['metadata']['name'], '😀')
+
     def test_scoped_json_reply_requires_object(self):
         client = object.__new__(policy.Kubernetes)
         for stdout in ('null', 'false', '0', '"ok"', '[]', '[{}]'):
