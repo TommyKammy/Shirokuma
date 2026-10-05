@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.164"
+version: "0.165"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: bounded workload selector expressions (offline)
+
+All four fixed storage reference readers previously certified a Pod under a
+workload selector whose additional `matchExpressions` excluded that Pod; the
+PodList query only carries fixed labels. Sixteen synthetic negative cases failed
+before the repair. Absent and explicitly empty expressions still pass; any
+nonempty or malformed expression is now refused rather than interpreted as a
+matching Pod. `make test-local-finops` passed 243 cases (seven Linux-only skips).
+Dedicated Colima was freshly observed stopped. No live API, collection, volume
+scan, report/backup mutation or GitHub write. This is not authenticated or atomic
+sampling, AgentHouse byte measurement (`null / NOT_MEASURED`) or operator
+acceptance. Restore only this selector guard/test if necessary, retaining saved
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: typed first claim and PodList envelopes (offline)
 

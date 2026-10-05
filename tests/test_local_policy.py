@@ -1193,6 +1193,14 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for where in ('metadata', 'template'):
+            reply = copy.deepcopy(valid)
+            labels = (reply['metadata']['labels'] if where == 'metadata' else
+                      reply['spec']['template']['metadata']['labels'])
+            labels['app.kubernetes.io/component'] = 'foreign-service'
+            client.json_request.return_value = reply
+            with self.subTest(extra_label=where), self.assertRaises(policy.PolicyError):
+                client.image()
         for annotations in ({'sidecar.istio.io/inject': 'true'},
                             {'shirokuma.dev/foreign': 'true'}, None, []):
             reply = copy.deepcopy(valid)

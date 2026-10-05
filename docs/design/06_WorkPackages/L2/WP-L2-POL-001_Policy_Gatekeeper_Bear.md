@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.202"
+version: "0.203"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bounded smoke source routing labels (offline)
+
+A same-image Deployment with an extra controller or Pod-template label could
+previously lend the Trino smoke image, despite potentially matching an unrelated
+selector. Two negative fixtures failed before the change. The source reader now
+requires exactly the repository Deployment's three ownership labels and four
+Pod-template labels; the valid source still passes. `make test-local-policy`
+passed 166 cases. No live API/admission, unknown-request replay, retained
+data/backup mutation or GitHub write. This offline label check does not
+authenticate the source or establish live strict admission/operator acceptance.
+Restore only the scoped label check/test if necessary, retaining saved requests.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed smoke template annotations (offline)
 

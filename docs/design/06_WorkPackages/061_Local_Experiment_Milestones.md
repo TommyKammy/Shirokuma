@@ -5,12 +5,36 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.356"
+version: "5.358"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed Trino routing-label source (offline)
+
+WP-L2-POL-001: same-image Deployment sources with extra controller or Pod
+labels no longer lend their image to the fixed smoke candidate. Two negatives
+failed before repair; 166 policy cases and `make verify-local-experiment`
+passed (its fake Dagster worker failure is an intentional negative diagnostic).
+`git diff --check` passed. No live admission/API, unknown
+request replay, retained data/backup mutation or GitHub write. This cannot
+authenticate the API, prove strict live admission or confer operator acceptance.
+Restore only the scoped reader/test if needed, retaining saved requests.
+Original Vault sync pending outside checkout.
+
+## 2026-10-06: bounded fixed storage selector expressions (offline)
+
+WP-L6-FIN-001: a fixed workload selector with expressions that exclude the
+reported Pod no longer certifies a storage reference. Sixteen negative fixtures
+failed before the repair; 243 FinOps cases passed (seven Linux-only skips).
+Dedicated Colima was freshly observed stopped. No live API, collection,
+retained report/volume/backup mutation, unknown-request replay or GitHub write.
+This cannot authenticate Kubernetes, provide an atomic sample, measure AgentHouse
+used bytes (`null / NOT_MEASURED`) or confer operator acceptance. Revert only
+the scoped selector guard/test if necessary; keep saved evidence. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: typed first storage replies and smoke annotations (offline)
 

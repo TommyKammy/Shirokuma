@@ -188,6 +188,19 @@ class StorageTests(unittest.TestCase):
                 with self.subTest(component=component, selector=selector), self.assertRaises(S.StorageError):
                     projected(component, changed)
 
+    def test_workload_selector_cannot_hide_expression_constraints(self):
+        for component in S.TARGETS:
+            for expressions in ([{'key': 'zone', 'operator': 'In', 'values': ['elsewhere']}],
+                                [{'key': 'app.kubernetes.io/name', 'operator': 'DoesNotExist'}],
+                                None, False):
+                data = deepcopy(objects(component))
+                data[0]['spec']['selector']['matchExpressions'] = expressions
+                with self.subTest(component=component, expressions=expressions), self.assertRaises(S.StorageError):
+                    projected(component, data)
+            data = deepcopy(objects(component))
+            data[0]['spec']['selector']['matchExpressions'] = []
+            self.assertIn(projected(component, data)['state'], ('observed', 'no_direct_pvc'))
+
     def test_lost_claim_retains_reference_without_claiming_live_pv(self):
         data=list(objects('seaweedfs'));data[3]['status']['phase']='Lost';data[4]=None
         value=projected('seaweedfs',data)

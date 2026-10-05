@@ -90,7 +90,13 @@ def _snapshot(component, workload, pods, replica=None):
     w = _meta(workload, kind, ns, workload_name)
     workload_spec = workload.get('spec')
     require(type(workload_spec) is dict and type(workload_spec.get('selector')) is dict)
-    selector = workload_spec['selector'].get('matchLabels')
+    workload_selector = workload_spec['selector']
+    # The scoped PodList query uses only matchLabels. Extra expressions could
+    # exclude that Pod even while the returned labels appear to match.
+    require(set(workload_selector) <= {'matchLabels', 'matchExpressions'} and
+            workload_selector.get('matchExpressions', []) == [] and
+            type(workload_selector.get('matchExpressions', [])) is list)
+    selector = workload_selector.get('matchLabels')
     require(type(selector) is dict and selector.get('app.kubernetes.io/name') == workload_name)
     if label: require(selector.get('app.kubernetes.io/component') == label)
     require(type(pods) is list and len(pods) <= 1, 'TARGET_AMBIGUOUS')
