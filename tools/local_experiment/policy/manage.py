@@ -472,14 +472,29 @@ class Kubernetes:
         return images[0]
 
     def smoke_request(self, value: dict):
-        namespace = value.get('metadata', {}).get('namespace')
+        if type(value) is not dict or type(value.get('metadata')) is not dict:
+            raise PolicyError('smoke request escaped its disposable namespace scope')
+        metadata = value['metadata']
+        namespace = metadata.get('namespace')
         if (value.get('kind') not in {'Pod', 'Service', 'Ingress'}
                 or namespace not in {NAMESPACE, 'default'}
-                or not re.fullmatch(r'shirokuma-policy-smoke-[0-9a-f]{12}', value.get('metadata', {}).get('name', ''))):
+                or type(metadata.get('name')) is not str
+                or not re.fullmatch(r'shirokuma-policy-smoke-[0-9a-f]{12}', metadata['name'])):
             raise PolicyError('smoke request escaped its disposable namespace scope')
-        if namespace == 'default' and (value['kind'] != 'Pod' or len(value.get('spec', {}).get('containers', [])) != 1
-                or value['spec']['containers'][0].get('image') != 'shirokuma.local/trino:dryrun-only'):
-            raise PolicyError('default namespace is limited to the mutable-image dry-run control')
+        if namespace == 'default':
+            # Do not let a caller use the outside-namespace control to dry-run
+            # an unrelated Pod. Only the generated mutable-image control is in
+            # scope, with its disposable name as the sole variable field.
+            control = smoke_cases('shirokuma.local/trino:dryrun-only')[-1]['object']
+            control['metadata']['name'] = metadata['name']
+            try:
+                # Python considers False == 0 and True == 1, unlike JSON.
+                identical = (json.dumps(value, sort_keys=True, allow_nan=False) ==
+                             json.dumps(control, sort_keys=True, allow_nan=False))
+            except (TypeError, ValueError, UnicodeError, RecursionError):
+                identical = False
+            if not identical:
+                raise PolicyError('default namespace is limited to the mutable-image dry-run control')
         return self.request(['-n', namespace, 'create', '--dry-run=server', '-f', '-', '-o', 'json'], value)
 
 

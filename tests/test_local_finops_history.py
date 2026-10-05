@@ -211,7 +211,21 @@ class HistoryTests(unittest.TestCase):
             with self.assertRaises(H.HistoryError):
                 H.parse(b'[' + positive + b',' + negative + b']')
             self.assertIn('保存FinOps観測履歴',
-                          H.render(H.parse(encoded([report(), report(processes())]))))
+                           H.render(H.parse(encoded([report(), report(processes())]))))
+
+    def test_direct_renderer_cannot_relabel_signed_zero_as_distinct_digest(self):
+        first = encoded(report())
+        positive = json.loads(first.replace(b'0.5', b'0.0', 1))
+        negative = json.loads(first.replace(b'0.5', b'-0.0', 1))
+        C.validate_public(positive)
+        C.validate_public(negative)
+        from hashlib import sha256
+        digest = sha256(H._canonical_bytes(positive)).hexdigest()
+        self.assertEqual(digest, sha256(H._canonical_bytes(negative)).hexdigest())
+        with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):
+            with self.assertRaises(H.HistoryError):
+                H.render([(0, (positive, digest)), (1, (negative, digest))])
+            self.assertIn('保存FinOps観測履歴', H.render(H.parse(encoded([report(), report(processes())]))))
 
     def test_offline_html_declares_no_external_resources_or_script(self):
         html = H.render(H.parse(encoded([report(), report(processes())])))

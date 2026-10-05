@@ -4,13 +4,28 @@ doc_id: "WP-L2-POL-001"
 title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-05
-version: "0.147"
+updated: 2026-10-06
+version: "0.148"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed outside-namespace dry-run control (offline)
+
+The native Kubernetes bridge previously allowed any disposable-named Pod in
+`default` with one container and the mutable-image tag. It now limits that
+outside-namespace dry-run to the exact generated control, apart from its
+disposable name. Privilege, host networking, extra containers/metadata, image
+drift and JSON boolean/integer aliases fail before a scoped request; the real
+control still reaches the mocked dry-run. `make test-local-policy` passed 128
+tests; `make verify-local-experiment` passed after the change. The dedicated
+Colima profile was observed stopped. No API request, new intent, saved data or
+backup mutation. This in-process guard does not authenticate the API, establish
+live admission or grant operator acceptance. Roll back only the smoke guard
+and regression if needed; preserve saved intents. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-06: complete unique native allowlist inventory (offline)
 

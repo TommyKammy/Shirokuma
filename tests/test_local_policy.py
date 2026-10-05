@@ -153,6 +153,26 @@ class ManifestTests(unittest.TestCase):
         with mock.patch.object(policy, 'load_manifest', side_effect=AssertionError('second read')):
             self.assertEqual(len(policy.Kubernetes(certified).expected), 16)
 
+    def test_default_namespace_smoke_is_only_the_fixed_mutable_image_control(self):
+        kube = policy.Kubernetes(items())
+        control = policy.smoke_cases(IMAGE)[-1]['object']
+        with mock.patch.object(kube, 'request', return_value='dry-run') as request:
+            self.assertEqual(kube.smoke_request(control), 'dry-run')
+            request.assert_called_once()
+            for field, changed in (
+                ('privileged', lambda x: x['spec']['containers'][0]['securityContext'].update(privileged=True)),
+                ('extra container', lambda x: x['spec']['containers'].append(copy.deepcopy(x['spec']['containers'][0]))),
+                ('host network', lambda x: x['spec'].update(hostNetwork=True)),
+                ('extra metadata', lambda x: x['metadata'].update(annotations={'unexpected': 'claim'})),
+                ('wrong image', lambda x: x['spec']['containers'][0].update(image=IMAGE)),
+                ('boolean alias', lambda x: x['spec'].update(automountServiceAccountToken=0)),
+            ):
+                altered = copy.deepcopy(control)
+                changed(altered)
+                with self.subTest(field=field), self.assertRaises(policy.PolicyError):
+                    kube.smoke_request(altered)
+            self.assertEqual(request.call_count, 1)
+
     def test_local_source_decoder_requires_document_separators(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]

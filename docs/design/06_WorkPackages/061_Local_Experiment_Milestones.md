@@ -4,13 +4,30 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-05
-version: "5.287"
+updated: 2026-10-06
+version: "5.288"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed default-namespace policy control and independent FinOps digest (offline)
+
+WP-L2-POL-001: the scoped native dry-run bridge now accepts only the generated
+mutable-image Pod control in `default`, rejecting changed privileges, host
+networking, container count, metadata, image or boolean aliases before any
+request. The unchanged control passes; 128 policy tests and `make
+verify-local-experiment` passed. Separately WP-L6-FIN-001: a direct saved
+renderer signed-zero digest regression and distinct-report control passed 207
+FinOps tests (seven Linux-only skips). Its first fixture targeted a nonexistent
+field and failed before correction. Dedicated Colima was freshly observed
+stopped. No live API, collection, unknown-request replay, retained data/backup
+mutation or GitHub write. AgentHouse usage remains `null / NOT_MEASURED`;
+offline controls do not authenticate producers, prove strict admission or
+grant operator acceptance. Revert only the scoped policy guard/test or FinOps
+regression if necessary, preserving historical intents and reports. Original
+Vault sync pending outside this checkout.
 
 ## 2026-10-06: unique native inventory and independent FinOps review (offline)
 

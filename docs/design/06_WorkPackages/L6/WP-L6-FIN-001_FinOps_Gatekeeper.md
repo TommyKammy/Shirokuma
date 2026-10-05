@@ -4,13 +4,26 @@ doc_id: "WP-L6-FIN-001"
 title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-05
-version: "0.107"
+updated: 2026-10-06
+version: "0.108"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: direct saved signed-zero digest control (offline)
+
+An independent direct-render regression verifies that two validated reports
+whose float-zero sign differs have the same history-only canonical digest and
+cannot be displayed as separate observations. A distinct two-report control
+still renders without collecting. The existing reader was unchanged; the first
+test attempt addressed a nonexistent fixture field and failed, then the
+corrected test and all 207 FinOps tests passed (seven Linux-only skips).
+Dedicated Colima was observed stopped; no collection, retained report/volume
+or backup mutation. AgentHouse bytes remain `null / NOT_MEASURED`; saved inputs
+do not authenticate producers or measure current usage. Revert only this test
+if necessary, preserving reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent saved-history and volume gate review (offline)
 
