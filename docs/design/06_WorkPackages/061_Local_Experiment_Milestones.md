@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.320"
+version: "5.321"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent first-report history snapshot regression (offline)
+
+WP-L6-FIN-001: during validation of a second direct-render selection, a
+synthetic caller mutation to the earlier first report cannot alter its already
+detached HTML content. The existing reader required no change; focused FinOps
+suite passed 213 cases (seven Linux-only skips). This is not concurrent atomic
+serialization, saved producer authentication or live collection. No retained
+report/volume/backup mutation; AgentHouse remains `null / NOT_MEASURED`.
+Restore only the regression test if necessary; original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: smoke image ownership labels and independent FinOps check (offline)
 

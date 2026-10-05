@@ -120,6 +120,25 @@ class HistoryTests(unittest.TestCase):
                 H.render(entries)
         self.assertTrue(changed)
 
+    def test_direct_renderer_keeps_earlier_snapshot_during_later_validation(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        original_validate = C.validate_public
+        calls = 0
+
+        def change_earlier_report(value):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                self.assertIsNot(value, entries[1][1][0])
+                entries[0][1][0]['inference']['groups'][0]['model_name'] = 'changed-while-validating-second'
+            return original_validate(value)
+
+        with patch.object(C, 'validate_public', side_effect=change_earlier_report):
+            html = H.render(entries)
+        self.assertGreaterEqual(calls, 2)
+        self.assertNotIn('changed-while-validating-second', html)
+        self.assertIn('保存観測 #2', html)
+
     def test_direct_renderer_refuses_caller_replacing_later_selection_during_validation(self):
         entries = H.parse(encoded([report(), report(processes())]))
         original_validate = C.validate_public

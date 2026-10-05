@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.134"
+version: "0.135"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: earlier history sample stays pinned during later validation (offline)
+
+A new two-report regression changes the caller-owned first report while the
+detached second report is validated. The unchanged renderer displays the
+original first snapshot, not the injected model name; FinOps focused suite
+passes 213 cases (seven Linux-only skips). The test covers a sequential
+mutation at this boundary, not atomic serialization or saved producer
+authentication. No collection or retained report, volume or backup change;
+AgentHouse bytes remain `null / NOT_MEASURED`. Revert only the regression if
+necessary, preserving saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent offline boundary recheck
 
