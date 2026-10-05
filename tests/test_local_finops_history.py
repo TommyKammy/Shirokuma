@@ -83,6 +83,25 @@ class HistoryTests(unittest.TestCase):
         self.assertTrue(changed)
         self.assertNotIn('mutated-after-digest', html)
 
+    def test_direct_renderer_checks_one_snapshot_during_validation(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        original_validate = C.validate_public
+        changed = False
+
+        def change_caller_after_validation(value):
+            nonlocal changed
+            result = original_validate(value)
+            if not changed:
+                self.assertIsNot(value, entries[0][1][0])
+                changed = True
+                entries[0][1][0]['inference']['groups'][0]['model_name'] = 'changed-during-validation'
+            return result
+
+        with patch.object(C, 'validate_public', side_effect=change_caller_after_validation):
+            html = H.render(entries)
+        self.assertTrue(changed)
+        self.assertNotIn('changed-during-validation', html)
+
     def test_direct_renderer_bounds_malformed_selection_shape(self):
         entries = H.parse(encoded([report(), report(processes())]))
         for malformed in ((), (0,), (0, ()), (0, (entries[0][1][0],)),

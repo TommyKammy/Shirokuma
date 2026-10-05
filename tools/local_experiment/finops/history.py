@@ -174,19 +174,19 @@ def render(entries):
         pinned = []
         for selected_index, (report, saved_digest) in entries:
             if type(selected_index) is not int or not 0 <= selected_index < len(entries): raise HistoryError()
-            C.validate_public(report)
-            order_key = (C.stamp(report['observed_at'])[1], selected_index)
-            if previous is not None and order_key < previous: raise HistoryError()
-            previous = order_key
+            # Snapshot before calling validators or calculating order: a direct
+            # caller retains the original dict and may change it at any time.
             canonical = _canonical_bytes(report)
             if len(canonical) > C.MAX_PUBLIC_BYTES or type(saved_digest) is not str or \
                     saved_digest != hashlib.sha256(canonical).hexdigest(): raise HistoryError()
+            snapshot = json.loads(canonical, parse_float=C.finite_json_float)
+            C.validate_public(snapshot)
+            order_key = (C.stamp(snapshot['observed_at'])[1], selected_index)
+            if previous is not None and order_key < previous: raise HistoryError()
+            previous = order_key
             if saved_digest in seen: raise HistoryError()
             seen.add(saved_digest)
-            # Direct callers own mutable dicts. Render only detached bytes
-            # bound to the checked digest, never those caller-owned objects.
-            pinned.append((selected_index, (
-                json.loads(canonical, parse_float=C.finite_json_float), saved_digest)))
+            pinned.append((selected_index, (snapshot, saved_digest)))
     except (TypeError, ValueError, UnicodeError, OverflowError, KeyError, IndexError, RecursionError):
         raise HistoryError() from None
     entries = pinned

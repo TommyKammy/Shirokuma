@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.313"
+version: "5.314"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: detached FinOps history validation (offline)
+
+WP-L6-FIN-001: direct history rendering now makes canonical bytes before
+validating, ordering or displaying a caller-owned report. A test mutation
+during validation failed before repair; focused FinOps tests passed 210 cases
+(seven Linux-only skips). This is a single bounded in-memory snapshot, not
+atomic concurrent access, saved producer authentication or current usage.
+Colima was freshly observed stopped; no collection, replay or retained
+report/volume/backup mutation. AgentHouse stays `null / NOT_MEASURED`.
+Restore only the direct history reader/test if needed, preserving saved
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: rollback policy UID continuity and independent FinOps regression (offline)
 

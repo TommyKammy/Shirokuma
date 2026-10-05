@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.129"
+version: "0.130"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: direct history validation uses detached report (offline)
+
+Direct history rendering previously validated a caller-owned dict before
+copying its canonical bytes. An isolated mutation during validation caused
+the checked report to diverge from the later digest input; the regression
+failed before the change. Rendering now canonicalizes first and uses the same
+detached report for validation, observation ordering, digest and HTML. FinOps
+focused suite: 210 cases (seven Linux-only skips), including the original
+post-digest mutation negative. No collection, saved report, retained volume or
+backup change; dedicated Colima observed stopped. This does not make concurrent
+serialization atomic or authenticate producer data; AgentHouse bytes remain
+`null / NOT_MEASURED`. Roll back only the history reader/test, keeping saved
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent single-report snapshot regression (offline)
 
