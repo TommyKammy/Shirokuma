@@ -990,6 +990,19 @@ class ScopedResponseTests(unittest.TestCase):
 
 
 class RollbackTests(unittest.TestCase):
+    def test_later_binding_missing_delete_precondition_prevents_partial_rollback(self):
+        for field, invalid in (('uid', None), ('resourceVersion', 'not-a-version')):
+            with self.subTest(field=field):
+                kube = FakeKubernetes(ready=True)
+                key = (policy.BINDING, policy.NAMES[-1])
+                kube.objects[key]['metadata'][field] = invalid
+                events = []
+                with self.assertRaisesRegex(policy.PolicyError, 'UID and resource version'):
+                    policy.rollback_bindings(kube, items(), record=events.append)
+                self.assertEqual(kube.calls, [])
+                self.assertEqual(events, [])
+                self.assertEqual(len([key for key in kube.objects if key[0] == policy.BINDING]), 8)
+
     def test_malformed_binding_after_delete_cannot_confirm_rollback(self):
         kube = FakeKubernetes(ready=True)
         first = next(x for x in items() if x['kind'] == policy.BINDING)

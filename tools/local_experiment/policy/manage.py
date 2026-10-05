@@ -338,6 +338,15 @@ def assert_owned(current: dict, expected: dict) -> None:
         raise PolicyError('existing dedicated policy identity, owner or content differs; refusing overwrite')
 
 
+def binding_delete_preconditions(current: dict) -> tuple[str, str]:
+    metadata = current['metadata']
+    uid, version = metadata.get('uid'), metadata.get('resourceVersion')
+    if (type(uid) is not str or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', uid)
+            or type(version) is not str or not re.fullmatch(r'[0-9]{1,128}', version)):
+        raise PolicyError('binding deletion requires a current UID and resource version')
+    return uid, version
+
+
 def typecheck(current: dict) -> str:
     status, metadata = current.get('status', {}), current.get('metadata', {})
     if type(status) is not dict or type(metadata) is not dict:
@@ -481,10 +490,7 @@ class Kubernetes:
         if expected['kind'] != BINDING or not identical:
             raise PolicyError('rollback only removes dedicated bindings')
         assert_owned(current, expected)
-        uid, version = current['metadata'].get('uid'), current['metadata'].get('resourceVersion')
-        if (not isinstance(uid, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', uid)
-                or not isinstance(version, str) or not re.fullmatch(r'[0-9]{1,128}', version)):
-            raise PolicyError('binding deletion requires a current UID and resource version')
+        uid, version = binding_delete_preconditions(current)
         path = '/apis/' + API + '/' + RESOURCES[BINDING] + '/' + expected['metadata']['name']
         options = {'apiVersion': 'v1', 'kind': 'DeleteOptions',
                    'preconditions': {'uid': uid, 'resourceVersion': version}}
@@ -631,6 +637,8 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
         current = kube.get(BINDING, expected['metadata']['name'])
         if current is not None:
             assert_owned(current, expected)
+            # Validate all atomic-delete inputs before deleting any binding.
+            binding_delete_preconditions(current)
     for expected in bindings:
         current = kube.get(BINDING, expected['metadata']['name'])
         if current is None:
