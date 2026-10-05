@@ -508,8 +508,11 @@ class Kubernetes:
                     or metadata.get('namespace') != NAMESPACE
                     or metadata.get('deletionTimestamp') is not None):
                 raise PolicyError('smoke requires the dedicated local Trino deployment')
-            containers = deployment['spec']['template']['spec']['containers']
-            if type(containers) is not list or any(type(item) is not dict for item in containers):
+            pod_spec = deployment['spec']['template']['spec']
+            containers = pod_spec['containers']
+            if (type(containers) is not list or len(containers) != 1 or
+                    type(containers[0]) is not dict or
+                    pod_spec.get('initContainers') or pod_spec.get('ephemeralContainers')):
                 raise PolicyError('smoke requires a well-formed local Trino deployment')
             images = [item.get('image') for item in containers if item.get('name') == 'trino']
         except (TypeError, KeyError):

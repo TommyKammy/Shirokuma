@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.314"
+version: "5.315"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: policy smoke image source excludes additional containers (offline)
+
+WP-L2-POL-001: the existing image lookup allowed a pinned Trino main image
+alongside an unexamined sidecar/init/ephemeral container. Three fake API
+negatives failed before repair; the 166-test focused policy suite passes after
+requiring exactly one container and no additional containers. No live API or
+admission request was made; Colima was observed stopped. This does not certify
+the current deployment or strict live admission. Revert the scoped lookup/test
+only if needed, preserving policy resources and saved intents. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: detached FinOps history validation (offline)
 

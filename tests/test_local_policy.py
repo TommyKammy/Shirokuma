@@ -1185,12 +1185,23 @@ class ScopedResponseTests(unittest.TestCase):
 
         for containers in (
                 [valid['spec']['template']['spec']['containers'][0]] * 2,
+                [valid['spec']['template']['spec']['containers'][0],
+                 {'name': 'sidecar', 'image': 'unrelated:mutable'}],
                 [{'name': 'trino', 'image': 'shirokuma.local/trino:latest'}],
                 [{'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'A' * 64}],
                 [{'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 63}]):
             with self.subTest(containers=containers):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec']['containers'] = containers
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+
+        for extra in ({'initContainers': [{'name': 'setup', 'image': 'unrelated:mutable'}]},
+                      {'ephemeralContainers': [{'name': 'debug', 'image': 'unrelated:mutable'}]}):
+            with self.subTest(extra=extra):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec'].update(extra)
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()

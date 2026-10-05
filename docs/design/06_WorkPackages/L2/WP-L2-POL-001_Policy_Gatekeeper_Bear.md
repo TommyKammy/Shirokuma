@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.172"
+version: "0.173"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke image source must be a single-container deployment (offline)
+
+The Trino deployment image lookup previously returned the pinned main image
+even when the observed Pod template also carried a mutable sidecar, init
+container or ephemeral container. Three fake API negatives failed before the
+repair. The lookup now refuses these extra containers before using that image
+for the fixed dry-run corpus. The 166 focused policy tests pass. This changes
+only smoke input selection, not cluster admission or deployment state. Colima
+was observed stopped; live strict admission and current deployment shape are
+not verified. Revert only the image lookup/test if necessary; preserve saved
+intents and policy resources. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: policy UID continuity in rollback retention (offline)
 
