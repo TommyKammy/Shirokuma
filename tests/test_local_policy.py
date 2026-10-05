@@ -298,6 +298,25 @@ class ScopedResponseTests(unittest.TestCase):
             stdout='{}', stderr='', returncode=0))
         self.assertEqual(client.json_request(['get', 'pods']), {})
 
+    def test_scoped_json_reply_refuses_nested_ambiguity_and_unrepresentable_numbers(self):
+        client = object.__new__(policy.Kubernetes)
+        # A top-level object is not sufficient: duplicate nested claims and
+        # numeric tokens rounded to infinity or zero must not certify a read.
+        for stdout in ('{"metadata":{"name":"other","name":"owned"}}',
+                       '{"metadata":{"na\\u006de":"other","name":"owned"}}',
+                       '{"status":{"generation":1e999}}',
+                       '{"status":{"generation":-1e-999}}',
+                       '{"status":{"generation":NaN}}'):
+            with self.subTest(stdout=stdout):
+                client.request = mock.Mock(return_value=SimpleNamespace(
+                    stdout=stdout, stderr='', returncode=0))
+                with self.assertRaises(policy.PolicyError):
+                    client.json_request(['get', 'pods'])
+        client.request = mock.Mock(return_value=SimpleNamespace(
+            stdout='{"status":{"generation":0e-999}}', stderr='', returncode=0))
+        self.assertEqual(client.json_request(['get', 'pods']),
+                         {'status': {'generation': 0.0}})
+
 
 class RollbackTests(unittest.TestCase):
     def test_only_owned_bindings_are_removed_policies_and_workloads_untouched(self):

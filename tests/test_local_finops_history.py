@@ -116,8 +116,9 @@ class HistoryTests(unittest.TestCase):
 
     def test_direct_renderer_refuses_boolean_and_float_selection_aliases(self):
         entries = H.parse(encoded([report(), report(processes())]))
-        for alias in (False, 0.0):
-            changed = [(alias, entries[0][1]), entries[1]]
+        for index, alias in ((0, False), (0, 0.0), (1, True), (1, 1.0)):
+            changed = list(entries)
+            changed[index] = (alias, entries[index][1])
             # Both compare equal to integer zero, including in the preliminary
             # set comparison; the explicit index type must still reject them.
             with self.subTest(alias=alias), self.assertRaises(H.HistoryError):

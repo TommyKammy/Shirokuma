@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.87"
+version: "0.88"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: independent saved-selection numeric aliases (offline)
+
+The direct saved-history renderer refuses both boolean and float aliases for
+each selected index (0 and 1), even though Python compares them equal to the
+integer indices. The existing guard needed no change. `make test-local-finops`
+passed 196 tests (seven Linux-only skips); full local regression passed. Colima
+was observed stopped; no collection or retained report/volume/backup mutation.
+AgentHouse bytes remain `null / NOT_MEASURED`. Offline saved fixtures cannot
+authenticate producers, measure current usage or grant operator acceptance.
+Rollback is the independent test only; preserve saved reports. Original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: independent UTF-8 history input bound (offline)
 

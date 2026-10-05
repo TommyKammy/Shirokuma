@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.258"
+version: "5.259"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: native response ambiguity and independent saved-index controls (offline)
+
+WP-L2-POL-001: nested duplicate/escaped response keys and unrepresentable
+numeric tokens fail closed under the existing native reader, with an exact-zero
+exponent control; 96 policy tests passed. Independently WP-L6-FIN-001: boolean
+and float aliases for both direct saved-history indices fail closed under the
+unchanged renderer; 196 FinOps tests passed (seven Linux-only skips). Full
+`make verify-local-experiment` passed. Dedicated Colima was freshly observed
+stopped; no API, collection, request replay, retained data/backup mutation or
+GitHub write. These synthetic fixtures do not authenticate producers, measure
+current AgentHouse bytes (`null / NOT_MEASURED`), clear strict admission or
+grant operator acceptance. Revert only these independent regressions if needed;
+preserve saved evidence. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: advisory Unicode response and independent FinOps byte bound (offline)
 

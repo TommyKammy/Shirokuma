@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.120"
+version: "0.121"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: nested native response ambiguity controls (offline)
+
+Independent fake scoped policy JSON responses with duplicate nested keys
+(including escaped-key aliases), non-JSON constants, float overflow and nonzero
+underflow are refused by the existing bounded reader; an exact zero exponent
+control remains accepted. The new negative/positive regression and 96 native
+policy tests plus `make verify-local-experiment` passed. Colima was freshly
+observed stopped; no live request, policy activation, unknown-request replay,
+retained data/backup mutation or GitHub write. No reader change was needed.
+This does not authenticate the response producer or establish strict admission
+or operator acceptance. Revert only the independent test if necessary; preserve
+saved intents. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: malformed advisory dry-run Unicode (offline)
 
