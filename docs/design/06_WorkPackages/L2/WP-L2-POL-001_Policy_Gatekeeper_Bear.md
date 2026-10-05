@@ -5,12 +5,29 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.158"
+version: "0.159"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: whole-inventory rollback identity recheck (offline)
+
+A late binding changing UID or resourceVersion on its second read previously
+allowed seven earlier deletes before the existing per-binding guard stopped.
+The negative failed before repair. Rollback now compares every binding against
+its preflight identity on a second full scan before the first deletion, retaining
+the per-delete read and atomic API preconditions. Focused policy tests passed
+147 cases; independent saved FinOps history/storage review passed 207 cases
+(seven Linux-only skips) without collection or code changes; `make
+verify-local-experiment` passed. Dedicated Colima
+was observed stopped. No live API request, retained data/backup mutation or
+unknown-request replay. Scans are sequential, not a transaction; drift after
+the second scan can still leave a partial rollback. Live strict admission and
+operator acceptance remain unverified. Restore only the scoped recheck/test if
+needed; preserve historical intents. Original Vault sync pending outside this
+checkout.
 
 ## 2026-10-06: validate dry-run replies and direct status inventory (offline)
 

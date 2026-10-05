@@ -1096,6 +1096,30 @@ class RollbackTests(unittest.TestCase):
         self.assertEqual(kube.calls, [])
         self.assertEqual(kube.objects[key], new_binding)
 
+    def test_later_binding_changed_on_second_scan_prevents_earlier_delete(self):
+        for field, replacement in (('uid', 'new-uid'), ('resourceVersion', '13')):
+            with self.subTest(field=field):
+                kube = FakeKubernetes(ready=True)
+                key = (policy.BINDING, policy.NAMES[-1])
+                original_get = kube.get
+                reads = 0
+
+                def change_later_binding(kind, name):
+                    nonlocal reads
+                    if (kind, name) == key:
+                        reads += 1
+                        if reads == 2:
+                            kube.objects[key]['metadata'][field] = replacement
+                    return original_get(kind, name)
+
+                kube.get = change_later_binding
+                events = []
+                with self.assertRaisesRegex(policy.PolicyError, 'changed since rollback preflight'):
+                    policy.rollback_bindings(kube, items(), record=events.append)
+                self.assertEqual(kube.calls, [])
+                self.assertEqual(events, [])
+                self.assertEqual(len([x for x in kube.objects if x[0] == policy.BINDING]), 8)
+
     def test_later_binding_missing_delete_precondition_prevents_partial_rollback(self):
         for field, invalid in (('uid', None), ('resourceVersion', 'not-a-version')):
             with self.subTest(field=field):

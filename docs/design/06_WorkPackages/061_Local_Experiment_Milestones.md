@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.298"
+version: "5.299"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: pre-delete full binding recheck and independent FinOps review (offline)
+
+WP-L2-POL-001: a later binding changing on its second read previously caused
+seven earlier deletions before rollback refused the change. The failing
+negative now leaves all eight untouched via a whole-inventory second scan;
+per-delete reads and atomic UID/version preconditions remain. Focused policy
+147 tests passed. Independently WP-L6-FIN-001 reviewed saved-history digest,
+selection and per-report storage coverage; its unchanged 207 tests passed
+(seven Linux-only skips), without new collection. Dedicated Colima was freshly
+observed stopped; `make verify-local-experiment` passed. No live API,
+unknown-request replay, retained data/backup
+mutation or GitHub write. This is not transactional rollback, source/API
+authentication, live strict admission, current AgentHouse measurement (`null /
+NOT_MEASURED`) or operator acceptance. Revert only the scoped policy scan/test
+if needed; preserve historical intents and reports. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-06: policy dry-run reply and direct status inventory (offline)
 

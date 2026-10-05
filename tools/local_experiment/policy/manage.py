@@ -665,6 +665,16 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
             preflight[expected['metadata']['name']] = binding_delete_preconditions(current)
         else:
             preflight[expected['metadata']['name']] = None
+    # Recheck the whole inventory before the first mutation, so drift in a
+    # later binding cannot be discovered only after earlier deletes. This is
+    # not an atomic snapshot; the per-delete read and API preconditions remain.
+    for expected in bindings:
+        current = kube.get(BINDING, expected['metadata']['name'])
+        if current is not None:
+            assert_owned(current, expected)
+        identity = binding_delete_preconditions(current) if current is not None else None
+        if identity != preflight[expected['metadata']['name']]:
+            raise PolicyError('binding changed since rollback preflight')
     for expected in bindings:
         current = kube.get(BINDING, expected['metadata']['name'])
         if current is not None:
