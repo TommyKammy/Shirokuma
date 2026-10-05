@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.389"
+version: "5.390"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed workload annotation continuity (offline)
+
+WP-L6-FIN-001 now refuses annotation drift on fixed workload, Pod or
+ReplicaSet between its two reads. Six negative variants failed before repair;
+storage-focused 53 tests and `make verify-local-experiment` pass (fake Dagster
+worker failure is an intentional negative diagnostic). Dedicated Colima was
+freshly listed Stopped. No live API, volume traversal, retained report/backup
+mutation or AgentHouse used-byte measurement (`null / NOT_MEASURED`). The
+synthetic sequential check cannot establish API authenticity, atomicity or
+operator acceptance. Roll back only this scoped guard/test if necessary;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed PVC/PV annotation continuity (offline)
 

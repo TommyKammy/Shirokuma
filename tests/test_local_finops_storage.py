@@ -586,6 +586,19 @@ class StorageTests(unittest.TestCase):
                         S.StorageError, 'IDENTITY_CHANGED'):
                     S._collect_one(backend, component)
 
+    def test_storage_collection_refuses_workload_and_pod_annotation_drift(self):
+        for component in ('seaweedfs', 'trino'):
+            w, pods, replica, pvc, pv = objects(component)
+            before = (w, pods, replica)
+            for index in ((0, 1, 2) if replica else (0, 1)):
+                after = deepcopy(before)
+                target = after[index][0] if index == 1 else after[index]
+                target['metadata']['annotations'] = {'storage-scope': 'changed'}
+                with self.subTest(component=component, index=index), self.assertRaisesRegex(
+                        S.StorageError, 'IDENTITY_CHANGED'):
+                    S.project(component, before, after, pvc=pvc, pv=pv,
+                              request_started_at=NOW, observed_at=NOW)
+
     def test_storage_collection_refuses_pv_losing_bound_phase(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             w, pods, _, pvc, pv = objects(component)

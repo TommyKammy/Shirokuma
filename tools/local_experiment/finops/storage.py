@@ -242,6 +242,8 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
             require(first_obj['metadata']['name'] == last_obj['metadata']['name'] and
                     _same_json(first_obj.get('spec'), last_obj.get('spec')) and
                     _same_json(first_obj['metadata'].get('labels'), last_obj['metadata'].get('labels')) and
+                    _same_json(first_obj['metadata'].get('annotations'),
+                               last_obj['metadata'].get('annotations')) and
                     _same_json(first_obj['metadata'].get('ownerReferences'),
                                last_obj['metadata'].get('ownerReferences')), 'IDENTITY_CHANGED')
     ns, kind, _, _, _, _, _, claim = TARGETS[component]

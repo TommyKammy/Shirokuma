@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.187"
+version: "0.188"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: workload/Pod/ReplicaSet annotation continuity (offline)
+
+Six synthetic second-read annotation changes across fixed StatefulSet,
+Deployment, Pod and ReplicaSet objects previously published storage references.
+The paired workload reader now requires unchanged annotations alongside spec,
+labels and controller references. Storage-focused 53 tests and the full local
+verifier pass (the fake Dagster failure is an intentional negative test).
+Fresh dedicated Colima inventory reported Stopped. No live API, retained
+volume/report/backup mutation or AgentHouse byte measurement. This is a
+sequential synthetic check, not an authenticated or atomic observation;
+physical-byte and operator acceptance remain open. Restore only the scoped
+guard/test if needed, leaving saved records untouched. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: fixed claim/volume annotation continuity (offline)
 
