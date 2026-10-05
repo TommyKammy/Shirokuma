@@ -51,11 +51,19 @@ class PolicyError(RuntimeError):
     pass
 
 
-def source_policies() -> list[dict]:
-    # kubectl's local YAML decoder needs no CRD, cluster, or third-party Python dependency.
+def source_policies(source_bytes: bytes | None = None) -> list[dict]:
+    # Feed the checked bytes, not a second pathname lookup, to kubectl's local
+    # YAML decoder. No CRD, cluster, or third-party Python dependency is needed.
+    if source_bytes is None:
+        source_bytes = source_snapshot()[0]
+    try:
+        source_text = source_bytes.decode('utf-8')
+    except UnicodeError:
+        raise PolicyError('repository policy source is not UTF-8') from None
     try:
         value = subprocess.run(['rtk', 'proxy', 'kubectl', 'patch', '--local=true', '--type=merge',
-            '-p', '{}', '-f', str(SOURCE), '-o', 'json'], cwd=ROOT, capture_output=True, text=True, timeout=20)
+            '-p', '{}', '-f', '-', '-o', 'json'], cwd=ROOT, capture_output=True,
+            input=source_text, text=True, timeout=20)
     except (OSError, subprocess.SubprocessError):
         raise PolicyError('local source decoding did not complete') from None
     try:
@@ -269,7 +277,7 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
     # kubectl decodes the source by pathname. Do not bind its projected items
     # to a digest obtained from a different version of that pathname.
     source_before, source_identity = source_snapshot()
-    source = source_policies()
+    source = source_policies(source_before)
     if source_snapshot() != (source_before, source_identity):
         raise PolicyError('repository policy source changed during projection')
     if value != render_native(source, hashlib.sha256(source_before).hexdigest()):

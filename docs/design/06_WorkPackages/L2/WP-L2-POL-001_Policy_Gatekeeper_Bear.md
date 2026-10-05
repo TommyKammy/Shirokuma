@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.141"
+version: "0.142"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: decode the checked source bytes (offline)
+
+The native projection previously checked source bytes before/after `kubectl`
+but let the decoder independently reopen the source pathname. It now supplies
+the bounded checked UTF-8 snapshot via `kubectl patch --local -f -` stdin and
+compares the source again after decoding. A disposable source replacement during
+decoding proves the original bytes were supplied while the changed pathname
+still fails certification. Real seven-source projection and 119 focused tests,
+plus `make verify-local-experiment` and design-context passed; dedicated Colima
+remained stopped. Strict `make verify-security` retains five historical failures
+from expired owner authorization/missing image ledger entries, not renewed for
+this offline change. This does not authenticate kubectl or the source producer,
+prevent in-place ABA modification, or prove live admission. No saved intents,
+retained data or backup changed. Roll back only the stdin reader/test, preserving
+saved evidence. Original Vault sync pending outside the approved checkout.
 
 ## 2026-10-05: source ancestor linkage (offline)
 

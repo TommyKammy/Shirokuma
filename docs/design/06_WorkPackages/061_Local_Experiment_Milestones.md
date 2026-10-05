@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.281"
+version: "5.282"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: native source decode bound to checked bytes (offline)
+
+WP-L2-POL-001: `kubectl patch --local -f -` now receives the checked bounded
+source bytes by stdin, rather than reopening the source pathname. A disposable
+replacement negative and the real source projection passed 119 focused tests;
+`make verify-local-experiment`, design-context and diff check passed. Dedicated
+Colima was observed stopped; no live admission or retained-data/backup changes.
+The strict `make verify-security` has five pre-existing historical gate failures
+(expired owner authorization and missing image ledger entries); neither historical
+authorization nor ledger was changed to force a pass. This local decoder binding
+does not establish producer/tool authenticity, live strict admission or operator
+acceptance. Revert only reader/test if needed; preserve saved intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: independent FinOps volume gate review (offline)
 

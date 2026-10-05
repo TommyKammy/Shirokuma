@@ -280,7 +280,7 @@ class ManifestTests(unittest.TestCase):
             manifest = Path(directory) / 'manifest.json'
             manifest.write_bytes(original)
 
-            def replace_after_read():
+            def replace_after_read(_source_bytes):
                 manifest.write_bytes(b'{}')
                 return source
 
@@ -299,10 +299,34 @@ class ManifestTests(unittest.TestCase):
 
             decoded = policy.source_policies()
             with mock.patch.object(policy, 'SOURCE', source), \
-                 mock.patch.object(policy, 'source_policies', side_effect=lambda: (
+                  mock.patch.object(policy, 'source_policies', side_effect=lambda _source_bytes: (
                      source.write_bytes(b'different source'), decoded)[1]):
                 with self.assertRaisesRegex(policy.PolicyError, 'changed during projection'):
                     policy.load_manifest_snapshot()
+
+    def test_local_decoder_receives_checked_source_bytes_not_a_path(self):
+        original = policy.SOURCE.read_bytes()
+        decoded = policy.source_policies()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source.yaml'
+            source.write_bytes(original)
+            seen = []
+
+            def decode(argv, **kwargs):
+                seen.append((argv, kwargs['input']))
+                # A pathname-based second read would see this new content.
+                source.write_bytes(b'different source')
+                return SimpleNamespace(stdout='\n'.join(json.dumps(item) for item in decoded),
+                                       stderr='', returncode=0)
+
+            with mock.patch.object(policy, 'SOURCE', source), \
+                 mock.patch.object(policy.subprocess, 'run', side_effect=decode):
+                with self.assertRaisesRegex(policy.PolicyError, 'changed during projection'):
+                    policy.load_manifest_snapshot()
+            self.assertEqual(len(seen), 1)
+            self.assertEqual(seen[0][0][-4:], ['-f', '-', '-o', 'json'])
+            self.assertNotIn(str(source), seen[0][0])
+            self.assertEqual(seen[0][1].encode('utf-8'), original)
 
     def test_manifest_refuses_same_bytes_source_replacement_during_decode(self):
         original = policy.SOURCE.read_bytes()
@@ -313,7 +337,7 @@ class ManifestTests(unittest.TestCase):
             source.write_bytes(original)
             replacement.write_bytes(original)
 
-            def replace_after_first_read():
+            def replace_after_first_read(_source_bytes):
                 os.replace(replacement, source)
                 return decoded
 
