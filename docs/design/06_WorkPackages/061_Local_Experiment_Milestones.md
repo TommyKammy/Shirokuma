@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.333"
+version: "5.334"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: security-context extensions and filesystem PVC references (offline)
+
+WP-L2-POL-001: synthetic Pod sysctls/container unmasked proc mount supplied
+the fixed Trino smoke image before security-context key scoping; manifest group
+settings and minimal fixtures pass (166 policy tests). Independently
+WP-L6-FIN-001: fixed directory-mounted PVCs now refuse synthetic Block volume
+mode at projection and saved-row validation; absent/default Filesystem passes
+(223 FinOps tests, seven Linux-only skips). Both negatives failed before repair;
+`make verify-local-experiment` and `git diff --check` passed (the verifier's
+fake Dagster failure is intentional diagnostic output).
+Dedicated Colima was freshly observed stopped; no live API, Docker collection,
+unknown-request replay, retained report/request/volume/backup mutation or
+GitHub write. Offline tests do not authenticate producers, prove strict live
+admission, measure AgentHouse used bytes (`null / NOT_MEASURED`) or confer
+operator acceptance. Roll back only scoped readers/tests, retaining saved
+evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke volume payloads and Docker context segment (offline)
 

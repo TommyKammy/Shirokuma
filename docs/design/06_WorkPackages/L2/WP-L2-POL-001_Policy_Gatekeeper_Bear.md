@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.188"
+version: "0.189"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: restrict smoke-source security-context extensions (offline)
+
+Synthetic same-name Deployment replies could supply the Trino smoke image with
+Pod sysctls or container `procMount: Unmasked` despite the required safe fields.
+The reader now refuses unexamined security-context keys and constrains optional
+runAsGroup/fsGroup to the manifest's UID 10000 (including rejecting boolean
+aliases). The manifest's explicit group settings and minimal fixture still pass;
+the negative regression failed before repair and 166 policy tests passed after.
+No live API, admission or resource mutation; this is not source authentication
+or strict live admission. Restore only the reader/test if needed, preserving
+saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bound fixed smoke volume payloads (offline)
 

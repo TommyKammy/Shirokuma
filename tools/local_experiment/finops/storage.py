@@ -143,7 +143,8 @@ def project(component, before, after, *, pvc=None, pv=None, request_started_at, 
                     capacity_bytes=capacity, storage_class=spec.get('storageClassName'),
                     volume_mode=spec.get('volumeMode'), pv_name=volume if volume else None)
         require(info['storage_class'] is None or name(info['storage_class']))
-        require(info['volume_mode'] in (None, 'Filesystem', 'Block'))
+        # Both fixed claims are mounted at directory paths, never via volumeDevices.
+        require(info['volume_mode'] in (None, 'Filesystem'))
         value['pvc'] = info
         if phase == 'Bound':
             require(type(volume) is str and name(volume))
@@ -187,7 +188,7 @@ def validate_row(row):
         require(U.uint(pvc['requested_bytes']) > 0)
         require(pvc['capacity_bytes'] is None or U.uint(pvc['capacity_bytes']) > 0)
         require(pvc['storage_class'] is None or name(pvc['storage_class']))
-        require(pvc['volume_mode'] in (None, 'Filesystem', 'Block'))
+        require(pvc['volume_mode'] in (None, 'Filesystem'))
         require(type(row['retention']) is dict and set(row['retention']) == {'when_deleted', 'when_scaled', 'template_prune'} and
                 row['retention']['when_deleted'] in ('Retain','Delete') and row['retention']['when_scaled'] in ('Retain','Delete') and
                 row['retention']['template_prune'] in (None, 'disabled'))

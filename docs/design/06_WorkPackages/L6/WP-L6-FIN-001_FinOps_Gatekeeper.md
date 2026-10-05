@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.146"
+version: "0.147"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: filesystem-only fixed PVC references (offline)
+
+Both fixed retained claims are directory-mounted by their workloads. A
+synthetic `volumeMode: Block` PVC could previously be reported as an observed
+directory reference, and a saved public row with Block mode passed validation.
+Both now refuse Block while absent/default Filesystem mode remains valid. The
+negative regression failed before repair; 223 FinOps tests pass (seven Linux-only
+skips). No collection, PVC scan, report rewrite or backup mutation; neither a
+capacity reference nor this mode check measures AgentHouse used bytes (`null /
+NOT_MEASURED`) or authenticates the API. Restore only the scoped PVC reader/test
+if needed; preserve saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: constrain Docker context user segment (offline)
 

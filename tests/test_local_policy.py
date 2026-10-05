@@ -1176,6 +1176,11 @@ class ScopedResponseTests(unittest.TestCase):
                   'capabilities': {'drop': ['ALL']}}}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        with_groups = copy.deepcopy(valid)
+        with_groups['spec']['template']['spec']['securityContext'].update(runAsGroup=10000, fsGroup=10000)
+        client.json_request.return_value = with_groups
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        client.json_request.return_value = valid
         for account in ('foreign-admin', None, 0, []):
             with self.subTest(legacy_service_account=account):
                 reply = copy.deepcopy(valid)
@@ -1266,8 +1271,10 @@ class ScopedResponseTests(unittest.TestCase):
         with self.assertRaises(policy.PolicyError):
             client.image()
         for field, value in (('runAsNonRoot', False), ('runAsNonRoot', 1),
-                             ('runAsUser', 0), ('runAsUser', True),
-                             ('seccompProfile', {'type': 'Unconfined'})):
+                              ('runAsUser', 0), ('runAsUser', True),
+                              ('seccompProfile', {'type': 'Unconfined'}),
+                              ('sysctls', [{'name': 'kernel.shm_rmid_forced', 'value': '0'}]),
+                              ('fsGroup', 0), ('fsGroup', True), ('runAsGroup', False)):
             with self.subTest(pod_security=field, value=value):
                 reply = copy.deepcopy(valid)
                 reply['spec']['template']['spec']['securityContext'][field] = value
@@ -1282,8 +1289,9 @@ class ScopedResponseTests(unittest.TestCase):
                 with self.assertRaises(policy.PolicyError):
                     client.image()
         for field, value in (('privileged', True), ('runAsUser', 0),
-                             ('runAsNonRoot', False), ('seccompProfile', {'type': 'Unconfined'}),
-                             ('allowPrivilegeEscalation', True),
+                              ('runAsNonRoot', False), ('seccompProfile', {'type': 'Unconfined'}),
+                              ('procMount', 'Unmasked'), ('capabilities', {'drop': ['ALL'], 'add': []}),
+                              ('allowPrivilegeEscalation', True),
                              ('readOnlyRootFilesystem', False),
                              ('capabilities', {'add': ['SYS_ADMIN'], 'drop': ['ALL']})):
             with self.subTest(container_security=field, value=value):

@@ -573,10 +573,16 @@ class Kubernetes:
                 raise PolicyError('smoke requires local config or ephemeral volumes')
             pod_security = pod_spec.get('securityContext')
             if (type(pod_security) is not dict or
-                    pod_security.get('runAsNonRoot') is not True or
-                    type(pod_security.get('runAsUser')) is not int or
-                    pod_security['runAsUser'] != 10000 or
-                    pod_security.get('seccompProfile') != {'type': 'RuntimeDefault'}):
+                     set(pod_security) - {'runAsNonRoot', 'runAsUser', 'runAsGroup',
+                                          'fsGroup', 'seccompProfile'} or
+                     pod_security.get('runAsNonRoot') is not True or
+                     type(pod_security.get('runAsUser')) is not int or
+                     pod_security['runAsUser'] != 10000 or
+                     ('runAsGroup' in pod_security and
+                      (type(pod_security['runAsGroup']) is not int or pod_security['runAsGroup'] != 10000)) or
+                     ('fsGroup' in pod_security and
+                      (type(pod_security['fsGroup']) is not int or pod_security['fsGroup'] != 10000)) or
+                     pod_security.get('seccompProfile') != {'type': 'RuntimeDefault'}):
                 raise PolicyError('smoke requires the non-root local Trino pod context')
             containers = pod_spec['containers']
             if (type(containers) is not list or len(containers) != 1 or
@@ -605,7 +611,9 @@ class Kubernetes:
                 raise PolicyError('smoke requires the local Trino image pull policy')
             container_security = containers[0].get('securityContext')
             if (type(container_security) is not dict or
-                    container_security.get('privileged', False) is not False or
+                     set(container_security) - {'privileged', 'allowPrivilegeEscalation',
+                                                'readOnlyRootFilesystem', 'capabilities'} or
+                     container_security.get('privileged', False) is not False or
                     'runAsUser' in container_security or
                     'runAsNonRoot' in container_security or
                     'seccompProfile' in container_security or
