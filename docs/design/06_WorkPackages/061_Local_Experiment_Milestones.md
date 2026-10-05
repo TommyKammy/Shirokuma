@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.319"
+version: "5.320"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: smoke image ownership labels and independent FinOps check (offline)
+
+WP-L2-POL-001: eight fake Deployment replies with missing/foreign ownership
+labels on the Deployment or Pod template falsely supplied the pinned smoke
+image before repair. The reader now requires the dedicated Trino manifest's
+scope and part-of labels in both places; focused policy suite passed 166.
+Separately WP-L6-FIN-001's unchanged history and volume-boundary suite passed
+212 cases (seven Linux-only skips). `make verify-local-experiment`,
+`make verify-design-context` and secret scan passed (the verifier's intentional
+fake Dagster failure is diagnostic, not a failed test). Colima was freshly
+observed stopped. No live API/admission, collection, unknown-request replay,
+retained report/request/backup mutation or GitHub write. Labels do not
+authenticate the server or prove current Deployment ownership, strict live
+admission or operator acceptance; AgentHouse remains `null / NOT_MEASURED`.
+Revert only the scoped image guard/test if needed, preserving saved inputs;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed smoke image selector and independent FinOps check (offline)
 

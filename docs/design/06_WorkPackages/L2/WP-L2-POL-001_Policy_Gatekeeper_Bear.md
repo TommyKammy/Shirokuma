@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.176"
+version: "0.177"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke image source ownership labels (offline)
+
+The same-name, matching-selector persisted Deployment could still supply the
+smoke image without the dedicated workload's ownership labels. Eight fake
+response negatives (missing/foreign scope or part-of labels on either the
+Deployment or Pod template) failed before requiring the labels present in the
+local Trino manifest. The policy suite passed 166 tests after repair. An
+independent FinOps suite passed 212 tests (seven Linux-only skips) without
+collecting or modifying its reader. The local verifier and design-context
+passed; dedicated Colima was freshly observed stopped. No live API/admission,
+retained requests, reports, volumes or backups were changed. Labels are not an
+authenticated provenance or proof of live strict admission. Restore only this
+image-source guard/test if needed, preserving saved evidence; original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: smoke Deployment selector bound to Trino template (offline)
 

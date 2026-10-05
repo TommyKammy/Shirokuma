@@ -1157,15 +1157,35 @@ class ScopedResponseTests(unittest.TestCase):
     def test_smoke_image_requires_one_well_formed_local_trino_container(self):
         client = object.__new__(policy.Kubernetes)
         valid = {'apiVersion': 'apps/v1', 'kind': 'Deployment',
-                 'metadata': {'name': 'trino-local', 'namespace': policy.NAMESPACE,
-                              'uid': 'trino-uid', 'resourceVersion': '42'},
+                  'metadata': {'name': 'trino-local', 'namespace': policy.NAMESPACE,
+                               'uid': 'trino-uid', 'resourceVersion': '42',
+                               'labels': {'app.kubernetes.io/name': 'trino-local',
+                                          'app.kubernetes.io/part-of': 'shirokuma',
+                                          'shirokuma.dev/scope': 'local-experiment'}},
                   'spec': {'selector': {'matchLabels': {'app.kubernetes.io/name': 'trino-local'}},
-                           'template': {'metadata': {'labels': {'app.kubernetes.io/name': 'trino-local',
-                                                               'shirokuma.dev/scope': 'local-experiment'}},
+                            'template': {'metadata': {'labels': {'app.kubernetes.io/name': 'trino-local',
+                                                                'app.kubernetes.io/part-of': 'shirokuma',
+                                                                'shirokuma.dev/scope': 'local-experiment'}},
                                         'spec': {'containers': [
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64}]}}}}
         client.json_request = mock.Mock(return_value=valid)
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for location in ('metadata', 'template'):
+            for key, value in (('shirokuma.dev/scope', None),
+                               ('shirokuma.dev/scope', 'other'),
+                               ('app.kubernetes.io/part-of', None),
+                               ('app.kubernetes.io/part-of', 'other')):
+                with self.subTest(location=location, key=key, value=value):
+                    reply = copy.deepcopy(valid)
+                    labels = (reply['metadata']['labels'] if location == 'metadata' else
+                              reply['spec']['template']['metadata']['labels'])
+                    if value is None:
+                        del labels[key]
+                    else:
+                        labels[key] = value
+                    client.json_request.return_value = reply
+                    with self.assertRaises(policy.PolicyError):
+                        client.image()
         for selector, labels in (({'matchLabels': {'app.kubernetes.io/name': 'other'}},
                                   {'app.kubernetes.io/name': 'other'}),
                                  ({'matchLabels': {'app.kubernetes.io/name': 'trino-local'}},

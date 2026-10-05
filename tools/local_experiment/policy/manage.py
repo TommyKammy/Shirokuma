@@ -515,9 +515,15 @@ class Kubernetes:
             # same-name Deployment selecting another set of Pods (or none).
             selector = deployment['spec']['selector']
             labels = deployment['spec']['template']['metadata']['labels']
+            owner_labels = metadata.get('labels')
+            expected_owner = {'app.kubernetes.io/name': 'trino-local',
+                              'app.kubernetes.io/part-of': 'shirokuma',
+                              'shirokuma.dev/scope': 'local-experiment'}
             if (type(selector) is not dict or selector != {
-                    'matchLabels': {'app.kubernetes.io/name': 'trino-local'}} or
-                    type(labels) is not dict or labels.get('app.kubernetes.io/name') != 'trino-local'):
+                     'matchLabels': {'app.kubernetes.io/name': 'trino-local'}} or
+                     type(labels) is not dict or type(owner_labels) is not dict or
+                     any(labels.get(key) != value or owner_labels.get(key) != value
+                         for key, value in expected_owner.items())):
                 raise PolicyError('smoke requires the dedicated local Trino selector')
             pod_spec = deployment['spec']['template']['spec']
             containers = pod_spec['containers']
