@@ -177,6 +177,24 @@ class RuntimeTests(unittest.TestCase):
         for bad in (value + value, value.replace('250', '-1'), value.replace('1000', '0')):
             with self.assertRaises(R.C.FinOpsError): R.parse_disk(bad)
 
+    def test_df_rejects_misidentified_or_inconsistent_capacity(self):
+        value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        for bad in (value.replace('1024-blocks', '512-blocks'),
+                    value.replace('700 250', '800 250'),
+                    value.replace('74%', 'unknown'),
+                    value.replace('74%', '101%'),
+                    value.replace(' /\n', ' relative\n'),
+                    value.replace('/dev/vda1', '')):
+            with self.subTest(bad=bad), self.assertRaises(R.C.FinOpsError):
+                R.parse_disk(bad)
+
+    def test_df_overlong_numeric_field_has_scoped_failure(self):
+        value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        for field in ('1000', '700', '250', '74%'):
+            bad = value.replace(' ' + field + ' ', ' ' + '9' * 5000 + ('%' if field == '74%' else '') + ' ')
+            with self.subTest(field=field), self.assertRaises(R.C.FinOpsError):
+                R.parse_disk(bad)
+
     def test_component_transport_fixed_namespace_and_before_metrics_after(self):
         backend = R.Backend(); backend.server = 'https://127.0.0.1:6443'
         values = [{'kind':'PodList','apiVersion':'v1','metadata':{},'items':[pod('seaweedfs')]},

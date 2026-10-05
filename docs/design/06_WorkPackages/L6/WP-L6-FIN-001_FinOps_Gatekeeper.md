@@ -5,12 +5,37 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.193"
+version: "0.195"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: bounded VM df integer conversion (offline)
+
+Four separate 5000-digit `df` numeric fields previously raised an unscoped
+Python conversion error. Bound the block and percentage widths before parsing
+so these rows fail with `DISK_INVALID`; the ordinary row still passes. Focused
+runtime 24 tests and the post-change full local verifier pass (its fake
+Dagster worker failure is an intentional negative diagnostic). No live VM
+read, saved report/backup change or volume
+measurement; this does not establish producer authenticity or operator
+acceptance. Revert only the bounded parsing/test if necessary and preserve
+saved evidence. Original Vault sync pending outside checkout.
+
+## 2026-10-06: VM df unit and capacity consistency (offline)
+
+The fixed Colima `df -Pk` parser previously reported free bytes from a row
+with a changed block unit, inconsistent used+available counts, malformed
+capacity percentage or non-absolute mount. Five synthetic negatives failed
+before repair; a conventional reserved-block row remains accepted. Focused
+FinOps 276 tests pass (seven Linux-only skips). Dedicated Colima was freshly
+listed Stopped; no live disk read, volume traversal, saved report/backup
+mutation or AgentHouse used-byte measurement (`null / NOT_MEASURED`). This
+offline row contract does not authenticate the VM or measure retained volumes;
+operator acceptance remains open. Revert only the parser/test if necessary,
+preserving saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed list envelope aliases (offline)
 

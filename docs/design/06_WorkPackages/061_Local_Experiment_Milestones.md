@@ -5,12 +5,35 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.395"
+version: "5.397"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded VM disk numeric parsing (offline)
+
+WP-L6-FIN-001 now rejects oversized block and percent fields with scoped
+`DISK_INVALID`, not an unhandled Python conversion exception. Four negative
+variants reproduced the exception before repair; focused runtime 24 tests,
+post-change `make verify-local-experiment`, design-context, secret scan and
+diff check pass. The verifier prints an intentional fake Dagster worker
+failure diagnostic.
+No live VM, retained report/volume/backup change or AgentHouse measurement.
+Restore only the bounded parser/test if required; original Vault sync pending
+outside checkout.
+
+## 2026-10-06: VM disk-unit and capacity-row checks (offline)
+
+WP-L6-FIN-001 rejects a misleading `df -Pk` unit header, contradictory
+used/free totals, malformed percent and non-absolute mount before projecting
+VM disk capacity. Five negative variants failed before repair; focused FinOps
+276 tests pass (seven Linux-only skips). Dedicated Colima was freshly listed
+Stopped; no live disk/volume read, report/backup mutation or AgentHouse byte
+measurement (`null / NOT_MEASURED`). Synthetic df output cannot authenticate
+the VM or confer operator acceptance. Restore only the parser/test if needed;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent list envelope and rollout generation aliases (offline)
 

@@ -79,11 +79,18 @@ def inference_sql(end):
 def parse_disk(raw):
     C.require(type(raw) is str and len(raw.encode()) <= 16384, 'DISK_INVALID')
     lines = raw.strip().splitlines()
-    C.require(len(lines) == 2, 'DISK_INVALID')
+    C.require(len(lines) == 2 and
+              lines[0].split() == ['Filesystem', '1024-blocks', 'Used', 'Available',
+                                   'Capacity', 'Mounted', 'on'], 'DISK_INVALID')
     fields = lines[1].split()
-    C.require(len(fields) == 6 and fields[1].isdigit() and fields[2].isdigit() and fields[3].isdigit(), 'DISK_INVALID')
+    C.require(len(fields) == 6 and fields[0] and fields[5].startswith('/') and
+              all(len(fields[i]) <= 19 and fields[i].isascii() and fields[i].isdigit()
+                  for i in (1, 2, 3)) and
+              fields[4].endswith('%') and fields[4][:-1].isascii() and
+              len(fields[4]) <= 4 and fields[4][:-1].isdigit() and
+              int(fields[4][:-1]) <= 100, 'DISK_INVALID')
     total, used, available = (int(fields[i]) * 1024 for i in (1, 2, 3))
-    C.require(0 < total <= 2**63-1 and 0 <= used <= total and 0 <= available <= total, 'DISK_INVALID')
+    C.require(0 < total <= 2**63-1 and used + available <= total, 'DISK_INVALID')
     return total, available
 
 
