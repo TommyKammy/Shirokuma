@@ -3260,6 +3260,8 @@ func TestLocalExperimentScopeRejectsLookalikeLoopbackEndpoints(t *testing.T) {
 	// endpoint local. Do not resolve hostnames or accept numeric lookalikes.
 	for _, endpoint := range []string{
 		"https://127.0.0.1.example:6443", "https://localhost.example:6443",
+		"https://localhost:6443@remote.example:6443", "https://127.0.0.1:6443@remote.example:6443",
+		"https://LOCALHOST:6443", "https://[::1%25en0]:6443",
 		"https://127.0.0.1.:6443", "https://0177.0.0.1:6443",
 		"https://127.1:6443", "https://2130706433:6443",
 		"https://[::ffff:127.0.0.1]:6443",

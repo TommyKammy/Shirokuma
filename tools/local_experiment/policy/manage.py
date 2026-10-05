@@ -540,7 +540,10 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                       service_address_family_consistent(spec) and
                     spec.get('trafficDistribution') is None and
                   type(spec.get('ports')) is list and len(spec['ports']) == len(original['ports']) and
-                all(type(port) is dict and type(port.get('port')) is int and
+                 all(type(port) is dict and
+                     set(port) <= {'port', 'targetPort', 'protocol', 'name',
+                                   'appProtocol', 'nodePort'} and
+                     type(port.get('port')) is int and
                     port['port'] == expected['port'] and
                     type(port.get('targetPort')) is int and
                     port['targetPort'] == expected['targetPort'] and

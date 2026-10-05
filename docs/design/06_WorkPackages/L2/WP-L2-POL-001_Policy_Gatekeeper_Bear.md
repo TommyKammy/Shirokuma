@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.102"
+version: "0.103"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: fixed ServicePort reply key boundary (offline)
+
+Fake successful fixed Service replies carrying Pod-only `hostIP` or `hostPort`
+on a ServicePort previously passed the second request; after restricting the
+reply to known ServicePort keys, both fail there. The focused negatives failed
+before repair; 82 native policy tests passed afterward. Colima was observed
+stopped; no live API, saved-request replay, retained data/backup mutation or
+GitHub write. This guard does not authenticate the reply or prove full effective
+object equality, strict admission or operator acceptance. Roll back only this
+key guard/test if needed, preserving saved intents. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-05: independent IPv4 boundary controls (offline)
 

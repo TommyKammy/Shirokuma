@@ -5,12 +5,22 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.140"
+version: "0.141"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent endpoint authority lookalikes (offline)
+
+Four additional fake context server strings with misleading local-looking
+userinfo, uppercase hostname or a scoped IPv6 address degrade under the
+unchanged doctor. The focused Go test passed. Colima was observed stopped;
+there was no live API/Git read or reconcile, retained data/backup mutation or
+GitHub write. Text fixtures cannot establish endpoint authenticity, atomic
+inventory, strict admission or operator acceptance. Revert only these test
+cases if needed; keep earlier evidence. Original Vault sync pending.
 
 ## 2026-10-05: independent mapped IPv4 range endpoint controls (offline)
 
