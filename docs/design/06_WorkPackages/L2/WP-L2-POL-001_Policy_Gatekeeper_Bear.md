@@ -5,12 +5,29 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.143"
+version: "0.144"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: final-entry metadata across bounded policy reads (offline)
+
+Both the CEL source and dedicated native manifest readers now compare the
+post-read pathname entry's size and modification/change timestamps as well as
+device/inode against the descriptor's checked snapshot. The manifest also
+explicitly requires a regular final entry after reading. Disposable in-place
+edits after the final descriptor check are rejected before source projection;
+the real projection and 124 native policy tests pass, as does `make
+verify-local-experiment`. A post-read manifest relink to its former inode is
+also refused (its ctime already exposed this in the fixture). The dedicated
+Colima profile was observed stopped; no API request, retained intent, volume
+or backup mutation occurred. Sequential metadata checks cannot exclude ABA,
+same-timestamp changes or authenticate the tool/producer; live strict admission
+and operator acceptance remain open. Roll back only these reader checks/tests
+if necessary, preserving historical intents. Original Vault sync pending
+outside the approved checkout.
 
 ## 2026-10-05: certified policy CLI allowlist and digest (offline)
 

@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import stat
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -424,6 +425,29 @@ class ManifestTests(unittest.TestCase):
                 with self.assertRaisesRegex(policy.PolicyError, 'ancestor changed'):
                     policy.source_snapshot()
 
+    def test_source_refuses_in_place_change_after_descriptor_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source.yaml'
+            source.write_bytes(policy.SOURCE.read_bytes())
+            real_fstat = os.fstat
+            file_checks = 0
+
+            def change_after_check(fd):
+                nonlocal file_checks
+                result = real_fstat(fd)
+                if stat.S_ISREG(result.st_mode):
+                    file_checks += 1
+                    if file_checks == 2:
+                        source.write_bytes(b'changed source')
+                        return result
+                return result
+
+            with mock.patch.object(policy, 'SOURCE', source), \
+                 mock.patch.object(policy.os, 'fstat', side_effect=change_after_check):
+                with self.assertRaisesRegex(policy.PolicyError, 'changed during projection'):
+                    policy.source_snapshot()
+            self.assertEqual(file_checks, 2)
+
     def test_manifest_refuses_symlink_and_oversize_before_projection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -450,6 +474,55 @@ class ManifestTests(unittest.TestCase):
                  mock.patch.object(policy, 'source_policies', side_effect=AssertionError('unexpected source read')):
                 with self.assertRaises(policy.PolicyError):
                     policy.load_manifest()
+
+    def test_manifest_refuses_post_read_symlink_to_same_inode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / 'manifest.json'
+            moved = root / 'original.json'
+            manifest.write_bytes(policy.MANIFEST.read_bytes())
+            original_read = os.read
+            changed = False
+
+            def relink_after_open(fd, size):
+                nonlocal changed
+                raw = original_read(fd, size)
+                if not changed:
+                    changed = True
+                    manifest.rename(moved)
+                    manifest.symlink_to(moved)
+                return raw
+
+            with mock.patch.object(policy, 'MANIFEST', manifest), \
+                 mock.patch.object(policy.os, 'read', side_effect=relink_after_open), \
+                 mock.patch.object(policy, 'source_policies', side_effect=AssertionError('source reached')):
+                with self.assertRaises(policy.PolicyError):
+                    policy.load_manifest()
+            self.assertTrue(changed)
+
+    def test_manifest_refuses_in_place_change_after_descriptor_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / 'manifest.json'
+            manifest.write_bytes(policy.MANIFEST.read_bytes())
+            real_fstat = os.fstat
+            file_checks = 0
+
+            def change_after_check(fd):
+                nonlocal file_checks
+                result = real_fstat(fd)
+                if stat.S_ISREG(result.st_mode):
+                    file_checks += 1
+                    if file_checks == 2:
+                        manifest.write_bytes(b'{}')
+                        return result
+                return result
+
+            with mock.patch.object(policy, 'MANIFEST', manifest), \
+                 mock.patch.object(policy.os, 'fstat', side_effect=change_after_check), \
+                 mock.patch.object(policy, 'source_policies', side_effect=AssertionError('source reached')):
+                with self.assertRaisesRegex(policy.PolicyError, 'path changed'):
+                    policy.load_manifest()
+            self.assertEqual(file_checks, 2)
 
     def test_manifest_refuses_symlink_parent_before_projection(self):
         with tempfile.TemporaryDirectory() as directory:

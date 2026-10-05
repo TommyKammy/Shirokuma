@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.283"
+version: "5.284"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: bounded policy final-entry metadata and separate FinOps check (offline)
+
+WP-L2-POL-001: final source and manifest entries now require post-read
+size/mtime/ctime agreement with their checked descriptors; the manifest also
+requires a regular final entry. Disposable after-descriptor in-place mutation
+negatives and a manifest relink refusal passed, together with the real source
+projection, 124 native policy tests and `make verify-local-experiment`.
+Separately WP-L6-FIN-001's 205 tests passed (seven Linux-only skips); no new
+volume measurement or reader change. Dedicated Colima was freshly observed
+stopped; no API, collection, unknown-request replay, retained data/backup
+mutation or GitHub write. AgentHouse bytes remain `null / NOT_MEASURED`;
+sequential metadata checks cannot prevent ABA or establish producer identity,
+live strict admission or operator acceptance. Revert only the scoped policy
+reader/tests if needed, retaining saved intents and reports. Original Vault
+sync pending outside this checkout.
 
 ## 2026-10-05: certified policy CLI snapshot wiring and independent storage boundary (offline)
 

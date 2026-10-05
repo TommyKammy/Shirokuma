@@ -185,7 +185,8 @@ def source_snapshot() -> tuple[bytes, tuple[int, int]]:
                         (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
                         (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) or
                         not stat.S_ISREG(entry.st_mode) or
-                        (after.st_dev, after.st_ino) != (entry.st_dev, entry.st_ino)):
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
+                        (entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns, entry.st_ctime_ns)):
                     raise PolicyError('repository policy source changed during projection')
                 for ancestor_fd, component, child_fd in ancestors:
                     linked = os.stat(component, dir_fd=ancestor_fd, follow_symlinks=False)
@@ -249,7 +250,9 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
                     raise PolicyError('dedicated manifest changed during bounded read')
                 entry = os.stat(MANIFEST.name, dir_fd=parent_fd, follow_symlinks=False)
                 current_parent = os.stat(MANIFEST.parent, follow_symlinks=False)
-                if ((after.st_dev, after.st_ino) != (entry.st_dev, entry.st_ino) or
+                if (not stat.S_ISREG(entry.st_mode) or
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
+                        (entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns, entry.st_ctime_ns) or
                         (parent.st_dev, parent.st_ino) != (current_parent.st_dev, current_parent.st_ino)):
                     raise PolicyError('dedicated manifest path changed during bounded read')
                 for ancestor_fd, component, child_fd in ancestors:
