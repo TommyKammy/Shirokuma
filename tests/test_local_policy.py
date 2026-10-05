@@ -1198,6 +1198,18 @@ class ScopedResponseTests(unittest.TestCase):
         client.json_request.return_value = reply
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         client.json_request.return_value = valid
+        for field, value in (('command', ['/bin/sh']), ('args', ['-c', 'sleep 999']),
+                             ('workingDir', '/host'), ('lifecycle', {'postStart': {'exec': {'command': ['id']}}}),
+                             ('envFrom', [{'secretRef': {'name': 'foreign'}}]),
+                             ('volumeDevices', [{'name': 'data', 'devicePath': '/dev/data'}]),
+                             ('stdin', True), ('stdinOnce', True), ('tty', True)):
+            with self.subTest(container_execution=field):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['containers'][0][field] = value
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        client.json_request.return_value = valid
         for account in ('foreign-admin', None, 0, []):
             with self.subTest(legacy_service_account=account):
                 reply = copy.deepcopy(valid)

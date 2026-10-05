@@ -593,6 +593,13 @@ class Kubernetes:
                       any(type(pod_spec[field]) is not list or pod_spec[field]
                           for field in ('initContainers', 'ephemeralContainers') if field in pod_spec)):
                 raise PolicyError('smoke requires a well-formed local Trino deployment')
+            # The fixed image is not evidence of the fixed workload if the
+            # container can run another command, hook, or bulk environment
+            # source. None of these fields occurs in the local Trino manifest.
+            if any(field in containers[0] for field in (
+                    'command', 'args', 'workingDir', 'lifecycle', 'envFrom',
+                    'volumeDevices', 'stdin', 'stdinOnce', 'tty')):
+                raise PolicyError('smoke requires the local Trino container execution')
             # A safe source is insufficient if it is mounted at an unexpected
             # location, writable over configuration, or through a subPath.
             mounts = containers[0].get('volumeMounts', [])

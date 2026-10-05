@@ -5,12 +5,26 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.190"
+version: "0.191"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: restrict smoke-source container execution (offline)
+
+The fixed-image lookup accepted a synthetic same-name Deployment with an
+alternate command, lifecycle hook, bulk environment source or device mapping.
+The reader now refuses nine unowned execution/IO fields absent from the
+repository's Trino manifest; its existing minimal and manifest-shaped controls
+still pass. `make test-local-policy` passed 166 tests and
+`make verify-local-experiment` passed (the fake Dagster failure is an intentional
+diagnostic). Dedicated Colima was
+observed stopped; no live API, admission, unknown-request replay or retained
+resource/backup change. This does not authenticate the source or establish
+strict live admission. Revert only the scoped image guard/test if necessary;
+preserve saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bound smoke-source DNS and placement overrides (offline)
 

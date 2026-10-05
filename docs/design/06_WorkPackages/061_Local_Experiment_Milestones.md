@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.335"
+version: "5.336"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded smoke container execution and independent FinOps check (offline)
+
+WP-L2-POL-001: the fixed Trino image lookup now rejects synthetic same-name
+Deployment templates with alternate command/args, lifecycle hook, bulk env
+source, mapped device or interactive IO; 166 focused policy tests passed.
+Separately WP-L6-FIN-001's unchanged 223 tests passed (seven Linux-only skips),
+without collection or report mutation. `make verify-local-experiment` passed
+(its fake Dagster failure output is intentional). Dedicated Colima was freshly
+observed stopped; no live API, admission, unknown request replay, retained volume/backup
+mutation or GitHub write. These checks cannot authenticate sources, prove live
+strict admission, measure AgentHouse bytes (`null / NOT_MEASURED`) or grant
+operator acceptance. Restore only the scoped policy reader/test if necessary;
+retain saved reports and requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke-source DNS/placement filter and independent FinOps check (offline)
 
