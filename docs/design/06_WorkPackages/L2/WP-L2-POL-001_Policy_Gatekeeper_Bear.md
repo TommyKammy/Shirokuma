@@ -12,6 +12,20 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-06: fixed Trino probe and port source (offline)
+
+The smoke-image reader now rejects same-name synthetic Deployment templates
+that substitute executable/redirected health probes or publish a host port,
+alternate protocol or additional container port. Present probes must match the
+manifest's `/v1/info` HTTP endpoint and timing; minimal probe-free fixtures
+remain compatible. Policy suite 166, independent FinOps suite 224 (seven
+Linux-only skips), and `make verify-local-experiment` passed; the fake Dagster
+worker failure trace in the verifier is intentional. Colima was freshly
+observed stopped. No live API/admission, retained data or backup changes.
+This offline reader does not authenticate Kubernetes or establish strict live
+admission/operator acceptance. Revert only these scoped guards/tests if needed;
+retain saved requests. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: smoke-image credential reference source (offline)
 
 The same-name Trino Deployment now must use exactly the six Secret key

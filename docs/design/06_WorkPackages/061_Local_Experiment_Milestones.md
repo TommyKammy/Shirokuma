@@ -12,6 +12,22 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: Trino smoke probe and port source filters (offline)
+
+WP-L2-POL-001: a synthetic same-name Deployment could lend its image with an
+exec health probe or exposed host port. The image reader now confines present
+probes to fixed HTTP `/v1/info` checks and present ports to the single named
+8080/TCP port; negative cases include redirected paths/headers, bool timing,
+host IP/port, UDP and additional ports. Minimal fixture and manifest-shaped
+responses pass. Focused policy suite 166, independently checked unchanged
+FinOps suite 224 (seven Linux-only skips), and full local verifier passed; the
+fake Dagster failure trace is intentional. Dedicated Colima was observed
+stopped. No live API/admission, unknown-request replay, retained volume/report/
+backup mutation, or GitHub write. This does not prove API authenticity, strict
+live admission or operator acceptance; AgentHouse remains `null / NOT_MEASURED`.
+Restore only the scoped reader/tests if needed, retaining saved evidence.
+Original Vault sync pending outside checkout.
+
 ## 2026-10-06: fixed Trino credential references in smoke source (offline)
 
 WP-L2-POL-001: four synthetic same-name Deployment templates with a fixed

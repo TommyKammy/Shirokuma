@@ -603,6 +603,43 @@ class Kubernetes:
                      'command', 'args', 'workingDir', 'lifecycle', 'envFrom',
                      'volumeDevices', 'stdin', 'stdinOnce', 'tty')):
                 raise PolicyError('smoke requires the local Trino container execution')
+            # Probes run in the container's security context. Do not borrow
+            # the image from a template that replaces an HTTP check with an
+            # executable command or sends it to a different endpoint.
+            for probe_name, period, failures in (('startupProbe', 5, 60),
+                                                 ('readinessProbe', 5, 3),
+                                                 ('livenessProbe', 10, 6)):
+                if probe_name not in containers[0]:
+                    continue  # Older minimal fixtures omit optional probes.
+                probe = containers[0][probe_name]
+                if (type(probe) is not dict or
+                        set(probe) - {'httpGet', 'periodSeconds', 'failureThreshold',
+                                      'initialDelaySeconds', 'timeoutSeconds', 'successThreshold'} or
+                        type(probe.get('httpGet')) is not dict or
+                        set(probe['httpGet']) - {'path', 'port', 'scheme'} or
+                        probe['httpGet'].get('path') != '/v1/info' or
+                        probe['httpGet'].get('port') != 'http' or
+                        probe['httpGet'].get('scheme', 'HTTP') != 'HTTP' or
+                        any(type(probe.get(key, default)) is not int or
+                            probe.get(key, default) != default
+                            for key, default in (('periodSeconds', period),
+                                                 ('failureThreshold', failures),
+                                                 ('initialDelaySeconds', 0),
+                                                 ('timeoutSeconds', 1),
+                                                 ('successThreshold', 1)))):
+                    raise PolicyError('smoke requires local Trino HTTP probes')
+            # A same-image template can publish a host port without changing
+            # the Pod's network namespace or the image digest.
+            ports = containers[0].get('ports', [])
+            if (type(ports) is not list or len(ports) > 1 or
+                    any(type(port) is not dict or
+                        set(port) - {'name', 'containerPort', 'protocol'} or
+                        port.get('name') != 'http' or
+                        type(port.get('containerPort')) is not int or
+                        port['containerPort'] != 8080 or
+                        port.get('protocol', 'TCP') != 'TCP'
+                        for port in ports)):
+                raise PolicyError('smoke requires local Trino container ports')
             # The named image must not be borrowed from a template redirecting
             # Trino's catalog credentials to literals or other references.
             expected_env = {

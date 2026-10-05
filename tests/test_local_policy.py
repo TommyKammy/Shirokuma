@@ -1225,6 +1225,40 @@ class ScopedResponseTests(unittest.TestCase):
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()
+        for probe in ({'exec': {'command': ['/bin/sh', '-c', 'id']}},
+                      {'httpGet': {'path': '/foreign', 'port': 'http'}},
+                      {'httpGet': {'path': '/v1/info', 'port': 'http',
+                                   'httpHeaders': [{'name': 'Host', 'value': 'foreign'}]}},
+                      {'httpGet': {'path': '/v1/info', 'port': 'http'}, 'periodSeconds': True}):
+            with self.subTest(probe=probe):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['containers'][0]['startupProbe'] = probe
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['containers'][0]['startupProbe'] = {
+            'httpGet': {'path': '/v1/info', 'port': 'http'}, 'periodSeconds': 5,
+            'failureThreshold': 60}
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for ports in ([{'name': 'http', 'containerPort': 8080, 'hostPort': 8080}],
+                      [{'name': 'http', 'containerPort': 8080, 'hostIP': '0.0.0.0'}],
+                      [{'name': 'http', 'containerPort': 8080, 'protocol': 'UDP'}],
+                      [{'name': 'http', 'containerPort': True}],
+                      [{'name': 'http', 'containerPort': 8080},
+                       {'name': 'other', 'containerPort': 9000}]):
+            with self.subTest(ports=ports):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['containers'][0]['ports'] = ports
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['containers'][0]['ports'] = [
+            {'name': 'http', 'containerPort': 8080}]
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for env in ([{'name': 'AWS_ACCESS_KEY_ID', 'value': 'foreign'}],
                     [{'name': 'AWS_ACCESS_KEY_ID', 'valueFrom': {'secretKeyRef':
                         {'name': 'foreign', 'key': 'AWS_ACCESS_KEY_ID'}}}],
