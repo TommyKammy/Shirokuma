@@ -93,6 +93,8 @@ def source_policies() -> list[dict]:
             json.dumps(item, ensure_ascii=False).encode('utf-8')
             result.append(item)
             remaining = remaining.lstrip()[end:]
+            if remaining and not remaining[0].isspace():
+                raise PolicyError('local source decoding requires separated JSON documents')
     except (ValueError, TypeError, RecursionError, UnicodeError) as exc:
         if isinstance(exc, PolicyError):
             raise

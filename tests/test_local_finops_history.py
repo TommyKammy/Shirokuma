@@ -14,6 +14,16 @@ def encoded(values):
 
 
 class HistoryTests(unittest.TestCase):
+    def test_saved_history_refuses_escaped_nested_duplicate_keys(self):
+        first, second = report(), report(processes())
+        first_wire = json.dumps(first, ensure_ascii=True)
+        self.assertIn('"model_name":', first_wire)
+        first_wire = first_wire.replace('"model_name":', '"model\\u005fname": "ambiguous", "model_name":', 1)
+        with patch.object(H, 'render', side_effect=AssertionError('must not render')):
+            with self.assertRaises(H.HistoryError):
+                H.parse(('[' + first_wire + ',' + json.dumps(second) + ']').encode())
+        self.assertIn('保存FinOps観測履歴', H.render(H.parse(encoded([first, second]))))
+
     def test_mixed_v1_v2_preserves_scope_and_null_stopped_usage(self):
         local = processes()
         local['components'][0].update(state='stopped', reason='STOPPED', identity=None, sample=None)

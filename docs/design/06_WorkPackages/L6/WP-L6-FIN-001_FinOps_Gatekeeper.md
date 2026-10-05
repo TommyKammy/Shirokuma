@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.95"
+version: "0.96"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: nested escaped saved-key control (offline)
+
+An escaped duplicate model-name key nested inside a saved inference group is
+rejected by the unchanged strict history reader before rendering; a valid
+two-report control renders. 204 FinOps tests passed (seven Linux-only skips),
+as did the local verifier. Colima was observed stopped; no collection or
+retained report/volume/backup mutation. Current AgentHouse usage remains
+`null / NOT_MEASURED`; offline input does not authenticate a producer or grant
+operator acceptance. Revert only this regression if needed; preserve saved
+reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: independent saved-history BOM control (offline)
 

@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.130"
+version: "0.131"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: local decoder document framing (offline)
+
+Seven adjacent, individually valid JSON policy objects without whitespace were
+previously treated as seven decoded source documents. The local decoder now
+requires whitespace between successive objects; newline-separated source and
+its manifest projection still pass. The focused negative failed before repair;
+106 policy tests and the local verifier passed. Colima was freshly observed
+stopped; no live admission, replay, retained data/backup mutation or GitHub
+write. This does not authenticate the local decoder or establish strict
+admission/operator acceptance. Roll back only the framing guard and regression
+if the decoder's actual output contract changes; preserve manifests and saved
+intents. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: nested escaped dry-run key ambiguity (offline)
 

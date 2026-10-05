@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.268"
+version: "5.269"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: source framing and independent saved-key boundary (offline)
+
+WP-L2-POL-001: adjacent source policy JSON objects without document whitespace
+previously passed inventory; the local decoder now refuses them. The negative
+failed before repair, while a newline-delimited control passes. Independently
+WP-L6-FIN-001: escaped nested duplicate saved model keys fail under the
+unchanged history reader without rendering, with a valid two-report control.
+Focused policy 106 and FinOps 204 tests (seven Linux-only skips) and full
+`make verify-local-experiment` passed. Dedicated Colima was freshly observed
+stopped. No live API, collection, unknown-request replay, retained data/backup
+mutation or GitHub write. Offline checks do not authenticate producers, clear
+strict admission, measure AgentHouse usage (`null / NOT_MEASURED`) or grant
+operator acceptance. Roll back only the source framing guard/test or independent
+history regression if needed; preserve historical intents and saved reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-05: independent policy key and saved-history BOM controls (offline)
 

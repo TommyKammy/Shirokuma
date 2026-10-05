@@ -99,6 +99,20 @@ class Clock:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_local_source_decoder_requires_document_separators(self):
+        source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
+                   'spec': {}} for name in policy.BASE_NAMES]
+        encoded = [json.dumps(item) for item in source]
+        for separator in ('', ','):
+            reply = SimpleNamespace(stdout=separator.join(encoded), stderr='', returncode=0)
+            with self.subTest(separator=separator), mock.patch.object(
+                    policy.subprocess, 'run', return_value=reply):
+                with self.assertRaises(policy.PolicyError):
+                    policy.source_policies()
+        reply = SimpleNamespace(stdout='\n'.join(encoded), stderr='', returncode=0)
+        with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+            self.assertEqual(len(policy.source_policies()), len(source))
+
     def test_local_source_decoder_refuses_escaped_lone_surrogates(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]
