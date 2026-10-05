@@ -255,6 +255,18 @@ class ScopedResponseTests(unittest.TestCase):
             stdout='{"value":"é"}', stderr='', returncode=0))
         self.assertEqual(client.json_request(['get', 'pods']), {'value': 'é'})
 
+    def test_scoped_json_reply_requires_object(self):
+        client = object.__new__(policy.Kubernetes)
+        for stdout in ('null', 'false', '0', '"ok"', '[]', '[{}]'):
+            with self.subTest(stdout=stdout):
+                client.request = mock.Mock(return_value=SimpleNamespace(
+                    stdout=stdout, stderr='', returncode=0))
+                with self.assertRaisesRegex(policy.PolicyError, 'not a JSON object'):
+                    client.json_request(['get', 'pods'])
+        client.request = mock.Mock(return_value=SimpleNamespace(
+            stdout='{}', stderr='', returncode=0))
+        self.assertEqual(client.json_request(['get', 'pods']), {})
+
 
 class RollbackTests(unittest.TestCase):
     def test_only_owned_bindings_are_removed_policies_and_workloads_untouched(self):

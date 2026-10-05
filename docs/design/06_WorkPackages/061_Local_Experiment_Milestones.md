@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.254"
+version: "5.255"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: scoped native JSON object boundary (offline)
+
+WP-L2-POL-001: successful JSON replies with scalar/list roots now fail closed
+instead of reaching object-only policy callers; the exact empty missing-policy
+read remains separate. Focused native policy 93 tests passed. Dedicated Colima
+was observed stopped. No live API, saved-request replay, retained data/backup
+mutation or GitHub write. Offline shapes do not authenticate producers, prove
+strict admission or grant operator acceptance. Revert only the guard/test if
+necessary; preserve saved intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: independent FinOps distinct-report limit (offline)
 

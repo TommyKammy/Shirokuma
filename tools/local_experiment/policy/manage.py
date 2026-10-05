@@ -212,8 +212,8 @@ class Kubernetes:
             if isinstance(exc, PolicyError):
                 raise
             raise PolicyError('scoped Kubernetes response is not bounded JSON') from None
-        if value is None:
-            raise PolicyError('scoped Kubernetes response contains explicit JSON null')
+        if not isinstance(value, dict):
+            raise PolicyError('scoped Kubernetes response is not a JSON object')
         return value
 
     def get(self, kind: str, name: str):

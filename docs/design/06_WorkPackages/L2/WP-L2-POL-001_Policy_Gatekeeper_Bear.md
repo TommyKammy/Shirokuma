@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.116"
+version: "0.117"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: scoped JSON object shape (offline)
+
+Successful native policy reads and mutations now refuse JSON scalar/list roots;
+only the exact dedicated missing-resource empty read represents absence. Fake
+null, boolean, number, string and array replies fail with PolicyError instead
+of propagating an unexpected shape to callers. Native policy 93 tests passed.
+The dedicated Colima profile was observed stopped; no live API request,
+unknown-request replay, retained data/backup mutation or GitHub write. This
+does not authenticate response producers or clear strict admission/operator
+acceptance. Revert only the scoped shape guard/test if necessary; preserve
+saved intents. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: empty native response scope (offline)
 
