@@ -156,6 +156,12 @@ def _snapshot(component, workload, pods, replica=None):
     else:
         # A generic ephemeral volume provisions another PVC. The fixed two-PVC
         # inventory cannot describe that additional claim as part of this row.
+        # Another mount below the claim directory shadows part of its contents;
+        # lexical normalization bounds this check without claiming symlink or
+        # actual filesystem/mount resolution.
+        require(all(m.get('name') == volume or not
+                    posixpath.normpath(m['mountPath']).startswith(mount + '/')
+                    for m in mounts))
         # Pin the entire claim mount, not merely one matching mount: a second
         # mount or subPath/device mapping would describe a different exposure.
         # Init/debug containers can mount the same Pod volume independently.

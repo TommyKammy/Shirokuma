@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.174"
+version: "0.175"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed PVC subdirectory shadowing (offline)
+
+Six synthetic Pod snapshots mounted another volume below the fixed claim
+directory, including lexically equivalent paths; all passed before repair.
+The inventory now refuses those overlapping mounts while allowing sibling
+mounts. Focused FinOps 255 tests passed (seven Linux-only skips). The dedicated
+Colima profile was freshly observed stopped. No live API, collection, retained
+volume/report/backup mutation or used-byte measurement (AgentHouse `null /
+NOT_MEASURED`). POSIX lexical path filtering cannot resolve symlinks, verify
+mount health, authenticate the API or establish operator acceptance. Restore
+only this scoped reader/test if necessary; preserve saved records. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: resolved mounts and valid Pod volume names (offline)
 

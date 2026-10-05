@@ -94,6 +94,23 @@ class StorageTests(unittest.TestCase):
                 {'name': 'scratch', 'mountPath': '/unrelated'})
             self.assertEqual(projected(component, data)['state'], 'observed')
 
+    def test_fixed_pvc_rejects_mounts_shadowing_claim_subdirectories(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            mount = S.TARGETS[component][6]
+            for shadow in (mount + '/scratch', mount + '/scratch/../scratch',
+                           mount + '-other/../' + mount.rsplit('/', 1)[-1] + '/scratch'):
+                data = deepcopy(objects(component))
+                data[1][0]['spec']['volumes'].append({'name': 'scratch', 'emptyDir': {}})
+                data[1][0]['spec']['containers'][0]['volumeMounts'].append(
+                    {'name': 'scratch', 'mountPath': shadow})
+                with self.subTest(component=component, shadow=shadow), self.assertRaises(S.StorageError):
+                    projected(component, data)
+            data = deepcopy(objects(component))
+            data[1][0]['spec']['volumes'].append({'name': 'scratch', 'emptyDir': {}})
+            data[1][0]['spec']['containers'][0]['volumeMounts'].append(
+                {'name': 'scratch', 'mountPath': mount + '-other/scratch'})
+            self.assertEqual(projected(component, data)['state'], 'observed')
+
     def test_second_read_cannot_rename_deployment_chain_with_same_uids(self):
         for index in (1, 2):
             first = objects('trino')

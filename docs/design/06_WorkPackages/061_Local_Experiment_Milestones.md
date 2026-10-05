@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.369"
+version: "5.370"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed PVC subdirectory shadowing (offline)
+
+WP-L6-FIN-001 refuses other volume mounts beneath either fixed claim directory;
+six synthetic negatives failed before repair and a sibling mount still passes.
+Focused FinOps 255 tests passed (seven Linux-only skips). Dedicated Colima was
+freshly observed stopped. No live API, retained volume/report/backup mutation,
+unknown-request replay or AgentHouse used-byte measurement (`null /
+NOT_MEASURED`). Lexical paths do not prove mount health, producer authenticity
+or operator acceptance. Revert only the scoped reader/test if needed, keeping
+saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded Trino Pod-template envelope (offline)
 
