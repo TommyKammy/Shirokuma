@@ -139,6 +139,26 @@ class HistoryTests(unittest.TestCase):
         self.assertNotIn('changed-while-validating-second', html)
         self.assertIn('保存観測 #2', html)
 
+    def test_direct_renderer_keeps_earlier_selection_if_caller_replaces_it_later(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        original_validate = C.validate_public
+        calls = 0
+
+        def replace_earlier_selection(value):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                # Replacing the outer list entry must not redirect the first
+                # already-pinned report to the second caller-owned selection.
+                entries[0] = entries[1]
+            return original_validate(value)
+
+        with patch.object(C, 'validate_public', side_effect=replace_earlier_selection):
+            html = H.render(entries)
+        self.assertGreaterEqual(calls, 2)
+        self.assertIn('選択入力 #1', html)
+        self.assertIn('選択入力 #2', html)
+
     def test_direct_renderer_refuses_caller_replacing_later_selection_during_validation(self):
         entries = H.parse(encoded([report(), report(processes())]))
         original_validate = C.validate_public

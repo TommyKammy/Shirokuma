@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.135"
+version: "0.136"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: earlier selection replacement regression (offline)
+
+A direct-render caller replacing its earlier selection while the later detached
+report is validated cannot redirect the already pinned first sample: the
+unchanged reader preserves both original input indices in HTML. Focused FinOps
+suite passed 214 tests (seven Linux-only skips); no collection, saved report,
+volume or backup mutation. This is not concurrent atomic serialization or
+producer authentication; AgentHouse bytes remain `null / NOT_MEASURED`.
+Rollback only the test if necessary, retaining historical reports. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: earlier history sample stays pinned during later validation (offline)
 

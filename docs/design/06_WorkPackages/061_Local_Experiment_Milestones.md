@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.322"
+version: "5.323"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent earlier FinOps selection replacement (offline)
+
+WP-L6-FIN-001: a regression replacing an already pinned earlier selection
+during later validation passes the existing detached reader; 214 FinOps tests
+pass (seven Linux-only skips). No live collection or retained report, volume
+or backup mutation. It does not establish concurrent atomicity, producer
+authentication, AgentHouse used bytes (`null / NOT_MEASURED`) or operator
+acceptance. Revert only the test if necessary, retaining saved reports;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: smoke image controller ownership boundary (offline)
 
