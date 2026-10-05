@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.125"
+version: "0.126"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: pinned smoke image source ambiguity controls (offline)
+
+Independent fake Deployment replies with duplicate Trino containers, mutable
+image tags, uppercase digest or truncated digest are refused by the existing
+smoke image reader; the valid dedicated Deployment still passes. The 101-test
+native policy suite passed. Colima was observed stopped; no live API, dry-run,
+saved-request replay, retained data/backup mutation or GitHub write. These
+fixtures cannot authenticate the producer or prove strict admission, current
+Trino readiness or operator acceptance. Revert only the independent test if
+necessary; preserve previous evidence. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-05: scoped smoke image source identity (offline)
 

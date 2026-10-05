@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.91"
+version: "0.92"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: malformed direct saved selection index (offline)
+
+A direct renderer selection with an unhashable list or object index is
+rejected as `HistoryError`, not leaked as an uncaught Python exception. The
+existing typed response boundary needed no change; a valid two-report control
+still renders. The 200-test FinOps suite passed (seven Linux-only skips).
+No collection or retained report/volume/backup mutation; dedicated Colima
+was observed stopped. This fixture cannot authenticate saved producers,
+measure present AgentHouse bytes (`null / NOT_MEASURED`) or grant operator
+acceptance. Revert only this independent regression if needed; preserve
+reports. Original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: malformed saved history UTF-8 (offline)
 

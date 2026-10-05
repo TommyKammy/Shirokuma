@@ -125,6 +125,15 @@ class HistoryTests(unittest.TestCase):
                 H.render(changed)
         self.assertIn('保存FinOps観測履歴', H.render(entries))
 
+    def test_direct_renderer_refuses_unhashable_selection_index(self):
+        entries = H.parse(encoded([report(), report(processes())]))
+        for index in ([], {}, [0]):
+            changed = list(entries)
+            changed[0] = (index, entries[0][1])
+            with self.subTest(index=index), self.assertRaises(H.HistoryError):
+                H.render(changed)
+        self.assertIn('保存FinOps観測履歴', H.render(entries))
+
     def test_repeated_saved_report_is_not_a_second_observation(self):
         first = report()
         payload = encoded([first, first])

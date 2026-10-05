@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.263"
+version: "5.264"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent saved-selection and image-source boundaries (offline)
+
+WP-L6-FIN-001: unhashable direct saved-history selection indices are already
+bounded to `HistoryError`; the new regression and 200 FinOps tests passed
+(seven Linux-only skips). Independently WP-L2-POL-001: duplicate Trino
+containers and mutable or malformed image digests fail under the unchanged
+scoped Deployment reader; 101 native policy tests passed. Full `make
+verify-local-experiment`, design-context (89 documents), secret scan and diff
+check passed. The dedicated
+Colima profile was freshly observed stopped. No live API, collection,
+unknown-request replay, retained data/backup mutation or GitHub write.
+Synthetic replies and reports do not authenticate producers, prove strict
+admission, measure present AgentHouse usage (`null / NOT_MEASURED`) or grant
+operator acceptance. Revert only the independent tests if needed; preserve
+saved reports and intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: smoke Deployment identity and independent saved UTF-8 rejection (offline)
 

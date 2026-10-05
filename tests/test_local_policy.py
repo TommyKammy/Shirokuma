@@ -314,6 +314,18 @@ class ScopedResponseTests(unittest.TestCase):
                 with self.assertRaises(policy.PolicyError):
                     client.image()
 
+        for containers in (
+                [valid['spec']['template']['spec']['containers'][0]] * 2,
+                [{'name': 'trino', 'image': 'shirokuma.local/trino:latest'}],
+                [{'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'A' * 64}],
+                [{'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 63}]):
+            with self.subTest(containers=containers):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['containers'] = containers
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+
     def test_success_with_stderr_cannot_certify_policy_read_or_mutation(self):
         client = object.__new__(policy.Kubernetes)
         read = ['get', policy.RESOURCES[policy.POLICY], policy.NAMES[0],
