@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.280"
+version: "5.281"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent FinOps volume gate review (offline)
+
+WP-L6-FIN-001: separately reviewed Docker reference versus usage, Linux-only
+fixture gates, receipt provenance limits and saved history storage coverage.
+`make test-local-finops` passed 205 tests (seven Linux-only skips). No FinOps
+reader change, VM authentication, retained-volume scan or backup mutation;
+dedicated Colima remained stopped. AgentHouse `used_bytes=null /
+NOT_MEASURED`; trusted VM binding, worker/cleanup verification and backup
+recovery remain open. This review is not live acceptance or a new measurement.
+No rollback; preserve historical reports. Original Vault sync pending.
 
 ## 2026-10-05: policy source ancestor linkage (offline)
 
