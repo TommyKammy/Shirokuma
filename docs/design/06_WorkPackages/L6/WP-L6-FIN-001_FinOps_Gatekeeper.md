@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.192"
+version: "0.193"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed list envelope aliases (offline)
+
+The storage PodList (both reads) and independent CPU/memory PodList/NodeList
+readers previously accepted canonical list fields beside conflicting
+case-variant `Items`, `Metadata`, `Kind` or `ApiVersion`. Sixteen negative
+variants failed before repair; ordinary canonical lists still pass. Focused
+FinOps 275 tests pass (seven Linux-only skips); the full local verifier and
+design-context pass. Dedicated Colima was freshly listed Stopped; no live API,
+collection, report/volume/backup mutation or AgentHouse used-byte measurement
+(`null / NOT_MEASURED`). This is conservative offline source-shape validation,
+not producer authentication, atomic sampling or operator acceptance. Restore
+only the scoped list guards/tests if necessary, retaining saved records.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed list pagination source ambiguity (offline)
 

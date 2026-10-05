@@ -91,6 +91,18 @@ class RuntimeTests(unittest.TestCase):
             valid['metadata']['remainingItemCount'] = 0
             self.assertTrue(R._complete_list(valid, kind))
 
+    def test_component_lists_refuse_conflicting_top_level_aliases(self):
+        for kind in ('PodList', 'NodeList'):
+            valid = {'kind': kind, 'apiVersion': 'v1', 'items': [], 'metadata': {}}
+            for key, value in (('Items', [{'kind': 'Pod'}]),
+                               ('Metadata', {'continue': 'next'}),
+                               ('Kind', 'OtherList'), ('ApiVersion', 'v2')):
+                reply = deepcopy(valid)
+                reply[key] = value
+                with self.subTest(kind=kind, key=key):
+                    self.assertFalse(R._complete_list(reply, kind))
+            self.assertTrue(R._complete_list(valid, kind))
+
     def backend(self):
         value = Mock()
         value.now.return_value = NOW

@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.394"
+version: "5.395"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent list envelope and rollout generation aliases (offline)
+
+WP-L6-FIN-001 refuses conflicting case-variant top-level list fields on fixed
+storage PodLists (both reads), CPU/memory PodLists and the local NodeList;
+16 negative subcases failed before repair. Independently WP-L2-POL-001 refuses
+case-variant Deployment metadata generation and status observedGeneration keys
+alongside their canonical fields; four negatives failed before repair. Focused
+FinOps 275 tests (seven Linux-only skips), policy 166 tests, the full
+`make verify-local-experiment`, design-context and diff check pass; its fake
+Dagster worker failure diagnostic is an intentional negative test. Dedicated
+Colima was freshly listed Stopped. No live API/admission, retained report,
+volume/backup changes, unknown-request replay or AgentHouse used-byte
+measurement (`null / NOT_MEASURED`). These checks cannot authenticate producers,
+prove atomicity or strict live admission, or grant operator acceptance. Revert
+only the scoped guards/tests, preserving saved inputs; original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent FinOps list completeness guards (offline)
 

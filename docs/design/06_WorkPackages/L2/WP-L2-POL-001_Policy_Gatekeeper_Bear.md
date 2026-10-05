@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.222"
+version: "0.223"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: unambiguous Trino generation keys (offline)
+
+Four synthetic same-image sources with canonical generation/observedGeneration
+plus conflicting case-variant metadata/status keys previously lent the smoke
+image. They now fail closed; the canonical generation control passes. Focused
+policy 166 tests and the full local verifier pass (including an intentional
+fake Dagster worker failure diagnostic). No live API/admission, rollout,
+unknown-request replay, retained data/backup mutation or GitHub write. The
+source check does not authenticate Kubernetes, establish strict admission or
+operator acceptance. Revert only the scoped source guard/test if needed and
+preserve saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: status-bearing Trino generation without observation (offline)
 

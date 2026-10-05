@@ -506,9 +506,11 @@ class Kubernetes:
             if (set(deployment) - {'apiVersion', 'kind', 'metadata', 'spec', 'status'} or
                       deployment.get('apiVersion') != 'apps/v1' or deployment.get('kind') != 'Deployment'
                      or type(metadata) is not dict or metadata.get('name') != 'trino-local'
-                      or metadata.get('namespace') != NAMESPACE
-                       or metadata.get('deletionTimestamp') is not None
-                       or ('generation' in metadata and
+                       or metadata.get('namespace') != NAMESPACE
+                        or metadata.get('deletionTimestamp') is not None
+                        or any(type(key) is str and key.lower() == 'generation' and
+                               key != 'generation' for key in metadata)
+                        or ('generation' in metadata and
                            (type(metadata['generation']) is not int or metadata['generation'] < 1))
                         or type(metadata.get('ownerReferences', [])) is not list
                        or metadata.get('ownerReferences', [])):
@@ -516,6 +518,10 @@ class Kubernetes:
             # A controller still observing an older generation has not
             # reconciled this spec; do not lend its image to the smoke.
             if 'status' in deployment and type(deployment['status']) is not dict:
+                raise PolicyError('smoke requires the current local Trino rollout generation')
+            if ('status' in deployment and any(
+                    type(key) is str and key.lower() == 'observedgeneration' and
+                    key != 'observedGeneration' for key in deployment['status'])):
                 raise PolicyError('smoke requires the current local Trino rollout generation')
             if ('status' in deployment and 'generation' in metadata and
                     'observedGeneration' not in deployment['status']):

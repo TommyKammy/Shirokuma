@@ -47,6 +47,8 @@ def _complete_list(value, kind):
         return False
     metadata = value.get('metadata', {})
     return (value.get('kind') == kind and value.get('apiVersion') == 'v1' and
+            not any(type(key) is str and key.lower() in ('kind', 'apiversion', 'items', 'metadata')
+                    and key not in ('kind', 'apiVersion', 'items', 'metadata') for key in value) and
             type(metadata) is dict and
             not any(type(key) is str and key.lower() in ('continue', 'remainingitemcount')
                     and key not in ('continue', 'remainingItemCount') for key in metadata) and

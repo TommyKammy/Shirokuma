@@ -1227,6 +1227,20 @@ class ScopedResponseTests(unittest.TestCase):
         reply['status'] = None
         with self.assertRaises(policy.PolicyError):
             client.image()
+        for key, value in (('ObservedGeneration', 1), ('OBSERVEDGENERATION', 1)):
+            reply = copy.deepcopy(valid)
+            reply['metadata']['generation'] = 1
+            reply['status'] = {'observedGeneration': 1, key: value}
+            client.json_request.return_value = reply
+            with self.subTest(status_alias=key), self.assertRaises(policy.PolicyError):
+                client.image()
+        for key, value in (('Generation', 2), ('GENERATION', 2)):
+            reply = copy.deepcopy(valid)
+            reply['metadata']['generation'] = 1
+            reply['metadata'][key] = value
+            client.json_request.return_value = reply
+            with self.subTest(metadata_alias=key), self.assertRaises(policy.PolicyError):
+                client.image()
         for extra in ({'foreignEnvelope': {'enabled': True}},
                       {'items': []}):
             reply = copy.deepcopy(valid)
