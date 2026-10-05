@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.84"
+version: "0.85"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: distinct saved-history count boundary (offline)
+
+An independent upper-bound fixture now uses eight distinct valid observations,
+renders all eight without collection or truncation, and rejects a ninth
+distinct report. The older nine-identical-reports negative could also fail
+on duplicate identity, so it did not isolate the count boundary. Focused
+FinOps suite passed. No collection, saved report, retained volume or backup
+mutation; Colima was observed stopped. AgentHouse bytes remain `null /
+NOT_MEASURED`; this synthetic bound does not authenticate producers, measure
+present usage or grant operator acceptance. Roll back only the new test if
+necessary; preserve saved reports. Original Vault sync remains pending.
 
 ## 2026-10-05: independent saved-history boundary check
 

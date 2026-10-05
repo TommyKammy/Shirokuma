@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.253"
+version: "5.254"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent FinOps distinct-report limit (offline)
+
+WP-L6-FIN-001: eight distinct saved fixtures render without collection, while
+a ninth distinct fixture is refused; this separates the count cap from the
+older duplicate-report check. Focused FinOps tests passed. Colima observed
+stopped; no saved report/volume/backup mutation or GitHub write. AgentHouse
+usage remains `null / NOT_MEASURED`; offline fixtures cannot authenticate
+producers, measure current usage or grant operator acceptance. Revert only the
+independent test if needed; preserve saved reports. Original Vault sync pending.
 
 ## 2026-10-05: bounded missing-policy response meaning (offline)
 

@@ -199,6 +199,20 @@ class HistoryTests(unittest.TestCase):
         too_many = encoded([report()] * 9)
         with self.assertRaises(H.HistoryError): H.parse(too_many)
 
+    def test_distinct_saved_reports_reach_exact_selection_limit_without_collection(self):
+        base = report()
+        samples = [C.build_report(base['components'], base['disks'], base['inference'],
+                   observed_at=f'2026-09-20T00:00:{second:02d}.000Z')
+                   for second in range(H.MAX_REPORTS + 1)]
+        with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):
+            entries = H.parse(encoded(samples[:H.MAX_REPORTS]))
+            html = H.render(entries)
+            self.assertEqual([index for index, _ in entries], list(range(H.MAX_REPORTS)))
+            self.assertEqual(html.count('<section id="observation-'), H.MAX_REPORTS)
+            self.assertLessEqual(len(html.encode('utf-8')), H.MAX_OUTPUT_BYTES)
+            with self.assertRaises(H.HistoryError):
+                H.parse(encoded(samples))
+
     def test_nested_duplicate_report_claims_cannot_override_saved_observation(self):
         original = encoded([report(), report(processes())])
         self.assertIn(b'"inference": {', original)
