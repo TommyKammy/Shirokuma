@@ -565,6 +565,23 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                     for port, expected in zip(spec['ports'], original['ports'])))
     if submitted['kind'] != 'Pod':
         return False
+    # A new Pod spec or container field may change scheduling, execution or
+    # exposure even when every field in the fixed smoke corpus still matches.
+    # Examine new API defaults explicitly before admitting them as evidence.
+    if not set(spec) <= {
+            'containers', 'os', 'hostNetwork', 'hostPID', 'hostIPC',
+            'shareProcessNamespace', 'volumes', 'initContainers',
+            'ephemeralContainers', 'hostAliases', 'resourceClaims',
+            'schedulingGates', 'resources', 'imagePullSecrets', 'nodeSelector',
+            'tolerations', 'affinity', 'topologySpreadConstraints', 'overhead',
+            'schedulerName', 'priorityClassName', 'priority',
+            'preemptionPolicy', 'runtimeClassName', 'serviceAccountName',
+            'serviceAccount', 'nodeName', 'dnsPolicy', 'dnsConfig', 'hostname',
+            'subdomain', 'setHostnameAsFQDN', 'enableServiceLinks', 'hostUsers',
+            'activeDeadlineSeconds', 'terminationGracePeriodSeconds',
+            'readinessGates', 'restartPolicy', 'automountServiceAccountToken',
+            'securityContext'}:
+        return False
     containers = spec.get('containers')
     if (type(containers) is not list or len(containers) != 1 or
             type(containers[0]) is not dict or
@@ -609,6 +626,14 @@ def smoke_success_scope(value: dict, submitted: dict) -> bool:
                  for key, val in original['securityContext'].items())):
         return False
     actual, expected = containers[0], original['containers'][0]
+    if not set(actual) <= {
+            'name', 'image', 'imagePullPolicy', 'command', 'args', 'workingDir',
+            'lifecycle', 'stopSignal', 'livenessProbe', 'readinessProbe',
+            'startupProbe', 'restartPolicy', 'restartPolicyRules', 'resizePolicy',
+            'terminationMessagePath', 'terminationMessagePolicy', 'stdin',
+            'tty', 'stdinOnce', 'volumeMounts', 'volumeDevices', 'env',
+            'envFrom', 'resources', 'securityContext', 'ports'}:
+        return False
     return (all(actual.get(key) == expected[key] for key in ('name', 'image', 'imagePullPolicy', 'command')) and
             actual.get('args') in (None, []) and actual.get('workingDir', '') == '' and
              actual.get('lifecycle') is None and

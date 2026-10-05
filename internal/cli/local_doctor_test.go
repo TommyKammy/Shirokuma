@@ -3262,6 +3262,7 @@ func TestLocalExperimentScopeRejectsLookalikeLoopbackEndpoints(t *testing.T) {
 		"https://127.0.0.1.example:6443", "https://localhost.example:6443",
 		"https://localhost:6443@remote.example:6443", "https://127.0.0.1:6443@remote.example:6443",
 		"https://localhost%40remote.example:6443", "https://127.0.0.1%2Eexample:6443",
+		"https://127.0.0.1%2fremote.example:6443", "https://localhost%3aremote.example:6443",
 		"https://LOCALHOST:6443", "https://[::1%25en0]:6443",
 		"https://127.0.0.1.:6443", "https://0177.0.0.1:6443",
 		"https://127.1:6443", "https://2130706433:6443",
@@ -3281,7 +3282,7 @@ func TestLocalExperimentScopeRejectsLookalikeLoopbackEndpoints(t *testing.T) {
 			}
 		})
 	}
-	for _, endpoint := range []string{"https://127.0.0.2:6443", "https://127.255.255.254:6443", "https://[0:0:0:0:0:0:0:1]:6443"} {
+	for _, endpoint := range []string{"https://127.0.0.2:6443", "https://127.21.34.56:6443", "https://127.255.255.254:6443", "https://[0:0:0:0:0:0:0:1]:6443"} {
 		check := checkLocalExperimentScope(context.Background(), &fakeRunner{responses: []fakeResponse{{output: endpoint}}}, localExperimentContext)
 		if check.Status != "healthy" {
 			t.Fatalf("literal loopback rejected: %s: %#v", endpoint, check)

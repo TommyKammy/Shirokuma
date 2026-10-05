@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.106"
+version: "0.107"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: fixed Pod spec/container key boundary (offline)
+
+Four synthetic successful Pod replies carried an unexamined spec or container
+key (null or nonempty). The first request advanced before repair; the fixed
+comparator now rejects keys outside the examined Pod and container fields.
+Known API defaults remain covered by the existing comparisons, but future
+defaulted keys require explicit examination. Native policy tests (85) and full
+local regression passed.
+Dedicated Colima was freshly observed stopped; no live admission, replay,
+retained data/backup mutation or GitHub write. This does not authenticate the
+reply, prove complete effective-object equality or clear strict/operator
+acceptance. Revert only these scoped key guards and regression if live defaulting
+contradicts the offline assumption; preserve saved requests. Original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: legacy smoke response envelope (offline)
 

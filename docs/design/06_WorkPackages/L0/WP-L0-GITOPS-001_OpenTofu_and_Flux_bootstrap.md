@@ -5,12 +5,22 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.142"
+version: "0.143"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-05: independent encoded-authority controls (offline)
+
+The unchanged doctor degrades two further encoded authority separators and
+accepts a middle-of-range literal IPv4 loopback in fake context output. Focused
+Go test, full CLI suite (906), vet and local regression passed. Colima was observed stopped; no live API/Git inventory or
+reconcile, retained data/backup mutation or GitHub write. This does not prove
+context or endpoint authenticity, atomic inventory, strict admission or
+operator acceptance. Revert only these fixture extensions if needed, preserving
+prior evidence. Direct original Vault synchronization remains pending.
 
 ## 2026-10-05: independent encoded-authority and mapped-host controls (offline)
 

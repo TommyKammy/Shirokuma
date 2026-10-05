@@ -255,6 +255,23 @@ class RollbackTests(unittest.TestCase):
 
 
 class SmokeTests(unittest.TestCase):
+    def test_pod_success_rejects_unexamined_spec_and_container_keys(self):
+        for location in ('spec', 'container'):
+            for value in (None, {'enabled': True}):
+                kube = FakeKubernetes(ready=True)
+                def changed(request):
+                    reply = copy.deepcopy(request)
+                    if reply['kind'] == 'Pod':
+                        target = (reply['spec'] if location == 'spec'
+                                  else reply['spec']['containers'][0])
+                        target['unexaminedControl'] = value
+                    return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+                kube.smoke_failure = changed
+                with self.subTest(location=location, value=value), self.assertRaisesRegex(policy.PolicyError, 'dry-run result'):
+                    policy.smoke(kube, items())
+                self.assertEqual(len(kube.calls), 1)
+        self.assertEqual(policy.smoke(FakeKubernetes(ready=True), items())['passed_cases'], 15)
+
     def test_malformed_unicode_success_reply_fails_closed(self):
         kube = FakeKubernetes(ready=True)
         def changed(value):

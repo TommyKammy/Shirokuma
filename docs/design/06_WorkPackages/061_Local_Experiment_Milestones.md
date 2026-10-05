@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.240"
+version: "5.241"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: Pod reply keys and independent endpoint controls (offline)
+
+WP-L2-POL-001: four fake Pod replies added unexamined spec or container keys;
+the first request advanced before scoped guards, then 85 native tests passed.
+WP-L0-GITOPS-001: the unchanged doctor degrades two encoded authority
+separators and accepts a literal loopback control in independent fake context
+tests. Focused Go check, full Go CLI tests (906), vet, `make
+verify-local-experiment` and diff check passed. Colima was freshly observed
+stopped. No live
+API/Git read, reconcile, request replay, retained data/backup mutation or
+GitHub write. These offline replies cannot authenticate producers, establish
+atomic inventory/full effective objects, clear strict admission or grant
+operator acceptance. Revert only the two scoped Pod guards/tests or independent
+doctor fixture extension if needed; preserve earlier evidence. Original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-05: legacy policy smoke response envelope (offline)
 
