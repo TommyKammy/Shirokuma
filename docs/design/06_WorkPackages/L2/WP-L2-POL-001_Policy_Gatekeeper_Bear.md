@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.153"
+version: "0.154"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: post-delete binding observation must still be owned (offline)
+
+A synthetic malformed post-delete binding read previously raised a raw
+`AttributeError` while checking removal. Rollback now checks the surviving
+object's dedicated ownership and spec before interpreting its UID; a foreign
+same-UID object cannot be waited on as if it were the old binding. The negative
+failed before repair, both negatives and the normal removal pass in 138 policy
+tests; `make verify-local-experiment` passed. The dedicated Colima profile was freshly observed stopped; no live
+delete, request replay, retained intent/data or backup mutation. This does not
+verify live API identity, actual deletion or operator acceptance. Restore only
+the scoped post-delete check/tests if needed; preserve saved intents. Original
+Vault sync pending outside this checkout.
 
 ## 2026-10-06: JSON-exact source projection certification (offline)
 

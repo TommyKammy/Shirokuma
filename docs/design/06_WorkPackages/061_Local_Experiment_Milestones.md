@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.293"
+version: "5.294"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: owned post-delete policy observation and FinOps recheck (offline)
+
+WP-L2-POL-001: rollback now refuses a malformed or foreign same-UID binding
+returned after deletion rather than raising an untyped exception or waiting on
+an unowned object. The malformed negative failed before repair; 138 focused
+policy tests and `make verify-local-experiment` passed. Independently WP-L6-FIN-001's saved-history and per-report
+volume scope were reviewed; 207 tests passed (seven Linux-only skips), with no
+collection or reader change. Dedicated Colima was freshly observed stopped;
+no live API, unknown-request replay, retained data/backup mutation or GitHub
+write. Live strict admission, source/API authentication, current AgentHouse
+usage (`null / NOT_MEASURED`) and operator acceptance remain open. Roll back
+only the scoped policy check/tests if required; preserve saved intents and
+reports. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: exact native source projection and independent FinOps regression (offline)
 

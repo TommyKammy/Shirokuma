@@ -643,6 +643,9 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
             remaining = kube.get(BINDING, expected['metadata']['name'])
             if remaining is None:
                 break
+            # A post-delete read is still an untrusted API object. Do not
+            # interpret a malformed or foreign replacement as our binding.
+            assert_owned(remaining, expected)
             if remaining['metadata'].get('uid') != uid:
                 raise PolicyError('replacement binding was preserved; rollback is incomplete')
             if clock() >= deadline:

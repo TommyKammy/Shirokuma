@@ -990,6 +990,40 @@ class ScopedResponseTests(unittest.TestCase):
 
 
 class RollbackTests(unittest.TestCase):
+    def test_malformed_binding_after_delete_cannot_confirm_rollback(self):
+        kube = FakeKubernetes(ready=True)
+        first = next(x for x in items() if x['kind'] == policy.BINDING)
+        original_delete = kube.delete_binding
+
+        def replace_with_malformed(current, expected):
+            original_delete(current, expected)
+            kube.objects[(policy.BINDING, expected['metadata']['name'])] = {'metadata': None}
+
+        kube.delete_binding = replace_with_malformed
+        events = []
+        with self.assertRaises(policy.PolicyError):
+            policy.rollback_bindings(kube, items(), record=events.append)
+        self.assertEqual(events, [])
+        self.assertEqual(kube.objects[(policy.BINDING, first['metadata']['name'])], {'metadata': None})
+        self.assertEqual(len([x for x in kube.objects if x[0] == policy.BINDING]), len(policy.NAMES))
+
+    def test_foreign_same_uid_after_delete_does_not_wait_as_owned(self):
+        kube = FakeKubernetes(ready=True)
+        first = next(x for x in items() if x['kind'] == policy.BINDING)
+        original_delete = kube.delete_binding
+
+        def replace_with_foreign(current, expected):
+            original_delete(current, expected)
+            current['spec']['validationActions'] = ['Warn']
+            kube.objects[(policy.BINDING, expected['metadata']['name'])] = current
+
+        kube.delete_binding = replace_with_foreign
+        events = []
+        with self.assertRaises(policy.PolicyError):
+            policy.rollback_bindings(kube, items(), record=events.append, pause=lambda _: self.fail('waited on foreign binding'))
+        self.assertEqual(events, [])
+        self.assertEqual(kube.objects[(policy.BINDING, first['metadata']['name'])]['spec']['validationActions'], ['Warn'])
+
     def test_only_owned_bindings_are_removed_policies_and_workloads_untouched(self):
         kube = FakeKubernetes(ready=True)
         result = policy.rollback_bindings(kube, items())
