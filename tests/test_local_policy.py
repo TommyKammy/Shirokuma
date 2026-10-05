@@ -868,6 +868,18 @@ class ActivationTests(unittest.TestCase):
         value['status'].pop('observedGeneration')
         self.assertEqual(policy.typecheck(value), 'pending')
 
+    def test_zero_resource_version_cannot_certify_persisted_inventory_or_activation(self):
+        expected = items()[0]
+        kube = FakeKubernetes(ready=True)
+        current = kube.objects[(expected['kind'], expected['metadata']['name'])]
+        for version in ('0', '000'):
+            current['metadata']['resourceVersion'] = version
+            with self.subTest(version=version), self.assertRaises(policy.PolicyError):
+                policy.inventory_status(kube, items())
+            with self.subTest(version=version), self.assertRaises(policy.PolicyError):
+                policy.apply_policies(kube, items())
+        self.assertEqual(kube.calls, [])
+
     def test_malformed_empty_warning_shapes_never_certify_typecheck(self):
         value = admitted(items()[0])
         for warnings in ('', {}, None, False, 0):

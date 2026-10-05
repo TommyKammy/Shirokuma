@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.161"
+version: "0.162"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: nonzero persisted resource version (offline)
+
+Direct status and activation previously accepted synthetic policy metadata with
+`resourceVersion: "0"` as persisted; a negative failed before repair. The common
+identity guard now rejects all-zero decimal versions, including `"000"`; normal
+version `"12"` remains valid. `make test-local-policy` passed 151 tests before
+the expanded zero spelling fixture; the full local verifier passed with the
+guard. Dedicated Colima was observed stopped; no API request,
+unknown-request replay or retained data/backup change. This is an offline
+identity check, not API authenticity, live admission or operator acceptance.
+Restore only the guard/test if needed, preserving saved intents. Original Vault
+sync pending outside this checkout.
 
 ## 2026-10-06: persisted identity required for policy readiness (offline)
 

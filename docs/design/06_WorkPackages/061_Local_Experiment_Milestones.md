@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.301"
+version: "5.302"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: nonzero policy version and independent saved FinOps check (offline)
+
+WP-L2-POL-001: a synthetic all-zero resourceVersion previously certified
+persisted policy readiness. The failed negative now refuses `"0"` and `"000"`
+before activation or status can certify it. The policy suite passed 151 cases
+before expanding the fixture; focused recheck and `make
+verify-local-experiment` passed after the guard. Separately WP-L6-FIN-001
+reviewed saved-history digest/order and per-report storage scope; 207 FinOps
+tests passed (seven Linux-only skips), without new collection. Dedicated Colima
+was observed stopped. No live API, request replay, retained data/backup mutation
+or GitHub write. Neither offline check authenticates producers or grants live
+strict admission or operator acceptance; AgentHouse bytes remain `null /
+NOT_MEASURED`. Revert only the scoped guard/test if needed, preserving saved
+intents and reports. Original Vault sync pending outside the checkout.
 
 ## 2026-10-06: persisted policy identity and independent FinOps check (offline)
 

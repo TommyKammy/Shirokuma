@@ -343,7 +343,9 @@ def persistent_identity(current: dict) -> tuple[str, str]:
     metadata = current['metadata']
     uid, version = metadata.get('uid'), metadata.get('resourceVersion')
     if (type(uid) is not str or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', uid)
-            or type(version) is not str or not re.fullmatch(r'[0-9]{1,128}', version)):
+            or type(version) is not str or not re.fullmatch(r'[0-9]{1,128}', version)
+            # An all-zero API version is not a persisted object's version.
+            or not any(digit != '0' for digit in version)):
         raise PolicyError('dedicated resource requires a current UID and resource version')
     return uid, version
 
