@@ -1299,6 +1299,23 @@ class ScopedResponseTests(unittest.TestCase):
 
 
 class RollbackTests(unittest.TestCase):
+    def test_reappearing_earlier_binding_cannot_certify_rollback(self):
+        kube = FakeKubernetes(ready=True)
+        first = (policy.BINDING, policy.NAMES[0])
+        last = policy.NAMES[-1]
+        original = copy.deepcopy(kube.objects[first])
+        original_delete = kube.delete_binding
+
+        def reappear_after_last_delete(current, expected):
+            original_delete(current, expected)
+            if expected['metadata']['name'] == last:
+                kube.objects[first] = original
+
+        kube.delete_binding = reappear_after_last_delete
+        with self.assertRaisesRegex(policy.PolicyError, 'rollback is incomplete'):
+            policy.rollback_bindings(kube, items())
+        self.assertIn(first, kube.objects)
+
     def test_incomplete_or_duplicate_binding_inventory_cannot_report_success(self):
         baseline = items()
         bindings = [x for x in baseline if x['kind'] == policy.BINDING]

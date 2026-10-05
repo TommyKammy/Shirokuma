@@ -762,6 +762,12 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
                 raise PolicyError('binding deletion has not been confirmed')
             pause(1)
         record({'action': 'binding_removed', 'name': expected['metadata']['name'], 'uid': uid})
+    # Per-delete absence is not a final inventory: an earlier name can be
+    # recreated while later deletions are still in progress. Do not claim a
+    # complete rollback if any dedicated name is present at this final scan.
+    for expected in bindings:
+        if kube.get(BINDING, expected['metadata']['name']) is not None:
+            raise PolicyError('binding remains after deletion; rollback is incomplete')
     return {'bindings_removed': True, 'policy_definitions_retained': True, 'namespace': NAMESPACE}
 
 

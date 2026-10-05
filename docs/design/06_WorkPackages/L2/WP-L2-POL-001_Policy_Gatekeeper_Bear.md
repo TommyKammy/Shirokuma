@@ -5,12 +5,25 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.168"
+version: "0.169"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: final rollback binding inventory (offline)
+
+Rollback could return `bindings_removed: true` after an earlier binding
+reappeared while later bindings were being removed. A fake API regression
+failed before repair; rollback now scans all dedicated binding names after
+the delete phase and refuses success if any remains. `make test-local-policy`
+passed 162 tests and `make verify-local-experiment` passed. The dedicated
+Colima profile was freshly observed stopped, so no live API or retained
+data/backup was changed. This scan is sequential, not atomic or authenticated:
+a binding can still appear after its read. Live strict admission and operator
+acceptance remain open. Restore only the final scan/test if necessary;
+preserve historical intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: binding continuity after policy recheck (offline)
 
