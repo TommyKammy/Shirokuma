@@ -533,6 +533,7 @@ class Kubernetes:
             if (type(pod_spec) is not dict or
                      pod_spec.get('automountServiceAccountToken') is not False or
                      pod_spec.get('serviceAccountName', 'default') != 'default' or
+                     pod_spec.get('serviceAccount', 'default') != 'default' or
                      any(pod_spec.get(field, False) is not False
                          for field in ('hostNetwork', 'hostPID', 'hostIPC'))):
                 raise PolicyError('smoke requires the isolated local Trino pod template')

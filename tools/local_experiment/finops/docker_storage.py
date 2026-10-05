@@ -107,6 +107,7 @@ def project(context_before, container_before, volume_before, context_after, cont
     require(before == after, 'IDENTITY_CHANGED')
     start, end = C.stamp(request_started_at), C.stamp(observed_at)
     require(0 <= end[1]-start[1] <= 30*10**9, 'SAMPLE_INVALID')
+    require(C.stamp(before[2])[1] <= start[1], 'SAMPLE_INVALID')
     row = unknown('READ_FAILED')
     row.update(state='observed', reason=None, container_id=before[0],
                container_running=before[1], volume_created_at=before[2],
@@ -126,9 +127,9 @@ def validate_row(row):
                 type(row['container_id']) is str and re.fullmatch(r'[0-9a-f]{64}', row['container_id']) and
                 type(row['container_running']) is bool and
                 row['mount_destination'] == '/var/lib/clickhouse' and row['mount_read_write'] is True)
-        C.stamp(row['volume_created_at'])
+        created = C.stamp(row['volume_created_at'])
         start, end = C.stamp(row['request_started_at']), C.stamp(row['observed_at'])
-        require(0 <= end[1]-start[1] <= 30*10**9)
+        require(created[1] <= start[1] and 0 <= end[1]-start[1] <= 30*10**9)
     return deepcopy(row)
 
 

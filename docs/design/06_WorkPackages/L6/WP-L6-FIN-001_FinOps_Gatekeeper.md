@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.143"
+version: "0.144"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: volume creation must precede reference sampling (offline)
+
+A synthetic Docker volume created after the reference sampling window was
+previously projected as observed; a saved public row with the same chronology
+was also accepted. The offline preflight could similarly certify metadata
+eligibility. All three now require creation no later than sampling start. The
+reference negative failed before repair; `make test-local-finops` passed 220
+tests (seven Linux-only skips), and the local verifier passed. Dedicated Colima
+was observed stopped. No Docker collection, traversal, retained report/volume
+or backup mutation; AgentHouse bytes remain `null / NOT_MEASURED`. Chronology
+is not daemon authentication or scan permission. Restore only the scoped
+chronology checks/tests if necessary; preserve prior reports. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: Docker creation timestamp offset bound (offline)
 

@@ -91,6 +91,7 @@ def _project(snapshot):
             volume.get('Driver') == 'local' and volume.get('Scope') == 'local' and
             volume.get('Options') in (None, {}) and _path(volume.get('Mountpoint')) == VOLUME_ROOT)
     created = D.created_at(volume.get('CreatedAt'))
+    require(C.stamp(created)[1] <= C.stamp(snapshot['started_at'])[1])
     container = snapshot['container']
     require(type(container) is dict and container.get('Name') == '/' + AH.NAME and
             container.get('Config', {}).get('Labels', {}).get(AH.LABEL) == 'agenthouse-local' and

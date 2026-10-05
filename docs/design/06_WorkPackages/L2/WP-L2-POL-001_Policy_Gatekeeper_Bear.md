@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.185"
+version: "0.186"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: legacy service account alias in smoke source (offline)
+
+The fixed Trino image reader accepted a fake Deployment with a foreign legacy
+`serviceAccount` even when `serviceAccountName` was absent. Four negatives failed
+before both aliases were constrained to absent/default; the explicit default
+control passes. `make test-local-policy` passed 166 tests and the local verifier
+passed. Colima was observed stopped; no API request, admission, saved request or
+retained backup mutation. This cannot authenticate the API or prove live strict
+admission. Restore only the scoped alias guard/test if necessary; preserve saved
+intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed smoke source service account (offline)
 

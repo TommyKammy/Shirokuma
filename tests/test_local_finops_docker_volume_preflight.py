@@ -38,6 +38,11 @@ class VolumePreflightTests(unittest.TestCase):
         value['volume']['Options']={}
         self.assertEqual(validate(value,deepcopy(value)),result)
 
+    def test_volume_created_after_metadata_window_cannot_be_eligible(self):
+        value=snapshot();value['volume']['CreatedAt']='2026-09-28T00:00:00Z'
+        with self.assertRaisesRegex(V.PreflightError,'SCOPE_INVALID'):
+            validate(value,deepcopy(value))
+
     def test_wrong_daemon_container_and_driver_options_refused(self):
         cases=[lambda s:s['context']['Endpoints']['docker'].update(Host='tcp://elsewhere'),
                lambda s:s['daemon'].update(Architecture='amd64'),

@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.330"
+version: "5.331"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: smoke service-account alias and volume chronology (offline)
+
+WP-L2-POL-001: a synthetic legacy `serviceAccount` field bypassed the fixed
+Trino image source account filter; four negatives failed before repair, and
+absent/default accounts pass (166 policy tests). Independently WP-L6-FIN-001:
+a future-created Docker volume could be reported as an observed reference or
+metadata-eligible; direct projection and saved-row checks now refuse creation
+after sampling start (220 FinOps tests, seven Linux-only skips). The broader
+`make verify-local-experiment` and `git diff --check` passed. Dedicated Colima
+was observed stopped; no live API/admission, Docker collection, unknown request
+replay, retained request/report/volume/backup mutation or GitHub write. These
+offline checks do not authenticate the API/daemon, establish strict live
+admission, measure AgentHouse (`null / NOT_MEASURED`) or confer operator
+acceptance. Restore only the scoped guards/tests if required, preserving saved
+evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded Docker timestamp and Trino smoke identity (offline)
 

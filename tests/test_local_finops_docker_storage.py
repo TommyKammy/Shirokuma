@@ -35,6 +35,12 @@ class DockerStorageTests(unittest.TestCase):
         data=fixture();data[2][0]['CreatedAt']='2026-09-19T09:00:00+09:00'
         self.assertEqual(projected(data)['volume_created_at'],'2026-09-19T00:00:00.000000000Z')
 
+    def test_future_volume_creation_cannot_be_an_observed_reference(self):
+        data=fixture();data[2][0]['CreatedAt']='2026-09-21T00:00:00Z'
+        with self.assertRaises(D.DockerStorageError):projected(data)
+        row=projected();row['volume_created_at']='2026-09-21T00:00:00Z'
+        with self.assertRaises(D.DockerStorageError):D.validate_row(row)
+
     def test_daemon_size_hints_do_not_become_agenthouse_usage(self):
         data=fixture()
         # Neither daemon summary hints nor private mountpoints prove a safe,
