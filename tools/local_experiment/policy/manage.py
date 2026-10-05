@@ -429,8 +429,18 @@ class Kubernetes:
         return self.json_request(['get', RESOURCES[kind], name, '--ignore-not-found', '-o', 'json'])
 
     def create(self, value: dict, *, dry_run=False):
-        key = (value.get('kind'), value.get('metadata', {}).get('name'))
-        if key not in self.expected or value != self.expected[key]:
+        if (type(value) is not dict or type(value.get('metadata')) is not dict or
+                type(value.get('kind')) is not str or
+                type(value['metadata'].get('name')) is not str):
+            raise PolicyError('policy creation is outside the dedicated inventory')
+        key = (value['kind'], value['metadata']['name'])
+        try:
+            identical = (key in self.expected and
+                         json.dumps(value, sort_keys=True, allow_nan=False) ==
+                         json.dumps(self.expected[key], sort_keys=True, allow_nan=False))
+        except (TypeError, ValueError, UnicodeError, RecursionError):
+            identical = False
+        if not identical:
             raise PolicyError('policy creation is outside the dedicated inventory')
         args = ['create', '-f', '-', '-o', 'json']
         if dry_run:
@@ -438,7 +448,11 @@ class Kubernetes:
         return self.json_request(args, value)
 
     def delete_binding(self, current: dict, expected: dict):
-        key = (expected.get('kind'), expected.get('metadata', {}).get('name'))
+        if (type(expected) is not dict or type(expected.get('metadata')) is not dict or
+                type(expected.get('kind')) is not str or
+                type(expected['metadata'].get('name')) is not str):
+            raise PolicyError('rollback only removes dedicated bindings')
+        key = (expected['kind'], expected['metadata']['name'])
         if expected.get('kind') != BINDING or self.expected.get(key) != expected:
             raise PolicyError('rollback only removes dedicated bindings')
         assert_owned(current, expected)

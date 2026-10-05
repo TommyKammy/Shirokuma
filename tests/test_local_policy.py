@@ -153,6 +153,42 @@ class ManifestTests(unittest.TestCase):
         with mock.patch.object(policy, 'load_manifest', side_effect=AssertionError('second read')):
             self.assertEqual(len(policy.Kubernetes(certified).expected), 16)
 
+    def test_kubernetes_create_refuses_json_type_aliases_and_malformed_identity(self):
+        certified = items()
+        # A certified snapshot may contain JSON boolean/number fields even if
+        # today's generated inventory happens to contain only string fields.
+        certified[0]['spec']['testBoundary'] = {'enabled': False, 'count': 1}
+        kube = policy.Kubernetes(certified)
+        original = copy.deepcopy(certified[0])
+        with mock.patch.object(kube, 'json_request', side_effect=AssertionError('request')):
+            for malformed in ([], {}, False, None):
+                changed = copy.deepcopy(original)
+                changed['metadata']['name'] = malformed
+                with self.subTest(identity=malformed), self.assertRaises(policy.PolicyError):
+                    kube.create(changed, dry_run=True)
+            changed = copy.deepcopy(original)
+            # JSON false and the number zero are distinct, even though Python
+            # compares them as equal in nested dictionaries.
+            changed['spec']['testBoundary']['enabled'] = 0
+            self.assertEqual(changed, original)
+            with self.assertRaises(policy.PolicyError):
+                kube.create(changed, dry_run=True)
+            changed = copy.deepcopy(original)
+            changed['spec']['testBoundary']['count'] = True
+            self.assertEqual(changed, original)
+            with self.assertRaises(policy.PolicyError):
+                kube.create(changed, dry_run=True)
+
+    def test_binding_delete_refuses_malformed_expected_identity_without_request(self):
+        kube = policy.Kubernetes(items())
+        binding = next(item for item in items() if item['kind'] == policy.BINDING)
+        with mock.patch.object(kube, 'json_request', side_effect=AssertionError('request')):
+            for malformed in ([], {}, False, None):
+                changed = copy.deepcopy(binding)
+                changed['metadata']['name'] = malformed
+                with self.subTest(identity=malformed), self.assertRaises(policy.PolicyError):
+                    kube.delete_binding({}, changed)
+
     def test_default_namespace_smoke_is_only_the_fixed_mutable_image_control(self):
         kube = policy.Kubernetes(items())
         control = policy.smoke_cases(IMAGE)[-1]['object']

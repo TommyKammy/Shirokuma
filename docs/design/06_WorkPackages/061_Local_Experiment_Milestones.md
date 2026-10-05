@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.290"
+version: "5.291"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: JSON-exact policy allowlist and malformed rollback identity (offline)
+
+WP-L2-POL-001: creation now refuses Python boolean/number equality aliases
+against a certified request; malformed create and binding-delete identities
+fail with `PolicyError` before scoped I/O. Synthetic certified numeric fields
+and malformed identities passed focused regressions; `make
+verify-local-experiment` passed. Dedicated Colima was observed stopped; no
+live API, unknown-request replay, retained data/backup mutation or GitHub
+write. The current generated inventory has no numeric/boolean field affected
+by the alias. This does not authenticate a producer or establish live strict
+admission, present AgentHouse usage (`null / NOT_MEASURED`) or operator
+acceptance. Roll back only the policy guards/tests if necessary, preserving
+historical intents. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: malformed policy smoke identity bounded (offline)
 

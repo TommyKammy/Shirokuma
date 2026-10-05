@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.150"
+version: "0.151"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: JSON-exact create and malformed rollback preflight (offline)
+
+The scoped Kubernetes create allowlist now compares canonical JSON rather
+than Python nested-dict equality: boolean/number aliases in a certified
+snapshot cannot pass as the original request. Malformed creation and rollback
+binding identities return `PolicyError` before a request, rather than leaking
+unhashable-key exceptions. Synthetic certified fields exercise both alias
+directions; today's generated inventory contains no numeric/boolean field
+subject to this particular alias. The policy suite and full local verifier
+passed. Dedicated Colima was observed stopped; no live API call, unknown
+request replay, retained intent/data or backup mutation. This does not
+authenticate certified inputs or establish live strict admission or operator
+acceptance. Revert only these guards and regressions if required, preserving
+saved intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: malformed dry-run identity fails closed (offline)
 
