@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.284"
+version: "5.285"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: explicit native projection digest and independent FinOps review (offline)
+
+WP-L2-POL-001: native rendering now requires a caller-supplied lowercase
+SHA-256 instead of silently reopening the source pathname when omitted. The
+actual 16-item projection, 125 focused native tests and `make
+verify-local-experiment` passed. Separately WP-L6-FIN-001 reviewed saved-history
+storage scope and Linux-only volume worker boundaries; 205 FinOps tests passed
+(seven Linux-only skips), with no reader or collection change. Dedicated
+Colima freshly observed stopped. No live API/admission, unknown-request replay,
+retained data/backup mutation or GitHub write. A supplied digest cannot
+authenticate source/decoder or establish atomicity, strict admission, current
+AgentHouse bytes (`null / NOT_MEASURED`) or operator acceptance. Revert only
+the scoped renderer/test if required; preserve prior reports/intents. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-05: bounded policy final-entry metadata and separate FinOps check (offline)
 

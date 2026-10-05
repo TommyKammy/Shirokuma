@@ -121,8 +121,12 @@ def source_policies(source_bytes: bytes | None = None) -> list[dict]:
     return result
 
 
-def render_native(source: list[dict], source_digest: str | None = None) -> dict:
-    digest = source_digest if source_digest is not None else hashlib.sha256(SOURCE.read_bytes()).hexdigest()
+def render_native(source: list[dict], source_digest: str) -> dict:
+    # The caller must bind the decoded objects to the same checked source bytes.
+    # A pathname fallback could annotate one projection with another file's hash.
+    if type(source_digest) is not str or re.fullmatch(r'[0-9a-f]{64}', source_digest) is None:
+        raise PolicyError('native projection requires a checked source digest')
+    digest = source_digest
     items = []
     expanded = []
     for original in source:

@@ -5,12 +5,27 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.144"
+version: "0.145"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: explicit digest at native projection boundary (offline)
+
+The renderer no longer falls back to hashing the source pathname when its
+caller omits a digest. It requires a lowercase SHA-256 supplied by the caller;
+the manifest comparison continues to pass the digest of the bounded source
+bytes that it decoded. A disposable constructor regression refuses missing or
+malformed digests without reopening the source and accepts an explicit digest.
+The real 16-item projection, 125 native policy tests and full local verifier
+passed. Dedicated Colima was freshly observed stopped; no live API, admission,
+unknown-request replay, retained intent, volume or backup mutation. An explicit
+digest is caller-provided, not producer authentication or atomic filesystem
+identity; strict admission and operator acceptance remain open. Roll back only
+the renderer signature/test if necessary; preserve saved evidence. Original
+Vault sync pending outside this checkout.
 
 ## 2026-10-05: final-entry metadata across bounded policy reads (offline)
 

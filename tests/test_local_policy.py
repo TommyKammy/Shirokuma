@@ -256,7 +256,7 @@ class ManifestTests(unittest.TestCase):
 
     def test_source_or_manifest_drift_fails_closed(self):
         source = policy.source_policies()
-        mutated = policy.render_native(source)
+        mutated = policy.render_native(source, hashlib.sha256(policy.source_snapshot()[0]).hexdigest())
         mutated['items'][0]['spec']['matchConstraints']['namespaceSelector'] = {}
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(policy, 'source_policies', return_value=source):
@@ -265,6 +265,18 @@ class ManifestTests(unittest.TestCase):
             with mock.patch.object(policy, 'MANIFEST', manifest):
                 with self.assertRaisesRegex(policy.PolicyError, 'exact repository'):
                     policy.load_manifest()
+
+    def test_renderer_requires_explicit_checked_digest_without_reopening_source(self):
+        source = policy.source_policies()
+        with mock.patch.object(policy.Path, 'read_bytes', side_effect=AssertionError('path reopened')):
+            with self.assertRaises(TypeError):
+                policy.render_native(source)
+            for invalid in (None, '', '0' * 63, 'G' * 64):
+                with self.subTest(invalid=invalid), self.assertRaises(policy.PolicyError):
+                    policy.render_native(source, invalid)
+            rendered = policy.render_native(source, 'a' * 64)
+        self.assertTrue(all(item['metadata']['annotations']['shirokuma.dev/source-sha256'] == 'a' * 64
+                            for item in rendered['items']))
 
     def test_manifest_cannot_hide_duplicate_equal_keys(self):
         source = policy.source_policies()
