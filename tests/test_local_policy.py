@@ -1175,7 +1175,16 @@ class ScopedResponseTests(unittest.TestCase):
                                                       {'name': 'data', 'emptyDir': {'sizeLimit': '2Gi'}}],
                                                   'containers': [
             {'name': 'trino', 'image': 'shirokuma.local/trino@sha256:' + 'a' * 64,
-               'imagePullPolicy': 'Never', 'volumeMounts': [
+               'imagePullPolicy': 'Never', 'env': [
+                   {'name': name, 'valueFrom': {'secretKeyRef': {'name': secret, 'key': key}}}
+                   for name, secret, key in (
+                       ('POLARIS_CLIENT_ID', 'polaris-root-credentials', 'client_id'),
+                       ('POLARIS_CLIENT_SECRET', 'polaris-root-credentials', 'client_secret'),
+                       ('POLARIS_REALM', 'polaris-root-credentials', 'realm'),
+                       ('AWS_REGION', 'seaweedfs-s3-application-credentials', 'S3_REGION'),
+                       ('AWS_ACCESS_KEY_ID', 'seaweedfs-s3-application-credentials', 'AWS_ACCESS_KEY_ID'),
+                       ('AWS_SECRET_ACCESS_KEY', 'seaweedfs-s3-application-credentials', 'AWS_SECRET_ACCESS_KEY'))],
+               'volumeMounts': [
                    {'name': 'config', 'mountPath': '/etc/trino', 'readOnly': True},
                    {'name': 'tmp', 'mountPath': '/tmp'},
                    {'name': 'data', 'mountPath': '/var/trino'}], 'securityContext': {
@@ -1216,6 +1225,36 @@ class ScopedResponseTests(unittest.TestCase):
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()
+        for env in ([{'name': 'AWS_ACCESS_KEY_ID', 'value': 'foreign'}],
+                    [{'name': 'AWS_ACCESS_KEY_ID', 'valueFrom': {'secretKeyRef':
+                        {'name': 'foreign', 'key': 'AWS_ACCESS_KEY_ID'}}}],
+                    [{'name': 'EXTRA', 'valueFrom': {'secretKeyRef':
+                        {'name': 'polaris-root-credentials', 'key': 'client_id'}}}],
+                    [{'name': 'AWS_ACCESS_KEY_ID', 'valueFrom': {'configMapKeyRef':
+                        {'name': 'foreign', 'key': 'AWS_ACCESS_KEY_ID'}}}]):
+            with self.subTest(env=env):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec']['containers'][0]['env'] = env
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        for change in ('missing', 'duplicate', 'literal'):
+            with self.subTest(env_change=change):
+                reply = copy.deepcopy(valid)
+                entries = reply['spec']['template']['spec']['containers'][0]['env']
+                if change == 'missing':
+                    entries.pop()
+                elif change == 'duplicate':
+                    entries[-1] = copy.deepcopy(entries[0])
+                else:
+                    entries[0]['valueFrom']['secretKeyRef']['optional'] = True
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['containers'][0]['env'].reverse()
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         client.json_request.return_value = valid
         for account in ('foreign-admin', None, 0, []):
             with self.subTest(legacy_service_account=account):

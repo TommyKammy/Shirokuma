@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.192"
+version: "0.193"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: smoke-image credential reference source (offline)
+
+The same-name Trino Deployment now must use exactly the six Secret key
+environment references declared by the local manifest before lending its
+image to a smoke candidate. Four redirected/literal fake responses passed
+before repair; after repair missing/duplicate/extra entries fail, reordered
+valid entries pass. Policy suite 166 and full local verifier passed. Colima
+was stopped; no Secret values were read or live admission attempted. This does
+not authenticate the cluster or grant operator acceptance. Roll back only the
+reader/test while retaining saved evidence. Original Vault sync pending.
 
 ## 2026-10-06: complete smoke volume reference (offline)
 

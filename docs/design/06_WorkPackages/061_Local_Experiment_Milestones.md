@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.337"
+version: "5.338"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed Trino credential references in smoke source (offline)
+
+WP-L2-POL-001: four synthetic same-name Deployment templates with a fixed
+digest image but redirected/extra/literal credential environment entries
+supplied the smoke image before repair. The image reader now requires exactly
+the six named Secret key references from the repository Trino manifest (order
+independent); missing, duplicate, extra and altered references fail closed.
+The 166-test focused policy suite and full local verifier passed, with its
+intentional fake Dagster failure diagnostic. Dedicated Colima remained stopped;
+no live API/admission, secrets read, retained data/backup change or GitHub
+write. This offline source check cannot authenticate the API, prove live strict
+admission or establish operator acceptance. Roll back the reader/test only,
+retaining saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed Trino smoke volumes and bound PV mode (offline)
 

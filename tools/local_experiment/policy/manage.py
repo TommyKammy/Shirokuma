@@ -600,9 +600,31 @@ class Kubernetes:
             # container can run another command, hook, or bulk environment
             # source. None of these fields occurs in the local Trino manifest.
             if any(field in containers[0] for field in (
-                    'command', 'args', 'workingDir', 'lifecycle', 'envFrom',
-                    'volumeDevices', 'stdin', 'stdinOnce', 'tty')):
+                     'command', 'args', 'workingDir', 'lifecycle', 'envFrom',
+                     'volumeDevices', 'stdin', 'stdinOnce', 'tty')):
                 raise PolicyError('smoke requires the local Trino container execution')
+            # The named image must not be borrowed from a template redirecting
+            # Trino's catalog credentials to literals or other references.
+            expected_env = {
+                'POLARIS_CLIENT_ID': ('polaris-root-credentials', 'client_id'),
+                'POLARIS_CLIENT_SECRET': ('polaris-root-credentials', 'client_secret'),
+                'POLARIS_REALM': ('polaris-root-credentials', 'realm'),
+                'AWS_REGION': ('seaweedfs-s3-application-credentials', 'S3_REGION'),
+                'AWS_ACCESS_KEY_ID': ('seaweedfs-s3-application-credentials', 'AWS_ACCESS_KEY_ID'),
+                'AWS_SECRET_ACCESS_KEY': ('seaweedfs-s3-application-credentials', 'AWS_SECRET_ACCESS_KEY'),
+            }
+            env = containers[0].get('env', [])
+            if (type(env) is not list or
+                    (len(env) != len(expected_env) or
+                     any(type(item) is not dict or set(item) != {'name', 'valueFrom'} or
+                         type(item.get('name')) is not str or
+                         item['name'] not in expected_env or
+                         item.get('valueFrom') != {'secretKeyRef': {
+                             'name': expected_env[item['name']][0],
+                             'key': expected_env[item['name']][1]}}
+                         for item in env) or
+                     {item['name'] for item in env} != set(expected_env))):
+                raise PolicyError('smoke requires the local Trino credential references')
             # A safe source is insufficient if it is mounted at an unexpected
             # location, writable over configuration, or through a subPath.
             mounts = containers[0].get('volumeMounts', [])
