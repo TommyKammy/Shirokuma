@@ -3261,6 +3261,7 @@ func TestLocalExperimentScopeRejectsLookalikeLoopbackEndpoints(t *testing.T) {
 	for _, endpoint := range []string{
 		"https://127.0.0.1.example:6443", "https://localhost.example:6443",
 		"https://localhost:6443@remote.example:6443", "https://127.0.0.1:6443@remote.example:6443",
+		"https://localhost%40remote.example:6443", "https://127.0.0.1%2Eexample:6443",
 		"https://LOCALHOST:6443", "https://[::1%25en0]:6443",
 		"https://127.0.0.1.:6443", "https://0177.0.0.1:6443",
 		"https://127.1:6443", "https://2130706433:6443",
@@ -3268,6 +3269,7 @@ func TestLocalExperimentScopeRejectsLookalikeLoopbackEndpoints(t *testing.T) {
 		"https://[::ffff:7f00:1]:6443", "https://[0:0:0:0:0:ffff:7f00:2]:6443",
 		"https://[::ffff:7f00:ffff]:6443", "https://[0:0:0:0:0:ffff:7f00:1]:6443",
 		"https://[::ffff:127.255.255.255]:6443",
+		"https://[::ffff:127.0.0.255]:6443", "https://[0:0:0:0:0:ffff:7f00:ff]:6443",
 		"https://[::1%25lo0]:6443", "https://[2001:db8::1]:6443",
 		"https://192.0.2.1:6443",
 	} {

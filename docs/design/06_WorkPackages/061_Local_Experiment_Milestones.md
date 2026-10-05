@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.237"
+version: "5.238"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent presence-only port and encoded endpoint controls (offline)
+
+WP-L2-POL-001: the existing fixed ServicePort guard rejects null-valued
+unsubmitted host routing keys and a `containerPort` key in fake successful
+replies; focused/full native policy tests (82) passed. Separately
+WP-L0-GITOPS-001: the unchanged doctor degrades two encoded authority
+lookalikes and two additional mapped-loopback endpoints; focused/full Go CLI
+tests and vet passed. Dedicated Colima was freshly observed stopped. No live
+API/Git inventory, reconciliation, request replay, retained data/backup
+mutation or GitHub write. Offline fixtures cannot authenticate producers,
+establish atomic inventory/full effective-object equality, clear strict
+admission or grant operator acceptance. Revert only the independent test
+extensions if necessary, preserving prior evidence. Original Vault sync
+remains pending outside checkout.
 
 ## 2026-10-05: ServicePort key boundary and independent endpoint authority (offline)
 

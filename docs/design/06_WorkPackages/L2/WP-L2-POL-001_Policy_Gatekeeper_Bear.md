@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.103"
+version: "0.104"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: ServicePort presence-only routing controls (offline)
+
+The existing ServicePort key guard also rejects unsubmitted `hostIP` and
+`hostPort` when their values are null, and an unsubmitted `containerPort` key;
+the independent fake-success negatives now pin this presence-only behavior.
+Focused and full native policy tests (82) passed. Dedicated Colima was observed
+stopped: no API dry-run, saved-request replay, retained data/backup change or
+GitHub write. Fake replies cannot authenticate a producer, prove complete
+effective-object equality, clear strict admission or grant operator acceptance.
+Revert only these test extensions if needed; preserve saved intents. Direct
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: fixed ServicePort reply key boundary (offline)
 

@@ -972,7 +972,9 @@ class SmokeTests(unittest.TestCase):
     def test_service_success_rejects_unsubmitted_port_routing_fields(self):
         # A fake successful ServicePort must not carry Pod-style host routing
         # fields or future unexamined keys while claiming the fixed port passed.
-        for field, value in (('hostIP', '0.0.0.0'), ('hostPort', 18080)):
+        for field, value in (('hostIP', '0.0.0.0'), ('hostPort', 18080),
+                             ('hostIP', None), ('hostPort', None),
+                             ('containerPort', 8080)):
             kube = FakeKubernetes(ready=True)
             reference = FakeKubernetes(ready=True)
             def changed(request):
