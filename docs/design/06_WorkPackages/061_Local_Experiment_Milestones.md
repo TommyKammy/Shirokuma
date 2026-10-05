@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.269"
+version: "5.270"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: strict source framing and independent manifest key boundary (offline)
+
+WP-L2-POL-001: Unicode whitespace between/around seven locally decoded JSON
+policy objects previously passed source inventory; only JSON ASCII whitespace
+is now permitted. Independently, duplicate equal manifest keys (literal or
+escaped) could pass exact projection equality; the manifest reader now refuses
+them before comparing. Both regressions failed before repair, while normal
+source/manifest controls pass. Focused policy 107 tests and full `make
+verify-local-experiment` passed. Colima was freshly observed stopped. No live
+API, dry-run, unknown-request replay, retained data/backup mutation or GitHub
+write. Offline checks do not authenticate producers, clear strict admission or
+grant operator acceptance. Roll back only scoped parsing guards/tests if the
+input contract changes; preserve historical evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-05: source framing and independent saved-key boundary (offline)
 

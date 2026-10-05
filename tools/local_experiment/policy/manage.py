@@ -83,17 +83,21 @@ def source_policies() -> list[dict]:
         return value
 
     remaining, result = value.stdout, []
+    json_whitespace = ' \t\r\n'
     decoder = json.JSONDecoder(object_pairs_hook=unique_keys, parse_constant=invalid_constant,
                                parse_float=finite_float)
     try:
-        while remaining.strip():
-            item, end = decoder.raw_decode(remaining.lstrip())
+        while remaining:
+            remaining = remaining.lstrip(json_whitespace)
+            if not remaining:
+                break
+            item, end = decoder.raw_decode(remaining)
             # Escape decoding can introduce lone surrogates in otherwise
             # UTF-8 transport; refuse them before projecting the source.
             json.dumps(item, ensure_ascii=False).encode('utf-8')
             result.append(item)
-            remaining = remaining.lstrip()[end:]
-            if remaining and not remaining[0].isspace():
+            remaining = remaining[end:]
+            if remaining and remaining[0] not in json_whitespace:
                 raise PolicyError('local source decoding requires separated JSON documents')
     except (ValueError, TypeError, RecursionError, UnicodeError) as exc:
         if isinstance(exc, PolicyError):
@@ -149,7 +153,20 @@ def render_native(source: list[dict]) -> dict:
 
 
 def load_manifest() -> list[dict]:
-    value = json.loads(MANIFEST.read_text())
+    def unique_keys(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise PolicyError('dedicated manifest contains duplicate keys')
+            value[key] = item
+        return value
+
+    try:
+        value = json.loads(MANIFEST.read_text(), object_pairs_hook=unique_keys)
+    except (OSError, ValueError, TypeError, RecursionError) as exc:
+        if isinstance(exc, PolicyError):
+            raise
+        raise PolicyError('dedicated manifest is not valid JSON') from None
     if value != render_native(source_policies()):
         raise PolicyError('dedicated manifest differs from the exact repository CEL projection')
     return value['items']

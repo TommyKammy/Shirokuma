@@ -103,7 +103,7 @@ class ManifestTests(unittest.TestCase):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
                    'spec': {}} for name in policy.BASE_NAMES]
         encoded = [json.dumps(item) for item in source]
-        for separator in ('', ','):
+        for separator in ('', ',', '\u00a0', '\u2028', '\u2003'):
             reply = SimpleNamespace(stdout=separator.join(encoded), stderr='', returncode=0)
             with self.subTest(separator=separator), mock.patch.object(
                     policy.subprocess, 'run', return_value=reply):
@@ -112,6 +112,14 @@ class ManifestTests(unittest.TestCase):
         reply = SimpleNamespace(stdout='\n'.join(encoded), stderr='', returncode=0)
         with mock.patch.object(policy.subprocess, 'run', return_value=reply):
             self.assertEqual(len(policy.source_policies()), len(source))
+        reply = SimpleNamespace(stdout=' \t\r\n'.join(encoded), stderr='', returncode=0)
+        with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+            self.assertEqual(len(policy.source_policies()), len(source))
+        for edge in ('\u00a0' + '\n'.join(encoded), '\n'.join(encoded) + '\u2028'):
+            reply = SimpleNamespace(stdout=edge, stderr='', returncode=0)
+            with mock.patch.object(policy.subprocess, 'run', return_value=reply):
+                with self.assertRaises(policy.PolicyError):
+                    policy.source_policies()
 
     def test_local_source_decoder_refuses_escaped_lone_surrogates(self):
         source = [{'kind': 'ValidatingPolicy', 'metadata': {'name': name},
@@ -226,6 +234,21 @@ class ManifestTests(unittest.TestCase):
              mock.patch.object(policy, 'source_policies', return_value=source):
             with self.assertRaisesRegex(policy.PolicyError, 'exact repository'):
                 policy.load_manifest()
+
+    def test_manifest_cannot_hide_duplicate_equal_keys(self):
+        source = policy.source_policies()
+        original = policy.MANIFEST.read_text()
+        # The ordinary JSON reader overwrites the first value with the second;
+        # structural equality alone must not certify an ambiguous file.
+        for altered in (original.replace('"kind": "List"', '"kind": "List", "kind": "List"', 1),
+                        original.replace('"kind": "List"', '"kind": "List", "k\\u0069nd": "List"', 1)):
+            with self.subTest(altered=altered[:100]):
+                self.assertNotEqual(altered, original)
+                self.assertEqual(json.loads(altered), json.loads(original))
+                with mock.patch.object(policy.MANIFEST.__class__, 'read_text', return_value=altered), \
+                     mock.patch.object(policy, 'source_policies', return_value=source):
+                    with self.assertRaises(policy.PolicyError):
+                        policy.load_manifest()
 
 
 class ActivationTests(unittest.TestCase):

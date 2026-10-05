@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.131"
+version: "0.132"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: strict source separators and manifest key identity (offline)
+
+The local source decoder accepted non-JSON Unicode whitespace between otherwise
+valid policy objects (or at either edge). Only JSON's four ASCII whitespace
+characters now separate documents; a mixed-ASCII separator control passes.
+Separately the dedicated native manifest reader could treat a repeated equal
+`kind` key (including an escaped alias) as an exact projection. It now refuses
+duplicate keys at any depth before comparing against the rendered source.
+Both negatives failed before repair. Focused policy 107 tests and full local
+verification passed. Dedicated Colima was observed stopped; no live API,
+activation, replay, retained data/backup mutation or GitHub write. This does
+not authenticate decoder/tool or source bytes, prove strict admission or grant
+operator acceptance. Roll back only either scoped decoder/manifest reader and
+its test if its actual input contract differs; preserve manifest and saved
+intents. Original Vault sync pending outside checkout.
 
 ## 2026-10-05: local decoder document framing (offline)
 
