@@ -5,12 +5,23 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.94"
+version: "0.95"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-05: independent saved-history BOM control (offline)
+
+The unchanged strict UTF-8 JSON reader rejects a BOM-prefixed saved two-report
+payload; the same reports without a BOM parse. The fixture forbids collection;
+203 FinOps tests passed (seven Linux-only skips), as did the local verifier.
+Dedicated Colima was observed stopped; no retained report, volume or backup
+mutation. Current AgentHouse usage remains `null / NOT_MEASURED`; synthetic
+saved input cannot authenticate a producer or grant operator acceptance.
+Rollback only the new regression; preserve saved reports. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-05: independent noncanonical saved UTF-8 control (offline)
 

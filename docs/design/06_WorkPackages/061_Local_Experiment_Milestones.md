@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.267"
+version: "5.268"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: independent policy key and saved-history BOM controls (offline)
+
+WP-L2-POL-001: an escaped duplicate nested key in an unexamined synthetic
+dry-run Pod reply fails the existing strict reader and halts the fake smoke;
+105 native policy tests passed. Separately WP-L6-FIN-001: BOM-prefixed saved
+history fails the unchanged UTF-8 JSON reader without collecting; a valid
+two-report control parses and 203 FinOps tests passed (seven Linux-only skips).
+`make verify-local-experiment` passed. Dedicated Colima was freshly observed
+stopped; no live API, request replay, collection, retained data/backup mutation
+or GitHub write. Offline inputs do not authenticate producers, prove strict
+admission, measure current AgentHouse usage (`null / NOT_MEASURED`) or grant
+operator acceptance. Revert only either independent regression if needed;
+preserve historical intents and reports. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-05: dry-run Unicode guard and independent saved UTF-8 control (offline)
 

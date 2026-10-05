@@ -245,6 +245,13 @@ class HistoryTests(unittest.TestCase):
                 H.parse(forged)
             self.assertEqual(len(H.parse(valid)), 2)
 
+    def test_saved_history_rejects_utf8_bom_without_collection(self):
+        valid = encoded([report(), report(processes())])
+        with patch('tools.local_experiment.finops.run.collect', side_effect=AssertionError('collection')):
+            with self.assertRaises(H.HistoryError):
+                H.parse(b'\xef\xbb\xbf' + valid)
+            self.assertEqual(len(H.parse(valid)), 2)
+
     def test_escaped_lone_surrogate_in_saved_model_is_refused(self):
         valid = encoded([report(), report(processes())])
         self.assertIn(b'"model_name": "', valid)

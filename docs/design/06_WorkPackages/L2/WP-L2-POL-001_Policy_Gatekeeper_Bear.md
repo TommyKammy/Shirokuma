@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.129"
+version: "0.130"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: nested escaped dry-run key ambiguity (offline)
+
+An independent synthetic successful Pod reply with an unexamined nested key
+spelled both literally and with a JSON escape is rejected by the existing
+duplicate-key decoder; a distinct-key control passes. The full fake smoke
+halts at the first case; 105 native policy tests and the local verifier passed.
+Dedicated Colima was observed stopped. No live dry-run, replay, data/backup
+mutation or GitHub write. This does not authenticate a response producer,
+establish strict admission or grant operator acceptance. Revert only the new
+regression if needed; preserve saved intents. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-05: dry-run success JSON Unicode boundary (offline)
 
