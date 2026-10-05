@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.300"
+version: "5.301"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: persisted policy identity and independent FinOps check (offline)
+
+WP-L2-POL-001: matching policy/binding replies without valid persisted UID or
+resourceVersion previously certified ready. A negative failed before repair;
+activation/status now require persistent identity for existing and newly
+created objects, not for server dry-runs. Focused policy 150 tests passed.
+The first full verifier exposed a Gatekeeper fake persisted-object fixture
+without resourceVersion; updating that fixture and rerunning the verifier
+passed. Independently WP-L6-FIN-001's unchanged 207 tests passed (seven
+Linux-only skips), without collection. Dedicated Colima was observed stopped;
+no live API, retained data/backup mutation, unknown-request replay or GitHub
+write. This does not prove API authenticity, live admission or AgentHouse
+volume usage (`null / NOT_MEASURED`), nor operator acceptance. Revert only the
+policy guard/tests if necessary; preserve historical intents/reports. Original
+Vault sync pending outside this checkout.
 
 ## 2026-10-06: terminating policy readiness and independent FinOps check (offline)
 

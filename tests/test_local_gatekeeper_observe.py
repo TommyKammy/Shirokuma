@@ -23,7 +23,8 @@ class FakeKube:
         for item in G.MANAGE.load_manifest():
             value = copy.deepcopy(item)
             key = (item['kind'], item['metadata']['name'])
-            value['metadata'].update(uid=str(uuid.uuid5(uuid.NAMESPACE_DNS, ':'.join(key))), generation=1)
+            value['metadata'].update(uid=str(uuid.uuid5(uuid.NAMESPACE_DNS, ':'.join(key))),
+                                     resourceVersion='12', generation=1)
             if item['kind'] == G.MANAGE.POLICY:
                 value['status'] = {'observedGeneration': 1, 'typeChecking': {}}
             self.items[key] = value

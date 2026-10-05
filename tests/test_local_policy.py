@@ -730,6 +730,19 @@ class ManifestTests(unittest.TestCase):
 
 
 class ActivationTests(unittest.TestCase):
+    def test_ready_inventory_requires_persistent_object_identity(self):
+        for kind in (policy.POLICY, policy.BINDING):
+            for field, value in (('uid', None), ('uid', ''), ('resourceVersion', None),
+                                 ('resourceVersion', 'not-a-version')):
+                with self.subTest(kind=kind, field=field, value=value):
+                    kube = FakeKubernetes(ready=True)
+                    kube.objects[(kind, policy.NAMES[-1])]['metadata'][field] = value
+                    with self.assertRaises(policy.PolicyError):
+                        policy.inventory_status(kube, items())
+                    with self.assertRaises(policy.PolicyError):
+                        policy.apply_policies(kube, items())
+                    self.assertEqual(kube.calls, [])
+
     def test_terminating_policy_or_binding_cannot_certify_ready_inventory(self):
         for kind in (policy.POLICY, policy.BINDING):
             with self.subTest(kind=kind):

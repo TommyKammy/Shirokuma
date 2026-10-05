@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.160"
+version: "0.161"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: persisted identity required for policy readiness (offline)
+
+An otherwise matching synthetic policy or binding with missing/invalid UID or
+resourceVersion previously passed direct status and could make activation ready.
+The negative failed before repair. Existing and newly created objects now need
+validated persistent identity before readiness or a later write; dry-run replies
+remain spec/ownership checked without requiring persistence. The Gatekeeper
+observer's persisted-object fixture was updated to include a resource version;
+the first full verifier exposed that fixture gap, and the rerun passed. Focused
+policy 150 tests passed. Independently, the unchanged FinOps suite passed 207
+tests (seven Linux-only skips). The dedicated Colima profile was observed
+stopped; no live API, unknown-request replay, retained data or backup changes.
+This is not API authentication, atomic activation, live strict admission or
+operator acceptance. Roll back only this guard and its tests if needed; keep
+saved intents. Original Vault sync pending outside the approved checkout.
 
 ## 2026-10-06: terminating resources cannot certify readiness (offline)
 

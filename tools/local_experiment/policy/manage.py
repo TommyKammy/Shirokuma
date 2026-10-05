@@ -339,12 +339,12 @@ def assert_owned(current: dict, expected: dict) -> None:
         raise PolicyError('existing dedicated policy identity, owner or content differs; refusing overwrite')
 
 
-def binding_delete_preconditions(current: dict) -> tuple[str, str]:
+def persistent_identity(current: dict) -> tuple[str, str]:
     metadata = current['metadata']
     uid, version = metadata.get('uid'), metadata.get('resourceVersion')
     if (type(uid) is not str or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', uid)
             or type(version) is not str or not re.fullmatch(r'[0-9]{1,128}', version)):
-        raise PolicyError('binding deletion requires a current UID and resource version')
+        raise PolicyError('dedicated resource requires a current UID and resource version')
     return uid, version
 
 
@@ -491,7 +491,7 @@ class Kubernetes:
         if expected['kind'] != BINDING or not identical:
             raise PolicyError('rollback only removes dedicated bindings')
         assert_owned(current, expected)
-        uid, version = binding_delete_preconditions(current)
+        uid, version = persistent_identity(current)
         path = '/apis/' + API + '/' + RESOURCES[BINDING] + '/' + expected['metadata']['name']
         options = {'apiVersion': 'v1', 'kind': 'DeleteOptions',
                    'preconditions': {'uid': uid, 'resourceVersion': version}}
@@ -592,6 +592,9 @@ def inventory_status(kube, items: list[dict]) -> dict:
         row = {'kind': expected['kind'], 'name': expected['metadata']['name'], 'present': current is not None}
         if current is not None:
             assert_owned(current, expected)
+            # A ready inventory describes persisted API objects, not a
+            # dry-run-shaped or synthetic reply with no stable identity.
+            persistent_identity(current)
             row['uid'] = current['metadata'].get('uid')
             if expected['kind'] == POLICY:
                 row['type_check'] = typecheck(current)
@@ -609,6 +612,7 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
         current = kube.get(expected['kind'], expected['metadata']['name'])
         if current is not None:
             assert_owned(current, expected)
+            persistent_identity(current)
         else:
             missing.append(expected)
     for expected in missing:
@@ -624,9 +628,11 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
                 missing.append(expected)
             else:
                 assert_owned(current, expected)
+                persistent_identity(current)
         for expected in missing:
             current = kube.create(expected)
             assert_owned(current, expected)
+            persistent_identity(current)
             record({'action': 'created', 'kind': kind, 'name': expected['metadata']['name'], 'uid': current['metadata'].get('uid')})
         if kind == POLICY:
             deadline = clock() + 45
@@ -637,6 +643,7 @@ def apply_policies(kube, items: list[dict], *, record=lambda event: None, clock=
                     if current is None:
                         raise PolicyError('policy disappeared before binding activation')
                     assert_owned(current, expected)
+                    persistent_identity(current)
                     states.append(typecheck(current))
                 if 'warnings' in states:
                     raise PolicyError('policy type checking reported warnings; bindings were not activated')
@@ -663,7 +670,7 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
         if current is not None:
             assert_owned(current, expected)
             # Validate all atomic-delete inputs before deleting any binding.
-            preflight[expected['metadata']['name']] = binding_delete_preconditions(current)
+            preflight[expected['metadata']['name']] = persistent_identity(current)
         else:
             preflight[expected['metadata']['name']] = None
     # Recheck the whole inventory before the first mutation, so drift in a
@@ -673,14 +680,14 @@ def rollback_bindings(kube, items: list[dict], *, record=lambda event: None, clo
         current = kube.get(BINDING, expected['metadata']['name'])
         if current is not None:
             assert_owned(current, expected)
-        identity = binding_delete_preconditions(current) if current is not None else None
+        identity = persistent_identity(current) if current is not None else None
         if identity != preflight[expected['metadata']['name']]:
             raise PolicyError('binding changed since rollback preflight')
     for expected in bindings:
         current = kube.get(BINDING, expected['metadata']['name'])
         if current is not None:
             assert_owned(current, expected)
-        identity = binding_delete_preconditions(current) if current is not None else None
+        identity = persistent_identity(current) if current is not None else None
         if identity != preflight[expected['metadata']['name']]:
             raise PolicyError('binding changed since rollback preflight')
         if current is None:
