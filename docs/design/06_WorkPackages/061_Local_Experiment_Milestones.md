@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.278"
+version: "5.279"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: bounded source snapshot and identity (offline)
+
+WP-L2-POL-001: the native projection check now refuses linked, nonregular or
+oversized final source entries and same-byte source replacement across local
+decoding. The real source and manifest, 117 native policy, 22 Gatekeeper,
+61 candidate-observer and 23 policy CLI tests pass; the full
+`make verify-local-experiment`, design-context, secret scan and diff check pass.
+Independently WP-L6-FIN-001 reviewed saved-history selection, digest and
+per-report storage scope without changing the reader; 205 FinOps tests passed
+(seven Linux-only skips).
+Dedicated Colima was freshly observed stopped; no live admission, unknown
+request replay, retained data/backup mutation or GitHub write. Path ancestor
+links, ABA races and decoder authenticity are not established by these offline
+checks; strict admission/operator acceptance remain open. Revert only the
+source reader and regressions if needed, preserving saved intents. Original
+Vault synchronization pending outside this checkout.
 
 ## 2026-10-05: independent FinOps saved integer spelling (offline)
 

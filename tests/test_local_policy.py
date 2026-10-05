@@ -304,6 +304,48 @@ class ManifestTests(unittest.TestCase):
                 with self.assertRaisesRegex(policy.PolicyError, 'changed during projection'):
                     policy.load_manifest_snapshot()
 
+    def test_manifest_refuses_same_bytes_source_replacement_during_decode(self):
+        original = policy.SOURCE.read_bytes()
+        decoded = policy.source_policies()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, replacement = root / 'source.yaml', root / 'replacement.yaml'
+            source.write_bytes(original)
+            replacement.write_bytes(original)
+
+            def replace_after_first_read():
+                os.replace(replacement, source)
+                return decoded
+
+            with mock.patch.object(policy, 'SOURCE', source), \
+                 mock.patch.object(policy, 'source_policies', side_effect=replace_after_first_read):
+                with self.assertRaisesRegex(policy.PolicyError, 'changed during projection'):
+                    policy.load_manifest_snapshot()
+
+    def test_manifest_refuses_unbounded_or_linked_source_before_decode(self):
+        original = policy.SOURCE.read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'source.yaml'
+            target = root / 'target.yaml'
+            target.write_bytes(original)
+            source.symlink_to(target)
+            for replacement in ('symlink', 'fifo', 'oversize'):
+                with self.subTest(replacement=replacement):
+                    if replacement != 'symlink':
+                        source.unlink()
+                        if replacement == 'fifo':
+                            os.mkfifo(source)
+                        else:
+                            source.write_bytes(b'x' * (256 * 1024 + 1))
+                    with mock.patch.object(policy, 'SOURCE', source), \
+                         mock.patch.object(policy, 'source_policies', side_effect=AssertionError('decoder reached')):
+                        with self.assertRaises(policy.PolicyError):
+                            policy.load_manifest_snapshot()
+            source.write_bytes(original)
+            with mock.patch.object(policy, 'SOURCE', source):
+                self.assertEqual(policy.source_snapshot()[0], original)
+
     def test_manifest_refuses_symlink_and_oversize_before_projection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

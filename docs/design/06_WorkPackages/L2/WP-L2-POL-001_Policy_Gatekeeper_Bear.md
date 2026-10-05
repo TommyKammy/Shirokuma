@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.139"
+version: "0.140"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: bounded source snapshot and same-byte replacement (offline)
+
+The native exact-projection check formerly read unbounded source path bytes
+before and after local decoding. It now requires a <=256 KiB regular source,
+opens the final component without following links or waiting on a FIFO, checks
+descriptor stability and the current entry, and compares both bytes and file
+identity across decoding. Disposable symlink, FIFO, oversize and same-byte
+replacement negatives fail before certification; the actual source/manifest
+projection, 117 native tests, 22 Gatekeeper tests, 61 candidate-observer tests,
+23 policy CLI tests and `make verify-local-experiment` pass. This guards local source reads, not
+the kubectl decoder's independent pathname read: parent links, ABA replacement,
+tool authenticity and live admission remain unproved. Colima remained stopped;
+no saved intent, retained data or backup was modified. Roll back only the source
+reader and its tests if the source contract changes; preserve prior evidence.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-05: source projection digest consistency (offline)
 

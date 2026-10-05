@@ -153,6 +153,30 @@ def render_native(source: list[dict], source_digest: str | None = None) -> dict:
     return {'apiVersion': 'v1', 'kind': 'List', 'items': items}
 
 
+def source_snapshot() -> tuple[bytes, tuple[int, int]]:
+    """Read bounded source bytes and opened-file identity without following a final link."""
+    try:
+        fd = os.open(SOURCE, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            before = os.fstat(fd)
+            if not stat.S_ISREG(before.st_mode) or before.st_size > 256 * 1024:
+                raise PolicyError('repository policy source is not a bounded regular file')
+            raw = os.read(fd, 256 * 1024 + 1)
+            after = os.fstat(fd)
+            entry = os.stat(SOURCE, follow_symlinks=False)
+            if (len(raw) > 256 * 1024 or len(raw) != before.st_size or
+                    (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
+                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) or
+                    not stat.S_ISREG(entry.st_mode) or
+                    (after.st_dev, after.st_ino) != (entry.st_dev, entry.st_ino)):
+                raise PolicyError('repository policy source changed during projection')
+            return raw, (after.st_dev, after.st_ino)
+        finally:
+            os.close(fd)
+    except OSError:
+        raise PolicyError('repository policy source could not be read') from None
+
+
 def load_manifest_snapshot() -> tuple[list[dict], str]:
     def unique_keys(pairs):
         value = {}
@@ -225,13 +249,10 @@ def load_manifest_snapshot() -> tuple[list[dict], str]:
         raise PolicyError('dedicated manifest is not valid JSON') from None
     # kubectl decodes the source by pathname. Do not bind its projected items
     # to a digest obtained from a different version of that pathname.
-    try:
-        source_before = SOURCE.read_bytes()
-        source = source_policies()
-        if SOURCE.read_bytes() != source_before:
-            raise PolicyError('repository policy source changed during projection')
-    except OSError:
-        raise PolicyError('repository policy source could not be read') from None
+    source_before, source_identity = source_snapshot()
+    source = source_policies()
+    if source_snapshot() != (source_before, source_identity):
+        raise PolicyError('repository policy source changed during projection')
     if value != render_native(source, hashlib.sha256(source_before).hexdigest()):
         raise PolicyError('dedicated manifest differs from the exact repository CEL projection')
     return value['items'], hashlib.sha256(raw).hexdigest()
