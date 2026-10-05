@@ -216,18 +216,11 @@ class GatekeeperObserver:
                 expected = case['deny_policy']
                 if expected:
                     matched = (type(result.returncode) is int and result.returncode > 0 and
+                               result.stdout == '' and
                                MANAGE.own_denial(result.stderr, expected, messages[expected]))
                     admission = 'denied' if matched else 'unknown'
                 else:
-                    try:
-                        value = json.loads(result.stdout)
-                    except (ValueError, TypeError):
-                        value = {}
-                    matched = (type(result.returncode) is int and result.returncode == 0 and
-                               isinstance(value, dict)
-                               and value.get('kind') == case['object']['kind']
-                               and value.get('metadata', {}).get('namespace') == case['object']['metadata']['namespace']
-                               and value.get('metadata', {}).get('name') == case['object']['metadata']['name'])
+                    matched = MANAGE.smoke_allowed(result, case['object'])
                     admission = 'allowed' if matched else 'unknown'
                 self.rows.append({'candidate_id': f'c{i:02}', 'admission': admission,
                                   'matched_host_expectation': matched, 'server_dry_run': True,

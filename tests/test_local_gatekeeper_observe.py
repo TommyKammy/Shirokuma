@@ -184,6 +184,39 @@ class GatekeeperTests(unittest.TestCase):
         self.assertFalse(caught.exception.receipt['authority_granted'])
         self.assertEqual(caught.exception.receipt['results'][0]['admission'], 'unknown')
 
+    def test_allowed_reply_requires_native_smoke_scope_not_just_name(self):
+        def changed(value):
+            reply = copy.deepcopy(value)
+            reply['spec']['containers'][0]['securityContext'] = {'privileged': True}
+            return SimpleNamespace(returncode=0, stdout=json.dumps(reply), stderr='')
+        for override in (changed,
+                         lambda value: SimpleNamespace(returncode=0, stdout=json.dumps(value), stderr='warning'),
+                         lambda value: SimpleNamespace(returncode=0, stdout=json.dumps(value) + '\n' + json.dumps(value), stderr='')):
+            kube = FakeKube()
+            observer = G.GatekeeperObserver(kube)
+            observer.observe()
+            kube.override = override
+            with self.subTest(override=override), self.assertRaises(G.GatekeeperError) as caught:
+                observer.verify()
+            self.assertEqual(caught.exception.receipt['results'][0]['admission'], 'unknown')
+            self.assertEqual(len(kube.requests), 1)
+
+    def test_matching_denial_with_stdout_is_unknown(self):
+        kube = FakeKube()
+        observer = G.GatekeeperObserver(kube)
+        observer.observe()
+        original = kube.smoke_request
+        def contaminated(value):
+            response = original(value)
+            if len(kube.requests) == 3:
+                return SimpleNamespace(returncode=response.returncode, stdout='unexpected', stderr=response.stderr)
+            return response
+        kube.smoke_request = contaminated
+        with self.assertRaises(G.GatekeeperError) as caught:
+            observer.verify()
+        self.assertEqual(caught.exception.receipt['results'][-1]['admission'], 'unknown')
+        self.assertEqual(len(kube.requests), 3)
+
     def test_signalled_denial_is_unknown_even_with_matching_stderr(self):
         for exit_code in (-9, None, True):
             kube = FakeKube()

@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-05
-version: "5.247"
+version: "5.248"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-05: advisory native success alignment and separate FinOps check (offline)
+
+WP-L2-POL-001: Gatekeeper previously classified a fake named Pod as allowed
+even with an injected privileged container. It now shares the native smoke
+success comparator and refuses denial output mixed with stdout. Four fake
+negative classes fail closed; focused Gatekeeper 18 and native policy 90 tests
+and `make verify-local-experiment` passed. Independently WP-L6-FIN-001's
+offline FinOps suite passed 194 tests (seven Linux-only skips), without a reader
+change or collection. Colima was observed stopped. No live API, saved-request
+replay, retained data/backup mutation or GitHub write. Neither synthetic
+responses nor saved-report fixtures authenticate producers, establish present
+usage, clear strict admission or grant operator acceptance. Roll back only the
+policy comparator/observer/test change if needed; preserve historical intents
+and reports. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: typed native success exit status (offline)
 

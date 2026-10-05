@@ -5,12 +5,28 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.112"
+version: "0.113"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-05: Gatekeeper shares native success evidence (offline)
+
+The advisory observer accepted a fake allowed Pod reply with the right name
+and namespace but an added privileged container, whereas native smoke rejected
+it. Gatekeeper now calls the same fixed-corpus success comparator as native
+smoke and requires empty stdout for a denial. Fake changed-spec, warning,
+multiple-document success and denial-with-stdout responses stop at the affected
+candidate with unknown admission; the full 15-case positive path still passes.
+Focused Gatekeeper 18 and native policy 90 tests, plus
+`make verify-local-experiment` passed. Dedicated Colima was freshly observed
+stopped; no live API, saved-request replay, policy mutation or retained
+data/backup change. These fixtures do not authenticate the producer, prove
+actual API defaulting, clear strict admission or grant operator acceptance.
+Rollback is limited to the shared comparator/observer and tests; preserve
+saved intents and historical evidence. Original Vault sync remains pending.
 
 ## 2026-10-05: typed success exit status (offline)
 

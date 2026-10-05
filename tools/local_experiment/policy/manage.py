@@ -694,6 +694,25 @@ def smoke_dry_run_identity(value: dict, metadata: dict) -> bool:
             metadata.get('managedFields') in (None, []))
 
 
+def smoke_allowed(response, submitted: dict) -> bool:
+    """Share the fixed-corpus success check with the advisory observer."""
+    value = smoke_success_object(response)
+    metadata = value.get('metadata')
+    return (type(metadata) is dict and
+            smoke_dry_run_identity(value, metadata) and
+            value.get('apiVersion') == submitted['apiVersion'] and
+            value.get('kind') == submitted['kind'] and
+            metadata.get('namespace') == submitted['metadata']['namespace'] and
+            metadata.get('name') == submitted['metadata']['name'] and
+            type(metadata.get('labels')) is dict and
+            metadata['labels'] == submitted['metadata']['labels'] and
+            metadata.get('annotations', {}) == {} and
+            type(metadata.get('annotations', {})) is dict and
+            metadata.get('finalizers', []) == [] and
+            type(metadata.get('finalizers', [])) is list and
+            smoke_success_scope(value, submitted))
+
+
 def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
     if not inventory_status(kube, items)['ready']:
         raise PolicyError('smoke requires all dedicated policies and bindings to be ready')
@@ -710,22 +729,7 @@ def smoke(kube, items: list[dict], *, record=lambda event: None) -> dict:
                        response.stdout == '' and
                        own_denial(response.stderr, denied, messages[denied]))
         else:
-            value = smoke_success_object(response)
-            metadata = value.get('metadata')
-            passed = (type(response.returncode) is int and response.returncode == 0 and
-                       type(metadata) is dict and
-                      smoke_dry_run_identity(value, metadata) and
-                      value.get('apiVersion') == case['object']['apiVersion'] and
-                      value.get('kind') == case['object']['kind'] and
-                       metadata.get('namespace') == case['object']['metadata']['namespace'] and
-                       metadata.get('name') == case['object']['metadata']['name'] and
-                       type(metadata.get('labels')) is dict and
-                        metadata['labels'] == case['object']['metadata']['labels'] and
-                       metadata.get('annotations', {}) == {} and
-                       type(metadata.get('annotations', {})) is dict and
-                       metadata.get('finalizers', []) == [] and
-                       type(metadata.get('finalizers', [])) is list and
-                       smoke_success_scope(value, case['object']))
+            passed = smoke_allowed(response, case['object'])
         row = {'case': case['case'], 'result': 'passed' if passed else 'failed',
                'expected_policy': denied, 'server_dry_run': True,
                'namespace': case['object']['metadata']['namespace'],
