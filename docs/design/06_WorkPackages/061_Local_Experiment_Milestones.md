@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.364"
+version: "5.365"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: unambiguous PVC Pod references and bounded Trino scratch source (offline)
+
+WP-L6-FIN-001 refuses duplicate non-claim volume names and duplicate mount
+destinations on fixed PVC Pods (four negative cases failed before repair).
+Independently, WP-L2-POL-001 no longer lends the fixed smoke image from a Trino
+template omitting either scratch emptyDir size limit (two negatives failed
+before repair). Focused FinOps 251 (seven Linux-only skips) and policy 166
+passed. Dedicated Colima was observed stopped; no live API/admission, retained
+data/backup mutation, unknown-request replay or AgentHouse volume measurement
+(`null / NOT_MEASURED`). These fixture-only source guards do not authenticate
+producers or confer operator acceptance. Restore only the scoped guards/tests
+if required, retaining saved records. Original Vault sync pending outside
+checkout.
+
+The final `make verify-local-experiment`, `make verify-design-context`, scoped
+secret scanner and `git diff --check` passed; the Dagster fake-worker failure
+printed during the full verifier is an expected negative test. An initial
+attempt to run nonexistent `make secret-scan` exited 2; the repository's
+actual `scripts/verify_supply_chain.py scan-secrets --repo .` exited 0.
 
 ## 2026-10-06: exclusive claim source and fixed Trino Pod OS (offline)
 

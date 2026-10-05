@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.208"
+version: "0.209"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed Trino scratch budget in image source (offline)
+
+The fixed smoke image source previously accepted the same-image Trino template
+with either scratch emptyDir lacking its manifest size limit. Two negative
+fixtures failed before repair; both `tmp` and `data` now require their exact
+fixed `sizeLimit`. Focused policy 166 cases passed. This constrains image
+source selection, not live admission, runtime disk enforcement, source
+authenticity or operator acceptance. No VM start, API request, retained data/
+backup change or unknown-request replay. Restore only the scoped guard/test
+if needed; preserve saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed smoke source refuses Pod OS override (offline)
 

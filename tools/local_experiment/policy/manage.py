@@ -607,10 +607,8 @@ class Kubernetes:
                           for volume in volumes) or
                       any('emptyDir' in volume and (
                           volume['name'] not in {'tmp', 'data'} or
-                          set(volume['emptyDir']) - {'sizeLimit'} or
-                          ('sizeLimit' in volume['emptyDir'] and
-                           volume['emptyDir']['sizeLimit'] !=
-                           {'tmp': '1Gi', 'data': '2Gi'}[volume['name']]))
+                          volume['emptyDir'] != {'sizeLimit':
+                              {'tmp': '1Gi', 'data': '2Gi'}[volume['name']]})
                           for volume in volumes)):
                 raise PolicyError('smoke requires local config or ephemeral volumes')
             pod_security = pod_spec.get('securityContext')

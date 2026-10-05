@@ -133,6 +133,12 @@ def _snapshot(component, workload, pods, replica=None):
             type(volumes) is list and len(volumes) <= 64)
     mounts = containers[0].get('volumeMounts', [])
     require(type(mounts) is list and len(mounts) <= 64 and all(type(m) is dict for m in mounts))
+    # A fixed reference must have an unambiguous Pod volume name and directory
+    # destination, including the non-PVC volumes in the same container.
+    require(all(type(v) is dict and type(v.get('name')) is str for v in volumes) and
+            len({v['name'] for v in volumes}) == len(volumes) and
+            all(type(m.get('mountPath')) is str for m in mounts) and
+            len({m['mountPath'] for m in mounts}) == len(mounts))
     claims = [v for v in volumes if type(v) is dict and 'persistentVolumeClaim' in v]
     if kind == 'Deployment':
         # Generic ephemeral volumes provision PVCs even without an explicit

@@ -1525,11 +1525,16 @@ class ScopedResponseTests(unittest.TestCase):
                 client.json_request.return_value = reply
                 with self.assertRaises(policy.PolicyError):
                     client.image()
+        for volume_index in (1, 2):
+            reply = copy.deepcopy(valid)
+            reply['spec']['template']['spec']['volumes'][volume_index]['emptyDir'] = {}
+            client.json_request.return_value = reply
+            with self.subTest(unbounded_scratch=volume_index), self.assertRaises(policy.PolicyError):
+                client.image()
+        client.json_request.return_value = valid
         reply = copy.deepcopy(valid)
-        reply['spec']['template']['spec']['volumes'][2]['emptyDir'] = {}
-        client.json_request.return_value = reply
-        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         reply['spec']['template']['spec']['containers'][0]['volumeMounts'][0]['name'] = []
+        client.json_request.return_value = reply
         with self.assertRaises(policy.PolicyError):
             client.image()
         for field, value in (('runAsNonRoot', False), ('runAsNonRoot', 1),

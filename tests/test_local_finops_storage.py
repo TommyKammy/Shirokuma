@@ -47,6 +47,17 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_fixed_pvc_rejects_ambiguous_pod_volume_and_mount_names(self):
+        for component in ('seaweedfs', 'polaris-postgresql'):
+            for change in (
+                lambda spec: spec['volumes'].extend([{'name': 'scratch', 'emptyDir': {}}, {'name': 'scratch', 'emptyDir': {}}]),
+                lambda spec: spec['containers'][0]['volumeMounts'].append({'name': 'scratch', 'mountPath': S.TARGETS[component][6]}),
+            ):
+                data = deepcopy(objects(component))
+                change(data[1][0]['spec'])
+                with self.subTest(component=component, change=change), self.assertRaises(S.StorageError):
+                    projected(component, data)
+
     def test_second_read_cannot_rename_deployment_chain_with_same_uids(self):
         for index in (1, 2):
             first = objects('trino')

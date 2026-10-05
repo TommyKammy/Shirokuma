@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.171"
+version: "0.172"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: ambiguous Pod volume/destination refusal (offline)
+
+Both fixed PVC rows previously accepted two non-claim volumes with the same
+name, or a non-claim mount at the claim's directory destination. Four negative
+fixtures failed before repair; volume names and primary-container mount paths
+must now be unique across the Pod snapshot. Focused FinOps 251 cases passed
+(seven Linux-only skips). This is a structural guard, not live mount health,
+source authentication, byte measurement or operator acceptance. Dedicated
+Colima stayed stopped; no retained report/volume/backup changed. AgentHouse
+usage remains `null / NOT_MEASURED`. Restore only the guard/test if needed;
+keep saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: exclusive fixed claim volume source (offline)
 
