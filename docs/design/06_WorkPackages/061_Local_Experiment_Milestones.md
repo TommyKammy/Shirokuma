@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.334"
+version: "5.335"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: smoke-source DNS/placement filter and independent FinOps check (offline)
+
+WP-L2-POL-001: five fake Deployment DNS/placement overrides supplied the
+fixed smoke image before repair; after the narrow guard, explicit ClusterFirst
+and the existing template pass (166 policy tests). Separately WP-L6-FIN-001's
+unchanged 223-test suite passed (seven Linux-only skips); the broader
+`make verify-local-experiment` passed, including the intentionally failing
+fake Dagster worker diagnostic. Design-context, repository secret scan and
+`git diff --check` passed. An attempted `make secret-scan` had no such target;
+the actual `scripts/verify_supply_chain.py scan-secrets --repo .` passed.
+Dedicated Colima was freshly observed stopped; no live API, Docker collection,
+unknown-request replay, retained data/volume/report/backup change or GitHub
+write. Offline guards do not authenticate sources, prove live strict admission,
+measure AgentHouse (`null / NOT_MEASURED`) or confer operator acceptance.
+Rollback only the policy reader/test, preserving saved evidence. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: security-context extensions and filesystem PVC references (offline)
 

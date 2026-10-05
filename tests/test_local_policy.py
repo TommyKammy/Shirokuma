@@ -1181,6 +1181,23 @@ class ScopedResponseTests(unittest.TestCase):
         client.json_request.return_value = with_groups
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         client.json_request.return_value = valid
+        for override in ({'hostAliases': [{'ip': '127.0.0.1', 'hostnames': ['metadata']}]},
+                         {'dnsConfig': {'nameservers': ['8.8.8.8']}},
+                         {'dnsPolicy': 'Default'},
+                         {'runtimeClassName': 'foreign-runtime'},
+                         {'nodeName': 'foreign-node'}):
+            with self.subTest(pod_override=override):
+                reply = copy.deepcopy(valid)
+                reply['spec']['template']['spec'].update(override)
+                client.json_request.return_value = reply
+                with self.assertRaises(policy.PolicyError):
+                    client.image()
+        client.json_request.return_value = valid
+        reply = copy.deepcopy(valid)
+        reply['spec']['template']['spec']['dnsPolicy'] = 'ClusterFirst'
+        client.json_request.return_value = reply
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        client.json_request.return_value = valid
         for account in ('foreign-admin', None, 0, []):
             with self.subTest(legacy_service_account=account):
                 reply = copy.deepcopy(valid)

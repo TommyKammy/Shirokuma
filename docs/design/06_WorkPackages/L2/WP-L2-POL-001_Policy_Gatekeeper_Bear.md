@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.189"
+version: "0.190"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: bound smoke-source DNS and placement overrides (offline)
+
+Five synthetic same-name Trino Deployment replies with host aliases, custom DNS,
+nondefault DNS policy, runtime class or node pinning supplied the fixed image
+before repair. The image lookup now refuses those unowned template overrides;
+the default `ClusterFirst` policy remains valid. The five negatives failed
+before repair; 166 focused policy tests and the local verifier passed. Dedicated
+Colima was observed stopped, with no API, dry-run, request replay or retained
+data/backup changes. This filter does not authenticate the Deployment or prove
+strict live admission. Restore only the scoped reader/test if needed; retain
+saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: restrict smoke-source security-context extensions (offline)
 

@@ -5,12 +5,21 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.147"
+version: "0.148"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: independent storage boundary recheck (offline)
+
+Separately reran the unchanged FinOps suite (223 tests, seven Linux-only skips)
+after the policy smoke-source change. Docker volume reference still does not
+publish usage (`null / NOT_MEASURED`); no daemon query, volume scan, report
+rewrite or backup change was made. The check is not VM/daemon authentication,
+retained-volume measurement or backup recovery. No FinOps code rollback is
+needed; retain saved reports. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: filesystem-only fixed PVC references (offline)
 
