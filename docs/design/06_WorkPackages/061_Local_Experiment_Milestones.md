@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.347"
+version: "5.348"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: typed FinOps pagination and Trino termination source (offline)
+
+WP-L6-FIN-001: both fixed PodList reads reject malformed falsey continuation
+tokens or non-map metadata (231 FinOps cases, seven Linux-only skips).
+WP-L2-POL-001: the pinned Trino smoke image cannot come from a Pod template
+changing its manifest termination grace (166 policy cases). `make
+verify-local-experiment` passed; its fake Dagster worker failure trace is an
+intentional diagnostic. The dedicated
+Colima profile was freshly observed stopped. No live API/admission, Docker
+collection, unknown-request replay, retained volume/report/backup mutation or
+GitHub write. Neither offline filter authenticates a producer, measures
+AgentHouse used bytes (`null / NOT_MEASURED`), proves strict admission or
+establishes operator acceptance. Restore only the scoped guards/tests if
+necessary, preserving saved inputs. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: Trino object-storage-client smoke source (offline)
 

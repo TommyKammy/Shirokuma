@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.198"
+version: "0.199"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed Trino smoke-source termination grace (offline)
+
+Five synthetic same-image Trino Pod templates with altered or malformed
+termination grace previously supplied the smoke image. Present grace must now
+be the manifest's integer 30 seconds; absent minimal fixtures and explicit 30
+pass. `make test-local-policy` passed 166 cases. No live API, admission,
+unknown-request replay, retained data/backup mutation or GitHub write. This
+source filter does not authenticate Kubernetes or establish strict live
+admission/operator acceptance. Revert only the scoped guard/test if needed;
+preserve saved requests. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: Trino object-storage-client source label (offline)
 

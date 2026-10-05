@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.155"
+version: "0.156"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: complete typed PodList pagination (offline)
+
+The first and second fixed storage PodList reads now require a map metadata
+envelope and an absent or empty-string continuation token. Synthetic null,
+boolean, numeric, nonempty and non-map tokens are refused rather than treated
+as complete; explicit empty strings still pass. `make test-local-finops` passed
+231 cases (seven Linux-only skips). Dedicated Colima was freshly observed
+stopped; no live collection, volume scan, retained report or backup mutation.
+This cannot authenticate the API or make the two reads atomic; AgentHouse used
+bytes remain `null / NOT_MEASURED`, and operator acceptance is open. Restore
+only this pagination guard/test if needed; retain saved reports. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: fixed storage source continuity (offline)
 

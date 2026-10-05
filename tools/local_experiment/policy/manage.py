@@ -544,8 +544,11 @@ class Kubernetes:
                           'topologySpreadConstraints', 'priorityClassName',
                           'priority', 'preemptionPolicy', 'overhead',
                           'readinessGates')) or
-                     pod_spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
-                     any(pod_spec.get(field, False) is not False
+                      pod_spec.get('dnsPolicy', 'ClusterFirst') != 'ClusterFirst' or
+                      ('terminationGracePeriodSeconds' in pod_spec and
+                       (type(pod_spec['terminationGracePeriodSeconds']) is not int or
+                        pod_spec['terminationGracePeriodSeconds'] != 30)) or
+                      any(pod_spec.get(field, False) is not False
                          for field in ('hostNetwork', 'hostPID', 'hostIPC'))):
                 raise PolicyError('smoke requires the isolated local Trino pod template')
             volumes = pod_spec.get('volumes', [])

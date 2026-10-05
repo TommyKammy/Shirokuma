@@ -223,6 +223,30 @@ class StorageTests(unittest.TestCase):
         with self.assertRaisesRegex(S.StorageError, 'IDENTITY_CHANGED'):
             S._collect_one(backend, 'seaweedfs')
 
+    def test_storage_collection_refuses_malformed_pagination_on_either_read(self):
+        w, p, _, c, v = objects('seaweedfs')
+        original = [w, {'kind':'PodList','apiVersion':'v1','metadata':{},'items':p}, c, v,
+                    deepcopy(w), {'kind':'PodList','apiVersion':'v1','metadata':{},'items':deepcopy(p)},
+                    deepcopy(c), deepcopy(v)]
+        for index, metadata in ((1, {'continue':None}), (1, {'continue':False}),
+                                (1, []), (5, {'continue':0}), (5, {'continue':'next'}),
+                                (5, None)):
+            responses = deepcopy(original)
+            responses[index]['metadata'] = metadata
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.storage_get.side_effect = responses
+            with self.subTest(index=index, metadata=metadata), self.assertRaisesRegex(
+                    S.StorageError, 'TARGET_AMBIGUOUS' if index == 1 else 'IDENTITY_CHANGED'):
+                S._collect_one(backend, 'seaweedfs')
+        for index in (1, 5):
+            responses = deepcopy(original)
+            responses[index]['metadata']['continue'] = ''
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.storage_get.side_effect = responses
+            self.assertEqual(S._collect_one(backend, 'seaweedfs')['state'], 'observed')
+
     def test_storage_collection_refuses_changed_workload_or_pod_scope(self):
         for component in ('seaweedfs', 'trino'):
             w, pods, replica, pvc, pv = objects(component)

@@ -257,6 +257,12 @@ def collect(backend):
     return validate(dict(schema_version=1, components=rows, limits=LIMITS[:]))
 
 
+def _complete_pod_list(response):
+    metadata = response.get('metadata', {})
+    return type(metadata) is dict and metadata.get('continue', '') == '' and type(
+        metadata.get('continue', '')) is str
+
+
 def _collect_one(backend, component):
     ns, kind, workload, _, label, _, _, claim = TARGETS[component]
     path = 'statefulsets' if kind == 'StatefulSet' else 'deployments'
@@ -267,7 +273,7 @@ def _collect_one(backend, component):
     listed = backend.storage_get(f'/api/v1/namespaces/{ns}/pods?labelSelector={quote(labels,safe="")}&limit=2')
     require(listed.get('kind') == 'PodList' and listed.get('apiVersion') == 'v1' and
             type(listed.get('items')) is list and len(listed['items']) <= 1 and
-            not listed.get('metadata', {}).get('continue'), 'TARGET_AMBIGUOUS')
+            _complete_pod_list(listed), 'TARGET_AMBIGUOUS')
     pods = listed['items']; replica = None
     if kind == 'Deployment' and pods:
         refs = pods[0].get('metadata', {}).get('ownerReferences', [])
@@ -285,7 +291,7 @@ def _collect_one(backend, component):
     after_pods = backend.storage_get(f'/api/v1/namespaces/{ns}/pods?labelSelector={quote(labels,safe="")}&limit=2')
     require(after_pods.get('kind') == 'PodList' and after_pods.get('apiVersion') == 'v1' and
             type(after_pods.get('items')) is list and
-            len(after_pods['items']) <= 1 and not after_pods.get('metadata', {}).get('continue'), 'IDENTITY_CHANGED')
+            len(after_pods['items']) <= 1 and _complete_pod_list(after_pods), 'IDENTITY_CHANGED')
     after_replica = backend.storage_get(f'/apis/apps/v1/namespaces/{ns}/replicasets/{replica["metadata"]["name"]}') if replica else None
     if pvc:
         later = backend.storage_get(f'/api/v1/namespaces/{ns}/persistentvolumeclaims/{claim}')
