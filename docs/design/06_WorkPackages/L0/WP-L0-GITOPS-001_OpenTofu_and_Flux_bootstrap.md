@@ -5,12 +5,34 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.146"
+version: "0.147"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: align offline renderer with pinned client gate
+
+The independent GitOps manifest renderer (`tests/gitops_render.py`) used to
+`strip()` Flux client stdout and ignore successful stderr, even though the
+Make gate refuses warnings and requires exactly `flux: v2.9.2` followed by
+one LF. Four fake-client false accepts were reproduced before correction;
+the renderer now fails closed for a missing/extra newline, leading whitespace
+or stderr warning. It still accepts the installed client through
+`make flux-version-check`. Focused fake-client tests (2), bootstrap contract
+tests (16), independent teardown contract tests (6), `make tofu-fmt`,
+`make verify-design-context` and `make verify-local-experiment` pass; the
+fake Dagster worker failure in the latter is an intentional negative.
+
+Fresh `colima list` and stopped-profile `colima status` confirm the dedicated
+VM was not running. No VM start, render apply, source/backup/volume inventory,
+writer exclusion, `flux check --pre`, Git smoke or reconciliation occurred.
+This offline version check is not live or operator acceptance. Before starting
+the VM, inventory retained state and Flux scope as described below. Restore
+only the renderer validation/test if verified CLI compatibility requires it;
+keep saved resources and historical failures. Direct original Vault sync is
+pending outside this checkout.
 
 ## 2026-10-06: pinned client warning and override boundary (offline)
 

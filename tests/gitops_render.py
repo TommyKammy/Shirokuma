@@ -162,10 +162,10 @@ def _tool(name: str) -> str:
 def _verified_tool(name: str) -> str:
     executable = _tool(name)
     if name == "flux":
-        actual = _run((executable, "version", "--client")).strip()
-        expected = f"flux: {FLUX_VERSION}"
+        actual = _run((executable, "version", "--client"), reject_stderr=True)
+        expected = f"flux: {FLUX_VERSION}\n"
         if actual != expected:
-            raise RenderError(f"expected {expected}, found {actual or 'unknown'}")
+            raise RenderError(f"expected exactly {expected!r} from Flux client")
     elif name == "helm":
         actual = _run((executable, "version", "--short")).strip()
         if not actual.startswith(f"{HELM_VERSION}+"):
@@ -198,6 +198,7 @@ def _run(
     *,
     input_text: str | None = None,
     cwd: Path | None = None,
+    reject_stderr: bool = False,
 ) -> str:
     try:
         completed = subprocess.run(
@@ -222,6 +223,8 @@ def _run(
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip()
         raise RenderError(f"{' '.join(args)} failed: {detail}")
+    if reject_stderr and completed.stderr:
+        raise RenderError(f"{' '.join(args)} emitted stderr")
     return completed.stdout
 
 

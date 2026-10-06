@@ -8,6 +8,10 @@ status: local-partial
 
 # WP-L0-GITOPS-001 evidence snapshot
 
+## 2026-10-06 offline renderer alignment
+
+- Renderer now rejects ambiguous Flux client stdout and stderr warnings, matching the pinned Make gate; four synthetic false accepts reproduced. Focused, bootstrap and independent teardown contracts, OpenTofu formatting, design-context and full local verifier pass. Dedicated VM remains Stopped; no precheck or live acceptance. Preserve saved data; original Vault sync pending. See WP/Milestones.
+
 ## 2026-10-06 pinned client warnings and overrides
 
 - The Flux gate refuses stderr warnings and caller overrides of pinned v2.9.2; fake cases and installed client pass. Independent OpenTofu formatting and 22 bootstrap/teardown tests plus full local verifier pass offline. The dedicated Colima profile remains Stopped; no live precheck, reconcile, storage/backup inspection or acceptance. Roll back the gate/test only; original Vault sync pending. See WP and Milestones.

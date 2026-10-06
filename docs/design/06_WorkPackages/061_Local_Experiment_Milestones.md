@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.518"
+version: "5.519"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: renderer Flux output and independent teardown checks (offline)
+
+WP-L0-GITOPS-001: the GitOps renderer now agrees with the pinned Make gate:
+exact `flux: v2.9.2` plus one LF, no stderr and successful exit. Four fake
+responses were falsely accepted before repair. Focused 2, bootstrap 16 and
+independent teardown 6 contract tests, OpenTofu formatting, design-context,
+installed client gate and full local verifier pass (intentional fake Dagster
+failure). Fresh dedicated Colima state is Stopped; no VM start, retained-state
+inspection, `flux check --pre`, Git smoke or reconcile. Live source identity,
+writer exclusion, strict admission and operator acceptance remain open. Keep
+saved resources; revert only the renderer guard/test if verified compatibility
+requires it. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: pinned Flux warning and override boundary (offline)
 
