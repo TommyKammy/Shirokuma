@@ -5,12 +5,28 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.157"
+version: "0.158"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: offline renderer refuses incomplete resource lists and launch failure
+
+An isolated Kubernetes `List` with a non-array `items` value previously
+flattened to zero resources, hiding an incomplete render; four negative
+fixtures now raise `RenderError`, while a valid list retains its resource.
+Separately a renderer command that cannot be launched now fails with a scoped
+error rather than an uncaught `OSError`. Bootstrap and teardown contract tests
+pass (31). `make verify-local-experiment`, `make verify-design-context` and diff
+check pass (the fake Dagster worker failure is intentional). Neither test
+contacts Git or Kubernetes. Fresh `colima list` shows
+the dedicated VM Stopped; no retained disk, volume, backup, writer or Flux
+scope was inventoried, and no live §9, remote provenance, strict gate or
+operator acceptance is claimed. Restore only these renderer guards/tests if
+verified input or tool semantics differ; preserve saved resources and past
+failures. Original Vault synchronization remains pending outside checkout.
 
 ## 2026-10-06: exact Helm renderer version output and stopped-lab recheck
 

@@ -237,6 +237,8 @@ def _run(
         )
     except subprocess.TimeoutExpired as error:
         raise RenderError(f"{' '.join(args)} timed out") from error
+    except OSError as error:
+        raise RenderError("renderer command could not start") from error
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip()
         raise RenderError(f"{' '.join(args)} failed: {detail}")
@@ -266,8 +268,11 @@ def _json_stream(text: str) -> list[dict[str, Any]]:
 
 def _flatten_resource(value: dict[str, Any]) -> list[dict[str, Any]]:
     if value.get("kind") == "List":
+        items = value.get("items")
+        if not isinstance(items, list):
+            raise RenderError("Kubernetes List requires an items array")
         flattened: list[dict[str, Any]] = []
-        for item in _sequence(value.get("items")):
+        for item in items:
             if not isinstance(item, dict):
                 raise RenderError("Kubernetes List contains a non-object item")
             flattened.extend(_flatten_resource(item))

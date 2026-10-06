@@ -17,7 +17,7 @@ from scripts.verify_gitops_image_admission import (
 )
 from tests.gitops_render import (
     RenderError, RepositoryContext, Resource, _canonical_git_url, _is_local_git_source,
-    _verified_tool, default_repository_context,
+    _json_stream, _run, _verified_tool, default_repository_context,
 )
 
 
@@ -25,6 +25,20 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
+    def test_renderer_refuses_tool_launch_failure_without_raw_exception(self) -> None:
+        with patch("tests.gitops_render.subprocess.run", side_effect=OSError("executable vanished")):
+            with self.assertRaisesRegex(RenderError, "renderer command could not start"):
+                _run(("fixture-tool", "version"))
+
+    def test_renderer_refuses_malformed_resource_list_instead_of_dropping_it(self) -> None:
+        for items in (None, {}, "hidden", 1):
+            with self.subTest(items=items), self.assertRaises(RenderError):
+                _json_stream(json.dumps({"apiVersion": "v1", "kind": "List", "items": items}))
+        self.assertEqual(
+            _json_stream(json.dumps({"kind": "List", "items": [{"kind": "ConfigMap"}]})),
+            [{"kind": "ConfigMap"}],
+        )
+
     def test_helm_renderer_refuses_ambiguous_version_output(self) -> None:
         expected = "v4.2.2+gb05881c\n"
         for output in (

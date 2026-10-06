@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.278"
+version: "0.279"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent metadata preflight recheck
+
+The standalone Docker two-snapshot fixture suite again passes 36 tests using
+repository discovery. Its interdependent top-level fixture imports do not
+support direct `python -m unittest tests.test_local_finops_docker_volume_preflight`;
+that alternate invocation failed before any tests, and was not counted as a
+functional failure or silently converted to acceptance. Fresh dedicated
+Colima state was Stopped; no Docker metadata, retained volume, report or backup
+was read. Supplied fixture metadata does not authenticate a daemon, exclude
+writers or permit traversal (`volume_traversal_authorized=False`); AgentHouse
+bytes remain `null / NOT_MEASURED`. No runtime recovery is required. Original
+Vault sync remains pending; live and operator criteria remain open.
 
 ## 2026-10-06 independent stopped-lab traversal boundary recheck
 

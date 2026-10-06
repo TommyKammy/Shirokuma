@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.529"
+version: "5.530"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: renderer incomplete-list refusal; independent FinOps fixture recheck
+
+WP-L0-GITOPS-001 refuses four malformed `List.items` cases that formerly
+silently removed resources, and scopes an unlaunchable renderer command.
+Bootstrap/teardown 31 pass. WP-L6-FIN-001 standalone metadata fixtures pass
+36 under discovery; direct package invocation cannot load its discovery-style
+fixture dependencies and was not counted as a pass. Fresh dedicated Colima
+Stopped; no VM start, retained data/backup inspection, Git fetch or Flux
+reconcile. FinOps traversal remains unauthorized and AgentHouse bytes
+`null / NOT_MEASURED`. Offline checks do not establish live §9, source
+authenticity, writer exclusion, strict admission or operator acceptance.
+Restore only scoped renderer changes if verified semantics differ; preserve
+saved state and prior failures. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: Helm output ambiguity closed; live preflight incomplete
 
