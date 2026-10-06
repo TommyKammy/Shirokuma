@@ -5,12 +5,40 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.144"
+version: "0.145"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: bounded local Flux version and stopped-runtime gates
+
+The installed `flux version --client` reported exactly `flux: v2.9.2` and
+`make flux-version-check` passed. The Make gate previously extracted any
+matching `flux:` line with awk, accepting appended warnings or contradictory
+versions. It now requires precisely the pinned single line and a successful
+client exit; seven fake-command cases pass, including extra lines, blank lines,
+suffixes, wrong versions and a failed client. This is a local client-version
+observation, not the full WP version/cluster acceptance criterion.
+
+Independently, a fresh `colima list` showed `mac-studio-solo` Stopped and
+`colima status --profile mac-studio-solo` refused the stopped profile. Host
+filesystem free space was 2.2 TiB (not a dedicated VM disk inventory). The
+read-only `go run ./cmd/shirokuma doctor --profile local-experiment --output
+json` reported healthy *scope* but degraded cluster, Flux and all four named
+workloads because their API reads failed while stopped. The scope result does
+not authenticate a remote server. No live Flux, source revision, writer,
+retained volume or backup state was measured, so `flux check --pre`, controller
+readiness, Git smoke, strict publication admission, teardown/rebootstrap and
+operator acceptance remain open. Before starting the VM, separately inventory
+its retained disk/backup and writer state and dedicated Flux reconciliation
+scope; do not use the whole-profile nuke or expired exception as a shortcut.
+No VM or retained data changed here. Focused version tests, the real gate,
+`make verify-local-experiment` (intentional fake Dagster failure),
+`make verify-design-context` and diff check passed. Rollback is limited to
+the Make gate and fake version test; preserve all retained resources and old
+failure records. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-05: encoded literal-host controls (offline)
 

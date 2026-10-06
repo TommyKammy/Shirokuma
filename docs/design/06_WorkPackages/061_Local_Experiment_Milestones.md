@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.515"
+version: "5.516"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: L0 pinned client gate and stopped-lab diagnostic
+
+WP-L0-GITOPS-001: `flux version --client` and the tightened exact-output
+`make flux-version-check` pass for installed v2.9.2; seven synthetic client
+responses cover ambiguous output and failures. Independently, a fresh stopped
+Colima observation and read-only local doctor give healthy context scope but
+degraded cluster/Flux/four workload checks. Host free space 2.2 TiB is not a
+VM disk/backup inventory. `make verify-local-experiment` and design-context
+pass (fake Dagster failure is an expected negative); no VM startup, GitHub
+write, reconcile, retained data/backup access or unknown-request replay.
+Live source provenance, writer exclusion, `flux check --pre`, smoke and strict
+admission remain open; no operator acceptance. Inspect retained state/Flux
+scope before any VM start. Roll back only the version gate/test and preserve
+saved resources; original Vault sync pending outside checkout.
 
 ## 2026-10-06: AgentHouse credential read and startup file identity (offline)
 
