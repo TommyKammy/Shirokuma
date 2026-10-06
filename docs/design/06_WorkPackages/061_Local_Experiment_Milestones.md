@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: AgentHouse dedicated Docker context path (offline)
+
+WP-L2-CH-001: the Docker context must now name exactly the current user's
+dedicated Colima profile socket URI. A different Unix socket with the same
+suffix is refused before Docker info/start; focused 25 tests pass. The read-only
+actual `docker context inspect colima-mac-studio-solo` returned `context not
+found` while Colima was stopped: no live context, socket inode/provenance or
+runtime integration was verified. `make verify-local-experiment` and
+`make verify-design-context` pass (fake Dagster worker failure in verifier is
+an intentional negative test). No host configuration or retained
+credential/report/volume/backup changed. To revert, remove only this scoped
+comparison/test, never delete saved resources. Original Vault sync pending;
+this is not operator acceptance.
+
 ## 2026-10-06: AgentHouse event identity and export-shape guards (offline)
 
 WP-L2-CH-001: event UUID and timestamp require the canonical spellings emitted

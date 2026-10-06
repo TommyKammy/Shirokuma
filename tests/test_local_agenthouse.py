@@ -76,11 +76,19 @@ class AgentHouseTests(unittest.TestCase):
                 M.inspect_owned("container", M.NAME)
 
     def test_context_must_be_dedicated_socket(self):
-        config = [{"Endpoints": {"docker": {"Host": "unix:///var/run/docker.sock"}}}]
-        with patch.object(M, "docker", return_value=json.dumps(config)) as docker:
-            with self.assertRaisesRegex(M.AgentHouseError, "dedicated"):
-                M.check_context()
-            self.assertEqual(docker.call_count, 1)
+        expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
+        for endpoint in ('unix:///var/run/docker.sock',
+                         'unix:///tmp/.colima/mac-studio-solo/docker.sock',
+                         expected + '/other'):
+            config = [{"Endpoints": {"docker": {"Host": endpoint}}}]
+            with self.subTest(endpoint=endpoint), patch.object(M, "docker", return_value=json.dumps(config)) as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, "dedicated"):
+                    M.check_context()
+                self.assertEqual(docker.call_count, 1)
+        config = [{"Endpoints": {"docker": {"Host": expected}}}]
+        with patch.object(M, "docker", side_effect=[json.dumps(config), 'aarch64']) as docker:
+            M.check_context()
+            self.assertEqual(docker.call_count, 2)
 
     def test_redirect_never_receives_authorization(self):
         with self.assertRaisesRegex(M.AgentHouseError, "redirect"):

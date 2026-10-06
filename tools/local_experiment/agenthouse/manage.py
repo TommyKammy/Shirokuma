@@ -53,7 +53,8 @@ def docker(*args: str, required: bool = True) -> str:
 def check_context() -> None:
     data = json.loads(docker("context", "inspect", CONTEXT))[0]
     endpoint = data["Endpoints"]["docker"]["Host"]
-    if not endpoint.startswith("unix://") or not endpoint.endswith("/.colima/mac-studio-solo/docker.sock"):
+    expected = "unix://" + str(Path.home() / ".colima/mac-studio-solo/docker.sock")
+    if endpoint != expected:
         raise AgentHouseError("requires the dedicated Colima Docker socket")
     if docker("info", "--format", "{{.Architecture}}").strip() not in {"aarch64", "arm64"}:
         raise AgentHouseError("requires native ARM64 Docker runtime")

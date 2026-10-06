@@ -12,6 +12,19 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline dedicated Docker context path check
+
+Docker context inspection now requires the exact current-home Colima profile
+socket URI, not any Unix socket with the same directory suffix. Synthetic
+alternate-root contexts fail before Docker info or startup; the exact candidate
+reaches the ARM64 check. Focused AgentHouse tests pass. The live Docker context
+metadata was unavailable (`context not found`) while the dedicated profile was
+stopped, so actual integration and socket inode/provenance were not verified.
+No profile, container, credential, retained volume or backup was changed.
+Verifier outcomes are in Milestones. Restore only the context check if needed;
+do not start a different context or delete retained data. Original Vault sync
+pending outside checkout; no live/operator acceptance is claimed.
+
 ## 2026-10-06 offline event identity and export-shape guards
 
 Externally supplied Pawprint IDs must now use the canonical lowercase hyphenated
