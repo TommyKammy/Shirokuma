@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.435"
+version: "5.436"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent Docker JSON and procfs fixture boundaries (offline)
+
+WP-L2-CH-001 bounds Docker inspection nesting to 64 and refuses decoded lone
+surrogates before authorizing context/owned metadata; four fixture negatives
+failed before repair, focused 43 tests pass. Independently WP-L6-FIN-001
+requires complete LF framing and no NUL for status/fdinfo procfs samples;
+four new negatives failed before repair, focused five tests pass (six negative
+cases total). Full `make verify-local-experiment` passes; fake Dagster worker
+failure in output is intentional. Dedicated Colima freshly Stopped; no live
+daemon/VM read, retained credential/report/volume/backup mutation or AgentHouse
+usage measurement (`null / NOT_MEASURED`). Offline checks do not authenticate
+producers, prove cleanup or confer operator acceptance. Revert only scoped
+readers/tests while preserving saved evidence. Original Vault sync pending.
 
 ## 2026-10-06: AgentHouse UTF-8-only credential decoding (offline)
 

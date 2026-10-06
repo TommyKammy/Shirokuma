@@ -73,9 +73,26 @@ def finite_docker_float(text):
 
 
 def decode_docker_json(raw):
-    return json.loads(raw, object_pairs_hook=unique_docker_fields,
-                      parse_constant=invalid_docker_constant,
-                      parse_int=bounded_docker_int, parse_float=finite_docker_float)
+    try:
+        value = json.loads(raw, object_pairs_hook=unique_docker_fields,
+                           parse_constant=invalid_docker_constant,
+                           parse_int=bounded_docker_int, parse_float=finite_docker_float)
+        stack = [(value, 0)]
+        while stack:
+            item, depth = stack.pop()
+            if depth > 64:
+                raise ValueError('deep Docker inspection metadata')
+            if isinstance(item, dict):
+                for key, child in item.items():
+                    key.encode('utf-8')
+                    stack.append((child, depth + 1))
+            elif isinstance(item, list):
+                stack.extend((child, depth + 1) for child in item)
+            elif isinstance(item, str):
+                item.encode('utf-8')
+        return value
+    except (RecursionError, UnicodeError):
+        raise ValueError('invalid Docker inspection metadata') from None
 
 
 def unique_credential_fields(items):

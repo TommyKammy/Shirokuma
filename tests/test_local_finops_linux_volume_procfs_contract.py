@@ -56,6 +56,15 @@ class ProcfsContractTests(unittest.TestCase):
             value=inputs();change(value)
             with self.subTest(change=change),self.assertRaises(P.ProcfsError):P.project(**value)
 
+    def test_status_and_fdinfo_require_complete_lf_records(self):
+        for field in ('self_status', 'fdinfo'):
+            for change in (lambda raw: raw[:-1],
+                           lambda raw: raw.replace(b'\n', b'\r\n'),
+                           lambda raw: raw + b'other:\x00bad\n'):
+                value=inputs();value[field]=change(value[field])
+                with self.subTest(field=field, raw=value[field]),self.assertRaises(P.ProcfsError):
+                    P.project(**value)
+
     def test_wrong_mount_hidden_proc_and_redirected_pid_paths_rejected(self):
         changes=[lambda x:x.update(proc_mount_id=20),
                  lambda x:x.update(fdinfo=b'mnt_id:\t19\nmnt_id:\t19\n'),

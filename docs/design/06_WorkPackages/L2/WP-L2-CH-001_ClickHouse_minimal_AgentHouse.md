@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 bounded Docker inspection structure (offline)
+
+Context and owned-volume JSON inspection now refuse metadata nested beyond 64
+levels and escaped lone-surrogate text in keys or values before lending a
+socket or ownership label to runtime actions. Four negative fixtures crossed
+the boundary before repair; focused 43 AgentHouse tests and the local verifier
+pass. Colima freshly Stopped; no live daemon/start, retained volume, credential,
+report or backup touched. This does not authenticate the Docker producer or
+establish saved-container compatibility. Revert only the decoder/test, preserving
+saved resources; original Vault sync pending outside checkout.
+
 ## 2026-10-06 credential encoding ambiguity (offline)
 
 Python's JSON byte decoder accepted UTF-16, UTF-32 and UTF-8 BOM credential

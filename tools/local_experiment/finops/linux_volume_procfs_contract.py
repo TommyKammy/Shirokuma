@@ -83,6 +83,12 @@ def _mount(raw,mount_id):
                     for option in left[5].split(',')+right[2].split(',')))
 
 
+def _lf_records(raw, maximum):
+    require(type(raw) is bytes and 0<len(raw)<=maximum and raw.endswith(b'\n') and
+            b'\r' not in raw and b'\x00' not in raw)
+    return raw
+
+
 def project(*, boot_id, proc_device, proc_inode, proc_mount_id, mountinfo,
             fdinfo, self_pid, self_stat, init_stat, self_status,
             pid_namespace_link, init_pid_namespace_link, mount_namespace_link,
@@ -99,11 +105,9 @@ def project(*, boot_id, proc_device, proc_inode, proc_mount_id, mountinfo,
     require(namespace==_namespace(init_pid_namespace_link,'pid'))
     mount_namespace=_namespace(mount_namespace_link,'mnt')
     _start(self_stat,self_pid);_start(init_stat,1)
-    require(type(self_status) is bytes and 0<len(self_status)<=MAX_STATUS)
-    match=re.findall(rb'^NSpid:[ \t]*([^\r\n]+)$',self_status,re.M)
+    match=re.findall(rb'^NSpid:[ \t]*([^\r\n]+)$',_lf_records(self_status,MAX_STATUS),re.M)
     require(len(match)==1 and match[0].strip()==str(self_pid).encode())
-    require(type(fdinfo) is bytes and 0<len(fdinfo)<=MAX_STATUS)
-    matches=re.findall(rb'^mnt_id:[ \t]*([0-9]+)$',fdinfo,re.M)
+    matches=re.findall(rb'^mnt_id:[ \t]*([0-9]+)$',_lf_records(fdinfo,MAX_STATUS),re.M)
     require(len(matches)==1 and matches[0]==str(proc_mount_id).encode())
     _mount(mountinfo,proc_mount_id)
     if target_stat is None:

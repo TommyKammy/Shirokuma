@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.222"
+version: "0.223"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 procfs status/fdinfo complete framing (offline)
+
+The pure Linux procfs fixture contract now requires bounded, complete LF rows
+without CR or NUL for both self status and fdinfo. Missing final LF and an
+unrelated NUL row previously projected a valid VM/probe candidate; six negatives
+cover both inputs, with the existing CRLF refusal retained. Focused five tests
+and the full local verifier pass. Dedicated Colima freshly Stopped: no guest
+procfs, retained report/volume/backup accessed or mutated. AgentHouse bytes
+remain `null / NOT_MEASURED`. Fixture framing does not authenticate a VM or
+prove remote cleanup or operator acceptance. Revert only this contract/test;
+retain saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 Linux volume worker mount framing (offline)
 

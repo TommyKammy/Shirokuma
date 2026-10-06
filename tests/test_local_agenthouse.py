@@ -156,6 +156,20 @@ class AgentHouseTests(unittest.TestCase):
                         M.inspect_owned('volume', M.VOLUME)
         self.assertEqual(M.decode_docker_json('{"n":1e-2,"i":123}'), {'n': 0.01, 'i': 123})
 
+    def test_docker_inspection_refuses_deep_or_unencodable_metadata(self):
+        endpoint = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
+        for extra in ('"\\ud800"', '[' * 65 + '0' + ']' * 65):
+            reply = '[{"Endpoints":{"docker":{"Host":' + json.dumps(endpoint) + '}},"extra":' + extra + '}]'
+            with self.subTest(extra=extra[:30]), patch.object(M, 'docker', return_value=reply) as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'context metadata'):
+                    M.check_context()
+                docker.assert_called_once_with('context', 'inspect', M.CONTEXT)
+            owned = '[{"Labels":{"shirokuma.dev.component":"agenthouse-local"},"extra":' + extra + '}]'
+            with patch.object(M, 'docker', return_value=owned):
+                with self.assertRaisesRegex(M.AgentHouseError, 'invalid volume inspection'):
+                    M.inspect_owned('volume', M.VOLUME)
+        self.assertEqual(M.decode_docker_json('{"nested":["ordinary"]}'), {'nested': ['ordinary']})
+
     def test_context_must_be_dedicated_socket(self):
         expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
         for endpoint in ('unix:///var/run/docker.sock',
