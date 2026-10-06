@@ -5,12 +5,22 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.279"
+version: "0.280"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 separate offline traversal-boundary recheck
+
+After the L0 renderer changes, standalone discovery of the two-snapshot Docker
+preflight passes 36 tests. Fresh `colima list` shows the dedicated VM Stopped;
+no daemon inventory or retained volume, report or backup was read or changed.
+Fixture eligibility remains unauthenticated, does not exclude continuous
+writers and does not authorize volume traversal; AgentHouse bytes stay `null /
+NOT_MEASURED`. This is not live/operator acceptance. Preserve saved resources;
+no runtime rollback is needed. Original Vault synchronization pending.
 
 ## 2026-10-06 independent metadata preflight recheck
 

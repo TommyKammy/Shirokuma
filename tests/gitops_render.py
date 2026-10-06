@@ -190,7 +190,7 @@ def _verified_tool(name: str) -> str:
                 f"expected one pinned Helm {HELM_VERSION} version line"
             )
     elif name == "kubectl":
-        raw = _run((executable, "version", "--client", "-o", "json"))
+        raw = _run((executable, "version", "--client", "-o", "json"), reject_stderr=True)
         try:
             version = json.loads(raw)
         except json.JSONDecodeError as error:
@@ -238,14 +238,15 @@ def _run(
             },
         )
     except subprocess.TimeoutExpired as error:
-        raise RenderError(f"{' '.join(args)} timed out") from error
+        raise RenderError("renderer command timed out") from error
     except OSError as error:
         raise RenderError("renderer command could not start") from error
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
-        raise RenderError(f"{' '.join(args)} failed: {detail}")
+        # Tool diagnostics may include manifest contents or credentials. Do not
+        # propagate either the arguments or untrusted output to policy reports.
+        raise RenderError(f"renderer command failed with exit status {completed.returncode}")
     if reject_stderr and completed.stderr:
-        raise RenderError(f"{' '.join(args)} emitted stderr")
+        raise RenderError("renderer command emitted stderr")
     return completed.stdout
 
 

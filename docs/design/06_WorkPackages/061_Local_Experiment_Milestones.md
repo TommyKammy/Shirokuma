@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.531"
+version: "5.532"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: offline renderer diagnostics and separate traversal recheck
+
+WP-L0-GITOPS-001 refuses kubectl version warnings and redacts renderer
+arguments/output on failure, timeout or warning; two isolated negatives failed
+before repair. Bootstrap/teardown 35, full local verifier, design-context and
+diff check pass (fake Dagster failure intentional). Independently
+WP-L6-FIN-001's standalone Docker metadata preflight passes 36 fixtures under
+discovery. Fresh dedicated Colima Stopped; no VM, remote Git, retained disk,
+volume, backup, credential or writer inspected or changed. FinOps traversal is
+unauthorized and AgentHouse usage `null / NOT_MEASURED`. Live §9, remote
+identity, strict admission and operator acceptance remain open. Restore only
+scoped renderer changes if verified tool semantics differ; preserve saved
+resources and previous failures. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: offline kubectl empty render and non-object version refusal
 

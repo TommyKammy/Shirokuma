@@ -5,12 +5,29 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.159"
+version: "0.160"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: offline renderer diagnostics and kubectl warning boundary
+
+Two independent synthetic false accepts/exposures were reproduced: kubectl
+version JSON matching the pinned versions alongside a stderr warning passed,
+and a failed renderer command echoed untrusted tool output and arguments into
+policy errors. The version gate now refuses warnings, and failed, timed-out or
+warning-bearing commands report fixed scoped errors without echoing those
+inputs. Exit status remains visible for failed commands. Bootstrap/teardown
+contracts pass (35); `make verify-local-experiment`, `make
+verify-design-context` and diff check pass (the fake Dagster failure is an
+intentional negative). Fresh `colima list`: dedicated VM Stopped. This changes
+only offline diagnostics/version classification; no VM, Git remote, Flux,
+retained volume/backup or credential was read or changed. Restore only the
+renderer/test changes if verified tool behavior differs; retain prior evidence
+and saved resources. Live §9, source authenticity, writer exclusion, strict
+admission and operator acceptance remain open. Original Vault sync pending.
 
 ## 2026-10-06: offline kubectl renderer output and version shape
 

@@ -55,6 +55,37 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RenderError, "renderer command could not start"):
                 _run(("fixture-tool", "version"))
 
+    def test_renderer_failure_does_not_echo_tool_output_or_arguments(self) -> None:
+        marker = "private-credential-marker"
+        with patch("tests.gitops_render.subprocess.run", return_value=subprocess.CompletedProcess(
+            args=[], returncode=7, stdout=marker, stderr=marker
+        )):
+            with self.assertRaises(RenderError) as caught:
+                _run(("fixture-tool", marker))
+        self.assertNotIn(marker, str(caught.exception))
+        self.assertIn("exit status 7", str(caught.exception))
+        for failure in (subprocess.TimeoutExpired(["fixture-tool", marker], 60), None):
+            with self.subTest(failure=failure), patch(
+                "tests.gitops_render.subprocess.run",
+                side_effect=failure,
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="ok", stderr=marker
+                ),
+            ), self.assertRaises(RenderError) as caught:
+                _run(("fixture-tool", marker), reject_stderr=True)
+            self.assertNotIn(marker, str(caught.exception))
+
+    def test_kubectl_version_refuses_warning_on_success(self) -> None:
+        _verified_tool.cache_clear()
+        version = json.dumps({"clientVersion": {"gitVersion": "v1.36.2"}, "kustomizeVersion": "v5.8.1"})
+        with patch("tests.gitops_render._tool", return_value="kubectl-fixture"), patch(
+            "tests.gitops_render.subprocess.run", return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=version, stderr="warning: unexpected client settings\n"
+            )
+        ), self.assertRaises(RenderError):
+            _verified_tool("kubectl")
+        _verified_tool.cache_clear()
+
     def test_renderer_refuses_malformed_resource_list_instead_of_dropping_it(self) -> None:
         for items in (None, {}, "hidden", 1):
             with self.subTest(items=items), self.assertRaises(RenderError):
