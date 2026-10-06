@@ -62,6 +62,22 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
             with self.subTest(raw=repr(raw)), self.assertRaises(W.ScanError):
                 W._mountpoints(raw)
 
+    def test_mountinfo_refuses_invalid_root_escape_and_alias(self):
+        row = '2 1 8:1 /some /fixture/child rw - ext4 /dev/a rw\n'
+        for root in ('/some\\999', '/some/../some', '/some//child', '//some'):
+            with self.subTest(root=root), self.assertRaises(W.ScanError):
+                W._mountpoints(row.replace('/some ', root + ' ', 1))
+        self.assertEqual(W._mountpoints(row.replace('/some ', '/some\\040name ', 1)),
+                         {'/fixture/child'})
+
+    def test_mountinfo_invalid_utf8_is_scoped(self):
+        from unittest.mock import mock_open
+        with patch('builtins.open', mock_open(read_data=b'\xff\n')):
+            with self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
+                W._read_mountinfo()
+        with self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
+            W._mountpoints('\ud800\n')
+
     def test_fdinfo_requires_single_complete_mount_id_field(self):
         canonical = b'pos:\t0\nflags:\t0100000\nmnt_id:\t42\nino:\t7\n'
         self.assertEqual(W._parse_mount_id(canonical), 42)

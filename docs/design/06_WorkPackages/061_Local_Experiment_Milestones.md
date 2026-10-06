@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.439"
+version: "5.440"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent worker mount root and encoding boundaries (offline)
+
+WP-L6-FIN-001 rejects malformed/noncanonical mountinfo root paths as well as
+mountpoint aliases; independently invalid procfs UTF-8 or unencodable fixture
+text fails with scoped `SCOPE_INVALID`. Four root and two encoding negatives
+reproduced the gaps; focused worker 13 tests (three Linux-only skips) and full
+`make verify-local-experiment` pass (intentional fake Dagster failure).
+Dedicated Colima freshly Stopped, no live VM read, retained volume/report/
+backup change or AgentHouse measurement (`null / NOT_MEASURED`). Offline
+parsing does not authenticate procfs, prove cleanup or grant operator acceptance.
+Revert only scoped parser/tests, retain saved resources. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent worker mountinfo structure and controls (offline)
 

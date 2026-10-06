@@ -50,11 +50,25 @@ def _check(deadline):
 
 def _identity(info):
     return (info.st_mode, info.st_dev, info.st_ino, info.st_uid, info.st_gid,
-            info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+             info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _mount_path(encoded):
+    require(re.fullmatch(r'(?:[^\\]|\\(?:040|011|012|134))*', encoded) is not None)
+    value = re.sub(r'\\(040|011|012|134)',
+                   lambda match: chr(int(match[1], 8)), encoded)
+    require(value.startswith('/') and not value.startswith('//') and
+            os.path.normpath(value) == value)
+    return value
 
 
 def _mountpoints(raw):
-    require(type(raw) is str and len(raw.encode('utf-8')) <= MAX_MOUNTINFO, 'READ_LIMIT')
+    require(type(raw) is str)
+    try:
+        size = len(raw.encode('utf-8'))
+    except UnicodeError:
+        raise ScanError('SCOPE_INVALID') from None
+    require(size <= MAX_MOUNTINFO, 'READ_LIMIT')
     # procfs mountinfo is LF-framed. splitlines() silently accepts truncated
     # records, CRLF and Unicode line separators as independent mount entries.
     # Kernel mountinfo escapes tabs/newlines in path fields. Unescaped control
@@ -76,14 +90,10 @@ def _mountpoints(raw):
         separator = fields.index('-')
         require(separator >= 6 and len(fields) == separator + 4)
         # mountinfo escapes spaces, tabs, newlines and backslashes as octal.
-        encoded = fields[4]
-        require(re.fullmatch(r'(?:[^\\]|\\(?:040|011|012|134))*', encoded) is not None)
-        value = re.sub(r'\\(040|011|012|134)',
-                       lambda match: chr(int(match[1], 8)), encoded)
+        _mount_path(fields[3])
+        value = _mount_path(fields[4])
         # Topology comparison uses lexical paths; do not let a noncanonical
         # mountpoint alias hide a mount underneath the measured root.
-        require(value.startswith('/') and not value.startswith('//') and
-                os.path.normpath(value) == value)
         result.add(value)
     require(result)
     return result
@@ -99,7 +109,10 @@ def _read_mountinfo():
     with open('/proc/self/mountinfo', 'rb', buffering=0) as source:
         raw = source.read(MAX_MOUNTINFO + 1)
     require(len(raw) <= MAX_MOUNTINFO, 'READ_LIMIT')
-    return raw.decode('utf-8')
+    try:
+        return raw.decode('utf-8')
+    except UnicodeError:
+        raise ScanError('SCOPE_INVALID') from None
 
 
 def _mount_id(fd):

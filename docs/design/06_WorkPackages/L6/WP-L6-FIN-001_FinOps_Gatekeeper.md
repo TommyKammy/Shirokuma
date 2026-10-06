@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.226"
+version: "0.227"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent mount root and UTF-8 failure boundaries (offline)
+
+Mountinfo root fields with malformed escapes or noncanonical aliases were
+previously accepted while projecting a plausible mountpoint. The worker now
+validates both escaped path columns using the same canonical-path rule; valid
+escaped spaces remain supported. Separately, invalid UTF-8 in a procfs read or
+unencodable fixture text now raises scoped `SCOPE_INVALID` instead of a raw
+Unicode exception. Four root negatives and two encoding negatives reproduced
+the gaps before repair. Focused worker tests: 13 run, three Linux-only skips;
+`make verify-local-experiment` passes (its fake Dagster failure is intentional).
+Dedicated Colima freshly Stopped; no live procfs or retained volume/report/
+backup accessed or changed. AgentHouse bytes remain `null / NOT_MEASURED`.
+These offline guards neither authenticate procfs nor authorize a retained-volume
+scan or establish operator acceptance. Restore only the scoped parser/tests,
+preserving saved resources. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 independent worker mountinfo record checks (offline)
 
