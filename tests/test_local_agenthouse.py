@@ -602,7 +602,8 @@ class AgentHouseTests(unittest.TestCase):
             "HostConfig": {"PortBindings": {"8123/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18123"}]},
                            "NanoCpus": 2_000_000_000, "Memory": 4 * 1024**3,
                            "NetworkMode": "default", "Privileged": False,
-                           "PidMode": "", "PublishAllPorts": False,
+                            "PidMode": "", "IpcMode": "private", "UTSMode": "",
+                            "PublishAllPorts": False,
                            "SecurityOpt": ["no-new-privileges:true"],
                            "CapAdd": None, "Devices": [], "Binds": None},
             "Mounts": [{"Type": "volume", "Name": M.VOLUME,
@@ -697,6 +698,23 @@ class AgentHouseTests(unittest.TestCase):
             del existing['HostConfig'][key]
             with self.subTest(key=key, value='missing'), self.assertRaisesRegex(M.AgentHouseError, 'isolation'):
                 self.ensure_existing(existing)
+
+    def test_existing_runtime_refuses_shared_ipc_or_uts_namespace(self):
+        for key, values in (("IpcMode", ("host", "container:foreign", None)),
+                            ("UTSMode", ("host", "container:foreign", None))):
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    existing = self.existing_runtime()
+                    existing['HostConfig'][key] = value
+                    with self.assertRaisesRegex(M.AgentHouseError, 'isolation'):
+                        self.ensure_existing(existing)
+            existing = self.existing_runtime()
+            del existing['HostConfig'][key]
+            with self.subTest(key=key, value='missing'), self.assertRaisesRegex(M.AgentHouseError, 'isolation'):
+                self.ensure_existing(existing)
+        private = self.existing_runtime()
+        private['HostConfig']['IpcMode'] = ''  # Docker's other default spelling.
+        self.ensure_existing(private)
 
     def test_existing_runtime_refuses_lost_security_options_or_host_access(self):
         for key, values in (("SecurityOpt", ([], ["no-new-privileges:false"],

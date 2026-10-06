@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.459"
+version: "5.460"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent namespace isolation and status spelling (offline)
+
+WP-L2-CH-001 refuses existing AgentHouse containers sharing IPC or UTS with
+host/foreign containers; eight negative fixture variants passed before repair.
+Independently WP-L6-FIN-001 refuses padded `NSpid` values in caller-supplied
+procfs status (three negatives). Focused AgentHouse 55 and procfs 25 tests and
+`make verify-local-experiment` pass; fake Dagster failure is intentional.
+Dedicated Colima freshly Stopped; no Docker/VM operation, retained credential,
+report, volume or backup accessed or changed, AgentHouse bytes `null /
+NOT_MEASURED`. Offline fixtures cannot authenticate producers, prove live
+deduplication/cleanup, permit retained-volume scanning or grant operator
+acceptance. Revert only scoped guards/tests while preserving saved records;
+never replay ambiguous inserts. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent inspect-name and proc-device correlation (offline)
 

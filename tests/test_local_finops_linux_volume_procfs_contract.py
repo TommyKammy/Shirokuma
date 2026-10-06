@@ -86,6 +86,15 @@ class ProcfsContractTests(unittest.TestCase):
                 with self.subTest(field=field, extra=extra), self.assertRaises(P.ProcfsError):
                     P.project(**value)
 
+    def test_self_namespace_pid_refuses_trailing_padding(self):
+        for suffix in (b' ', b'\t', b'\t\t'):
+            value = inputs()
+            value['self_status'] = value['self_status'].replace(b'NSpid:\t101\n',
+                                                                b'NSpid:\t101' + suffix + b'\n')
+            with self.subTest(suffix=suffix), self.assertRaises(P.ProcfsError):
+                P.project(**value)
+        self.assertTrue(P.project(**inputs())['probe']['query_complete'])
+
     def test_wrong_mount_hidden_proc_and_redirected_pid_paths_rejected(self):
         changes=[lambda x:x.update(proc_mount_id=20),
                  lambda x:x.update(fdinfo=b'mnt_id:\t19\nmnt_id:\t19\n'),

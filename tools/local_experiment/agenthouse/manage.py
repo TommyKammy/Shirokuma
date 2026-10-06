@@ -312,9 +312,12 @@ def ensure_runtime() -> Client:
             raise AgentHouseError("existing AgentHouse resource limits must remain 2 CPU and 4 GiB")
         # PortBindings alone do not constrain a host-networked or privileged
         # container; Docker may ignore published ports in host network mode.
+        # IPC/UTS namespace sharing also exposes host or foreign-container state.
         if (host_config.get('NetworkMode') not in ('default', 'bridge') or
                 host_config.get('Privileged') is not False or
                 host_config.get('PidMode') != '' or
+                host_config.get('IpcMode') not in ('', 'private') or
+                host_config.get('UTSMode') != '' or
                 host_config.get('PublishAllPorts') is not False or
                 host_config.get('SecurityOpt') != ['no-new-privileges:true'] or
                 'CapAdd' not in host_config or host_config['CapAdd'] not in (None, []) or

@@ -5,12 +5,27 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.18"
+version: "0.19"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 existing-container IPC/UTS isolation (offline)
+
+The saved-container startup check previously accepted host or foreign-container
+IPC and UTS namespaces despite pinned image, port and owned volume. Eight
+negative fixture variants (including absent fields) reached startup before
+repair. Existing startup now requires private/default IPC and default UTS;
+the default empty IPC spelling remains accepted. Focused AgentHouse 55 tests
+and `make verify-local-experiment` pass (fake Dagster failure intentional).
+Dedicated Colima observed Stopped; no Docker start, retained credential,
+volume, report or backup accessed or changed. Docker replies are not independently
+authenticated, and saved-container compatibility, live deduplication and operator
+acceptance remain unproved. Revert only the scoped isolation guard/test after
+inspecting saved runtime identity; do not delete resources or replay unknown
+inserts. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 fixed Docker inspect name correlation (offline)
 

@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.243"
+version: "0.244"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 exact self namespace PID field (offline)
+
+The caller-supplied `/proc` status fixture previously accepted a matching
+`NSpid` with trailing space or tabs via `.strip()`. Three negative variants
+projected before repair; the single namespace PID must now have canonical
+digits without suffix padding. Focused procfs 25 tests and full
+`make verify-local-experiment` pass (fake Dagster failure intentional).
+Dedicated Colima observed Stopped; no guest read, retained volume/report/backup
+access or change; AgentHouse bytes remain `null / NOT_MEASURED`. Fixture syntax
+does not authenticate the kernel, authorize retained-volume scanning, prove
+cleanup or grant operator acceptance. Revert only this field guard/test and
+retain saved evidence; original Vault sync pending outside checkout.
 
 ## 2026-10-06 procfs device identity correlation (offline)
 
