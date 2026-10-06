@@ -44,6 +44,7 @@ def _json(raw):
         return value
     def finite_float(text):
         try:
+            C.require(len(text) <= 128, 'READ_FAILED')
             return C.finite_json_float(text)
         except (C.FinOpsError, ValueError):
             raise C.FinOpsError('READ_FAILED') from None

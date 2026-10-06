@@ -344,7 +344,13 @@ def export(client: Client) -> Path:
             return value
         def invalid_constant(_value):
             raise ValueError('nonstandard export number')
+        def bounded_int(text):
+            if len(text.lstrip('-')) > 128:
+                raise ValueError('overlong export integer')
+            return int(text)
         def finite_float(text):
+            if len(text) > 128:
+                raise ValueError('overlong export float')
             number = float(text)
             mantissa = re.split('[eE]', text, maxsplit=1)[0]
             if not math.isfinite(number) or (number == 0 and re.search('[1-9]', mantissa)):
@@ -354,7 +360,8 @@ def export(client: Client) -> Path:
             if not line:
                 return False
             value = json.loads(line, object_pairs_hook=unique_fields,
-                               parse_constant=invalid_constant, parse_float=finite_float)
+                                parse_constant=invalid_constant, parse_float=finite_float,
+                                parse_int=bounded_int)
             if not isinstance(value, dict):
                 return False
             stack = [(value, 0)]

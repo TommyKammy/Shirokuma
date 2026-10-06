@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 bounded export numeric tokens (offline)
+
+JSONEachRow export refuses integer tokens over 128 digits and decimal tokens
+over 128 characters before publishing a report. Synthetic 129-digit integer,
+long zero fraction and exponent published before repair; afterward focused
+AgentHouse 32 tests and the full local verifier pass. Dedicated Colima freshly
+Stopped; no live export or retained report, volume or backup touched. This
+does not authenticate the producer or prove operator acceptance. Revert only
+the scoped parser/fixtures; retain saved reports and pending files. Original
+Vault sync pending outside checkout.
+
 ## 2026-10-06 ambiguous Docker inspection fields (offline)
 
 Context and owned container/volume inspection now reject duplicate JSON keys

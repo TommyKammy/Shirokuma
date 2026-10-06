@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.429"
+version: "5.430"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent bounded numeric tokens (offline)
+
+WP-L6-FIN-001 metadata JSON float tokens and WP-L2-CH-001 AgentHouse export
+integer/float tokens now have 128-character/digit limits before publication or
+projection. Synthetic long zero fractions/exponents and export integers passed
+before the guards; focused FinOps 316 tests (seven Linux-only skips), AgentHouse
+32 tests and full `make verify-local-experiment` pass (fake Dagster worker
+failure is an intentional negative fixture). Dedicated Colima freshly Stopped;
+no live query, retained report, volume or backup mutation. AgentHouse volume
+usage remains `null / NOT_MEASURED`. These bounds cannot authenticate producers
+or establish operator acceptance. Roll back only the two scoped parsers/tests,
+preserving saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent metadata text/integer and Docker key guards (offline)
 

@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.217"
+version: "0.218"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 fixed metadata decimal token limit (offline)
+
+The fixed Docker/Kubernetes metadata decoder now refuses float tokens longer
+than 128 characters before conversion, including harmless-looking long zero
+fractions and exponents. Two negative variants passed before repair; a long
+nonzero underflow was already refused. Focused FinOps 316 tests (seven Linux-only
+skips) and the full local verifier pass. Dedicated Colima freshly Stopped; no
+live metadata or retained report, volume or backup touched. This is a bounded
+decoder, not producer authentication or operator acceptance. Restore only the
+scoped token guard/test, preserving saved reports. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 fixed metadata decoded text and integer bounds (offline)
 

@@ -25,6 +25,13 @@ class DockerReplyNumberTests(unittest.TestCase):
                 R._json(raw)
         self.assertEqual(R._json('{"nested": 123}'), {'nested': 123})
 
+    def test_metadata_float_token_is_bounded(self):
+        for token in ('1.' + '0' * 129, '1e' + '9' * 129,
+                      '0.' + '0' * 129 + '0'):
+            with self.subTest(token_length=len(token)), self.assertRaisesRegex(R.C.FinOpsError, 'READ_FAILED'):
+                R._json('{"nested": ' + token + '}')
+        self.assertEqual(R._json('{"nested": 1.25e2}'), {'nested': 125.0})
+
     def test_nonrepresentable_numbers_are_not_accepted_in_metadata(self):
         for raw in ('{"nested":1e9999}', '{"nested":1e-9999}',
                     '{"nested":[-1e9999]}'):

@@ -256,6 +256,9 @@ class AgentHouseTests(unittest.TestCase):
                                '{"nested":{"value":-Infinity}}\n',
                                '{"value":"\\ud800"}\n', '{"\\ud800":1}\n',
                                '{"value":1e9999}\n', '{"value":1e-9999}\n',
+                               '{"value":' + '9' * 129 + '}\n',
+                               '{"value":1.' + '0' * 129 + '}\n',
+                               '{"value":1e' + '0' * 129 + '}\n',
                                '{"nested":' + '[' * 65 + '0' + ']' * 65 + '}\n',
                                '{"nested":' + '[' * 1200 + '0' + ']' * 1200 + '}\n',
                                ' ' * (8 * 1024 * 1024 + 1)):
