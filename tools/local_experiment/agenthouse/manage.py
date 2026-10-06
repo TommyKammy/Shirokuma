@@ -340,13 +340,26 @@ def export(client: Client) -> Path:
             if not math.isfinite(number) or (number == 0 and re.search('[1-9]', mantissa)):
                 raise ValueError('unrepresentable export number')
             return number
-        if rows and (not rows.endswith('\n') or any(
-                not line or not isinstance(json.loads(line, object_pairs_hook=unique_fields,
-                                                      parse_constant=invalid_constant,
-                                                      parse_float=finite_float), dict)
-                for line in rows.splitlines())):
+        def valid_row(line):
+            if not line:
+                return False
+            value = json.loads(line, object_pairs_hook=unique_fields,
+                               parse_constant=invalid_constant, parse_float=finite_float)
+            if not isinstance(value, dict):
+                return False
+            stack = [(value, 0)]
+            while stack:
+                item, depth = stack.pop()
+                if depth > 64:
+                    return False
+                if isinstance(item, dict):
+                    stack.extend((child, depth + 1) for child in item.values())
+                elif isinstance(item, list):
+                    stack.extend((child, depth + 1) for child in item)
+            return True
+        if rows and (not rows.endswith('\n') or not all(valid_row(line) for line in rows.splitlines())):
             raise AgentHouseError('local AgentHouse export is not JSONEachRow')
-    except ValueError:
+    except (ValueError, RecursionError):
         raise AgentHouseError('local AgentHouse export is not JSONEachRow') from None
     name = "pawprints-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".jsonl"
     path = STATE / name

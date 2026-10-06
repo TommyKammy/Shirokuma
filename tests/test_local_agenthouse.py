@@ -236,13 +236,18 @@ class AgentHouseTests(unittest.TestCase):
                               '{"event_id":"a","event_id":"b"}\n',
                               '{"value":NaN}\n', '{"value":Infinity}\n',
                               '{"nested":{"value":-Infinity}}\n',
-                              '{"value":1e9999}\n', '{"value":1e-9999}\n',
-                              ' ' * (8 * 1024 * 1024 + 1)):
+                               '{"value":1e9999}\n', '{"value":1e-9999}\n',
+                               '{"nested":' + '[' * 65 + '0' + ']' * 65 + '}\n',
+                               '{"nested":' + '[' * 1200 + '0' + ']' * 1200 + '}\n',
+                               ' ' * (8 * 1024 * 1024 + 1)):
                     with self.subTest(reply=reply[:32]):
                         client.query.return_value = reply
                         with self.assertRaises(M.AgentHouseError):
                             M.export(client)
                         self.assertEqual(list(state.iterdir()), [])
+
+                client.query.return_value = '{"nested":' + '[' * 63 + '0' + ']' * 63 + '}\n'
+                self.assertEqual(M.export(client).read_text(), client.query.return_value)
 
     def test_query_rejects_invalid_utf8_response_with_scoped_error(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')

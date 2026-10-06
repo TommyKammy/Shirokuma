@@ -12,6 +12,16 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: bounded AgentHouse export nesting (offline)
+
+WP-L2-CH-001 now refuses JSONEachRow values nested beyond 64 levels and
+converts parser recursion failure to a scoped export error before publication.
+Focused 30 tests and local verifier pass; the fake Dagster failure in the
+verifier is an expected negative fixture. Dedicated Colima was freshly stopped;
+no live export or retained report, volume or backup was changed. This is not
+producer authentication or operator acceptance. Roll back only the guard/test,
+preserving saved evidence. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: bounded FinOps reply depth (offline)
 
 WP-L6-FIN-001 refuses deeply nested JSONEachRow replies with scoped

@@ -12,6 +12,16 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline export nesting limit
+
+An 8 MiB-bounded JSONEachRow response could still contain 65 nested levels.
+Export now rejects rows deeper than 64 and catches JSON parser recursion failure
+before creating any report; a shallower fixture remains accepted. Focused 30
+AgentHouse tests and `make verify-local-experiment` pass. Dedicated Colima was
+observed stopped; no live export or retained data/backup change. This is not
+producer authentication or operator acceptance. Revert only the scoped guard
+and fixtures; preserve reports and pending files. Original Vault sync pending.
+
 ## 2026-10-06 offline export publication on disk failure
 
 The bounded JSONEachRow export now writes a private 0600 `.pending` inode,
