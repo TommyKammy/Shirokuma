@@ -12,6 +12,24 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 saved-container security and inspection shape (offline)
+
+Two independent startup gaps: a container with matching image/port/volume could
+lose `no-new-privileges`, gain capabilities, devices or host binds; malformed
+saved Config/HostConfig/Mounts raised raw Python exceptions. Isolated negatives
+reproduced ten unauthorized starts and six raw exceptions before repair. Existing
+containers now require the pinned security option and no extra host access;
+malformed inspection fails with a scoped error before private state creation.
+The canonical fixture still starts through the fake Docker client. Focused 41
+AgentHouse tests and `make verify-local-experiment` pass (the fake Dagster
+worker failure is an intentional negative fixture). Dedicated Colima freshly
+Stopped; no live Docker start, credential, volume, backup or report mutation.
+Docker replies and daemon identity are not independently authenticated; this
+does not prove saved-container compatibility or operator acceptance. For
+recovery, inspect the actual retained container before a live start; revert
+only these guards/tests if needed, never delete saved resources. Original Vault
+sync pending outside checkout.
+
 ## 2026-10-06 existing container isolation before startup (offline)
 
 An existing owned container with the expected image, port binding, volume and

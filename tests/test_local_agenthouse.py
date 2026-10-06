@@ -393,7 +393,9 @@ class AgentHouseTests(unittest.TestCase):
             "HostConfig": {"PortBindings": {"8123/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18123"}]},
                            "NanoCpus": 2_000_000_000, "Memory": 4 * 1024**3,
                            "NetworkMode": "default", "Privileged": False,
-                           "PidMode": "", "PublishAllPorts": False},
+                           "PidMode": "", "PublishAllPorts": False,
+                           "SecurityOpt": ["no-new-privileges:true"],
+                           "CapAdd": None, "Devices": [], "Binds": None},
             "Mounts": [{"Type": "volume", "Name": M.VOLUME,
                         "Destination": "/var/lib/clickhouse", "RW": True}],
         }
@@ -455,6 +457,33 @@ class AgentHouseTests(unittest.TestCase):
             del existing['HostConfig'][key]
             with self.subTest(key=key, value='missing'), self.assertRaisesRegex(M.AgentHouseError, 'isolation'):
                 self.ensure_existing(existing)
+
+    def test_existing_runtime_refuses_lost_security_options_or_host_access(self):
+        for key, values in (("SecurityOpt", ([], ["no-new-privileges:false"],
+                                               ["no-new-privileges:true", "seccomp=unconfined"])),
+                            ("CapAdd", (["SYS_ADMIN"],)),
+                            ("Devices", ([{"PathOnHost": "/dev/disk0"}],)),
+                            ("Binds", (["/host:/host"],))):
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    existing = self.existing_runtime()
+                    existing['HostConfig'][key] = value
+                    with self.assertRaisesRegex(M.AgentHouseError, 'isolation'):
+                        self.ensure_existing(existing)
+            existing = self.existing_runtime()
+            del existing['HostConfig'][key]
+            with self.subTest(key=key, value='missing'), self.assertRaisesRegex(M.AgentHouseError, 'isolation'):
+                self.ensure_existing(existing)
+
+    def test_existing_runtime_refuses_malformed_inspection_before_start(self):
+        for field, malformed in (("Config", None), ("Config", {}),
+                                 ("HostConfig", None), ("HostConfig", []),
+                                 ("Mounts", None), ("Mounts", [None])):
+            with self.subTest(field=field, malformed=malformed):
+                existing = self.existing_runtime()
+                existing[field] = malformed
+                with self.assertRaises(M.AgentHouseError):
+                    self.ensure_existing(existing)
 
     def test_new_runtime_refuses_existing_env_without_modifying_it(self):
         with tempfile.TemporaryDirectory() as directory:

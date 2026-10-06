@@ -233,6 +233,12 @@ def ensure_runtime() -> Client:
     volume = inspect_owned("volume", VOLUME)
     if existing and volume is None:
         raise AgentHouseError("existing AgentHouse requires its original owned data volume; refusing recreation")
+    if existing and (not isinstance(existing.get('Config'), dict) or
+                     not isinstance(existing['Config'].get('Image'), str) or
+                     not isinstance(existing.get('HostConfig'), dict) or
+                     not isinstance(existing.get('Mounts'), list) or
+                     any(not isinstance(mount, dict) for mount in existing['Mounts'])):
+        raise AgentHouseError('existing AgentHouse inspection is malformed; refusing startup')
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     with private_state_fd() as state:
         try:
@@ -280,7 +286,11 @@ def ensure_runtime() -> Client:
         if (host_config.get('NetworkMode') not in ('default', 'bridge') or
                 host_config.get('Privileged') is not False or
                 host_config.get('PidMode') != '' or
-                host_config.get('PublishAllPorts') is not False):
+                host_config.get('PublishAllPorts') is not False or
+                host_config.get('SecurityOpt') != ['no-new-privileges:true'] or
+                'CapAdd' not in host_config or host_config['CapAdd'] not in (None, []) or
+                'Devices' not in host_config or host_config['Devices'] not in (None, []) or
+                'Binds' not in host_config or host_config['Binds'] not in (None, [])):
             raise AgentHouseError('existing AgentHouse isolation differs; refusing startup')
     client = Client()
     docker("start", NAME)

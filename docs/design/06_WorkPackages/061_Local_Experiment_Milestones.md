@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: saved AgentHouse startup security and inspection shape (offline)
+
+WP-L2-CH-001 refuses an existing container missing no-new-privileges or adding
+capabilities, devices or host binds, and scopes malformed Config/HostConfig/
+Mounts before state creation. Ten unsafe-start and six raw-exception negatives
+failed before repair; focused 41 tests and the full local verifier pass (fake
+Dagster worker failure is intentional). Dedicated Colima freshly Stopped; no
+live Docker or retained data/backup change. This is not daemon authentication,
+saved-container compatibility or operator acceptance. Restore only scoped
+guards/tests, keeping retained resources; original Vault sync pending.
+
 ## 2026-10-06: independent existing-container isolation and inference framing (offline)
 
 WP-L2-CH-001 refuses host network/PID mode, privileged or publish-all existing
