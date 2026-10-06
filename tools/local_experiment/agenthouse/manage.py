@@ -144,6 +144,11 @@ def inspect_owned(kind: str, name: str) -> dict | None:
         raise AgentHouseError(f"invalid {kind} inspection for {name}; refusing runtime") from None
     if labels.get(LABEL) != "agenthouse-local":
         raise AgentHouseError(f"refusing an unowned {kind} named {name}")
+    # A label alone must not lend another object the fixed container/volume
+    # identity used to authorize startup against retained data.
+    expected_name = '/' + name if kind == 'container' else name
+    if data.get('Name') != expected_name:
+        raise AgentHouseError(f"invalid {kind} inspection for {name}; refusing runtime")
     return data
 
 

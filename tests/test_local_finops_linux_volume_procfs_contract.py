@@ -14,7 +14,7 @@ def stat_line(pid,start,comm=b'fixture worker'):
 
 
 def inputs():
-    return {'boot_id':str(uuid.uuid4()),'proc_device':32,'proc_inode':1,
+    return {'boot_id':str(uuid.uuid4()),'proc_device':20,'proc_inode':1,
             'proc_mount_id':19,
             'mountinfo':b'19 1 0:20 / /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
             'fdinfo':b'pos:\t0\nflags:\t0100000\nmnt_id:\t19\n',
@@ -133,6 +133,15 @@ class ProcfsContractTests(unittest.TestCase):
         value['mountinfo'] = value['mountinfo'].replace(b'19 0 0:20', b'19 00 0:20')
         with self.assertRaises(P.ProcfsError):
             P.project(**value)
+
+    def test_proc_mount_device_must_match_pinned_proc_stat_device(self):
+        for device, row_device in ((21, b'0:20'), (20, b'0:21'), (20, b'1:20')):
+            value = inputs()
+            value['proc_device'] = device
+            value['mountinfo'] = value['mountinfo'].replace(b'0:20', row_device, 1)
+            with self.subTest(device=device, row_device=row_device), self.assertRaises(P.ProcfsError):
+                P.project(**value)
+        self.assertTrue(P.project(**inputs())['probe']['query_complete'])
 
     def test_mountinfo_requires_canonical_single_space_columns(self):
         original = inputs()['mountinfo']

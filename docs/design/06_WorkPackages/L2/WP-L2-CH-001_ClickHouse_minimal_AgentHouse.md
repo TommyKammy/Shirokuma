@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.17"
+version: "0.18"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 fixed Docker inspect name correlation (offline)
+
+The owned-label inspection accepted a Docker reply for another named container
+or volume (or no name) as the fixed AgentHouse resource. Six negative fixtures
+now fail; a matching container `/name` or volume `name` still passes. Focused
+AgentHouse 54 tests and `make verify-local-experiment` pass. An initial
+`make test-local-agenthouse` failed because that target does not exist; the
+direct unittest discovery succeeded. Dedicated Colima observed Stopped; no
+Docker startup, live query, saved credential, report, volume or backup accessed
+or changed. This checks reply consistency, not daemon provenance, live
+deduplication or operator acceptance. Revert only the scoped identity check
+and test, preserve retained resources, and never replay an uncertain insert.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06 exact startup readiness reply (offline)
 

@@ -73,7 +73,7 @@ def _start(raw,pid):
     return tick.decode('ascii')
 
 
-def _mount(raw,mount_id):
+def _mount(raw,mount_id,device):
     require(type(raw) is bytes and 0<len(raw)<=MAX_MOUNTINFO and
             raw.endswith(b'\n') and
             not any(byte < 32 and byte != 10 or byte == 127 for byte in raw))
@@ -136,6 +136,12 @@ def _mount(raw,mount_id):
         require(not re.fullmatch(r'/proc/(?:[0-9]+|self|thread-self)(?:/.*)?',path))
     require(len(matches)==1 and matches[0][0]==mount_id)
     _,left,right=matches[0]
+    # Linux mountinfo prints the major:minor pair of the same st_dev encoded
+    # in the caller's /proc stat. Decode Linux dev_t explicitly: this pure
+    # fixture contract also runs on macOS, whose os.major/minor differ.
+    major=((device>>8)&0xfff)|((device>>32)&~0xfff)
+    minor=(device&0xff)|((device>>12)&~0xff)
+    require(left[2]==f'{major}:{minor}')
     mount_options=left[5].split(',')
     require(mount_options[0] in ('rw','ro') and
             len(mount_options)==len(set(mount_options)) and
@@ -182,7 +188,7 @@ def project(*, boot_id, proc_device, proc_inode, proc_mount_id, mountinfo,
     require(len(match)==1 and match[0].strip()==str(self_pid).encode())
     matches=re.findall(rb'^mnt_id:[ \t]*([0-9]+)$',info,re.M)
     require(len(matches)==1 and matches[0]==str(proc_mount_id).encode())
-    _mount(mountinfo,proc_mount_id)
+    _mount(mountinfo,proc_mount_id,proc_device)
     if target_stat is None:
         require(type(target_errno) is int and target_errno==errno.ENOENT)
         start=None

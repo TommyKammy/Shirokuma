@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.458"
+version: "5.459"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent inspect-name and proc-device correlation (offline)
+
+WP-L2-CH-001 refuses owned-label Docker inspections whose reported container
+or volume name does not match the fixed requested resource (six negative
+fixtures). Independently WP-L6-FIN-001 correlates the supplied `/proc` stat
+device with the mountinfo major/minor using Linux encoding (three negatives);
+the formerly inconsistent positive fixture is corrected. Focused AgentHouse
+54, procfs 24 and FinOps 352 tests (seven Linux-only skips), full
+`make verify-local-experiment`, design-context and diff check pass; the
+verifier's fake Dagster failure is an intentional negative. An initial
+nonexistent AgentHouse make target produced no tests, then direct discovery
+passed. Dedicated Colima observed Stopped; no Docker/VM runtime operation,
+retained data/backup access or change, or AgentHouse usage measurement
+(`null / NOT_MEASURED`). These checks cannot authenticate producers, permit
+retained-volume scanning, prove live deduplication/cleanup or grant operator
+acceptance. Roll back only the scoped parsers and fixtures while preserving
+saved evidence; never replay unknown inserts. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: independent root-parent and startup readiness fixtures (offline)
 

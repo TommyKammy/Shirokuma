@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.242"
+version: "0.243"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 procfs device identity correlation (offline)
+
+The independent caller-supplied `/proc` fixture projected a candidate even
+when its mountinfo `major:minor` contradicted the pinned `/proc` `st_dev`.
+Three negative fixtures failed before repair. The pure parser now decodes the
+Linux device number without relying on macOS `os.major/minor`, and the positive
+fixture uses a consistent pair. Focused procfs 24 tests, FinOps 352 tests
+(seven Linux-only skips), and `make verify-local-experiment` pass. Dedicated
+Colima observed Stopped; no guest read, retained volume/report/backup access
+or change; AgentHouse bytes remain `null / NOT_MEASURED`. Consistent
+caller-supplied fields do not authenticate the kernel, justify scanning a
+retained volume, establish cleanup or grant operator acceptance. Roll back
+only the device correlation/fixture, preserve saved evidence; original Vault
+sync pending outside checkout.
 
 ## 2026-10-06 namespace-root mount parent compatibility (offline)
 

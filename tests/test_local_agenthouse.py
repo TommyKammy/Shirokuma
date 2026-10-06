@@ -118,6 +118,25 @@ class AgentHouseTests(unittest.TestCase):
             with self.assertRaisesRegex(M.AgentHouseError, "unowned"):
                 M.inspect_owned("container", M.NAME)
 
+    def test_owned_inspection_must_report_requested_resource_name(self):
+        for kind, name, labels in (
+            ('container', M.NAME, {'Config': {'Labels': {M.LABEL: 'agenthouse-local'}}}),
+            ('volume', M.VOLUME, {'Labels': {M.LABEL: 'agenthouse-local'}}),
+        ):
+            for reported in (None, '/other' if kind == 'container' else 'other',
+                             name if kind == 'container' else '/' + name):
+                reply = dict(labels)
+                if reported is not None:
+                    reply['Name'] = reported
+                with self.subTest(kind=kind, reported=reported), \
+                        patch.object(M, 'docker', return_value=json.dumps([reply])):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'invalid .* inspection'):
+                        M.inspect_owned(kind, name)
+            reply = dict(labels, Name='/' + name if kind == 'container' else name)
+            with self.subTest(kind=kind, reported='correct'), \
+                    patch.object(M, 'docker', return_value=json.dumps([reply])):
+                self.assertEqual(M.inspect_owned(kind, name), reply)
+
     def test_malformed_owned_inspection_is_not_absence(self):
         for kind, name in (('container', M.NAME), ('volume', M.VOLUME)):
             for reply in ('[]', '{}', 'not json', '[null]', '[{}, {}]',
