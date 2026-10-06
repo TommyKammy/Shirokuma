@@ -207,6 +207,21 @@ class DockerStorageTests(unittest.TestCase):
                          [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
                           ('volume', D.AH.VOLUME)])
 
+    def test_container_identity_drift_stops_before_second_volume(self):
+        for field, value in (('Id', 'b'*64), ('State', {'Running': True})):
+            responses = fixture() + deepcopy(fixture())
+            responses[4][0][field] = value
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.docker_storage_inspect.side_effect = responses
+            with self.subTest(field=field):
+                result = D.collect(backend)
+            self.assertEqual(result['agenthouse']['reason'], 'IDENTITY_CHANGED')
+            self.assertEqual([call.args for call in backend.docker_storage_inspect.call_args_list],
+                             [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
+                              ('volume', D.AH.VOLUME), ('context', D.AH.CONTEXT),
+                              ('container', D.AH.NAME)])
+
     def test_backend_only_fixed_scoped_inspect_commands(self):
         backend=R.Backend()
         with patch.object(backend,'_command',side_effect=lambda cmd:json.dumps([{'safe':'metadata'}])) as command:

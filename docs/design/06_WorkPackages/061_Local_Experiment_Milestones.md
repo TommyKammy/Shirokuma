@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.408"
+version: "5.409"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: second-pass container drift stops before volume read (offline)
+
+WP-L6-FIN-001: changed ID/running state on the second container reply now
+stops at five Docker reads rather than querying the volume before final
+projection. Two negatives failed before repair; FinOps 303 tests (seven
+Linux-only skips) and full local verifier pass. Colima last observed Stopped;
+no live Docker read or retained data/backup change, AgentHouse bytes remain
+`null / NOT_MEASURED`. Offline source consistency is not daemon authenticity,
+atomic observation or acceptance. Roll back only this comparison/test;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: Docker reference fails before unrelated follow-up reads (offline)
 

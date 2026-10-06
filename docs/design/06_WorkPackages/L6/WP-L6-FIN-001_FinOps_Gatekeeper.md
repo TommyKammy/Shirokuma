@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.206"
+version: "0.207"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: detect container drift before second volume read (offline)
+
+Independently of malformed first-response rejection, a changed fixed container
+ID or running state on the second pass used to trigger the second volume read
+before the final identity comparison. Both negative fixtures failed before
+repair. The collector now rejects that drift at the container boundary with
+`IDENTITY_CHANGED`; the six-read stable case still passes. Focused FinOps
+303 tests (seven Linux-only skips) and full local verifier pass. Dedicated
+Colima was last observed Stopped; no live daemon read, retained volume/backup
+mutation or measured AgentHouse bytes (`null / NOT_MEASURED`). This narrows
+the read sequence, not the non-atomicity or daemon-authentication gap. Roll
+back only this early comparison/test; preserve saved data. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: stop Docker reference reads at first invalid identity (offline)
 

@@ -167,7 +167,8 @@ def collect(backend):
         second_context = backend.docker_storage_inspect('context', AH.CONTEXT)
         require(_context(first_context) == _context(second_context), 'IDENTITY_CHANGED')
         second_container = backend.docker_storage_inspect('container', AH.NAME)
-        _container(_object(second_container))
+        require(_container(_object(first_container)) == _container(_object(second_container)),
+                'IDENTITY_CHANGED')
         after = [second_context, second_container,
                  backend.docker_storage_inspect('volume', AH.VOLUME)]
         row = project(*before, *after, request_started_at=start, observed_at=backend.now())
