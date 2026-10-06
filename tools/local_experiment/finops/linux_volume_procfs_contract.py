@@ -134,6 +134,10 @@ def _mount(raw,mount_id,device):
         if path=='/proc':matches.append((ident,left,right))
         # A nested mount replacing procfs lookup of any PID is ambiguous.
         require(not re.fullmatch(r'/proc/(?:[0-9]+|self|thread-self)(?:/.*)?',path))
+        # A nested mount can also replace the source of the VM boot identity;
+        # matching the caller's boot UUID alone does not detect that topology.
+        boot_path='/proc/sys/kernel/random/boot_id'
+        require(path=='/proc' or not (path==boot_path or boot_path.startswith(path+'/')))
     require(len(matches)==1 and matches[0][0]==mount_id)
     _,left,right=matches[0]
     # Linux mountinfo prints the major:minor pair of the same st_dev encoded

@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.462"
+version: "5.463"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent procfs boot-ID overmount boundary (offline)
+
+WP-L6-FIN-001 rejects caller-supplied mount inventories with an overmount of
+`/proc/sys/kernel/random/boot_id` or its nested ancestors. Four negatives
+projected before repair; unrelated `/proc/acpi` remains allowed. Focused
+procfs 26, FinOps 354 (seven Linux-only skips) and full local verifier pass;
+the fake Dagster failure is intentional. Dedicated Colima remained Stopped;
+no VM read or retained data/backup change, AgentHouse bytes `null /
+NOT_MEASURED`. Offline topology does not authenticate a boot ID/kernel,
+permit retained-volume scanning, prove cleanup or grant operator acceptance.
+Revert only scoped parser/test and preserve records; original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent context identity and restart-policy checks (offline)
 

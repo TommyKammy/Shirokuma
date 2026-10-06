@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.244"
+version: "0.245"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 boot-ID path overmount fixture (offline)
+
+The caller-supplied procfs mount inventory previously projected a valid
+candidate with a separate mount on `/proc/sys` or another ancestor of
+`/proc/sys/kernel/random/boot_id`. Four negative fixtures exposed the gap;
+the contract now refuses these mounts while leaving an unrelated `/proc/acpi`
+mount eligible. Focused procfs 26 and FinOps 354 tests (seven Linux-only skips),
+plus `make verify-local-experiment`, pass; the fake Dagster failure is
+intentional. Dedicated Colima was Stopped; no VM/procfs read or retained
+report/volume/backup access or change, AgentHouse usage `null / NOT_MEASURED`.
+This is a caller-supplied topology check, not kernel/boot-ID provenance,
+permission to scan a retained volume, cleanup proof or operator acceptance.
+Restore only the scoped check/test if needed and preserve saved evidence;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06 exact self namespace PID field (offline)
 

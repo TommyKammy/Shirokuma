@@ -121,6 +121,17 @@ class ProcfsContractTests(unittest.TestCase):
             with self.subTest(mount=mount),self.assertRaises(P.ProcfsError):
                 P.project(**value)
 
+    def test_boot_identity_path_cannot_be_overmounted(self):
+        for mount in (b'/proc/sys', b'/proc/sys/kernel', b'/proc/sys/kernel/random',
+                      b'/proc/sys/kernel/random/boot_id'):
+            value = inputs()
+            value['mountinfo'] += b'20 19 0:21 / ' + mount + b' rw - tmpfs tmpfs rw\n'
+            with self.subTest(mount=mount), self.assertRaises(P.ProcfsError):
+                P.project(**value)
+        value = inputs()
+        value['mountinfo'] += b'20 19 0:21 / /proc/acpi rw - tmpfs tmpfs rw\n'
+        self.assertTrue(P.project(**value)['probe']['query_complete'])
+
     def test_mountinfo_root_parent_and_device_are_structural(self):
         for row in (b'19 -1 0:20 / /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
                     b'19 1 broken / /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
