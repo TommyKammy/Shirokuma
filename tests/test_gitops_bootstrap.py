@@ -524,6 +524,28 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
                 self.assertIn(reason, result.stdout)
                 self.assertNotIn("No rule to make target", result.stderr)
 
+    def test_gitops_status_rejects_foreign_context_before_reads(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            calls = root / "calls"
+            for executable in ("kubectl", "flux"):
+                binary = root / executable
+                binary.write_text('#!/bin/sh\nprintf "called\\n" >> "$CALLS_FILE"\n', encoding="utf-8")
+                binary.chmod(0o755)
+            result = subprocess.run(
+                ["make", "--no-print-directory", "gitops-status", "KUBE_CONTEXT=colima-other",
+                 f"FLUX={root / 'flux'}"],
+                cwd=ROOT,
+                env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}", "CALLS_FILE": str(calls)},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("dedicated Kubernetes context", result.stdout)
+            self.assertFalse(calls.exists())
+
     def test_gitops_bootstrap_preflights_all_secret_inputs_before_apply(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         target = makefile.split("gitops-bootstrap:", 1)[1].split("\ngitops-status:", 1)[0]

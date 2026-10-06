@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.538"
+version: "5.539"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: dedicated-context status read (offline)
+
+WP-L0-GITOPS-001: the separate read-only `gitops-status` target rejects a
+foreign context before kubectl/Flux reads. A fake `colima-other` invocation
+made zero calls; bootstrap/teardown focused 46 tests pass. This is a local
+scope check, not live API authentication or §9 acceptance. The dedicated
+Colima profile was freshly observed Stopped in this invocation; no VM start,
+retained volume/backup read, remote write or reconcile. For a separately
+authorized profile, review this target's context check rather than changing
+global kubeconfig. Original Vault direct sync pending outside checkout.
 
 ## 2026-10-06: local bootstrap/teardown refusal and offline List completeness
 

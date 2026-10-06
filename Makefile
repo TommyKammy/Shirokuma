@@ -166,6 +166,7 @@ gitops-bootstrap:
 	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(FLUX_GITHUB_REPOSITORY) --private=$(FLUX_GITHUB_PRIVATE) --branch=$(FLUX_BOOTSTRAP_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT)
 
 gitops-status:
+	@test "$(KUBE_CONTEXT)" = colima-mac-studio-solo || { echo "gitops-status requires the dedicated Kubernetes context"; exit 1; }
 	@kubectl --context $(KUBE_CONTEXT) -n flux-system get deployments
 	@$(FLUX) get sources git -A --context=$(KUBE_CONTEXT)
 	@$(FLUX) get kustomizations -A --context=$(KUBE_CONTEXT)

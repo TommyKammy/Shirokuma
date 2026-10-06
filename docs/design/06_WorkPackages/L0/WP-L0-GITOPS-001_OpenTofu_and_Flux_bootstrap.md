@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.166"
+version: "0.167"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: status scope for the dedicated context (offline)
+
+Separately from the mutating-target refusal, `make gitops-status` now rejects
+an overridden non-dedicated Kubernetes context before kubectl or Flux reads.
+A fake-tool invocation with `colima-other` recorded zero calls; the 46
+bootstrap/teardown focused tests pass. This protects unrelated contexts from
+accidental observation, not Kubernetes API authenticity or live Flux health.
+The dedicated Colima profile was last freshly observed Stopped and was not
+started for this check. No retained storage/backup or cluster state changed.
+To restore status for another authorized profile, review and change only this
+scope check; do not infer live §9, writer safety or publication acceptance.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-06: local mutating-target refusals and partial List boundary
 
