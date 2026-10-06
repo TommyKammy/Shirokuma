@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.210"
+version: "0.211"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: scope inference to the fixed AgentHouse mount (offline)
+
+The inference reader previously accepted the fixed image/identity/port even
+when the inspected container had no mount or a foreign data source. It now
+reuses the fixed AgentHouse container mount contract before opening the local
+credential or issuing the query; missing, redirected and duplicate mount
+fixtures fail with `SCOPE_INVALID`. Focused FinOps 307 tests (seven Linux-only
+skips) and full local verifier passed. No live query, credential read, Docker
+daemon access or retained data/backup change in this increment; dedicated
+Colima was last freshly observed not running. This check is not daemon
+authentication, independent data provenance or proof of AgentHouse volume
+usage (`null / NOT_MEASURED`). Revert only the inference guard/test if needed;
+preserve retained records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: reject invalid reference clock before Docker reads (offline)
 

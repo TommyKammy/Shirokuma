@@ -257,8 +257,14 @@ class Backend:
                   type(state) is dict and type(network) is dict and
                   type(network.get('Ports')) is dict, 'SCOPE_INVALID')
         C.require(config['Labels'].get(AH.LABEL) == 'agenthouse-local' and
-                  config.get('Image') == AH.IMAGE and state.get('Running') is True,
-                  'SCOPE_INVALID')
+                   config.get('Image') == AH.IMAGE and state.get('Running') is True,
+                   'SCOPE_INVALID')
+        # A matching image/port with a foreign data mount is not the fixed
+        # local AgentHouse dataset. Check before opening the host credential.
+        try:
+            D._container(container)
+        except D.DockerStorageError:
+            raise C.FinOpsError('SCOPE_INVALID') from None
         ports = network['Ports'].get('8123/tcp')
         C.require(type(ports) is list and len(ports) == 1 and ports[0] ==
                   {'HostIp': '127.0.0.1', 'HostPort': '18123'} and

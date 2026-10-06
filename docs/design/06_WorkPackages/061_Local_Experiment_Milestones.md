@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.412"
+version: "5.413"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed AgentHouse inference mount scope (offline)
+
+WP-L6-FIN-001: inference now checks the single fixed named-volume mount before
+opening the credential/querying, rather than trusting image, container ID and
+loopback port alone. Missing/foreign/duplicate mounts are refused in fixtures.
+FinOps 307 tests (seven Linux-only skips) and the full local verifier passed.
+Colima last freshly observed not running; no live Docker/query, credential
+read, retained data or backup change. AgentHouse volume usage stays `null /
+NOT_MEASURED`; replies are not authenticated data provenance or operator
+acceptance. Revert only the scoped guard/test; original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: invalid FinOps start clock stops before Docker (offline)
 

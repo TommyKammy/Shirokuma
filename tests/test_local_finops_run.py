@@ -387,8 +387,9 @@ class RuntimeTests(unittest.TestCase):
     def test_agenthouse_fixed_read_reuses_client_without_starting_and_rejects_foreign_port(self):
         context = [{'Name': R.AH.CONTEXT, 'Endpoints':{'docker':{'Host':self._inference_socket()}}}]
         owned = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
-                  'Config':{'Labels':{R.AH.LABEL:'agenthouse-local'},'Image':R.AH.IMAGE},
-                  'State':{'Running':True},'NetworkSettings':{'Ports':{'8123/tcp':[
+                   'Config':{'Labels':{R.AH.LABEL:'agenthouse-local'},'Image':R.AH.IMAGE},
+                   'Mounts': self._inference_mounts(),
+                   'State':{'Running':True},'NetworkSettings':{'Ports':{'8123/tcp':[
                       {'HostIp':'127.0.0.1','HostPort':'18123'}]}}}]
         with tempfile.TemporaryDirectory() as temp:
             state=Path(temp); state.chmod(0o700)
@@ -435,8 +436,9 @@ class RuntimeTests(unittest.TestCase):
     def test_agenthouse_inference_requires_inspected_container_identity(self):
         context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
         owned = {'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
-                 'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
-                 'State': {'Running': True}, 'NetworkSettings': {'Ports': {'8123/tcp': [
+                  'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+                  'Mounts': self._inference_mounts(),
+                  'State': {'Running': True}, 'NetworkSettings': {'Ports': {'8123/tcp': [
                      {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}
         for key, invalid in (('Name', '/unrelated'), ('Name', None),
                              ('Id', None), ('Id', 'b'*63), ('Id', 'A'*64)):
@@ -452,8 +454,9 @@ class RuntimeTests(unittest.TestCase):
     def test_agenthouse_inference_refuses_unexpected_published_port(self):
         context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
         container = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
-                      'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
-                      'State': {'Running': True}, 'NetworkSettings': {'Ports': {
+                       'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+                       'Mounts': self._inference_mounts(),
+                       'State': {'Running': True}, 'NetworkSettings': {'Ports': {
                           '8123/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '18123'}],
                           '9000/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '19000'}]}}}]
         backend = R.Backend()
@@ -462,6 +465,31 @@ class RuntimeTests(unittest.TestCase):
                 self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
             backend.inference(NOW)
         client.assert_not_called()
+
+    def test_agenthouse_inference_rejects_foreign_data_mount_before_credential(self):
+        context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
+        container = {'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
+                     'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+                     'Mounts': self._inference_mounts(), 'State': {'Running': True},
+                     'NetworkSettings': {'Ports': {'8123/tcp': [
+                         {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}
+        for mounts in ([], [dict(container['Mounts'][0], Name='foreign')],
+                       [dict(container['Mounts'][0], Source='/host/other')],
+                       container['Mounts'] * 2):
+            backend = R.Backend()
+            with self.subTest(mounts=mounts), \
+                    patch.object(backend, '_command', side_effect=[json.dumps(context),
+                                                                   json.dumps([dict(container, Mounts=mounts)])]), \
+                    patch.object(R.AH, 'Client') as client, \
+                    self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
+                backend.inference(NOW)
+            client.assert_not_called()
+
+    @staticmethod
+    def _inference_mounts():
+        source = '/var/lib/docker/volumes/' + R.AH.VOLUME + '/_data'
+        return [{'Type': 'volume', 'Name': R.AH.VOLUME, 'Driver': 'local',
+                 'Source': source, 'Destination': '/var/lib/clickhouse', 'RW': True}]
 
     def test_agenthouse_inference_refuses_context_path_alias_before_container_read(self):
         for name, host in ((R.AH.CONTEXT, 'unix:///Users/test/../other/.colima/mac-studio-solo/docker.sock'),
