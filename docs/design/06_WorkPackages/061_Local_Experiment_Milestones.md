@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.452"
+version: "5.453"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: private worker mount inventory ambiguity (offline)
+
+WP-L6-FIN-001 refuses repeated/conflicting propagation tags, ambiguous
+superblock access modes and duplicate mount IDs before projecting a volume
+mountpoint. Twelve negative fixtures failed before repair; worker focused 17
+tests (three Linux-only skips) and `make verify-local-experiment` pass (fake
+Dagster failure intentional). Dedicated Colima freshly Stopped; no VM read,
+retained data/backup change or AgentHouse measurement (`null / NOT_MEASURED`).
+Fixture parsing cannot authenticate kernel origin, authorize retained-volume
+scanning, prove cleanup or grant operator acceptance. Revert only scoped worker
+checks/tests, preserve saved records; original Vault sync pending.
 
 ## 2026-10-06: independent procfs propagation and process states (offline)
 

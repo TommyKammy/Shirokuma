@@ -82,6 +82,25 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
                 W._mountpoints(raw)
 
+    def test_mountinfo_refuses_conflicting_or_repeated_propagation(self):
+        row = '2 1 8:1 /some /fixture/child rw {tags} - ext4 /dev/a rw\n'
+        for tags in ('shared:1 shared:2', 'master:1 master:1',
+                     'unbindable unbindable', 'unbindable shared:1',
+                     'master:1 unbindable', 'propagate_from:1 unbindable'):
+            with self.subTest(tags=tags), self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
+                W._mountpoints(row.format(tags=tags))
+        for tags in ('unbindable', 'shared:1 master:2 propagate_from:3'):
+            self.assertEqual(W._mountpoints(row.format(tags=tags)), {'/fixture/child'})
+
+    def test_mountinfo_refuses_ambiguous_superblock_options_and_mount_ids(self):
+        row = '2 1 8:1 /some /fixture/child rw - ext4 /dev/a rw,relatime\n'
+        for options in ('ro,rw', 'rw,ro', 'rw,rw', 'rw,relatime,relatime',
+                        'relatime', 'rw,,relatime'):
+            with self.subTest(options=options), self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
+                W._mountpoints(row.replace('rw,relatime\n', options + '\n'))
+        with self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
+            W._mountpoints(row + row.replace('/fixture/child', '/elsewhere'))
+
     def test_mountinfo_refuses_ambiguous_access_options(self):
         row = '2 1 8:1 /some /fixture/child rw,nosuid - ext4 /dev/a rw,relatime\n'
         for options in ('rw,ro', 'rw,rw', 'rw,nosuid,ro', 'rw,nosuid,nosuid'):

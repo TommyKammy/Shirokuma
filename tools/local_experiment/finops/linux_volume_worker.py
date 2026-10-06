@@ -77,6 +77,7 @@ def _mountpoints(raw):
     lines = raw.split('\n')[:-1]
     require(all(line and line.splitlines() == [line] for line in lines))
     result = set()
+    seen_ids = set()
     for line in lines:
         fields = line.split(' ')
         # Mountinfo has six fixed columns, optional propagation columns, one
@@ -89,19 +90,32 @@ def _mountpoints(raw):
                 fields.count('-') == 1)
         separator = fields.index('-')
         require(separator >= 6 and len(fields) == separator + 4)
+        mount_id = int(fields[0])
+        require(0 < mount_id <= 2**63 - 1 and mount_id not in seen_ids)
+        seen_ids.add(mount_id)
         # The optional propagation columns are a small, defined vocabulary;
         # arbitrary text must not be accepted as evidence from procfs.
+        tags = set()
         for option in fields[6:separator]:
             if option == 'unbindable':
-                continue
-            match = re.fullmatch(r'(?:shared|master|propagate_from):([0-9]{1,19})', option)
-            require(match is not None and 0 < int(match[1]) <= 2**63 - 1)
+                kind = option
+            else:
+                match = re.fullmatch(r'(shared|master|propagate_from):([0-9]{1,19})', option)
+                require(match is not None and 0 < int(match[2]) <= 2**63 - 1)
+                kind = match[1]
+            require(kind not in tags)
+            tags.add(kind)
+        require('unbindable' not in tags or len(tags) == 1)
         mount_options = fields[5].split(',')
         require(mount_options[0] in ('ro', 'rw') and
                 len(mount_options) == len(set(mount_options)) and
                 not any(option in ('ro', 'rw') for option in mount_options[1:]) and
                 all(re.fullmatch(r'[A-Za-z0-9_.=:+/-]+', item) for item in mount_options))
-        require(all(re.fullmatch(r'[^,\s]+', item) for item in fields[separator + 3].split(',')))
+        super_options = fields[separator + 3].split(',')
+        require(super_options[0] in ('ro', 'rw') and
+                len(super_options) == len(set(super_options)) and
+                not any(option in ('ro', 'rw') for option in super_options[1:]) and
+                all(re.fullmatch(r'[^,\s]+', item) for item in super_options))
         # mountinfo escapes spaces, tabs, newlines and backslashes as octal.
         _mount_path(fields[3])
         value = _mount_path(fields[4])

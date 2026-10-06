@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.236"
+version: "0.237"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 private worker mount inventory ambiguity (offline)
+
+The separate private volume worker accepted repeated/conflicting propagation
+tags, ambiguous superblock access options and duplicate mount IDs while
+projecting mountpoints. Twelve isolated negatives failed before repair; valid
+unbindable and shared/master/propagate_from fixtures pass. Focused worker 17
+tests (three Linux-only skips) and `make verify-local-experiment` pass; the
+verifier's fake Dagster failure is intentional. Dedicated Colima was freshly
+Stopped; no VM or retained volume/report/backup accessed or changed. AgentHouse
+bytes remain `null / NOT_MEASURED`. This is syntax, not kernel provenance,
+safe retained-volume measurement, cleanup or operator acceptance. Restore only
+this worker guard/tests while preserving saved evidence; original Vault sync
+pending outside the checkout.
 
 ## 2026-10-06 procfs propagation conflict and lowercase states (offline)
 
