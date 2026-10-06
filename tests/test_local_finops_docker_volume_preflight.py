@@ -178,6 +178,18 @@ class VolumePreflightTests(unittest.TestCase):
                 validate(value, deepcopy(value))
         self.assertEqual(validate(snapshot(), deepcopy(snapshot()))['state'], 'metadata_eligible')
 
+    def test_overlapping_mount_sources_are_ambiguous_even_with_distinct_destinations(self):
+        for source in ('/var/lib/docker/volumes/unrelated/_data',
+                       '/var/lib/docker/volumes/unrelated/_data/child'):
+            value = snapshot()
+            other = value['containers'][1]
+            other['Mounts'].append({'Type': 'bind', 'Source': source,
+                                    'Destination': '/other', 'RW': False})
+            with self.subTest(source=source), self.assertRaisesRegex(
+                    V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        self.assertEqual(validate(snapshot(), deepcopy(snapshot()))['state'], 'metadata_eligible')
+
     def test_stopped_fixed_volume_is_metadata_only_not_scan_permission(self):
         value=snapshot();result=validate(value,deepcopy(value))
         self.assertEqual(result,{'state':'metadata_eligible','container_count':2,

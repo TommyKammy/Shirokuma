@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.273"
+version: "0.274"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 overlapping unrelated mount sources (offline)
+
+The standalone two-snapshot guard rejects overlapping mount sources inside
+one container even when destinations differ: aliasing can obscure the visible
+inventory. Two synthetic unrelated bind aliases were previously eligible;
+an independent nonoverlapping control and 32 focused preflight tests pass.
+This conservative metadata rule is not daemon authentication, proof against
+continuous writers or permission to scan a retained volume
+(`volume_traversal_authorized=False`). Dedicated Colima freshly Stopped; no
+Docker/VM or saved report/volume/backup accessed or changed. AgentHouse bytes
+remain `null / NOT_MEASURED`; operator acceptance open. Roll back only this
+guard/test if verified Docker metadata requires it; retain saved records.
+Original Vault sync pending outside checkout. Combined local verifier,
+design-context and diff check pass.
 
 ## 2026-10-06 created-container finish chronology (offline)
 

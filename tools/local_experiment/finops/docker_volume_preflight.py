@@ -135,6 +135,10 @@ def _mounts(container):
     # Refuse that inventory rather than infer a unique reference layout.
     require(all(not _overlaps(left[2], right[2])
                 for index, left in enumerate(result) for right in result[index + 1:]))
+    # The same source (or its child) mounted through another destination has
+    # aliasing semantics that this metadata-only inventory cannot resolve.
+    require(all(not _overlaps(left[1], right[1])
+                for index, left in enumerate(result) for right in result[index + 1:]))
     return tuple(sorted(result))
 
 

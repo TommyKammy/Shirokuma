@@ -945,6 +945,26 @@ class AgentHouseTests(unittest.TestCase):
         response.headers = {'Content-Length': '0'}
         self.assertEqual(client.query('SELECT 1'), '')
 
+    def test_query_refuses_attachment_on_200_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.return_value = b''
+        client.opener.open = Mock(return_value=response)
+        for value in ('attachment; filename="login.txt"', 'inline', ''):
+            with self.subTest(value=value):
+                headers = Message()
+                headers.add_header('Content-Disposition', value)
+                response.headers = headers
+                with self.assertRaisesRegex(M.AgentHouseError, 'disposition'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        response.read.assert_not_called()
+        self.assertEqual(client.opener.open.call_count, 3)
+        response.headers = {'Content-Length': '0'}
+        self.assertEqual(client.query('SELECT 1'), '')
+
     def test_query_refuses_nonbyte_response_body_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()

@@ -349,6 +349,14 @@ class Client:
                                if key.lower() == name.lower()])
                     if values:
                         raise AgentHouseError('local AgentHouse response contains authentication challenge')
+                # A file download (or an intermediary supplying one) is not
+                # the plain query acknowledgement this client requested.
+                dispositions = (response.headers.get_all('Content-Disposition')
+                                if hasattr(response.headers, 'get_all') else
+                                [value for key, value in response.headers.items()
+                                 if key.lower() == 'content-disposition'])
+                if dispositions:
+                    raise AgentHouseError('local AgentHouse response contains content disposition')
                 # HTTPMessage.get() returns only one of multiple headers. Do
                 # not accept a write acknowledgement with ambiguous framing or
                 # transfer coding, even if the decoded body happens to fit.

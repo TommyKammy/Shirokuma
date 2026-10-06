@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.47"
+version: "0.48"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 HTTP attachment metadata (offline)
+
+The local query client refuses any `Content-Disposition` on HTTP 200 before
+reading the body or acknowledging an insert. Three synthetic 200 responses
+previously succeeded, including an empty and an inline disposition; the clean
+control and 88 focused tests pass. This is a conservative signature, not peer
+authentication or proof of live completion. Dedicated Colima freshly Stopped;
+no live request or saved credential/report/volume/backup read/change. Live
+compatibility, deduplication and operator acceptance remain open. Never replay
+an uncertain insert; revert only this scoped guard/test if verified runtime
+behavior requires it, preserving saved resources. Original Vault sync pending
+outside checkout. Combined local verifier, design-context and diff check pass.
 
 ## 2026-10-06 HTTP authentication challenge on 200 (offline)
 

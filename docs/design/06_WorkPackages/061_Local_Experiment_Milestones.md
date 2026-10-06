@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.502"
+version: "5.503"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent attachment and source-alias checks (offline)
+
+WP-L2-CH-001 refuses `Content-Disposition` on HTTP 200 before acknowledging
+an insert (three synthetic false successes before repair, 88 focused tests).
+WP-L6-FIN-001 independently refuses overlapping mount sources in one unrelated
+container (two previously metadata-eligible negatives, 32 focused preflight
+tests). Dedicated `colima list` freshly showed mac-studio-solo Stopped; no live
+HTTP/Docker/VM or retained credential/report/volume/backup read or change.
+Combined `make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` pass; the fake Dagster worker failure is an intentional
+negative test.
+These conservative fixture checks do not authenticate producers, prove live
+deduplication or writer exclusion, authorize volume traversal, or grant operator
+acceptance. AgentHouse bytes remain `null / NOT_MEASURED`; never replay an
+uncertain insert. Restore only scoped checks/tests if live compatibility
+requires it, preserving saved records. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: independent HTTP authentication challenge (offline)
 
