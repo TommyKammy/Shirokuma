@@ -5,12 +5,30 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.24"
+version: "0.25"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 ambiguous Docker inspect failure is not absence (offline)
+
+The startup inventory previously treated **any** failed container/volume
+inspect as absent; simultaneous daemon failures could enter first-time
+credential and container creation. It now recognizes only exit 1, empty
+stdout and an exact Docker `No such container/volume/object` diagnostic for
+the requested name. Other failures, partial replies and empty successful
+inspections refuse startup. Focused AgentHouse 62 tests and full local verifier
+pass (fake Dagster worker failure intentional); private verifier log
+`tmp/local-experiment/attempt-191-agenthouse-verifier.log`. Dedicated
+Colima freshly observed Stopped, so Docker's actual diagnostic spelling and
+live startup compatibility are not established; a different spelling fails
+closed and requires operator inspection, not a broadened fallback. No live
+Docker call, retained credential/report/volume/backup access or change.
+Rollback only the inspect classification if required, preserving saved data
+and not replaying unknown inserts. ARM64/deduplication and operator acceptance
+remain open; original Vault sync pending outside checkout.
 
 ## 2026-10-06 orphaned retained volume refuses recreation (offline)
 

@@ -111,9 +111,21 @@ def unique_credential_fields(items):
 def docker(*args: str, required: bool = True) -> str:
     result = subprocess.run(["docker", "--context", CONTEXT, *args], capture_output=True,
                             text=True, timeout=180)
-    if required and result.returncode:
+    if result.returncode:
+        # Only an explicit absence for the exact requested resource allows
+        # first-time creation. An unavailable daemon or ambiguous inspect
+        # failure must not be interpreted as missing retained data.
+        missing = (not required and len(args) == 3 and args[1] == 'inspect' and
+                   args[0] in ('container', 'volume') and result.returncode == 1 and
+                   result.stdout == '' and result.stderr in {
+                       f'Error: No such {args[0]}: {args[2]}\n',
+                       f'Error: No such object: {args[2]}\n'})
+        if missing:
+            return ''
         raise AgentHouseError(f"Docker {args[0]} failed (exit {result.returncode}); inspect scoped runtime locally")
-    return result.stdout if result.returncode == 0 else ""
+    if not required and result.stdout == '':
+        raise AgentHouseError(f'Docker {args[0]} returned empty inspection; refusing runtime')
+    return result.stdout
 
 
 def check_context() -> None:

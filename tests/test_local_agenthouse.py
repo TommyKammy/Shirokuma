@@ -146,6 +146,22 @@ class AgentHouseTests(unittest.TestCase):
                     with self.assertRaisesRegex(M.AgentHouseError, 'invalid .* inspection'):
                         M.inspect_owned(kind, name)
 
+    def test_inspect_failure_is_absence_only_for_exact_missing_resource(self):
+        from subprocess import CompletedProcess
+        for kind, name in (('container', M.NAME), ('volume', M.VOLUME)):
+            argv = ['docker', '--context', M.CONTEXT, kind, 'inspect', name]
+            with self.subTest(kind=kind), patch.object(M.subprocess, 'run', return_value=CompletedProcess(
+                    argv, 1, '', f'Error: No such {kind}: {name}\n')):
+                self.assertIsNone(M.inspect_owned(kind, name))
+            for status, stdout, stderr in ((1, '', 'Cannot connect to daemon\n'),
+                                            (2, '', f'Error: No such {kind}: {name}\n'),
+                                            (1, 'partial', f'Error: No such {kind}: {name}\n'),
+                                            (0, '', '')):
+                with self.subTest(kind=kind, status=status, stderr=stderr), patch.object(
+                        M.subprocess, 'run', return_value=CompletedProcess(argv, status, stdout, stderr)):
+                    with self.assertRaises(M.AgentHouseError):
+                        M.inspect_owned(kind, name)
+
     def test_ambiguous_owned_inspection_does_not_authorize_runtime(self):
         for kind, name, reply in (
             ('container', M.NAME, '[{"Config":{"Labels":{"shirokuma.dev.component":"foreign","shirokuma.dev.component":"agenthouse-local"}}}]'),

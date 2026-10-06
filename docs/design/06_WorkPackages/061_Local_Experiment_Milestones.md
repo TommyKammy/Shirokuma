@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.472"
+version: "5.473"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse inspect errors cannot imply absence (offline)
+
+WP-L2-CH-001 previously treated every failed Docker resource inspect as
+missing, allowing ambiguous daemon failures to reach first-time creation.
+Only exact name-scoped not-found diagnostics with exit 1 and empty stdout
+now count as absent; other errors or empty successful replies refuse startup.
+Focused AgentHouse 62 tests and full local verifier pass (intentional fake
+Dagster failure). Private log: `tmp/local-experiment/attempt-191-agenthouse-verifier.log`.
+Fresh dedicated Colima observation was Stopped; no live Docker, retained
+credential, report, volume or backup read/change. Actual daemon diagnostic
+compatibility, ARM64/deduplication and operator acceptance remain unproved;
+unknown inserts must not be replayed. Restore only classification/tests if
+needed, preserving saved data. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: FinOps preflight timestamp failures stay scoped (offline)
 
