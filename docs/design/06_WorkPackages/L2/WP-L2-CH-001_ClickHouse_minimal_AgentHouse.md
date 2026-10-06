@@ -5,12 +5,29 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.28"
+version: "0.29"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 private startup-file sync before Docker creation (offline)
+
+New AgentHouse credential and container environment files now flush and fsync
+before startup proceeds. Synthetic sync failure on either file stops before any
+Docker image/volume/container action; the already-created private 0600 file
+remains for inspection, never automatically deleted or overwritten. Focused
+AgentHouse 66 tests and the full local verifier pass (the fake Dagster failure
+is intentional). The dedicated Colima profile was freshly Stopped; no live
+Docker/HTTP, retained credential, volume, report or backup read/change.
+This is file-content sync, **not** directory fsync, power-loss atomicity,
+daemon provenance, live startup/deduplication or operator acceptance. A failed
+first-time startup may leave up to one private credential and one private env
+file plus filesystem overhead; inspect them before explicit recovery, do
+not rotate/retry blindly or replay unknown inserts. Roll back only this scoped
+write guard/tests while preserving saved files. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 explicit credential input uses saved-file limit (offline)
 

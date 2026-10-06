@@ -32,6 +32,16 @@ def validate(before, after):
 
 
 class VolumePreflightTests(unittest.TestCase):
+    def test_same_destination_with_different_mount_sources_is_ambiguous(self):
+        value = snapshot()
+        other = value['containers'][1]
+        conflicting = deepcopy(other['Mounts'][0])
+        conflicting['Source'] = '/var/lib/docker/volumes/second/_data'
+        conflicting['Name'] = 'second'
+        other['Mounts'].append(conflicting)
+        with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+            validate(value, deepcopy(value))
+
     def test_stopped_fixed_volume_is_metadata_only_not_scan_permission(self):
         value=snapshot();result=validate(value,deepcopy(value))
         self.assertEqual(result,{'state':'metadata_eligible','container_count':2,

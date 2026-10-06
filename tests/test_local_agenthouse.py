@@ -18,6 +18,48 @@ SPEC.loader.exec_module(M)
 
 
 class AgentHouseTests(unittest.TestCase):
+    def test_new_private_file_requires_durable_write_before_use(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            path.chmod(0o700)
+            with patch.object(M, 'STATE', path), patch.object(M.os, 'fsync', side_effect=OSError('disk failure')):
+                with M.private_state_fd() as state:
+                    with self.assertRaisesRegex(M.AgentHouseError, 'cannot be created safely'):
+                        M.create_private_file(state, 'credential.json', b'{"password":"test"}\n')
+            # A failed publication is ambiguous: keep the private inode for
+            # inspection rather than overwriting or automatically removing it.
+            self.assertEqual((path / 'credential.json').read_bytes(), b'{"password":"test"}\n')
+            self.assertEqual((path / 'credential.json').stat().st_mode & 0o777, 0o600)
+            with M.private_state_fd() as state:
+                with self.assertRaisesRegex(M.AgentHouseError, 'cannot be created safely'):
+                    M.create_private_file(state, 'credential.json', b'replacement')
+            self.assertEqual((path / 'credential.json').read_bytes(), b'{"password":"test"}\n')
+
+    def test_new_runtime_refuses_failed_private_file_sync_before_docker_create(self):
+        for failed_sync in (1, 2):
+            with self.subTest(failed_sync=failed_sync), tempfile.TemporaryDirectory() as directory:
+                state = Path(directory) / 'state'
+                state.mkdir(mode=0o700)
+                calls = 0
+                actual_fsync = M.os.fsync
+
+                def sync(fd):
+                    nonlocal calls
+                    calls += 1
+                    if calls == failed_sync:
+                        raise OSError('synthetic disk failure')
+                    actual_fsync(fd)
+
+                with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                        patch.object(M, 'inspect_owned', side_effect=[None, None]), \
+                        patch.object(M, 'docker') as docker, patch.object(M.os, 'fsync', side_effect=sync):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'cannot be created safely'):
+                        M.ensure_runtime()
+                    docker.assert_not_called()
+                self.assertEqual(calls, failed_sync)
+                self.assertTrue((state / 'credential.json').exists())
+                self.assertEqual((state / 'container.env').exists(), failed_sync == 2)
+
     def test_status_version_reply_is_bounded_before_public_result(self):
         for version in ('25.8.4.1\x1b[0m', '25.8.4.1\nother', 'x' * 200, None):
             with self.subTest(version=version), patch('sys.argv', ['manage.py', 'status']), \

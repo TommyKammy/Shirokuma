@@ -88,6 +88,9 @@ def _mounts(container):
             driver = _label(driver, 128)
         result.append((entry['Type'], source, destination, name, driver, entry['RW']))
     require(len(set(result)) == len(result))
+    # Distinct mounts at the same destination cannot be treated as a unique
+    # reference inventory even when each tuple is individually well formed.
+    require(len({entry[2] for entry in result}) == len(result))
     return tuple(sorted(result))
 
 

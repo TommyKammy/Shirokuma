@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.478"
+version: "5.479"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: private AgentHouse startup sync and separate FinOps mount guard (offline)
+
+WP-L2-CH-001 requires flush/fsync of newly created credential and env files
+before Docker create; two synthetic sync failures stop without Docker actions
+and preserve the private partial/ambiguous files. Focused AgentHouse 66 tests
+pass. Independently WP-L6-FIN-001 refuses distinct Docker mount records with
+the same destination: the synthetic case was eligible before repair; focused
+preflight 15 and FinOps 369 tests (seven Linux-only skips) pass. Full
+`make verify-local-experiment` passes (fake Dagster failure intentional), log
+`tmp/local-experiment/attempt-195-verifier.log`. Fresh dedicated Colima state:
+Stopped. No live Docker/VM/HTTP or retained credentials, data, report, volume
+or backup accessed/changed. File fsync is not directory durability; failure
+can leave up to two private files plus overhead requiring inspection, not
+automatic deletion/retry. FinOps traversal remains unauthorized and AgentHouse
+usage remains `null / NOT_MEASURED`; producer authentication, continuous
+writer exclusion, live deduplication and operator acceptance remain open.
+Revert only scoped guards/tests and preserve saved resources; never replay an
+uncertain insert. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: explicit AgentHouse credential input bounded (offline)
 

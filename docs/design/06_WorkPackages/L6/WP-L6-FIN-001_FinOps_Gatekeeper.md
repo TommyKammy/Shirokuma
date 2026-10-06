@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.256"
+version: "0.257"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 duplicate Docker mount destinations (offline)
+
+The standalone AgentHouse volume preflight now refuses two distinct mount
+records sharing one destination, even when their sources differ and neither
+source references the measured volume. A synthetic conflicting mount was
+previously metadata-eligible; focused preflight 15 and FinOps 369 tests
+(seven Linux-only skips), plus the full local verifier, pass after repair.
+Dedicated Colima was freshly Stopped: no live Docker, VM, retained volume,
+report or backup access/change. No volume traversal is authorized; AgentHouse
+usage remains `null / NOT_MEASURED`. This validates a supplied inventory, not
+its producer, continuous writer exclusion, guest cleanup or operator
+acceptance. Revert only the scoped guard/test while preserving saved data;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06 standalone inventory text and lifecycle controls (offline)
 

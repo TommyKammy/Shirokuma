@@ -228,6 +228,8 @@ def create_private_file(state: int, name: str, payload: bytes) -> None:
         with os.fdopen(fd, 'wb') as file:
             os.fchmod(file.fileno(), 0o600)
             file.write(payload)
+            file.flush()
+            os.fsync(file.fileno())
     except OSError:
         raise AgentHouseError(f'local AgentHouse {name} cannot be created safely') from None
 
