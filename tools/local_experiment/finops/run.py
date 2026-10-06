@@ -347,7 +347,8 @@ class Backend:
         C.require(size <= 1024**2, 'READ_LIMIT')
         # JSONEachRow emits one complete object per newline, or no bytes for
         # zero rows. Never silently discard blank/truncated lines as zero events.
-        C.require(not raw or (raw.endswith('\n') and all(line.strip() for line in raw.split('\n')[:-1])),
+        C.require(not raw or ('\r' not in raw and raw.endswith('\n') and
+                              all(line.strip() for line in raw.split('\n')[:-1])),
                   'INFERENCE_INVALID')
         try:
             def unique_fields(pairs):

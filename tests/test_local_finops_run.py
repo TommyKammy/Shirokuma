@@ -537,7 +537,7 @@ class RuntimeTests(unittest.TestCase):
                         context if args[1] == 'context' else container)):
                 client.query.return_value = ''
                 self.assertEqual(backend.inference(NOW), [])
-                for reply in (' ', '\n', '{}', '{}\n\n', '{}\n \n',
+                for reply in (' ', '\n', '{}', '{}\n\n', '{}\n \n', '{}\r\n',
                               '{"events":1,"events":2}\n', '{"events":NaN}\n',
                               '{"events":Infinity}\n', '{"nested":{"value":-Infinity}}\n',
                                '{"events":1e9999}\n', '{"nested":{"value":' + '9' * 129 + '}}\n',

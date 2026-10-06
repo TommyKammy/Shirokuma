@@ -275,6 +275,13 @@ def ensure_runtime() -> Client:
         host_config = existing["HostConfig"]
         if host_config.get("NanoCpus") != 2_000_000_000 or host_config.get("Memory") != 4 * 1024**3:
             raise AgentHouseError("existing AgentHouse resource limits must remain 2 CPU and 4 GiB")
+        # PortBindings alone do not constrain a host-networked or privileged
+        # container; Docker may ignore published ports in host network mode.
+        if (host_config.get('NetworkMode') not in ('default', 'bridge') or
+                host_config.get('Privileged') is not False or
+                host_config.get('PidMode') != '' or
+                host_config.get('PublishAllPorts') is not False):
+            raise AgentHouseError('existing AgentHouse isolation differs; refusing startup')
     client = Client()
     docker("start", NAME)
     deadline = time.monotonic() + 90

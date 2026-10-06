@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.432"
+version: "5.433"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent existing-container isolation and inference framing (offline)
+
+WP-L2-CH-001 refuses host network/PID mode, privileged or publish-all existing
+containers before startup even if their image, port binding and data mount
+match; focused AgentHouse 39 tests pass. WP-L6-FIN-001 rejects literal CR in
+inference JSONEachRow: an isolated CRLF negative was accepted before repair;
+focused FinOps runtime 51 tests pass afterward. The full local verifier,
+design-context and diff check pass (fake Dagster worker error is an intentional
+negative fixture). Dedicated Colima freshly
+Stopped; no live Docker/HTTP, credentials, retained report/volume/backup or
+unknown-request replay. AgentHouse used bytes remain `null / NOT_MEASURED`.
+Offline fixtures do not authenticate Docker or query producers or confer
+operator acceptance. Revert only scoped guards/tests, preserving all saved
+resources. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: policy smoke identity alias guard (offline)
 

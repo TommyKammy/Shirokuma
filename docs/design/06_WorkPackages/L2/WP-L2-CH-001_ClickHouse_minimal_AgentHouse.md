@@ -5,12 +5,29 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 existing container isolation before startup (offline)
+
+An existing owned container with the expected image, port binding, volume and
+resource limits could still have host networking, host PID namespace, privileged
+execution or publish-all enabled. Startup now requires the Docker default/bridge
+network, an explicit unprivileged state, an empty PID mode and publish-all false;
+missing fields fail closed. Isolated negative fixtures refuse startup before
+credential/client use and Docker start; the ordinary existing fixture still
+passes. Focused AgentHouse 39 tests, the full local verifier and design-context
+pass (the verifier's fake Dagster worker error is an intentional negative).
+Dedicated Colima freshly Stopped; no
+live inspect/start, retained data, volume, credential or backup change. Docker
+inspection is not independently authenticated; inspect the actual saved
+container before any future live startup. Restore only the scoped startup guard
+and tests if needed, never remove retained resources. Original Vault sync
+pending outside checkout; this is not operator acceptance.
 
 ## 2026-10-06 credential token and Pawprint control boundary (offline)
 

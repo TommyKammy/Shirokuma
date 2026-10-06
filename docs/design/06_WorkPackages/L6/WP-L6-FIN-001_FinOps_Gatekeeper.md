@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.220"
+version: "0.221"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 inference CRLF framing (offline)
+
+The fixed AgentHouse inference JSONEachRow reader now refuses literal CR,
+including a CRLF-terminated row accepted as a complete object before repair.
+The negative fixture failed before the change; focused 51 runtime tests, full
+local verifier and design-context pass afterward (the verifier's fake Dagster
+worker error is intentional). Escaped JSON `\\r` inside a string remains ordinary JSON, not a
+record separator. Dedicated Colima freshly Stopped; no live query or retained
+report/volume/backup change. AgentHouse bytes remain `null / NOT_MEASURED`.
+This cannot authenticate the reply producer or establish operator acceptance.
+Restore only this reader/test, preserving reports; original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 VM df column whitespace (offline)
 

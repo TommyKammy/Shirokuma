@@ -391,7 +391,9 @@ class AgentHouseTests(unittest.TestCase):
         return {
             "Config": {"Image": M.IMAGE},
             "HostConfig": {"PortBindings": {"8123/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18123"}]},
-                           "NanoCpus": 2_000_000_000, "Memory": 4 * 1024**3},
+                           "NanoCpus": 2_000_000_000, "Memory": 4 * 1024**3,
+                           "NetworkMode": "default", "Privileged": False,
+                           "PidMode": "", "PublishAllPorts": False},
             "Mounts": [{"Type": "volume", "Name": M.VOLUME,
                         "Destination": "/var/lib/clickhouse", "RW": True}],
         }
@@ -437,6 +439,22 @@ class AgentHouseTests(unittest.TestCase):
                 existing["HostConfig"][key] = value
                 with self.assertRaisesRegex(M.AgentHouseError, "resource limits"):
                     self.ensure_existing(existing)
+
+    def test_existing_runtime_refuses_unsafe_or_missing_isolation(self):
+        for key, values in (("NetworkMode", ("host", "container:foreign", None)),
+                            ("Privileged", (True, None, 0)),
+                            ("PidMode", ("host", None)),
+                            ("PublishAllPorts", (True, None, 0))):
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    existing = self.existing_runtime()
+                    existing['HostConfig'][key] = value
+                    with self.assertRaisesRegex(M.AgentHouseError, 'isolation'):
+                        self.ensure_existing(existing)
+            existing = self.existing_runtime()
+            del existing['HostConfig'][key]
+            with self.subTest(key=key, value='missing'), self.assertRaisesRegex(M.AgentHouseError, 'isolation'):
+                self.ensure_existing(existing)
 
     def test_new_runtime_refuses_existing_env_without_modifying_it(self):
         with tempfile.TemporaryDirectory() as directory:
