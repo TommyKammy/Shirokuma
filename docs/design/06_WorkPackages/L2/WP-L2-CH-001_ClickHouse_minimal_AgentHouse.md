@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline existing-container startup retention
+
+An existing container no longer reads the credential or rewrites `container.env`
+before validation or start: its Docker environment is already captured at
+creation. The negative resource-limit fixtures showed the previous premature
+write; valid and invalid existing-container cases now leave that file absent
+in isolated tests. New-container creation retains its scoped env-file path.
+Focused AgentHouse/dashboard tests pass (25); no live startup or saved file
+was changed, and the dedicated Colima profile was stopped. The post-change
+local verifier, design-context and diff check pass; its fake Dagster worker
+failure diagnostic is intentional. This does not
+secure the new-container credential/env creation path or prove runtime identity.
+Restore only this branching change if needed, keeping existing credentials,
+env files and volumes. Original Vault sync remains pending outside checkout.
+
 ## 2026-10-06 offline input and export encoding follow-up
 
 Non-string SQL now fails before HTTP; Pawprint fields with lone Unicode

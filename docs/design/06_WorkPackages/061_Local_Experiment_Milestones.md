@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.420"
+version: "5.421"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse existing-container startup retention (offline)
+
+WP-L2-CH-001: existing-container startup no longer reads the credential and
+rewrites `container.env` before refusing a changed container. Isolated
+resource-limit fixture failed before repair; focused AgentHouse/dashboard 25
+tests, post-change local verifier, design-context and diff check pass (fake
+Dagster worker failure diagnostic is intentional). No live startup or retained
+credential/env/volume/backup changed;
+dedicated Colima was freshly stopped. New-container env-file creation and
+actual Docker/runtime identity were not reverified. Restore only the startup
+branch if required, preserving saved credentials and data; original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: AgentHouse input and export encoding follow-up (offline)
 

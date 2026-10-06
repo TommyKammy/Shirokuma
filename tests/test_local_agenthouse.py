@@ -230,9 +230,11 @@ class AgentHouseTests(unittest.TestCase):
                 except M.AgentHouseError:
                     docker.assert_not_called()
                     client.assert_not_called()
+                    self.assertFalse((state / 'container.env').exists())
                     raise
                 docker.assert_called_once_with("start", M.NAME)
                 self.assertIs(result, client.return_value)
+                self.assertFalse((state / 'container.env').exists())
 
     def test_existing_runtime_requires_exact_owned_persistent_mount(self):
         valid = self.existing_runtime()

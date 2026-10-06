@@ -158,12 +158,12 @@ def ensure_runtime() -> Client:
             raise AgentHouseError("existing AgentHouse requires its original local credential; refusing rotation")
         credential_path.write_text(json.dumps({"password": secrets.token_urlsafe(36)}) + "\n")
         credential_path.chmod(0o600)
-    password = json.loads(credential_path.read_text())["password"]
-    environment = STATE / "container.env"
-    environment.write_text(f"CLICKHOUSE_DB=agenthouse\nCLICKHOUSE_USER={USER}\nCLICKHOUSE_PASSWORD={password}\n")
-    environment.chmod(0o600)
     if not existing:
         docker("image", "inspect", IMAGE)
+        password = json.loads(credential_path.read_text())["password"]
+        environment = STATE / "container.env"
+        environment.write_text(f"CLICKHOUSE_DB=agenthouse\nCLICKHOUSE_USER={USER}\nCLICKHOUSE_PASSWORD={password}\n")
+        environment.chmod(0o600)
         docker("volume", "create", "--label", LABEL + "=agenthouse-local", VOLUME)
         docker("create", "--name", NAME, "--label", LABEL + "=agenthouse-local",
                "--platform", "linux/arm64", "--cpus", "2", "--memory", "4g",
