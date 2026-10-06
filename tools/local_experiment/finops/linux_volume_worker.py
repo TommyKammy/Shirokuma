@@ -73,7 +73,8 @@ def _mountpoints(raw):
     # records, CRLF and Unicode line separators as independent mount entries.
     # Kernel mountinfo escapes tabs/newlines in path fields. Unescaped control
     # bytes anywhere in a row cannot be used as trustworthy topology evidence.
-    require(raw.endswith('\n') and not any(char in raw for char in ('\r', '\x00', '\t', '\v', '\f')))
+    require(raw.endswith('\n') and not any(ord(char) < 32 and char != '\n' or
+                                             ord(char) == 127 for char in raw))
     lines = raw.split('\n')[:-1]
     require(all(line and line.splitlines() == [line] for line in lines))
     result = set()
@@ -156,7 +157,7 @@ def _mount_id(fd):
 def _parse_mount_id(raw):
     # Do not let \s* consume a newline and borrow an ID from another field.
     require(type(raw) is bytes and 0 < len(raw) <= 4096 and raw.endswith(b'\n') and
-            not any(separator in raw for separator in (b'\r', b'\x00', b'\v', b'\f')))
+            not any(byte < 32 and byte not in (9, 10) or byte == 127 for byte in raw))
     lines = raw.split(b'\n')[:-1]
     require(all(line for line in lines))
     matches = [line[len(b'mnt_id:\t'):] for line in lines if line.startswith(b'mnt_id:')]

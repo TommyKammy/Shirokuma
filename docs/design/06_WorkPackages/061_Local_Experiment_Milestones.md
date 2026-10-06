@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.456"
+version: "5.457"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent worker and procfs row controls (offline)
+
+WP-L6-FIN-001 refuses raw C0/DEL in worker mountinfo and worker fdinfo,
+and separately in caller-supplied procfs status/fdinfo; eight isolated
+negatives reproduced acceptance before repair. Focused volume 63 tests
+(seven Linux-only skips) and `make verify-local-experiment` pass (fake Dagster
+failure intentional). Dedicated Colima observed Stopped; no live guest read,
+retained volume/report/backup access or change; AgentHouse bytes remain
+`null / NOT_MEASURED`. Fixture syntax is not authenticated kernel provenance,
+safe retained-volume scanning, cleanup or operator acceptance. Restore only
+the scoped guards/tests; keep saved records. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: procfs inventory refuses raw control bytes (offline)
 

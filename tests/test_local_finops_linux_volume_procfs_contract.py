@@ -65,6 +65,14 @@ class ProcfsContractTests(unittest.TestCase):
                             lambda raw: raw + b'other:\fvalue\n'):
                 value=inputs();value[field]=change(value[field])
                 with self.subTest(field=field, raw=value[field]),self.assertRaises(P.ProcfsError):
+                     P.project(**value)
+
+    def test_status_and_fdinfo_refuse_raw_controls_in_unrelated_rows(self):
+        for field in ('self_status', 'fdinfo'):
+            for bad in (b'\x01', b'\x7f'):
+                value = inputs()
+                value[field] += b'other:\tvalue' + bad + b'\n'
+                with self.subTest(field=field, bad=bad), self.assertRaises(P.ProcfsError):
                     P.project(**value)
 
     def test_status_and_fdinfo_refuse_ambiguous_identity_labels(self):

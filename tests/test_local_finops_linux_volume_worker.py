@@ -58,7 +58,9 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
     def test_mountinfo_refuses_embedded_controls_outside_mountpoint(self):
         row = '2 1 8:1 /some /fixture/child rw - ext4 /dev/a rw\n'
         for raw in (row.replace('rw -', 'rw\x00 -'),
-                    row.replace('/dev/a', '/dev/a\t')):
+                    row.replace('/dev/a', '/dev/a\t'),
+                    row.replace('/dev/a', '/dev/a\x01'),
+                    row.replace('/dev/a', '/dev/a\x7f')):
             with self.subTest(raw=repr(raw)), self.assertRaises(W.ScanError):
                 W._mountpoints(raw)
 
@@ -147,7 +149,9 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
         for raw in (canonical.replace(b'pos:\t0', b'pos:\t0\x00'),
                     canonical.replace(b'pos:\t0', b'pos:\t0\v'),
                     canonical.replace(b'pos:\t0', b'pos:\t0\f'),
-                    canonical.replace(b'pos:\t0', b'pos:\t0\r')):
+                    canonical.replace(b'pos:\t0', b'pos:\t0\r'),
+                    canonical.replace(b'pos:\t0', b'pos:\t0\x01'),
+                    canonical.replace(b'pos:\t0', b'pos:\t0\x7f')):
             with self.subTest(raw=raw), self.assertRaises(W.ScanError):
                 W._parse_mount_id(raw)
 

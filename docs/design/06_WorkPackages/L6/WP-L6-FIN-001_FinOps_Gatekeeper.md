@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.240"
+version: "0.241"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent worker and procfs control boundaries (offline)
+
+The private worker accepted raw C0/DEL in an unrelated mountinfo source field
+and in fdinfo, while the independent caller-supplied procfs status/fdinfo
+contract accepted the same bytes in unrelated rows. Eight negative variants
+reproduced acceptance before repair. The worker now refuses raw C0/DEL in
+mountinfo except record LF, and in fdinfo except field TAB and record LF;
+the procfs status/fdinfo fixture has the latter boundary independently.
+Escaped mount paths and ordinary fdinfo tabs remain valid. Focused volume
+discovery: 63 tests, seven Linux-only skips; `make verify-local-experiment`
+passes (the fake Dagster worker failure is intentional). Dedicated Colima
+observed Stopped; no guest read, retained data/backup access or change, or
+AgentHouse byte measurement (`null / NOT_MEASURED`). Offline syntax cannot
+authenticate kernel origin, establish safe retained-volume scanning or cleanup,
+or grant operator acceptance. Revert only the scoped readers/tests while
+preserving saved evidence; original Vault sync pending outside checkout.
 
 ## 2026-10-06 independent procfs mount inventory control bytes (offline)
 

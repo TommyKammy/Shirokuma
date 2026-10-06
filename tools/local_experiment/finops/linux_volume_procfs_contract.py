@@ -154,8 +154,7 @@ def _mount(raw,mount_id):
 
 def _lf_records(raw, maximum):
     require(type(raw) is bytes and 0<len(raw)<=maximum and raw.endswith(b'\n') and
-            b'\r' not in raw and b'\x00' not in raw and
-            b'\v' not in raw and b'\f' not in raw)
+            not any(byte < 32 and byte not in (9, 10) or byte == 127 for byte in raw))
     return raw
 
 
