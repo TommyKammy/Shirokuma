@@ -351,8 +351,16 @@ class Backend:
                         raise ValueError('duplicate inference field')
                     value[key] = field
                 return value
+            def bounded_int(text):
+                if len(text.lstrip('-')) > 128:
+                    raise ValueError('overlong inference integer')
+                return int(text)
+            def bounded_float(text):
+                if len(text) > 128:
+                    raise ValueError('overlong inference float')
+                return C.finite_json_float(text)
             rows = [json.loads(line, object_pairs_hook=unique_fields,
-                               parse_float=C.finite_json_float,
+                                parse_float=bounded_float, parse_int=bounded_int,
                                parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonstandard number')))
                     for line in raw.split('\n')[:-1]] if raw else []
         except (ValueError, RecursionError, C.FinOpsError):

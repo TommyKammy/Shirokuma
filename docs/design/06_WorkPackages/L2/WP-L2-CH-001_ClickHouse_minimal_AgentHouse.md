@@ -5,12 +5,23 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-09-16
-version: "0.4"
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 Docker nonstandard number refusal (offline)
+
+Context and owned-volume inspection reject `NaN`, `Infinity` and `-Infinity`
+even in unused metadata before authorizing Docker info or owned-resource use.
+Synthetic negatives passed before repair. Focused AgentHouse 33 tests and full
+`make verify-local-experiment` pass. Dedicated Colima freshly Stopped; no live
+Docker call, credential, retained volume, report or backup change. JSON syntax
+checks do not authenticate the daemon or establish operator acceptance. Revert
+only the scoped decoder/fixtures and preserve saved resources and reports.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06 bounded export numeric tokens (offline)
 

@@ -52,6 +52,10 @@ def unique_docker_fields(items):
     return value
 
 
+def invalid_docker_constant(_value):
+    raise ValueError('nonstandard Docker inspection number')
+
+
 def docker(*args: str, required: bool = True) -> str:
     result = subprocess.run(["docker", "--context", CONTEXT, *args], capture_output=True,
                             text=True, timeout=180)
@@ -63,7 +67,8 @@ def docker(*args: str, required: bool = True) -> str:
 def check_context() -> None:
     try:
         contexts = json.loads(docker("context", "inspect", CONTEXT),
-                              object_pairs_hook=unique_docker_fields)
+                              object_pairs_hook=unique_docker_fields,
+                              parse_constant=invalid_docker_constant)
         if not isinstance(contexts, list) or len(contexts) != 1:
             raise ValueError('invalid context count')
         data = contexts[0]
@@ -82,7 +87,8 @@ def inspect_owned(kind: str, name: str) -> dict | None:
     if not raw:
         return None
     try:
-        result = json.loads(raw, object_pairs_hook=unique_docker_fields)
+        result = json.loads(raw, object_pairs_hook=unique_docker_fields,
+                            parse_constant=invalid_docker_constant)
         if not isinstance(result, list) or len(result) != 1 or not isinstance(result[0], dict):
             raise ValueError('invalid inspect result')
         data = result[0]

@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.430"
+version: "5.431"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent inference token and Docker number guards (offline)
+
+WP-L6-FIN-001 refuses >128-digit inference integers and >128-character inference
+floats before projection; WP-L2-CH-001 refuses nonstandard constants in Docker
+context and owned-volume JSON before runtime authorization. Synthetic negatives
+failed before repair. FinOps focused 316 tests (seven Linux-only skips), AgentHouse
+33 tests and full `make verify-local-experiment` pass (fake Dagster worker failure
+is an intentional negative fixture). Dedicated Colima freshly Stopped; no live
+query/Docker call, credential, retained report/volume/backup mutation; AgentHouse
+bytes remain `null / NOT_MEASURED`. Neither check proves producer identity, live
+integration or operator acceptance. Restore only scoped parser/test changes and
+preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent bounded numeric tokens (offline)
 

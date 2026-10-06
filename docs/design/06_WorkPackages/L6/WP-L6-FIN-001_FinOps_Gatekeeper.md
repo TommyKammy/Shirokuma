@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.218"
+version: "0.219"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 bounded inference numeric tokens (offline)
+
+The fixed AgentHouse inference JSONEachRow decoder now refuses integer tokens
+over 128 digits and float tokens over 128 characters before projecting rows.
+Three nested synthetic replies (large integer, zero fraction and zero exponent)
+passed before repair and fail `INFERENCE_INVALID` afterward. Focused FinOps 316
+tests (seven Linux-only skips) and `make verify-local-experiment` pass. Dedicated
+Colima freshly Stopped; no live query, report, retained volume or backup change;
+AgentHouse bytes remain `null / NOT_MEASURED`. Token bounds do not authenticate
+producers or establish operator acceptance. Revert only the inference decoder
+and test, preserving saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 fixed metadata decimal token limit (offline)
 

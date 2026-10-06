@@ -101,6 +101,19 @@ class AgentHouseTests(unittest.TestCase):
                 M.check_context()
             docker.assert_called_once_with('context', 'inspect', M.CONTEXT)
 
+    def test_nonstandard_docker_inspection_numbers_are_not_valid_metadata(self):
+        expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
+        for token in ('NaN', 'Infinity', '-Infinity'):
+            reply = '[{"Endpoints":{"docker":{"Host":' + json.dumps(expected) + '},"unknown":' + token + '}}]'
+            with self.subTest(token=token), patch.object(M, 'docker', return_value=reply) as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'context metadata'):
+                    M.check_context()
+                docker.assert_called_once_with('context', 'inspect', M.CONTEXT)
+            owned = '[{"Labels":{"shirokuma.dev.component":"agenthouse-local"},"unknown":' + token + '}]'
+            with patch.object(M, 'docker', return_value=owned):
+                with self.assertRaisesRegex(M.AgentHouseError, 'invalid volume inspection'):
+                    M.inspect_owned('volume', M.VOLUME)
+
     def test_context_must_be_dedicated_socket(self):
         expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
         for endpoint in ('unix:///var/run/docker.sock',
