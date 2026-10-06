@@ -331,8 +331,11 @@ def export(client: Client) -> Path:
                     raise ValueError('duplicate export field')
                 value[key] = field
             return value
+        def invalid_constant(_value):
+            raise ValueError('nonstandard export number')
         if rows and (not rows.endswith('\n') or any(
-                not line or not isinstance(json.loads(line, object_pairs_hook=unique_fields), dict)
+                not line or not isinstance(json.loads(line, object_pairs_hook=unique_fields,
+                                                      parse_constant=invalid_constant), dict)
                 for line in rows.splitlines())):
             raise AgentHouseError('local AgentHouse export is not JSONEachRow')
     except ValueError:

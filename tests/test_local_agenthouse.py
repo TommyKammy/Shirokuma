@@ -201,6 +201,8 @@ class AgentHouseTests(unittest.TestCase):
                 clock.now.return_value.strftime.return_value = 'fixed'
                 for reply in ('not json\n', '{"event_id":1}', '[]\n', '{}\n\n',
                               '{"event_id":"a","event_id":"b"}\n',
+                              '{"value":NaN}\n', '{"value":Infinity}\n',
+                              '{"nested":{"value":-Infinity}}\n',
                               ' ' * (8 * 1024 * 1024 + 1)):
                     with self.subTest(reply=reply[:32]):
                         client.query.return_value = reply

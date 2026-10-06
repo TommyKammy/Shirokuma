@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.425"
+version: "5.426"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse export rejects nonstandard JSON numbers (offline)
+
+WP-L2-CH-001: export rejects `NaN`, `Infinity` and nested `-Infinity` in
+JSONEachRow before creating a report. Focused AgentHouse 28 tests and
+`make verify-local-experiment` pass (fake Dagster worker failure is an
+intentional negative diagnostic).
+Dedicated Colima freshly Stopped; no live query, credential, retained
+report, volume or backup touched. Producer provenance, full event schema and
+operator acceptance remain unproved. Restore only the parser/fixtures while
+preserving saved evidence; original Vault sync pending outside checkout.
 
 ## 2026-10-06: duplicate JSONEachRow keys fail closed (offline)
 

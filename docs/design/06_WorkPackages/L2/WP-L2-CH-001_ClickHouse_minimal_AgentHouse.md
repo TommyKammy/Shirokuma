@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline export nonstandard-number guard
+
+The JSONEachRow export parser now rejects `NaN` and signed infinity tokens,
+including nested fields, instead of saving nonstandard JSON as a private
+report. Focused AgentHouse 28 tests pass. No live export or retained
+credential/report/volume/backup changed; the dedicated Colima profile was
+freshly Stopped. This does not authenticate producers or validate the full
+Pawprint schema. Restore only this number guard and its negative fixtures;
+preserve saved reports. Original Vault sync pending outside checkout; no
+operator acceptance.
+
 ## 2026-10-06 offline export duplicate-field guard
 
 The bounded JSONEachRow export now refuses repeated keys within any object
