@@ -5,12 +5,32 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.506"
+version: "5.507"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent export post-link and local-volume source checks (offline)
+
+WP-L2-CH-001 refuses a substituted export staging inode during hardlink
+publication, keeping ambiguous files rather than reporting success (one
+isolated false success before repair; 93 focused tests). WP-L6-FIN-001 refuses
+an unrelated local Docker volume whose source disagrees with its name (three
+isolated false metadata-eligible fixtures; 33 preflight and 387 FinOps tests,
+seven Linux-only skips). Combined `make verify-local-experiment`,
+`make verify-design-context` and `git diff --check` pass; the verifier's fake
+Dagster worker failure is an intentional negative. Dedicated `colima list`
+freshly showed mac-studio-solo
+Stopped; no Docker/HTTP/VM or retained report, credential, volume or backup
+read/change. Export publication is not atomic against a same-UID writer; an
+ambiguous linked report can remain on failure. Supplied Docker inventory is
+not authenticated, excludes no continuous writer and authorizes no volume
+traversal; AgentHouse bytes remain `null / NOT_MEASURED`. Preserve ambiguous
+files and saved resources, never replay uncertain inserts. Revert only scoped
+guards/tests if verified compatibility differs; original Vault sync pending
+outside checkout. Operator/live acceptance remains open.
 
 ## 2026-10-06: export staging identity and private startup short writes (offline)
 

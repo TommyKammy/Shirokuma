@@ -608,6 +608,29 @@ class AgentHouseTests(unittest.TestCase):
             self.assertEqual((state / 'original-pending').read_text(), client.query.return_value)
             self.assertEqual(len(list(state.glob('*.pending'))), 1)
 
+    def test_export_refuses_source_swap_during_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            state.chmod(0o700)
+            client = Mock()
+            client.query.return_value = '{"event_id":"fixture"}\n'
+            original_link = M.os.link
+
+            def swapped_link(source, target, **kwargs):
+                pending, = state.glob('*.pending')
+                pending.rename(state / 'original-pending')
+                pending.write_text('{"event_id":"substitute"}\n')
+                pending.chmod(0o600)
+                return original_link(source, target, **kwargs)
+
+            with patch.object(M, 'STATE', state), patch.object(M.os, 'link', side_effect=swapped_link):
+                with self.assertRaisesRegex(M.AgentHouseError, 'cannot be published safely'):
+                    M.export(client)
+            self.assertEqual((state / 'original-pending').read_text(), client.query.return_value)
+            self.assertEqual(len(list(state.glob('*.pending'))), 1)
+            # The ambiguous hardlink may already exist: do not auto-remove it.
+            self.assertEqual(len(list(state.glob('pawprints-*.jsonl'))), 1)
+
     def test_smoke_invalid_readback_is_scoped_without_replaying_insert(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'

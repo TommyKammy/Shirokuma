@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.274"
+version: "0.275"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 unrelated local-volume source coherence (offline)
+
+The standalone two-snapshot guard refuses an unrelated Docker `local` volume
+mount when its source does not match `/var/lib/docker/volumes/<name>/_data`.
+Three synthetic mismatches were previously metadata-eligible; canonical
+alternate names remain eligible (33 focused preflight tests, 387 FinOps tests
+with seven Linux-only skips; combined local verifier passes). This checks a supplied inventory, not daemon
+provenance, actual source paths, continuous writer exclusion or safe traversal
+(`volume_traversal_authorized=False`). Dedicated Colima freshly Stopped; no
+Docker/VM or retained volume/report/backup accessed or changed. AgentHouse
+usage stays `null / NOT_MEASURED`. Revert only the scoped rule/test if verified
+daemon metadata requires it, preserving saved records; original Vault sync
+pending outside checkout and operator acceptance remains open.
 
 ## 2026-10-06 overlapping unrelated mount sources (offline)
 

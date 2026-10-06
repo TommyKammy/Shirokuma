@@ -51,7 +51,18 @@ class VolumePreflightTests(unittest.TestCase):
         for name in ('other.volume_1', 'other-volume'):
             value = snapshot()
             value['containers'][1]['Mounts'][0]['Name'] = name
+            value['containers'][1]['Mounts'][0]['Source'] = '/var/lib/docker/volumes/' + name + '/_data'
             self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
+    def test_unrelated_local_volume_source_matches_its_name(self):
+        for source in ('/var/lib/docker/volumes/different/_data',
+                       '/var/lib/docker/volumes/unrelated/_data/child', '/elsewhere'):
+            value = snapshot()
+            value['containers'][1]['Mounts'][0]['Source'] = source
+            with self.subTest(source=source), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        value = snapshot()
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
 
     def test_nonterminated_container_cannot_report_future_finish(self):
         for status, flag in (('running', 'Running'), ('paused', 'Paused'),

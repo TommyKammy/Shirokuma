@@ -124,6 +124,10 @@ def _mounts(container):
             # Do not normalize a malformed unrelated reference into inventory.
             require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', name) is not None)
             driver = _label(driver, 128)
+            # A local volume's Docker mountpoint is determined by its name.
+            # A different source must not masquerade as an unrelated volume.
+            if driver == 'local':
+                require(source == ROOT + '/volumes/' + name + '/_data')
         else:
             # Do not erase a contradictory volume identity while projecting a
             # bind. Docker bind mounts have no volume name or driver.

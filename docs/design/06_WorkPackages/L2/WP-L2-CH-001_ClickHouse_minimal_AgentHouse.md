@@ -5,12 +5,28 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.51"
+version: "0.52"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 post-link export identity (offline)
+
+The private exporter now checks both staging and published names against the
+fsynced, still-open inode after the hardlink and directory sync, before removing
+the staging name. An isolated source swap *inside* link previously returned the
+substitute JSONL as a successful export; it now refuses success and retains both
+ambiguous names plus the original pending inode for inspection. 93 focused tests
+and the combined local verifier pass. This check is not atomic exclusion of a same-UID actor: the wrong hardlink
+can be briefly visible or remain on failure, and a later swap remains possible.
+Do not read or delete an ambiguous report automatically or replay an uncertain
+insert. Dedicated Colima was freshly Stopped; no live HTTP/Docker, saved report,
+credential, volume or backup accessed or changed. Restore only the scoped guard
+and test if verified compatibility requires it, retaining all saved files.
+Original Vault sync pending outside checkout; live deduplication and operator
+acceptance remain open.
 
 ## 2026-10-06 staged export identity and startup short-write checks (offline)
 

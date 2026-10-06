@@ -700,8 +700,18 @@ def export(client: Client) -> Path:
                 # link is exclusive: unlike rename it cannot replace a saved report.
                 os.link(staging, name, src_dir_fd=state, dst_dir_fd=state,
                         follow_symlinks=False)
-            os.fsync(state)
-            os.unlink(staging, dir_fd=state)
+                os.fsync(state)
+                # The source name can change inside link() after the earlier
+                # check. Refuse success and keep both names for inspection if
+                # the published inode is not the one whose bytes were synced.
+                for entry_name in (staging, name):
+                    linked = os.stat(entry_name, dir_fd=state, follow_symlinks=False)
+                    if (not stat.S_ISREG(linked.st_mode) or linked.st_uid != os.getuid() or
+                            stat.S_IMODE(linked.st_mode) != 0o600 or linked.st_nlink != 2 or
+                            (linked.st_dev, linked.st_ino, linked.st_size, linked.st_mtime_ns) !=
+                            (written.st_dev, written.st_ino, written.st_size, written.st_mtime_ns)):
+                        raise OSError('export changed during publication')
+                os.unlink(staging, dir_fd=state)
             os.fsync(state)
     except OSError:
         raise AgentHouseError('local AgentHouse export cannot be published safely; inspect any pending file') from None
