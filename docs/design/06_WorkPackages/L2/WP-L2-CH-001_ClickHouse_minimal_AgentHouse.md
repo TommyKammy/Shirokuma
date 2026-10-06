@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.56"
+version: "0.57"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 short pinned staging read (offline follow-up)
+
+The exporter also refuses a short read from the pinned staging inode even if
+that read returns a valid first JSONL row: it must match the entire validated
+response before link publication. The synthetic short-read fixture leaves a
+private pending file and no public report; 100 focused tests pass. The earlier
+full local verifier preceded this follow-up. Dedicated Colima last observed
+Stopped; no live HTTP/Docker or retained resources accessed. This is an
+offline transport boundary, not proof of atomic exclusion, power-loss
+durability, deduplication or operator acceptance. Keep pending files for
+inspection; revert only this test/byte guard if necessary, never replay an
+unknown write. Original Vault synchronization remains pending.
 
 ## 2026-10-06 staged export byte readback before publication (offline)
 

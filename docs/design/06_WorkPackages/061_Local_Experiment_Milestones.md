@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.511"
+version: "5.512"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: pinned staging short-read follow-up (offline)
+
+WP-L2-CH-001's pinned export readback refuses a valid first-row prefix returned
+by a short file read; the report is not published and its private pending file
+is retained. Focused AgentHouse suite: 100 pass. The full local verifier was
+run for the preceding staged-byte increment, not this follow-up. Colima last
+observed Stopped; no live runtime or retained files/backup accessed. The
+synthetic read cannot prove live deduplication, peer provenance, atomic
+publication against same-UID writers or operator acceptance. Preserve saved
+resources and unknown writes; original Vault sync pending outside checkout.
 
 ## 2026-10-06: export staged-byte readback (offline)
 

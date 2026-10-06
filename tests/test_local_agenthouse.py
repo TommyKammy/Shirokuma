@@ -981,6 +981,25 @@ class AgentHouseTests(unittest.TestCase):
             self.assertFalse(list(state.glob('*.jsonl')))
             self.assertEqual(len(list(state.glob('*.pending'))), 1)
 
+    def test_export_refuses_short_pinned_staging_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            client = Mock()
+            client.query.return_value = '{"event_id":"first"}\n{"event_id":"second"}\n'
+            actual_read = M.os.pread
+
+            def short_read(fd, count, offset):
+                return actual_read(fd, count, offset)[:client.query.return_value.index('\n') + 1]
+
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock, \
+                    patch.object(M.os, 'pread', side_effect=short_read):
+                clock.now.return_value.strftime.return_value = 'fixed'
+                with self.assertRaisesRegex(M.AgentHouseError, 'pending'):
+                    M.export(client)
+            self.assertFalse(list(state.glob('*.jsonl')))
+            self.assertEqual(len(list(state.glob('*.pending'))), 1)
+            self.assertEqual(list(state.glob('*.pending'))[0].read_text(), client.query.return_value)
+
     def test_export_existing_name_is_not_replaced_by_publish(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)
