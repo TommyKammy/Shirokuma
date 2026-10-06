@@ -33,6 +33,17 @@ class AgentHouseTests(unittest.TestCase):
             with self.subTest(fields=fields), self.assertRaises(M.AgentHouseError):
                 M.event("test", "clickhouse", **fields)
 
+    def test_invalid_event_identity_and_timestamp_fail_before_insert(self):
+        for fields in ({'event_id': 'not-a-uuid'}, {'timestamp': 'yesterday'}):
+            with self.subTest(fields=fields), self.assertRaises(M.AgentHouseError):
+                M.event('test', 'clickhouse', **fields)
+            value = M.event('test', 'clickhouse')
+            value.update(fields)
+            client = Mock()
+            with self.assertRaises(M.AgentHouseError):
+                M.insert(client, value)
+            client.query.assert_not_called()
+
     def test_insert_uses_json_data_not_sql_interpolation(self):
         value = M.event("x'); DROP TABLE unrelated; --", "clickhouse")
         client = Mock()
@@ -138,6 +149,15 @@ class AgentHouseTests(unittest.TestCase):
         client.opener.open = Mock(return_value=response)
         with self.assertRaises(M.AgentHouseError):
             client.query('SELECT 1')
+
+    def test_unencodable_credential_and_query_fail_before_http(self):
+        with self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
+            M.Client(credential_bytes=b'{"password":"\\ud800"}')
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        with patch.object(client.opener, 'open') as open_request:
+            with self.assertRaisesRegex(M.AgentHouseError, 'invalid SQL'):
+                client.query('SELECT \ud800')
+            open_request.assert_not_called()
 
     def test_insert_rejects_missing_fields_without_inventing_retry_identity(self):
         complete = M.event("test", "clickhouse")

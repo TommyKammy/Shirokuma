@@ -119,11 +119,18 @@ class Client:
                 raise ValueError('invalid credential')
         except (ValueError, TypeError, KeyError, UnicodeError):
             raise AgentHouseError('local credential has invalid format') from None
-        self.auth = base64.b64encode((USER + ":" + password).encode()).decode()
+        try:
+            self.auth = base64.b64encode((USER + ":" + password).encode('utf-8')).decode('ascii')
+        except UnicodeError:
+            raise AgentHouseError('local credential has invalid format') from None
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
     def query(self, sql: str) -> str:
-        request = urllib.request.Request(URL + "/?wait_end_of_query=1", data=sql.encode(),
+        try:
+            payload = sql.encode('utf-8')
+        except UnicodeError:
+            raise AgentHouseError('local AgentHouse query has invalid SQL encoding') from None
+        request = urllib.request.Request(URL + "/?wait_end_of_query=1", data=payload,
                                          headers={"Authorization": "Basic " + self.auth}, method="POST")
         try:
             with self.opener.open(request, timeout=30) as response:
@@ -208,7 +215,6 @@ def event(action: str, target: str, status: str = "success", **fields) -> dict:
     if set(fields) - set(value):
         raise AgentHouseError("unknown Pawprint field; raw prompts, tool inputs and credentials are not accepted")
     value.update(fields)
-    uuid.UUID(value["event_id"])
     for key in ("issue", "pr", "prompt_tokens", "completion_tokens", "duration_ms"):
         number = value[key]
         if key == "duration_ms" and number is None:
@@ -233,7 +239,14 @@ def event(action: str, target: str, status: str = "success", **fields) -> dict:
                 "risk_level", "approval_tier", "model_provider", "model_name", "status", "trace_id"):
         if not isinstance(value[key], str):
             raise AgentHouseError(f"invalid string: {key}")
-    datetime.strptime(value["timestamp"], "%Y-%m-%d %H:%M:%S.%f")
+    try:
+        uuid.UUID(value["event_id"])
+    except (ValueError, TypeError, AttributeError):
+        raise AgentHouseError('invalid Pawprint event ID') from None
+    try:
+        datetime.strptime(value["timestamp"], "%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        raise AgentHouseError('invalid Pawprint timestamp') from None
     return value
 
 

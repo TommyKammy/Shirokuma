@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.418"
+version: "5.419"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse client and event failure boundaries (offline)
+
+WP-L2-CH-001: unencodable password and SQL now fail with scoped errors; bad
+Pawprint UUID/timestamp fails before insert HTTP. Two independent negative
+fixture classes failed before repair; AgentHouse focused 15 tests and
+`make verify-local-experiment` passed afterward (fake Dagster worker failure
+diagnostic is an intentional negative test). Dedicated Colima freshly Stopped;
+no live query, saved credential, report, volume or backup touched. No producer
+authentication or operator acceptance follows. Roll back only these guards and
+tests, retaining saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: FinOps inference reply encoding (offline)
 

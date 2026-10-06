@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline client input and event validation
+
+The direct client now reports malformed Unicode credential passwords and SQL
+as scoped failures, with invalid SQL rejected before HTTP. Independently,
+malformed Pawprint UUIDs and timestamps fail as AgentHouse errors rather than
+escaping raw parser exceptions; insertion rejects them before querying. The
+negative fixtures failed before repair; focused 15 tests and the local verifier
+passed afterward (the verifier's fake Dagster worker failure is intentional).
+The dedicated Colima profile was freshly Stopped. No live query, retained
+credential/report/volume/backup change or runtime authentication occurred.
+This does not prove live service behavior or operator acceptance. Restore only
+these guards/tests if required, retaining all saved evidence. Original Vault
+sync remains pending outside checkout.
+
 ## 2026-10-06 offline state binding and export retention
 
 The direct credential reader now opens the final state directory with no-follow,
