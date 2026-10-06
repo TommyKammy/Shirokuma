@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.509"
+version: "5.510"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: staged export size after fsync (offline)
+
+WP-L2-CH-001 rejects a staging inode that grew after file sync instead of
+publishing an extra row (isolated negative reproduced; 98 focused tests,
+combined local verifier, design-context and diff checks pass; the fake Dagster
+failure is an intentional negative).
+This is an independent export-publication check, not protection against
+same-size mutation or a concurrent same-UID writer. Dedicated Colima last
+observed Stopped; no live HTTP/Docker or retained report, credential, volume
+or backup read/change. Preserve ambiguous pending files; never replay unknown
+inserts. Restore only the scoped guard/test if needed. Original Vault sync
+pending outside checkout; live/operator acceptance open.
 
 ## 2026-10-06: AgentHouse readback parser recursion (offline)
 

@@ -935,6 +935,29 @@ class AgentHouseTests(unittest.TestCase):
             self.assertEqual(len(pending), 1)
             self.assertEqual(pending[0].read_bytes(), b'{"event_id":"first"}\n')
 
+    def test_export_refuses_staged_bytes_changed_after_file_sync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            client = Mock()
+            client.query.return_value = '{"event_id":"original"}\n'
+            original_fsync = M.os.fsync
+            calls = []
+
+            def append_after_sync(fd):
+                result = original_fsync(fd)
+                calls.append(fd)
+                if len(calls) == 1:
+                    M.os.write(fd, b'{"event_id":"extra"}\n')
+                return result
+
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock, \
+                    patch.object(M.os, 'fsync', side_effect=append_after_sync):
+                clock.now.return_value.strftime.return_value = 'fixed'
+                with self.assertRaisesRegex(M.AgentHouseError, 'pending'):
+                    M.export(client)
+            self.assertFalse(list(state.glob('*.jsonl')))
+            self.assertEqual(len(list(state.glob('*.pending'))), 1)
+
     def test_export_existing_name_is_not_replaced_by_publish(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

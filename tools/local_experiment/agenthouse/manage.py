@@ -687,6 +687,8 @@ def export(client: Client) -> Path:
                 # checking the entry that will be linked. A substituted staging
                 # pathname must not publish an unrelated private file.
                 written = os.fstat(file.fileno())
+                if written.st_size != len(payload):
+                    raise OSError('staged export size changed after write')
                 # A failed sync leaves the pending inode for inspection.
                 os.fsync(state)
                 entry = os.stat(staging, dir_fd=state, follow_symlinks=False)

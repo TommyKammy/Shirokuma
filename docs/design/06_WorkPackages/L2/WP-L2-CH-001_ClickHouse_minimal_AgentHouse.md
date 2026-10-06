@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.54"
+version: "0.55"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 staged export size after file sync (offline)
+
+The publisher now compares the pinned staging inode size to the validated
+response length after file fsync, before linking a public report. A synthetic
+append after fsync previously published an extra JSONL row as a successful
+export; the isolated negative now refuses publication and retains the pending
+inode. 98 focused tests, `make verify-local-experiment`, design-context and
+diff checks pass (the fake Dagster failure is intentional). This size check cannot detect same-size edits or
+atomically exclude same-UID interference. No live Docker/HTTP or retained
+report/credential/volume/backup read/change; dedicated Colima last observed
+Stopped. Preserve the ambiguous pending file and never replay an uncertain
+insert. Revert only this guard/test if needed. Original Vault sync remains
+pending outside checkout; operator acceptance remains open.
 
 ## 2026-10-06 readback parser recursion boundary (offline)
 
