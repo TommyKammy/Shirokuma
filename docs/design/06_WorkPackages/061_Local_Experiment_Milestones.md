@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.477"
+version: "5.478"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: explicit AgentHouse credential input bounded (offline)
+
+WP-L2-CH-001 applies the existing private-file 16 KiB bound to explicitly
+supplied credential bytes before JSON decoding or Basic auth construction. One
+synthetic oversized credential failed before repair; 64 focused tests pass.
+Dedicated Colima last freshly Stopped; no Docker/HTTP or retained credential,
+report, volume or backup read/change. This does not prove authenticated
+provenance, live startup/deduplication or operator acceptance. Revert only the
+scoped guard/test, preserving saved evidence and never replaying unknown
+inserts. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: standalone volume inventory validation (offline)
 

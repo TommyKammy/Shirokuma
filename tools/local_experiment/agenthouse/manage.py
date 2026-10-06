@@ -239,7 +239,7 @@ class Client:
         try:
             # json.loads(bytes) auto-detects UTF-16/32 and BOMs. Only the
             # generated UTF-8 credential representation is in this scope.
-            if type(credential_bytes) is not bytes:
+            if type(credential_bytes) is not bytes or len(credential_bytes) > 16384:
                 raise ValueError('invalid credential bytes')
             text = credential_bytes.decode('utf-8')
             if text.startswith('\ufeff'):

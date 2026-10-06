@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.27"
+version: "0.28"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 explicit credential input uses saved-file limit (offline)
+
+The AgentHouse Client's explicit credential-byte argument now has the same
+16 KiB limit as its private-file read. A synthetic oversized URL-safe password
+previously reached Basic auth construction; the focused AgentHouse 64 tests
+pass after repair. This protects caller-supplied bytes, not only saved-file
+inputs; no secret was read. Dedicated Colima was last freshly observed Stopped;
+no live HTTP/Docker, retained credential/report/volume/backup read or change.
+This does not authenticate the producer, prove live startup/deduplication or
+grant operator acceptance. Restore only the size check/fixture if necessary,
+preserving saved resources and avoiding unknown-request replay. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06 Docker process failures are not absence (offline)
 

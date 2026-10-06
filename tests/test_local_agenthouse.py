@@ -330,6 +330,8 @@ class AgentHouseTests(unittest.TestCase):
                                    M.USER + ':pinned')
 
     def test_credential_shape_and_env_token_stop_before_http(self):
+        with self.assertRaises(M.AgentHouseError):
+            M.Client(credential_bytes=b'{"password":"' + b'x' * 16384 + b'"}')
         for raw in (b'{"password":"ok","unused":1}', b'["ok"]',
                     b'{"password":"bad:colon"}', b'{"password":"bad space"}',
                     b'{"password":"bad\\u2028value"}', b'{"password":""}'):
