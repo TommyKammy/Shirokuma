@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.262"
+version: "0.263"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 explicit saved-container restart retry policy (offline)
+
+The standalone two-snapshot preflight now requires integer zero
+`MaximumRetryCount` alongside the fixed `no` policy and its private Docker
+transport projects that field. Five negative fixtures (missing, positive,
+negative, boolean and string values) were metadata-eligible before repair;
+focused FinOps 375 tests (seven Linux-only skips) and full
+`make verify-local-experiment` pass (intentional fake Dagster failure).
+Dedicated Colima freshly Stopped; no live Docker/VM, saved volume/report/backup
+access or change. This offline metadata check does not authenticate a daemon,
+exclude ongoing writers, authorize volume traversal (`False`), measure
+AgentHouse bytes (`null / NOT_MEASURED`) or grant operator acceptance. Keep
+saved resources; restore only the scoped projection/guard/tests if verified
+daemon metadata differs. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 contradictory bind identity (offline)
 

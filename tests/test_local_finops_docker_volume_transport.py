@@ -20,7 +20,7 @@ def backend(*, listing=None, missing_volume=False, foreign_context=False, foreig
     if foreign_options:volume['Options']={'o':'username=secret,password=do-not-publish'}
     containers=deepcopy(value['containers'])
     containers[1]['Config']={'Labels':None,'Image':'other'}
-    containers[1]['HostConfig']={'RestartPolicy':{'Name':'no'}}
+    containers[1]['HostConfig']={'RestartPolicy':{'Name':'no','MaximumRetryCount':0}}
     containers[0]['Config']['Env']=['PRIVATE_TOKEN=do-not-publish']
     containers[0]['State']['Error']='do-not-publish'
     containers[0]['Mounts'][0]['Mode']='do-not-publish'
@@ -54,6 +54,7 @@ class VolumeTransportTests(unittest.TestCase):
         self.assertEqual(data['listed_ids'],snapshot()['listed_ids'])
         self.assertIs(data['container']['State']['Paused'], False)
         self.assertIs(data['container']['State']['Dead'], False)
+        self.assertEqual(data['container']['HostConfig']['RestartPolicy']['MaximumRetryCount'], 0)
         self.assertNotIn('do-not-publish',repr(data))
         self.assertEqual(V.validate_pair(data,deepcopy(data),now='2026-09-27T00:00:10Z')
                          ['volume_traversal_authorized'],False)

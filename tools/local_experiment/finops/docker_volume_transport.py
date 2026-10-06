@@ -86,7 +86,9 @@ def _container(value):
                        ('Type','Name','Driver','Source','Destination','RW')}
                       for entry in mounts],
             'Config':{'Labels':{AH.LABEL:labels.get(AH.LABEL)},'Image':config.get('Image')},
-            'HostConfig':{'RestartPolicy':{'Name':host['RestartPolicy'].get('Name')}}}
+            'HostConfig':{'RestartPolicy':{
+                'Name':host['RestartPolicy'].get('Name'),
+                'MaximumRetryCount':host['RestartPolicy'].get('MaximumRetryCount')}}}
 
 
 def collect(backend, *, monotonic=time.monotonic):

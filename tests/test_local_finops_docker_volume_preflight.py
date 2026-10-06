@@ -12,7 +12,7 @@ def snapshot():
         Paused=False,Dead=False,StartedAt='2026-09-20T00:00:00Z',
         FinishedAt='2026-09-20T00:00:10Z')
     container['RestartCount']=0
-    container['HostConfig']={'RestartPolicy':{'Name':'no'}}
+    container['HostConfig']={'RestartPolicy':{'Name':'no','MaximumRetryCount':0}}
     volume=volumes[0];volume['Options']=None
     other={'Id':'c'*64,'State':{'Status':'exited','Running':False,'Restarting':False,
             'Paused':False,'Dead':False,
@@ -105,6 +105,16 @@ class VolumePreflightTests(unittest.TestCase):
             del value['container']['State'][flag]
             with self.subTest(missing=flag), self.assertRaises(V.PreflightError):
                 validate(value, deepcopy(value))
+
+    def test_target_requires_explicit_zero_restart_retry_limit(self):
+        for retry in (None, 1, -1, True, '0'):
+            value = snapshot()
+            value['container']['HostConfig']['RestartPolicy']['MaximumRetryCount'] = retry
+            with self.subTest(retry=retry), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        value = snapshot()
+        value['container']['HostConfig']['RestartPolicy']['MaximumRetryCount'] = 0
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
 
     def test_malformed_nested_metadata_fails_scoped(self):
         changes = [

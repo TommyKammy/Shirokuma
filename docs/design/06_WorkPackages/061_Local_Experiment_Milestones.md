@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.485"
+version: "5.486"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent HTTP reset and restart retry guards (offline)
+
+WP-L2-CH-001 scopes a socket reset after HTTP 200 as an uncertain query failure
+without replay (focused 73 tests). WP-L6-FIN-001 independently projects and
+requires integer zero Docker restart retries for its saved target; five invalid
+fixtures previously appeared metadata-eligible (focused FinOps 375 tests, seven
+Linux-only skips). Full `make verify-local-experiment` passes; the fake Dagster
+failure is intentional. Fresh `colima list`: dedicated profile Stopped. No live
+HTTP/Docker/VM or saved credential, report, volume or backup read/change.
+AgentHouse bytes remain `null / NOT_MEASURED`, FinOps traversal unauthorized.
+Neither fixture authenticates producers, proves completed writes or continuous
+writer exclusion, live deduplication or operator acceptance. Restore only the
+scoped guards/tests if necessary, preserve saved records and never replay an
+uncertain insert. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent FinOps bind identity projection (offline)
 

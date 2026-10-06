@@ -801,6 +801,18 @@ class AgentHouseTests(unittest.TestCase):
         response.read.return_value = b'1\n'
         self.assertEqual(client.query('SELECT 1'), '1\n')
 
+    def test_query_refuses_connection_reset_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.side_effect = ConnectionResetError('simulated reset after acknowledgement')
+        client.opener.open = Mock(return_value=response)
+        with self.assertRaisesRegex(M.AgentHouseError, 'request failed'):
+            client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        client.opener.open.assert_called_once()
+
     def test_unencodable_credential_and_query_fail_before_http(self):
         with self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
             M.Client(credential_bytes=b'{"password":"\\ud800"}')

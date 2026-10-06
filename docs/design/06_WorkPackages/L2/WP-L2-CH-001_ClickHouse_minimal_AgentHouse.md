@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.34"
+version: "0.35"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 HTTP connection reset after status (offline)
+
+An isolated response that returns HTTP 200 then raises a socket reset while
+reading the body previously escaped as a raw `ConnectionResetError`. The client
+now reports a scoped request failure without retrying the uncertain write.
+The negative failed before repair; focused 73 AgentHouse tests and full
+`make verify-local-experiment` pass (fake Dagster failure is intentional).
+Dedicated Colima freshly Stopped; no HTTP/Docker, saved credential/report/volume
+or backup accessed or changed. Status and exception handling cannot prove that
+ClickHouse committed an insert, authenticate the producer, establish live
+deduplication or grant operator acceptance. Inspect an ambiguous write without
+replay; roll back only the exception guard/test while retaining saved records.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06 partial startup and query acknowledgement (offline)
 

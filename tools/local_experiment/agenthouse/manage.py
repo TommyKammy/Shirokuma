@@ -297,7 +297,7 @@ class Client:
                     return body.decode('utf-8')
                 except UnicodeError:
                     raise AgentHouseError('local AgentHouse response is not UTF-8') from None
-        except (urllib.error.URLError, TimeoutError, http.client.HTTPException) as error:
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
             raise AgentHouseError("local AgentHouse request failed; verify its scoped runtime") from error
 
 

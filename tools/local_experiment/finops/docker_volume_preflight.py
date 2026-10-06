@@ -161,8 +161,10 @@ def _project(snapshot):
     state = container.get('State')
     require(type(state) is dict and state.get('Status') == 'exited' and
             state.get('Running') is False and state.get('Restarting') is False and
-            state.get('Paused') is False and state.get('Dead') is False and
-            host_config['RestartPolicy'].get('Name') == 'no')
+             state.get('Paused') is False and state.get('Dead') is False and
+             host_config['RestartPolicy'].get('Name') == 'no' and
+             type(host_config['RestartPolicy'].get('MaximumRetryCount')) is int and
+             host_config['RestartPolicy']['MaximumRetryCount'] == 0)
     target_lifecycle = _lifecycle(container)
     image_id = container.get('Image')
     require(type(image_id) is str and image_id.startswith('sha256:') and
