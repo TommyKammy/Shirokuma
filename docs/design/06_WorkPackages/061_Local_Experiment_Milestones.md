@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.510"
+version: "5.511"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: export staged-byte readback (offline)
+
+WP-L2-CH-001 refuses a same-size staging edit after file fsync before
+publishing the validated JSONL (isolated false success reproduced, 99 focused
+tests and full local verifier pass; the fake Dagster failure is intentional).
+Dedicated Colima freshly Stopped; no live HTTP/Docker or retained report,
+credential, volume or backup accessed. An ambiguous private pending file (up
+to 8 MiB plus overhead) remains for inspection; this is not an atomic guard
+against same-UID writers or evidence of power-loss durability, live
+deduplication or operator acceptance. Never replay uncertain writes or remove
+saved resources automatically. Revert only the scoped reader/test if needed.
+Original Vault synchronization pending outside checkout.
 
 ## 2026-10-06: staged export size after fsync (offline)
 

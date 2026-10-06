@@ -675,9 +675,9 @@ def export(client: Client) -> Path:
                 pass
             else:
                 raise FileExistsError('report name already exists')
-            fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                          0o600, dir_fd=state)
-            with os.fdopen(fd, 'wb') as file:
+            fd = os.open(staging, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                           0o600, dir_fd=state)
+            with os.fdopen(fd, 'wb+') as file:
                 os.fchmod(file.fileno(), 0o600)
                 if file.write(payload) != len(payload):
                     raise OSError('short export write')
@@ -689,6 +689,10 @@ def export(client: Client) -> Path:
                 written = os.fstat(file.fileno())
                 if written.st_size != len(payload):
                     raise OSError('staged export size changed after write')
+                # Size alone cannot detect an in-place edit after fsync. Compare
+                # the still-open inode with the validated response before linking.
+                if os.pread(file.fileno(), len(payload) + 1, 0) != payload:
+                    raise OSError('staged export bytes changed after write')
                 # A failed sync leaves the pending inode for inspection.
                 os.fsync(state)
                 entry = os.stat(staging, dir_fd=state, follow_symlinks=False)

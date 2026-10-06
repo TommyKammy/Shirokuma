@@ -5,12 +5,28 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.55"
+version: "0.56"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 staged export byte readback before publication (offline)
+
+The exporter now compares bytes read from its pinned, fsynced staging inode
+with the validated response before publishing it. A same-size in-place edit
+after file sync previously returned a changed report as success; the isolated
+negative reproduced this and now leaves the pending file unpublished. Focused
+99 AgentHouse tests and `make verify-local-experiment` pass (the fake Dagster
+worker failure is an intentional negative). Dedicated Colima freshly Stopped;
+no live Docker/HTTP or retained report, credential, volume or backup accessed.
+One failed export can retain up to 8 MiB plus directory overhead. This check
+does not atomically exclude a same-UID writer after readback, establish power-
+loss durability or prove live deduplication. Preserve ambiguous pending files,
+never replay unknown inserts; restore only this guard/test if compatibility
+requires it. Original Vault synchronization pending outside checkout; live and
+operator acceptance remain open.
 
 ## 2026-10-06 staged export size after file sync (offline)
 
