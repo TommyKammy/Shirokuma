@@ -12,6 +12,18 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: staged AgentHouse report publication (offline)
+
+WP-L2-CH-001: export now stages a 0600 file and fsyncs before exclusive
+hard-link publication; failure does not advertise a partial `.jsonl` report.
+Existing reports and symlinks remain intact. Failed staging may leave a
+private `.pending` file of up to 8 MiB; inspect it rather than deleting saved
+evidence. Dedicated Colima freshly Stopped; no live export, retained data or
+backup changed. Focused and broader verification results are recorded in the
+matching WP. Directory crash durability, same-UID mutation, producer identity
+and operator acceptance remain unproved. Roll back only scoped writer/tests,
+preserving saved files. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: finite JSONEachRow numbers at two independent readers (offline)
 
 WP-L6-FIN-001 inference now refuses `NaN`, `Infinity`, nested `-Infinity` and

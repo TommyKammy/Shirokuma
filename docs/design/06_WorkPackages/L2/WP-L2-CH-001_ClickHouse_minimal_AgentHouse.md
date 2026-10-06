@@ -12,6 +12,23 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline export publication on disk failure
+
+The bounded JSONEachRow export now writes a private 0600 `.pending` inode,
+flushes and fsyncs it, and publishes by exclusive hard link only after the
+write succeeds. A simulated fsync failure leaves no `.jsonl` report and retains
+the incomplete pending file for inspection; an existing report or symlink is
+never replaced. Focused AgentHouse 30 tests and `make verify-local-experiment`
+pass (the fake Dagster worker failure is an intentional negative fixture).
+A failed publish after staging also retains the pending file;
+each may consume up to the 8 MiB response cap plus filesystem overhead. There
+is no automatic cleanup of ambiguous data. This does not guarantee directory
+durability across power loss, prevent same-UID state substitution, or prove
+live export integrity. No retained report/volume/backup was changed; Colima
+was freshly Stopped. Revert only this writer/tests, retaining pending and saved
+reports for inspection. Original Vault sync pending outside checkout; this is
+not operator acceptance.
+
 ## 2026-10-06 offline extreme export exponent guard
 
 An export containing a finite-looking decimal exponent that decodes to

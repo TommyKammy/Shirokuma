@@ -181,6 +181,39 @@ class AgentHouseTests(unittest.TestCase):
                 self.assertEqual(M.export(client), existing)
                 self.assertEqual(existing.read_text(), client.query.return_value)
                 self.assertEqual(existing.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(list(state.glob('*.pending')), [])
+
+    def test_export_write_failure_never_publishes_partial_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            client = Mock()
+            client.query.return_value = '{"event_id":"fixture"}\n'
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock:
+                clock.now.return_value.strftime.return_value = 'fixed'
+                with patch.object(M.os, 'fsync', side_effect=OSError('fixture disk failure')):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'pending'):
+                        M.export(client)
+                self.assertFalse((state / 'pawprints-fixed.jsonl').exists())
+                pending = list(state.glob('*.pending'))
+                self.assertEqual(len(pending), 1)
+                self.assertEqual(pending[0].stat().st_mode & 0o777, 0o600)
+                # A failed attempt is retained; a later export must not erase it.
+                self.assertEqual(M.export(client).read_text(), client.query.return_value)
+                self.assertTrue(pending[0].exists())
+
+    def test_export_existing_name_is_not_replaced_by_publish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            report = state / 'pawprints-fixed.jsonl'
+            report.write_text('retained')
+            client = Mock()
+            client.query.return_value = '{}\n'
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock:
+                clock.now.return_value.strftime.return_value = 'fixed'
+                with self.assertRaises(M.AgentHouseError):
+                    M.export(client)
+                self.assertEqual(report.read_text(), 'retained')
+                self.assertEqual(list(state.glob('*.pending')), [])
 
     def test_unencodable_export_reply_does_not_create_report(self):
         with tempfile.TemporaryDirectory() as directory:

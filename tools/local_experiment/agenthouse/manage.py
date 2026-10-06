@@ -350,15 +350,30 @@ def export(client: Client) -> Path:
         raise AgentHouseError('local AgentHouse export is not JSONEachRow') from None
     name = "pawprints-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".jsonl"
     path = STATE / name
+    # Never publish a partially written JSONL report. Keep an incomplete staging
+    # inode for inspection on failure instead of deleting ambiguous saved data.
+    staging = name + '.' + secrets.token_hex(16) + '.pending'
     try:
         with private_state_fd() as state:
-            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                         0o600, dir_fd=state)
+            try:
+                os.stat(name, dir_fd=state, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                raise FileExistsError('report name already exists')
+            fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                          0o600, dir_fd=state)
             with os.fdopen(fd, 'wb') as file:
                 os.fchmod(file.fileno(), 0o600)
                 file.write(payload)
+                file.flush()
+                os.fsync(file.fileno())
+            # link is exclusive: unlike rename it cannot replace a saved report.
+            os.link(staging, name, src_dir_fd=state, dst_dir_fd=state,
+                    follow_symlinks=False)
+            os.unlink(staging, dir_fd=state)
     except OSError:
-        raise AgentHouseError('local AgentHouse export cannot be created safely') from None
+        raise AgentHouseError('local AgentHouse export cannot be published safely; inspect any pending file') from None
     return path
 
 
