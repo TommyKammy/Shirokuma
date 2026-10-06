@@ -33,6 +33,19 @@ class AgentHouseTests(unittest.TestCase):
             with self.subTest(fields=fields), self.assertRaises(M.AgentHouseError):
                 M.event("test", "clickhouse", **fields)
 
+    def test_control_bearing_pawprint_text_stops_before_http(self):
+        for text in ('tab\tvalue', 'nul\x00value', 'delete\x7fvalue', 'c1\x85value'):
+            with self.subTest(text=repr(text)):
+                with self.assertRaises(M.AgentHouseError):
+                    M.event(text, 'clickhouse')
+                value = M.event('test', 'clickhouse')
+                value['action_type'] = text
+                client = Mock()
+                with self.assertRaises(M.AgentHouseError):
+                    M.insert(client, value)
+                client.query.assert_not_called()
+        self.assertEqual(M.event('test', 'clickhouse', model_name='safe-name')['model_name'], 'safe-name')
+
     def test_float_metrics_refuse_unrepresentable_integer_before_insert(self):
         for field in ('inference_cost_estimate', 'cpu_seconds', 'memory_mb_seconds'):
             for number in (2**53 + 1, 10**400):
@@ -197,6 +210,15 @@ class AgentHouseTests(unittest.TestCase):
                 self.assertEqual(base64.b64decode(M.Client(
                     credential_bytes=b'{"password":"pinned"}').auth).decode(),
                                    M.USER + ':pinned')
+
+    def test_credential_shape_and_env_token_stop_before_http(self):
+        for raw in (b'{"password":"ok","unused":1}', b'["ok"]',
+                    b'{"password":"bad:colon"}', b'{"password":"bad space"}',
+                    b'{"password":"bad\\u2028value"}', b'{"password":""}'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
+                M.Client(credential_bytes=raw)
+        self.assertEqual(base64.b64decode(M.Client(credential_bytes=b'{"password":"safe_123-"}').auth).decode(),
+                         M.USER + ':safe_123-')
 
     def test_ambiguous_credential_json_is_refused_before_http(self):
         for raw in (b'{"password":"first","password":"last"}',
@@ -458,7 +480,7 @@ class AgentHouseTests(unittest.TestCase):
             with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
                     patch.object(M, 'inspect_owned', side_effect=[None, None]), \
                     patch.object(M, 'docker') as docker:
-                with self.assertRaisesRegex(M.AgentHouseError, 'container environment'):
+                with self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
                     M.ensure_runtime()
                 self.assertFalse((state / 'container.env').exists())
                 docker.assert_not_called()

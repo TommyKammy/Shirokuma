@@ -12,6 +12,22 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 credential token and Pawprint control boundary (offline)
+
+Direct client initialization accepts only the generated single-field, URL-safe
+password credential; unrelated fields and ambiguous env/Basic-auth characters
+fail before HTTP. Independently Pawprint string fields reject C0/C1 controls
+and DEL before insert HTTP, not just CR/LF. Offline negative fixtures and the
+focused suite (38 tests) and `make verify-local-experiment` pass; its fake
+Dagster worker failure is an intentional negative fixture. The dedicated
+Colima profile was freshly
+Stopped; no retained credential, report, volume or backup was changed. Existing
+non-token credentials would need explicit, non-destructive inspection before a
+new start; do not rotate them automatically. Neither fixture verifies the
+producer, live integration or operator acceptance. Roll back only these scoped
+input guards/tests while preserving saved records. Original Vault sync pending
+outside checkout.
+
 ## 2026-10-06 Float64 metric integer boundary (offline)
 
 Pawprint `event` and `insert` now refuse integer cost/CPU/memory measurements

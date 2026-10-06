@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: independent credential and Pawprint text guards (offline)
+
+WP-L2-CH-001 now refuses extra credential fields and non-URL-safe passwords
+before Basic auth or container environment use, and C0/C1/DEL in Pawprint
+text before insertion. Focused 38 tests and the full local verifier pass (the
+fake Dagster worker failure is an intentional negative fixture).
+Dedicated Colima freshly Stopped; no live query or retained credential,
+report, volume or backup mutation. No producer authentication or operator
+acceptance. Revert only scoped guards/tests, retaining saved resources; original
+Vault sync pending outside checkout.
+
 ## 2026-10-06: independent Float64 and VM disk column guards (offline)
 
 WP-L2-CH-001 refuses >2^53 integer measurements before Float64 Pawprint

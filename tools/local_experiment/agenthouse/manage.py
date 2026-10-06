@@ -190,8 +190,12 @@ class Client:
         try:
             credential = json.loads(credential_bytes, object_pairs_hook=unique_credential_fields,
                                     parse_constant=invalid_docker_constant)
+            if type(credential) is not dict or set(credential) != {'password'}:
+                raise ValueError('invalid credential fields')
             password = credential['password']
-            if type(password) is not str or not password:
+            # Newly generated secrets are URL-safe tokens. Do not feed a
+            # differently encoded saved value into Basic auth or an env file.
+            if type(password) is not str or re.fullmatch(r'[A-Za-z0-9_-]+', password) is None:
                 raise ValueError('invalid credential')
         except (ValueError, TypeError, KeyError, UnicodeError):
             raise AgentHouseError('local credential has invalid format') from None
@@ -320,8 +324,10 @@ def event(action: str, target: str, status: str = "success", **fields) -> dict:
             if not valid:
                 raise AgentHouseError(f"invalid measured value: {key}")
     for key, item in value.items():
-        if isinstance(item, str) and (len(item) > 256 or "\n" in item or "\r" in item):
-            raise AgentHouseError(f"unbounded or multiline field: {key}")
+         if isinstance(item, str) and (len(item) > 256 or
+                                       any(ord(character) < 32 or 127 <= ord(character) <= 159
+                                           for character in item)):
+             raise AgentHouseError(f"unbounded or control-bearing field: {key}")
     if value["status"] not in {"success", "failed", "blocked"}:
         raise AgentHouseError("invalid Pawprint status")
     if value["risk_level"] not in {"low", "normal", "high"}:
