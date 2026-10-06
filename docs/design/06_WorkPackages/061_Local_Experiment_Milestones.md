@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: optional Kubernetes ListMeta types (offline)
+
+WP-L6-FIN-001: four synthetic non-string `selfLink`/`resourceVersion`
+variants on component PodList/NodeList and both storage PodList reads now
+fail closed. Focused FinOps 290 tests pass (seven Linux-only skips). Dedicated
+Colima was freshly listed Stopped. No live API/VM, saved report/volume/backup
+change or AgentHouse used-byte claim (`null / NOT_MEASURED`). These tests
+cannot authenticate the API, establish atomicity or operator acceptance.
+Restore only the scoped guards/tests if needed, preserving saved evidence;
+original Vault sync remains pending outside checkout.
+
 ## 2026-10-06: bounded FinOps ListMeta and VM filesystem identity (offline)
 
 WP-L6-FIN-001: component PodList/NodeList and both storage PodList reads now

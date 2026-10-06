@@ -114,7 +114,7 @@ class RuntimeTests(unittest.TestCase):
     def test_component_lists_refuse_unexpected_metadata_fields(self):
         for kind in ('PodList', 'NodeList'):
             valid = {'kind': kind, 'apiVersion': 'v1', 'items': [], 'metadata': {}}
-            for field in ('pagination', 'ResourceVersion'):
+            for field in ('pagination', 'ResourceVersion', 'selfLink', 'resourceVersion'):
                 reply = deepcopy(valid)
                 reply['metadata'][field] = {'continue': 'next'}
                 with self.subTest(kind=kind, field=field):

@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: typed optional list metadata (offline)
+
+Both CPU/memory PodList/NodeList and the two storage PodList reads now reject
+non-string `selfLink` or `resourceVersion`, instead of accepting malformed
+optional Kubernetes ListMeta fields. Focused `make test-local-finops` passes
+(290 tests, seven Linux-only skips). The dedicated Colima profile was freshly
+observed Stopped; no live API/VM access, report/volume/backup mutation, or
+AgentHouse used-byte measurement (`null / NOT_MEASURED`). This fixture guard
+does not authenticate Kubernetes or establish atomicity or operator acceptance.
+Roll back only the scoped list guards/tests if required, retaining saved data.
+Original Vault synchronization remains pending outside checkout.
+
 ## 2026-10-06: bounded list metadata and VM identity text (offline)
 
 Two independent source checks: the component PodList/NodeList and both reads of

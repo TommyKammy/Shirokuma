@@ -597,7 +597,7 @@ class StorageTests(unittest.TestCase):
                     {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': deepcopy(pods)},
                     deepcopy(pvc), deepcopy(pv)]
         for index in (1, 5):
-            for field in ('pagination', 'ResourceVersion'):
+            for field in ('pagination', 'ResourceVersion', 'selfLink', 'resourceVersion'):
                 replies = deepcopy(original)
                 replies[index]['metadata'][field] = {'continue': 'next'}
                 backend = Mock(); backend.now.return_value = NOW

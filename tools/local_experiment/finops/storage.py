@@ -386,6 +386,7 @@ def _complete_pod_list(response):
                               {'kind', 'apiVersion', 'items', 'metadata'}) and
              type(metadata) is dict and
              set(metadata) <= {'selfLink', 'resourceVersion', 'continue', 'remainingItemCount'} and
+             all(type(metadata[key]) is str for key in ('selfLink', 'resourceVersion') if key in metadata) and
             metadata.get('continue', '') == '' and
             type(metadata.get('continue', '')) is str and
             # No continuation token cannot describe unreturned selected Pods.

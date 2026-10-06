@@ -54,6 +54,7 @@ def _complete_list(value, kind):
              value.get('kind') == kind and value.get('apiVersion') == 'v1' and
              type(metadata) is dict and
              set(metadata) <= {'selfLink', 'resourceVersion', 'continue', 'remainingItemCount'} and
+             all(type(metadata[key]) is str for key in ('selfLink', 'resourceVersion') if key in metadata) and
             ('remainingItemCount' not in metadata or
              (type(metadata['remainingItemCount']) is int and metadata['remainingItemCount'] == 0)) and
             metadata.get('continue', '') == '' and
