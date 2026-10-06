@@ -625,6 +625,12 @@ def smoke(client: Client) -> dict:
     matching = [row for row in exported if isinstance(row, dict) and row.get('event_id') == value['event_id']]
     if len(matching) != 1 or matching[0].get('status') != 'success':
         raise AgentHouseError("export does not contain exactly one successful inserted event")
+    # The ID alone is not evidence that the exported row is the event we sent.
+    # Compare the stable identity columns rather than ClickHouse's numeric/null
+    # formatting, which may differ from the JSONEachRow insert representation.
+    if any(matching[0].get(key) != value[key] for key in
+           ('timestamp', 'agent_id', 'task_id', 'action_type', 'target_system')):
+        raise AgentHouseError("exported event identity differs from inserted event; do not replay")
     return {"result": "passed", "version": client.query("SELECT version()").strip(),
             "event_id": value["event_id"], "logical_rows": 1, "export": str(path), "endpoint": URL}
 

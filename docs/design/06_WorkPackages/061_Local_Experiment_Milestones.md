@@ -12,6 +12,21 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: smoke row identity and procfs propagation tags (offline)
+
+WP-L2-CH-001 correlates the saved smoke row's timestamp, agent/task, action
+and target with the twice-sent event, not only its event ID; five mismatched
+identity fixtures are refused (AgentHouse focused 49 tests). Independently
+WP-L6-FIN-001 rejects malformed or duplicate mountinfo propagation tags in
+caller-supplied procfs fixtures (six negatives; focused 12 tests). Full
+`make verify-local-experiment` passes; fake Dagster worker failure is an
+intentional negative. Dedicated Colima freshly Stopped. No live insert, guest
+read, retained report, volume, credential or backup access/change; AgentHouse
+bytes remain `null / NOT_MEASURED`. Neither fixture establishes producer/VM
+authenticity, safe retained-volume measurement or operator acceptance. Roll
+back only scoped checks/tests, preserve saved evidence and do not replay an
+ambiguous insert. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: independent smoke nested values and procfs identity labels (offline)
 
 WP-L2-CH-001 refuses deeply nested or unencodable Unicode values in all rows

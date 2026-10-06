@@ -88,6 +88,18 @@ def _mount(raw,mount_id):
         canonical_path(left[3])
         path=canonical_path(left[4])
         ident=int(left[0]);require(ident<=MAX_NUMBER and ident not in seen);seen.add(ident)
+        # The columns between mount options and " - " are propagation tags,
+        # not arbitrary evidence. Refuse malformed IDs and contradictory tags.
+        tags=set()
+        for tag in left[6:]:
+            if tag=='unbindable':
+                kind=tag
+            else:
+                match=re.fullmatch(r'(shared|master|propagate_from):([1-9][0-9]{0,18})',tag)
+                require(match is not None and int(match[2])<=MAX_NUMBER)
+                kind=match[1]
+            require(kind not in tags)
+            tags.add(kind)
         if path=='/proc':matches.append((ident,left,right))
         # A nested mount replacing procfs lookup of any PID is ambiguous.
         require(not re.fullmatch(r'/proc/(?:[0-9]+|self|thread-self)(?:/.*)?',path))

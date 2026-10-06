@@ -138,6 +138,19 @@ class ProcfsContractTests(unittest.TestCase):
             with self.subTest(options=options),self.assertRaises(P.ProcfsError):
                 P.project(**value)
 
+    def test_mountinfo_propagation_tags_require_bounded_unique_kinds(self):
+        for tags in (b'unknown:1', b'shared:0', b'shared:01',
+                     b'shared:9223372036854775808', b'shared:1 shared:2',
+                     b'unbindable unbindable'):
+            value=inputs()
+            value['mountinfo']=value['mountinfo'].replace(b' - proc proc ', b' '+tags+b' - proc proc ')
+            with self.subTest(tags=tags),self.assertRaises(P.ProcfsError):
+                P.project(**value)
+        value=inputs()
+        value['mountinfo']=value['mountinfo'].replace(
+            b' - proc proc ', b' shared:1 master:2 propagate_from:3 - proc proc ')
+        self.assertTrue(P.project(**value)['probe']['query_complete'])
+
     def test_forged_stat_field_noncanonical_numbers_and_limits_rejected(self):
         changes=[lambda x:x.update(target_stat=stat_line(999,4),target_errno=None),
                  lambda x:x.update(target_stat=stat_line(345,'0123'),target_errno=None),

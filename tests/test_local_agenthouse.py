@@ -311,10 +311,14 @@ class AgentHouseTests(unittest.TestCase):
     def test_smoke_refuses_ambiguous_count_and_export_rows(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
-            report.write_text('{"event_id":"fixture","status":"success"}\n')
+            value = M.event('runtime.smoke', 'clickhouse')
+            good = json.dumps({key: value[key] for key in
+                               ('event_id', 'timestamp', 'agent_id', 'task_id',
+                                'action_type', 'target_system', 'status')}) + '\n'
+            report.write_text(good)
             report.chmod(0o600)
             client = Mock()
-            with patch.object(M, 'STATE', Path(directory)), patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
+            with patch.object(M, 'STATE', Path(directory)), patch.object(M, 'event', return_value=value), \
                     patch.object(M, 'insert') as inserted, patch.object(M, 'export', return_value=report):
                 for reply in ('{"data":[{"n":true,"status":"success"}]}',
                               '{"data":[{"n":1,"n":1,"status":"success"}]}',
@@ -325,15 +329,33 @@ class AgentHouseTests(unittest.TestCase):
                         with self.assertRaises(M.AgentHouseError):
                             M.smoke(client)
                 client.query.return_value = '{"data":[{"n":1,"status":"success"}]}'
-                for text in ('{"event_id":"fixture","status":"failed"}\n',
-                             '{"event_id":"fixture","status":"success"}\n' * 2):
+                for text in (good.replace('"success"', '"failed"'), good * 2):
                     with self.subTest(report=text):
                         report.write_text(text)
                         with self.assertRaises(M.AgentHouseError):
                             M.smoke(client)
-                report.write_text('{"event_id":"fixture","status":"success"}\n')
+                report.write_text(good)
                 self.assertEqual(M.smoke(client)['result'], 'passed')
                 self.assertEqual(inserted.call_count, 14)
+
+    def test_smoke_refuses_same_id_with_different_exported_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
+            value = M.event('runtime.smoke', 'clickhouse')
+            fields = ('event_id', 'timestamp', 'agent_id', 'task_id',
+                      'action_type', 'target_system', 'status')
+            client = Mock()
+            client.query.return_value = '{"data":[{"n":1,"status":"success"}]}'
+            with patch.object(M, 'STATE', Path(directory)), patch.object(M, 'event', return_value=value), \
+                    patch.object(M, 'insert') as inserted, patch.object(M, 'export', return_value=report):
+                for field in fields[1:-1]:
+                    row = {key: value[key] for key in fields}
+                    row[field] = 'other'
+                    report.write_text(json.dumps(row) + '\n')
+                    report.chmod(0o600)
+                    with self.subTest(field=field), self.assertRaisesRegex(M.AgentHouseError, 'identity differs'):
+                        M.smoke(client)
+                self.assertEqual(inserted.call_count, 10)
 
     def test_smoke_export_readback_rejects_redirected_and_oversized_reports(self):
         with tempfile.TemporaryDirectory() as directory:

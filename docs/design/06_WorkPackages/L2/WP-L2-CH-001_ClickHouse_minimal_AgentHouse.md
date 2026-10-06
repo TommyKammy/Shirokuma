@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 smoke matching-row identity correlation (offline)
+
+The saved-export smoke readback used to accept a successful row with the same
+event ID but a changed timestamp, agent/task, action or target. It now checks
+those five stable identity fields against the event sent on both intentional
+inserts; five isolated corrupt-row fixtures fail without a hidden third insert.
+Focused AgentHouse 49 tests and `make verify-local-experiment` pass (the fake
+Dagster worker failure is an intentional negative). Dedicated Colima was
+freshly Stopped. No live insert, retained report, credential, volume or backup
+access/change. This correlates caller-supplied replies, not producer
+authenticity or live deduplication. On ambiguous insert evidence, inspect the
+saved record without replay; roll back only the scoped check/test and preserve
+reports. Original Vault sync pending outside checkout; operator acceptance
+remains unproved.
+
 ## 2026-10-06 smoke export nested-value boundary (offline)
 
 Private smoke readback previously accepted a valid matching row alongside an

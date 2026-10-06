@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 procfs propagation-tag structure (offline)
+
+The separate caller-supplied procfs fixture contract accepted arbitrary or
+duplicate mountinfo optional propagation tags. It now bounds recognized
+`shared`, `master`, `propagate_from` IDs and rejects repeated kinds or
+unrecognized tags; six negatives and a valid three-tag fixture are covered.
+Focused procfs 12 tests and full local verifier pass (intentional fake Dagster
+worker failure). Dedicated Colima freshly Stopped; no guest read or retained
+volume/report/backup access/change. AgentHouse usage remains `null /
+NOT_MEASURED`. This cannot authenticate a kernel or authorize scanning a
+retained volume, and does not establish cleanup or operator acceptance. Restore
+only this fixture parser/test while preserving saved evidence. Original Vault
+sync pending outside checkout.
+
 ## 2026-10-06 procfs identity label ambiguity (offline)
 
 The caller-supplied procfs fixture accepted an empty/malformed second `NSpid:`
