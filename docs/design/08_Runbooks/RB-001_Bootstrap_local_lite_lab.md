@@ -4,13 +4,27 @@ doc_id: "RB-001"
 title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
-updated: 2026-07-22
-version: "1.3.0"
+updated: 2026-10-06
+version: "1.3.1"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
 
 # Bootstrap local-lite lab
+
+> **Local-experiment execution boundary (ADR-0034):** This runbook also retains
+> the historical GitHub delivery and whole-profile rebuild procedure. In the
+> current autonomous local checkout, **do not run** `make gitops-bootstrap`: its
+> `flux bootstrap github` step writes to GitHub. Do not run the staging-branch
+> handoff, PR/merge steps, or the RB-013 whole-profile reset without separate
+> authorization. Offline `make verify-gitops-bootstrap`,
+> `make verify-gitops-teardown`, `make flux-version-check`, and locked-provider
+> `make tofu-validate` do not perform those delivery steps. Before starting a
+> stopped retained VM for read-only live gates, establish dedicated profile,
+> disk/backup, writer and Flux reconciliation scope; a `colima list` disk *limit*
+> is not retained disk or backup inventory. Only after that assessment use the
+> explicit Kubernetes context for bounded observations. Record live results
+> separately from offline tests, and preserve existing failed strict admission.
 
 ## Purpose
 

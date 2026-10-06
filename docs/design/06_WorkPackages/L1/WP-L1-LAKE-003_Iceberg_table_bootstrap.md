@@ -4,13 +4,25 @@ doc_id: "WP-L1-LAKE-003"
 title: "WP-L1-LAKE-003 Iceberg table bootstrap"
 status: evidence-in-review
 created: 2026-07-05
-updated: 2026-07-22
-version: "1.0"
+updated: 2026-10-06
+version: "1.1"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
 
 # WP-L1-LAKE-003 Iceberg table bootstrap
+
+## 2026-10-06: independent offline rendering recheck
+
+The 144-test `make verify-iceberg-table-bootstrap` passes with the previously
+isolated Helm v4.2.2 binary on PATH; its archive SHA-256 is
+`5410a0dae3d5d91f45653b161260d9301aabc4ae80ae50a6605d66884b6df8ea`.
+The host-installed v4.2.3 is unchanged, and the earlier wrong-version failures
+remain evidence. This is an offline input/renderer gate, not a new Iceberg
+table write, live persistence check, Flux reconciliation or operator acceptance.
+Dedicated Colima is Stopped. No retained storage or backup was inspected or
+changed. Omit the private Helm PATH prefix to restore the host tool scope;
+do not remove saved tables or backups. Original Vault sync pending.
 
 ## 2026-09-16: local experimental milestone
 

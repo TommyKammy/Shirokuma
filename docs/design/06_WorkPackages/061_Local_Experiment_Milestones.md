@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.535"
+version: "5.536"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: offline L0 prerequisites and separate L1 renderer measured
+
+WP-L0-GITOPS-001: 36 bootstrap and 6 teardown contract tests, locked-provider
+OpenTofu init/validate, object-storage state check and pinned Flux v2.9.2
+client gate pass. Independent WP-L1-LAKE-003: 144 Iceberg renderer tests pass
+using the previously isolated Helm v4.2.2 archive; installed v4.2.3 and
+historical version failures remain unchanged. Full local verifier passes
+(intentional fake Dagster failure). Fresh `colima list --json` reports the
+dedicated profile Stopped, aarch64, configured 400 GiB disk limit—not actual
+disk/backup utilization. RB-001 now explicitly blocks its historical
+GitHub-writing bootstrap and whole-profile reset in local mode. No VM start,
+remote write, reconcile or retained data/backup inspection/change; live §9,
+strict admission and operator acceptance remain open. Inventory disk/backup,
+writers and Flux scope before live work; omit the private Helm PATH prefix to
+restore host tool scope. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: offline renderer warning closure and separate FinOps boundary
 

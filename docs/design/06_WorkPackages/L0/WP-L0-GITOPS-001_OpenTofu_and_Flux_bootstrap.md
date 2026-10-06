@@ -5,12 +5,32 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.163"
+version: "0.164"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: measured offline prerequisites, live boundary retained
+
+`make verify-gitops-bootstrap verify-gitops-teardown` passed 36+6 tests,
+locked-provider OpenTofu init/validate and the normal object-storage state
+check; `make flux-version-check` passed the installed v2.9.2 client. The
+independent 144-test Iceberg renderer gate passed with the existing isolated
+Darwin/arm64 Helm v4.2.2 archive (SHA-256
+`5410a0dae3d5d91f45653b161260d9301aabc4ae80ae50a6605d66884b6df8ea`),
+not the installed v4.2.3. The full local verifier also passed; its fake
+Dagster worker failure is an intentional negative. `colima list --json`
+reports `mac-studio-solo` Stopped, aarch64, configured 16 CPUs/96 GiB/400 GiB;
+the disk number is a configured limit, not a retained disk/backup inventory.
+The runbook now marks its GitHub-writing bootstrap and whole-profile reset as
+outside this local execution scope. No VM start, GitHub write, reconcile,
+retained disk/backup inspection or change was performed. Before live §9 work,
+assess disk/backup, writer and Flux scope; remote source authenticity, strict
+admission and operator acceptance remain open. Restore the previous offline
+tool scope by omitting the private Helm PATH prefix; preserve saved resources
+and past failures. Original Vault synchronization pending outside checkout.
 
 ## 2026-10-06: warning-bearing offline render paths
 
