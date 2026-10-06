@@ -21,6 +21,54 @@ operation is automatically retried. On 2026-10-03 the owner allowed consuming
 the **whole ChatGPT Pro weekly allowance** for local Shirokuma development;
 this does not authorize metered API calls or extra purchases.
 
+**Current policy supersedes the historical 500-run examples below:** the
+existing `run-qjiwuw2k` process retains its original 240-run/500-total
+boundary, but its prepared 1000-total one-shot successor was unloaded on
+2026-10-06 and marked `POLICY_REVIEW_HOLD`. Do not restart that job or launch
+the historical 500-run example. After a *separate* successful reconciliation
+of the 500 boundary, use [DEV-04C](../../docs/design/04_Development/04C_Gate_Driven_Local_Continuation.md)
+and its short [gate index](../../docs/design/04_Development/04D_Current_Gate_Summary.md).
+The owner-set cumulative 1000 ceiling is only a maximum. Reaching 500 does
+not start another invocation, clear an earlier failure or prove a WP gate.
+
+The **future** runner code prepared in `local/astra-consult` is not deployed
+to the active checkout during a request. Once integrated at a clean boundary,
+it accepts at most **six new sessions and 120 minutes per manual L0 mission**.
+Execution requires an owned 0600 JSON objective in ignored private
+`tmp/local-experiment/gate-batches/mission.json`, bound to the current HEAD:
+
+```json
+{"schema_version":1,"wp_id":"WP-L0-GITOPS-001","gate_id":"L0_GITOPS_READINESS","head_before":"<full HEAD>","baseline":"<measured current boundary, at least 30 characters>","target_evidence":"<observable L0 result or concrete blocker, at least 30 characters>","allowed_scope":"<named dedicated runtime/resources, at least 30 characters>","stop_conditions":"<unknown state, quota, retained data and safety stops>","recovery":"<specific scoped restoration and evidence preservation>"}
+```
+
+No example objective is a substitute for a fresh lab observation. A second
+private 0600 `gate-batches/ready.json` may be written **only after** the old
+run's exact 240 results/HEAD chain, last checkpoint, and specific server
+session are independently reconciled as succeeded, idle and non-active. Its
+fields are `schema_version:1`, `source_run:"run-qjiwuw2k"`, `source_head`,
+`series_started:500`, `last_session_id`, and
+`server_outcome:"succeeded_idle_nonactive"`. This file is a *review
+attestation*, not proof of the remote session. The runner checks the original
+run summary/final result, original seven-day clock, retained review-hold
+marker and subsequent local gate-run summaries. Missing/failed/unknown
+evidence refuses launch; a batch counts against the original 1000 ceiling
+including failed starts. A prior nonbudget or missing gate-run summary
+requires investigation, not a blind next batch.
+
+Only after all preflights and a current mission selection, plan without a
+model request; then deliberately execute at most six sessions:
+
+```sh
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --model openai/gpt-6-sol --max-runs 6 --max-minutes 120 --mission-file "$(pwd)/tmp/local-experiment/gate-batches/mission.json"
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --execute --use-pro-weekly-limit --model openai/gpt-6-sol --max-runs 6 --max-minutes 120 --mission-file "$(pwd)/tmp/local-experiment/gate-batches/mission.json"
+```
+
+Inspect functional evidence and the exact terminal server state **between**
+batches. A commit/checkpoint/checkbox cannot authorize a second batch. There
+is no recurring scheduler or automatic restart. The original seven-day guard,
+OAuth routing and no-new-spending boundary remain; the new 120-minute bound is
+not a token/USD cap.
+
 ## Use
 
 From `worktree/local-autonomous`, with any interactive agent/editing session
@@ -48,6 +96,7 @@ billing ledger. The owner explicitly requested continuation, so a single
 OAuth connection, explicit OpenAI model and the owner's Pro attestation are
 now the bounded experiment's routing preconditions, not a verified bill.
 
+Historical 500-run example **for the previous series only, do not use now**.
 Plan-only (zero model requests) with a model listed for this project; substitute
 an eligible model ID after checking the account's entitlement:
 
@@ -65,8 +114,8 @@ Start the bounded series with the same model ID:
 rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/autonomous_runner.py --execute --use-pro-weekly-limit --model openai/SELECTED_MODEL --max-runs 500 --max-minutes 10080
 ```
 
-Allowed limits are **1–500 sequential runs and 1–10080 minutes (seven days)**
-per manual launch. Set smaller values if unattended host operation is
+The previous runner allowed **1–500 sequential runs and 1–10080 minutes**
+per manual launch. Future gate batches are capped at 6/120; set less if host operation is
 undesirable. The runner rechecks the OAuth label before **each** attempt and
 pins `--model`; it rejects ambiguous OpenAI account listings and inherited
 `OPENAI_API_KEY`/`OPENAI_BASE_URL`. These checks cannot independently verify
@@ -124,6 +173,8 @@ preserve every old failure/result, and fail closed on any other stop reason or
 unknown state. The session ceiling is not completion, a token/USD cap, or
 independent proof of ChatGPT Pro billing. Do not automatically renew the
 allowance at a later weekly reset or schedule a recurring runner.
+That extension design was subsequently **put on hold** after review. This
+paragraph records the earlier decision, not permission to reactivate its job.
 
 The checkout's `opencode.jsonc` denies normal use of every provider except
 OpenAI. The CLI's noninteractive permission requests for the parent workspace,

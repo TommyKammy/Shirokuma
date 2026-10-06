@@ -5,7 +5,7 @@ title: "Use autonomous local experimental development"
 status: accepted
 created: 2026-09-16
 updated: 2026-10-06
-version: "1.5"
+version: "1.6"
 area: adr
 tags: [shirokuma, adr, local, development]
 ---
@@ -112,6 +112,26 @@ checkout and start a **new** one-shot invocation of at most 500 sessions.
 Any failure, unknown remote state, quota stop, dirty checkout or expired
 original deadline prevents the extension; no request is replayed or retried.
 The new 1000 ceiling measures scheduler starts, not WP completion or billing.
+
+**Subsequent 2026-10-06 operating-policy revision:** the automatic extension
+described above was unloaded *before* the 500 boundary and permanently marked
+`POLICY_REVIEW_HOLD`; it must not silently resume. The owner asked for a change
+in direction after reviewing the offline micro-fix loop, rather than merely
+spending the remaining allowance. The 1000 cumulative ceiling remains an upper
+bound, not an instruction to consume it. Do not mutate the currently running
+checkout/request. At its terminal boundary, independently reconcile its
+summary, result, checkpoint, OpenCode server state and clean descendant HEAD.
+Only then select one gate with a measurable baseline and bounded scope and use
+manually scheduled batches of at most six fresh sessions, under the *original*
+week and other route/retention checks; review functional evidence between
+batches. No checkpoint, new commit, passing offline tests or newly checked box
+alone permits a new batch. Prefer the L0 GitOps live-readiness gate to further
+hardening of already `local-verified` AgentHouse unless a material defect is
+reproduced. If dedicated-lab ownership/retention is unclear, stop that runtime
+action rather than start/reset the VM. See [DEV-04C](../04_Development/04C_Gate_Driven_Local_Continuation.md)
+and its [short gate summary](../04_Development/04D_Current_Gate_Summary.md).
+Neither this policy nor historic publisher gate failures authorize GitHub writes
+or the full-Colima destruction implied by the integrated plan's full-nuke gate.
 
 On 2026-10-04 the owner requested autonomous GPT-6 Astra advice when future
 coding sessions face a difficult blocker. Keep the runner's primary model,

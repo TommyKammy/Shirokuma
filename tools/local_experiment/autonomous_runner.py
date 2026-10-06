@@ -31,8 +31,16 @@ BRANCH = 'local/autonomous-experiment'
 MAX_LOG_BYTES = 8 * 1024 * 1024
 MAX_CHECKPOINT_BYTES = 2048
 MAX_HANDOFF_BYTES = 512 * 1024
-MAX_RUNS = 500
-MAX_MINUTES = 7 * 24 * 60
+# The previous process was launched with its own 240-run / seven-day arguments.
+# These limits apply only to *future* manual gate batches, never to that process.
+MAX_RUNS = 6
+MAX_MINUTES = 120
+ORIGINAL_WEEK_MINUTES = 7 * 24 * 60
+MISSION_BYTES = 4096
+MISSION_WP = 'WP-L0-GITOPS-001'
+SERIES_LIMIT = 1000
+SOURCE_RUN = 'run-qjiwuw2k'
+FIRST_RUN = 'run-3au9fp_4'
 
 
 class RunnerError(RuntimeError):
@@ -143,6 +151,135 @@ def save_json(path: Path, value: dict) -> None:
     private_file(path, (json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n').encode())
 
 
+def mission_file(path: Path, root: Path, head: str) -> dict:
+    """Read a short, private, explicit L0 objective; this is not gate evidence."""
+    try:
+        directory = root / 'tmp/local-experiment/gate-batches'
+        parent = directory.lstat()
+        require(path.parent == directory and path.name.endswith('.json') and
+                stat.S_ISDIR(parent.st_mode) and parent.st_uid == os.getuid() and
+                stat.S_IMODE(parent.st_mode) == 0o700, 'MISSION_INVALID')
+        before = path.lstat()
+        require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid() and
+                stat.S_IMODE(before.st_mode) == 0o600 and before.st_nlink == 1 and
+                0 < before.st_size <= MISSION_BYTES, 'MISSION_INVALID')
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            opened = os.fstat(fd)
+            raw = os.read(fd, MISSION_BYTES + 1)
+            after = os.fstat(fd)
+            identity = lambda s: (s.st_dev, s.st_ino, s.st_mode, s.st_uid, s.st_nlink,
+                                  s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+            require(identity(before) == identity(opened) == identity(after) ==
+                    identity(path.lstat()) and len(raw) == before.st_size, 'MISSION_INVALID')
+        finally:
+            os.close(fd)
+        value = json.loads(raw, object_pairs_hook=unique_pairs,
+                           parse_constant=lambda _: require(False, 'MISSION_INVALID'))
+        keys = {'schema_version', 'wp_id', 'gate_id', 'head_before', 'baseline',
+                'target_evidence', 'allowed_scope', 'stop_conditions', 'recovery'}
+        require(type(value) is dict and set(value) == keys and
+                type(value['schema_version']) is int and value['schema_version'] == 1 and
+                value['wp_id'] == MISSION_WP and
+                re.fullmatch(r'L0_[A-Z0-9_]{8,64}', value['gate_id']) is not None and
+                value['head_before'] == head, 'MISSION_INVALID')
+        for key in ('baseline', 'target_evidence', 'allowed_scope', 'stop_conditions', 'recovery'):
+            require(type(value[key]) is str and 30 <= len(value[key]) <= 650 and
+                    not any(ord(char) < 32 for char in value[key]), 'MISSION_INVALID')
+        return value
+    except (OSError, ValueError, TypeError, KeyError, UnicodeError):
+        raise RunnerError('MISSION_INVALID') from None
+
+
+def private_json(path: Path, code: str) -> dict:
+    try:
+        state = path.lstat()
+        require(stat.S_ISREG(state.st_mode) and state.st_uid == os.getuid() and
+                stat.S_IMODE(state.st_mode) == 0o600 and state.st_nlink == 1 and
+                0 < state.st_size <= MISSION_BYTES, code)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            opened = os.fstat(fd)
+            raw = os.read(fd, MISSION_BYTES + 1)
+            after = os.fstat(fd)
+            identity = lambda s: (s.st_dev, s.st_ino, s.st_mode, s.st_uid,
+                                  s.st_nlink, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+            require(identity(state) == identity(opened) == identity(after) ==
+                    identity(path.lstat()) and len(raw) == state.st_size, code)
+        finally:
+            os.close(fd)
+        value = json.loads(raw, object_pairs_hook=unique_pairs)
+        require(type(value) is dict, code)
+        return value
+    except (OSError, ValueError, TypeError, KeyError, UnicodeError):
+        raise RunnerError(code) from None
+
+
+def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int) -> None:
+    """Require an independently reviewed boundary; refuse missing/unknown runs.
+
+    ready.json is a local review attestation, NOT independent server or billing
+    evidence. Create it only after separately reconciling the specific session.
+    """
+    base = root / 'tmp/local-experiment/autonomous-runner'
+    gate = root / 'tmp/local-experiment/gate-batches'
+    try:
+        scope = gate.lstat()
+        require(stat.S_ISDIR(scope.st_mode) and scope.st_uid == os.getuid() and
+                stat.S_IMODE(scope.st_mode) == 0o700, 'GATE_NOT_RECONCILED')
+        first = (base / FIRST_RUN).lstat()
+        require(stat.S_ISDIR(first.st_mode) and first.st_uid == os.getuid() and
+                stat.S_IMODE(first.st_mode) == 0o700 and
+                type(getattr(first, 'st_birthtime', None)) is float,
+                'ORIGINAL_WEEK_UNVERIFIED')
+        require(time.time() + max_minutes * 60 < first.st_birthtime + ORIGINAL_WEEK_MINUTES * 60,
+                'ORIGINAL_WEEK_EXPIRED')
+        hold = private_json(base / 'cap-1000-bridge/bridge-stop.json', 'REVIEW_HOLD_UNVERIFIED')
+        require(hold.get('source_run') == SOURCE_RUN and hold.get('reason') == 'POLICY_REVIEW_HOLD',
+                'REVIEW_HOLD_UNVERIFIED')
+        source = base / SOURCE_RUN
+        summary = private_json(source / 'summary.json', 'SOURCE_NOT_CLEAN_BUDGET_BOUNDARY')
+        require(summary == {'schema_version': 1, 'result': 'stopped',
+                            'reason': 'run_budget_reached', 'attempts': 240} and
+                not (source / 'attempt-241').exists(), 'SOURCE_NOT_CLEAN_BUDGET_BOUNDARY')
+        final = private_json(source / 'attempt-240/result.json', 'SOURCE_RESULT_UNVERIFIED')
+        checkpoint = private_json(source / 'attempt-240/checkpoint.json', 'SOURCE_RESULT_UNVERIFIED')
+        ready = private_json(gate / 'ready.json', 'GATE_NOT_RECONCILED')
+        source_head = final.get('head_after')
+        require(type(source_head) is str and re.fullmatch(r'[0-9a-f]{40}', source_head) and
+                final.get('reason') == 'more_work' and
+                checkpoint.get('decision') == 'continue' and
+                checkpoint.get('reason') == 'more_work' and
+                checkpoint.get('head') == source_head and
+                checkpoint.get('iteration') == 240 and
+                ready == {'schema_version': 1, 'source_run': SOURCE_RUN,
+                          'source_head': source_head, 'series_started': 500,
+                          'last_session_id': ready.get('last_session_id'),
+                          'server_outcome': 'succeeded_idle_nonactive'} and
+                type(ready['last_session_id']) is str and
+                re.fullmatch(r'ses_[A-Za-z0-9]+', ready['last_session_id']) and
+                git(root, 'merge-base', '--is-ancestor', source_head, head) == '',
+                'GATE_NOT_RECONCILED')
+        started = 500
+        for prior in sorted(base.glob('gate-*')):
+            state = prior.lstat()
+            require(stat.S_ISDIR(state.st_mode) and state.st_uid == os.getuid() and
+                    stat.S_IMODE(state.st_mode) == 0o700, 'PRIOR_GATE_RUN_UNVERIFIED')
+            result = private_json(prior / 'summary.json', 'PRIOR_GATE_RUN_UNVERIFIED')
+            number = result.get('attempts')
+            require(type(number) is int and 0 <= number <= MAX_RUNS and
+                    result.get('schema_version') == 1 and
+                    result.get('reason') == 'run_budget_reached' and
+                    result.get('result') == 'stopped' and
+                    len(list(prior.glob('attempt-*'))) == number and
+                    all((prior / f'attempt-{i:03d}/result.json').exists()
+                        for i in range(1, number + 1)), 'PRIOR_GATE_RUN_UNVERIFIED')
+            started += number
+        require(started + max_runs <= SERIES_LIMIT, 'SERIES_BUDGET_EXCEEDED')
+    except OSError:
+        raise RunnerError('GATE_NOT_RECONCILED') from None
+
+
 def subscription_preflight(binary: str, model: str, root: Path) -> None:
     """Reject default/other-provider models and missing V2 OpenAI OAuth accounts.
 
@@ -172,21 +309,37 @@ This is not proof of provider billing. Never print the account listing.
             'SUBSCRIPTION_AUTH_UNVERIFIED')
 
 
-def prompt(control: dict, handoff: Path, model: str) -> str:
+def prompt(control: dict, handoff: Path, model: str, mission: dict | None = None) -> str:
+    gate = (f"""This *entire batch* has ONE objective in {mission['wp_id']} ({mission['gate_id']}).
+Baseline: {mission['baseline']}
+Required evidence: {mission['target_evidence']}
+Allowed scope: {mission['allowed_scope']}
+Stop conditions: {mission['stop_conditions']}
+Recovery: {mission['recovery']}
+If a gate cannot safely advance, report a precise blocker and stop; do not
+substitute unrelated AgentHouse/FinOps micro-hardening or mark a checkbox to
+keep the runner alive. `more_work` may continue *only inside this short batch*;
+it does not authorize any later batch. No live/operator acceptance without
+fresh, scoped observations.
+""" if mission is not None else '')
     return f"""Continue Shirokuma's *local* experimental development in this checkout.
 Read AGENTS.md, docs/design/04_Development/04B_Autonomous_Local_Development.md,
-docs/design/06_WorkPackages/061_Local_Experiment_Milestones.md and the private
-Vault handoff snapshot at {handoff} before choosing work. The original Vault,
+docs/design/04_Development/04C_Gate_Driven_Local_Continuation.md and the short
+docs/design/04_Development/04D_Current_Gate_Summary.md first. Read relevant
+sections of the current WP, Milestones ledger and private Vault handoff snapshot
+at {handoff}; do not ingest their entire historical logs as an instruction.
+{gate}The original Vault,
 parent workspace AGENTS.md, and ~/.codex are outside this noninteractive CLI's
 approved filesystem; do not try to bypass a permission rejection. The root
 checkout AGENTS.md and this prompt carry the relevant scope. Prefix shell
 commands with rtk. Record current work in repository WPs/Milestones; if direct
 Vault update is denied, leave it untouched and document pending sync.
-Read relevant WPs and current lab state; old notes are not fresh observations.
-Do not end at one WP/commit/test milestone: continue with other safe independent
-work in this invocation. Implement, test, record evidence and gaps, and commit
-coherent changes locally. The owner authorized using their ChatGPT Pro weekly
-allowance, including exhaustion, and requested that this runner start. An
+Read the current WP and lab state; old notes are not fresh observations.
+Do not turn an isolated commit or green test into a gate pass. Continue only
+safe work *for this gate* within this invocation. Implement, test, record
+evidence and gaps, and commit coherent changes locally. The owner authorized
+the existing ChatGPT Pro weekly allowance; this manually selected short batch
+must not silently restart the earlier 500-to-1000 successor. An
 unambiguous OpenAI OAuth-only connection and explicit {model} are the local
 experimental routing preconditions, NOT independent proof of billing. Do not
 stop solely because a provider billing ledger cannot be independently read;
@@ -223,7 +376,7 @@ do not follow a preexisting entry). Exact keys: schema_version (integer 1),
 nonce, iteration (integer), head (full git rev-parse HEAD after your last commit),
 decision ("continue" or "stop"), reason ("more_work", "no_safe_work",
 "safety_boundary", or "complete"). Use continue/more_work only if more safe
-independent tasks remain; otherwise stop with the applicable reason. Never
+work for this gate remains *within this batch*; otherwise stop. Never
 claim complete merely because tests pass. Do not write secrets to checkpoint.
 If interrupted before a trustworthy checkpoint, the runner will stop without
 retrying the request. It will also stop on dirty worktree or unchanged HEAD.
@@ -327,22 +480,28 @@ def invoke(binary: str, root: Path, directory: Path, message: str, deadline: flo
                 'OUTPUT_LIMIT_EXCEEDED')
 
 
-def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int, model: str) -> tuple[str, Path]:
+def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int,
+        model: str, mission: dict | None = None) -> tuple[str, Path]:
     require(1 <= max_runs <= MAX_RUNS and 1 <= max_minutes <= MAX_MINUTES, 'BUDGET_INVALID')
+    require(mission is not None, 'MISSION_REQUIRED')
     binary = shutil.which(binary)
     require(binary is not None, 'OPENCODE_UNAVAILABLE')
     require(os.environ.get('OPENCODE_DISABLE_PROJECT_CONFIG') != '1', 'PROJECT_INSTRUCTIONS_DISABLED')
     fd = lock_directory(root)
     try:
-        checkout_head(root, vault)
+        before_batch = checkout_head(root, vault)
+        require(mission['head_before'] == before_batch, 'MISSION_HEAD_CHANGED')
+        gate_preflight(root, before_batch, max_runs, max_minutes)
         parent = root / 'tmp/local-experiment/autonomous-runner'
-        directory = Path(tempfile.mkdtemp(prefix='run-', dir=parent))
+        original_deadline = (parent / FIRST_RUN).stat().st_birthtime + ORIGINAL_WEEK_MINUTES * 60
+        directory = Path(tempfile.mkdtemp(prefix='gate-', dir=parent))
         os.chmod(directory, 0o700)
         nonce = uuid.uuid4().hex
         deadline = time.monotonic() + max_minutes * 60
         summary = {'schema_version': 1, 'result': 'stopped', 'attempts': 0, 'reason': None}
         try:
             for number in range(1, max_runs + 1):
+                require(time.time() < original_deadline, 'ORIGINAL_WEEK_EXPIRED')
                 if deadline - time.monotonic() < 10:
                     summary['reason'] = 'time_budget_reached'
                     break
@@ -355,7 +514,7 @@ def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int
                            'checkpoint': str(attempt.relative_to(root) / 'checkpoint.json')}
                 print(f'RUN_STARTED attempt={number} evidence={attempt.relative_to(root)}', flush=True)
                 summary['attempts'] = number
-                invoke(binary, root, attempt, prompt(control, handoff.relative_to(root), model), deadline, model)
+                invoke(binary, root, attempt, prompt(control, handoff.relative_to(root), model, mission), deadline, model)
                 after = checkout_head(root, vault)
                 reason = read_checkpoint(attempt / 'checkpoint.json', control, after)
                 if after != before:
@@ -397,6 +556,8 @@ def main(argv: list[str] | None = None) -> int:
                         help='session model (default: openai/gpt-6.1-sol)')
     parser.add_argument('--max-runs', type=int)
     parser.add_argument('--max-minutes', type=int)
+    parser.add_argument('--mission-file', type=Path,
+                        help='private 0600 gate objective bound to the current HEAD (required to execute)')
     args = parser.parse_args(argv)
     try:
         head = checkout_head(ROOT, VAULT)
@@ -418,16 +579,21 @@ def main(argv: list[str] | None = None) -> int:
                               'cli': binary, 'active_calls': 0, 'planned_max_runs': args.max_runs,
                               'planned_max_minutes': args.max_minutes, 'model': args.model,
                               'subscription_preflight': preflight,
-                              'cost_limit': 'not-enforced'}, sort_keys=True))
+                               'cost_limit': 'not-enforced',
+                               'mission_gate': mission_file(args.mission_file, ROOT, head)['gate_id']
+                               if args.mission_file is not None else None}, sort_keys=True))
             return 0
         require(args.use_pro_weekly_limit and args.model is not None
                 and args.max_runs is not None and args.max_minutes is not None,
                 'BUDGET_REQUIRED')
+        require(args.mission_file is not None, 'MISSION_REQUIRED')
+        mission = mission_file(args.mission_file, ROOT, head)
         previous = signal.getsignal(signal.SIGTERM)
         signal.signal(signal.SIGTERM, lambda _signal, _frame: (_ for _ in ()).throw(KeyboardInterrupt()))
         try:
             reason, directory = run(ROOT, VAULT, binary, max_runs=args.max_runs,
-                                    max_minutes=args.max_minutes, model=args.model)
+                                    max_minutes=args.max_minutes, model=args.model,
+                                    mission=mission)
         finally:
             signal.signal(signal.SIGTERM, previous)
         print(json.dumps({'mode': 'executed', 'stop_reason': reason,

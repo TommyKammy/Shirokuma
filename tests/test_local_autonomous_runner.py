@@ -90,6 +90,75 @@ class AutonomousRunnerTests(unittest.TestCase):
         return subprocess.run(['git', '-C', str(self.root), *args], check=True,
                               capture_output=True, text=True).stdout.strip()
 
+    def write_mission(self):
+        directory = self.root / 'tmp/local-experiment/gate-batches'
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        (self.root / 'tmp').chmod(0o700)
+        (self.root / 'tmp/local-experiment').chmod(0o700)
+        parent = self.root / 'tmp/local-experiment/autonomous-runner'
+        parent.mkdir(mode=0o700, exist_ok=True)
+        (parent / R.FIRST_RUN).mkdir(mode=0o700, exist_ok=True)
+        mission = dict(schema_version=1, wp_id=R.MISSION_WP,
+                       gate_id='L0_GITOPS_READINESS', head_before=self.git('rev-parse', 'HEAD'),
+                       baseline='The dedicated cluster has no fresh live gate observations.',
+                       target_evidence='Record dedicated scope and fresh controller status or a concrete blocker.',
+                       allowed_scope='Inspect only isolated disposable fixture state in this test.',
+                       stop_conditions='Stop on unknown retained state, auth change or any failed request.',
+                       recovery='Preserve old fixture evidence and restore only test-owned state.')
+        path = directory / 'mission.json'
+        path.write_text(json.dumps(mission))
+        path.chmod(0o600)
+        return path
+
+    def invoke_fixture(self, *args, **kwargs):
+        path = self.write_mission()
+        kwargs['mission'] = R.mission_file(path, self.root, self.git('rev-parse', 'HEAD'))
+        with mock.patch.object(R, 'gate_preflight'):
+            return R.run(*args, **kwargs)
+
+    def write_private_json(self, path, value):
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.parent.chmod(0o700)
+        path.write_text(json.dumps(value))
+        path.chmod(0o600)
+
+    def test_gate_preflight_refuses_unreviewed_source_unknown_run_and_spent_budget(self):
+        self.write_mission()
+        head = self.git('rev-parse', 'HEAD')
+        base = self.root / 'tmp/local-experiment/autonomous-runner'
+        with self.assertRaisesRegex(R.RunnerError, 'REVIEW_HOLD_UNVERIFIED'):
+            R.gate_preflight(self.root, head, 1, 1)
+        self.write_private_json(base / 'cap-1000-bridge/bridge-stop.json',
+                                {'source_run': R.SOURCE_RUN, 'reason': 'POLICY_REVIEW_HOLD'})
+        source = base / R.SOURCE_RUN
+        self.write_private_json(source / 'summary.json', {'schema_version': 1,
+                                'result': 'stopped', 'reason': 'run_budget_reached', 'attempts': 240})
+        self.write_private_json(source / 'attempt-240/result.json',
+                                {'head_after': head, 'reason': 'more_work'})
+        self.write_private_json(source / 'attempt-240/checkpoint.json',
+                                {'decision': 'continue', 'reason': 'more_work',
+                                 'head': head, 'iteration': 240})
+        with self.assertRaisesRegex(R.RunnerError, 'GATE_NOT_RECONCILED'):
+            R.gate_preflight(self.root, head, 1, 1)
+        self.write_private_json(self.root / 'tmp/local-experiment/gate-batches/ready.json',
+                                {'schema_version': 1, 'source_run': R.SOURCE_RUN,
+                                 'source_head': head, 'series_started': 500,
+                                 'last_session_id': 'ses_fixture123',
+                                 'server_outcome': 'succeeded_idle_nonactive'})
+        R.gate_preflight(self.root, head, 6, 1)
+        unknown = base / 'gate-unknown'
+        unknown.mkdir(mode=0o700)
+        with self.assertRaisesRegex(R.RunnerError, 'PRIOR_GATE_RUN_UNVERIFIED'):
+            R.gate_preflight(self.root, head, 1, 1)
+        unknown.rmdir()  # only disposable fixture-owned directory
+        with mock.patch.object(R, 'SERIES_LIMIT', 505):
+            with self.assertRaisesRegex(R.RunnerError, 'SERIES_BUDGET_EXCEEDED'):
+                R.gate_preflight(self.root, head, 6, 1)
+        self.write_private_json(base / 'cap-1000-bridge/bridge-stop.json',
+                                {'source_run': R.SOURCE_RUN, 'reason': 'OPENCODE_RUN_FAILED'})
+        with self.assertRaisesRegex(R.RunnerError, 'REVIEW_HOLD_UNVERIFIED'):
+            R.gate_preflight(self.root, head, 1, 1)
+
     def test_plan_is_zero_model_calls_and_requires_explicit_budget(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
@@ -104,41 +173,65 @@ class AutonomousRunnerTests(unittest.TestCase):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
              mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': 'stop'}), \
+             mock.patch.object(R, 'gate_preflight'), \
              contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
             self.assertEqual(R.main(['--execute', '--model', self.model, '--max-runs', '2', '--max-minutes', '1']), 1)
             self.assertIn('BUDGET_REQUIRED', err.getvalue())
+            path = self.write_mission()
             self.assertEqual(R.main(['--execute', '--use-pro-weekly-limit', '--model', self.model,
-                                     '--max-runs', '2', '--max-minutes', '1']), 0)
+                                     '--max-runs', '2', '--max-minutes', '1',
+                                     '--mission-file', str(path)]), 0)
         self.assertEqual(json.loads(out.getvalue().splitlines()[-1])['completion_verified'], False)
         parent = self.root/'tmp/local-experiment/autonomous-runner'
-        output = next(parent.glob('run-*/attempt-001/stdout.jsonl'))
+        output = next(parent.glob('gate-*/attempt-001/stdout.jsonl'))
         self.assertIn('fixture', output.read_text())
-        self.assertFalse(list(parent.glob('run-*/attempt-002')))
+        self.assertFalse(list(parent.glob('gate-*/attempt-002')))
 
-    def test_week_long_bound_is_allowed_but_not_unbounded(self):
+    def test_short_batch_bound_is_allowed_but_not_unbounded(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
              contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertEqual(R.main(['--max-runs', '500', '--max-minutes', '10080']), 0)
+            self.assertEqual(R.main(['--max-runs', '6', '--max-minutes', '120']), 0)
         plan = json.loads(out.getvalue())
-        self.assertEqual((plan['planned_max_runs'], plan['planned_max_minutes']), (500, 10080))
+        self.assertEqual((plan['planned_max_runs'], plan['planned_max_minutes']), (6, 120))
         self.assertEqual(plan['subscription_preflight'], 'openai_oauth_label_present')
         self.assertEqual(plan['model'], 'openai/gpt-6.1-sol')
         with self.assertRaisesRegex(R.RunnerError, 'BUDGET_INVALID'):
-            R.run(self.root, self.vault, str(self.cli), max_runs=501, max_minutes=10080, model=self.model)
+            self.invoke_fixture(self.root, self.vault, str(self.cli), max_runs=7, max_minutes=120, model=self.model)
         with self.assertRaisesRegex(R.RunnerError, 'BUDGET_INVALID'):
-            R.run(self.root, self.vault, str(self.cli), max_runs=500, max_minutes=10081, model=self.model)
+            self.invoke_fixture(self.root, self.vault, str(self.cli), max_runs=6, max_minutes=121, model=self.model)
+
+    def test_execute_rejects_missing_or_unsafe_mission_without_model_call(self):
+        with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
+             mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
+             contextlib.redirect_stderr(io.StringIO()) as err, contextlib.redirect_stdout(io.StringIO()):
+            args = ['--execute', '--use-pro-weekly-limit', '--model', self.model,
+                    '--max-runs', '1', '--max-minutes', '1']
+            self.assertEqual(R.main(args), 1)
+            self.assertIn('MISSION_REQUIRED', err.getvalue())
+            path = self.write_mission()
+            alias = path.with_name('alias.json')
+            alias.symlink_to(path)
+            self.assertEqual(R.main(args + ['--mission-file', str(alias)]), 1)
+            path.chmod(0o644)
+            self.assertEqual(R.main(args + ['--mission-file', str(path)]), 1)
+            path.chmod(0o600)
+            wrong = json.loads(path.read_text())
+            wrong['head_before'] = 'a'*40
+            path.write_text(json.dumps(wrong))
+            self.assertEqual(R.main(args + ['--mission-file', str(path)]), 1)
+            self.assertFalse(list((self.root/'tmp/local-experiment/autonomous-runner').glob('gate-*')))
 
     def test_missing_or_ambiguous_oauth_cannot_start_run(self):
         for mode in ('missing', 'api', 'multiple', 'untyped', 'legacy_text'):
             with self.subTest(mode=mode), mock.patch.dict(os.environ, {'FAKE_AUTH_MODE': mode}), \
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_AUTH_UNVERIFIED'):
-                    R.run(self.root, self.vault, str(self.cli), max_runs=96,
-                          max_minutes=10080, model=self.model)
+                    self.invoke_fixture(self.root, self.vault, str(self.cli), max_runs=6,
+                             max_minutes=120, model=self.model)
         parent = self.root/'tmp/local-experiment/autonomous-runner'
-        self.assertFalse(list(parent.glob('run-*/attempt-001')))
-        self.assertEqual(len(list(parent.glob('run-*/summary.json'))), 5)
+        self.assertFalse(list(parent.glob('gate-*/attempt-001')))
+        self.assertEqual(len(list(parent.glob('gate-*/summary.json'))), 5)
         with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_MODEL_REQUIRED'):
             R.subscription_preflight(str(self.cli), 'openrouter/paid-model', self.root)
         with mock.patch.dict(os.environ, {'OPENAI_API_KEY': 'redacted'}):
@@ -162,10 +255,10 @@ class AutonomousRunnerTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {'FAKE_AUTH_MODE': 'expires'}), \
              contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(R.RunnerError, 'SUBSCRIPTION_AUTH_UNVERIFIED'):
-                R.run(self.root, self.vault, str(self.cli), max_runs=96,
-                      max_minutes=10080, model=self.model)
+                self.invoke_fixture(self.root, self.vault, str(self.cli), max_runs=6,
+                         max_minutes=120, model=self.model)
         parent = self.root/'tmp/local-experiment/autonomous-runner'
-        directory = next(parent.glob('run-*'))
+        directory = next(parent.glob('gate-*'))
         summary = json.loads((directory/'summary.json').read_text())
         count = self.root/'tmp/auth-count'
         self.assertEqual(summary['attempts'], 1,
@@ -176,7 +269,7 @@ class AutonomousRunnerTests(unittest.TestCase):
     def test_two_new_sessions_continue_only_after_new_clean_commits(self):
         initial = R.checkout_head(self.root, self.vault)
         with contextlib.redirect_stdout(io.StringIO()):
-            reason, directory = R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
+            reason, directory = self.invoke_fixture(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
         self.assertEqual(reason, 'run_budget_reached')
         self.assertEqual(json.loads((directory/'summary.json').read_text())['attempts'], 2)
         self.assertNotEqual(initial, R.checkout_head(self.root, self.vault))
@@ -254,7 +347,7 @@ class AutonomousRunnerTests(unittest.TestCase):
     def test_agent_stop_claim_never_becomes_verified_completion(self):
         with mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': 'stop'}), \
              contextlib.redirect_stdout(io.StringIO()):
-            reason, directory = R.run(self.root, self.vault, str(self.cli), max_runs=3, max_minutes=1, model=self.model)
+            reason, directory = self.invoke_fixture(self.root, self.vault, str(self.cli), max_runs=3, max_minutes=1, model=self.model)
         self.assertEqual(reason, 'agent_no_safe_work_claim')
         self.assertEqual(json.loads((directory/'summary.json').read_text())['attempts'], 1)
         self.assertFalse((directory/'attempt-002').exists())
@@ -265,23 +358,23 @@ class AutonomousRunnerTests(unittest.TestCase):
             with self.subTest(mode=mode), mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': mode}), \
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(R.RunnerError, code):
-                    R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
+                    self.invoke_fixture(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
         parent = self.root/'tmp/local-experiment/autonomous-runner'
-        self.assertEqual(len(list(parent.glob('run-*/summary.json'))), 3)
-        self.assertFalse(list(parent.glob('run-*/attempt-002')))
+        self.assertEqual(len(list(parent.glob('gate-*/summary.json'))), 3)
+        self.assertFalse(list(parent.glob('gate-*/attempt-002')))
 
     def test_dirty_or_nonzero_exit_preserves_evidence_and_never_retries(self):
         for mode, code in [('dirty', 'DIRTY_WORKTREE'), ('failure', 'OPENCODE_RUN_FAILED')]:
             with self.subTest(mode=mode), mock.patch.dict(os.environ, {'FAKE_OPENCODE_MODE': mode}), \
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(R.RunnerError, code):
-                    R.run(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
+                    self.invoke_fixture(self.root, self.vault, str(self.cli), max_runs=2, max_minutes=1, model=self.model)
             if mode == 'dirty':
                 self.assertEqual((self.root/'unfinished.txt').read_text(), 'preserve me')
                 # Clear only this test-owned disposable file for the next fixture.
                 (self.root/'unfinished.txt').unlink()
         parent = self.root/'tmp/local-experiment/autonomous-runner'
-        self.assertFalse(list(parent.glob('run-*/attempt-002')))
+        self.assertFalse(list(parent.glob('gate-*/attempt-002')))
 
     def test_scope_lock_and_timeout_do_not_launch_another_session(self):
         self.git('checkout', '-q', '-b', 'wrong-branch')

@@ -5,7 +5,7 @@ title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.7.1"
+version: "0.7.2"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -111,12 +111,19 @@ new spending, GitHub writes or publication. See
 
 On 2026-10-06 the owner raised the *cumulative* local series ceiling from 500
 to 1000 started sessions. Do not change the currently running invocation or
-its 500-total boundary. Only after its clean `run_budget_reached` result, valid
-checkpoint, terminal server session and clean descendant commit may one
-separately gated continuation use the remaining 500 slots. The per-invocation
-limit remains 500, and the original seven-day deadline, OAuth-only route,
-stop-on-error rules and no-new-spending boundary remain in force. A failed or
-unknown request is counted, never replayed to fill the budget.
+its 500-total boundary. On review of repeated offline micro-fixes, the owner
+asked to change the development environment and future policy: the prepared
+automatic 500-to-1000 extension was **unloaded and put on hold**. The 1000
+ceiling is a maximum, not a target or permission to auto-start 500 more. At
+the 500 boundary first reconcile the original run and its final server session,
+result, checkpoint and clean descendant HEAD. Then use the gate-driven,
+manually selected short-batch policy in
+`docs/design/04_Development/04C_Gate_Driven_Local_Continuation.md` with its
+short current-gate index. Prioritize L0 GitOps live evidence; never turn a
+commit, `more_work`, offline tests or checkbox edits into gate acceptance.
+Keep the original seven-day deadline, OAuth-only route, stop-on-error and
+no-new-spending boundaries. Count failures and unknown starts; never replay
+one to fill the budget. Do not erase retained evidence or worktrees.
 
 The owner also requested a **conditional GPT-6 Astra consultation** when a
 coding session meets a genuine difficult blocker. In sessions with the updated

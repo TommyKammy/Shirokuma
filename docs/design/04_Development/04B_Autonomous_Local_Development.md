@@ -4,8 +4,8 @@ doc_id: "DEV-04B"
 title: "Autonomous Local Development"
 status: accepted
 created: 2026-09-16
-updated: 2026-10-03
-version: "1.3"
+updated: 2026-10-06
+version: "1.4"
 area: development
 tags: [shirokuma, local, development]
 ---
@@ -61,6 +61,15 @@ authorized. A noninteractive run reads a private checkout-scoped snapshot of
 the Vault handoff instead of bypassing external-directory permission. A denied
 Vault update remains pending rather than being silently claimed complete.
 The runner is not a daemon, scheduler, approval bypass, or hard currency cap.
+
+After the running 500-total series reaches a safely reconciled terminal state,
+use [DEV-04C](04C_Gate_Driven_Local_Continuation.md) and its [short gate index](04D_Current_Gate_Summary.md)
+instead of the original open-ended `more_work` scheduling rule. The prepared
+1000-total auto-extension is on `POLICY_REVIEW_HOLD`: a 1000 upper bound does
+not schedule a new invocation. Keep the source evidence intact and review
+measured gate progress between batches of at most six new sessions; no checkbox
+or commit alone constitutes functional acceptance. This revision does not
+change or signal a currently active runner process.
 
 The retained `make verify` includes historical publication/admission gates,
 including expired authorization and the absence of unpublished runtime inputs.
