@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.528"
+version: "5.529"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Helm output ambiguity closed; live preflight incomplete
+
+WP-L0-GITOPS-001: exact single-line, warning-free pinned Helm output is now
+required by the offline renderer after three false accepts in isolated fixtures.
+Bootstrap/teardown 29, pinned Iceberg 144, design-context and the full local
+verifier pass (first full invocation timed out at 120 seconds; longer rerun
+passed; intentional fake Dagster failure). Dedicated VM freshly Stopped; host
+free space 2.2 TiB is not retained VM disk/backup or writer inventory. No VM
+start or saved resource change. Live §9, source provenance, strict gate and
+operator acceptance remain open. Preserve prior failures; omit private Helm
+PATH prefix to restore host tool scope. Original Vault sync pending.
+
+Independent WP-L6-FIN-001 recheck: standalone Docker preflight 36 fixture
+tests pass under discovery; the direct module command first failed on its
+top-level test fixture import. Neither those fixtures nor host free space
+authorize a saved-volume scan: writer and producer scope remain unverified,
+`volume_traversal_authorized=False` and AgentHouse usage is `null / NOT_MEASURED`.
 
 ## 2026-10-06: pinned Helm isolates Iceberg gate (offline)
 

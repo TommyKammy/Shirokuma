@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.277"
+version: "0.278"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent stopped-lab traversal boundary recheck
+
+After the L0 offline gate, a fresh `colima list` showed the dedicated profile
+Stopped. The standalone Docker two-snapshot preflight suite passes 36 tests
+(`python -m unittest discover -s tests -p
+test_local_finops_docker_volume_preflight.py`); a direct module invocation
+first failed on the suite's expected top-level fixture import, so the
+repository's discovery layout was used. This verifies only synthetic metadata
+classification, including `volume_traversal_authorized=False`, not a live
+Docker inventory. The host's 2.2 TiB free space is not VM disk or backup
+capacity. No retained volume, report or backup was inspected or changed;
+AgentHouse bytes remain `null / NOT_MEASURED`. Authentic daemon scope,
+continuous writer exclusion and safe retained-volume traversal remain open.
+Do not start a scan from this result. No runtime rollback is needed; preserve
+existing saved resources. Original Vault sync remains pending.
 
 ## 2026-10-06 unrelated mount whitespace boundary (offline)
 

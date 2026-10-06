@@ -184,10 +184,10 @@ def _verified_tool(name: str) -> str:
         if actual != expected:
             raise RenderError(f"expected exactly {expected!r} from Flux client")
     elif name == "helm":
-        actual = _run((executable, "version", "--short")).strip()
-        if not actual.startswith(f"{HELM_VERSION}+"):
+        actual = _run((executable, "version", "--short"), reject_stderr=True)
+        if not re.fullmatch(rf"{re.escape(HELM_VERSION)}\+g[0-9a-f]+\n", actual):
             raise RenderError(
-                f"expected helm {HELM_VERSION}, found {actual or 'unknown'}"
+                f"expected one pinned Helm {HELM_VERSION} version line"
             )
     elif name == "kubectl":
         raw = _run((executable, "version", "--client", "-o", "json"))

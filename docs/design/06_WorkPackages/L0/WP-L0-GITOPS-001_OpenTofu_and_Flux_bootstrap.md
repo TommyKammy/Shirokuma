@@ -5,12 +5,37 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.156"
+version: "0.157"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: exact Helm renderer version output and stopped-lab recheck
+
+The offline GitOps renderer previously accepted an additional Helm version line,
+an empty build suffix, or leading whitespace because it stripped stdout and
+only compared a prefix; stderr was unchecked. Isolated fixture negatives failed
+before correction. It now requires one LF-terminated pinned v4.2.2 build line
+and no stderr. Bootstrap/teardown contracts (29), the independent Iceberg gate
+with the previously isolated v4.2.2 binary (144), design-context and the full
+local verifier pass. The first full verifier exceeded a 120-second command
+timeout before completion; the bounded 420-second rerun passed (private log
+`tmp/local-experiment/attempt-231-verify.log`; fake Dagster failure is the
+expected negative). No host Helm installation or pin change was made.
+
+Independently, fresh `colima list` shows all profiles Stopped, and dedicated
+`colima status` refuses a stopped profile. Host filesystem has 2.2 TiB free;
+this is not a VM disk, backup, or writer inventory. No VM was started and no
+retained volumes/backups or Flux state were inspected or changed. Before live
+§9 measurements, inventory the dedicated VM's retained disk/backup, continuous
+writers and Flux scope, then assess whether startup is safe. No remote Git
+authenticity, live controller health, strict admission or operator acceptance
+follows from this offline gate. To recover the prior local tool scope omit the
+private PATH prefix; revert only the renderer/test if verified Helm output
+semantics require it, preserving saved data. Original Vault sync remains
+pending outside this checkout.
 
 ## 2026-10-06: independently supply the pinned local Helm tool
 

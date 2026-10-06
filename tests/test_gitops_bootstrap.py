@@ -17,7 +17,7 @@ from scripts.verify_gitops_image_admission import (
 )
 from tests.gitops_render import (
     RenderError, RepositoryContext, Resource, _canonical_git_url, _is_local_git_source,
-    default_repository_context,
+    _verified_tool, default_repository_context,
 )
 
 
@@ -25,6 +25,36 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
+    def test_helm_renderer_refuses_ambiguous_version_output(self) -> None:
+        expected = "v4.2.2+gb05881c\n"
+        for output in (
+            expected + "v4.2.3+other\n",
+            "v4.2.2+\n",
+            " v4.2.2+gb05881c\n",
+        ):
+            with self.subTest(output=output):
+                _verified_tool.cache_clear()
+                with patch("tests.gitops_render._tool", return_value="helm-fixture"), patch(
+                    "tests.gitops_render._run", return_value=output
+                ):
+                    with self.assertRaises(RenderError):
+                        _verified_tool("helm")
+        _verified_tool.cache_clear()
+        with patch("tests.gitops_render._tool", return_value="helm-fixture"), patch(
+            "tests.gitops_render._run", return_value=expected
+        ) as run:
+            self.assertEqual(_verified_tool("helm"), "helm-fixture")
+            run.assert_called_once_with(("helm-fixture", "version", "--short"), reject_stderr=True)
+        _verified_tool.cache_clear()
+        with patch("tests.gitops_render._tool", return_value="helm-fixture"), patch(
+            "tests.gitops_render.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=expected, stderr="warning: renderer changed\n"
+            ),
+        ), self.assertRaises(RenderError):
+            _verified_tool("helm")
+        _verified_tool.cache_clear()
+
     def test_repository_context_refuses_ambiguous_source_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
