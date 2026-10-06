@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.527"
+version: "5.528"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: pinned Helm isolates Iceberg gate (offline)
+
+WP-L0-GITOPS-001: a private v4.2.2 Darwin/arm64 archive matches release-host
+SHA-256, and its isolated binary passes the 144-test Iceberg gate after the
+configuration scan repair. The host's v4.2.3 remains installed; the earlier
+43/44-error runs are preserved. Same-host checksum is not independent signing.
+No VM start, live Flux, remote source proof, retained data/backup change or
+operator acceptance. Revert PATH to the installed binary to restore the prior
+tool scope; original Vault sync remains pending outside checkout.
 
 ## 2026-10-06: Iceberg deployment inputs classified (offline)
 

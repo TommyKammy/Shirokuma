@@ -5,12 +5,29 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.155"
+version: "0.156"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: independently supply the pinned local Helm tool
+
+The installed Helm v4.2.3 remains unchanged. The v4.2.2 Darwin/arm64 archive
+from `https://get.helm.sh/helm-v4.2.2-darwin-arm64.tar.gz` was downloaded into
+ignored checkout-private `tmp/local-experiment/attempt-230-helm/`; its SHA-256
+`5410a0dae3d5d91f45653b161260d9301aabc4ae80ae50a6605d66884b6df8ea`
+matches the release host's `.sha256sum`. Archive entries were inspected before
+extracting, and the isolated binary reports `v4.2.2+gb05881c`. With only that
+directory prepended to PATH, `make verify-iceberg-table-bootstrap` passes all
+144 tests (`tmp/local-experiment/attempt-230-iceberg-pinned.log`); without it,
+the prior 43 version errors remain reproducible. A checksum served from the
+same host is not independent release signing/provenance. This check does not
+install a host tool, start the VM, apply manifests, prove remote Git identity,
+or satisfy §9/live/operator acceptance. Retain the old failure logs and saved
+resources; recovery is to omit the private PATH prefix, not to change the
+host binary or relax the pin. Original Vault synchronization remains pending.
 
 ## 2026-10-06: separate application configuration from manifest scan
 
