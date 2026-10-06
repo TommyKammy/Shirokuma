@@ -119,15 +119,17 @@ def project_component(component, before, metrics, after, *, request_started_at, 
     require(type(metrics) is dict and metrics.get('kind') == 'PodMetrics' and
             metrics.get('apiVersion') == 'metrics.k8s.io/v1beta1', 'SAMPLE_INVALID')
     meta, containers = metrics.get('metadata', {}), metrics.get('containers')
-    require(meta.get('namespace') == identity['namespace'] and meta.get('name') == identity['pod_name'] and
+    require(type(meta) is dict and meta.get('namespace') == identity['namespace'] and meta.get('name') == identity['pod_name'] and
             meta.get('uid', identity['pod_uid']) == identity['pod_uid'] and type(containers) is list and
-            len(containers) == 1 and containers[0].get('name') == identity['container'], 'SAMPLE_INVALID')
+            len(containers) == 1 and type(containers[0]) is dict and
+            containers[0].get('name') == identity['container'], 'SAMPLE_INVALID')
     window = metrics.get('window')
     require(type(window) is str and len(window) <= 32 and
             re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.[0-9]{1,9})?s', window), 'SAMPLE_INVALID')
     ns = Fraction(window[:-1]) * 10**9
     require(ns.denominator == 1 and 0 < ns <= 120 * 10**9, 'SAMPLE_INVALID')
     usage = containers[0].get('usage', {})
+    require(type(usage) is dict, 'SAMPLE_INVALID')
     try:
         sample = {'timestamp': stamp(metrics.get('timestamp'))[0], 'window_ns': str(int(ns)),
                   'cpu_nanocores': U.quantity(usage.get('cpu'), 'cpu'),

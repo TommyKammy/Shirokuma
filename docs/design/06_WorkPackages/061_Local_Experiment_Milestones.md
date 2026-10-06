@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.403"
+version: "5.404"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded FinOps PodMetrics payload shapes (offline)
+
+WP-L6-FIN-001: six independent malformed metadata/container/usage variants
+raised raw exceptions before the scoped `SAMPLE_INVALID` repair. Focused
+FinOps 293 tests and `make verify-local-experiment` pass (the verifier's fake
+Dagster worker failure is an intentional negative diagnostic). Dedicated Colima was listed
+Stopped earlier in this invocation; no live API/VM collection, retained
+report/volume/backup mutation or AgentHouse used-byte claim (`null /
+NOT_MEASURED`). Fixture-only tests do not authenticate the producer or grant
+operator acceptance. Restore only this scoped parser/test, preserving saved
+evidence; original Vault sync remains pending outside checkout.
 
 ## 2026-10-06: independent FinOps storage and component Pod scope guards (offline)
 

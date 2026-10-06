@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.201"
+version: "0.202"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: scoped PodMetrics nested source failures (offline)
+
+Six malformed synthetic PodMetrics metadata, container and usage envelopes
+raised raw attribute errors before projection. They now fail with
+`SAMPLE_INVALID` before metric quantities are read. `make test-local-finops`
+passed 293 cases (seven Linux-only skips), and `make verify-local-experiment`
+passed (its fake Dagster worker failure diagnostic is an intentional negative
+test). No live API, retained report or
+backup modification, or AgentHouse used-byte measurement; dedicated Colima
+was observed Stopped earlier in this invocation. A fixture cannot authenticate
+metrics provenance or grant operator acceptance. Roll back only the bounded
+PodMetrics shape checks/test if needed, retaining saved records. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed storage deletion aliases and component Pod label types (offline)
 

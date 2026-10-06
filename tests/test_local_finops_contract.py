@@ -48,6 +48,20 @@ class ContractTests(unittest.TestCase):
                         with self.assertRaisesRegex(C.FinOpsError, '^SCOPE_INVALID$'):
                             C.project_component(component, **args)
 
+    def test_pod_metrics_nested_envelopes_have_scoped_sample_failure(self):
+        for mutation in (
+            lambda m: m.update(metadata=None),
+            lambda m: m.update(metadata=[]),
+            lambda m: m.update(containers=[None]),
+            lambda m: m.update(containers=['trino']),
+            lambda m: m['containers'][0].update(usage=None),
+            lambda m: m['containers'][0].update(usage=[]),
+        ):
+            args = component_args()
+            mutation(args['metrics'])
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(C.FinOpsError, '^SAMPLE_INVALID$'):
+                C.project_component('trino', **args)
+
     def test_three_fixed_components_keep_exact_cpu_and_memory_and_identity(self):
         for component in C.COMPONENTS:
             value = C.project_component(component, **component_args(component))
