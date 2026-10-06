@@ -557,10 +557,15 @@ def export(client: Client) -> Path:
                 file.write(payload)
                 file.flush()
                 os.fsync(file.fileno())
+            # Make the recoverable staging entry durable before attempting
+            # publication. A failed sync leaves it for explicit inspection.
+            os.fsync(state)
             # link is exclusive: unlike rename it cannot replace a saved report.
             os.link(staging, name, src_dir_fd=state, dst_dir_fd=state,
                     follow_symlinks=False)
+            os.fsync(state)
             os.unlink(staging, dir_fd=state)
+            os.fsync(state)
     except OSError:
         raise AgentHouseError('local AgentHouse export cannot be published safely; inspect any pending file') from None
     return path

@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.258"
+version: "0.259"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 unrelated Docker status consistency (offline)
+
+The standalone two-snapshot metadata guard now refuses `created`/`exited`
+containers with active stop flags and `running` containers without the matching
+Running-only flags. Five stable contradictory unrelated-container fixtures
+were metadata-eligible before repair; focused preflight 17 and full local
+verifier pass (fake Dagster worker failure intentional). Dedicated Colima
+freshly Stopped; no Docker/VM request, retained report/volume/backup access or
+change. No volume traversal authorized; AgentHouse usage `null / NOT_MEASURED`.
+This checks supplied metadata, not daemon provenance, continuous writer
+exclusion, cleanup or operator acceptance. Restore only scoped guard/tests on
+rollback, preserving saved volumes and reports. Original Vault sync pending.
 
 ## 2026-10-06 standalone context socket path boundary (offline)
 

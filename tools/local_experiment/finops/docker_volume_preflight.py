@@ -57,10 +57,18 @@ def _overlaps(a, b):
 def _lifecycle(container):
     state = container.get('State')
     require(type(state) is dict and state.get('Status') in
-            ('created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead') and
+             ('created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead') and
             type(state.get('Running')) is bool and type(state.get('Restarting')) is bool and
             type(state.get('Paused')) is bool and type(state.get('Dead')) is bool and
-            type(container.get('RestartCount')) is int and container['RestartCount'] >= 0)
+             type(container.get('RestartCount')) is int and container['RestartCount'] >= 0)
+    # A stable pair of snapshots with internally contradictory Docker state
+    # cannot establish a trustworthy inventory, even for an unrelated writer.
+    if state['Status'] in ('created', 'exited'):
+        require(all(state[flag] is False for flag in
+                    ('Running', 'Restarting', 'Paused', 'Dead')))
+    elif state['Status'] == 'running':
+        require(state['Running'] is True and state['Restarting'] is False and
+                state['Paused'] is False and state['Dead'] is False)
     times = (state.get('StartedAt'), state.get('FinishedAt'))
     require(all(type(value) is str and 1 <= len(value) <= 64 and
                 all(ord(ch) >= 32 and not 127 <= ord(ch) <= 159 for ch in value)

@@ -460,6 +460,29 @@ class AgentHouseTests(unittest.TestCase):
                 self.assertEqual(existing.stat().st_mode & 0o777, 0o600)
                 self.assertEqual(list(state.glob('*.pending')), [])
 
+    def test_export_requires_directory_sync_for_publish_and_pending_removal(self):
+        for failed_sync in (2, 3, 4):
+            with self.subTest(failed_sync=failed_sync), tempfile.TemporaryDirectory() as directory:
+                state = Path(directory)
+                state.chmod(0o700)
+                client = Mock()
+                client.query.return_value = '{"event_id":"fixture"}\n'
+                original = M.os.fsync
+                calls = []
+
+                def sync(fd):
+                    calls.append(fd)
+                    if len(calls) == failed_sync:
+                        raise OSError('synthetic directory sync failure')
+                    original(fd)
+
+                with patch.object(M, 'STATE', state), patch.object(M.os, 'fsync', side_effect=sync):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'cannot be published safely'):
+                        M.export(client)
+                self.assertEqual(len(calls), failed_sync)
+                self.assertEqual(len(list(state.glob('pawprints-*.jsonl'))), int(failed_sync != 2))
+                self.assertEqual(len(list(state.glob('*.pending'))), int(failed_sync != 4))
+
     def test_smoke_invalid_readback_is_scoped_without_replaying_insert(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'

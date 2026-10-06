@@ -149,6 +149,9 @@ class VolumePreflightTests(unittest.TestCase):
             first = snapshot()
             second = deepcopy(first)
             second['containers'][1]['State'][flag] = True
+            second['containers'][1]['State']['Status'] = flag.lower()
+            if flag == 'Paused':
+                second['containers'][1]['State']['Running'] = True
             with self.subTest(changed=flag), self.assertRaisesRegex(V.PreflightError, 'IDENTITY_CHANGED'):
                 validate(first, second)
             for replacement in (None, 'false'):
@@ -159,6 +162,20 @@ class VolumePreflightTests(unittest.TestCase):
             value = snapshot()
             del value['containers'][1]['State'][flag]
             with self.subTest(missing=flag), self.assertRaises(V.PreflightError):
+                validate(value, deepcopy(value))
+
+    def test_unrelated_container_status_cannot_contradict_stop_flags(self):
+        for status, flags in (
+            ('running', {'Running': False}),
+            ('exited', {'Running': True}),
+            ('exited', {'Paused': True}),
+            ('exited', {'Dead': True}),
+            ('created', {'Restarting': True}),
+        ):
+            value = snapshot()
+            value['containers'][1]['State'].update(Status=status, **flags)
+            with self.subTest(status=status, flags=flags), self.assertRaisesRegex(
+                    V.PreflightError, 'SCOPE_INVALID'):
                 validate(value, deepcopy(value))
 
     def test_all_containers_not_only_owned_label_and_bind_overlaps(self):

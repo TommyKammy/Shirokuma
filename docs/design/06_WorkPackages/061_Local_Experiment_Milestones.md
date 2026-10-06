@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.480"
+version: "5.481"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: private export sync and independent Docker status coherence (offline)
+
+WP-L2-CH-001 syncs staging/publication/removal directory entries for JSONL
+reports; three simulated sync failures retain ambiguous files instead of
+returning success (focused 68 tests). WP-L6-FIN-001 separately refuses five
+contradictory stopped/running states in unrelated Docker container metadata
+(focused 17 tests). Full `make verify-local-experiment` passed; the fake Dagster
+failure is an intentional negative. Fresh dedicated `colima list`: Stopped.
+No live Docker/VM/HTTP, retained data/credential/report/backup read or change.
+Volume traversal remains unauthorized and AgentHouse bytes `null /
+NOT_MEASURED`. Directory sync is not power-loss atomicity; fixture checks do
+not prove producer identity, live deduplication, writer exclusion or operator
+acceptance. Revert only scoped guards/tests while retaining saved records;
+never replay an unknown insert. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: directory durability and scoped socket shape (offline)
 

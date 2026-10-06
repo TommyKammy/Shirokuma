@@ -5,12 +5,28 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.30"
+version: "0.31"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 export directory durability (offline)
+
+The private JSONL report publisher now syncs its staging directory entry,
+exclusive published link and pending-entry removal as well as report bytes.
+Three isolated directory-sync failures previously returned a published path;
+they now refuse and leave any partial/private names for inspection rather than
+deleting or retrying. Focused AgentHouse 68 tests and full local verifier pass
+(fake Dagster worker failure intentional). Dedicated Colima freshly Stopped;
+no live query, retained report/volume/backup or credential accessed/changed.
+Disk impact on failure is one report-sized pending file and/or published link
+plus directory overhead; backup/export remains private and no saved report is
+replaced. This is not power-loss atomicity, producer authenticity, live
+deduplication or operator acceptance. Revert only scoped sync/test if needed,
+retain ambiguous reports and never replay uncertain inserts. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06 directory entry sync before first Docker creation (offline)
 
