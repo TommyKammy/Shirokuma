@@ -282,6 +282,8 @@ class Client:
             payload = sql.encode('utf-8')
         except UnicodeError:
             raise AgentHouseError('local AgentHouse query has invalid SQL encoding') from None
+        if not payload or len(payload) > 8 * 1024 * 1024:
+            raise AgentHouseError('local AgentHouse query exceeds the scoped request limit')
         request = urllib.request.Request(URL + "/?wait_end_of_query=1", data=payload,
                                          headers={"Authorization": "Basic " + self.auth}, method="POST")
         try:
@@ -299,6 +301,14 @@ class Client:
                                      if key.lower() == 'x-clickhouse-exception-code']))
                 if exception_codes:
                     raise AgentHouseError('local AgentHouse response indicates a query exception')
+                # A range reply is not a complete query acknowledgement even
+                # when an intermediary reports status 200 instead of 206.
+                ranges = (response.headers.get_all('Content-Range')
+                          if hasattr(response.headers, 'get_all') else
+                          [value for key, value in response.headers.items()
+                           if key.lower() == 'content-range'])
+                if ranges:
+                    raise AgentHouseError('local AgentHouse response is partial')
                 # This client requests plain text and never decompresses reply
                 # bodies. A coded response is not a completed plain-text query.
                 encodings = (response.headers.get_all('Content-Encoding')

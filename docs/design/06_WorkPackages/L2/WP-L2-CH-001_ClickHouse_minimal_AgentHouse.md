@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.39"
+version: "0.40"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 bounded SQL request and partial-range refusal (offline)
+
+Two independent client boundaries: reject empty or >8 MiB UTF-8 SQL before
+HTTP, and refuse a 200 response carrying any `Content-Range` before treating
+an insert as acknowledged. Both guards have isolated negative fixtures and
+valid short-query/clean-reply controls; focused AgentHouse 79 tests pass.
+The request cap bounds local memory/transfer, not server resource consumption;
+the range guard does not authenticate a peer or detect unmarked streamed errors.
+Dedicated Colima freshly Stopped. No live HTTP/Docker, retained credential,
+report, volume or backup was read or changed. Live compatibility, deduplication
+and operator acceptance remain open; preserve saved records and never replay
+an uncertain insert. Revert only these client guards/tests if verified runtime
+behavior requires it. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 HTTP content encoding boundary (offline)
 

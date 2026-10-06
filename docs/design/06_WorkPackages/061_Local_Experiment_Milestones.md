@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.492"
+version: "5.493"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent SQL request bound and partial HTTP range (offline)
+
+WP-L2-CH-001 rejects empty or >8 MiB encoded SQL before opening HTTP and
+separately refuses a 200 response carrying `Content-Range` before acknowledging
+an insert. Focused AgentHouse 79 tests pass with valid controls. Dedicated
+Colima freshly Stopped; no live HTTP/Docker or retained credential/report/
+volume/backup accessed or changed. This is not producer authentication, live
+deduplication, proof against unmarked streamed errors or operator acceptance.
+AgentHouse bytes stay `null / NOT_MEASURED`; do not replay uncertain writes.
+Revert only the scoped guards/tests if necessary and preserve saved resources.
+Final combined tree passes `make verify-local-experiment` (the fake Dagster
+worker failure is an intentional negative), `make verify-design-context` and
+`git diff --check`. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent HTTP coding and Docker start chronology (offline)
 

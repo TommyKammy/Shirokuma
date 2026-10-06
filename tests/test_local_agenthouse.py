@@ -876,6 +876,28 @@ class AgentHouseTests(unittest.TestCase):
         response.headers = {'Content-Length': '0'}
         self.assertEqual(client.query('SELECT 1'), '')
 
+    def test_query_refuses_range_reply_on_200_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.return_value = b''
+        client.opener.open = Mock(return_value=response)
+        for fields in ((('Content-Range', 'bytes 0-0/2'),),
+                       (('content-range', ''),)):
+            with self.subTest(fields=fields):
+                headers = Message()
+                for name, value in fields:
+                    headers.add_header(name, value)
+                response.headers = headers
+                with self.assertRaisesRegex(M.AgentHouseError, 'partial'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 2)
+        response.read.assert_not_called()
+        response.headers = {'Content-Length': '0'}
+        self.assertEqual(client.query('SELECT 1'), '')
+
     def test_query_refuses_encoded_response_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()
@@ -904,6 +926,15 @@ class AgentHouseTests(unittest.TestCase):
         with patch.object(client.opener, 'open') as open_request:
             with self.assertRaisesRegex(M.AgentHouseError, 'invalid SQL'):
                 client.query('SELECT \ud800')
+            open_request.assert_not_called()
+
+    def test_query_bounds_encoded_request_before_http(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        with patch.object(client.opener, 'open') as open_request:
+            for sql in ('', 'é' * (4 * 1024 * 1024 + 1)):
+                with self.subTest(size=len(sql)):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'request limit'):
+                        client.query(sql)
             open_request.assert_not_called()
 
     def test_non_string_query_fails_before_http(self):
