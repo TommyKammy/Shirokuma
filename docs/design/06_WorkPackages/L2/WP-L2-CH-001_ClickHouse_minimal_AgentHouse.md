@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline direct-client credential boundary
+
+The direct AgentHouse client now refuses an oversized, symlinked, non-private
+or non-regular credential before forming its authorization header. The
+independent FinOps collector may pass its own pinned credential bytes instead
+of reopening the path. Synthetic private-file, mode, size and symlink cases
+passed in the focused AgentHouse tests; the full local verifier passed. An
+initial attempt to use a nonexistent `make test-local-agenthouse` target did
+not run tests; the focused unittest command was used instead. The dedicated
+Colima profile was freshly Stopped. No retained credential contents, live
+Docker/query, backup or volume were accessed or changed. This bounds a local
+file read, not same-UID pre-open mutation, runtime authentication or operator
+acceptance. Restore only the client read if necessary while retaining saved
+credentials/data; original Vault sync pending outside checkout.
+
 | Field | Value |
 |---|---|
 | WP ID | WP-L2-CH-001 |

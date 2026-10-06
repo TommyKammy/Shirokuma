@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import secrets
+import stat
 import subprocess
 import time
 import urllib.error
@@ -75,9 +76,28 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 class Client:
     def __init__(self, *, credential_bytes: bytes | None = None) -> None:
-        credential = json.loads(credential_bytes if credential_bytes is not None else
-                                (STATE / "credential.json").read_text())
-        self.auth = base64.b64encode((USER + ":" + credential["password"]).encode()).decode()
+        if credential_bytes is None:
+            try:
+                fd = os.open(STATE / "credential.json", os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(fd, 'rb') as file:
+                    identity = os.fstat(file.fileno())
+                    if (not stat.S_ISREG(identity.st_mode) or identity.st_uid != os.getuid() or
+                            stat.S_IMODE(identity.st_mode) != 0o600 or identity.st_nlink != 1 or
+                            identity.st_size > 16384):
+                        raise AgentHouseError('local credential is not a private regular file')
+                    credential_bytes = file.read(16385)
+                    if len(credential_bytes) > 16384:
+                        raise AgentHouseError('local credential exceeds read limit')
+            except OSError:
+                raise AgentHouseError('local credential cannot be opened safely') from None
+        try:
+            credential = json.loads(credential_bytes)
+            password = credential['password']
+            if type(password) is not str or not password:
+                raise ValueError('invalid credential')
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            raise AgentHouseError('local credential has invalid format') from None
+        self.auth = base64.b64encode((USER + ":" + password).encode()).decode()
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
     def query(self, sql: str) -> str:

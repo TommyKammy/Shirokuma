@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
 import copy
 import json
 from pathlib import Path
@@ -56,6 +57,34 @@ class AgentHouseTests(unittest.TestCase):
     def test_redirect_never_receives_authorization(self):
         with self.assertRaisesRegex(M.AgentHouseError, "redirect"):
             M.NoRedirect().redirect_request(None, None, 302, "", {}, "https://example.com")
+
+    def test_direct_client_uses_only_bounded_private_regular_credential(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            credential = state / 'credential.json'
+            credential.write_text('{"password":"fixture-only"}')
+            credential.chmod(0o600)
+            with patch.object(M, 'STATE', state):
+                self.assertEqual(base64.b64decode(M.Client().auth).decode(),
+                                 M.USER + ':fixture-only')
+                credential.chmod(0o644)
+                with self.assertRaisesRegex(M.AgentHouseError, 'private regular'):
+                    M.Client()
+                credential.chmod(0o600)
+                credential.write_bytes(b'x' * 16385)
+                with self.assertRaisesRegex(M.AgentHouseError, 'private regular'):
+                    M.Client()
+                credential.unlink()
+                other = state / 'other'
+                other.write_text('{"password":"foreign"}')
+                other.chmod(0o600)
+                credential.symlink_to(other)
+                with self.assertRaisesRegex(M.AgentHouseError, 'opened safely'):
+                    M.Client()
+                credential.unlink()
+                self.assertEqual(base64.b64decode(M.Client(
+                    credential_bytes=b'{"password":"pinned"}').auth).decode(),
+                                 M.USER + ':pinned')
 
     def test_insert_rejects_missing_fields_without_inventing_retry_identity(self):
         complete = M.event("test", "clickhouse")

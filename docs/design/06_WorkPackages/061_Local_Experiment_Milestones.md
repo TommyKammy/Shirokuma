@@ -12,6 +12,19 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: bounded direct AgentHouse client credential (offline)
+
+WP-L2-CH-001: direct client initialization now reads at most 16 KiB from a
+no-follow, owned, single-link 0600 regular credential. An optional already
+pinned byte input supports the separate FinOps reader. Focused AgentHouse
+unittest and `make verify-local-experiment` passed; an initial nonexistent
+make target produced no tests and was replaced by the direct unittest command.
+Dedicated Colima freshly Stopped. No retained credential contents or live
+runtime, saved volume, backup or report changed. Pre-open same-UID mutation,
+daemon provenance, backup recovery and operator acceptance remain unproved.
+Roll back only the client read, retaining saved records. Original Vault sync
+pending outside checkout.
+
 ## 2026-10-06: descriptor-bound FinOps inference credential (offline)
 
 WP-L6-FIN-001 now passes bytes read from a bounded no-follow credential FD
