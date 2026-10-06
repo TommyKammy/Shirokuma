@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.526"
+version: "5.527"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Iceberg deployment inputs classified (offline)
+
+WP-L0-GITOPS-001: seven explicit application configuration files are excluded
+from the Kubernetes resource scan with fail-closed resource/patch-shape checks.
+Focused 15, all 37 remaining deploy manifests through kubectl and the local
+verifier pass. The independent Iceberg gate still fails: 144 tests, 43 errors,
+all pinned Helm v4.2.2 versus installed v4.2.3. Previous 44 errors are retained
+as historical evidence; this is not live or operator acceptance. Dedicated
+Colima freshly Stopped, no VM, retained data/backup or remote change. Restore
+only the scanner/tests if verified semantics differ. Original Vault sync pending.
 
 ## 2026-10-06: independent Iceberg gate rechecked, not accepted
 

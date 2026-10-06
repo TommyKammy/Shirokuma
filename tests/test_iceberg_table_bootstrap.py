@@ -17,6 +17,7 @@ from gitops_render import (
     RenderError,
     RepositoryContext,
     Resource,
+    _manifest_paths,
     _git_source_matches_context_url,
     default_repository_context,
     iceberg_bootstrap_manifests,
@@ -226,6 +227,39 @@ class RepositoryFixture(unittest.TestCase):
             relative,
             json.dumps(normalize(value), indent=2, sort_keys=True),
         )
+
+    def test_application_configuration_is_not_a_kubernetes_manifest(self) -> None:
+        configuration = self.write(
+            "deploy/local-experiment/gateway-warehouse/routing-rules.yaml",
+            "name: xs\ncondition: 'true'",
+        )
+        workload = self.write("deploy/other/job.yaml", "apiVersion: batch/v1\nkind: Job")
+        self.assertIn(workload, _manifest_paths(self.deploy_root))
+        self.assertNotIn(configuration, _manifest_paths(self.deploy_root))
+        configuration.write_text("apiVersion: batch/v1\nkind: Job\n", encoding="utf-8")
+        with self.assertRaisesRegex(RenderError, "Kubernetes resource in configuration path"):
+            _manifest_paths(self.deploy_root)
+
+    def test_json_configuration_cannot_hide_a_resource(self) -> None:
+        configuration = self.write_json(
+            "deploy/local-experiment/metadata/compose.json", {"services": {}}
+        )
+        self.assertNotIn(configuration, _manifest_paths(self.deploy_root))
+        configuration.write_text('{"kind":"Pod","apiVersion":"v1"}', encoding="utf-8")
+        with self.assertRaisesRegex(RenderError, "Kubernetes resource in configuration path"):
+            _manifest_paths(self.deploy_root)
+
+    def test_flux_patch_array_is_configuration_not_manifest(self) -> None:
+        path = self.write_json(
+            "deploy/local-experiment/storage/flux-patches.json",
+            {"kind": "Pod", "apiVersion": "v1"},
+        )
+        with self.assertRaisesRegex(RenderError, "invalid Flux patch configuration"):
+            _manifest_paths(self.deploy_root)
+        path.write_text(
+            '[{"target":{"kind":"Pod"},"patch":"kind: Pod"}]', encoding="utf-8"
+        )
+        self.assertNotIn(path, _manifest_paths(self.deploy_root))
 
     def context(self, *urls: str) -> RepositoryContext:
         return RepositoryContext.create(

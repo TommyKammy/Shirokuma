@@ -5,12 +5,32 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.154"
+version: "0.155"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: separate application configuration from manifest scan
+
+The independent Iceberg renderer was feeding checked-in routing rules, warehouse
+mapping, metadata Compose/image inputs and a Flux patch array to kubectl as
+Kubernetes objects. Its deployment scan now excludes only those seven explicit
+relative configuration paths, after the existing symlink boundary check. A
+`kind`/`apiVersion` field in the six ordinary configuration paths or a malformed
+Flux patch array fails closed, rather than silently hiding a Kubernetes resource;
+new deployment paths remain scanned. Focused configuration tests (15), direct
+kubectl parsing of all 37 remaining deploy files, and `make
+verify-local-experiment` pass. The full Iceberg gate runs 144 tests but still
+fails with 43 Helm-dependent errors: installed v4.2.3 does not meet the pinned
+v4.2.2 requirement. The original 44-error failure remains historical evidence,
+not acceptance. Dedicated Colima freshly observed Stopped; no tool install,
+VM start, retained volume or backup access/change, or remote fetch. Restore
+only the scoped scanner/tests if verified deployment semantics differ; keep
+saved resources. Supply and verify the pinned Helm separately before claiming
+the gate, then measure live §9 and operator criteria. Original Vault sync is
+pending outside checkout.
 
 ## 2026-10-06: independent Iceberg gate remains failed
 

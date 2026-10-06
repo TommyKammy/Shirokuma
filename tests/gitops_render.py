@@ -340,6 +340,41 @@ def _manifest_paths(root: Path) -> list[Path]:
             continue
         if not _path_within(path.resolve(), root.resolve()):
             raise RenderError(f"manifest symlink escapes scan root: {path}")
+        # These checked-in inputs are consumed as application configuration,
+        # not submitted to Kubernetes. Keep the exclusion explicit: a new file
+        # under deploy must still go through the manifest parser.
+        relative = path.relative_to(root).as_posix()
+        if relative == "local-experiment/storage/flux-patches.json":
+            try:
+                patches = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                raise RenderError(f"invalid Flux patch configuration {path}") from error
+            if not isinstance(patches, list) or not all(
+                isinstance(item, dict)
+                and set(item) == {"target", "patch"}
+                and isinstance(item["target"], dict)
+                and isinstance(item["patch"], str)
+                for item in patches
+            ):
+                raise RenderError(f"invalid Flux patch configuration {path}")
+            continue
+        if relative in {
+            "local-experiment/warehouse-lifecycle/routing-rules.yaml",
+            "local-experiment/warehouse-lifecycle/warehouse-mapping.json",
+            "local-experiment/gateway-warehouse/routing-rules.yaml",
+            "local-experiment/gateway-warehouse/warehouse-mapping.json",
+            "local-experiment/metadata/images.json",
+            "local-experiment/metadata/compose.json",
+        }:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as error:
+                raise RenderError(f"cannot read configuration {path}: {error}") from error
+            if re.search(r'(?m)^\s*(?:kind|apiVersion)\s*:', text) or re.search(
+                r'"(?:kind|apiVersion)"\s*:', text
+            ):
+                raise RenderError(f"Kubernetes resource in configuration path: {path}")
+            continue
         paths.append(path)
     return sorted(paths)
 
