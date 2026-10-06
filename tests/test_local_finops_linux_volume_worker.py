@@ -44,6 +44,24 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
             with self.subTest(mount=mount),self.assertRaises(W.ScanError):
                 W._mountpoints(row)
 
+    def test_mountinfo_rejects_incomplete_or_ambiguous_record_structure(self):
+        row = '2 1 8:1 /some /fixture/child rw - ext4 /dev/a rw\n'
+        for raw in (row.replace('2 1 ', '2 x ', 1),
+                    row.replace('8:1', 'not-a-device', 1),
+                    row.replace(' rw - ', ' rw  - ', 1),
+                    row.replace(' - ext4 ', ' ext4 ', 1),
+                    row.replace(' - ext4 ', ' - ext4 - ', 1),
+                    row.replace('/some ', 'relative ', 1)):
+            with self.subTest(raw=raw), self.assertRaises(W.ScanError):
+                W._mountpoints(raw)
+
+    def test_mountinfo_refuses_embedded_controls_outside_mountpoint(self):
+        row = '2 1 8:1 /some /fixture/child rw - ext4 /dev/a rw\n'
+        for raw in (row.replace('rw -', 'rw\x00 -'),
+                    row.replace('/dev/a', '/dev/a\t')):
+            with self.subTest(raw=repr(raw)), self.assertRaises(W.ScanError):
+                W._mountpoints(raw)
+
     def test_fdinfo_requires_single_complete_mount_id_field(self):
         canonical = b'pos:\t0\nflags:\t0100000\nmnt_id:\t42\nino:\t7\n'
         self.assertEqual(W._parse_mount_id(canonical), 42)

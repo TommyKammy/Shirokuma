@@ -12,6 +12,24 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 independent worker mountinfo record checks (offline)
+
+The private Linux volume worker no longer projects a mountpoint from a
+structurally incomplete mountinfo row: it validates fixed IDs/device, absolute
+root, unambiguous field separation and exactly three trailing fields. A second
+independent fixture check rejects unescaped NUL/tab/control bytes elsewhere
+in the row. Seven negative fixture variants were admitted before these guards;
+focused worker tests pass (11 run, three Linux-only skips). The full local
+verifier passed after both changes (122 test suites; private log at
+`tmp/local-experiment/attempt-167-verify.log`); design-context, secret scan and
+diff check pass. Dedicated Colima was freshly
+Stopped; no VM or retained report/volume/backup was accessed or changed.
+AgentHouse usage stays `null / NOT_MEASURED`. These fixture constraints do not
+authenticate the kernel sample or make a retained-volume scan safe; remote
+cleanup and operator acceptance remain unverified. Revert only the scoped
+worker/tests while retaining saved evidence; original Vault sync pending
+outside checkout.
+
 ## 2026-10-06 independent worker fdinfo controls (offline)
 
 The private Linux volume worker's direct fdinfo mount-ID parser previously

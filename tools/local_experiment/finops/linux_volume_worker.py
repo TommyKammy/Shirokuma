@@ -57,13 +57,24 @@ def _mountpoints(raw):
     require(type(raw) is str and len(raw.encode('utf-8')) <= MAX_MOUNTINFO, 'READ_LIMIT')
     # procfs mountinfo is LF-framed. splitlines() silently accepts truncated
     # records, CRLF and Unicode line separators as independent mount entries.
-    require(raw.endswith('\n') and '\r' not in raw)
+    # Kernel mountinfo escapes tabs/newlines in path fields. Unescaped control
+    # bytes anywhere in a row cannot be used as trustworthy topology evidence.
+    require(raw.endswith('\n') and not any(char in raw for char in ('\r', '\x00', '\t', '\v', '\f')))
     lines = raw.split('\n')[:-1]
     require(all(line and line.splitlines() == [line] for line in lines))
     result = set()
     for line in lines:
         fields = line.split(' ')
-        require(len(fields) >= 10 and fields[0].isdigit() and fields[4].startswith('/'))
+        # Mountinfo has six fixed columns, optional propagation columns, one
+        # separator and three trailing columns. Never project a mountpoint
+        # from a malformed row that only happens to have a plausible field 5.
+        require(len(fields) >= 10 and all(fields) and fields[0].isascii() and
+                fields[0].isdigit() and fields[1].isascii() and fields[1].isdigit() and
+                re.fullmatch(r'[0-9]+:[0-9]+', fields[2]) is not None and
+                fields[3].startswith('/') and fields[4].startswith('/') and
+                fields.count('-') == 1)
+        separator = fields.index('-')
+        require(separator >= 6 and len(fields) == separator + 4)
         # mountinfo escapes spaces, tabs, newlines and backslashes as octal.
         encoded = fields[4]
         require(re.fullmatch(r'(?:[^\\]|\\(?:040|011|012|134))*', encoded) is not None)

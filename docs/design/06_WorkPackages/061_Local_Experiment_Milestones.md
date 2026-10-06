@@ -12,6 +12,22 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: independent worker mountinfo structure and controls (offline)
+
+WP-L6-FIN-001 now refuses mountinfo rows with invalid parent/device fields,
+ambiguous separators, missing mountinfo separator, extra trailing fields or
+relative root. Separately it rejects unescaped NUL/tab controls outside the
+mountpoint. Seven synthetic variants passed before repair; focused worker
+tests pass (11 run, three Linux-only skips). The full local verifier passes
+after both changes (122 suites; private log
+`tmp/local-experiment/attempt-167-verify.log`); design-context, secret scan and
+diff check pass. Its fake Dagster worker failure is an intentional negative.
+Dedicated Colima freshly Stopped; no VM or retained volume/report/backup
+access or change, no AgentHouse usage measurement (`null / NOT_MEASURED`).
+Fixture parsing is not kernel authentication, cleanup proof or operator
+acceptance. Restore only the scoped checks/tests, preserving saved records;
+original Vault sync pending outside checkout.
+
 ## 2026-10-06: independent worker fdinfo control refusal (offline)
 
 WP-L6-FIN-001 bounds its private worker fdinfo parser and refuses NUL, VT,
