@@ -106,6 +106,46 @@ class AgentHouseTests(unittest.TestCase):
                         M.read_credential()
                 self.assertTrue(changed)
 
+    def test_credential_read_refuses_permission_and_link_changes_after_read(self):
+        for change in ('mode', 'link'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory)
+                path.chmod(0o700)
+                credential = path / 'credential.json'
+                payload = b'{"password":"original"}\n'
+                credential.write_bytes(payload)
+                credential.chmod(0o600)
+                original_fdopen = M.os.fdopen
+
+                class ChangingReader:
+                    def __init__(self, file):
+                        self.file = file
+
+                    def __enter__(self):
+                        self.file.__enter__()
+                        return self
+
+                    def __exit__(self, *args):
+                        return self.file.__exit__(*args)
+
+                    def fileno(self):
+                        return self.file.fileno()
+
+                    def read(self, size):
+                        result = self.file.read(size)
+                        if change == 'mode':
+                            credential.chmod(0o644)
+                        else:
+                            os.link(credential, path / 'other')
+                        return result
+
+                with patch.object(M, 'STATE', path), patch.object(
+                        M.os, 'fdopen', side_effect=lambda *args, **kwargs: ChangingReader(
+                            original_fdopen(*args, **kwargs))):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'changed during read'):
+                        M.read_credential()
+                self.assertEqual(credential.read_bytes(), payload)
+
     def test_new_private_file_requires_durable_write_before_use(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
@@ -122,6 +162,27 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaisesRegex(M.AgentHouseError, 'cannot be created safely'):
                     M.create_private_file(state, 'credential.json', b'replacement')
             self.assertEqual((path / 'credential.json').read_bytes(), b'{"password":"test"}\n')
+
+    def test_new_private_file_refuses_swapped_entry_after_directory_sync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            path.chmod(0o700)
+            actual_fsync = M.os.fsync
+
+            def swap_after_sync(fd):
+                actual_fsync(fd)
+                if stat.S_ISDIR(os.fstat(fd).st_mode):
+                    original = path / 'credential.json'
+                    original.rename(path / 'original.pending')
+                    original.write_bytes(b'replacement')
+                    original.chmod(0o600)
+
+            with patch.object(M, 'STATE', path), patch.object(M.os, 'fsync', side_effect=swap_after_sync):
+                with M.private_state_fd() as state:
+                    with self.assertRaisesRegex(M.AgentHouseError, 'cannot be created safely'):
+                        M.create_private_file(state, 'credential.json', b'fixture')
+            self.assertEqual((path / 'original.pending').read_bytes(), b'fixture')
+            self.assertEqual((path / 'credential.json').read_bytes(), b'replacement')
 
     def test_new_private_file_refuses_short_write_without_directory_sync(self):
         with tempfile.TemporaryDirectory() as directory:

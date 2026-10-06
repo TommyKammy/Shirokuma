@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.514"
+version: "5.515"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse credential read and startup file identity (offline)
+
+WP-L2-CH-001 rejects synthetic credential mode/hardlink changes after read
+and a replaced private startup-file entry after directory sync, retaining
+ambiguous files instead of starting a container. 103 focused tests and
+`make verify-local-experiment` pass (intentional fake Dagster failure).
+Dedicated Colima was observed stopped; no live Docker/HTTP or retained
+credential, report, volume or backup accessed. No atomic same-UID exclusion,
+producer authentication, power-loss durability, live deduplication or operator
+acceptance is claimed. Preserve saved resources and never replay unknown
+inserts; rollback only scoped checks/tests. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: private AgentHouse directory descriptor cleanup (offline)
 

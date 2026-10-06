@@ -5,12 +5,30 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.58"
+version: "0.59"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 private credential and startup-file identity (offline)
+
+The credential reader rechecks private mode, single link, ownership and full
+entry metadata after reading; synthetic mode and hardlink changes now refuse
+the credential rather than returning its otherwise valid bytes. Independently,
+new credential/environment files keep their written descriptor open across
+directory fsync and require the final entry to match before container startup;
+a synthetic name swap now refuses startup and retains both ambiguous files.
+103 focused tests and `make verify-local-experiment` pass (the fake Dagster
+worker failure is intentional). Dedicated Colima was observed stopped; no
+live Docker/HTTP or retained credentials, reports, volumes or backups accessed.
+These checks do not authenticate an external producer or atomically exclude a
+same-UID actor after return, and do not prove power-loss durability or live
+deduplication. Preserve ambiguous files, never retry an uncertain insert;
+rollback is limited to these scoped checks/tests, without deleting saved data.
+Original Vault synchronization pending outside checkout; operator acceptance
+remains open.
 
 ## 2026-10-06 private state directory stat failure (offline)
 

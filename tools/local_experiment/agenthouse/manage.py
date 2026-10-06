@@ -222,10 +222,17 @@ def read_credential() -> bytes:
                     raise AgentHouseError('local credential exceeds read limit')
                 after = os.fstat(file.fileno())
                 entry = os.stat('credential.json', dir_fd=state, follow_symlinks=False)
-                if ((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
+                if (not stat.S_ISREG(after.st_mode) or after.st_uid != os.getuid() or
+                        stat.S_IMODE(after.st_mode) != 0o600 or after.st_nlink != 1 or
+                        not stat.S_ISREG(entry.st_mode) or entry.st_uid != os.getuid() or
+                        stat.S_IMODE(entry.st_mode) != 0o600 or entry.st_nlink != 1 or
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
                         (identity.st_dev, identity.st_ino, identity.st_size,
                          identity.st_mtime_ns, identity.st_ctime_ns) or
-                        (entry.st_dev, entry.st_ino) != (identity.st_dev, identity.st_ino)):
+                        (entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns,
+                         entry.st_ctime_ns) != (identity.st_dev, identity.st_ino,
+                                                identity.st_size, identity.st_mtime_ns,
+                                                identity.st_ctime_ns)):
                     raise AgentHouseError('local credential changed during read')
                 if len(content) != identity.st_size:
                     raise AgentHouseError('local credential read is incomplete')
@@ -244,9 +251,21 @@ def create_private_file(state: int, name: str, payload: bytes) -> None:
                 raise OSError('short private file write')
             file.flush()
             os.fsync(file.fileno())
-        # Sync the new directory entry as well as the file contents before
-        # creating a container which will depend on this name after a restart.
-        os.fsync(state)
+            # Keep the written inode open until the directory entry is durable
+            # and verified. A swapped name must not be handed to Docker.
+            os.fsync(state)
+            written = os.fstat(file.fileno())
+            entry = os.stat(name, dir_fd=state, follow_symlinks=False)
+            if (not stat.S_ISREG(written.st_mode) or written.st_uid != os.getuid() or
+                    stat.S_IMODE(written.st_mode) != 0o600 or written.st_nlink != 1 or
+                    written.st_size != len(payload) or
+                    not stat.S_ISREG(entry.st_mode) or entry.st_uid != os.getuid() or
+                    stat.S_IMODE(entry.st_mode) != 0o600 or entry.st_nlink != 1 or
+                    (entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns,
+                     entry.st_ctime_ns) != (written.st_dev, written.st_ino,
+                                             written.st_size, written.st_mtime_ns,
+                                             written.st_ctime_ns)):
+                raise OSError('private file entry changed after sync')
     except OSError:
         raise AgentHouseError(f'local AgentHouse {name} cannot be created safely') from None
 
