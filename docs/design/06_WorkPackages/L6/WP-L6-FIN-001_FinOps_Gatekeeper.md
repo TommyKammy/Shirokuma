@@ -12,6 +12,22 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: bound inference reply nesting (offline)
+
+A UTF-8 JSONEachRow reply under the 1 MiB byte cap could still contain over
+1,200 levels of tiny arrays. The inference reader now rejects nesting beyond
+64 levels with `INFERENCE_INVALID`, using an iterative walk after decoding;
+decoder recursion failures are scoped to the same code. The negative fixture
+was accepted before the repair (the decoder itself accepted that input).
+Focused FinOps 311 tests pass (seven Linux-only skips) and the post-change
+`make verify-local-experiment` passes; its fake Dagster worker error is an
+intentional negative fixture. This protects downstream projection, not the
+decoder from all resource exhaustion. Dedicated Colima freshly Stopped; no
+live query, retained credential/report/volume/backup mutation or AgentHouse
+byte measurement (`null / NOT_MEASURED`). Restore only the nesting check and
+fixture if necessary, preserving saved evidence. Original Vault sync pending
+outside checkout; no producer authenticity or operator acceptance is claimed.
+
 ## 2026-10-06: reject nonrepresentable inference reply numbers (offline)
 
 The fixed JSONEachRow inference reader refuses `NaN`, signed infinity and

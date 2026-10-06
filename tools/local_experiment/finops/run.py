@@ -325,9 +325,19 @@ class Backend:
                                parse_float=C.finite_json_float,
                                parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonstandard number')))
                     for line in raw.split('\n')[:-1]] if raw else []
-        except (ValueError, C.FinOpsError):
+        except (ValueError, RecursionError, C.FinOpsError):
             raise C.FinOpsError('INFERENCE_INVALID') from None
         C.require(all(type(line) is dict for line in rows), 'INFERENCE_INVALID')
+        # A bounded reply can still contain thousands of tiny nested arrays.
+        # Do not pass arbitrarily deep objects to downstream projection.
+        stack = [(line, 0) for line in rows]
+        while stack:
+            value, depth = stack.pop()
+            C.require(depth <= 64, 'INFERENCE_INVALID')
+            if type(value) is dict:
+                stack.extend((child, depth + 1) for child in value.values())
+            elif type(value) is list:
+                stack.extend((child, depth + 1) for child in value)
         return rows
 
     def local_processes(self):

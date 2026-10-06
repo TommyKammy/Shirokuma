@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: bounded FinOps reply depth (offline)
+
+WP-L6-FIN-001 refuses deeply nested JSONEachRow replies with scoped
+`INFERENCE_INVALID` even when the reply is below its byte limit. A synthetic
+1,200-level row was accepted before repair; focused FinOps 311 tests (seven
+Linux-only skips) and the post-change local verifier pass (the fake Dagster
+worker error is intentional). Dedicated Colima freshly Stopped; no live query or retained
+data/backup change, and AgentHouse bytes remain `null / NOT_MEASURED`. This
+does not authenticate the query producer or prove operator acceptance. Revert
+only the scoped check/test; preserve saved records. Original Vault sync pending.
+
 ## 2026-10-06: staged AgentHouse report publication (offline)
 
 WP-L2-CH-001: export now stages a 0600 file and fsyncs before exclusive
