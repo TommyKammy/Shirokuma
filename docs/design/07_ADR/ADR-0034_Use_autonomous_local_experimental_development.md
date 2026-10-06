@@ -4,8 +4,8 @@ doc_id: "ADR-0034"
 title: "Use autonomous local experimental development"
 status: accepted
 created: 2026-09-16
-updated: 2026-10-04
-version: "1.4"
+updated: 2026-10-06
+version: "1.5"
 area: adr
 tags: [shirokuma, adr, local, development]
 ---
@@ -97,6 +97,21 @@ stop-on-error/quota rules remain unchanged. A process already started with
 the old limit must not be modified or interrupted mid-request; use a separately
 validated, one-shot continuation from its clean budget boundary. The ceiling
 is neither a model-request count nor a monetary cap.
+
+On 2026-10-06, with the 500-session series still running, the owner raised its
+**cumulative** started-session ceiling to 1000. This does not lengthen the
+original seven-day wall-clock guard or authorize another subscription, metered
+API routing, extra spending, GitHub writes or publication. Keep the active
+invocation unchanged. At exactly 500 started slots, extend only if its final
+run stops at `run_budget_reached`, all runner results form a clean descendant
+chain, the final checkpoint requests `continue/more_work`, and that particular
+OpenCode server session has succeeded and is idle/non-active. Preserve the
+earlier missing results and count failed starts rather than repairing them.
+After fresh OAuth/model/time preflights, activate this policy in a clean
+checkout and start a **new** one-shot invocation of at most 500 sessions.
+Any failure, unknown remote state, quota stop, dirty checkout or expired
+original deadline prevents the extension; no request is replayed or retried.
+The new 1000 ceiling measures scheduler starts, not WP completion or billing.
 
 On 2026-10-04 the owner requested autonomous GPT-6 Astra advice when future
 coding sessions face a difficult blocker. Keep the runner's primary model,

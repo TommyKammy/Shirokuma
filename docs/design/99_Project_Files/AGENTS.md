@@ -4,8 +4,8 @@ doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
-updated: 2026-10-04
-version: "0.7.0"
+updated: 2026-10-06
+version: "0.7.1"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -108,6 +108,15 @@ Merely reading these instructions or running its default plan must never start
 a model request. The runner is not the GitHub supervisor and does not authorize
 new spending, GitHub writes or publication. See
 `tools/local_experiment/AUTONOMOUS_RUNNER.md` for limits and recovery.
+
+On 2026-10-06 the owner raised the *cumulative* local series ceiling from 500
+to 1000 started sessions. Do not change the currently running invocation or
+its 500-total boundary. Only after its clean `run_budget_reached` result, valid
+checkpoint, terminal server session and clean descendant commit may one
+separately gated continuation use the remaining 500 slots. The per-invocation
+limit remains 500, and the original seven-day deadline, OAuth-only route,
+stop-on-error rules and no-new-spending boundary remain in force. A failed or
+unknown request is counted, never replayed to fill the budget.
 
 The owner also requested a **conditional GPT-6 Astra consultation** when a
 coding session meets a genuine difficult blocker. In sessions with the updated

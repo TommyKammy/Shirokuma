@@ -110,6 +110,21 @@ reason `run_budget_reached`. Never continue after an error, unknown remote
 state, safety boundary or quota exhaustion. Do not kill an active request just
 to apply the new ceiling or replay its last operation.
 
+On 2026-10-06 the owner raised the **cumulative** series ceiling to 1000 while
+the 500-total series was active. The runner's per-launch maximum stays 500;
+do not alter an in-flight process or replace the original seven-day clock.
+A private one-shot handoff may start only the remaining 500 from a **new**
+session after the existing run records all 240 of its own results with
+`run_budget_reached`, a valid final `continue/more_work` checkpoint, clean
+descendant HEAD and terminal succeeded/idle/non-active server session.
+The prior series comprises 496 runner results, three separately reconciled
+server successes and one failed OAuth request, if it reaches that boundary.
+Recheck original time left, clean checkout and OAuth-only route before starting;
+preserve every old failure/result, and fail closed on any other stop reason or
+unknown state. The session ceiling is not completion, a token/USD cap, or
+independent proof of ChatGPT Pro billing. Do not automatically renew the
+allowance at a later weekly reset or schedule a recurring runner.
+
 The checkout's `opencode.jsonc` denies normal use of every provider except
 OpenAI. The CLI's noninteractive permission requests for the parent workspace,
 `~/.codex`, and the original Vault path auto-reject. Each attempt therefore
