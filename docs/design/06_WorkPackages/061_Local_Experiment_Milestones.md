@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.490"
+version: "5.491"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: FinOps terminated-container observation chronology (offline)
+
+WP-L6-FIN-001 refuses an exited/dead container (target or unrelated) whose
+finish timestamp lies after the snapshot observation. Three offline negative
+fixtures previously appeared eligible; an equal timestamp remains eligible;
+focused preflight 24 tests pass. Dedicated Colima was freshly Stopped. No
+Docker/VM, retained volume/report/backup access or change. Clock skew fails
+closed: producer provenance, continuous writer exclusion and volume traversal
+remain unresolved, AgentHouse bytes `null / NOT_MEASURED`. Revert only the
+scoped chronology guard/test if necessary, preserving saved records. Original
+Vault sync pending outside checkout; no operator acceptance.
+The combined tree passes `make verify-local-experiment` (the fake Dagster
+failure is an intentional negative), `make verify-design-context` and
+`git diff --check`; private verifier log:
+`tmp/local-experiment/attempt-204-verify.log`.
 
 ## 2026-10-06: AgentHouse HTTP exception indicator (offline)
 

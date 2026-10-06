@@ -54,7 +54,7 @@ def _overlaps(a, b):
     return a == b or a.startswith(b + '/') or b.startswith(a + '/')
 
 
-def _lifecycle(container):
+def _lifecycle(container, observed):
     state = container.get('State')
     require(type(state) is dict and state.get('Status') in
              ('created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead') and
@@ -81,7 +81,7 @@ def _lifecycle(container):
     # A terminated container with a finish before its start cannot be
     # evidence for a coherent inventory, even if both samples agree.
     if state['Status'] in ('exited', 'dead'):
-        require(parsed[0] <= parsed[1])
+        require(parsed[0] <= parsed[1] <= observed)
     return (state['Status'], state['Running'], state['Restarting'],
             state['Paused'], state['Dead'], *times,
             container['RestartCount'])
@@ -119,7 +119,7 @@ def _project(snapshot):
                               'containers', 'boot_id', 'started_at', 'observed_at', 'listing_complete'} and
             snapshot['listing_complete'] is True)
     _stamp(snapshot['started_at'])
-    _stamp(snapshot['observed_at'])
+    observed = _stamp(snapshot['observed_at'])[1]
     context = snapshot['context']
     require(type(context) is dict and context.get('Name') == AH.CONTEXT)
     endpoints = context.get('Endpoints')
@@ -168,7 +168,7 @@ def _project(snapshot):
              host_config['RestartPolicy'].get('Name') == 'no' and
              type(host_config['RestartPolicy'].get('MaximumRetryCount')) is int and
              host_config['RestartPolicy']['MaximumRetryCount'] == 0)
-    target_lifecycle = _lifecycle(container)
+    target_lifecycle = _lifecycle(container, observed)
     image_id = container.get('Image')
     require(type(image_id) is str and image_id.startswith('sha256:') and
             len(image_id) == 71 and all(ch in '0123456789abcdef' for ch in image_id[7:]))
@@ -189,7 +189,7 @@ def _project(snapshot):
     inventory = []
     for other in inspected:
         require(type(other) is dict)
-        lifecycle = _lifecycle(other)
+        lifecycle = _lifecycle(other, observed)
         references = _mounts(other)
         inventory.append((other['Id'], lifecycle, references))
         if other['Id'] == identifier:
