@@ -5,12 +5,39 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.503"
+version: "5.505"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent private export short-write guard (offline)
+
+WP-L2-CH-001 requires a full staging-file write before syncing and publishing
+the private JSONL export. A synthetic writer accepting only the first valid
+row previously returned a truncated published report; now it leaves only a
+pending file (up to 8 MiB plus directory overhead) for inspection. 90 focused
+tests, `make verify-local-experiment`, design-context and diff check pass;
+the fake Dagster failure is intentional. Dedicated Colima remained Stopped; no live HTTP/Docker,
+retained report, credential, volume or backup was read/changed. This does not
+prove power-loss atomicity, peer identity, live deduplication or operator
+acceptance. Preserve partial pending files and saved exports, never replay an
+uncertain insert. Roll back only the scoped writer/test if needed. Original
+Vault sync pending outside checkout.
+
+## 2026-10-06: private smoke export readback short-read guard (offline)
+
+WP-L2-CH-001 refuses a valid LF-framed prefix returned by a short file read
+when the pinned report inode contains further bytes. One isolated false success
+before repair; 89 focused tests and `make verify-local-experiment` pass (the
+fake Dagster worker failure is intentional). Dedicated `colima list` freshly
+showed mac-studio-solo Stopped; no live Docker/HTTP or retained report,
+credential, volume or backup read/change. A complete inode-sized read is not
+proof against same-UID mutation, producer authentication or live deduplication.
+Preserve ambiguous reports; never replay unknown inserts. Roll back only the
+scoped guard/test if needed. Original Vault sync pending outside checkout;
+operator acceptance remains open.
 
 ## 2026-10-06: independent attachment and source-alias checks (offline)
 

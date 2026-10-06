@@ -678,7 +678,8 @@ def export(client: Client) -> Path:
                           0o600, dir_fd=state)
             with os.fdopen(fd, 'wb') as file:
                 os.fchmod(file.fileno(), 0o600)
-                file.write(payload)
+                if file.write(payload) != len(payload):
+                    raise OSError('short export write')
                 file.flush()
                 os.fsync(file.fileno())
             # Make the recoverable staging entry durable before attempting
@@ -710,7 +711,8 @@ def read_smoke_export(path: Path) -> list[dict]:
                     raise AgentHouseError('Pawprint export is not a private bounded report')
                 payload = file.read(8 * 1024 * 1024 + 1)
                 after = os.fstat(file.fileno())
-                if (len(payload) > 8 * 1024 * 1024 or
+                if (len(payload) != identity.st_size or
+                        len(payload) > 8 * 1024 * 1024 or
                         (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
                         (identity.st_dev, identity.st_ino, identity.st_size,
                          identity.st_mtime_ns, identity.st_ctime_ns)):

@@ -5,12 +5,43 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.48"
+version: "0.50"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 private export short-write refusal (offline)
+
+The publisher previously ignored the number of bytes written into its private
+staging file. An isolated writer accepting only the first valid JSONL row
+returned a truncated published report as success before repair. The writer now
+requires the full payload length before flush/fsync/link; a short write keeps
+the private pending inode for inspection, without publishing the `.jsonl` name.
+90 focused tests and the full local verifier pass. This does not guarantee
+power-loss atomicity, same-UID isolation or live ClickHouse completeness. A
+failed attempt can leave one pending file of up to the 8 MiB payload cap plus
+directory overhead; inspect
+it without deleting saved exports or replaying unknown inserts. Dedicated
+Colima Stopped, no live request or retained report/credential/volume/backup
+read or change. Restore only this writer guard/test if necessary; original
+Vault sync pending outside checkout and operator acceptance remains open.
+
+## 2026-10-06 private smoke readback short-read refusal (offline)
+
+A bounded file read may return a valid LF-framed first row before EOF while the
+saved report inode still contains further rows. The smoke readback previously
+accepted that prefix and could misstate export consistency; an isolated short
+read reproduced the false success before repair. Readback now requires exactly
+the pre-read inode size in addition to the existing post-read inode/entry
+checks; 89 focused AgentHouse tests and the full local verifier pass. Dedicated
+Colima freshly Stopped; no retained report, credential, volume or backup was
+read/changed and no live HTTP/Docker operation occurred. This does not prove
+atomic readback against same-UID writers, authentic ClickHouse replies or live
+deduplication. Inspect ambiguous saved exports; never replay an uncertain
+insert. Restore only the scoped guard/test if necessary, retaining saved files.
+Original Vault sync pending outside checkout; operator acceptance remains open.
 
 ## 2026-10-06 HTTP attachment metadata (offline)
 

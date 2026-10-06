@@ -686,6 +686,35 @@ class AgentHouseTests(unittest.TestCase):
                     with self.subTest(suffix=suffix), self.assertRaises(M.AgentHouseError):
                         M.read_smoke_export(report)
 
+    def test_smoke_export_readback_refuses_short_valid_prefix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            report = state / 'pawprints-20261006T010203000000Z.jsonl'
+            first = b'{"event_id":"fixture","status":"success"}\n'
+            report.write_bytes(first + b'{"event_id":"second","status":"failed"}\n')
+            report.chmod(0o600)
+            original_fdopen = M.os.fdopen
+
+            class ShortReader:
+                def __init__(self, fd, *args):
+                    self.file = original_fdopen(fd, *args)
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return self.file.__exit__(*args)
+
+                def fileno(self):
+                    return self.file.fileno()
+
+                def read(self, size):
+                    return self.file.read(len(first))
+
+            with patch.object(M, 'STATE', state), patch.object(M.os, 'fdopen', ShortReader):
+                with self.assertRaisesRegex(M.AgentHouseError, 'readback'):
+                    M.read_smoke_export(report)
+
     def test_smoke_export_readback_refuses_invalid_nested_values(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
@@ -716,6 +745,42 @@ class AgentHouseTests(unittest.TestCase):
                 # A failed attempt is retained; a later export must not erase it.
                 self.assertEqual(M.export(client).read_text(), client.query.return_value)
                 self.assertTrue(pending[0].exists())
+
+    def test_export_short_write_never_publishes_partial_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            client = Mock()
+            client.query.return_value = '{"event_id":"first"}\n{"event_id":"second"}\n'
+            original_fdopen = M.os.fdopen
+
+            class ShortWriter:
+                def __init__(self, fd, *args):
+                    self.file = original_fdopen(fd, *args)
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return self.file.__exit__(*args)
+
+                def fileno(self):
+                    return self.file.fileno()
+
+                def write(self, payload):
+                    return self.file.write(payload[:payload.index(b'\n') + 1])
+
+                def flush(self):
+                    return self.file.flush()
+
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock, \
+                    patch.object(M.os, 'fdopen', ShortWriter):
+                clock.now.return_value.strftime.return_value = 'fixed'
+                with self.assertRaisesRegex(M.AgentHouseError, 'pending'):
+                    M.export(client)
+            self.assertFalse(list(state.glob('*.jsonl')))
+            pending = list(state.glob('*.pending'))
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0].read_bytes(), b'{"event_id":"first"}\n')
 
     def test_export_existing_name_is_not_replaced_by_publish(self):
         with tempfile.TemporaryDirectory() as directory:
