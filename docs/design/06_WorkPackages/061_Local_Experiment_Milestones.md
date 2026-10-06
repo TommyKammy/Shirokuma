@@ -5,12 +5,21 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.524"
+version: "5.525"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: checked-in source selector ambiguity (offline)
+
+WP-L0-GITOPS-001: three fake GitRepository branch-plus-selector declarations
+were incorrectly treated as branch-only by the checked-in context reader.
+The reader now refuses them; bootstrap/teardown 28 pass. Dedicated Colima
+is Stopped; no remote fetch, retained data/backup change or live Flux evidence.
+This is offline declaration consistency, not §9 or operator acceptance.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-06: complete checked-in source contract (offline)
 

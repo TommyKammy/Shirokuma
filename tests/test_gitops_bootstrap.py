@@ -54,6 +54,24 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
                 with self.assertRaises(RenderError):
                     default_repository_context(root, root)
 
+    def test_checked_in_context_refuses_competing_git_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sync = root / "gitops/clusters/local-lite/flux-system/gotk-sync.yaml"
+            sync.parent.mkdir(parents=True)
+            sync.write_text("fixture", encoding="utf-8")
+            valid = {
+                "kind": "GitRepository", "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "spec": {"url": "ssh://git@example.invalid/team/repo.git", "ref": {"branch": "main"}},
+            }
+            with patch("tests.gitops_render.load_yaml_file", return_value=[valid]):
+                self.assertEqual(1, len(default_repository_context(root, root).local_git_sources))
+            for ref in ({"branch": "main", "tag": "release"}, {"branch": "main", "commit": "a" * 40}, {"branch": "main", "semver": "*"}):
+                with self.subTest(ref=ref), patch("tests.gitops_render.load_yaml_file", return_value=[
+                    {**valid, "spec": {**valid["spec"], "ref": ref}},
+                ]), self.assertRaises(RenderError):
+                    default_repository_context(root, root)
+
     def test_git_source_invalid_authority_is_scoped_and_redacted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

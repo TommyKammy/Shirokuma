@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.152"
+version: "0.153"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: checked-in source ref is branch-only (offline)
+
+The checked-in context reader previously accepted a branch together with a
+tag, commit or semver selector as a declared local source. An isolated fixture
+reproduced three false accepts; it now requires exactly one branch ref, matching
+the downstream renderer. Bootstrap/teardown contracts (28) pass. No remote
+fetch or live Flux observation; dedicated Colima is Stopped. Restore only the
+scoped reader/test if verified Flux semantics require it, preserving retained
+resources and backups. Live §9 and operator acceptance remain open; original
+Vault sync is pending outside the checkout.
 
 ## 2026-10-06: checked-in Git source completeness (offline)
 

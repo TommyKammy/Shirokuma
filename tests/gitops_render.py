@@ -439,9 +439,10 @@ def default_repository_context(source_root: Path, deploy_root: Path) -> Reposito
             raise RenderError("checked-in GitRepository has unsupported apiVersion")
         spec = _mapping(resource.get("spec"))
         url = spec.get("url")
-        branch = _mapping(spec.get("ref")).get("branch")
-        if not isinstance(url, str) or not isinstance(branch, str) or not branch:
-            raise RenderError("checked-in GitRepository requires URL and branch")
+        ref = _mapping(spec.get("ref"))
+        branch = ref.get("branch")
+        if not isinstance(url, str) or set(ref) != {"branch"} or not isinstance(branch, str) or not branch:
+            raise RenderError("checked-in GitRepository requires URL and one branch ref")
         secret = spec.get("secretRef")
         if secret is not None and (
             not isinstance(secret, dict)
