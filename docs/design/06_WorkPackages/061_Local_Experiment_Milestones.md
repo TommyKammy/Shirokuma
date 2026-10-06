@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.460"
+version: "5.461"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: exact AgentHouse architecture reply (offline)
+
+WP-L2-CH-001 refuses padded, multiline or CRLF Docker architecture replies
+before using a dedicated ARM64 runtime; four fixture negatives reproduced
+acceptance before repair. Focused AgentHouse 56 tests pass. The full local
+verifier passed for the preceding independent IPC/UTS and procfs increments;
+it was not rerun for this follow-up. Dedicated Colima last observed Stopped;
+no daemon, retained credential/report/volume/backup accessed or changed.
+AgentHouse usage `null / NOT_MEASURED`. Reply syntax cannot authenticate the
+daemon, establish live ARM64 behavior, deduplication or operator acceptance.
+Revert only the scoped comparison/test while preserving saved resources;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent namespace isolation and status spelling (offline)
 

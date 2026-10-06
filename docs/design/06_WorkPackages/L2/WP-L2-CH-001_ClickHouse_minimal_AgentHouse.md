@@ -5,12 +5,23 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.19"
+version: "0.20"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 exact architecture diagnostic (offline)
+
+The dedicated-context check previously stripped a Docker `info` architecture
+reply and accepted leading padding, double LF, CRLF and TAB as ARM64. Four
+negative replies failed before repair; a single optional LF now passes.
+Focused AgentHouse 56 tests pass. Dedicated Colima remained Stopped; no Docker
+daemon, credential, retained data or backup was accessed. This is reply syntax,
+not daemon/host provenance or live ARM64 compatibility proof. Revert only the
+diagnostic comparison/test, preserve saved resources; original Vault sync
+pending outside checkout. Operator acceptance remains open.
 
 ## 2026-10-06 existing-container IPC/UTS isolation (offline)
 

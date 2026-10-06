@@ -220,6 +220,17 @@ class AgentHouseTests(unittest.TestCase):
             M.check_context()
             self.assertEqual(docker.call_count, 2)
 
+    def test_architecture_reply_requires_one_exact_line(self):
+        endpoint = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
+        config = json.dumps([{'Endpoints': {'docker': {'Host': endpoint}}}])
+        for architecture in ('aarch64\n', 'arm64', 'arm64\n'):
+            with self.subTest(architecture=architecture), patch.object(M, 'docker', side_effect=[config, architecture]):
+                M.check_context()
+        for architecture in (' arm64\n', 'arm64\n\n', 'arm64\r\n', 'arm64\t', 'arm64\x00'):
+            with self.subTest(architecture=architecture), patch.object(M, 'docker', side_effect=[config, architecture]):
+                with self.assertRaisesRegex(M.AgentHouseError, 'ARM64'):
+                    M.check_context()
+
     def test_malformed_context_stops_before_docker_info(self):
         for reply in ('not json', '{}', '[]', '[{}, {}]', '[null]',
                       '[{"Endpoints":null}]', '[{"Endpoints":{"docker":{}}}]'):
