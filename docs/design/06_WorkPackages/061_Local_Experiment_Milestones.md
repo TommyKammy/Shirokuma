@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: decoded AgentHouse export text (offline)
+
+WP-L2-CH-001 rejects escaped lone surrogates in JSONEachRow object keys and
+nested strings before publication. Synthetic negatives published a report
+before repair; focused 30 tests and local verifier pass afterward (fake
+Dagster worker failure is an expected negative fixture). Dedicated Colima
+freshly Stopped; no live export, retained report, volume or backup mutation.
+This neither authenticates producers nor establishes operator acceptance.
+Restore only the scoped parser/fixtures; retain saved reports and pending
+files. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: FinOps decoded inference text (offline)
 
 WP-L6-FIN-001 rejects escaped lone surrogates in JSONEachRow keys/values

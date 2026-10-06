@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline decoded export text
+
+JSONEachRow export now rejects escaped lone surrogates in decoded object keys
+or nested string values before publishing a report. The negative fixtures
+published a file before the guard; focused 30 AgentHouse tests and
+`make verify-local-experiment` pass after repair. Dedicated Colima was freshly
+Stopped; no live export, retained data or backup change. This guards text
+representation only, not producer authenticity or operator acceptance. Roll
+back only the parser guard/fixtures, preserving saved reports and pending
+files. Original Vault sync pending outside checkout.
+
 ## 2026-10-06 offline export nesting limit
 
 An 8 MiB-bounded JSONEachRow response could still contain 65 nested levels.

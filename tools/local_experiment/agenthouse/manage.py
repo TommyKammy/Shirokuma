@@ -353,13 +353,17 @@ def export(client: Client) -> Path:
                 if depth > 64:
                     return False
                 if isinstance(item, dict):
+                    for key in item:
+                        key.encode('utf-8')
                     stack.extend((child, depth + 1) for child in item.values())
                 elif isinstance(item, list):
                     stack.extend((child, depth + 1) for child in item)
+                elif isinstance(item, str):
+                    item.encode('utf-8')
             return True
         if rows and (not rows.endswith('\n') or not all(valid_row(line) for line in rows.splitlines())):
             raise AgentHouseError('local AgentHouse export is not JSONEachRow')
-    except (ValueError, RecursionError):
+    except (ValueError, RecursionError, UnicodeError):
         raise AgentHouseError('local AgentHouse export is not JSONEachRow') from None
     name = "pawprints-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".jsonl"
     path = STATE / name
