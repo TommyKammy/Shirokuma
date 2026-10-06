@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.468"
+version: "5.469"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: all-container Docker stop flags (offline)
+
+WP-L6-FIN-001 private preflight now requires and compares `Paused`/`Dead` for
+every container, not only the named target. Eight negative fixture cases
+passed unexpectedly before repair; focused preflight seven, transport 12 and
+full local verifier pass. Private log:
+`tmp/local-experiment/attempt-189-verify-preflight.log`. Dedicated Colima
+last observed stopped; no live Docker/VM request or retained volume, report
+or backup change. Snapshot equality is not continuous writer exclusion;
+`volume_traversal_authorized=False` and AgentHouse `null / NOT_MEASURED`.
+VM trust, cleanup and operator acceptance remain open. Roll back only the
+scoped guard/fixture, retaining records; original Vault sync pending.
 
 ## 2026-10-06: Docker container-list encoding guard (offline)
 

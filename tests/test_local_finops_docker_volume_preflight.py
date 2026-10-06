@@ -15,6 +15,7 @@ def snapshot():
     container['HostConfig']={'RestartPolicy':{'Name':'no'}}
     volume=volumes[0];volume['Options']=None
     other={'Id':'c'*64,'State':{'Status':'exited','Running':False,'Restarting':False,
+            'Paused':False,'Dead':False,
            'StartedAt':'2026-09-20T00:00:00Z','FinishedAt':'2026-09-20T00:00:10Z'},
            'RestartCount':0,'Mounts':[{'Type':'volume','Name':'unrelated','Driver':'local',
            'Source':'/var/lib/docker/volumes/unrelated/_data','Destination':'/data','RW':True}]}
@@ -71,6 +72,23 @@ class VolumePreflightTests(unittest.TestCase):
                     validate(value, deepcopy(value))
             value = snapshot()
             del value['container']['State'][flag]
+            with self.subTest(missing=flag), self.assertRaises(V.PreflightError):
+                validate(value, deepcopy(value))
+
+    def test_other_container_stop_flags_must_be_present_and_stable(self):
+        for flag in ('Paused', 'Dead'):
+            first = snapshot()
+            second = deepcopy(first)
+            second['containers'][1]['State'][flag] = True
+            with self.subTest(changed=flag), self.assertRaisesRegex(V.PreflightError, 'IDENTITY_CHANGED'):
+                validate(first, second)
+            for replacement in (None, 'false'):
+                value = snapshot()
+                value['containers'][1]['State'][flag] = replacement
+                with self.subTest(flag=flag, replacement=replacement), self.assertRaises(V.PreflightError):
+                    validate(value, deepcopy(value))
+            value = snapshot()
+            del value['containers'][1]['State'][flag]
             with self.subTest(missing=flag), self.assertRaises(V.PreflightError):
                 validate(value, deepcopy(value))
 

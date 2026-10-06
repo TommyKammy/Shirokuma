@@ -39,10 +39,12 @@ def _lifecycle(container):
     require(type(state) is dict and state.get('Status') in
             ('created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead') and
             type(state.get('Running')) is bool and type(state.get('Restarting')) is bool and
+            type(state.get('Paused')) is bool and type(state.get('Dead')) is bool and
             type(container.get('RestartCount')) is int and container['RestartCount'] >= 0)
     times = (state.get('StartedAt'), state.get('FinishedAt'))
     require(all(type(value) is str and 1 <= len(value) <= 64 for value in times))
-    return (state['Status'], state['Running'], state['Restarting'], *times,
+    return (state['Status'], state['Running'], state['Restarting'],
+            state['Paused'], state['Dead'], *times,
             container['RestartCount'])
 
 

@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.249"
+version: "0.250"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 all-container stop-flag stability (offline)
+
+The private two-snapshot preflight previously ignored `Paused` and `Dead` for
+non-target containers. Eight isolated negative fixture cases showed missing,
+malformed or changing flags still produced `metadata_eligible`. The inventory
+now requires both boolean flags for every inspected container and compares
+them across snapshots. Focused preflight seven and transport 12 tests and
+`make verify-local-experiment` pass. No VM start, live Docker request or
+retained report/volume/backup change; dedicated Colima remains last observed
+stopped. Snapshot equality cannot establish continuous writer exclusion,
+authenticated kernel identity or remote worker cleanup; traversal stays
+unauthorized and AgentHouse bytes `null / NOT_MEASURED`. Revert only the
+preflight/fixture change if necessary without deleting saved evidence.
+Original Vault synchronization pending outside checkout.
 
 ## 2026-10-06 Docker container-list encoding boundary (offline)
 
