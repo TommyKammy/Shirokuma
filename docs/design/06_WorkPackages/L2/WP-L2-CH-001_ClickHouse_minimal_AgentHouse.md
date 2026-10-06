@@ -5,12 +5,29 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.45"
+version: "0.46"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 HTTP navigation and body type boundaries (offline)
+
+Two independent acknowledgement checks: a 200 reply carrying `Location`,
+`Content-Location` or `Refresh` is refused before body read, and a transport
+returning non-byte body data is refused with a scoped error instead of an
+unhandled exception or accidental success. Eight synthetic negative cases
+previously reached success or escaped the scoped error; 86 focused tests pass.
+The combined `make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` pass; the fake Dagster worker error is an intentional test.
+The redirect check is deliberately conservative and requires live ClickHouse
+compatibility verification. Dedicated Colima freshly Stopped; no live HTTP,
+saved credential, volume, report or backup was accessed or changed. Neither
+offline check authenticates the producer, establishes live deduplication or
+grants operator acceptance. Never replay an uncertain insert; revert only the
+scoped guards/tests if verified compatibility differs, preserving saved data.
+Original Vault synchronization pending outside this checkout.
 
 ## 2026-10-06 explicit HTTP media type boundary (offline)
 

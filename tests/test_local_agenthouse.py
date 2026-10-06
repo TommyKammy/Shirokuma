@@ -904,6 +904,44 @@ class AgentHouseTests(unittest.TestCase):
             response.read.return_value = b'1\n'
             self.assertEqual(client.query('SELECT 1'), '1\n')
 
+    def test_query_refuses_redirect_metadata_on_200_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.return_value = b''
+        client.opener.open = Mock(return_value=response)
+        for key, value in (('Location', '/login'), ('Content-Location', '/login'),
+                           ('Refresh', '0;url=/login'), ('Location', '')):
+            with self.subTest(key=key, value=value):
+                headers = Message()
+                headers.add_header(key, value)
+                response.headers = headers
+                with self.assertRaisesRegex(M.AgentHouseError, 'redirect metadata'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 4)
+        response.read.assert_not_called()
+        response.headers = {'Content-Length': '0'}
+        self.assertEqual(client.query('SELECT 1'), '')
+
+    def test_query_refuses_nonbyte_response_body_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.headers = {'Content-Length': '0'}
+        client.opener.open = Mock(return_value=response)
+        for body in ('', None, bytearray()):
+            with self.subTest(body=body):
+                response.read.return_value = body
+                with self.assertRaisesRegex(M.AgentHouseError, 'body is not bytes'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 3)
+        response.read.return_value = b''
+        self.assertEqual(client.query('SELECT 1'), '')
+
     def test_query_refuses_streamed_exception_body_on_200_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()

@@ -327,9 +327,19 @@ class Client:
                          ([value for key, value in response.headers.items()
                            if key.lower() == 'content-type']))
                 if types and (len(types) != 1 or not isinstance(types[0], str) or
-                              re.fullmatch(r'(?:text/plain|text/tab-separated-values|application/json)'
-                                           r'(?:; charset=(?:UTF-8|utf-8))?', types[0]) is None):
+                               re.fullmatch(r'(?:text/plain|text/tab-separated-values|application/json)'
+                                            r'(?:; charset=(?:UTF-8|utf-8))?', types[0]) is None):
                     raise AgentHouseError('local AgentHouse response media type is unsupported')
+                # A successful query has no alternate resource or client-side
+                # navigation. Do not accept a login/intermediary 200 as a write
+                # acknowledgement merely because it claims a plain media type.
+                for name in ('Location', 'Content-Location', 'Refresh'):
+                    values = (response.headers.get_all(name)
+                              if hasattr(response.headers, 'get_all') else
+                              [value for key, value in response.headers.items()
+                               if key.lower() == name.lower()])
+                    if values:
+                        raise AgentHouseError('local AgentHouse response contains redirect metadata')
                 # HTTPMessage.get() returns only one of multiple headers. Do
                 # not accept a write acknowledgement with ambiguous framing or
                 # transfer coding, even if the decoded body happens to fit.
@@ -353,6 +363,8 @@ class Client:
                             len(declared) > 16 or int(declared) > 8 * 1024 * 1024):
                         raise AgentHouseError('local AgentHouse response length is invalid')
                 body = response.read(8 * 1024 * 1024 + 1)
+                if type(body) is not bytes:
+                    raise AgentHouseError('local AgentHouse response body is not bytes')
                 if len(body) > 8 * 1024 * 1024:
                     raise AgentHouseError("AgentHouse response exceeds the local export limit")
                 if declared is not None and len(body) != int(declared):

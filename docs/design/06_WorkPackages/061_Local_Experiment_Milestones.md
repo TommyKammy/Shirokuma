@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.500"
+version: "5.501"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent HTTP navigation and body type guards (offline)
+
+WP-L2-CH-001 refuses navigation metadata on HTTP 200 before read and non-byte
+transport bodies with a scoped failure. Eight isolated negatives failed before
+repair; 86 focused tests pass. Combined `make verify-local-experiment`,
+`make verify-design-context` and `git diff --check` pass (intentional fake
+Dagster worker failure). Dedicated `colima list` freshly showed
+mac-studio-solo Stopped. No live HTTP/Docker/VM or retained credential, report,
+volume or backup read/change. These checks cannot authenticate producers, prove
+live deduplication or authorize replay of uncertain writes. AgentHouse bytes
+remain `null / NOT_MEASURED`; FinOps volume traversal remains unauthorized and
+operator acceptance open. Preserve saved resources; revert only the scoped
+guards/tests if live compatibility requires it. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: independent HTTP media type and created chronology (offline)
 
