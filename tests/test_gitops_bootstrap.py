@@ -17,7 +17,7 @@ from scripts.verify_gitops_image_admission import (
 )
 from tests.gitops_render import (
     RenderError, RepositoryContext, Resource, _canonical_git_url, _is_local_git_source,
-    _json_stream, _run, _verified_tool, default_repository_context,
+    _json_stream, _run, _verified_tool, default_repository_context, load_yaml_text,
 )
 
 
@@ -25,6 +25,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
+    def test_nonempty_yaml_refuses_empty_kubectl_output(self) -> None:
+        for output in ("", " \n\t"):
+            with self.subTest(output=output), patch(
+                "tests.gitops_render._verified_tool", return_value="kubectl-fixture"
+            ), patch("tests.gitops_render._run", return_value=output), self.assertRaisesRegex(
+                RenderError, "no resources"
+            ):
+                load_yaml_text("kind: ConfigMap\n")
+        with patch("tests.gitops_render._verified_tool", return_value="kubectl-fixture"), patch(
+            "tests.gitops_render._run", return_value='{"kind":"ConfigMap"}'
+        ):
+            self.assertEqual(load_yaml_text("kind: ConfigMap\n"), [{"kind": "ConfigMap"}])
+        self.assertEqual(load_yaml_text(""), [])
+
+    def test_kubectl_version_requires_object(self) -> None:
+        _verified_tool.cache_clear()
+        for output in ("[]", "null", '"version"'):
+            with self.subTest(output=output), patch(
+                "tests.gitops_render._tool", return_value="kubectl-fixture"
+            ), patch("tests.gitops_render._run", return_value=output), self.assertRaisesRegex(
+                RenderError, "non-object version"
+            ):
+                _verified_tool("kubectl")
+        _verified_tool.cache_clear()
+
     def test_renderer_refuses_tool_launch_failure_without_raw_exception(self) -> None:
         with patch("tests.gitops_render.subprocess.run", side_effect=OSError("executable vanished")):
             with self.assertRaisesRegex(RenderError, "renderer command could not start"):

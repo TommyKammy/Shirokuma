@@ -195,6 +195,8 @@ def _verified_tool(name: str) -> str:
             version = json.loads(raw)
         except json.JSONDecodeError as error:
             raise RenderError("kubectl returned invalid version JSON") from error
+        if not isinstance(version, dict):
+            raise RenderError("kubectl returned a non-object version")
         client = _mapping(version.get("clientVersion"))
         actual_client = str(client.get("gitVersion") or "")
         actual_kustomize = str(version.get("kustomizeVersion") or "")
@@ -300,6 +302,8 @@ def load_yaml_text(text: str) -> list[dict[str, Any]]:
         ),
         input_text=text,
     )
+    if not output.strip():
+        raise RenderError("kubectl returned no resources for nonempty YAML")
     return _json_stream(output)
 
 

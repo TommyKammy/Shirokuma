@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.530"
+version: "5.531"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: offline kubectl empty render and non-object version refusal
+
+WP-L0-GITOPS-001: successful kubectl with empty/whitespace-only output for a
+nonempty YAML input no longer loses resources silently; non-object version JSON
+now raises a scoped renderer error. Synthetic negatives and valid controls,
+bootstrap/teardown 33 and the full local verifier pass (fake Dagster failure
+intentional). Fresh dedicated Colima Stopped; no VM, remote Git, Flux or retained
+disk/backup read or change. Live §9, strict admission and operator acceptance
+remain open; preserve prior evidence and saved state, revert only scoped guards
+if live tool semantics differ. Original Vault synchronization pending.
 
 ## 2026-10-06: renderer incomplete-list refusal; independent FinOps fixture recheck
 

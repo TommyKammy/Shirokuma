@@ -5,12 +5,29 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.158"
+version: "0.159"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: offline kubectl renderer output and version shape
+
+Two independent incomplete-tool cases are now scoped failures: nonempty YAML
+whose successful kubectl invocation returns no JSON (including whitespace),
+and a kubectl version response with a JSON scalar or array instead of an object.
+Previously the former silently produced zero resources and the latter leaked an
+unscoped attribute error. Isolated negatives and valid controls pass; bootstrap
+and teardown contracts pass (33), as does `make verify-local-experiment` (the
+fake Dagster worker failure is an intentional negative). Dedicated Colima was
+freshly observed Stopped; no VM start, remote fetch, Flux reconcile, retained
+data or backup inspection/change. An empty input still returns zero resources;
+nonempty comments-only YAML now fails conservatively. Restore only these two
+renderer guards and tests if verified kubectl semantics require it, leaving saved
+state and historical failures untouched. Live §9, remote source identity, strict
+admission and operator acceptance remain open. Original Vault sync pending
+outside this checkout.
 
 ## 2026-10-06: offline renderer refuses incomplete resource lists and launch failure
 
