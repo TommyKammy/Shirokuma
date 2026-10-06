@@ -170,6 +170,16 @@ class AgentHouseTests(unittest.TestCase):
                     M.inspect_owned(kind, name)
                 run.assert_called_once()
 
+    def test_docker_process_failure_is_not_absence(self):
+        for kind, name in (('container', M.NAME), ('volume', M.VOLUME)):
+            for failure in (M.subprocess.TimeoutExpired(['docker', kind, 'inspect', name], 180),
+                            FileNotFoundError('docker not found'), PermissionError('docker denied')):
+                with self.subTest(kind=kind, failure=type(failure).__name__), patch.object(
+                        M.subprocess, 'run', side_effect=failure) as run:
+                    with self.assertRaisesRegex(M.AgentHouseError, 'refusing runtime'):
+                        M.inspect_owned(kind, name)
+                    run.assert_called_once()
+
     def test_ambiguous_owned_inspection_does_not_authorize_runtime(self):
         for kind, name, reply in (
             ('container', M.NAME, '[{"Config":{"Labels":{"shirokuma.dev.component":"foreign","shirokuma.dev.component":"agenthouse-local"}}}]'),

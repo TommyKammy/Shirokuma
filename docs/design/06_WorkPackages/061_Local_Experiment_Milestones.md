@@ -5,12 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.475"
+version: "5.476"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent Docker process and stop-state refusals (offline)
+
+WP-L2-CH-001 now refuses timed-out or unlaunchable Docker commands instead of
+leaking raw process exceptions or inferring absent owned resources (six
+synthetic failures, 64 focused tests). WP-L6-FIN-001 independently requires
+explicit false `Paused` and `Dead` in its standalone volume reference before
+the volume read; six synthetic negatives and 23 focused tests, plus the full
+FinOps suite, pass. The first full verifier exposed two valid inference
+fixtures missing those flags; after correction `make verify-local-experiment`,
+`make verify-design-context` and diff check pass. Private verifier log:
+`tmp/local-experiment/attempt-193-verify.log`. Dedicated
+Colima freshly observed Stopped; no live Docker, VM, retained credential,
+report, volume or backup access/change. AgentHouse bytes remain `null /
+NOT_MEASURED`, volume traversal unauthorized. Neither fixture authenticates
+the producer, proves continuous writer exclusion, live startup, deduplication
+or operator acceptance. Revert only the respective guards/tests if needed;
+preserve saved data and never replay an unknown insert. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent Docker decoding and mount-path controls (offline)
 

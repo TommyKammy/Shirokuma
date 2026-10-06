@@ -116,6 +116,10 @@ def docker(*args: str, required: bool = True) -> str:
         # text=True decodes both stdout and stderr before returning. A broken
         # daemon reply is never evidence that a named retained object is absent.
         raise AgentHouseError('Docker reply is not decodable text; refusing runtime') from None
+    except subprocess.TimeoutExpired:
+        raise AgentHouseError('Docker command timed out; refusing runtime') from None
+    except OSError:
+        raise AgentHouseError('Docker command could not run; refusing runtime') from None
     if result.returncode:
         # Only an explicit absence for the exact requested resource allows
         # first-time creation. An unavailable daemon or ambiguous inspect

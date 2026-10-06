@@ -443,7 +443,7 @@ class RuntimeTests(unittest.TestCase):
         owned = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
                    'Config':{'Labels':{R.AH.LABEL:'agenthouse-local'},'Image':R.AH.IMAGE},
                    'Mounts': self._inference_mounts(),
-                   'State':{'Running':True},'NetworkSettings':{'Ports':{'8123/tcp':[
+                    'State':{'Running':True,'Paused':False,'Dead':False},'NetworkSettings':{'Ports':{'8123/tcp':[
                       {'HostIp':'127.0.0.1','HostPort':'18123'}]}}}]
         with tempfile.TemporaryDirectory() as temp:
             state=Path(temp); state.chmod(0o700)
@@ -502,7 +502,7 @@ class RuntimeTests(unittest.TestCase):
         context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
         container = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
                       'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
-                      'Mounts': self._inference_mounts(), 'State': {'Running': True},
+                       'Mounts': self._inference_mounts(), 'State': {'Running': True, 'Paused': False, 'Dead': False},
                       'NetworkSettings': {'Ports': {'8123/tcp': [
                           {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}]
         with tempfile.TemporaryDirectory() as temp:
@@ -522,7 +522,7 @@ class RuntimeTests(unittest.TestCase):
         context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
         container = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
                       'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
-                      'Mounts': self._inference_mounts(), 'State': {'Running': True},
+                       'Mounts': self._inference_mounts(), 'State': {'Running': True, 'Paused': False, 'Dead': False},
                       'NetworkSettings': {'Ports': {'8123/tcp': [
                           {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}]
         with tempfile.TemporaryDirectory() as temp:

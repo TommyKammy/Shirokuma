@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.26"
+version: "0.27"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 Docker process failures are not absence (offline)
+
+The fixed AgentHouse Docker wrapper now refuses a timed-out or unlaunchable
+subprocess as a scoped runtime error; neither outcome implies the named
+container or volume is missing. Six synthetic failures (timeout, missing
+binary and permission error for each resource) are covered by 64 focused
+tests. Dedicated Colima was freshly Stopped; no daemon, retained credential,
+volume, report or backup was read or changed. Subprocess capture still lacks
+an OS-level output cap, and live startup, deduplication, daemon identity and
+operator acceptance remain unproved. Restore only the wrapper/test on rollback;
+preserve saved resources and do not replay uncertain inserts. Original Vault
+sync pending outside this checkout.
 
 ## 2026-10-06 undecodable Docker inspection is not absence (offline)
 

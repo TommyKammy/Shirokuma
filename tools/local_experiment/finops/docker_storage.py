@@ -83,7 +83,8 @@ def _container(container):
     require(type(identifier) is str and re.fullmatch(r'[0-9a-f]{64}', identifier))
     require(container.get('Name') == '/' + AH.NAME and
             container_labels.get(AH.LABEL) == 'agenthouse-local' and
-            config.get('Image') == AH.IMAGE and type(state.get('Running')) is bool)
+            config.get('Image') == AH.IMAGE and type(state.get('Running')) is bool and
+            state.get('Paused') is False and state.get('Dead') is False)
     mounts = container.get('Mounts')
     require(type(mounts) is list and len(mounts) == 1)
     mount = mounts[0]

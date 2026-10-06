@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.254"
+version: "0.255"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent container stop-state scope (offline)
+
+The standalone AgentHouse volume reference previously accepted a container
+without `Paused` or `Dead` flags, or one explicitly paused/dead, as a usable
+Docker identity. It now requires both flags to be explicitly false before
+reading the volume; the shared inference identity check also requires them.
+Six malformed/unsafe stop-state fixtures refuse the volume reference with
+`SCOPE_INVALID`, and the valid inference fixtures retain explicit false flags.
+Focused volume-reference 23 and full FinOps suites pass. This is metadata-only:
+no retained volume traversal or byte measurement (`null / NOT_MEASURED`),
+continuous writer exclusion, daemon authentication, cleanup proof or operator
+acceptance. Dedicated Colima was freshly Stopped; no saved data/backup access
+or change. Revert only this guard and fixtures if incompatible with a verified
+runtime; retain all reports and volumes. Original Vault sync pending.
 
 ## 2026-10-06 all-container mount path controls (offline)
 

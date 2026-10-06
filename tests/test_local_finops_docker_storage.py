@@ -16,7 +16,7 @@ def fixture():
     source = '/var/lib/docker/volumes/' + D.AH.VOLUME + '/_data'
     container = [{'Id':'a'*64,'Name':'/'+D.AH.NAME,'Config':{'Image':D.AH.IMAGE,
                   'Labels':{D.AH.LABEL:'agenthouse-local'},'Env':['PRIVATE_SECRET=do-not-publish']},
-                  'State':{'Running':False},'Mounts':[{'Type':'volume','Name':D.AH.VOLUME,
+                   'State':{'Running':False,'Paused':False,'Dead':False},'Mounts':[{'Type':'volume','Name':D.AH.VOLUME,
                   'Driver':'local','Source':source,'Destination':'/var/lib/clickhouse','RW':True}]}]
     volume = [{'Name':D.AH.VOLUME,'Driver':'local','Scope':'local','Labels':{D.AH.LABEL:'agenthouse-local'},
                'Mountpoint':source,'CreatedAt':'2026-09-19T00:00:00.000000000Z'}]
@@ -36,6 +36,20 @@ class DockerStorageTests(unittest.TestCase):
         self.assertNotIn('PRIVATE_SECRET',json.dumps(row));self.assertNotIn('/var/lib/docker/volumes/',json.dumps(row))
         data=fixture();data[2][0]['CreatedAt']='2026-09-19T09:00:00+09:00'
         self.assertEqual(projected(data)['volume_created_at'],'2026-09-19T00:00:00.000000000Z')
+
+    def test_ambiguous_container_stop_flags_refuse_volume_reference(self):
+        for flag in ('Paused', 'Dead'):
+            for value in (True, None, 'false'):
+                data = fixture()
+                data[1][0]['State'][flag] = value
+                with self.subTest(flag=flag, value=value), self.assertRaisesRegex(
+                        D.DockerStorageError, '^SCOPE_INVALID$'):
+                    projected(data)
+                backend = Mock()
+                backend.now.return_value = NOW
+                backend.docker_storage_inspect.side_effect = data + deepcopy(data)
+                self.assertEqual(D.collect(backend)['agenthouse']['reason'], 'SCOPE_INVALID')
+                self.assertEqual(backend.docker_storage_inspect.call_count, 2)
 
     def test_future_volume_creation_cannot_be_an_observed_reference(self):
         data=fixture();data[2][0]['CreatedAt']='2026-09-21T00:00:00Z'
@@ -229,7 +243,7 @@ class DockerStorageTests(unittest.TestCase):
             backend.docker_storage_inspect.assert_not_called()
 
     def test_container_identity_drift_stops_before_second_volume(self):
-        for field, value in (('Id', 'b'*64), ('State', {'Running': True})):
+        for field, value in (('Id', 'b'*64), ('State', {'Running': True, 'Paused': False, 'Dead': False})):
             responses = fixture() + deepcopy(fixture())
             responses[4][0][field] = value
             backend = Mock()
