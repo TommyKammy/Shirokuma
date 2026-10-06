@@ -70,6 +70,18 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
         self.assertEqual(W._mountpoints(row.replace('/some ', '/some\\040name ', 1)),
                          {'/fixture/child'})
 
+    def test_mountinfo_refuses_invalid_options_and_propagation(self):
+        row = '2 1 8:1 /some /fixture/child rw,nosuid shared:12 - ext4 /dev/a rw,relatime\n'
+        self.assertEqual(W._mountpoints(row), {'/fixture/child'})
+        for raw in (row.replace('rw,nosuid', 'rw,,nosuid'),
+                    row.replace('rw,nosuid', 'unknown,nosuid'),
+                    row.replace('shared:12', 'shared:bad'),
+                    row.replace('shared:12', 'shared:0'),
+                    row.replace('shared:12', 'foreign:12'),
+                    row.replace('rw,relatime', 'rw,,relatime')):
+            with self.subTest(raw=raw), self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
+                W._mountpoints(raw)
+
     def test_mountinfo_invalid_utf8_is_scoped(self):
         from unittest.mock import mock_open
         with patch('builtins.open', mock_open(read_data=b'\xff\n')):

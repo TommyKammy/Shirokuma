@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.440"
+version: "5.441"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent worker options and procfs mount aliases (offline)
+
+WP-L6-FIN-001 refuses malformed mount options and propagation fields in the
+private volume worker, and noncanonical or malformed escaped mountpoints in
+the separate procfs fixture contract before PID-overmount projection. Eleven
+negative fixtures failed before repair; focused worker 14 tests (three Linux
+skips on macOS), procfs seven and full local verifier pass (intentional fake
+Dagster failure). Dedicated Colima freshly Stopped; no live guest read, retained
+volume/report/backup access or change, AgentHouse usage `null / NOT_MEASURED`.
+Offline checks do not establish source authenticity, safe retained-volume
+measurement, cleanup or operator acceptance. Restore only scoped parsers/tests;
+retain saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent worker mount root and encoding boundaries (offline)
 

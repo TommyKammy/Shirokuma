@@ -85,6 +85,14 @@ class ProcfsContractTests(unittest.TestCase):
             value=inputs();change(value)
             with self.subTest(change=change),self.assertRaises(P.ProcfsError):P.project(**value)
 
+    def test_mountpoint_aliases_cannot_hide_pid_overmount(self):
+        for mount in (b'/proc/./345', b'/proc//345', b'/proc/x/../345',
+                      b'//proc/345', b'/proc/\\999345'):
+            value=inputs()
+            value['mountinfo']+=b'20 19 0:21 / '+mount+b' rw - tmpfs tmpfs rw\n'
+            with self.subTest(mount=mount),self.assertRaises(P.ProcfsError):
+                P.project(**value)
+
     def test_forged_stat_field_noncanonical_numbers_and_limits_rejected(self):
         changes=[lambda x:x.update(target_stat=stat_line(999,4),target_errno=None),
                  lambda x:x.update(target_stat=stat_line(345,'0123'),target_errno=None),

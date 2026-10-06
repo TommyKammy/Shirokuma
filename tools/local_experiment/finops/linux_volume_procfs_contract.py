@@ -6,6 +6,7 @@ came from the intended VM, and ENOENT alone is not a remote cleanup receipt.
 from __future__ import annotations
 
 import errno
+import posixpath
 import re
 import uuid
 
@@ -71,10 +72,18 @@ def _mount(raw,mount_id):
         left,right=halves[0].split(),halves[1].split()
         require(len(left)>=6 and len(right)==3 and
                 re.fullmatch(r'[1-9][0-9]*',left[0]) is not None)
+        # A noncanonical mountpoint could disguise an overmount below /proc.
+        # Decode the four mountinfo path escapes before lexical comparison.
+        encoded=left[4]
+        require(re.fullmatch(r'(?:[^\\]|\\(?:040|011|012|134))*',encoded) is not None)
+        path=re.sub(r'\\(040|011|012|134)',
+                    lambda match: chr(int(match[1],8)),encoded)
+        require(path.startswith('/') and not path.startswith('//') and
+                posixpath.normpath(path)==path)
         ident=int(left[0]);require(ident<=MAX_NUMBER and ident not in seen);seen.add(ident)
-        if left[4]=='/proc':matches.append((ident,left,right))
+        if path=='/proc':matches.append((ident,left,right))
         # A nested mount replacing procfs lookup of any PID is ambiguous.
-        require(not re.fullmatch(r'/proc/(?:[0-9]+|self|thread-self)(?:/.*)?',left[4]))
+        require(not re.fullmatch(r'/proc/(?:[0-9]+|self|thread-self)(?:/.*)?',path))
     require(len(matches)==1 and matches[0][0]==mount_id)
     _,left,right=matches[0]
     require(left[3]=='/' and right[0]=='proc' and right[1]=='proc' and

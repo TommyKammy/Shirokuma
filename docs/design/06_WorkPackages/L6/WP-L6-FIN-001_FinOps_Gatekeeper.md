@@ -5,12 +5,31 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.227"
+version: "0.228"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent mount options and procfs alias boundaries (offline)
+
+The private volume worker previously accepted malformed mount option lists and
+unknown/invalid propagation fields while projecting a mountpoint (six negatives
+failed before repair). It now requires a ro/rw first option, nonempty option
+tokens and known bounded propagation tags; future kernel tags may need explicit
+support. Separately, the procfs fixture contract accepted five malformed or
+noncanonical mountpoint aliases that could disguise a PID overmount; it now
+validates and decodes mountinfo escapes and requires canonical absolute paths
+before comparing. Focused worker 14 tests (three macOS Linux skips), procfs
+seven tests and full `make verify-local-experiment` pass; its fake Dagster
+worker failure is an intentional negative fixture. Dedicated Colima freshly
+Stopped; no guest read, retained volume/report/backup access or mutation, and
+AgentHouse used bytes remain `null / NOT_MEASURED`. Fixture checks do not
+authenticate procfs, establish absence of transient mounts, authorize scanning
+retained data, prove cleanup or grant operator acceptance. Roll back only these
+parsers/tests, preserving all saved resources. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 independent mount root and UTF-8 failure boundaries (offline)
 

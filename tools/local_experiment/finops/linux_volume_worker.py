@@ -89,6 +89,17 @@ def _mountpoints(raw):
                 fields.count('-') == 1)
         separator = fields.index('-')
         require(separator >= 6 and len(fields) == separator + 4)
+        # The optional propagation columns are a small, defined vocabulary;
+        # arbitrary text must not be accepted as evidence from procfs.
+        for option in fields[6:separator]:
+            if option == 'unbindable':
+                continue
+            match = re.fullmatch(r'(?:shared|master|propagate_from):([0-9]{1,19})', option)
+            require(match is not None and 0 < int(match[1]) <= 2**63 - 1)
+        mount_options = fields[5].split(',')
+        require(mount_options[0] in ('ro', 'rw') and
+                all(re.fullmatch(r'[A-Za-z0-9_.=:+/-]+', item) for item in mount_options))
+        require(all(re.fullmatch(r'[^,\s]+', item) for item in fields[separator + 3].split(',')))
         # mountinfo escapes spaces, tabs, newlines and backslashes as octal.
         _mount_path(fields[3])
         value = _mount_path(fields[4])
