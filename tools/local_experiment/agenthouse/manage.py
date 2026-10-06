@@ -51,8 +51,14 @@ def docker(*args: str, required: bool = True) -> str:
 
 
 def check_context() -> None:
-    data = json.loads(docker("context", "inspect", CONTEXT))[0]
-    endpoint = data["Endpoints"]["docker"]["Host"]
+    try:
+        contexts = json.loads(docker("context", "inspect", CONTEXT))
+        if not isinstance(contexts, list) or len(contexts) != 1:
+            raise ValueError('invalid context count')
+        data = contexts[0]
+        endpoint = data["Endpoints"]["docker"]["Host"]
+    except (ValueError, TypeError, KeyError, IndexError):
+        raise AgentHouseError("dedicated Colima Docker context metadata is invalid") from None
     expected = "unix://" + str(Path.home() / ".colima/mac-studio-solo/docker.sock")
     if endpoint != expected:
         raise AgentHouseError("requires the dedicated Colima Docker socket")
@@ -64,8 +70,16 @@ def inspect_owned(kind: str, name: str) -> dict | None:
     raw = docker(kind, "inspect", name, required=False)
     if not raw:
         return None
-    data = json.loads(raw)[0]
-    labels = data.get("Config", {}).get("Labels", {}) if kind == "container" else data.get("Labels", {})
+    try:
+        result = json.loads(raw)
+        if not isinstance(result, list) or len(result) != 1 or not isinstance(result[0], dict):
+            raise ValueError('invalid inspect result')
+        data = result[0]
+        labels = data.get("Config", {}).get("Labels", {}) if kind == "container" else data.get("Labels", {})
+        if not isinstance(labels, dict):
+            raise ValueError('invalid labels')
+    except (ValueError, TypeError, AttributeError):
+        raise AgentHouseError(f"invalid {kind} inspection for {name}; refusing runtime") from None
     if labels.get(LABEL) != "agenthouse-local":
         raise AgentHouseError(f"refusing an unowned {kind} named {name}")
     return data
@@ -166,7 +180,9 @@ class Client:
 def ensure_runtime() -> Client:
     check_context()
     existing = inspect_owned("container", NAME)
-    inspect_owned("volume", VOLUME)
+    volume = inspect_owned("volume", VOLUME)
+    if existing and volume is None:
+        raise AgentHouseError("existing AgentHouse requires its original owned data volume; refusing recreation")
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     with private_state_fd() as state:
         try:

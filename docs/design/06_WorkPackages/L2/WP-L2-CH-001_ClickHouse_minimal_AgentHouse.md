@@ -12,6 +12,22 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline existing-volume retention and Docker reply boundaries
+
+An existing owned container now refuses startup when its named volume is absent,
+before creating state files or allowing Docker to recreate a volume under the
+same name. A new container may still create its own volume. Separately malformed
+context and container/volume inspection replies fail closed rather than being
+mistaken for absence or escaping as raw indexing/type errors. Isolated negative
+fixtures cover absent volume, invalid JSON, wrong cardinality and nested shapes;
+focused tests pass (28). The dedicated Colima profile was freshly Stopped; no
+live daemon, credential, volume, retained report or backup was changed. Docker
+reply checks do not authenticate the daemon or prove live volume contents. Keep
+the existing volume and container for manual identity investigation if either
+inspect fails; never recreate or delete retained data as recovery. Revert only
+the scoped guards/tests if necessary. Original Vault sync remains pending
+outside checkout; no operator acceptance is claimed.
+
 ## 2026-10-06 offline dedicated Docker context path check
 
 Docker context inspection now requires the exact current-home Colima profile

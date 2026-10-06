@@ -75,6 +75,15 @@ class AgentHouseTests(unittest.TestCase):
             with self.assertRaisesRegex(M.AgentHouseError, "unowned"):
                 M.inspect_owned("container", M.NAME)
 
+    def test_malformed_owned_inspection_is_not_absence(self):
+        for kind, name in (('container', M.NAME), ('volume', M.VOLUME)):
+            for reply in ('[]', '{}', 'not json', '[null]', '[{}, {}]',
+                          '[{"Config":null}]' if kind == 'container' else '[{"Labels":[]}]'):
+                with self.subTest(kind=kind, reply=reply), \
+                        patch.object(M, 'docker', return_value=reply):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'invalid .* inspection'):
+                        M.inspect_owned(kind, name)
+
     def test_context_must_be_dedicated_socket(self):
         expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
         for endpoint in ('unix:///var/run/docker.sock',
@@ -89,6 +98,14 @@ class AgentHouseTests(unittest.TestCase):
         with patch.object(M, "docker", side_effect=[json.dumps(config), 'aarch64']) as docker:
             M.check_context()
             self.assertEqual(docker.call_count, 2)
+
+    def test_malformed_context_stops_before_docker_info(self):
+        for reply in ('not json', '{}', '[]', '[{}, {}]', '[null]',
+                      '[{"Endpoints":null}]', '[{"Endpoints":{"docker":{}}}]'):
+            with self.subTest(reply=reply), patch.object(M, 'docker', return_value=reply) as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'context metadata'):
+                    M.check_context()
+                docker.assert_called_once_with('context', 'inspect', M.CONTEXT)
 
     def test_redirect_never_receives_authorization(self):
         with self.assertRaisesRegex(M.AgentHouseError, "redirect"):
@@ -341,6 +358,17 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaisesRegex(M.AgentHouseError, 'original local credential'):
                     M.ensure_runtime()
                 docker.assert_not_called()
+
+    def test_existing_runtime_missing_owned_volume_does_not_start_or_create_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[self.existing_runtime(), None]), \
+                    patch.object(M, 'docker') as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'original owned data volume'):
+                    M.ensure_runtime()
+                docker.assert_not_called()
+                self.assertFalse(state.exists())
 
     def test_existing_runtime_unsafe_credential_does_not_start(self):
         with tempfile.TemporaryDirectory() as directory:

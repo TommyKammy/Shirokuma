@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.422"
+version: "5.423"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse missing volume and malformed Docker replies (offline)
+
+WP-L2-CH-001: an existing container no longer starts when the separately
+inspected named data volume is missing; this stops before local state creation
+or any further Docker operation. Malformed context and container/volume inspect
+replies are scoped failures, not missing resources. Focused AgentHouse 28 tests,
+`make verify-local-experiment`, `make verify-design-context` and diff check pass
+(the verifier's fake Dagster worker failure is an intentional negative test).
+Dedicated Colima freshly Stopped; no live daemon, credential, retained
+volume/report/backup mutation. These fixture checks cannot authenticate Docker,
+recover lost volume contents or grant operator acceptance. Preserve saved data
+and inspect identity before any manual recovery; revert only scoped guards/tests.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-06: AgentHouse dedicated Docker context path (offline)
 
