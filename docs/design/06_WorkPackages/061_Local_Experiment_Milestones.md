@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.532"
+version: "5.533"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: ambiguous renderer JSON rejected; independent FinOps recheck
+
+WP-L0-GITOPS-001: offline kubectl version and resource streams reject duplicate
+JSON fields at any nesting depth, including escaped aliases; version mismatch
+errors no longer echo untrusted values. Initial focused negatives failed, then
+bootstrap/teardown 37, full local verifier and design-context passed (intentional
+fake Dagster failure). Independent WP-L6-FIN-001 Docker metadata preflight
+36 fixtures pass under discovery; AgentHouse traversal remains unauthorized,
+`used_bytes=null / NOT_MEASURED`. Fresh dedicated Colima Stopped. No live
+§9, authenticated source, strict admission, writer exclusion or operator
+acceptance; no retained disk, volume or backup read/change. Restore only
+renderer changes if tool semantics differ, preserving previous failures.
+Original Vault direct sync pending outside checkout.
 
 ## 2026-10-06: offline renderer diagnostics and separate traversal recheck
 

@@ -25,6 +25,32 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
+    def test_renderer_refuses_duplicate_json_keys_at_any_depth(self) -> None:
+        for output in (
+            '{"kind":"ConfigMap","kind":"Secret"}',
+            '{"kind":"List","items":[{"kind":"ConfigMap","metadata":{"name":"a","name":"b"}}]}',
+            '{"kind":"ConfigMap","k\\u0069nd":"Secret"}',
+        ):
+            with self.subTest(output=output), self.assertRaisesRegex(RenderError, "duplicate JSON key"):
+                _json_stream(output)
+        self.assertEqual(_json_stream('{"kind":"ConfigMap"}\n{"kind":"Secret"}'),
+                         [{"kind": "ConfigMap"}, {"kind": "Secret"}])
+
+    def test_kubectl_version_refuses_duplicate_keys_and_redacts_untrusted_version(self) -> None:
+        _verified_tool.cache_clear()
+        for output in (
+            '{"clientVersion":{"gitVersion":"v1.36.2","gitVersion":"v1.36.2"},"kustomizeVersion":"v5.8.1"}',
+            json.dumps({"clientVersion": {"gitVersion": "private-credential-marker"},
+                        "kustomizeVersion": "v5.8.1"}),
+        ):
+            with self.subTest(output=output), patch(
+                "tests.gitops_render._tool", return_value="kubectl-fixture"
+            ), patch("tests.gitops_render._run", return_value=output):
+                with self.assertRaises(RenderError) as caught:
+                    _verified_tool("kubectl")
+                self.assertNotIn("private-credential-marker", str(caught.exception))
+        _verified_tool.cache_clear()
+
     def test_nonempty_yaml_refuses_empty_kubectl_output(self) -> None:
         for output in ("", " \n\t"):
             with self.subTest(output=output), patch(

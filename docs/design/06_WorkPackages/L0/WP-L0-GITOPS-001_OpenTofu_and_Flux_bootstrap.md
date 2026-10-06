@@ -5,12 +5,30 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.160"
+version: "0.161"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: offline renderer duplicate JSON refusal
+
+The canonical offline renderer previously accepted conflicting duplicate keys
+in kubectl resource JSON (including nested and escaped-equivalent names) and
+client version JSON. Its JSON decoders now reject duplicates without echoing
+their contents. Independently, a wrong client version no longer repeats
+untrusted version text in diagnostic output. Two focused negatives failed
+before correction; bootstrap/teardown contracts pass (37), full local verifier
+and design-context pass (the fake Dagster failure is intentional). Separate
+FinOps Docker metadata preflight fixtures pass (36) under discovery; they do
+not authorize AgentHouse volume traversal or replace writer verification.
+Fresh dedicated Colima Stopped; no VM start, remote Git/API, Flux reconcile,
+credential, retained volume or backup read/change. This is not live §9,
+source authenticity, strict admission, or operator acceptance. Roll back only
+the renderer/tests if verified kubectl output semantics differ; preserve
+historical evidence and saved resources. Original Vault sync pending outside
+the permitted checkout.
 
 ## 2026-10-06: offline renderer diagnostics and kubectl warning boundary
 

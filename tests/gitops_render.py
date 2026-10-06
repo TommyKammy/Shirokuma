@@ -72,6 +72,15 @@ class RenderError(RuntimeError):
     """The repository cannot be evaluated completely and safely."""
 
 
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise RenderError("renderer returned a duplicate JSON key")
+        result[key] = value
+    return result
+
+
 @dataclass(frozen=True)
 class RepositoryContext:
     """Explicit provenance boundary for repository-local Flux sources."""
@@ -192,7 +201,7 @@ def _verified_tool(name: str) -> str:
     elif name == "kubectl":
         raw = _run((executable, "version", "--client", "-o", "json"), reject_stderr=True)
         try:
-            version = json.loads(raw)
+            version = json.loads(raw, object_pairs_hook=_unique_json_object)
         except json.JSONDecodeError as error:
             raise RenderError("kubectl returned invalid version JSON") from error
         if not isinstance(version, dict):
@@ -205,9 +214,7 @@ def _verified_tool(name: str) -> str:
             or actual_kustomize != KUSTOMIZE_VERSION
         ):
             raise RenderError(
-                "expected kubectl "
-                f"{KUBECTL_VERSION}/Kustomize {KUSTOMIZE_VERSION}, found "
-                f"{actual_client or 'unknown'}/{actual_kustomize or 'unknown'}"
+                f"expected kubectl {KUBECTL_VERSION}/Kustomize {KUSTOMIZE_VERSION}"
             )
     return executable
 
@@ -251,7 +258,7 @@ def _run(
 
 
 def _json_stream(text: str) -> list[dict[str, Any]]:
-    decoder = json.JSONDecoder()
+    decoder = json.JSONDecoder(object_pairs_hook=_unique_json_object)
     offset = 0
     documents: list[dict[str, Any]] = []
     while offset < len(text):
