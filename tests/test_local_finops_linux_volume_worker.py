@@ -101,6 +101,20 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
             W._mountpoints(row + row.replace('/fixture/child', '/elsewhere'))
 
+    def test_mountinfo_bounds_numeric_identity_before_conversion(self):
+        row = '2 1 8:1 /some /fixture/child rw - ext4 /dev/a rw\n'
+        for raw in (row.replace('2 1 ', '0 1 ', 1),
+                    row.replace('2 1 ', '02 1 ', 1),
+                    row.replace('2 1 ', '2 -1 ', 1),
+                    row.replace('2 1 ', '2 01 ', 1),
+                    row.replace('8:1', '08:1', 1),
+                    row.replace('8:1', '8:99999999999999999999', 1),
+                    row.replace('2 1 ', '2 ' + '9' * 5000 + ' ', 1),
+                    row.replace('2 1 ', '9' * 5000 + ' 1 ', 1)):
+            with self.subTest(raw=raw[:90]), self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
+                W._mountpoints(raw)
+        self.assertEqual(W._mountpoints(row), {'/fixture/child'})
+
     def test_mountinfo_refuses_ambiguous_access_options(self):
         row = '2 1 8:1 /some /fixture/child rw,nosuid - ext4 /dev/a rw,relatime\n'
         for options in ('rw,ro', 'rw,rw', 'rw,nosuid,ro', 'rw,nosuid,nosuid'):

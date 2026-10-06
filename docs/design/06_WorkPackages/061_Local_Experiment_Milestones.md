@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.453"
+version: "5.454"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: private worker numeric mount identity (offline)
+
+WP-L6-FIN-001 bounds and canonicalizes mount, parent and device number fields
+before private worker conversion. Eight negative fixtures reproduce the gap.
+Focused worker 18 (three skips), FinOps 348 (seven skips) and full
+`make verify-local-experiment` pass (intentional fake Dagster failure); private
+full log `tmp/local-experiment/attempt-180-verify.log`. Dedicated Colima remained
+Stopped. No VM read, retained data/backup change or AgentHouse measurement
+(`null / NOT_MEASURED`). This does not authenticate kernel origin, permit
+retained-volume scanning, prove cleanup or establish operator acceptance.
+Revert only the scoped numeric guard/test and preserve saved records; original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: private worker mount inventory ambiguity (offline)
 

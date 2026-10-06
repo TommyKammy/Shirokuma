@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.237"
+version: "0.238"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 private worker numeric mount identity (offline)
+
+The worker independently accepted leading-zero IDs/device fields, oversized
+parent and device numbers, or attempted an unbounded decimal conversion before
+validating the complete mount inventory. Eight negative fixtures reproduce the
+issue. Mount, parent and device fields now require bounded canonical decimal
+spelling before conversion; parent zero remains valid for mount namespace roots.
+Focused worker 18 tests (three Linux-only skips), FinOps 348 (seven Linux-only
+skips) and `make verify-local-experiment` pass (intentional fake Dagster failure).
+Colima remained Stopped; no VM read, retained report/volume/backup access or
+change; AgentHouse bytes remain `null / NOT_MEASURED`. Fixture syntax cannot
+authenticate the producer, justify scanning retained data, prove cleanup or
+grant operator acceptance. Restore only the numeric guard/test; preserve saved
+evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 private worker mount inventory ambiguity (offline)
 

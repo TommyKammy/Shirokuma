@@ -83,9 +83,13 @@ def _mountpoints(raw):
         # Mountinfo has six fixed columns, optional propagation columns, one
         # separator and three trailing columns. Never project a mountpoint
         # from a malformed row that only happens to have a plausible field 5.
-        require(len(fields) >= 10 and all(fields) and fields[0].isascii() and
-                fields[0].isdigit() and fields[1].isascii() and fields[1].isdigit() and
-                re.fullmatch(r'[0-9]+:[0-9]+', fields[2]) is not None and
+        require(len(fields) >= 10 and all(fields) and
+                re.fullmatch(r'[1-9][0-9]{0,18}', fields[0]) is not None and
+                re.fullmatch(r'(?:0|[1-9][0-9]{0,18})', fields[1]) is not None and
+                int(fields[1]) <= 2**63 - 1 and
+                re.fullmatch(r'(?:0|[1-9][0-9]{0,18}):(?:0|[1-9][0-9]{0,18})',
+                             fields[2]) is not None and
+                all(int(part) <= 2**63 - 1 for part in fields[2].split(':')) and
                 fields[3].startswith('/') and fields[4].startswith('/') and
                 fields.count('-') == 1)
         separator = fields.index('-')
