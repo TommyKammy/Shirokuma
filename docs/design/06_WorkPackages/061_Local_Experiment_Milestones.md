@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.405"
+version: "5.406"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: inference inspection and port-boundary guards (offline)
+
+WP-L6-FIN-001: eleven malformed Docker inspection shapes and a second,
+publicly published native port previously crossed the inference source boundary;
+they now yield `SCOPE_INVALID` before credential access. An unpublished port
+still passes. Both negative classes failed before repair. FinOps 297 tests
+(seven Linux-only skips) and `make verify-local-experiment` passed; its fake
+Dagster worker failure is an intentional negative diagnostic. Dedicated Colima
+was freshly listed Stopped. No live Docker/API/VM query, saved report/volume/
+backup mutation, or AgentHouse used-byte measurement (`null / NOT_MEASURED`).
+Fixtures cannot authenticate the runtime, prove atomicity or establish operator
+acceptance. Restore only the scoped reader/tests, preserving saved records;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent FinOps component and inference input guards (offline)
 

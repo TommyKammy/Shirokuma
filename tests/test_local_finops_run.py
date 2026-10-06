@@ -398,11 +398,48 @@ class RuntimeTests(unittest.TestCase):
                     patch.object(backend,'_command',side_effect=[json.dumps(context),json.dumps(owned)]):
                 self.assertEqual(backend.inference(NOW), [row()])
             client.query.assert_called_once_with(R.inference_sql(NOW))
+            owned[0]['NetworkSettings']['Ports']['9000/tcp'] = None
+            with patch.object(backend, '_command', side_effect=[json.dumps(context), json.dumps(owned)]), \
+                    patch.object(R.AH, 'STATE', state), patch.object(R.AH, 'Client', return_value=client):
+                self.assertEqual(backend.inference(NOW), [row()])
             owned[0]['NetworkSettings']['Ports']['8123/tcp'][0]['HostIp']='0.0.0.0'
             with patch.object(backend,'_command',side_effect=[json.dumps(context),json.dumps(owned)]), \
                     patch.object(R.AH,'Client') as factory, self.assertRaises(R.C.FinOpsError):
                 backend.inference(NOW)
             factory.assert_not_called()
+
+    def test_agenthouse_malformed_inspection_refuses_before_credentials(self):
+        context = {'Endpoints': {'docker': {'Host': 'unix:///test/.colima/mac-studio-solo/docker.sock'}}}
+        owned = [{'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+                  'State': {'Running': True}, 'NetworkSettings': {'Ports': {'8123/tcp': [
+                      {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}]
+        variants = [(bad, owned) for bad in (None, {}, {'Endpoints': None},
+                    {'Endpoints': {'docker': None}}, {'Endpoints': {'docker': {'Host': []}}})]
+        variants += [(context, bad) for bad in (None, {}, {'Config': None},
+                     {'Config': {'Labels': None}}, {'Config': {'Labels': {}, 'Image': R.AH.IMAGE},
+                      'State': None}, {'Config': owned[0]['Config'], 'State': {'Running': True},
+                      'NetworkSettings': {'Ports': None}})]
+        for ctx, container in variants:
+            backend = R.Backend()
+            with self.subTest(ctx=ctx, container=container), \
+                    patch.object(backend, '_command', side_effect=[json.dumps([ctx]), json.dumps([container])]), \
+                    patch.object(R.AH, 'Client') as client, \
+                    self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
+                backend.inference(NOW)
+            client.assert_not_called()
+
+    def test_agenthouse_inference_refuses_unexpected_published_port(self):
+        context = [{'Endpoints': {'docker': {'Host': 'unix:///test/.colima/mac-studio-solo/docker.sock'}}}]
+        container = [{'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+                      'State': {'Running': True}, 'NetworkSettings': {'Ports': {
+                          '8123/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '18123'}],
+                          '9000/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '19000'}]}}}]
+        backend = R.Backend()
+        with patch.object(backend, '_command', side_effect=[json.dumps(context), json.dumps(container)]), \
+                patch.object(R.AH, 'Client') as client, \
+                self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
+            backend.inference(NOW)
+        client.assert_not_called()
 
     def test_fixed_command_enforces_live_limit_kills_only_owned_group_and_reaps(self):
         backend = R.Backend()

@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.203"
+version: "0.204"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: inference inspection shape and published-port scope (offline)
+
+Two independent inference source boundaries: eleven malformed synthetic Docker
+context/container inspection shapes raised unscoped exceptions before credential
+access; they now fail with `SCOPE_INVALID`. A separate fixture with the expected
+loopback HTTP port plus an unexpected publicly published native port previously
+continued to the client; it now fails closed. An unpublished native port remains
+valid. The negatives failed before repair. `make test-local-finops` passed 297
+tests (seven Linux-only skips), followed by `make verify-local-experiment` (its
+fake Dagster worker failure is an intentional negative diagnostic). Dedicated
+Colima was freshly listed Stopped. No live Docker/API/VM read, credential use,
+retained report/volume/backup mutation or AgentHouse used-byte measurement
+(`null / NOT_MEASURED`). These synthetic checks do not authenticate Docker or
+prove runtime exposure, physical usage, atomicity or operator acceptance.
+Restore only these scoped guards/tests if needed, keeping saved evidence;
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-06: component Pod and inference identity failures (offline)
 

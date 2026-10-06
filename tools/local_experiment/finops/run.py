@@ -224,18 +224,29 @@ class Backend:
     def inference(self, end):
         # Never call ensure_runtime: it can create containers/database/schema.
         context = _json(self._command(['docker', 'context', 'inspect', AH.CONTEXT]))
-        C.require(type(context) is list and len(context) == 1 and
-                  context[0]['Endpoints']['docker']['Host'].startswith('unix://') and
-                  context[0]['Endpoints']['docker']['Host'].endswith('/.colima/mac-studio-solo/docker.sock'), 'SCOPE_INVALID')
-        value = _json(self._command(['docker', '--context', AH.CONTEXT, 'container', 'inspect', AH.NAME]))
-        C.require(type(value) is list and len(value) == 1, 'SCOPE_INVALID')
-        container = value[0]
-        C.require(container['Config']['Labels'].get(AH.LABEL) == 'agenthouse-local' and
-                  container['Config']['Image'] == AH.IMAGE and container['State']['Running'] is True,
+        C.require(type(context) is list and len(context) == 1 and type(context[0]) is dict,
                   'SCOPE_INVALID')
-        ports = container['NetworkSettings']['Ports'].get('8123/tcp')
+        endpoints = context[0].get('Endpoints')
+        C.require(type(endpoints) is dict and type(endpoints.get('docker')) is dict, 'SCOPE_INVALID')
+        host = endpoints['docker'].get('Host')
+        C.require(type(host) is str and host.startswith('unix://') and
+                  host.endswith('/.colima/mac-studio-solo/docker.sock'), 'SCOPE_INVALID')
+        value = _json(self._command(['docker', '--context', AH.CONTEXT, 'container', 'inspect', AH.NAME]))
+        C.require(type(value) is list and len(value) == 1 and type(value[0]) is dict,
+                  'SCOPE_INVALID')
+        container = value[0]
+        config, state, network = (container.get(key) for key in ('Config', 'State', 'NetworkSettings'))
+        C.require(type(config) is dict and type(config.get('Labels')) is dict and
+                  type(state) is dict and type(network) is dict and
+                  type(network.get('Ports')) is dict, 'SCOPE_INVALID')
+        C.require(config['Labels'].get(AH.LABEL) == 'agenthouse-local' and
+                  config.get('Image') == AH.IMAGE and state.get('Running') is True,
+                  'SCOPE_INVALID')
+        ports = network['Ports'].get('8123/tcp')
         C.require(type(ports) is list and len(ports) == 1 and ports[0] ==
-                  {'HostIp': '127.0.0.1', 'HostPort': '18123'}, 'SCOPE_INVALID')
+                  {'HostIp': '127.0.0.1', 'HostPort': '18123'} and
+                  all(binding is None for port, binding in network['Ports'].items()
+                      if port != '8123/tcp'), 'SCOPE_INVALID')
         path = AH.STATE / 'credential.json'
         parent, before = path.parent.lstat(), path.lstat()
         C.require(stat.S_ISDIR(parent.st_mode) and parent.st_uid == os.getuid() and
