@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import os
+import pwd
 import re
 
 from tools.local_experiment.finops import contract as C
@@ -48,10 +50,10 @@ def _context(raw):
     # A suffix match alone also accepts a socket in an unrelated directory.
     # Reject control characters and traversal-like user segments as well.
     # This is a path scope check, not authentication of the daemon at the path.
-    match = (re.fullmatch(
-        r'unix:///Users/([A-Za-z0-9][A-Za-z0-9._-]*)/\.colima/mac-studio-solo/docker\.sock', host)
-        if type(host) is str else None)
-    require(match is not None and '..' not in match[1])
+    home = pwd.getpwuid(os.getuid()).pw_dir
+    require(type(host) is str and home.startswith('/') and
+            all(part not in ('', '.', '..') for part in home.split('/')[1:]) and
+            host == 'unix://' + home + '/.colima/mac-studio-solo/docker.sock')
     return host
 
 

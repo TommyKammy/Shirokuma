@@ -230,9 +230,14 @@ class Backend:
         endpoints = context[0].get('Endpoints')
         C.require(type(endpoints) is dict and type(endpoints.get('docker')) is dict, 'SCOPE_INVALID')
         host = endpoints['docker'].get('Host')
-        C.require(type(host) is str and host.startswith('unix:///Users/') and
-                  host.endswith('/.colima/mac-studio-solo/docker.sock') and
-                  '..' not in host.split('/'), 'SCOPE_INVALID')
+        # A socket in another local account is not this profile's endpoint.
+        # Use the OS account record, not caller-controlled HOME or Docker output.
+        import pwd
+        home = pwd.getpwuid(os.getuid()).pw_dir
+        C.require(type(host) is str and home.startswith('/') and
+                  host == 'unix://' + home + '/.colima/mac-studio-solo/docker.sock' and
+                  all(part not in ('.', '..', '') for part in home.split('/')[1:]),
+                  'SCOPE_INVALID')
         value = _json(self._command(['docker', '--context', AH.CONTEXT, 'container', 'inspect', AH.NAME]))
         C.require(type(value) is list and len(value) == 1 and type(value[0]) is dict,
                   'SCOPE_INVALID')

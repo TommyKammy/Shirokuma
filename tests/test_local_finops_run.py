@@ -385,7 +385,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(backend.server, 'https://127.0.0.1:6443')
 
     def test_agenthouse_fixed_read_reuses_client_without_starting_and_rejects_foreign_port(self):
-        context = [{'Name': R.AH.CONTEXT, 'Endpoints':{'docker':{'Host':'unix:///Users/test/.colima/mac-studio-solo/docker.sock'}}}]
+        context = [{'Name': R.AH.CONTEXT, 'Endpoints':{'docker':{'Host':self._inference_socket()}}}]
         owned = [{'Config':{'Labels':{R.AH.LABEL:'agenthouse-local'},'Image':R.AH.IMAGE},
                   'State':{'Running':True},'NetworkSettings':{'Ports':{'8123/tcp':[
                       {'HostIp':'127.0.0.1','HostPort':'18123'}]}}}]
@@ -409,7 +409,7 @@ class RuntimeTests(unittest.TestCase):
             factory.assert_not_called()
 
     def test_agenthouse_malformed_inspection_refuses_before_credentials(self):
-        context = {'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': 'unix:///Users/test/.colima/mac-studio-solo/docker.sock'}}}
+        context = {'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}
         owned = [{'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
                   'State': {'Running': True}, 'NetworkSettings': {'Ports': {'8123/tcp': [
                       {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}]
@@ -429,7 +429,7 @@ class RuntimeTests(unittest.TestCase):
             client.assert_not_called()
 
     def test_agenthouse_inference_refuses_unexpected_published_port(self):
-        context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': 'unix:///Users/test/.colima/mac-studio-solo/docker.sock'}}}]
+        context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
         container = [{'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
                       'State': {'Running': True}, 'NetworkSettings': {'Ports': {
                           '8123/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '18123'}],
@@ -444,7 +444,8 @@ class RuntimeTests(unittest.TestCase):
     def test_agenthouse_inference_refuses_context_path_alias_before_container_read(self):
         for name, host in ((R.AH.CONTEXT, 'unix:///Users/test/../other/.colima/mac-studio-solo/docker.sock'),
                            (R.AH.CONTEXT, 'unix:///foreign/.colima/mac-studio-solo/docker.sock'),
-                           ('unrelated', 'unix:///Users/test/.colima/mac-studio-solo/docker.sock')):
+                           (R.AH.CONTEXT, 'unix:///Users/another-user/.colima/mac-studio-solo/docker.sock'),
+                           ('unrelated', self._inference_socket())):
             backend = R.Backend()
             context = [{'Name': name, 'Endpoints': {'docker': {'Host': host}}}]
             with self.subTest(host=host), patch.object(backend, '_command', return_value=json.dumps(context)) as command, \
@@ -452,6 +453,12 @@ class RuntimeTests(unittest.TestCase):
                     self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
                 backend.inference(NOW)
             command.assert_called_once(); client.assert_not_called()
+
+    @staticmethod
+    def _inference_socket():
+        import os
+        import pwd
+        return 'unix://' + pwd.getpwuid(os.getuid()).pw_dir + '/.colima/mac-studio-solo/docker.sock'
 
     def test_fixed_command_enforces_live_limit_kills_only_owned_group_and_reaps(self):
         backend = R.Backend()

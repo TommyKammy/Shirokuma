@@ -1,5 +1,7 @@
 from copy import deepcopy
 import json
+import os
+import pwd
 import unittest
 from unittest.mock import Mock, patch
 
@@ -10,7 +12,7 @@ from test_local_finops_run import storage_complete, docker_storage_complete, mlf
 
 
 def fixture():
-    context = [{'Name':D.AH.CONTEXT,'Endpoints':{'docker':{'Host':'unix:///Users/example/.colima/mac-studio-solo/docker.sock'}}}]
+    context = [{'Name':D.AH.CONTEXT,'Endpoints':{'docker':{'Host':'unix://' + pwd.getpwuid(os.getuid()).pw_dir + '/.colima/mac-studio-solo/docker.sock'}}}]
     source = '/var/lib/docker/volumes/' + D.AH.VOLUME + '/_data'
     container = [{'Id':'a'*64,'Name':'/'+D.AH.NAME,'Config':{'Image':D.AH.IMAGE,
                   'Labels':{D.AH.LABEL:'agenthouse-local'},'Env':['PRIVATE_SECRET=do-not-publish']},
@@ -127,6 +129,7 @@ class DockerStorageTests(unittest.TestCase):
 
     def test_context_reference_refuses_foreign_or_alias_socket(self):
         for host in ('unix:///tmp/foreign/.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/another-user/.colima/mac-studio-solo/docker.sock',
                      'unix:///Users/example/other/.colima/mac-studio-solo/docker.sock',
                      'unix:///Users/example/../.colima/mac-studio-solo/docker.sock',
                      'unix:///Users//.colima/mac-studio-solo/docker.sock',

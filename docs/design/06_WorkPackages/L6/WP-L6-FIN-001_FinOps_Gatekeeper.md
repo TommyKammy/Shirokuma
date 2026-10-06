@@ -12,6 +12,26 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: bind two Docker socket scopes to the OS account (offline)
+
+The inference reader formerly accepted another account's syntactically valid
+`/Users/.../.colima/mac-studio-solo/docker.sock` before a container or credential
+read; the independent volume-reference reader also accepted such a path as an
+observed reference. Both now require the exact socket beneath the current UID's
+OS account home (not caller `HOME` or a Docker-provided owner), with canonical
+path components. Foreign-account negatives and current-account fixtures pass.
+`make test-local-finops`: 298 tests, seven Linux-only skips;
+`make verify-local-experiment`, `make verify-design-context`, supply-chain
+secret scan and `git diff --check` passed. An attempted `make scan-secrets`
+failed because that target does not exist; the script actually used by
+`verify-security` was then run directly and passed. Colima `mac-studio-solo`
+was freshly listed Stopped. No live Docker/VM/API read, credential access,
+retained report/volume/backup change or measured AgentHouse bytes (`null /
+NOT_MEASURED`). An OS home pathname does not authenticate a Unix socket or
+daemon, prevent symlink redirection or establish exclusive ownership. Revert
+only these two checks and fixture updates if necessary; retain saved records.
+Direct original Vault sync remains pending outside this checkout.
+
 ## 2026-10-06: inference Docker context path attribution (offline)
 
 Separately from nested shape and published-port validation, a context reply

@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: FinOps Docker socket account binding (offline)
+
+WP-L6-FIN-001: inference and independent volume-reference readers now scope
+their Docker context socket to the current UID's OS-account home instead of
+accepting a different account's canonical-looking socket. Focused FinOps 298
+tests (seven Linux-only skips), full local verifier, design-context and direct
+secret scan passed. `make scan-secrets` was an invalid target, then the
+repository's actual scan script passed. Dedicated Colima was freshly Stopped;
+no live Docker read, credential access, retained data/backup mutation or
+AgentHouse byte measurement (`null / NOT_MEASURED`). Lexical identity cannot
+authenticate the socket/daemon or grant operator acceptance. Roll back only
+these guards/tests without touching retained records. Original Vault sync
+pending outside checkout.
+
 ## 2026-10-06: inference context socket alias (offline)
 
 WP-L6-FIN-001: three foreign-name/path or parent-segment context replies
