@@ -103,6 +103,14 @@ class RuntimeTests(unittest.TestCase):
                     self.assertFalse(R._complete_list(reply, kind))
             self.assertTrue(R._complete_list(valid, kind))
 
+    def test_component_lists_refuse_unexpected_top_level_fields(self):
+        for kind in ('PodList', 'NodeList'):
+            valid = {'kind': kind, 'apiVersion': 'v1', 'items': [], 'metadata': {}}
+            for extra in ({'status': {'reason': 'partial'}}, {'itemsExtra': [1]}):
+                with self.subTest(kind=kind, extra=extra):
+                    self.assertFalse(R._complete_list({**valid, **extra}, kind))
+            self.assertTrue(R._complete_list(valid, kind))
+
     def backend(self):
         value = Mock()
         value.now.return_value = NOW
@@ -224,6 +232,13 @@ class RuntimeTests(unittest.TestCase):
                     value.replace('74%', '\ud800%')):
             with self.subTest(bad=repr(bad)), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
                 R.parse_disk(bad)
+
+    def test_df_refuses_control_characters_in_filesystem_identity(self):
+        value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        for device in ('/dev/vda1\x00shadow', '/dev/vda1\x1b[31m', '/dev/vda1\x7f'):
+            with self.subTest(device=repr(device)), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
+                R.parse_disk(value.replace('/dev/vda1', device))
+        self.assertEqual(R.parse_disk(value), (1024000, 256000))
 
     def test_vm_disk_refuses_wrong_architecture_before_df(self):
         backend = R.Backend()

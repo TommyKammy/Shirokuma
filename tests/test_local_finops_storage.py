@@ -575,6 +575,21 @@ class StorageTests(unittest.TestCase):
                 with self.subTest(index=index, key=key), self.assertRaises(S.StorageError):
                     S._collect_one(backend, 'seaweedfs')
 
+    def test_storage_list_refuses_unexpected_top_level_fields_on_both_reads(self):
+        w, pods, _, pvc, pv = objects('seaweedfs')
+        original = [w, {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': pods},
+                    pvc, pv, deepcopy(w),
+                    {'kind': 'PodList', 'apiVersion': 'v1', 'metadata': {}, 'items': deepcopy(pods)},
+                    deepcopy(pvc), deepcopy(pv)]
+        for index in (1, 5):
+            for field in ('status', 'itemsExtra'):
+                replies = deepcopy(original)
+                replies[index][field] = {'partial': True}
+                backend = Mock(); backend.now.return_value = NOW
+                backend.storage_get.side_effect = replies
+                with self.subTest(index=index, field=field), self.assertRaises(S.StorageError):
+                    S._collect_one(backend, 'seaweedfs')
+
     def test_storage_collection_rejects_storage_semantics_changed_between_reads(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             w, p, _, c, v = objects(component)

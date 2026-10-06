@@ -46,9 +46,11 @@ def _complete_list(value, kind):
     if type(value) is not dict:
         return False
     metadata = value.get('metadata', {})
-    return (value.get('kind') == kind and value.get('apiVersion') == 'v1' and
-            not any(type(key) is str and key.lower() in ('kind', 'apiversion', 'items', 'metadata')
-                    and key not in ('kind', 'apiVersion', 'items', 'metadata') for key in value) and
+    # A typed Kubernetes list has only TypeMeta, ListMeta and items; an
+    # unrecognized sibling must not silently describe a partial list.
+    return (set(value) in ({'kind', 'apiVersion', 'items'},
+                           {'kind', 'apiVersion', 'items', 'metadata'}) and
+            value.get('kind') == kind and value.get('apiVersion') == 'v1' and
             type(metadata) is dict and
             not any(type(key) is str and key.lower() in ('continue', 'remainingitemcount')
                     and key not in ('continue', 'remainingItemCount') for key in metadata) and
@@ -88,7 +90,10 @@ def parse_disk(raw):
               lines[0].split() == ['Filesystem', '1024-blocks', 'Used', 'Available',
                                    'Capacity', 'Mounted', 'on'], 'DISK_INVALID')
     fields = lines[1].split()
+    # Do not accept control-bearing device identifiers as capacity provenance.
     C.require(len(fields) == 6 and fields[0] and fields[5].startswith('/') and
+              all(ord(char) >= 32 and ord(char) != 127 and not 128 <= ord(char) <= 159
+                  for char in fields[0]) and
               all(len(fields[i]) <= 19 and fields[i].isascii() and fields[i].isdigit()
                   for i in (1, 2, 3)) and
               fields[4].endswith('%') and fields[4][:-1].isascii() and

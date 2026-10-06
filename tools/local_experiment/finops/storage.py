@@ -381,8 +381,9 @@ def collect(backend):
 
 def _complete_pod_list(response):
     metadata = response.get('metadata', {})
-    return (not any(type(key) is str and key.lower() in ('kind', 'apiversion', 'items', 'metadata')
-                    and key not in ('kind', 'apiVersion', 'items', 'metadata') for key in response) and
+    # Extra siblings are not part of a Kubernetes PodList envelope.
+    return (set(response) in ({'kind', 'apiVersion', 'items'},
+                              {'kind', 'apiVersion', 'items', 'metadata'}) and
             type(metadata) is dict and
             not any(type(key) is str and key.lower() in ('continue', 'remainingitemcount')
                     and key not in ('continue', 'remainingItemCount') for key in metadata) and

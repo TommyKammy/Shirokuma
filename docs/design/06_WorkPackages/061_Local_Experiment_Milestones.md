@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.400"
+version: "5.401"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed FinOps list and disk source envelopes (offline)
+
+WP-L6-FIN-001: CPU/memory PodList, NodeList and both storage PodList reads
+refuse unexpected top-level fields; VM `df` filesystem identities refuse
+control characters. Eleven independent negatives failed before repair;
+focused FinOps 287 tests pass (seven Linux-only skips). Full
+`make verify-local-experiment`, design-context, scoped secret scan and diff
+check pass (the fake Dagster worker failure is an intentional negative test).
+Dedicated Colima
+freshly listed Stopped. No live API/VM, retained report, volume or backup
+change, or AgentHouse used-byte claim (`null / NOT_MEASURED`). Offline fixture
+checks do not authenticate sources, prove atomicity or grant operator
+acceptance. Restore only scoped guards/tests if needed, retaining saved
+evidence; direct original Vault sync pending outside checkout.
 
 ## 2026-10-06: VM command UTF-8 and disk mount scope (offline)
 

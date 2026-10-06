@@ -5,12 +5,30 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.198"
+version: "0.199"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed list envelopes and disk identity controls (offline)
+
+Three independent negative boundaries: unexpected top-level keys on the
+CPU/memory PodList or NodeList, and on either storage PodList read, no longer
+lend a complete scoped list; a `df -Pk` filesystem identity containing control
+characters no longer lends VM free capacity. Four component-list, four storage-
+list and three disk negatives failed before repair. Canonical envelopes,
+optional absent list metadata and the ordinary disk row remain accepted;
+`make test-local-finops` passed 287 cases (seven Linux-only skips). Full
+`make verify-local-experiment`, design-context, scoped secret scan and diff
+check passed; the fake Dagster worker failure in the verifier is an intentional
+negative test. Dedicated
+Colima was freshly listed Stopped. No live API/VM, report/volume/backup change
+or AgentHouse used-byte measurement (`null / NOT_MEASURED`). This does not
+authenticate either producer, make sequential reads atomic or confer operator
+acceptance. Revert only the scoped guards/tests if needed and preserve saved
+records. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-06: VM command decoding and mount attribution (offline)
 
