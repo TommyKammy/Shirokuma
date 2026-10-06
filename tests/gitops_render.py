@@ -280,6 +280,18 @@ def _flatten_resource(value: dict[str, Any], depth: int = 0) -> list[dict[str, A
     if value.get("kind") == "List":
         if depth >= 16:
             raise RenderError("kubectl returned an excessively nested List")
+        metadata = value.get("metadata", {})
+        if not isinstance(metadata, dict):
+            raise RenderError("kubectl returned invalid List metadata")
+        continuation = metadata.get("continue", "")
+        remaining = metadata.get("remainingItemCount", 0)
+        if (
+            not isinstance(continuation, str)
+            or continuation
+            or type(remaining) is not int
+            or remaining != 0
+        ):
+            raise RenderError("kubectl returned an incomplete List")
         items = value.get("items")
         if not isinstance(items, list):
             raise RenderError("Kubernetes List requires an items array")

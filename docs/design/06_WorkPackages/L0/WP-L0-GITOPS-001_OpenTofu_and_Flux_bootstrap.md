@@ -4,13 +4,36 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-05
-version: "0.165"
+updated: 2026-10-06
+version: "0.166"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: local mutating-target refusals and partial List boundary
+
+The historical `gitops-bootstrap` and `gitops-teardown` Make recipes now
+refuse in local mode **before prerequisites**. Their preserved GitHub-writing
+bootstrap and Flux uninstall/OpenTofu destroy commands cannot be reached via
+these targets; external delivery would require a separately reviewed change,
+not an environment-variable override. A fake-tool Make invocation confirms
+both refuse without running their preflights. This prevents these entrypoints
+from making unauthorized writes; it does not replace a safe local bootstrap
+or a data/backup-aware teardown plan. Separately the offline kubectl renderer
+rejects partial Kubernetes `List` responses (continuation token or remaining
+items), including nested lists, instead of interpreting a page as the entire
+resource inventory. Synthetic failures were reproduced before repair; 45
+bootstrap/teardown tests and the full local verifier pass. The full verifier's
+fake Dagster failure output is expected. Design-context and diff checks pass.
+Fresh `colima list --json` reports the dedicated aarch64 profile Stopped;
+no VM start, live API, reconciliation, retained disk/backup read or change.
+Inventory disk/backup, writers and Flux scope before any live §9 step;
+remote Git identity, supply-chain strict admission, and human/operator
+acceptance remain open. To revert, change only the scoped Make guards or
+renderer contract after reviewing authorization; preserve retained evidence
+and resources. Original Vault direct sync remains pending outside checkout.
 
 ## 2026-10-06: scoped reconcile prerequisite (offline)
 

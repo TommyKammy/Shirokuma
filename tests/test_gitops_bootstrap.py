@@ -223,6 +223,27 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
         self.assertEqual(_json_stream('{"kind":"List","items":[{"kind":"List","items":[{"kind":"ConfigMap"}]}]}'),
                          [{"kind": "ConfigMap"}])
 
+    def test_renderer_refuses_partial_resource_lists(self) -> None:
+        for metadata in (
+            {"continue": "next-page"},
+            {"remainingItemCount": 1},
+            {"continue": "next-page", "remainingItemCount": 0},
+            {"remainingItemCount": True},
+            {"continue": None},
+        ):
+            with self.subTest(metadata=metadata), self.assertRaisesRegex(RenderError, "incomplete List"):
+                _json_stream(json.dumps({"kind": "List", "items": [{"kind": "ConfigMap"}], "metadata": metadata}))
+        self.assertEqual(
+            _json_stream(json.dumps({"kind": "List", "items": [{"kind": "ConfigMap"}],
+                                     "metadata": {"continue": "", "remainingItemCount": 0}})),
+            [{"kind": "ConfigMap"}],
+        )
+        with self.assertRaisesRegex(RenderError, "incomplete List"):
+            _json_stream(json.dumps({"kind": "List", "items": [
+                {"kind": "List", "metadata": {"continue": "next-page"},
+                 "items": [{"kind": "ConfigMap"}]}
+            ]}))
+
     def test_helm_renderer_refuses_ambiguous_version_output(self) -> None:
         expected = "v4.2.2+gb05881c\n"
         for output in (
@@ -476,6 +497,32 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             makefile,
         )
         self.assertIn("flux-system", makefile)
+
+    def test_historical_mutating_targets_refuse_before_preflights(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        for target, next_target, reason in (
+            ("gitops-bootstrap", "gitops-status", "GitHub write"),
+            ("gitops-teardown", "colima-start", "retained data"),
+        ):
+            with self.subTest(target=target):
+                recipe = makefile.split(f"\n{target}:", 1)[1].split(
+                    f"\n{next_target}:", 1
+                )[0]
+                first_command = next(line for line in recipe.splitlines() if line.startswith("\t"))
+                self.assertIn(reason, first_command)
+                self.assertIn("exit 1", first_command)
+                self.assertEqual(makefile.split(f"\n{target}:", 1)[1].splitlines()[0], "")
+                result = subprocess.run(
+                    ["make", "--no-print-directory", target, "TOFU=/bin/false", "FLUX=/bin/false"],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(reason, result.stdout)
+                self.assertNotIn("No rule to make target", result.stderr)
 
     def test_gitops_bootstrap_preflights_all_secret_inputs_before_apply(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")

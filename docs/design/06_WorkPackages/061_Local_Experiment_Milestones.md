@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.537"
+version: "5.538"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: local bootstrap/teardown refusal and offline List completeness
+
+WP-L0-GITOPS-001: historical GitHub-writing bootstrap and destructive
+teardown Make entrypoints refuse before prerequisites in local mode; fake-tool
+invocations cannot reach writes. Independently, kubectl renderer rejects a
+partial/nested Kubernetes List rather than flattening incomplete resources.
+Focused negative failed before repair; bootstrap/teardown 45 tests, full local
+verifier, design-context and diff check pass (intentional fake Dagster failure
+in verifier output). Dedicated Colima freshly Stopped; no VM start, GitHub
+write, reconciliation, retained disk/backup inspection or mutation. Live §9,
+authenticated source, writer exclusion, strict gate and operator acceptance
+remain pending; inventory disk/backups and Flux scope before live work. Restore
+only reviewed scoped code if needed, not saved resources or prior failures.
+Original Vault direct sync pending outside checkout.
 
 ## 2026-10-06: reconcile scope and baseline gate (offline)
 

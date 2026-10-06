@@ -150,7 +150,10 @@ flux-version-check:
 	@test "$(FLUX_VERSION)" = v2.9.2 || { echo "pinned flux v2.9.2 is required"; exit 1; }
 	@version="$$( $(FLUX) version --client 2>&1 && printf .)" && test "$$version" = $$'flux: v2.9.2\n.' || { echo "pinned flux v2.9.2 is required without client warnings"; exit 1; }
 
-gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init flux-version-check
+# Historical GitHub bootstrap is retained for external-delivery review, but local
+# mode must not execute even its preflight dependencies or publish to GitHub.
+gitops-bootstrap:
+	@echo "gitops-bootstrap is disabled in local mode: GitHub write requires separate external-delivery authorization"; exit 1
 	@test -n "$${GITHUB_TOKEN:-}" || { echo "GITHUB_TOKEN is required for Flux bootstrap and is never persisted by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_access_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_secret_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
@@ -178,7 +181,9 @@ gitops-reconcile: flux-version-check
 	@$(FLUX) reconcile kustomization shirokuma-catalog-bootstrap -n flux-system --context=$(KUBE_CONTEXT)
 	@$(FLUX) reconcile kustomization shirokuma-catalog -n flux-system --context=$(KUBE_CONTEXT)
 
-gitops-teardown: tofu-init
+# Do not run init or uninstall/destroy against retained lab state in local mode.
+gitops-teardown:
+	@echo "gitops-teardown is disabled in local mode: retained data and backup safety require a separate reviewed plan"; exit 1
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_access_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_secret_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_application_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_access_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
