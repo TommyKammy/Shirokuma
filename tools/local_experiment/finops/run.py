@@ -314,7 +314,15 @@ class Backend:
         C.require(not raw or (raw.endswith('\n') and all(line.strip() for line in raw.split('\n')[:-1])),
                   'INFERENCE_INVALID')
         try:
-            rows = [_json(line) for line in raw.split('\n')[:-1]] if raw else []
+            def unique_fields(pairs):
+                value = {}
+                for key, field in pairs:
+                    if key in value:
+                        raise ValueError('duplicate inference field')
+                    value[key] = field
+                return value
+            rows = [json.loads(line, object_pairs_hook=unique_fields)
+                    for line in raw.split('\n')[:-1]] if raw else []
         except (ValueError, C.FinOpsError):
             raise C.FinOpsError('INFERENCE_INVALID') from None
         C.require(all(type(line) is dict for line in rows), 'INFERENCE_INVALID')

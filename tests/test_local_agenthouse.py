@@ -200,6 +200,7 @@ class AgentHouseTests(unittest.TestCase):
             with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock:
                 clock.now.return_value.strftime.return_value = 'fixed'
                 for reply in ('not json\n', '{"event_id":1}', '[]\n', '{}\n\n',
+                              '{"event_id":"a","event_id":"b"}\n',
                               ' ' * (8 * 1024 * 1024 + 1)):
                     with self.subTest(reply=reply[:32]):
                         client.query.return_value = reply

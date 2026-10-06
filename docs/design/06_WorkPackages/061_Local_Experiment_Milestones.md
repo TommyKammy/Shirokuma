@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.424"
+version: "5.425"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: duplicate JSONEachRow keys fail closed (offline)
+
+WP-L6-FIN-001 and WP-L2-CH-001: FinOps inference and AgentHouse export now
+reject duplicate object keys rather than accepting the last declared value.
+Focused FinOps 311 tests (seven Linux-only skips) and AgentHouse 28 tests pass;
+`make verify-local-experiment` passes (the fake Dagster worker error is an
+intentional negative diagnostic). First combined unittest invocation could not
+import the FinOps test module outside the test discovery path; `make
+test-local-finops` succeeded. Dedicated Colima freshly Stopped; no live query,
+credential, report, retained volume or backup touched. AgentHouse volume bytes
+stay `null / NOT_MEASURED`. No producer authentication or operator acceptance.
+Rollback: remove only the two scoped parser guards and fixtures, preserving
+saved records. Original Vault sync pending outside this checkout.
 
 ## 2026-10-06: independent FinOps inference reply completeness (offline)
 

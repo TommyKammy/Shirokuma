@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline export duplicate-field guard
+
+The bounded JSONEachRow export now refuses repeated keys within any object
+before creating a private report; a repeated event identity is no longer
+silently collapsed. AgentHouse focused 28 tests and the local verifier passed.
+The dedicated Colima profile was freshly Stopped: no live export, retained
+credential/report/volume or backup was modified. This check does not authenticate
+the producer, prove schema completeness or make disk writes atomic. Restore
+only the parser/test if necessary; retain saved records and inspect any failed
+export before recovery. Original Vault sync pending outside checkout; no
+operator acceptance is claimed.
+
 ## 2026-10-06 offline existing-volume retention and Docker reply boundaries
 
 An existing owned container now refuses startup when its named volume is absent,

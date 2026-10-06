@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.214"
+version: "0.215"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: refuse ambiguous inference JSON keys (offline)
+
+The fixed JSONEachRow inference reply now rejects duplicate object keys before
+projecting declared event counts; a repeated `events` key no longer silently
+wins by position. Empty output still means zero reported rows. Focused FinOps
+311 tests (seven Linux-only skips) and the local verifier passed. The dedicated
+Colima profile was freshly Stopped; no live query, retained credential, report,
+volume or backup changed. AgentHouse volume usage stays `null / NOT_MEASURED`.
+This is only reply-shape validation, not producer authenticity, billing proof or
+operator acceptance. Revert the parser/test alone if needed; retain saved
+evidence. Original Vault synchronization pending outside the checkout.
 
 ## 2026-10-06: refuse partial inference JSONEachRow replies (offline)
 

@@ -324,11 +324,18 @@ def export(client: Client) -> Path:
         raise AgentHouseError('local AgentHouse export exceeds the response limit')
     # A zero-row export is empty; otherwise JSONEachRow must have complete object lines.
     try:
+        def unique_fields(pairs):
+            value = {}
+            for key, field in pairs:
+                if key in value:
+                    raise ValueError('duplicate export field')
+                value[key] = field
+            return value
         if rows and (not rows.endswith('\n') or any(
-                not line or not isinstance(json.loads(line), dict)
+                not line or not isinstance(json.loads(line, object_pairs_hook=unique_fields), dict)
                 for line in rows.splitlines())):
             raise AgentHouseError('local AgentHouse export is not JSONEachRow')
-    except json.JSONDecodeError:
+    except ValueError:
         raise AgentHouseError('local AgentHouse export is not JSONEachRow') from None
     name = "pawprints-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".jsonl"
     path = STATE / name

@@ -483,7 +483,8 @@ class RuntimeTests(unittest.TestCase):
                         context if args[1] == 'context' else container)):
                 client.query.return_value = ''
                 self.assertEqual(backend.inference(NOW), [])
-                for reply in (' ', '\n', '{}', '{}\n\n', '{}\n \n'):
+                for reply in (' ', '\n', '{}', '{}\n\n', '{}\n \n',
+                              '{"events":1,"events":2}\n'):
                     with self.subTest(reply=reply), self.assertRaisesRegex(R.C.FinOpsError, 'INFERENCE_INVALID'):
                         client.query.return_value = reply
                         backend.inference(NOW)
