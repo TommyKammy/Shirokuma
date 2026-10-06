@@ -82,6 +82,12 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
                 W._mountpoints(raw)
 
+    def test_mountinfo_refuses_ambiguous_access_options(self):
+        row = '2 1 8:1 /some /fixture/child rw,nosuid - ext4 /dev/a rw,relatime\n'
+        for options in ('rw,ro', 'rw,rw', 'rw,nosuid,ro', 'rw,nosuid,nosuid'):
+            with self.subTest(options=options), self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
+                W._mountpoints(row.replace('rw,nosuid -', options + ' -'))
+
     def test_mountinfo_invalid_utf8_is_scoped(self):
         from unittest.mock import mock_open
         with patch('builtins.open', mock_open(read_data=b'\xff\n')):

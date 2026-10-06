@@ -93,6 +93,10 @@ def _mount(raw,mount_id):
         require(not re.fullmatch(r'/proc/(?:[0-9]+|self|thread-self)(?:/.*)?',path))
     require(len(matches)==1 and matches[0][0]==mount_id)
     _,left,right=matches[0]
+    mount_options=left[5].split(',')
+    require(mount_options[0] in ('rw','ro') and
+            len(mount_options)==len(set(mount_options)) and
+            not any(option in ('rw','ro') for option in mount_options[1:]))
     # Superblock options must describe a single, unambiguous access/visibility
     # mode; membership checks alone admit contradictory or repeated tokens.
     options=right[2].split(',')
@@ -102,7 +106,7 @@ def _mount(raw,mount_id):
             all(option in ('rw','ro','nosuid','nodev','noexec','relatime','hidepid=0','gid=0')
                 for option in options) and
             not any(option.startswith('hidepid=') and option!='hidepid=0'
-                    for option in left[5].split(',')+options))
+                     for option in mount_options+options))
 
 
 def _lf_records(raw, maximum):

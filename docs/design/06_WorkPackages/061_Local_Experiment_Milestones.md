@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.444"
+version: "5.445"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent mount option ambiguity guards (offline)
+
+WP-L6-FIN-001 refuses contradictory, absent or repeated mount-side procfs
+access options and duplicate visibility tokens. Separately its private volume
+worker refuses conflicting or repeated mount access options. Ten negative
+fixture variants failed before repair; focused procfs 10 and worker 15 tests
+(three Linux-only skips) and full `make verify-local-experiment` pass (the fake
+Dagster failure is intentional). Dedicated Colima freshly Stopped; no live
+guest read or retained volume/report/backup access or change, AgentHouse bytes
+remain `null / NOT_MEASURED`. Fixture checks do not establish producer
+authenticity, safe scanning, cleanup or operator acceptance. Restore only the
+scoped readers/tests while retaining saved evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent smoke report and procfs option boundaries (offline)
 

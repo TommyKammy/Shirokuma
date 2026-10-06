@@ -98,6 +98,8 @@ def _mountpoints(raw):
             require(match is not None and 0 < int(match[1]) <= 2**63 - 1)
         mount_options = fields[5].split(',')
         require(mount_options[0] in ('ro', 'rw') and
+                len(mount_options) == len(set(mount_options)) and
+                not any(option in ('ro', 'rw') for option in mount_options[1:]) and
                 all(re.fullmatch(r'[A-Za-z0-9_.=:+/-]+', item) for item in mount_options))
         require(all(re.fullmatch(r'[^,\s]+', item) for item in fields[separator + 3].split(',')))
         # mountinfo escapes spaces, tabs, newlines and backslashes as octal.

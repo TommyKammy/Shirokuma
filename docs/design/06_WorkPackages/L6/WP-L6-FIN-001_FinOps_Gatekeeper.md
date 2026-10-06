@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.229"
+version: "0.230"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent mount-option ambiguity guards (offline)
+
+The caller-supplied procfs fixture previously projected a visible `/proc` from
+contradictory, absent or repeated mount-side access options, including repeated
+visibility tokens. Independently, the private volume worker accepted repeated
+or contradictory access tokens in mountinfo before projecting mountpoints.
+Six procfs and four worker negative variants failed before repair; focused
+procfs 10 tests and worker 15 tests (three Linux-only skips) pass afterward.
+`make verify-local-experiment` passes (its fake Dagster worker failure is an
+intentional negative fixture). Dedicated Colima was freshly Stopped; no live
+guest read, retained volume/report/backup access or mutation, and AgentHouse
+usage stays `null / NOT_MEASURED`. These checks only validate fixture syntax;
+they cannot authenticate kernel provenance, establish safe retained-volume
+measurement or grant operator acceptance. Restore only the two scoped parsers
+and tests, preserving saved resources. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06 procfs superblock option ambiguity (offline)
 
