@@ -444,6 +444,26 @@ class RuntimeTests(unittest.TestCase):
             command.assert_not_called()
             client.assert_not_called()
 
+    def test_inference_refuses_unencodable_query_reply(self):
+        context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
+        container = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
+                      'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+                      'Mounts': self._inference_mounts(), 'State': {'Running': True},
+                      'NetworkSettings': {'Ports': {'8123/tcp': [
+                          {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}]
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp)
+            credential = state / 'credential.json'
+            credential.write_text('{"password":"fixture"}')
+            credential.chmod(0o600)
+            client = Mock()
+            client.query.return_value = '\udcff'
+            backend = R.Backend()
+            with patch.object(R.AH, 'STATE', state), patch.object(R.AH, 'Client', return_value=client), \
+                    patch.object(backend, '_command', side_effect=[json.dumps(context), json.dumps(container)]), \
+                    self.assertRaises(R.C.FinOpsError):
+                backend.inference(NOW)
+
     def test_agenthouse_malformed_inspection_refuses_before_credentials(self):
         context = {'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}
         owned = [{'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},

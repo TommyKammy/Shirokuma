@@ -303,7 +303,12 @@ class Backend:
         except (OSError, ValueError):
             raise C.FinOpsError('SCOPE_INVALID') from None
         raw = client.query(sql)
-        C.require(len(raw.encode()) <= 1024**2, 'READ_LIMIT')
+        C.require(type(raw) is str, 'INFERENCE_INVALID')
+        try:
+            size = len(raw.encode('utf-8'))
+        except UnicodeError:
+            raise C.FinOpsError('INFERENCE_INVALID') from None
+        C.require(size <= 1024**2, 'READ_LIMIT')
         return [_json(line) for line in raw.splitlines() if line.strip()]
 
     def local_processes(self):

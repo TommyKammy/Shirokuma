@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: refuse unencodable inference reply (offline)
+
+An unencodable synthetic AgentHouse query string previously raised an unscoped
+Unicode exception at the FinOps byte-limit check. Inference now requires a
+string and reports `INFERENCE_INVALID` for unencodable text without projecting
+a partial result; valid replies retain the existing byte cap. The negative
+failed before repair; focused FinOps 310 tests (seven Linux-only skips), the
+post-change local verifier, design-context, secret scan and diff check passed.
+The dedicated Colima profile was freshly Stopped: no live query, saved report,
+credential, volume or backup changed and AgentHouse used bytes remain `null /
+NOT_MEASURED`. This fixture does not authenticate the query producer or prove
+operator acceptance. Revert only the reply guard/test if necessary; retain
+saved evidence. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: pin the inference credential read (offline)
 
 The inference collector now opens the private state directory and credential

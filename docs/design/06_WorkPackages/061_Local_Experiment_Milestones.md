@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.417"
+version: "5.418"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: FinOps inference reply encoding (offline)
+
+WP-L6-FIN-001: an unencodable AgentHouse query reply now fails
+`INFERENCE_INVALID` instead of leaking a raw Unicode exception at the size
+check. Negative fixture failed before repair; focused FinOps 310 tests pass
+(seven Linux-only skips), as do the post-change local verifier, design-context,
+secret scan and diff check. The verifier's fake Dagster worker error is an
+intentional negative diagnostic. Dedicated Colima freshly Stopped; no live query,
+credential, retained report/volume/backup change or AgentHouse byte measurement
+(`null / NOT_MEASURED`). Producer authenticity and operator acceptance are not
+established. Roll back only this reply guard/test, preserving saved evidence;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: AgentHouse private state, exclusive export and response decoding (offline)
 
