@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.493"
+version: "5.494"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent nonterminated Docker finish chronology (offline)
+
+WP-L6-FIN-001 refuses a future finish timestamp for an unrelated running,
+paused or restarting container. Three formerly eligible synthetic negatives
+and equal-time positives pass; focused preflight 26 tests. Dedicated Colima
+freshly Stopped. No Docker/VM or retained volume/report/backup read/change.
+Metadata consistency is not producer authentication, continuous writer
+exclusion, volume traversal authorization or operator acceptance; AgentHouse
+bytes remain `null / NOT_MEASURED`. Preserve saved resources; revert only this
+guard/test if verified runtime metadata requires it. Original Vault sync
+pending outside checkout. Final combined tree passes
+`make verify-local-experiment` (intentional fake Dagster failure),
+`make verify-design-context` and `git diff --check`; private verifier log:
+`tmp/local-experiment/attempt-206-verify.log`.
 
 ## 2026-10-06: independent SQL request bound and partial HTTP range (offline)
 

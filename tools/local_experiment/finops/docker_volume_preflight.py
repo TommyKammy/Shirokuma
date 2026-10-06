@@ -81,6 +81,9 @@ def _lifecycle(container, observed):
     # Even an unrelated running writer cannot have started after this
     # inventory was observed. Stable snapshots do not cure a future start.
     require(parsed[0] <= observed)
+    # Docker may retain a prior FinishedAt for a running/restarted container.
+    # It still cannot describe a termination after this observation.
+    require(parsed[1] <= observed)
     # A terminated container with a finish before its start cannot be
     # evidence for a coherent inventory, even if both samples agree.
     if state['Status'] in ('exited', 'dead'):

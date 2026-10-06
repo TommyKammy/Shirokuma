@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.267"
+version: "0.268"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 nonterminated-container finish chronology (offline)
+
+The standalone two-snapshot metadata preflight now refuses a future
+`FinishedAt` even for unrelated running, paused or restarting containers.
+Docker may retain a prior finish when a container restarts, but a finish after
+the inventory observation cannot describe that history. Three synthetic
+negatives previously appeared eligible; equal-time controls and focused 26
+preflight tests pass. Dedicated Colima freshly Stopped; no Docker/VM request
+or retained volume/report/backup access/change. This checks supplied metadata,
+not daemon identity or continuous writer exclusion; traversal stays forbidden,
+AgentHouse bytes `null / NOT_MEASURED`, operator acceptance open. If verified
+runtime metadata differs, revert only this guard/test and retain saved records.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06 all-container start chronology (offline)
 
