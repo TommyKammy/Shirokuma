@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.215"
+version: "0.216"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: reject nonrepresentable inference reply numbers (offline)
+
+The fixed JSONEachRow inference reader refuses `NaN`, signed infinity and
+finite-looking exponents that overflow before projecting events; the existing
+finite-float guard also rejects nonzero exponents rounded to zero. Synthetic
+nonstandard-number cases failed before repair. Focused FinOps 311 tests (seven
+Linux-only skips), local verifier and design-context pass. Dedicated Colima
+was freshly Stopped; no live query, retained credential, report, volume or
+backup changed. AgentHouse volume bytes remain `null / NOT_MEASURED`.
+This parser guard neither authenticates the producer nor proves actual usage
+or operator acceptance. Revert only the scoped parser and fixtures; preserve
+saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: refuse ambiguous inference JSON keys (offline)
 

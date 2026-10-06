@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.426"
+version: "5.427"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: finite JSONEachRow numbers at two independent readers (offline)
+
+WP-L6-FIN-001 inference now refuses `NaN`, `Infinity`, nested `-Infinity` and
+overflowing exponents before projecting counts; WP-L2-CH-001 export additionally
+refuses decimal exponents that overflow or round nonzero values to zero before
+creating a report. Both negative fixtures failed before their repairs. Focused
+FinOps 311 tests (seven Linux-only skips), AgentHouse 28 tests, full
+`make verify-local-experiment`, design-context and diff check pass; the fake
+Dagster worker failure emitted by the verifier is an intentional negative
+fixture. Dedicated Colima freshly Stopped; no live query/export, retained
+credential, report, volume or backup changed. AgentHouse used bytes stay
+`null / NOT_MEASURED`. This is offline parsing, not producer authentication,
+usage acceptance or operator acceptance. Revert only the two parser changes
+and fixtures while preserving saved evidence; original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: AgentHouse export rejects nonstandard JSON numbers (offline)
 

@@ -321,7 +321,9 @@ class Backend:
                         raise ValueError('duplicate inference field')
                     value[key] = field
                 return value
-            rows = [json.loads(line, object_pairs_hook=unique_fields)
+            rows = [json.loads(line, object_pairs_hook=unique_fields,
+                               parse_float=C.finite_json_float,
+                               parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonstandard number')))
                     for line in raw.split('\n')[:-1]] if raw else []
         except (ValueError, C.FinOpsError):
             raise C.FinOpsError('INFERENCE_INVALID') from None

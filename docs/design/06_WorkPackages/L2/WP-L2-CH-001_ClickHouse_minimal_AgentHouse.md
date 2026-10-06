@@ -5,12 +5,23 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-09-16
-version: "0.3"
+version: "0.4"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 offline extreme export exponent guard
+
+An export containing a finite-looking decimal exponent that decodes to
+infinity or rounds a nonzero value to zero is refused before private report
+creation. Synthetic overflow and underflow cases failed before repair; focused
+AgentHouse 28 tests, local verifier and design-context pass. Dedicated Colima
+was freshly Stopped. No live export, retained report, credential, volume or
+backup changed. This does not authenticate producers or validate all Pawprint
+rows. Restore only the scoped parser/fixtures without deleting saved reports;
+original Vault sync pending outside checkout; no operator acceptance.
 
 ## 2026-10-06 offline export nonstandard-number guard
 

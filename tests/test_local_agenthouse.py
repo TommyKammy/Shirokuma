@@ -203,6 +203,7 @@ class AgentHouseTests(unittest.TestCase):
                               '{"event_id":"a","event_id":"b"}\n',
                               '{"value":NaN}\n', '{"value":Infinity}\n',
                               '{"nested":{"value":-Infinity}}\n',
+                              '{"value":1e9999}\n', '{"value":1e-9999}\n',
                               ' ' * (8 * 1024 * 1024 + 1)):
                     with self.subTest(reply=reply[:32]):
                         client.query.return_value = reply

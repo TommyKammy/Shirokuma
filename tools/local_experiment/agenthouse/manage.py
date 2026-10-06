@@ -11,6 +11,7 @@ import http.client
 import math
 import os
 from pathlib import Path
+import re
 import secrets
 import stat
 import subprocess
@@ -333,9 +334,16 @@ def export(client: Client) -> Path:
             return value
         def invalid_constant(_value):
             raise ValueError('nonstandard export number')
+        def finite_float(text):
+            number = float(text)
+            mantissa = re.split('[eE]', text, maxsplit=1)[0]
+            if not math.isfinite(number) or (number == 0 and re.search('[1-9]', mantissa)):
+                raise ValueError('unrepresentable export number')
+            return number
         if rows and (not rows.endswith('\n') or any(
                 not line or not isinstance(json.loads(line, object_pairs_hook=unique_fields,
-                                                      parse_constant=invalid_constant), dict)
+                                                      parse_constant=invalid_constant,
+                                                      parse_float=finite_float), dict)
                 for line in rows.splitlines())):
             raise AgentHouseError('local AgentHouse export is not JSONEachRow')
     except ValueError:
