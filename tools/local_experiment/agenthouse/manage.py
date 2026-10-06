@@ -56,6 +56,37 @@ def invalid_docker_constant(_value):
     raise ValueError('nonstandard Docker inspection number')
 
 
+def bounded_docker_int(text):
+    if len(text.lstrip('-')) > 128:
+        raise ValueError('overlong Docker inspection integer')
+    return int(text)
+
+
+def finite_docker_float(text):
+    if len(text) > 128:
+        raise ValueError('overlong Docker inspection float')
+    number = float(text)
+    mantissa = re.split('[eE]', text, maxsplit=1)[0]
+    if not math.isfinite(number) or (number == 0 and re.search('[1-9]', mantissa)):
+        raise ValueError('unrepresentable Docker inspection number')
+    return number
+
+
+def decode_docker_json(raw):
+    return json.loads(raw, object_pairs_hook=unique_docker_fields,
+                      parse_constant=invalid_docker_constant,
+                      parse_int=bounded_docker_int, parse_float=finite_docker_float)
+
+
+def unique_credential_fields(items):
+    value = {}
+    for key, item in items:
+        if key in value:
+            raise ValueError('duplicate credential field')
+        value[key] = item
+    return value
+
+
 def docker(*args: str, required: bool = True) -> str:
     result = subprocess.run(["docker", "--context", CONTEXT, *args], capture_output=True,
                             text=True, timeout=180)
@@ -66,9 +97,7 @@ def docker(*args: str, required: bool = True) -> str:
 
 def check_context() -> None:
     try:
-        contexts = json.loads(docker("context", "inspect", CONTEXT),
-                              object_pairs_hook=unique_docker_fields,
-                              parse_constant=invalid_docker_constant)
+        contexts = decode_docker_json(docker("context", "inspect", CONTEXT))
         if not isinstance(contexts, list) or len(contexts) != 1:
             raise ValueError('invalid context count')
         data = contexts[0]
@@ -87,8 +116,7 @@ def inspect_owned(kind: str, name: str) -> dict | None:
     if not raw:
         return None
     try:
-        result = json.loads(raw, object_pairs_hook=unique_docker_fields,
-                            parse_constant=invalid_docker_constant)
+        result = decode_docker_json(raw)
         if not isinstance(result, list) or len(result) != 1 or not isinstance(result[0], dict):
             raise ValueError('invalid inspect result')
         data = result[0]
@@ -160,7 +188,8 @@ class Client:
         if credential_bytes is None:
             credential_bytes = read_credential()
         try:
-            credential = json.loads(credential_bytes)
+            credential = json.loads(credential_bytes, object_pairs_hook=unique_credential_fields,
+                                    parse_constant=invalid_docker_constant)
             password = credential['password']
             if type(password) is not str or not password:
                 raise ValueError('invalid credential')

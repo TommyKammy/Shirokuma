@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: bounded Docker numbers and unambiguous AgentHouse credential (offline)
+
+WP-L2-CH-001 refuses extreme Docker context/volume number tokens before
+runtime use and duplicate/nonstandard credential JSON before client HTTP.
+Focused 35 tests and full `make verify-local-experiment` pass; the verifier's
+fake Dagster worker failure is an intentional negative test. Dedicated Colima
+freshly Stopped; no live Docker/HTTP, retained credential, report, volume or
+backup mutation. These fixture checks do not establish producer identity, live
+integration or operator acceptance. Revert only scoped readers/tests without
+removing saved resources. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: independent inference token and Docker number guards (offline)
 
 WP-L6-FIN-001 refuses >128-digit inference integers and >128-character inference

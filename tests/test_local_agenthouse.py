@@ -114,6 +114,21 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaisesRegex(M.AgentHouseError, 'invalid volume inspection'):
                     M.inspect_owned('volume', M.VOLUME)
 
+    def test_unrepresentable_docker_inspection_numbers_fail_before_runtime(self):
+        expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
+        for token in ('1e9999', '1e-9999', '9' * 129, '1.' + '0' * 129):
+            with self.subTest(token=token[:24]):
+                reply = '[{"Endpoints":{"docker":{"Host":' + json.dumps(expected) + '}},"unknown":' + token + '}]'
+                with patch.object(M, 'docker', return_value=reply) as docker:
+                    with self.assertRaisesRegex(M.AgentHouseError, 'context metadata'):
+                        M.check_context()
+                    docker.assert_called_once_with('context', 'inspect', M.CONTEXT)
+                owned = '[{"Labels":{"shirokuma.dev.component":"agenthouse-local"},"unknown":' + token + '}]'
+                with patch.object(M, 'docker', return_value=owned):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'invalid volume inspection'):
+                        M.inspect_owned('volume', M.VOLUME)
+        self.assertEqual(M.decode_docker_json('{"n":1e-2,"i":123}'), {'n': 0.01, 'i': 123})
+
     def test_context_must_be_dedicated_socket(self):
         expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
         for endpoint in ('unix:///var/run/docker.sock',
@@ -167,7 +182,16 @@ class AgentHouseTests(unittest.TestCase):
                 credential.unlink()
                 self.assertEqual(base64.b64decode(M.Client(
                     credential_bytes=b'{"password":"pinned"}').auth).decode(),
-                                  M.USER + ':pinned')
+                                   M.USER + ':pinned')
+
+    def test_ambiguous_credential_json_is_refused_before_http(self):
+        for raw in (b'{"password":"first","password":"last"}',
+                    b'{"password":"valid","nested":{"x":1,"x":2}}',
+                    b'{"password":"valid","unused":NaN}'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
+                M.Client(credential_bytes=raw)
+        self.assertIn('valid', base64.b64decode(M.Client(
+            credential_bytes=b'{"password":"valid"}').auth).decode())
 
     def test_direct_client_refuses_redirected_or_public_state_directory(self):
         with tempfile.TemporaryDirectory() as directory:

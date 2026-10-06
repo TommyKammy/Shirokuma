@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 bounded Docker numeric replies and credential ambiguity (offline)
+
+Context and owned-volume inspection now refuse nonrepresentable floating-point
+exponents and overlong integer/float tokens even in unused metadata. Direct
+client authentication independently refuses repeated credential JSON keys,
+including nested duplicates, and nonstandard numbers. Synthetic negatives and
+ordinary values pass the focused 35 tests; the full local verifier passes (its
+fake Dagster worker failure is an intentional negative fixture). Dedicated
+Colima freshly Stopped; no live Docker or HTTP call, retained credential,
+report, volume or backup changed. Parsing cannot authenticate the daemon or
+credential producer, and neither live behavior nor operator acceptance was
+reverified. Restore only these scoped decoders/tests, preserving saved files;
+original Vault sync remains pending outside this checkout.
+
 ## 2026-10-06 Docker nonstandard number refusal (offline)
 
 Context and owned-volume inspection reject `NaN`, `Infinity` and `-Infinity`
