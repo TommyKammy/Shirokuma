@@ -290,6 +290,15 @@ class Client:
                 # insert/schema query finished. Never retry an ambiguous write.
                 if response.status != 200:
                     raise AgentHouseError('local AgentHouse response status is not a completed query')
+                # ClickHouse can report a query failure after sending HTTP 200
+                # (for example, once a streamed response has begun). The
+                # exception indicator must not become a write acknowledgement.
+                exception_codes = (response.headers.get_all('X-ClickHouse-Exception-Code')
+                                   if hasattr(response.headers, 'get_all') else
+                                   ([value for key, value in response.headers.items()
+                                     if key.lower() == 'x-clickhouse-exception-code']))
+                if exception_codes:
+                    raise AgentHouseError('local AgentHouse response indicates a query exception')
                 # HTTPMessage.get() returns only one of multiple headers. Do
                 # not accept a write acknowledgement with ambiguous framing or
                 # transfer coding, even if the decoded body happens to fit.

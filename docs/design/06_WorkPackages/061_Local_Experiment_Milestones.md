@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.489"
+version: "5.490"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse HTTP exception indicator (offline)
+
+WP-L2-CH-001 refuses `X-ClickHouse-Exception-Code` on a 200 response before
+reading the body or acknowledging a write. Three synthetic exception-header
+values previously succeeded; focused 76 tests pass, with a clean 200 retained.
+Fresh dedicated Colima: Stopped. No live HTTP/Docker or retained credential,
+report, volume or backup access/change. This does not authenticate ClickHouse
+or detect an unmarked streamed error; do not replay uncertain inserts. Restore
+only the scoped guard/test if necessary while preserving saved records.
+Original Vault sync pending outside checkout; no operator acceptance.
 
 ## 2026-10-06: independent dead-container chronology (offline)
 

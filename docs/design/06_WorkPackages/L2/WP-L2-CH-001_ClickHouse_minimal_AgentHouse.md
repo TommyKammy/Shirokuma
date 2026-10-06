@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.37"
+version: "0.38"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 HTTP exception indicator (offline)
+
+The client refuses a 200 response carrying `X-ClickHouse-Exception-Code`
+before reading its body or treating a write as acknowledged. Three synthetic
+header values (including empty and zero) previously returned success; focused
+76 AgentHouse tests pass. A clean 200 remains accepted. This protects only
+responses that carry the indicator; it does not authenticate the server or
+rule out errors concealed in a streamed body. The dedicated Colima profile
+was freshly Stopped; no live HTTP/Docker, retained credential, report, volume
+or backup was accessed or changed. Never replay an uncertain insert. Roll
+back only this guard/test if verified live behavior requires it, preserving
+saved records. Original Vault sync pending outside checkout; no operator
+acceptance claimed.
 
 ## 2026-10-06 ambiguous HTTP response framing (offline)
 
