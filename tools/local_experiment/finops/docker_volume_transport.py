@@ -101,7 +101,10 @@ def collect(backend, *, monotonic=time.monotonic):
     ids_text=read([*docker,'container','ls','-a','--no-trunc',
                    '--format','{{.ID}}'])
     require(type(ids_text) is str and len(ids_text.encode()) <= 16384)
-    ids=ids_text.splitlines()
+    # Docker's --format emits one LF-terminated ID per row. Python splitlines()
+    # also accepts CR and Unicode separators that the producer did not emit.
+    require(ids_text.endswith('\n') and '\r' not in ids_text)
+    ids=ids_text[:-1].split('\n')
     require(1 <= len(ids) <= V.MAX_CONTAINERS and len(set(ids)) == len(ids) and
             all(type(item) is str and len(item) == 64 and
                 all(ch in '0123456789abcdef' for ch in item) for item in ids))

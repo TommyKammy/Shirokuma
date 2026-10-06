@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: independent Docker inventory LF framing (offline)
+
+WP-L6-FIN-001 fixed-volume preflight now refuses Unicode line separators and
+CRLF in the Docker container ID listing before inspecting containers. Three
+negative replies passed before repair; focused transport eight and FinOps 319
+tests pass (seven Linux-only skips). Dedicated Colima freshly Stopped; no live
+daemon access or retained volume/report/backup mutation; AgentHouse bytes stay
+`null / NOT_MEASURED`. This is not daemon authentication, volume measurement or
+operator acceptance. Revert only scoped parser/test, retaining saved records;
+original Vault sync pending outside checkout.
+
 ## 2026-10-06: saved AgentHouse startup security and inspection shape (offline)
 
 WP-L2-CH-001 refuses an existing container missing no-new-privileges or adding

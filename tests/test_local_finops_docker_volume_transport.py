@@ -77,6 +77,20 @@ class VolumeTransportTests(unittest.TestCase):
         with self.assertRaises(T.TransportError):T.collect(tool)
         self.assertEqual(len(calls),1)
 
+    def test_container_listing_requires_docker_lf_framing(self):
+        for separator in ('\u2028', '\r\n', '\x85'):
+            with self.subTest(separator=repr(separator)):
+                tool,calls=backend()
+                original=tool._command.side_effect
+                def changed(args, *, timeout):
+                    raw=original(args,timeout=timeout)
+                    if 'ls' in args:
+                        return raw.replace('\n', separator)
+                    return raw
+                tool._command.side_effect=changed
+                with self.assertRaises(T.TransportError):T.collect(tool)
+                self.assertFalse(any('inspect' in call and 'container' in call for call in calls))
+
     def test_new_container_after_inspection_rejected_by_second_list(self):
         tool,calls=backend();original=tool._command.side_effect;lists=[0]
         def changed(args, *, timeout):

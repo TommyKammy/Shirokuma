@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 fixed Docker inventory LF framing (offline)
+
+The independent volume preflight's fixed `docker container ls --format` reader
+used Python `splitlines()`: Unicode line separators or CRLF between valid IDs
+passed as a complete inventory and could authorize subsequent inspection.
+Three negative reply fixtures passed before repair. The reader now requires
+LF-terminated rows without CR and splits only on LF; canonical inventory still
+passes. Focused transport eight tests and FinOps 319 tests (seven Linux-only
+skips) pass. Dedicated Colima freshly Stopped; no live daemon read, volume
+traversal, retained report or backup mutation; AgentHouse used bytes remain
+`null / NOT_MEASURED`. Framing is not daemon authentication or safe volume
+measurement, and cannot establish operator acceptance. Revert only this reader
+and fixture if needed while retaining saved evidence; original Vault sync
+pending outside checkout.
+
 ## 2026-10-06 inference CRLF framing (offline)
 
 The fixed AgentHouse inference JSONEachRow reader now refuses literal CR,
