@@ -5,7 +5,7 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.253"
+version: "0.254"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
@@ -26,6 +26,12 @@ Docker, exclude continuous writers or authorize traversal:
 `volume_traversal_authorized=False`, AgentHouse bytes `null / NOT_MEASURED`.
 Restore only the scoped path guard/fixture while preserving saved records;
 operator acceptance and original Vault sync remain pending.
+
+Follow-up offline standalone fixture: C1 and unencodable lone-surrogate mount
+paths also passed before the guard was extended. Four further negatives now
+refuse them with `SCOPE_INVALID`; focused preflight 11 tests pass. The full
+verifier above preceded this follow-up, not a second full verifier. No new
+lab or retained-data observation; previous stopped-state observation applies.
 
 ## 2026-10-06 standalone snapshot timestamp refusal (offline)
 

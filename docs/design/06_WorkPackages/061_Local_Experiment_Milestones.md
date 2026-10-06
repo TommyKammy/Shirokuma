@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.474"
+version: "5.475"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -25,6 +25,11 @@ live deduplication, continuous writer exclusion or operator acceptance is
 established. AgentHouse usage remains `null / NOT_MEASURED`; volume traversal
 remains unauthorized. Restore only scoped guards/tests, retain saved data and
 do not replay unknown inserts. Original Vault sync pending outside checkout.
+
+Follow-up: WP-L6-FIN-001 standalone preflight additionally refuses C1 and
+unencodable mount paths; four negatives failed before repair, focused 11 pass.
+The full verifier above preceded this follow-up. No new runtime observation or
+traversal authorization; original Vault sync remains pending.
 
 ## 2026-10-06: AgentHouse inspect errors cannot imply absence (offline)
 

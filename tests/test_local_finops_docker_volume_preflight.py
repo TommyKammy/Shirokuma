@@ -154,7 +154,7 @@ class VolumePreflightTests(unittest.TestCase):
 
     def test_unrelated_mount_paths_with_controls_are_not_inventory_evidence(self):
         for field in ('Source', 'Destination'):
-            for character in ('\n', '\r', '\t', '\x00', '\x7f'):
+            for character in ('\n', '\r', '\t', '\x00', '\x7f', '\x85', '\ud800'):
                 value = snapshot()
                 value['containers'][1]['Mounts'][0][field] += character + 'alias'
                 with self.subTest(field=field, character=repr(character)), self.assertRaisesRegex(
