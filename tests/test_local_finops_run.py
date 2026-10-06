@@ -195,6 +195,29 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(R.C.FinOpsError):
                 R.parse_disk(bad)
 
+    def test_df_unencodable_text_has_scoped_failure(self):
+        value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        for bad in (value.replace('/dev/vda1', '/dev/\ud800'),
+                    value.replace('74%', '\ud800%')):
+            with self.subTest(bad=repr(bad)), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
+                R.parse_disk(bad)
+
+    def test_vm_disk_refuses_wrong_architecture_before_df(self):
+        backend = R.Backend()
+        with patch.object(backend, '_command', return_value='x86_64\n') as command, \
+                self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
+            backend.disk('colima')
+        command.assert_called_once_with(['colima', 'ssh', '--profile', 'mac-studio-solo', '--', 'uname', '-m'])
+
+    def test_vm_disk_reads_only_fixed_path_on_arm64(self):
+        backend = R.Backend()
+        df = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        with patch.object(backend, '_command', side_effect=['aarch64\n', df]) as command:
+            self.assertEqual(backend.disk('colima'), (1024000, 256000))
+        self.assertEqual([call.args[0] for call in command.call_args_list], [
+            ['colima', 'ssh', '--profile', 'mac-studio-solo', '--', 'uname', '-m'],
+            ['colima', 'ssh', '--profile', 'mac-studio-solo', '--', 'df', '-Pk', R.VM_PATH]])
+
     def test_component_transport_fixed_namespace_and_before_metrics_after(self):
         backend = R.Backend(); backend.server = 'https://127.0.0.1:6443'
         values = [{'kind':'PodList','apiVersion':'v1','metadata':{},'items':[pod('seaweedfs')]},

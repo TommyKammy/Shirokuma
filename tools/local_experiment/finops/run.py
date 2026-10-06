@@ -77,7 +77,12 @@ def inference_sql(end):
 
 
 def parse_disk(raw):
-    C.require(type(raw) is str and len(raw.encode()) <= 16384, 'DISK_INVALID')
+    C.require(type(raw) is str and len(raw) <= 16384, 'DISK_INVALID')
+    try:
+        encoded_size = len(raw.encode('utf-8'))
+    except UnicodeError:
+        raise C.FinOpsError('DISK_INVALID') from None
+    C.require(encoded_size <= 16384, 'DISK_INVALID')
     lines = raw.strip().splitlines()
     C.require(len(lines) == 2 and
               lines[0].split() == ['Filesystem', '1024-blocks', 'Used', 'Available',

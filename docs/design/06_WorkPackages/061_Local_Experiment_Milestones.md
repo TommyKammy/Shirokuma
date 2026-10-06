@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.397"
+version: "5.398"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: VM disk text and fixed-command controls (offline)
+
+WP-L6-FIN-001: two unencodable synthetic `df` fields previously caused an
+unscoped Unicode exception and now yield `DISK_INVALID`. Separately, test
+controls confirm a wrong guest architecture stops before `df`, and ARM64 uses
+only the dedicated Colima profile and fixed storage path. Focused runtime 27
+tests, `make verify-local-experiment`, design-context, scoped secret scan and
+diff check pass (intentional fake Dagster worker failure diagnostic).
+Dedicated Colima was freshly listed Stopped; no live VM, saved
+report/volume/backup change or AgentHouse used-byte claim (`null /
+NOT_MEASURED`). Offline fakes do not authenticate the guest or confer operator
+acceptance. Restore only the scoped parser/tests, keeping saved evidence;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded VM disk numeric parsing (offline)
 

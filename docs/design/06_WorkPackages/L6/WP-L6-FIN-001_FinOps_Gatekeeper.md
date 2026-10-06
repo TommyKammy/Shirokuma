@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.195"
+version: "0.196"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: VM disk text failure and fixed-command controls (offline)
+
+An unencodable surrogate in a synthetic `df` device or percent field raised an
+unscoped Unicode error before row validation. The bounded parser now reports
+`DISK_INVALID`; two negatives failed before repair. Independent transport
+controls assert that a non-ARM64 guest stops before `df` and that the accepted
+guest is read only through the fixed profile/path. Focused runtime 27 tests,
+`make verify-local-experiment`, design-context, scoped secret scan and diff
+check pass (the verifier's fake Dagster worker failure is an intentional
+negative diagnostic). The dedicated Colima profile was listed Stopped; no live VM read,
+retained report/volume/backup mutation or AgentHouse byte measurement (`null /
+NOT_MEASURED`). These fixture checks cannot authenticate the guest or grant
+operator acceptance. Restore only the parser/test changes if needed; preserve
+saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded VM df integer conversion (offline)
 
