@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.207"
+version: "0.208"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: pin Docker reference transport and reject late drift (offline)
+
+The reference collector checked the fixed context socket but its later Docker
+inspect commands resolved the mutable context name again. Daemon reads now use
+the fixed current-account Unix socket (the same lexical endpoint checked before
+each pair), not `--context`. Independently, an invalid or changed second volume
+is rejected before reading the final clock; the valid six-read path is unchanged.
+Focused FinOps 304 tests (seven Linux-only skips) and the full local verifier
+passed. `colima list` freshly showed `mac-studio-solo` Stopped. No live Docker
+read, retained data/backup change or AgentHouse byte measurement (`null /
+NOT_MEASURED`). Socket-path pinning does not authenticate the daemon, prevent
+socket symlink redirection or make sequential observations atomic. Roll back
+only the transport/early-validation changes and tests; preserve saved reports
+and volumes. Original Vault handoff sync remains pending outside checkout.
 
 ## 2026-10-06: detect container drift before second volume read (offline)
 

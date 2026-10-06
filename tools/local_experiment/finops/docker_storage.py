@@ -169,8 +169,10 @@ def collect(backend):
         second_container = backend.docker_storage_inspect('container', AH.NAME)
         require(_container(_object(first_container)) == _container(_object(second_container)),
                 'IDENTITY_CHANGED')
-        after = [second_context, second_container,
-                 backend.docker_storage_inspect('volume', AH.VOLUME)]
+        second_volume = backend.docker_storage_inspect('volume', AH.VOLUME)
+        require(_identity(_object(first_container), _object(first_volume)) ==
+                _identity(_object(second_container), _object(second_volume)), 'IDENTITY_CHANGED')
+        after = [second_context, second_container, second_volume]
         row = project(*before, *after, request_started_at=start, observed_at=backend.now())
     except Exception as error:
         from tools.local_experiment.gateway import pod_usage as U

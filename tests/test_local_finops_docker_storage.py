@@ -218,9 +218,24 @@ class DockerStorageTests(unittest.TestCase):
                 result = D.collect(backend)
             self.assertEqual(result['agenthouse']['reason'], 'IDENTITY_CHANGED')
             self.assertEqual([call.args for call in backend.docker_storage_inspect.call_args_list],
-                             [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
-                              ('volume', D.AH.VOLUME), ('context', D.AH.CONTEXT),
-                              ('container', D.AH.NAME)])
+                              [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
+                               ('volume', D.AH.VOLUME), ('context', D.AH.CONTEXT),
+                               ('container', D.AH.NAME)])
+
+    def test_second_volume_drift_stops_before_final_clock_read(self):
+        for change in (lambda volume: volume.update(Driver='foreign'),
+                       lambda volume: volume.update(CreatedAt='2026-09-18T00:00:00Z')):
+            responses = fixture() + deepcopy(fixture())
+            change(responses[5][0])
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.docker_storage_inspect.side_effect = responses
+            with self.subTest(change=change):
+                result = D.collect(backend)
+            self.assertEqual(result['agenthouse']['state'], 'unknown')
+            self.assertEqual(result['agenthouse']['reason'], 'SCOPE_INVALID' if
+                             responses[5][0]['Driver'] == 'foreign' else 'IDENTITY_CHANGED')
+            self.assertEqual(backend.now.call_count, 1)
 
     def test_backend_only_fixed_scoped_inspect_commands(self):
         backend=R.Backend()
@@ -229,8 +244,10 @@ class DockerStorageTests(unittest.TestCase):
                 self.assertEqual(backend.docker_storage_inspect(kind,name),[{'safe':'metadata'}])
             self.assertEqual([x.args[0] for x in command.call_args_list],[
                 ['docker','context','inspect',D.AH.CONTEXT],
-                ['docker','--context',D.AH.CONTEXT,'container','inspect',D.AH.NAME],
-                ['docker','--context',D.AH.CONTEXT,'volume','inspect',D.AH.VOLUME]])
+                ['docker','--host',fixture()[0][0]['Endpoints']['docker']['Host'],
+                 'container','inspect',D.AH.NAME],
+                ['docker','--host',fixture()[0][0]['Endpoints']['docker']['Host'],
+                 'volume','inspect',D.AH.VOLUME]])
             with self.assertRaises(C.FinOpsError):backend.docker_storage_inspect('volume','foreign')
             self.assertEqual(command.call_count,3)
 

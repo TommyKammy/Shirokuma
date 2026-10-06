@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import pwd
 import os
 import re
 from pathlib import Path
@@ -292,9 +293,13 @@ class Backend:
 
     def docker_storage_inspect(self, kind, name):
         C.require((kind, name) in (('context', AH.CONTEXT), ('container', AH.NAME),
-                                  ('volume', AH.VOLUME)), 'SCOPE_INVALID')
-        return _json(self._command(['docker', '--context', AH.CONTEXT, kind, 'inspect', name]
-                                   if kind != 'context' else ['docker', 'context', 'inspect', name]))
+                                   ('volume', AH.VOLUME)), 'SCOPE_INVALID')
+        if kind == 'context':
+            return _json(self._command(['docker', 'context', 'inspect', name]))
+        # The context name is mutable between reads. Use the same fixed account
+        # socket that D._context verifies before each daemon read instead.
+        endpoint = 'unix://' + pwd.getpwuid(os.getuid()).pw_dir + '/.colima/mac-studio-solo/docker.sock'
+        return _json(self._command(['docker', '--host', endpoint, kind, 'inspect', name]))
 
     def docker_storage(self):
         return D.collect(self)

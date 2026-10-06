@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.409"
+version: "5.410"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: fixed Docker socket transport and early volume drift (offline)
+
+WP-L6-FIN-001: daemon inspect now targets the fixed account socket directly
+instead of resolving a mutable context name after its check. Independently, a
+malformed or changed second volume stops before the final clock read. FinOps
+304 tests (seven Linux-only skips) and `make verify-local-experiment` passed.
+Fresh Colima state: Stopped. No live read, saved volume/report/backup change or
+AgentHouse byte measurement (`null / NOT_MEASURED`). Neither lexical binding
+nor fixtures establish daemon authenticity, atomicity or operator acceptance.
+Restore only scoped code/tests if needed, retaining saved records; original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: second-pass container drift stops before volume read (offline)
 
