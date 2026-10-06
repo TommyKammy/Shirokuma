@@ -344,6 +344,8 @@ def _canonical_git_url(value: str) -> str:
     if scp_match:
         host = scp_match.group("host").lower()
         path = scp_match.group("path")
+        if path.startswith("/"):
+            raise RenderError("unsupported absolute scp-style Git repository path")
         transport = f"ssh://{scp_match.group('user')}@"
     else:
         parsed = urlsplit(raw)
@@ -385,6 +387,8 @@ def _canonical_git_url(value: str) -> str:
     if (
         raw != raw.strip()
         or not re.fullmatch(r"[A-Za-z0-9._~/-]+", path)
+        or "//" in path
+        or path.endswith("/")
         or any(part in {".", ".."} for part in path.split("/"))
     ):
         raise RenderError(f"unsupported Git repository URL: {value}")

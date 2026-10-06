@@ -5,12 +5,26 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.149"
+version: "0.150"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: offline Git source path separator boundary
+
+An independent check of local-source identity found that collapsing leading,
+duplicate or trailing path slashes could equate a different Git repository
+path to the configured source. The renderer now refuses duplicate/trailing
+separators and absolute scp-style paths instead of normalizing them. Five
+negative paths and ordinary scp/SSH positive remain tested. This does not
+authenticate the remote repository, guarantee all URL equivalences or grant
+live Flux acceptance. The dedicated VM remains Stopped; no Git remote request,
+VM start, retained-data operation or GitHub write. Revert only this scoped
+path refusal if verified remote semantics require it; do not modify retained
+resources. Original Vault sync pending outside checkout. Live §9 and operator
+acceptance remain open.
 
 ## 2026-10-06: offline Git transport and principal identity
 

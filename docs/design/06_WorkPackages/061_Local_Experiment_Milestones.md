@@ -5,12 +5,21 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.521"
+version: "5.522"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: GitOps source separator refusal (offline)
+
+WP-L0-GITOPS-001: five source path variants with redundant or absolute
+scp-style separators no longer alias the declared source. Focused tests pass;
+remote identity, live Flux/strict gate and operator acceptance remain open.
+Dedicated VM stays Stopped, no retained data or backup changes. Preserve
+historical evidence; revert only matcher/test if verified URL semantics require
+it. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: GitOps transport identity and independent bootstrap check
 
