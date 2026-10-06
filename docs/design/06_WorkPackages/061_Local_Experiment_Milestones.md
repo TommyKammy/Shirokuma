@@ -5,12 +5,21 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.525"
+version: "5.526"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent Iceberg gate rechecked, not accepted
+
+After the GitOps source fix, `make verify-iceberg-table-bootstrap` ran 129
+tests with 44 errors. Installed Helm v4.2.3 differs from v4.2.2 pin, and the
+deploy scanner passes warehouse routing-rules YAML lacking Kubernetes `kind`
+to kubectl. Preserve this failure; separate config from manifests and supply
+the verified pinned tool before acceptance. No runtime or retained-state
+mutation; original Vault sync pending.
 
 ## 2026-10-06: checked-in source selector ambiguity (offline)
 

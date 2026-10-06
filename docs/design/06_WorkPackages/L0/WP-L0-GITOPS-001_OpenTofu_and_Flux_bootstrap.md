@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.153"
+version: "0.154"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: independent Iceberg gate remains failed
+
+After the source-context repair, a fresh `make verify-iceberg-table-bootstrap`
+ran 129 tests and failed with 44 errors. The installed Helm reports v4.2.3
+against the renderer's v4.2.2 pin; separately the broad deploy manifest scan
+sends non-Kubernetes warehouse routing-rules YAML (without `kind`) to kubectl.
+These are distinct from the 28 passing bootstrap/teardown contracts and the
+passing local verifier. A future repair must separate Kubernetes manifests
+from retained configuration inputs and verify the pinned tool, without
+silently skipping Kubernetes resources or relaxing the version gate. No tool
+install, VM start or retained-state change was made. The failed gate is not
+operator acceptance; original Vault sync remains pending.
 
 ## 2026-10-06: checked-in source ref is branch-only (offline)
 
