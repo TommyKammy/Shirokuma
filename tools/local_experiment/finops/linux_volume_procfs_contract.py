@@ -94,7 +94,7 @@ def _mount(raw,mount_id):
         left,right=halves[0].split(' '),halves[1].split(' ')
         require(len(left)>=6 and len(right)==3 and
                 re.fullmatch(r'[1-9][0-9]{0,18}',left[0]) is not None and
-                re.fullmatch(r'[1-9][0-9]{0,18}',left[1]) is not None and
+                re.fullmatch(r'(?:0|[1-9][0-9]{0,18})',left[1]) is not None and
                 int(left[1])<=MAX_NUMBER and
                 re.fullmatch(r'(?:0|[1-9][0-9]{0,18}):(?:0|[1-9][0-9]{0,18})',left[2]) is not None and
                 all(int(part)<=MAX_NUMBER for part in left[2].split(':')))

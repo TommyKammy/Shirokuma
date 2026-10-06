@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.16"
+version: "0.17"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 exact startup readiness reply (offline)
+
+Existing-container startup used `strip()` on `SELECT 1` and accepted five
+noncanonical fixture replies (leading space, extra LF, CRLF, TAB, NUL) as
+readiness before running setup SQL. It now accepts only `1` or ClickHouse's
+plain-text `1\n`; otherwise its bounded readiness loop fails without running
+schema setup. Focused AgentHouse 53 tests and full local verifier pass (fake
+Dagster failure intentional). Dedicated Colima was Stopped; no actual Docker
+start/SQL, credential read or retained report/volume/backup change. This
+does not authenticate the reply producer or prove live readiness, deduplication
+or operator acceptance. Revert only this scoped comparison/test; retain saved
+resources and never replay an ambiguous insert. Original Vault sync pending.
 
 ## 2026-10-06 count reply underflow (offline)
 

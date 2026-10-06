@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.457"
+version: "5.458"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent root-parent and startup readiness fixtures (offline)
+
+WP-L6-FIN-001 now accepts canonical mount namespace root parent `0` while
+rejecting `00`; WP-L2-CH-001 no longer promotes whitespace-padded `SELECT 1`
+to startup readiness. Focused procfs 23 and AgentHouse 53 tests and
+`make verify-local-experiment` pass (fake Dagster failure intentional). Dedicated
+Colima freshly Stopped; no live VM read, container start/SQL, retained report,
+credential, volume or backup accessed or changed. AgentHouse bytes remain
+`null / NOT_MEASURED`. Fixture compatibility and strict readiness spelling
+cannot authenticate producers, establish safe volume scanning, live startup or
+operator acceptance. Roll back only the scoped parser/comparison and tests;
+retain saved evidence and do not replay ambiguous inserts. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent worker and procfs row controls (offline)
 

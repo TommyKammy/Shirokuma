@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.241"
+version: "0.242"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 namespace-root mount parent compatibility (offline)
+
+The independent procfs fixture contract rejected parent ID `0` in a mountinfo
+row, although the private worker already accepts it for a mount namespace root.
+A positive zero-parent fixture failed before repair; canonical `0` now projects
+and `00` still fails. Focused procfs 23 tests and the full local verifier pass
+(its fake Dagster failure is intentional). Dedicated Colima observed Stopped;
+no guest read or retained report/volume/backup access or change; AgentHouse
+bytes remain `null / NOT_MEASURED`. This syntax compatibility does not prove
+kernel provenance, justify scanning a retained volume, establish cleanup or
+grant operator acceptance. Revert only this parent field/test, preserve saved
+records; original Vault sync pending outside checkout.
 
 ## 2026-10-06 independent worker and procfs control boundaries (offline)
 

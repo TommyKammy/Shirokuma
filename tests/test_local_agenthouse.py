@@ -623,6 +623,37 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaisesRegex(M.AgentHouseError, "owned data volume"):
                     self.ensure_existing(existing)
 
+    def test_readiness_requires_exact_select_one_reply(self):
+        # The ClickHouse plain-text response has one LF; arbitrary surrounding
+        # whitespace must not turn a different response into readiness.
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            credential = state / 'credential.json'
+            credential.write_text(json.dumps({'password': 'fixture'}))
+            credential.chmod(0o600)
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[self.existing_runtime(), {}]), \
+                    patch.object(M, 'docker'), patch.object(M, 'Client') as client:
+                client.return_value.query.return_value = '1\n'
+                self.assertIs(M.ensure_runtime(), client.return_value)
+        for reply in (' 1\n', '1\n\n', '1\r\n', '1\t', '1\x00'):
+            with self.subTest(reply=reply), tempfile.TemporaryDirectory() as directory:
+                state = Path(directory)
+                credential = state / 'credential.json'
+                credential.write_text(json.dumps({'password': 'fixture'}))
+                credential.chmod(0o600)
+                with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                        patch.object(M, 'inspect_owned', side_effect=[self.existing_runtime(), {}]), \
+                        patch.object(M, 'docker') as docker, patch.object(M, 'Client') as client, \
+                        patch.object(M.time, 'monotonic', side_effect=[0, 90]), \
+                        patch.object(M.time, 'sleep') as sleep:
+                    client.return_value.query.return_value = reply
+                    with self.assertRaisesRegex(M.AgentHouseError, 'did not become ready'):
+                        M.ensure_runtime()
+                    docker.assert_called_once_with('start', M.NAME)
+                    client.return_value.query.assert_called_once_with('SELECT 1')
+                    sleep.assert_not_called()
+
     def test_existing_runtime_refuses_unbounded_or_changed_resources(self):
         for key, value in (("NanoCpus", 0), ("NanoCpus", 4_000_000_000),
                            ("Memory", 0), ("Memory", 8 * 1024**3)):

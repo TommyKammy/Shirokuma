@@ -321,7 +321,7 @@ def ensure_runtime() -> Client:
     deadline = time.monotonic() + 90
     while True:
         try:
-            if client.query("SELECT 1").strip() == "1":
+            if client.query("SELECT 1") in ("1", "1\n"):
                 break
             raise AgentHouseError("AgentHouse readiness response differs")
         except AgentHouseError:

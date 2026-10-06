@@ -126,6 +126,14 @@ class ProcfsContractTests(unittest.TestCase):
         value['mountinfo']+=b'20 19 0:21 /name\\040with\\040spaces /other rw - tmpfs tmpfs rw\n'
         self.assertTrue(P.project(**value)['probe']['query_complete'])
 
+    def test_mount_namespace_root_can_have_zero_parent_id(self):
+        value = inputs()
+        value['mountinfo'] = value['mountinfo'].replace(b'19 1 0:20', b'19 0 0:20')
+        self.assertTrue(P.project(**value)['probe']['query_complete'])
+        value['mountinfo'] = value['mountinfo'].replace(b'19 0 0:20', b'19 00 0:20')
+        with self.assertRaises(P.ProcfsError):
+            P.project(**value)
+
     def test_mountinfo_requires_canonical_single_space_columns(self):
         original = inputs()['mountinfo']
         for row in (original.replace(b'19 1 ', b'19  1 ', 1),
