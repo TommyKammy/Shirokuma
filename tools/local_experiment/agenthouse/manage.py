@@ -351,9 +351,10 @@ class Client:
                 # ClickHouse can append an exception after beginning a streamed
                 # successful response, without an exception header or a new HTTP
                 # status. Do not promote that body to a write acknowledgement.
-                # A BOM or indentation at the start of a line must not hide
-                # an exception behind an otherwise successful HTTP status.
-                if re.search(r'(?m)^\ufeff?[ \t]*Code: [0-9]+\. DB::Exception:', text):
+                # A BOM or indentation at the start of a CR, LF or CRLF
+                # delimited line must not hide an exception. The BOM may
+                # follow leading whitespace in a streamed reply.
+                if re.search(r'(?:\A|(?<=[\r\n]))[ \t]*\ufeff?[ \t]*Code: [0-9]+\. DB::Exception:', text):
                     raise AgentHouseError('local AgentHouse response contains a query exception')
                 return text
         except (urllib.error.URLError, OSError, http.client.HTTPException) as error:

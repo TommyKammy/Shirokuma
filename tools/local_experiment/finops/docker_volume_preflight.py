@@ -90,6 +90,10 @@ def _lifecycle(container, observed):
     # Docker may retain a prior FinishedAt for a running/restarted container.
     # It still cannot describe a termination after this observation.
     require(parsed[1] <= observed)
+    # A live or paused process began after its previous termination. A
+    # reported finish later than its current start cannot be prior history.
+    if state['Status'] in ('running', 'paused'):
+        require(parsed[1] <= parsed[0])
     # A terminated container with a finish before its start cannot be
     # evidence for a coherent inventory, even if both samples agree.
     if state['Status'] in ('exited', 'dead'):

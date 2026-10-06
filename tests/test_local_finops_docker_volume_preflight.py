@@ -55,6 +55,25 @@ class VolumePreflightTests(unittest.TestCase):
             with self.subTest(status=status), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
                 validate(value, deepcopy(value))
             other['State']['FinishedAt'] = value['observed_at']
+            if status == 'restarting':
+                self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+            else:
+                with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                    validate(value, deepcopy(value))
+                other['State']['FinishedAt'] = other['State']['StartedAt']
+                self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
+    def test_running_or_paused_container_cannot_finish_after_current_start(self):
+        for status in ('running', 'paused'):
+            value = snapshot()
+            state = value['containers'][1]['State']
+            state.update(Status=status, Running=True, Paused=status == 'paused',
+                         StartedAt='2026-09-21T00:00:00Z',
+                         FinishedAt='2026-09-22T00:00:00Z')
+            with self.subTest(status=status), self.assertRaisesRegex(
+                    V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+            state['FinishedAt'] = state['StartedAt']
             self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
 
     def test_all_containers_cannot_start_after_snapshot_observation(self):
@@ -258,6 +277,7 @@ class VolumePreflightTests(unittest.TestCase):
             second['containers'][1]['State']['Status'] = flag.lower()
             if flag == 'Paused':
                 second['containers'][1]['State']['Running'] = True
+                second['containers'][1]['State']['FinishedAt'] = second['containers'][1]['State']['StartedAt']
             with self.subTest(changed=flag), self.assertRaisesRegex(V.PreflightError, 'IDENTITY_CHANGED'):
                 validate(first, second)
             for replacement in (None, 'false'):
@@ -308,6 +328,7 @@ class VolumePreflightTests(unittest.TestCase):
                 validate(value, deepcopy(value))
         value = snapshot()
         value['containers'][1]['State'].update(Status='paused', Paused=True, Running=True)
+        value['containers'][1]['State']['FinishedAt'] = value['containers'][1]['State']['StartedAt']
         self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
 
     def test_all_containers_not_only_owned_label_and_bind_overlaps(self):

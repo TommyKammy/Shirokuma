@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.498"
+version: "5.499"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent CR exception and running chronology (offline)
+
+WP-L2-CH-001 refuses CR-delimited ClickHouse exception text and a BOM after
+indentation on HTTP 200; three synthetic writes previously returned success,
+focused AgentHouse 83 tests pass. WP-L6-FIN-001 independently refuses a
+running/paused Docker container whose last finish follows its current start;
+two negatives previously appeared eligible, FinOps 384 tests pass (seven
+Linux-only skips). Dedicated `colima list` freshly showed mac-studio-solo
+Stopped. No live HTTP/Docker/VM or retained credential, report, volume or
+backup read/change. These fixtures cannot authenticate producers, prove live
+deduplication, exclude continuous writers, permit volume traversal or grant
+operator acceptance. AgentHouse bytes remain `null / NOT_MEASURED`; never
+replay an uncertain insert. Roll back only scoped guards/tests and retain
+saved resources. Original Vault sync pending outside checkout.
+Combined `make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` pass; fake Dagster worker failure is an intentional
+negative. No live-runtime or operator acceptance follows.
 
 ## 2026-10-06 unrelated Docker volume name spelling (offline)
 

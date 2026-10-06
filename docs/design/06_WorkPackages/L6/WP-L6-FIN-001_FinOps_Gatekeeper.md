@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.271"
+version: "0.272"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 running/paused finish chronology (offline)
+
+The standalone Docker inventory now refuses an unrelated running or paused
+container whose reported last finish follows its current start. Two synthetic
+negatives were formerly metadata-eligible; equal-time controls remain eligible.
+Older positive fixtures with contradictory chronology were corrected. Focused
+FinOps 384 tests pass (seven Linux-only skips). Dedicated Colima freshly
+Stopped; no VM/Docker or retained volume, report or backup accessed/changed.
+Offline chronology does not authenticate Docker or exclude continuous writers;
+traversal remains `False`, AgentHouse bytes `null / NOT_MEASURED`, operator
+acceptance open. Preserve saved resources; revert only this scoped guard/tests
+if verified daemon behavior differs. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 unrelated volume name spelling (offline)
 

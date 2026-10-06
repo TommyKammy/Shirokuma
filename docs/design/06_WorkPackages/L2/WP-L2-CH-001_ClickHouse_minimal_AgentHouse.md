@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.43"
+version: "0.44"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 CR-separated and indented-BOM exception text (offline)
+
+The HTTP 200 query guard now refuses ClickHouse exception lines separated by
+CR alone, or with a BOM after leading spaces/tabs. Three synthetic inserts
+were incorrectly acknowledged before repair; 83 focused tests pass, including
+a clean `Code:` text control. No automatic retry. Dedicated Colima freshly
+Stopped; no live HTTP/Docker or saved credential, report, volume or backup
+access/change. This signature cannot authenticate a producer, exclude other
+unmarked errors, prove live deduplication or grant operator acceptance. Retain
+saved records; revert only the scoped pattern/test if runtime compatibility
+requires it, never replay an uncertain insert. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 indented streamed exception refusal (offline)
 
