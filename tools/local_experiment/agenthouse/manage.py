@@ -109,8 +109,13 @@ def unique_credential_fields(items):
 
 
 def docker(*args: str, required: bool = True) -> str:
-    result = subprocess.run(["docker", "--context", CONTEXT, *args], capture_output=True,
-                            text=True, timeout=180)
+    try:
+        result = subprocess.run(["docker", "--context", CONTEXT, *args], capture_output=True,
+                                text=True, timeout=180)
+    except UnicodeError:
+        # text=True decodes both stdout and stderr before returning. A broken
+        # daemon reply is never evidence that a named retained object is absent.
+        raise AgentHouseError('Docker reply is not decodable text; refusing runtime') from None
     if result.returncode:
         # Only an explicit absence for the exact requested resource allows
         # first-time creation. An unavailable daemon or ambiguous inspect

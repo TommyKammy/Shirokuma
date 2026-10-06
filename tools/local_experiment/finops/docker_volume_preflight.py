@@ -34,7 +34,8 @@ def _stamp(value):
 
 def _path(value):
     require(type(value) is str and value.startswith('/') and not value.startswith('//') and
-            len(value) <= 4096 and '\x00' not in value and all(part not in ('', '.', '..')
+            len(value) <= 4096 and all(ord(ch) >= 32 and ord(ch) != 127 for ch in value) and
+            all(part not in ('', '.', '..')
             for part in value[1:].split('/')))
     return value
 

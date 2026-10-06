@@ -162,6 +162,14 @@ class AgentHouseTests(unittest.TestCase):
                     with self.assertRaises(M.AgentHouseError):
                         M.inspect_owned(kind, name)
 
+    def test_undecodable_docker_reply_is_not_absence(self):
+        for kind, name in (('container', M.NAME), ('volume', M.VOLUME)):
+            with self.subTest(kind=kind), patch.object(
+                    M.subprocess, 'run', side_effect=UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'bad')) as run:
+                with self.assertRaisesRegex(M.AgentHouseError, 'not decodable'):
+                    M.inspect_owned(kind, name)
+                run.assert_called_once()
+
     def test_ambiguous_owned_inspection_does_not_authorize_runtime(self):
         for kind, name, reply in (
             ('container', M.NAME, '[{"Config":{"Labels":{"shirokuma.dev.component":"foreign","shirokuma.dev.component":"agenthouse-local"}}}]'),

@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.252"
+version: "0.253"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 all-container mount path controls (offline)
+
+The standalone Docker-volume preflight accepted LF, CR, TAB and DEL inside an
+unrelated container's source/destination mount path, allowing malformed
+metadata into an apparently eligible inventory. Eight isolated negatives
+reproduced this before the guard; it now refuses C0/DEL in all projected mount
+paths (including unrelated containers). Eleven focused preflight tests and
+`make verify-local-experiment` pass (intentional fake Dagster failure).
+Dedicated Colima freshly Stopped; no daemon, VM, retained volume, report or
+backup access/change. This metadata consistency check does not authenticate
+Docker, exclude continuous writers or authorize traversal:
+`volume_traversal_authorized=False`, AgentHouse bytes `null / NOT_MEASURED`.
+Restore only the scoped path guard/fixture while preserving saved records;
+operator acceptance and original Vault sync remain pending.
 
 ## 2026-10-06 standalone snapshot timestamp refusal (offline)
 

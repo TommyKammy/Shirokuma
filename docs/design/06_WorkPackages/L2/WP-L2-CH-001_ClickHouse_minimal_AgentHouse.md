@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.25"
+version: "0.26"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 undecodable Docker inspection is not absence (offline)
+
+Python's Docker subprocess text decoding can fail before returning an exit
+status or stderr. The AgentHouse wrapper now reports that failure as a scoped
+runtime refusal rather than leaking a decoder exception; no absence or creation
+is inferred. Synthetic undecodable container/volume replies are covered by
+63 focused tests and `make verify-local-experiment` (intentional fake Dagster
+failure). The dedicated Colima profile was freshly Stopped; no live Docker,
+credential, report, volume or backup access/change. This does not authenticate
+the daemon, prove ARM64/deduplication, bound the pipe at OS level or confer
+operator acceptance. Restore only the decoding guard/test if needed, preserving
+saved data and never replaying unknown inserts. Original Vault sync pending.
 
 ## 2026-10-06 ambiguous Docker inspect failure is not absence (offline)
 

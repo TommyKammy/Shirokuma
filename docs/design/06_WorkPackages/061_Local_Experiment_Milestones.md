@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.473"
+version: "5.474"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent Docker decoding and mount-path controls (offline)
+
+WP-L2-CH-001 refuses undecodable Docker inspection output without interpreting
+it as absent (focused AgentHouse 63 tests). WP-L6-FIN-001 independently refuses
+C0/DEL in every listed container's mount source/destination; eight negative
+fixtures failed before repair (focused preflight 11 tests). Full
+`make verify-local-experiment` passes; its fake Dagster failure is intentional.
+Dedicated Colima freshly observed Stopped; no live Docker/VM, retained
+credential/report/volume/backup access or change. No authenticated producer,
+live deduplication, continuous writer exclusion or operator acceptance is
+established. AgentHouse usage remains `null / NOT_MEASURED`; volume traversal
+remains unauthorized. Restore only scoped guards/tests, retain saved data and
+do not replay unknown inserts. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: AgentHouse inspect errors cannot imply absence (offline)
 
