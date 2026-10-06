@@ -5,12 +5,27 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.35"
+version: "0.36"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 declared HTTP body length (offline)
+
+The local HTTP client now refuses a 200 response whose declared Content-Length
+is malformed, exceeds the export cap, or differs from the bytes actually read.
+An EOF after a short `read(amt)` need not raise a transport exception; returning
+that body as a completed write acknowledgement was unsafe. Six negative
+fixtures and a valid exact-length reply pass (focused AgentHouse 74 tests).
+No retry of an ambiguous insert. The dedicated Colima profile was freshly
+Stopped; no HTTP/Docker or retained credential, report, volume or backup was
+read or changed. Missing Content-Length and dishonest equal-length responses,
+producer authenticity, live deduplication and operator acceptance remain open.
+Restore only the scoped reply guard/test if needed; preserve saved resources
+and inspect ambiguous writes rather than replaying them. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06 HTTP connection reset after status (offline)
 

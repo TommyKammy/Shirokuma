@@ -290,9 +290,20 @@ class Client:
                 # insert/schema query finished. Never retry an ambiguous write.
                 if response.status != 200:
                     raise AgentHouseError('local AgentHouse response status is not a completed query')
+                declared = response.headers.get('Content-Length')
+                if declared is not None:
+                    # read(amt) can return a short body at EOF without raising
+                    # IncompleteRead. A 200 with an incomplete body is not a
+                    # completed query acknowledgement, especially for writes.
+                    if (not isinstance(declared, str) or
+                            re.fullmatch(r'(0|[1-9][0-9]*)', declared) is None or
+                            len(declared) > 16 or int(declared) > 8 * 1024 * 1024):
+                        raise AgentHouseError('local AgentHouse response length is invalid')
                 body = response.read(8 * 1024 * 1024 + 1)
                 if len(body) > 8 * 1024 * 1024:
                     raise AgentHouseError("AgentHouse response exceeds the local export limit")
+                if declared is not None and len(body) != int(declared):
+                    raise AgentHouseError('local AgentHouse response body is incomplete')
                 try:
                     return body.decode('utf-8')
                 except UnicodeError:

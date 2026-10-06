@@ -779,6 +779,7 @@ class AgentHouseTests(unittest.TestCase):
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
         response.status = 200
+        response.headers = {}
         response.read.return_value = b'\xff'
         client.opener.open = Mock(return_value=response)
         with self.assertRaises(M.AgentHouseError):
@@ -789,6 +790,7 @@ class AgentHouseTests(unittest.TestCase):
         response = Mock()
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
+        response.headers = {}
         client.opener.open = Mock(return_value=response)
         for status in (201, 202, 204, None):
             with self.subTest(status=status):
@@ -807,11 +809,29 @@ class AgentHouseTests(unittest.TestCase):
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
         response.status = 200
+        response.headers = {}
         response.read.side_effect = ConnectionResetError('simulated reset after acknowledgement')
         client.opener.open = Mock(return_value=response)
         with self.assertRaisesRegex(M.AgentHouseError, 'request failed'):
             client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
         client.opener.open.assert_called_once()
+
+    def test_query_refuses_incomplete_or_invalid_declared_body_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.return_value = b'1\n'
+        client.opener.open = Mock(return_value=response)
+        for length in ('3', '1', '02', '-1', '99999999999999999', '8388609'):
+            with self.subTest(length=length):
+                response.headers = {'Content-Length': length}
+                with self.assertRaises(M.AgentHouseError):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 6)
+        response.headers = {'Content-Length': '2'}
+        self.assertEqual(client.query('SELECT 1'), '1\n')
 
     def test_unencodable_credential_and_query_fail_before_http(self):
         with self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):

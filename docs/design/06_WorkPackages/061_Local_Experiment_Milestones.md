@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.486"
+version: "5.487"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent HTTP body-length and FinOps chronology guards (offline)
+
+WP-L2-CH-001 refuses an incomplete or invalid declared HTTP response length
+after status 200; six negative fixtures and an exact-length success, focused
+74 tests. WP-L6-FIN-001 independently refuses reversed exited-container
+start/finish timestamps for target and unrelated containers; two previously
+eligible negatives, focused preflight 22 tests. Final combined tree passes
+`make verify-local-experiment` (intentional fake Dagster failure),
+`make verify-design-context` and `git diff --check`. Private verifier log:
+`tmp/local-experiment/attempt-202-verify.log`.
+Fresh `colima list`: dedicated profile Stopped. No live HTTP, Docker, VM or
+retained credentials, reports, volumes or backups read/changed. AgentHouse
+bytes remain `null / NOT_MEASURED`; FinOps traversal unauthorized. Offline
+fixtures cannot authenticate producers, exclude continuous writers, prove live
+deduplication or grant operator acceptance. Roll back only the scoped guards
+and tests; preserve saved data and never replay uncertain inserts. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: independent HTTP reset and restart retry guards (offline)
 

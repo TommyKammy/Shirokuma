@@ -32,6 +32,14 @@ def validate(before, after):
 
 
 class VolumePreflightTests(unittest.TestCase):
+    def test_exited_container_lifecycle_must_not_run_backwards(self):
+        for index in (0, 1):
+            value = snapshot()
+            value['containers'][index]['State']['FinishedAt'] = '2026-09-19T23:59:59Z'
+            with self.subTest(index=index), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        self.assertEqual(validate(snapshot(), deepcopy(snapshot()))['state'], 'metadata_eligible')
+
     def test_daemon_identity_refuses_control_and_non_ascii_text(self):
         for identifier in ('DAEMON:ONE\n', 'DAEMON:\x7fONE', 'DAEMON:\x85ONE', 'DAEMON:\ud800ONE'):
             value = snapshot()

@@ -77,8 +77,11 @@ def _lifecycle(container):
     require(all(type(value) is str and 1 <= len(value) <= 64 and
                 all(ord(ch) >= 32 and not 127 <= ord(ch) <= 159 for ch in value)
                 for value in times))
-    for value in times:
-        _stamp(value)
+    parsed = [_stamp(value)[1] for value in times]
+    # An exited container with a finish before its start cannot be evidence
+    # for a coherent stopped inventory, even if both samples agree.
+    if state['Status'] == 'exited':
+        require(parsed[0] <= parsed[1])
     return (state['Status'], state['Running'], state['Restarting'],
             state['Paused'], state['Dead'], *times,
             container['RestartCount'])
