@@ -5,12 +5,23 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.161"
+version: "0.162"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: bounded nested resource lists (offline)
+
+Separately from duplicate-key rejection, the offline kubectl renderer now
+refuses a resource `List` nested beyond 16 levels instead of following an
+unbounded recursive shape; an isolated 20-level negative failed before the
+guard and a two-level valid control passes. Bootstrap/teardown contracts 38,
+full local verifier and design-context pass. No live input or runtime state is
+changed. This limit does not establish canonical tool output, live §9 or
+source identity. Restore only this guard/test if actual pinned kubectl output
+requires deeper nesting. Original Vault sync remains pending.
 
 ## 2026-10-06: offline renderer duplicate JSON refusal
 

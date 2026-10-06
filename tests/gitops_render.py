@@ -276,8 +276,10 @@ def _json_stream(text: str) -> list[dict[str, Any]]:
     return documents
 
 
-def _flatten_resource(value: dict[str, Any]) -> list[dict[str, Any]]:
+def _flatten_resource(value: dict[str, Any], depth: int = 0) -> list[dict[str, Any]]:
     if value.get("kind") == "List":
+        if depth >= 16:
+            raise RenderError("kubectl returned an excessively nested List")
         items = value.get("items")
         if not isinstance(items, list):
             raise RenderError("Kubernetes List requires an items array")
@@ -285,7 +287,7 @@ def _flatten_resource(value: dict[str, Any]) -> list[dict[str, Any]]:
         for item in items:
             if not isinstance(item, dict):
                 raise RenderError("Kubernetes List contains a non-object item")
-            flattened.extend(_flatten_resource(item))
+            flattened.extend(_flatten_resource(item, depth + 1))
         return flattened
     return [value]
 

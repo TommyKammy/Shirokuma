@@ -121,6 +121,15 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             [{"kind": "ConfigMap"}],
         )
 
+    def test_renderer_refuses_unbounded_nested_lists(self) -> None:
+        nested: dict[str, object] = {"kind": "ConfigMap"}
+        for _ in range(20):
+            nested = {"kind": "List", "items": [nested]}
+        with self.assertRaisesRegex(RenderError, "nested List"):
+            _json_stream(json.dumps(nested))
+        self.assertEqual(_json_stream('{"kind":"List","items":[{"kind":"List","items":[{"kind":"ConfigMap"}]}]}'),
+                         [{"kind": "ConfigMap"}])
+
     def test_helm_renderer_refuses_ambiguous_version_output(self) -> None:
         expected = "v4.2.2+gb05881c\n"
         for output in (

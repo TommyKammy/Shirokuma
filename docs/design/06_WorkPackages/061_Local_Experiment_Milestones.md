@@ -5,12 +5,22 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.533"
+version: "5.534"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded offline nested List flattening
+
+WP-L0-GITOPS-001: an independent 20-level nested kubectl `List` negative
+previously passed the offline renderer; the flattening gate now rejects depth
+above 16 while a two-level list succeeds. Bootstrap/teardown 38, full local
+verifier and design-context pass. No VM start, retained state, or
+source publication. This is not live §9 or tool provenance. Roll back only the
+scoped depth guard if pinned kubectl semantics require otherwise. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: ambiguous renderer JSON rejected; independent FinOps recheck
 
