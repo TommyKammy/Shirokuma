@@ -507,9 +507,12 @@ class Kubernetes:
                       deployment.get('apiVersion') != 'apps/v1' or deployment.get('kind') != 'Deployment'
                      or type(metadata) is not dict or metadata.get('name') != 'trino-local'
                          or metadata.get('namespace') != NAMESPACE
-                         or metadata.get('deletionTimestamp') is not None
-                         or any(type(key) is str and key.lower() == 'deletiontimestamp' and
-                                key != 'deletionTimestamp' for key in metadata)
+                          or metadata.get('deletionTimestamp') is not None
+                          or metadata.get('deletionGracePeriodSeconds') is not None
+                          or any(type(key) is str and key.lower() == 'deletiontimestamp' and
+                                 key != 'deletionTimestamp' for key in metadata)
+                          or any(type(key) is str and key.lower() == 'deletiongraceperiodseconds' and
+                                 key != 'deletionGracePeriodSeconds' for key in metadata)
                          or any(type(key) is str and key.lower() == 'generation' and
                                key != 'generation' for key in metadata)
                         or ('generation' in metadata and

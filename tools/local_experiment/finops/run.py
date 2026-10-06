@@ -225,6 +225,8 @@ class Backend:
 
     def inference(self, end):
         # Never call ensure_runtime: it can create containers/database/schema.
+        # Reject an invalid query window before inspecting Docker or touching a credential.
+        sql = inference_sql(end)
         context = _json(self._command(['docker', 'context', 'inspect', AH.CONTEXT]))
         C.require(type(context) is list and len(context) == 1 and type(context[0]) is dict and
                   context[0].get('Name') == AH.CONTEXT,
@@ -280,7 +282,7 @@ class Backend:
         after = path.lstat()
         C.require((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) ==
                   (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns), 'SCOPE_INVALID')
-        raw = client.query(inference_sql(end))
+        raw = client.query(sql)
         C.require(len(raw.encode()) <= 1024**2, 'READ_LIMIT')
         return [_json(line) for line in raw.splitlines() if line.strip()]
 

@@ -413,6 +413,16 @@ class RuntimeTests(unittest.TestCase):
                 backend.inference(NOW)
             factory.assert_not_called()
 
+    def test_invalid_inference_window_stops_before_docker_and_credentials(self):
+        for end in (None, 'not-a-time', '2026-10-06T00:00:00', []):
+            backend = R.Backend()
+            with self.subTest(end=end), patch.object(backend, '_command') as command, \
+                    patch.object(R.AH, 'Client') as client, \
+                    self.assertRaises(R.C.FinOpsError):
+                backend.inference(end)
+            command.assert_not_called()
+            client.assert_not_called()
+
     def test_agenthouse_malformed_inspection_refuses_before_credentials(self):
         context = {'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}
         owned = [{'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},

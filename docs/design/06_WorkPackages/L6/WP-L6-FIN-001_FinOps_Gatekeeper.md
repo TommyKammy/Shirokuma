@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.211"
+version: "0.212"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: validate inference window before Docker inspection (offline)
+
+The inference reader previously inspected Docker before discovering a malformed
+query window. It now builds the fixed SQL first; four invalid-window fixtures
+stop before Docker or credential access. The negative failed before the repair;
+focused FinOps 308 tests (seven Linux-only skips) and the full local verifier
+passed after this change. Dedicated Colima was freshly Stopped; no live Docker,
+credential, retained volume, report or backup access. AgentHouse used bytes
+remain `null / NOT_MEASURED`. This is not producer authentication, a live
+query or operator acceptance. Restore only the early SQL validation/test if
+needed, retaining saved data. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: scope inference to the fixed AgentHouse mount (offline)
 

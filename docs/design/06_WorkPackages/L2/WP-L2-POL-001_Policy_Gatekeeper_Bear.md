@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.223"
+version: "0.224"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: reject terminating grace-period image source (offline)
+
+The fixed Trino smoke image reader previously lent an image when the returned
+Deployment carried a non-null deletion grace period, including a case-variant
+alias. Two synthetic negatives failed before the guard; focused policy 166
+tests passed after repair. No live API/admission, unknown-request replay,
+retained data/backup change or publication. A reply shape is not Kubernetes
+authentication, strict admission or operator acceptance. Revert only the
+image-source guard/test if required, keeping saved requests; original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: deletion-marker alias in smoke image source (offline)
 
