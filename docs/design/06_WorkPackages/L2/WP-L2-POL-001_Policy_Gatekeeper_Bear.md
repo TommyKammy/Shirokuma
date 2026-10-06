@@ -5,12 +5,24 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.225"
+version: "0.226"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: unambiguous smoke source retention metadata (offline)
+
+A fixed-image Deployment with a case-variant finalizers or ownerReferences
+field lent the image despite an unexamined retention/ownership claim. Three
+synthetic aliases now fail closed; the negative finalizer cases failed before
+repair. Focused policy 166 tests and `make verify-local-experiment` passed
+after both scoped repairs. No live admission/API, saved request
+replay, retained data/backup mutation or publication. Offline source shape
+checks do not authenticate Kubernetes or establish strict admission/operator
+acceptance. Restore only the alias guard/test if needed; preserve saved
+requests. Original Vault handoff sync pending outside checkout.
 
 ## 2026-10-06: fixed smoke image source has no finalizers (offline)
 

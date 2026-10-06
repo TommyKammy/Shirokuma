@@ -1261,6 +1261,12 @@ class ScopedResponseTests(unittest.TestCase):
                 client.image()
         reply['metadata']['finalizers'] = []
         self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
+        for key in ('Finalizers', 'FINALIZERS', 'OwnerReferences'):
+            reply = copy.deepcopy(valid)
+            reply['metadata'][key] = ['example.test/hold']
+            client.json_request.return_value = reply
+            with self.subTest(finalizer_alias=key), self.assertRaises(policy.PolicyError):
+                client.image()
         for extra in ({'foreignEnvelope': {'enabled': True}},
                       {'items': []}):
             reply = copy.deepcopy(valid)

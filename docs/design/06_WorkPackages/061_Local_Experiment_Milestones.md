@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.415"
+version: "5.416"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent inference OOM and smoke retention aliases (offline)
+
+WP-L6-FIN-001 refuses a contradictory `Running=true`, `OOMKilled=true`
+AgentHouse reply before credential access. WP-L2-POL-001 refuses case-variant
+finalizers/ownerReferences on the fixed Trino image source. Negative fixtures
+failed before repair; focused FinOps 309 tests (seven Linux-only skips) and
+policy 166 tests passed after repair. `make verify-local-experiment` also
+passed; its fake Dagster worker failure diagnostic is an intentional negative
+test. Dedicated Colima freshly Stopped. No live Docker/API/admission/query,
+credential access, unknown-request replay,
+saved report/volume/backup mutation or AgentHouse byte measurement (`null /
+NOT_MEASURED`). Offline fixture success cannot authenticate producers, prove
+strict admission or establish operator acceptance. Roll back only these scoped
+guards/tests, keeping retained evidence. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: independent inactive inference and finalizer guards (offline)
 

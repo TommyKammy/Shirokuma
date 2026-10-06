@@ -260,7 +260,7 @@ class Backend:
                   type(network.get('Ports')) is dict, 'SCOPE_INVALID')
         C.require(config['Labels'].get(AH.LABEL) == 'agenthouse-local' and
                   config.get('Image') == AH.IMAGE and state.get('Running') is True and
-                  all(state.get(flag, False) is False for flag in ('Paused', 'Restarting', 'Dead')),
+                  all(state.get(flag, False) is False for flag in ('Paused', 'Restarting', 'Dead', 'OOMKilled')),
                   'SCOPE_INVALID')
         # A matching image/port with a foreign data mount is not the fixed
         # local AgentHouse dataset. Check before opening the host credential.

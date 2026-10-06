@@ -461,7 +461,7 @@ class RuntimeTests(unittest.TestCase):
                 backend.inference(NOW)
             client.assert_not_called()
 
-    def test_agenthouse_inference_refuses_paused_or_restarting_container(self):
+    def test_agenthouse_inference_refuses_inactive_or_oom_container(self):
         context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
         container = {'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
                      'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
@@ -469,8 +469,9 @@ class RuntimeTests(unittest.TestCase):
                      'NetworkSettings': {'Ports': {'8123/tcp': [
                          {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}
         for state in ({'Running': True, 'Paused': True},
-                      {'Running': True, 'Restarting': True},
-                      {'Running': True, 'Dead': True}):
+                       {'Running': True, 'Restarting': True},
+                       {'Running': True, 'Dead': True},
+                       {'Running': True, 'OOMKilled': True}):
             backend = R.Backend()
             with self.subTest(state=state), \
                     patch.object(backend, '_command', side_effect=[json.dumps(context),

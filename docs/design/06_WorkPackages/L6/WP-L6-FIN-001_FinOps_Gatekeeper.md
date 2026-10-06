@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.213"
+version: "0.214"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: reject OOM-terminated inference state (offline)
+
+An inspected container reporting `Running=true` with `OOMKilled=true` previously
+reached the credential and query path. The synthetic negative failed before
+repair; now it returns `SCOPE_INVALID` before credential access. Focused FinOps
+309 tests passed (seven Linux-only skips), as did the full local verifier after
+both scoped repairs. The dedicated Colima profile was
+freshly Stopped; no live Docker/query, saved data/backup change or AgentHouse
+byte measurement (`null / NOT_MEASURED`). A restarted container retaining an
+OOM marker may also be refused conservatively. Inspection text cannot
+authenticate the daemon, establish a stable process or confer operator
+acceptance. Revert only this state guard/test while retaining saved evidence.
+Original Vault handoff sync pending outside checkout.
 
 ## 2026-10-06: refuse suspended AgentHouse inference source (offline)
 

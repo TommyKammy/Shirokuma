@@ -522,6 +522,9 @@ class Kubernetes:
                          or type(metadata.get('finalizers', [])) is not list
                          or metadata.get('finalizers', [])):
                  raise PolicyError('smoke requires the dedicated local Trino deployment')
+            if any(type(key) is str and key.lower() in ('finalizers', 'ownerreferences') and
+                   key not in ('finalizers', 'ownerReferences') for key in metadata):
+                raise PolicyError('smoke requires the dedicated local Trino deployment')
             # A controller still observing an older generation has not
             # reconciled this spec; do not lend its image to the smoke.
             if 'status' in deployment and type(deployment['status']) is not dict:
