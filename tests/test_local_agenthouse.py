@@ -102,6 +102,37 @@ class AgentHouseTests(unittest.TestCase):
                     M.create_private_file(state, 'credential.json', b'replacement')
             self.assertEqual((path / 'credential.json').read_bytes(), b'{"password":"test"}\n')
 
+    def test_new_private_file_refuses_short_write_without_directory_sync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory)
+            state_path.chmod(0o700)
+            original_fdopen = M.os.fdopen
+
+            class ShortWriter:
+                def __init__(self, fd, *args):
+                    self.file = original_fdopen(fd, *args)
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return self.file.__exit__(*args)
+
+                def fileno(self):
+                    return self.file.fileno()
+
+                def write(self, data):
+                    return self.file.write(data[:3])
+
+            with patch.object(M, 'STATE', state_path), patch.object(M.os, 'fdopen', ShortWriter), \
+                    patch.object(M.os, 'fsync') as sync:
+                with M.private_state_fd() as state:
+                    with self.assertRaisesRegex(M.AgentHouseError, 'cannot be created safely'):
+                        M.create_private_file(state, 'credential.json', b'fixture')
+            sync.assert_not_called()
+            self.assertEqual((state_path / 'credential.json').read_bytes(), b'fix')
+            self.assertEqual((state_path / 'credential.json').stat().st_mode & 0o777, 0o600)
+
     def test_new_runtime_refuses_failed_private_file_sync_before_docker_create(self):
         for failed_sync in (1, 2, 3, 4):
             with self.subTest(failed_sync=failed_sync), tempfile.TemporaryDirectory() as directory:
@@ -549,6 +580,33 @@ class AgentHouseTests(unittest.TestCase):
                 self.assertEqual(len(calls), failed_sync)
                 self.assertEqual(len(list(state.glob('pawprints-*.jsonl'))), int(failed_sync != 2))
                 self.assertEqual(len(list(state.glob('*.pending'))), int(failed_sync != 4))
+
+    def test_export_refuses_substituted_staging_inode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            state.chmod(0o700)
+            client = Mock()
+            client.query.return_value = '{"event_id":"fixture"}\n'
+            original_sync = M.os.fsync
+            calls = 0
+
+            def sync(fd):
+                nonlocal calls
+                calls += 1
+                original_sync(fd)
+                if calls == 2:
+                    pending, = state.glob('*.pending')
+                    pending.rename(state / 'original-pending')
+                    pending.write_text('{"event_id":"substitute"}\n')
+                    pending.chmod(0o600)
+
+            with patch.object(M, 'STATE', state), patch.object(M.os, 'fsync', side_effect=sync):
+                with self.assertRaisesRegex(M.AgentHouseError, 'cannot be published safely'):
+                    M.export(client)
+            self.assertEqual(calls, 2)
+            self.assertEqual(list(state.glob('pawprints-*.jsonl')), [])
+            self.assertEqual((state / 'original-pending').read_text(), client.query.return_value)
+            self.assertEqual(len(list(state.glob('*.pending'))), 1)
 
     def test_smoke_invalid_readback_is_scoped_without_replaying_insert(self):
         with tempfile.TemporaryDirectory() as directory:

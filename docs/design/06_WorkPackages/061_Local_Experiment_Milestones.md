@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.505"
+version: "5.506"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: export staging identity and private startup short writes (offline)
+
+WP-L2-CH-001: a substituted private staging inode is refused before linking
+an export (one synthetic false publication before repair). Independently, a
+short credential/environment-file write fails before fsync/startup, retaining
+the partial file. 92 focused tests, `make verify-local-experiment`,
+design-context and diff check pass (fake Dagster worker failure is intentional).
+Dedicated Colima freshly Stopped;
+no retained reports, credentials, volumes or backups accessed/changed, and no
+live HTTP/Docker. This does not atomically exclude same-UID interference,
+prove power-loss durability, authenticate ClickHouse or prove deduplication.
+Preserve ambiguous files; do not replay uncertain inserts. Roll back only the
+scoped guards/tests, never delete retained material. Vault sync pending outside
+checkout; operator acceptance remains open.
 
 ## 2026-10-06: independent private export short-write guard (offline)
 

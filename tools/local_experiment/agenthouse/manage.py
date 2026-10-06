@@ -236,7 +236,8 @@ def create_private_file(state: int, name: str, payload: bytes) -> None:
                      0o600, dir_fd=state)
         with os.fdopen(fd, 'wb') as file:
             os.fchmod(file.fileno(), 0o600)
-            file.write(payload)
+            if file.write(payload) != len(payload):
+                raise OSError('short private file write')
             file.flush()
             os.fsync(file.fileno())
         # Sync the new directory entry as well as the file contents before
@@ -682,12 +683,23 @@ def export(client: Client) -> Path:
                     raise OSError('short export write')
                 file.flush()
                 os.fsync(file.fileno())
-            # Make the recoverable staging entry durable before attempting
-            # publication. A failed sync leaves it for explicit inspection.
-            os.fsync(state)
-            # link is exclusive: unlike rename it cannot replace a saved report.
-            os.link(staging, name, src_dir_fd=state, dst_dir_fd=state,
-                    follow_symlinks=False)
+                # Keep the written inode pinned while syncing the directory and
+                # checking the entry that will be linked. A substituted staging
+                # pathname must not publish an unrelated private file.
+                written = os.fstat(file.fileno())
+                # A failed sync leaves the pending inode for inspection.
+                os.fsync(state)
+                entry = os.stat(staging, dir_fd=state, follow_symlinks=False)
+                if (not stat.S_ISREG(entry.st_mode) or entry.st_uid != os.getuid() or
+                        stat.S_IMODE(entry.st_mode) != 0o600 or entry.st_nlink != 1 or
+                        (entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns,
+                         entry.st_ctime_ns) !=
+                        (written.st_dev, written.st_ino, written.st_size,
+                         written.st_mtime_ns, written.st_ctime_ns)):
+                    raise OSError('staging export changed before publication')
+                # link is exclusive: unlike rename it cannot replace a saved report.
+                os.link(staging, name, src_dir_fd=state, dst_dir_fd=state,
+                        follow_symlinks=False)
             os.fsync(state)
             os.unlink(staging, dir_fd=state)
             os.fsync(state)

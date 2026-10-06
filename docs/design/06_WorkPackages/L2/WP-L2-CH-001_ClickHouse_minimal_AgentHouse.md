@@ -5,12 +5,32 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.50"
+version: "0.51"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 staged export identity and startup short-write checks (offline)
+
+The exporter now holds the written staging inode through directory sync and
+refuses a substituted same-name inode before linking the public report. A
+synthetic replacement with a different private JSONL file previously published
+that replacement; now it fails and leaves the original and substitute for
+inspection. Independently, a short write of a newly created private credential
+or container environment file fails before fsync/consumer startup, retaining
+the partial file for investigation instead of claiming a durable credential.
+92 focused tests, `make verify-local-experiment`, design-context and diff check
+pass. Both checks are local fail-closed conditions, not atomic
+exclusion of a concurrent same-UID actor or a guarantee across power loss.
+The dedicated Colima profile remained Stopped; no saved reports, credentials,
+volumes or backups were accessed, and no HTTP/Docker request was made. A
+pending/partial private file consumes at most the scoped payload size plus
+directory overhead; do not remove or overwrite ambiguous retained material
+automatically. Revert only these two scoped guards/tests if compatibility
+requires it, preserving saved records; original Vault sync pending outside
+checkout. Live ClickHouse, deduplication and operator acceptance remain open.
 
 ## 2026-10-06 private export short-write refusal (offline)
 
