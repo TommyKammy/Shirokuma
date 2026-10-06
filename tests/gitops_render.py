@@ -105,6 +105,8 @@ class RepositoryContext:
             raise RenderError(
                 "RepositoryContext Git URLs and branches cannot be paired"
             )
+        if len(set(pairs)) != len(pairs):
+            raise RenderError("RepositoryContext has duplicate Git URL/branch identities")
         refs = (
             tuple(local_git_secret_refs)
             if local_git_secret_refs is not None
@@ -363,7 +365,10 @@ def _canonical_git_url(value: str) -> str:
             raise RenderError("unsupported absolute scp-style Git repository path")
         transport = f"ssh://{scp_match.group('user')}@"
     else:
-        parsed = urlsplit(raw)
+        try:
+            parsed = urlsplit(raw)
+        except ValueError as error:
+            raise RenderError("unsupported Git repository URL") from error
         if (
             parsed.scheme.lower() not in {"http", "https", "ssh"}
             or not parsed.hostname
@@ -372,7 +377,7 @@ def _canonical_git_url(value: str) -> str:
             or "?" in raw
             or "#" in raw
         ):
-            raise RenderError(f"unsupported Git repository URL: {value}")
+            raise RenderError("unsupported Git repository URL")
         host = parsed.hostname.lower()
         # A different transport or SSH principal can select different Git
         # content even when host/path match. Embedded passwords are not a
@@ -391,9 +396,7 @@ def _canonical_git_url(value: str) -> str:
         try:
             port = parsed.port
         except ValueError as error:
-            raise RenderError(
-                f"unsupported Git repository URL: {value}"
-            ) from error
+            raise RenderError("unsupported Git repository URL") from error
         if port is not None and port != default_port:
             host = f"{host}:{port}"
         path = parsed.path
@@ -406,10 +409,10 @@ def _canonical_git_url(value: str) -> str:
         or path.endswith("/")
         or any(part in {".", ".."} for part in path.split("/"))
     ):
-        raise RenderError(f"unsupported Git repository URL: {value}")
+        raise RenderError("unsupported Git repository URL")
     normalized_path = path.strip("/").removesuffix(".git")
     if not normalized_path:
-        raise RenderError(f"unsupported Git repository URL: {value}")
+        raise RenderError("unsupported Git repository URL")
     return f"{transport}{host}/{normalized_path}"
 
 

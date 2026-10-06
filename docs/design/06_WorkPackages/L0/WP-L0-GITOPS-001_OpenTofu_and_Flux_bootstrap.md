@@ -5,12 +5,29 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.150"
+version: "0.151"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: unambiguous offline source identities
+
+Two independent fixture failures in the local GitOps renderer were corrected:
+duplicate canonical Git URL/branch declarations with different credential
+reference names no longer create interchangeable source identities; malformed
+URL authorities (including an unmatched IPv6 bracket) now fail as scoped
+`RenderError` rather than leaking a parser exception. URL errors do not echo
+potential embedded credential text. Isolated regressions failed before repair;
+bootstrap/teardown contract tests (26), `make flux-version-check tofu-fmt`,
+and `make verify-local-experiment` pass (fake Dagster worker failure is an
+intentional negative). Dedicated `colima list` observed mac-studio-solo Stopped;
+no VM start, remote fetch, credential bytes, retained data or backup accessed.
+This compares local declarations only: remote identity, live Flux, Git smoke,
+strict admission and operator acceptance remain open. Restore only the scoped
+renderer/test if verified source semantics require it, preserving saved state.
+Original Vault synchronization remains pending outside this checkout.
 
 ## 2026-10-06: checked-in source credential reference (offline)
 

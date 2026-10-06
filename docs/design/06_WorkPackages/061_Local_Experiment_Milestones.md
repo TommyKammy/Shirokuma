@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.522"
+version: "5.523"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent offline Git identity and malformed authority checks
+
+WP-L0-GITOPS-001: duplicate canonical URL/branch declarations cannot silently
+authorize two credential references, and malformed Git URL authorities fail
+closed with redacted, scoped errors. Both fixture classes failed before repair;
+bootstrap/teardown 26, pinned Flux/Tofu formatting and full local verifier
+pass (intentional fake Dagster failure). Dedicated VM freshly observed Stopped;
+no remote/VM, credential bytes, retained data or backup read/change. Remote
+provenance, live Flux/Git smoke, strict gate and operator acceptance open;
+restore only renderer/test if verified compatibility differs. Vault sync
+pending outside checkout.
 
 ## 2026-10-06: checked-in Git credential reference (offline)
 

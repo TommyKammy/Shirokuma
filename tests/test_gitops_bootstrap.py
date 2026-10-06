@@ -15,7 +15,7 @@ from scripts.verify_gitops_image_admission import (
     validate_rendered_image_multiset,
 )
 from tests.gitops_render import (
-    RenderError, RepositoryContext, Resource, _is_local_git_source,
+    RenderError, RepositoryContext, Resource, _canonical_git_url, _is_local_git_source,
     default_repository_context,
 )
 
@@ -24,6 +24,33 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
+    def test_repository_context_refuses_ambiguous_source_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            url = "ssh://git@example.invalid/team/repo.git"
+            for urls, branches, refs in (
+                ((url, url), ("main", "main"), ("first", "second")),
+                ((url, "git@example.invalid:team/repo.git"), ("main", "main"), ("first", "second")),
+            ):
+                with self.subTest(urls=urls), self.assertRaises(RenderError):
+                    RepositoryContext.create(root, urls, branches, refs)
+
+    def test_git_source_invalid_authority_is_scoped_and_redacted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            context = RepositoryContext.create(root, ["ssh://git@example.invalid/team/repo.git"])
+            for url in ("ssh://[broken/team/repo.git", "ssh://git@host:bad/team/repo.git"):
+                with self.subTest(url=url):
+                    source = Resource(root / "source.yaml", {
+                        "apiVersion": "source.toolkit.fluxcd.io/v1",
+                        "kind": "GitRepository", "metadata": {"name": "source"},
+                        "spec": {"url": url, "ref": {"branch": "main"}},
+                    })
+                    self.assertFalse(_is_local_git_source(source, context))
+            with self.assertRaises(RenderError) as caught:
+                _canonical_git_url("ssh://git:private-marker@[broken/team/repo.git")
+            self.assertNotIn("private-marker", str(caught.exception))
+
     def test_local_source_rejects_unmodeled_fetch_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
