@@ -33,6 +33,20 @@ class AgentHouseTests(unittest.TestCase):
             with self.subTest(fields=fields), self.assertRaises(M.AgentHouseError):
                 M.event("test", "clickhouse", **fields)
 
+    def test_float_metrics_refuse_unrepresentable_integer_before_insert(self):
+        for field in ('inference_cost_estimate', 'cpu_seconds', 'memory_mb_seconds'):
+            for number in (2**53 + 1, 10**400):
+                with self.subTest(field=field, number=str(number)[:20]):
+                    with self.assertRaises(M.AgentHouseError):
+                        M.event('test', 'clickhouse', **{field: number})
+                    value = M.event('test', 'clickhouse')
+                    value[field] = number
+                    client = Mock()
+                    with self.assertRaises(M.AgentHouseError):
+                        M.insert(client, value)
+                    client.query.assert_not_called()
+            self.assertEqual(M.event('test', 'clickhouse', **{field: 2**53})[field], 2**53)
+
     def test_invalid_event_identity_and_timestamp_fail_before_insert(self):
         for fields in ({'event_id': 'not-a-uuid'}, {'timestamp': 'yesterday'},
                        {'event_id': '00000000000000000000000000000001'},

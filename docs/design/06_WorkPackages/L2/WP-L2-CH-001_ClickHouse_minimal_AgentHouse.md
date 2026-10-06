@@ -4,13 +4,25 @@ doc_id: "WP-L2-CH-001"
 title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
-updated: 2026-09-16
-version: "0.5"
+updated: 2026-10-06
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 Float64 metric integer boundary (offline)
+
+Pawprint `event` and `insert` now refuse integer cost/CPU/memory measurements
+above 2^53: larger integers can silently round in Float64, while very large
+integers previously raised an unscoped `OverflowError` in `isfinite`. Exact
+boundary integers and finite floats remain accepted. A synthetic negative
+reproduced both paths; AgentHouse focused 36 tests and the local verifier pass.
+Dedicated Colima was freshly Stopped, so no live insertion, retained data,
+volume or backup changed. This is input validation, not producer authentication
+or live/operator acceptance. Roll back only the metric guard/test; preserve
+saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 bounded Docker numeric replies and credential ambiguity (offline)
 

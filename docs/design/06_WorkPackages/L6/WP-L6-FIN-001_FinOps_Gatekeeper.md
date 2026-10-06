@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.219"
+version: "0.220"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 VM df column whitespace (offline)
+
+The fixed `df -Pk` reader now refuses Unicode whitespace in the header or data
+row rather than allowing Python `split()` to turn a nonstandard separator into
+a valid column boundary. Synthetic NBSP/EM SPACE variants passed before repair;
+the focused 51 runtime tests and local verifier pass afterward. ASCII space/tab
+and the two LF row delimiters remain supported. Dedicated Colima was freshly
+Stopped; no live capacity read or retained report/volume/backup change;
+AgentHouse volume bytes remain `null / NOT_MEASURED`. This cannot authenticate
+the VM or establish operator acceptance. Restore only the parser/test and
+preserve saved evidence; original Vault sync pending outside checkout.
 
 ## 2026-10-06 complete VM disk row framing (offline)
 

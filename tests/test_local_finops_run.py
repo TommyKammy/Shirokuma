@@ -243,6 +243,14 @@ class RuntimeTests(unittest.TestCase):
                 R.parse_disk(bad)
         self.assertEqual(R.parse_disk(value), (1024000, 256000))
 
+    def test_df_rejects_unicode_whitespace_that_changes_columns(self):
+        value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        for bad in (value.replace('Filesystem 1024', 'Filesystem\u00a01024'),
+                    value.replace('1000 700', '1000\u2003700')):
+            with self.subTest(bad=repr(bad)), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
+                R.parse_disk(bad)
+        self.assertEqual(R.parse_disk(value), (1024000, 256000))
+
     def test_df_rejects_misidentified_or_inconsistent_capacity(self):
         value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
         for bad in (value.replace('1024-blocks', '512-blocks'),

@@ -122,7 +122,8 @@ def parse_disk(raw):
     # df -Pk emits exactly a header and one complete LF-terminated data row.
     # splitlines() would treat Unicode separators or a truncated last row as
     # equivalent framing, even though neither came from this fixed command.
-    C.require(raw.endswith('\n') and raw.count('\n') == 2 and '\r' not in raw,
+    C.require(raw.endswith('\n') and raw.count('\n') == 2 and '\r' not in raw and
+              all(not char.isspace() or char in (' ', '\t', '\n') for char in raw),
               'DISK_INVALID')
     lines = raw[:-1].split('\n')
     C.require(len(lines) == 2 and

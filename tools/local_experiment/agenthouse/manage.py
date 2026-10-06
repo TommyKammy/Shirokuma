@@ -310,8 +310,15 @@ def event(action: str, target: str, status: str = "success", **fields) -> dict:
             raise AgentHouseError(f"invalid nonnegative integer: {key}")
     for key in ("inference_cost_estimate", "cpu_seconds", "memory_mb_seconds"):
         number = value[key]
-        if number is not None and (type(number) not in {int, float} or not math.isfinite(number) or number < 0):
-            raise AgentHouseError(f"invalid measured value: {key}")
+        if number is not None:
+            # These columns are Float64. An arbitrary Python int may overflow
+            # isfinite() or silently round when ClickHouse stores the event.
+            if type(number) is int:
+                valid = 0 <= number <= 2**53
+            else:
+                valid = type(number) is float and math.isfinite(number) and number >= 0
+            if not valid:
+                raise AgentHouseError(f"invalid measured value: {key}")
     for key, item in value.items():
         if isinstance(item, str) and (len(item) > 256 or "\n" in item or "\r" in item):
             raise AgentHouseError(f"unbounded or multiline field: {key}")

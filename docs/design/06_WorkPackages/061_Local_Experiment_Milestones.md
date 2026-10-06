@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.431"
+version: "5.432"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent Float64 and VM disk column guards (offline)
+
+WP-L2-CH-001 refuses >2^53 integer measurements before Float64 Pawprint
+insertion (silent rounding or unscoped overflow before repair); WP-L6-FIN-001
+refuses Unicode whitespace that previously split the fixed `df` header/data
+into apparently valid columns. Reproduced negative fixtures; focused AgentHouse
+36 tests and FinOps runtime 51 tests, then full `make verify-local-experiment`
+pass (fake Dagster worker failure is an intentional negative fixture).
+Dedicated Colima freshly Stopped; no live write/capacity read or retained
+volume/report/backup change. AgentHouse bytes stay `null / NOT_MEASURED`.
+Neither parser authenticates its producer or grants operator acceptance.
+Rollback only the scoped guards/tests, retaining saved records. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: complete VM df LF framing (offline)
 
