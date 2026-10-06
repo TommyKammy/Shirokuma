@@ -12,6 +12,16 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: checked-in Git credential reference (offline)
+
+WP-L0-GITOPS-001: source credential reference name now belongs to the
+checked-in URL/branch context; swapped, missing or extra fields fail closed.
+Focused bootstrap/teardown 25 pass; pinned Flux and OpenTofu format pass.
+The independent Iceberg suite has 44 tool-drift errors (Helm v4.2.3 vs
+v4.2.2 pin; kubectl rejects non-Kubernetes JSON), not acceptance. Dedicated
+VM remains Stopped, no credential bytes or retained data/backup accessed.
+Remote authenticity/live Flux/operator acceptance open; Vault sync pending.
+
 ## 2026-10-06: GitOps fetch-setting classification (offline)
 
 WP-L0-GITOPS-001: four fake source fetch-setting variants falsely matched the

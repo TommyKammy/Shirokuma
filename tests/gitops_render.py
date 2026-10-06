@@ -78,6 +78,7 @@ class RepositoryContext:
 
     source_root: Path
     local_git_sources: frozenset[tuple[str, str]]
+    local_git_secret_refs: frozenset[tuple[str, str, str | None]]
 
     @classmethod
     def create(
@@ -85,6 +86,7 @@ class RepositoryContext:
         source_root: Path,
         local_git_urls: Iterable[str],
         local_git_branches: Iterable[str] = ("main",),
+        local_git_secret_refs: Iterable[str | None] | None = None,
     ) -> "RepositoryContext":
         root = source_root.resolve()
         urls = tuple(_canonical_git_url(url) for url in local_git_urls)
@@ -94,18 +96,31 @@ class RepositoryContext:
                 "RepositoryContext requires a Git URL and branch"
             )
         if len(branches) == 1:
-            pairs = ((url, branches[0]) for url in urls)
+            pairs = tuple((url, branches[0]) for url in urls)
         elif len(urls) == 1:
-            pairs = ((urls[0], branch) for branch in branches)
+            pairs = tuple((urls[0], branch) for branch in branches)
         elif len(urls) == len(branches):
-            pairs = zip(urls, branches)
+            pairs = tuple(zip(urls, branches))
         else:
             raise RenderError(
                 "RepositoryContext Git URLs and branches cannot be paired"
             )
+        refs = (
+            tuple(local_git_secret_refs)
+            if local_git_secret_refs is not None
+            else (None,) * len(pairs)
+        )
+        if len(refs) != len(pairs) or any(
+            ref is not None and (not isinstance(ref, str) or not ref)
+            for ref in refs
+        ):
+            raise RenderError("RepositoryContext requires one valid secret reference per source")
         return cls(
             source_root=root,
             local_git_sources=frozenset(pairs),
+            local_git_secret_refs=frozenset(
+                (url, branch, ref) for (url, branch), ref in zip(pairs, refs)
+            ),
         )
 
     @property
@@ -413,7 +428,7 @@ def default_repository_context(source_root: Path, deploy_root: Path) -> Reposito
         raise RenderError(
             "temporary or alternate repositories must provide RepositoryContext"
         )
-    sources: list[tuple[str, str]] = []
+    sources: list[tuple[str, str, str | None]] = []
     for resource in load_yaml_file(sync_path):
         if (
             resource.get("kind") != "GitRepository"
@@ -425,13 +440,22 @@ def default_repository_context(source_root: Path, deploy_root: Path) -> Reposito
         url = spec.get("url")
         branch = _mapping(spec.get("ref")).get("branch")
         if isinstance(url, str) and isinstance(branch, str) and branch:
-            sources.append((url, branch))
+            secret = spec.get("secretRef")
+            if secret is not None and (
+                not isinstance(secret, dict)
+                or set(secret) != {"name"}
+                or not isinstance(secret["name"], str)
+                or not secret["name"]
+            ):
+                raise RenderError("GitRepository has an invalid secret reference")
+            sources.append((url, branch, secret["name"] if secret else None))
     if not sources:
         raise RenderError(f"no GitRepository URL found in {sync_path}")
     return RepositoryContext.create(
         source_root,
-        (url for url, _branch in sources),
-        (branch for _url, branch in sources),
+        (url for url, _branch, _secret in sources),
+        (branch for _url, branch, _secret in sources),
+        (secret for _url, _branch, secret in sources),
     )
 
 
@@ -871,6 +895,20 @@ def _is_local_git_source(resource: Resource, context: RepositoryContext) -> bool
             "repository-local GitRepository URL/branch pair is outside "
             "RepositoryContext"
         )
+    secret = spec.get("secretRef")
+    if secret is not None and (
+        not isinstance(secret, dict)
+        or set(secret) != {"name"}
+        or not isinstance(secret["name"], str)
+        or not secret["name"]
+    ):
+        raise RenderError("repository-local GitRepository has an invalid secret reference")
+    if (
+        canonical_url,
+        source_ref["branch"],
+        secret["name"] if secret else None,
+    ) not in context.local_git_secret_refs:
+        raise RenderError("repository-local GitRepository secret reference is outside RepositoryContext")
     return True
 
 

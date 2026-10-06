@@ -12,6 +12,21 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-06: checked-in source credential reference (offline)
+
+As a second independent identity check, repository-local rendering now binds
+the GitRepository `secretRef.name` to the checked-in sync contract alongside
+URL/branch. A changed or omitted reference and an extra credential field are
+rejected; the original source is still accepted. This compares reference
+**names**, not credential bytes, remote content or authenticity. The focused
+bootstrap/teardown tests pass (25), and the pinned Flux gate and OpenTofu
+format check pass. An independent Iceberg suite still fails with 44 errors:
+installed Helm v4.2.3 differs from renderer pin v4.2.2, and installed kubectl
+rejects non-Kubernetes JSON. Do not relax pins or count that suite as passed.
+No dedicated VM start or retained data/backup change. Revert only this
+reference-binding change if verified semantics require it; original Vault sync
+pending, live §9 and operator acceptance still open.
+
 ## 2026-10-06: offline source fetch-setting boundary
 
 Four synthetic GitRepository variants with the declared URL/branch but an

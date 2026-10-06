@@ -14,7 +14,10 @@ from scripts.verify_gitops_image_admission import (
     AdmissionError,
     validate_rendered_image_multiset,
 )
-from tests.gitops_render import RepositoryContext, Resource, _is_local_git_source
+from tests.gitops_render import (
+    RenderError, RepositoryContext, Resource, _is_local_git_source,
+    default_repository_context,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,8 +25,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
     def test_local_source_rejects_unmodeled_fetch_settings(self) -> None:
-        from tests.gitops_render import RenderError
-
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             context = RepositoryContext.create(root, ["ssh://git@example.invalid/team/repo.git"])
@@ -41,6 +42,31 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             ):
                 with self.subTest(field=field), self.assertRaises(RenderError):
                     _is_local_git_source(source({**spec, field: value}), context)
+
+    def test_checked_in_source_credential_reference_is_not_interchangeable(self) -> None:
+        context = default_repository_context(ROOT, ROOT / "deploy")
+        source = Resource(
+            ROOT / "deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "metadata": {"name": "flux-system", "namespace": "flux-system"},
+                "spec": {
+                    "url": "ssh://git@github.com/TommyKammy/Shirokuma",
+                    "ref": {"branch": "main"},
+                    "secretRef": {"name": "flux-system"},
+                },
+            },
+        )
+        self.assertTrue(_is_local_git_source(source, context))
+        for secret in (None, {"name": "alternate"}, {"name": "flux-system", "extra": True}):
+            with self.subTest(secret=secret), self.assertRaises(RenderError):
+                altered = {**source.value, "spec": {**source.value["spec"]}}
+                if secret is None:
+                    altered["spec"].pop("secretRef")
+                else:
+                    altered["spec"]["secretRef"] = secret
+                _is_local_git_source(Resource(source.path, altered), context)
 
     def test_repository_owns_flux_bootstrap_entrypoints(self) -> None:
         required_files = (
