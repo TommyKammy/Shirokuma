@@ -224,13 +224,15 @@ class Backend:
     def inference(self, end):
         # Never call ensure_runtime: it can create containers/database/schema.
         context = _json(self._command(['docker', 'context', 'inspect', AH.CONTEXT]))
-        C.require(type(context) is list and len(context) == 1 and type(context[0]) is dict,
+        C.require(type(context) is list and len(context) == 1 and type(context[0]) is dict and
+                  context[0].get('Name') == AH.CONTEXT,
                   'SCOPE_INVALID')
         endpoints = context[0].get('Endpoints')
         C.require(type(endpoints) is dict and type(endpoints.get('docker')) is dict, 'SCOPE_INVALID')
         host = endpoints['docker'].get('Host')
-        C.require(type(host) is str and host.startswith('unix://') and
-                  host.endswith('/.colima/mac-studio-solo/docker.sock'), 'SCOPE_INVALID')
+        C.require(type(host) is str and host.startswith('unix:///Users/') and
+                  host.endswith('/.colima/mac-studio-solo/docker.sock') and
+                  '..' not in host.split('/'), 'SCOPE_INVALID')
         value = _json(self._command(['docker', '--context', AH.CONTEXT, 'container', 'inspect', AH.NAME]))
         C.require(type(value) is list and len(value) == 1 and type(value[0]) is dict,
                   'SCOPE_INVALID')

@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.406"
+version: "5.407"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: inference context socket alias (offline)
+
+WP-L6-FIN-001: three foreign-name/path or parent-segment context replies
+previously allowed a further container read; now they fail with `SCOPE_INVALID`
+before it. Focused FinOps 298 tests pass (seven Linux-only skips). The prior
+full verifier predates this follow-up. No live Docker/VM read, credential access,
+saved report/volume/backup change or AgentHouse usage measurement (`null /
+NOT_MEASURED`). Lexical socket attribution is not producer authentication or
+operator acceptance. Revert only this guard/test while preserving saved data;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: inference inspection and port-boundary guards (offline)
 

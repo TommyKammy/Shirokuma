@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.204"
+version: "0.205"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: inference Docker context path attribution (offline)
+
+Separately from nested shape and published-port validation, a context reply
+with a lexical parent segment, a foreign Unix socket prefix or a foreign
+context name could previously trigger the next container read. Three negatives
+failed before the guard; the canonical-looking Colima socket fixture still passes.
+Focused `make test-local-finops` passed 298 tests (seven Linux-only skips).
+The full verifier reported below predates this follow-up, not a post-change
+integration result. No live Docker/VM access, credential read, retained volume/
+report/backup mutation or AgentHouse usage measurement. Lexical checks cannot
+authenticate the socket or establish operator acceptance. Roll back only this
+context guard/test if needed; retain saved records. Vault sync pending outside
+checkout.
 
 ## 2026-10-06: inference inspection shape and published-port scope (offline)
 
