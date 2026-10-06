@@ -335,8 +335,28 @@ class AgentHouseTests(unittest.TestCase):
                         with self.assertRaises(M.AgentHouseError):
                             M.smoke(client)
                 report.write_text(good)
+                client.query.side_effect = lambda statement: '25.8.4.1\n' if statement == 'SELECT version()' else '{"data":[{"n":1,"status":"success"}]}'
                 self.assertEqual(M.smoke(client)['result'], 'passed')
                 self.assertEqual(inserted.call_count, 14)
+
+    def test_smoke_version_reply_is_bounded_before_public_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
+            value = M.event('runtime.smoke', 'clickhouse')
+            report.write_text(json.dumps({key: value[key] for key in
+                                          ('event_id', 'timestamp', 'agent_id', 'task_id',
+                                           'action_type', 'target_system', 'status')}) + '\n')
+            report.chmod(0o600)
+            client = Mock()
+            with patch.object(M, 'STATE', Path(directory)), patch.object(M, 'event', return_value=value), \
+                    patch.object(M, 'insert') as inserted, patch.object(M, 'export', return_value=report):
+                for version in ('25.8.4.1\x1b[0m', '25.8.4.1\nother', 'x' * 200, None):
+                    client.query.side_effect = lambda statement: version if statement == 'SELECT version()' else '{"data":[{"n":1,"status":"success"}]}'
+                    with self.subTest(version=version), self.assertRaisesRegex(M.AgentHouseError, 'version reply'):
+                        M.smoke(client)
+                client.query.side_effect = lambda statement: '25.8.4.1\n' if statement == 'SELECT version()' else '{"data":[{"n":1,"status":"success"}]}'
+                self.assertEqual(M.smoke(client)['version'], '25.8.4.1')
+                self.assertEqual(inserted.call_count, 10)
 
     def test_smoke_refuses_same_id_with_different_exported_identity(self):
         with tempfile.TemporaryDirectory() as directory:

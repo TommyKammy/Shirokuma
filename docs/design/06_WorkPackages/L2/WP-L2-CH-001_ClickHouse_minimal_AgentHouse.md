@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 smoke version diagnostic output boundary (offline)
+
+After matching count/export readback, the smoke path previously returned an
+unbounded raw `version()` reply. It now accepts only a bounded dotted numeric
+version with at most one trailing LF; control text, extra lines, oversized and
+non-text replies fail closed without a public result. Four negative fixtures
+and the valid reply are covered; focused AgentHouse 50 tests and full local
+verifier pass (fake Dagster failure intentional). Dedicated Colima Stopped;
+no live insert, retained report/credential/volume/backup access or change.
+The version reply is diagnostic, not proof of server identity or deduplication.
+On ambiguous smoke outcomes inspect saved evidence without replay; roll back
+only this reply guard/test and preserve reports. Original Vault sync pending
+outside checkout; no operator acceptance.
+
 ## 2026-10-06 smoke matching-row identity correlation (offline)
 
 The saved-export smoke readback used to accept a successful row with the same

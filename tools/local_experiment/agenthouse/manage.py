@@ -631,7 +631,12 @@ def smoke(client: Client) -> dict:
     if any(matching[0].get(key) != value[key] for key in
            ('timestamp', 'agent_id', 'task_id', 'action_type', 'target_system')):
         raise AgentHouseError("exported event identity differs from inserted event; do not replay")
-    return {"result": "passed", "version": client.query("SELECT version()").strip(),
+    version = client.query("SELECT version()")
+    if (not isinstance(version, str) or
+            re.fullmatch(r'[0-9]+(?:\.[0-9]+){1,5}\n?', version) is None or
+            len(version) > 128):
+        raise AgentHouseError("Pawprint version reply is invalid; do not replay")
+    return {"result": "passed", "version": version.rstrip('\n'),
             "event_id": value["event_id"], "logical_rows": 1, "export": str(path), "endpoint": URL}
 
 

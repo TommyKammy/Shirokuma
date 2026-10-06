@@ -12,6 +12,18 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: bounded AgentHouse smoke version reply (offline)
+
+WP-L2-CH-001 refuses control-bearing, multiline, oversized or non-text
+`version()` diagnostics after count/export smoke readback. Four negative
+fixtures and one valid reply; AgentHouse focused 50 tests and full
+`make verify-local-experiment` pass (intentional fake Dagster failure).
+Dedicated Colima Stopped; no live insert, retained report, credential, volume
+or backup access/change. The diagnostic does not authenticate ClickHouse or
+prove live deduplication/operator acceptance. Preserve saved evidence and do
+not replay an ambiguous insert; revert only this scoped check/test. Original
+Vault sync pending outside checkout.
+
 ## 2026-10-06: smoke row identity and procfs propagation tags (offline)
 
 WP-L2-CH-001 correlates the saved smoke row's timestamp, agent/task, action
