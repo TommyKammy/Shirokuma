@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.404"
+version: "5.405"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent FinOps component and inference input guards (offline)
+
+WP-L6-FIN-001: 16 malformed first/second component Pod nested shapes and two
+unencodable inference model identities raised unscoped exceptions before their
+separate repairs; now they yield `SCOPE_INVALID` and `INFERENCE_INVALID`.
+Focused FinOps 295 tests passed (seven Linux-only skips), followed by
+`make verify-local-experiment` (its fake Dagster worker failure is an expected
+negative diagnostic). Dedicated Colima was freshly listed Stopped. No live
+API/VM collection, retained report/volume/backup mutation, or AgentHouse
+used-byte measurement (`null / NOT_MEASURED`). These offline fixtures cannot
+authenticate a producer, prove atomicity or grant operator acceptance. Revert
+only scoped checks/tests if needed, keeping saved evidence; original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-06: bounded FinOps PodMetrics payload shapes (offline)
 

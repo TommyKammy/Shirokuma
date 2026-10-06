@@ -76,6 +76,13 @@ def integer(value, maximum=2**63-1):
     return int(value)
 
 
+def bounded_model_identity(value):
+    if type(value) is not str: return False
+    try: size = len(value.encode('utf-8'))
+    except UnicodeError: return False
+    return 0 < size <= 256 and all(ord(c) >= 32 and ord(c) != 127 for c in value)
+
+
 def unknown_component(component, reason):
     require(component in COMPONENTS and reason in REASONS)
     return {'component': component, 'state': 'unknown', 'reason': reason, 'request_started_at': None,
@@ -96,13 +103,17 @@ def _identity(component, pod):
     try: require(str(uuid.UUID(meta.get('uid'))) == meta['uid'], 'SCOPE_INVALID')
     except (ValueError, TypeError, AttributeError): raise FinOpsError('SCOPE_INVALID') from None
     spec = pod.get('spec', {})
+    require(type(spec) is dict, 'SCOPE_INVALID')
     containers, states = spec.get('containers'), status.get('containerStatuses')
-    require(type(containers) is list and len(containers) == 1 and containers[0].get('name') == container and
-            type(states) is list and len(states) == 1 and states[0].get('name') == container and
+    require(type(containers) is list and len(containers) == 1 and type(containers[0]) is dict and
+            containers[0].get('name') == container and
+            type(states) is list and len(states) == 1 and type(states[0]) is dict and
+            states[0].get('name') == container and
             not spec.get('ephemeralContainers'), 'SCOPE_INVALID')
     state = states[0]
     require(type(state.get('restartCount')) is int and 0 <= state['restartCount'] <= 2**31-1 and
-            type(state.get('state')) is dict and set(state['state']) == {'running'}, 'SCOPE_INVALID')
+            type(state.get('state')) is dict and set(state['state']) == {'running'} and
+            type(state['state']['running']) is dict, 'SCOPE_INVALID')
     started, started_ns = stamp(state['state']['running'].get('startedAt'))
     created = stamp(meta.get('creationTimestamp'))[1]
     require(created <= started_ns and type(state.get('containerID')) is str and
@@ -203,8 +214,7 @@ def inference(rows, *, end, reason=None):
     for row in rows:
         require(type(row) is dict and set(row) == expected)
         identity = tuple(row[k] for k in ('model_provider', 'model_name'))
-        require(all(type(v) is str and 0 < len(v.encode()) <= 256 and
-                    all(ord(c) >= 32 and ord(c) != 127 for c in v) for v in identity) and
+        require(all(bounded_model_identity(v) for v in identity) and
                 identity[0] != 'none' and identity not in seen)
         seen.add(identity)
         events = integer(row['events'], 10**9); require(events > 0)

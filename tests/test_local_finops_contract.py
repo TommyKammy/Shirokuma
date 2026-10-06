@@ -38,6 +38,22 @@ def row(events='2', known='1'):
 
 
 class ContractTests(unittest.TestCase):
+    def test_pod_nested_envelopes_have_scoped_scope_failure_on_both_reads(self):
+        for phase in ('before', 'after'):
+            for field, replacement in (
+                ('spec', None), ('spec', []), ('containers', [None]),
+                ('containers', ['trino']), ('containerStatuses', [None]),
+                ('containerStatuses', ['trino']), ('running', None), ('running', []),
+            ):
+                args = component_args()
+                if field == 'spec': args[phase]['spec'] = replacement
+                elif field == 'containers': args[phase]['spec'][field] = replacement
+                elif field == 'running': args[phase]['status']['containerStatuses'][0]['state'][field] = replacement
+                else: args[phase]['status'][field] = replacement
+                with self.subTest(phase=phase, field=field, replacement=replacement):
+                    with self.assertRaisesRegex(C.FinOpsError, '^SCOPE_INVALID$'):
+                        C.project_component('trino', **args)
+
     def test_component_pod_labels_must_be_object(self):
         for component in C.COMPONENTS:
             for phase in ('before', 'after'):
@@ -151,6 +167,12 @@ class ContractTests(unittest.TestCase):
                   [dict(row(), events=True)], [dict(row(), prompt_tokens_sum='01')], [row()] * 51]
         for rows in values:
             with self.subTest(rows=len(rows)), self.assertRaises(C.FinOpsError): C.inference(rows, end=NOW)
+
+    def test_inference_refuses_unencodable_model_identity_with_scoped_error(self):
+        for key in ('model_provider', 'model_name'):
+            bad = row(); bad[key] = '\ud800'
+            with self.subTest(key=key), self.assertRaisesRegex(C.FinOpsError, '^INFERENCE_INVALID$'):
+                C.inference([bad], end=NOW)
 
     def test_fixed_window_is_24_hours_in_utc(self):
         self.assertEqual(C.window(NOW), {'hours': 24, 'start': '2026-09-19T00:00:21.000Z', 'end': NOW})

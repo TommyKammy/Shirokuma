@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.202"
+version: "0.203"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: component Pod and inference identity failures (offline)
+
+Two independent contract boundaries: 16 malformed before/after Pod spec,
+container, status and running-state envelopes raised raw attribute errors
+before the component sample could be scoped; now they yield `SCOPE_INVALID`.
+Separately, an unencodable surrogate in either inference model identity
+raised `UnicodeEncodeError`; it now yields `INFERENCE_INVALID` without
+publishing a subtotal. Both focused negative tests failed before repair.
+`make test-local-finops` passed 295 tests (seven Linux-only skips), and
+`make verify-local-experiment` passed after both changes (the fake Dagster
+worker failure is an intentional negative test diagnostic). Dedicated Colima
+was freshly listed Stopped; no live API/VM read, retained report/volume/backup
+mutation or AgentHouse used-byte measurement (`null / NOT_MEASURED`). Offline
+fixtures neither authenticate producers nor prove atomic sampling or operator
+acceptance. Restore only these scoped guards/tests if needed; preserve saved
+records. Direct original Vault sync remains pending outside checkout.
 
 ## 2026-10-06: scoped PodMetrics nested source failures (offline)
 
