@@ -71,15 +71,22 @@ def _mount(raw,mount_id):
         require(len(halves)==2)
         left,right=halves[0].split(),halves[1].split()
         require(len(left)>=6 and len(right)==3 and
-                re.fullmatch(r'[1-9][0-9]*',left[0]) is not None)
+                re.fullmatch(r'[1-9][0-9]*',left[0]) is not None and
+                re.fullmatch(r'[1-9][0-9]*',left[1]) is not None and
+                int(left[1])<=MAX_NUMBER and
+                re.fullmatch(r'(?:0|[1-9][0-9]*):(?:0|[1-9][0-9]*)',left[2]) is not None and
+                all(int(part)<=MAX_NUMBER for part in left[2].split(':')))
         # A noncanonical mountpoint could disguise an overmount below /proc.
         # Decode the four mountinfo path escapes before lexical comparison.
-        encoded=left[4]
-        require(re.fullmatch(r'(?:[^\\]|\\(?:040|011|012|134))*',encoded) is not None)
-        path=re.sub(r'\\(040|011|012|134)',
-                    lambda match: chr(int(match[1],8)),encoded)
-        require(path.startswith('/') and not path.startswith('//') and
-                posixpath.normpath(path)==path)
+        def canonical_path(encoded):
+            require(re.fullmatch(r'(?:[^\\]|\\(?:040|011|012|134))*',encoded) is not None)
+            path=re.sub(r'\\(040|011|012|134)',
+                        lambda match: chr(int(match[1],8)),encoded)
+            require(path.startswith('/') and not path.startswith('//') and
+                    posixpath.normpath(path)==path)
+            return path
+        canonical_path(left[3])
+        path=canonical_path(left[4])
         ident=int(left[0]);require(ident<=MAX_NUMBER and ident not in seen);seen.add(ident)
         if path=='/proc':matches.append((ident,left,right))
         # A nested mount replacing procfs lookup of any PID is ambiguous.

@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.443"
+version: "5.444"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent procfs parent/device structure (offline)
+
+WP-L6-FIN-001 rejects negative/overflowing parent ID and malformed/overflowing
+device fields that previously projected a procfs candidate. Three additional
+malformed-root fixtures were already refused; escaped-space roots on unrelated
+mounts pass.
+Focused procfs eight tests and full local verifier pass (fake Dagster failure
+intentional). Dedicated Colima last freshly Stopped; no guest read, retained
+volume/report/backup access or change; AgentHouse usage `null / NOT_MEASURED`.
+Source authenticity, safe retained-volume measurement, cleanup and operator
+acceptance remain unproved. Restore only scoped parser/tests while preserving
+saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent AgentHouse smoke count and export consistency (offline)
 

@@ -93,6 +93,20 @@ class ProcfsContractTests(unittest.TestCase):
             with self.subTest(mount=mount),self.assertRaises(P.ProcfsError):
                 P.project(**value)
 
+    def test_mountinfo_root_parent_and_device_are_structural(self):
+        for row in (b'19 -1 0:20 / /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
+                    b'19 1 broken / /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
+                    b'19 1 0:20 relative /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
+                    b'19 1 0:20 /./ /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
+                    b'19 1 0:20 /\\999 /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
+                    b'19 9223372036854775808 0:20 / /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n',
+                    b'19 1 0:9223372036854775808 / /proc rw,nosuid,nodev,noexec - proc proc rw,hidepid=0\n'):
+            value=inputs();value['mountinfo']=row
+            with self.subTest(row=row),self.assertRaises(P.ProcfsError):P.project(**value)
+        value=inputs()
+        value['mountinfo']+=b'20 19 0:21 /name\\040with\\040spaces /other rw - tmpfs tmpfs rw\n'
+        self.assertTrue(P.project(**value)['probe']['query_complete'])
+
     def test_forged_stat_field_noncanonical_numbers_and_limits_rejected(self):
         changes=[lambda x:x.update(target_stat=stat_line(999,4),target_errno=None),
                  lambda x:x.update(target_stat=stat_line(345,'0123'),target_errno=None),

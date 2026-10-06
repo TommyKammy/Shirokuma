@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.228"
+version: "0.229"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent procfs parent/device structure (offline)
+
+The pure caller-supplied mountinfo contract projected a procfs candidate from
+rows with a negative or overflowing parent ID or malformed or overflowing
+device token. Four negative fixtures passed before repair; three malformed-root
+negatives were already refused. Parent and
+major:minor fields now require bounded canonical nonnegative device numbers and
+a positive parent, while both root and mountpoint use escaped canonical absolute
+path validation. A non-proc mount with escaped spaces remains valid. Focused
+procfs eight tests and full `make verify-local-experiment` pass (fake Dagster
+worker failure intentional). Dedicated Colima last freshly Stopped; no live VM
+read, saved report/volume/backup access or change, or AgentHouse byte measurement
+(`null / NOT_MEASURED`). Fixture structure does not authenticate procfs, prove
+absence of transient mounts or authorize a retained-volume scan. Revert only
+this contract/test, preserving retained evidence; original Vault sync pending
+outside checkout, no operator acceptance.
 
 ## 2026-10-06 independent mount options and procfs alias boundaries (offline)
 
