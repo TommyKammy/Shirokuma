@@ -32,6 +32,24 @@ def validate(before, after):
 
 
 class VolumePreflightTests(unittest.TestCase):
+    def test_all_containers_cannot_start_after_snapshot_observation(self):
+        for index, status in ((0, 'exited'), (1, 'exited'), (1, 'running')):
+            value = snapshot()
+            state = value['containers'][index]['State']
+            state['Status'] = status
+            if status == 'running':
+                state['Running'] = True
+            state['StartedAt'] = '2026-09-27T00:00:01Z'
+            if status == 'exited':
+                state['FinishedAt'] = '2026-09-27T00:00:02Z'
+            with self.subTest(index=index, status=status), self.assertRaisesRegex(
+                    V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+            state['StartedAt'] = value['observed_at']
+            if status == 'exited':
+                state['FinishedAt'] = value['observed_at']
+            self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
     def test_terminated_container_cannot_finish_after_snapshot_observation(self):
         for index, status in ((0, 'exited'), (1, 'exited'), (1, 'dead')):
             value = snapshot()

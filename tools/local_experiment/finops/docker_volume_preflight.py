@@ -78,6 +78,9 @@ def _lifecycle(container, observed):
                 all(ord(ch) >= 32 and not 127 <= ord(ch) <= 159 for ch in value)
                 for value in times))
     parsed = [_stamp(value)[1] for value in times]
+    # Even an unrelated running writer cannot have started after this
+    # inventory was observed. Stable snapshots do not cure a future start.
+    require(parsed[0] <= observed)
     # A terminated container with a finish before its start cannot be
     # evidence for a coherent inventory, even if both samples agree.
     if state['Status'] in ('exited', 'dead'):

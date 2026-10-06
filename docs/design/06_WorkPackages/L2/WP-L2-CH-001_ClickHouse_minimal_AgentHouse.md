@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.38"
+version: "0.39"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 HTTP content encoding boundary (offline)
+
+The plain-text query client refuses an HTTP 200 response with non-identity or
+multiple Content-Encoding fields before reading its body or acknowledging an
+insert. Two synthetic encoded replies previously succeeded; an explicit single
+identity encoding still succeeds. Focused AgentHouse 77 tests pass. This does
+not authenticate the producer or exclude unmarked streamed errors, and no
+uncertain insert may be replayed. Dedicated Colima freshly Stopped; no live
+HTTP/Docker, retained credential/report/volume or backup access or change.
+Restore only this guard/test if verified runtime behavior requires it; preserve
+saved records. Original Vault sync pending outside checkout, with live
+deduplication and operator acceptance still unproved.
 
 ## 2026-10-06 HTTP exception indicator (offline)
 

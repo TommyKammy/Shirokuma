@@ -876,6 +876,27 @@ class AgentHouseTests(unittest.TestCase):
         response.headers = {'Content-Length': '0'}
         self.assertEqual(client.query('SELECT 1'), '')
 
+    def test_query_refuses_encoded_response_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.return_value = b''
+        client.opener.open = Mock(return_value=response)
+        for fields in ((('Content-Encoding', 'gzip'),),
+                       (('Content-Encoding', 'identity'), ('Content-Encoding', 'gzip'))):
+            with self.subTest(fields=fields):
+                headers = Message()
+                for name, value in fields:
+                    headers.add_header(name, value)
+                response.headers = headers
+                with self.assertRaisesRegex(M.AgentHouseError, 'encoding'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        response.read.assert_not_called()
+        response.headers = {'Content-Encoding': 'identity', 'Content-Length': '0'}
+        self.assertEqual(client.query('SELECT 1'), '')
+
     def test_unencodable_credential_and_query_fail_before_http(self):
         with self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
             M.Client(credential_bytes=b'{"password":"\\ud800"}')

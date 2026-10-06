@@ -299,6 +299,14 @@ class Client:
                                      if key.lower() == 'x-clickhouse-exception-code']))
                 if exception_codes:
                     raise AgentHouseError('local AgentHouse response indicates a query exception')
+                # This client requests plain text and never decompresses reply
+                # bodies. A coded response is not a completed plain-text query.
+                encodings = (response.headers.get_all('Content-Encoding')
+                             if hasattr(response.headers, 'get_all') else
+                             ([value for key, value in response.headers.items()
+                               if key.lower() == 'content-encoding']))
+                if encodings and encodings != ['identity']:
+                    raise AgentHouseError('local AgentHouse response encoding is unsupported')
                 # HTTPMessage.get() returns only one of multiple headers. Do
                 # not accept a write acknowledgement with ambiguous framing or
                 # transfer coding, even if the decoded body happens to fit.

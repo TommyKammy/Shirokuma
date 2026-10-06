@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.491"
+version: "5.492"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent HTTP coding and Docker start chronology (offline)
+
+WP-L2-CH-001 refuses non-identity or multiple response Content-Encoding fields
+on HTTP 200 before acknowledging a query; two synthetic negatives previously
+passed and focused AgentHouse 77 tests pass after repair. WP-L6-FIN-001 refuses
+an unrelated running container whose start follows the snapshot observation;
+the synthetic negative previously appeared eligible and focused preflight 25
+tests pass. Dedicated Colima freshly Stopped. No live HTTP/Docker/VM or saved
+credential/report/volume/backup accessed or changed. These checks cannot
+authenticate producers, prove live deduplication, exclude continuous writers,
+authorize volume traversal or grant operator acceptance; AgentHouse bytes stay
+`null / NOT_MEASURED`. Keep saved evidence and never replay uncertain inserts;
+roll back only scoped guards/tests if needed. Original Vault sync pending
+outside checkout. Final combined tree passes `make verify-local-experiment`
+(the fake Dagster failure is an intentional test), `make verify-design-context`
+and `git diff --check`.
 
 ## 2026-10-06: FinOps terminated-container observation chronology (offline)
 

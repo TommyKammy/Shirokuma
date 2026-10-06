@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.266"
+version: "0.267"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 all-container start chronology (offline)
+
+The standalone two-snapshot inventory now refuses a container starting after
+its corresponding observation, including an unrelated running writer. The
+running negative previously appeared metadata-eligible; equal-time start and
+ordered exited cases remain eligible (focused preflight 25 tests). Dedicated
+Colima freshly Stopped; no VM/Docker or retained volume/report/backup access
+or change. Clock and producer authenticity, continuous writer exclusion and
+safe volume traversal remain unproved: authorization stays false, AgentHouse
+bytes `null / NOT_MEASURED`. Revert only this scoped guard/test if verified
+runtime metadata requires it, preserving saved records. Original Vault sync
+pending outside checkout; no operator acceptance.
 
 ## 2026-10-06 terminated-container observation chronology (offline)
 
