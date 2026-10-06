@@ -94,24 +94,39 @@ def private_state_fd():
         os.close(fd)
 
 
+def read_credential() -> bytes:
+    try:
+        with private_state_fd() as state:
+            fd = os.open('credential.json', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=state)
+            with os.fdopen(fd, 'rb') as file:
+                identity = os.fstat(file.fileno())
+                if (not stat.S_ISREG(identity.st_mode) or identity.st_uid != os.getuid() or
+                        stat.S_IMODE(identity.st_mode) != 0o600 or identity.st_nlink != 1 or
+                        identity.st_size > 16384):
+                    raise AgentHouseError('local credential is not a private regular file')
+                content = file.read(16385)
+                if len(content) > 16384:
+                    raise AgentHouseError('local credential exceeds read limit')
+                return content
+    except OSError:
+        raise AgentHouseError('local credential cannot be opened safely') from None
+
+
+def create_private_file(state: int, name: str, payload: bytes) -> None:
+    try:
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=state)
+        with os.fdopen(fd, 'wb') as file:
+            os.fchmod(file.fileno(), 0o600)
+            file.write(payload)
+    except OSError:
+        raise AgentHouseError(f'local AgentHouse {name} cannot be created safely') from None
+
+
 class Client:
     def __init__(self, *, credential_bytes: bytes | None = None) -> None:
         if credential_bytes is None:
-            try:
-                with private_state_fd() as state:
-                    fd = os.open('credential.json', os.O_RDONLY | os.O_NOFOLLOW,
-                                 dir_fd=state)
-                    with os.fdopen(fd, 'rb') as file:
-                        identity = os.fstat(file.fileno())
-                        if (not stat.S_ISREG(identity.st_mode) or identity.st_uid != os.getuid() or
-                                stat.S_IMODE(identity.st_mode) != 0o600 or identity.st_nlink != 1 or
-                                identity.st_size > 16384):
-                            raise AgentHouseError('local credential is not a private regular file')
-                        credential_bytes = file.read(16385)
-                        if len(credential_bytes) > 16384:
-                            raise AgentHouseError('local credential exceeds read limit')
-            except OSError:
-                raise AgentHouseError('local credential cannot be opened safely') from None
+            credential_bytes = read_credential()
         try:
             credential = json.loads(credential_bytes)
             password = credential['password']
@@ -152,18 +167,25 @@ def ensure_runtime() -> Client:
     existing = inspect_owned("container", NAME)
     inspect_owned("volume", VOLUME)
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
-    credential_path = STATE / "credential.json"
-    if not credential_path.exists():
-        if existing:
-            raise AgentHouseError("existing AgentHouse requires its original local credential; refusing rotation")
-        credential_path.write_text(json.dumps({"password": secrets.token_urlsafe(36)}) + "\n")
-        credential_path.chmod(0o600)
+    with private_state_fd() as state:
+        try:
+            os.stat('credential.json', dir_fd=state, follow_symlinks=False)
+        except FileNotFoundError:
+            if existing:
+                raise AgentHouseError("existing AgentHouse requires its original local credential; refusing rotation")
+            create_private_file(state, 'credential.json',
+                                (json.dumps({'password': secrets.token_urlsafe(36)}) + '\n').encode())
     if not existing:
-        docker("image", "inspect", IMAGE)
-        password = json.loads(credential_path.read_text())["password"]
+        credential_bytes = read_credential()
+        Client(credential_bytes=credential_bytes)  # Validate before using it as an environment value.
+        password = json.loads(credential_bytes)['password']
+        if any(character in password for character in ('\n', '\r', '\x00')):
+            raise AgentHouseError('local credential cannot be used in a container environment')
         environment = STATE / "container.env"
-        environment.write_text(f"CLICKHOUSE_DB=agenthouse\nCLICKHOUSE_USER={USER}\nCLICKHOUSE_PASSWORD={password}\n")
-        environment.chmod(0o600)
+        with private_state_fd() as state:
+            create_private_file(state, 'container.env',
+                                f"CLICKHOUSE_DB=agenthouse\nCLICKHOUSE_USER={USER}\nCLICKHOUSE_PASSWORD={password}\n".encode())
+        docker("image", "inspect", IMAGE)
         docker("volume", "create", "--label", LABEL + "=agenthouse-local", VOLUME)
         docker("create", "--name", NAME, "--label", LABEL + "=agenthouse-local",
                "--platform", "linux/arm64", "--cpus", "2", "--memory", "4g",
@@ -186,8 +208,8 @@ def ensure_runtime() -> Client:
         host_config = existing["HostConfig"]
         if host_config.get("NanoCpus") != 2_000_000_000 or host_config.get("Memory") != 4 * 1024**3:
             raise AgentHouseError("existing AgentHouse resource limits must remain 2 CPU and 4 GiB")
-    docker("start", NAME)
     client = Client()
+    docker("start", NAME)
     deadline = time.monotonic() + 90
     while True:
         try:

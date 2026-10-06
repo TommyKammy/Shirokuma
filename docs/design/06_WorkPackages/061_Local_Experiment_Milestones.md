@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.421"
+version: "5.422"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse private creation and safe start ordering (offline)
+
+WP-L2-CH-001: exclusive fd-relative 0600 credential and env creation refuses
+preexisting/dangling links rather than overwriting retained files; unsafe
+environment characters are rejected. Separately, an existing container with
+an unsafe credential no longer starts before credential validation. Negative
+overwrite and unsafe-start fixtures failed before repair; focused tests pass
+(24), as do `make verify-local-experiment` and design-context (the fake
+Dagster worker error is an intentional negative test). Dedicated Colima
+freshly stopped. No live Docker startup, retained
+credential/env/report/volume/backup modification or producer authentication;
+new private files on a failed creation are not automatically removed. Inspect
+individual entries before recovery, never delete saved records. No operator
+acceptance; original Vault sync pending outside checkout.
 
 ## 2026-10-06: AgentHouse existing-container startup retention (offline)
 

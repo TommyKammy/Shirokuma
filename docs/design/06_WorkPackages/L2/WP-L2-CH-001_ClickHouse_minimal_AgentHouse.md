@@ -12,6 +12,27 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline new-container files and startup ordering
+
+New-container startup now creates the credential and `container.env` exclusively
+at creation-time mode 0600 relative to the checked private state directory.
+An existing entry, including a dangling credential link or env symlink, is
+refused instead of overwritten or followed. The credential is validated before
+use in the env file; newline, carriage return and NUL cannot inject container
+environment lines. Independently, an existing container with an unsafe
+credential is refused before Docker start, after its runtime configuration is
+validated. The two overwrite fixtures and unsafe-start fixture failed before
+repair; focused tests pass (24), as do the local verifier and design-context
+(the verifier's fake Dagster worker failure is an expected negative test).
+No live container, retained credential, env,
+volume or backup changed; the dedicated Colima profile was freshly stopped.
+These checks do not authenticate Docker, resolve same-UID path substitutions,
+make partial writes atomic or verify a live new-container create. A failed
+creation can leave a newly created private file; inspect its identity rather
+than deleting or rotating it automatically. Roll back only the startup and
+reader changes while preserving saved files. Original Vault sync pending
+outside the checkout; no operator acceptance follows.
+
 ## 2026-10-06 offline existing-container startup retention
 
 An existing container no longer reads the credential or rewrites `container.env`

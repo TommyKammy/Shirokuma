@@ -259,6 +259,90 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaisesRegex(M.AgentHouseError, "resource limits"):
                     self.ensure_existing(existing)
 
+    def test_new_runtime_refuses_existing_env_without_modifying_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            credential = state / 'credential.json'
+            credential.write_text('{"password":"fixture-only"}')
+            credential.chmod(0o600)
+            target = state / 'retained'
+            target.write_text('keep')
+            (state / 'container.env').symlink_to(target)
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[None, None]), \
+                    patch.object(M, 'docker') as docker:
+                with self.assertRaises(M.AgentHouseError):
+                    M.ensure_runtime()
+                self.assertEqual(target.read_text(), 'keep')
+                docker.assert_not_called()
+
+    def test_new_runtime_refuses_dangling_credential_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            target = state / 'target'
+            (state / 'credential.json').symlink_to(target)
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[None, None]), \
+                    patch.object(M, 'docker') as docker:
+                with self.assertRaises(M.AgentHouseError):
+                    M.ensure_runtime()
+                self.assertFalse(target.exists())
+                docker.assert_not_called()
+
+    def test_new_runtime_rejects_environment_line_in_credential(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            credential = state / 'credential.json'
+            credential.write_text(json.dumps({'password': 'fixture\nCLICKHOUSE_DB=other'}))
+            credential.chmod(0o600)
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[None, None]), \
+                    patch.object(M, 'docker') as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'container environment'):
+                    M.ensure_runtime()
+                self.assertFalse((state / 'container.env').exists())
+                docker.assert_not_called()
+
+    def test_existing_runtime_missing_credential_does_not_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[self.existing_runtime(), {}]), \
+                    patch.object(M, 'docker') as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'original local credential'):
+                    M.ensure_runtime()
+                docker.assert_not_called()
+
+    def test_existing_runtime_unsafe_credential_does_not_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            (state / 'credential.json').write_text('{"password":"fixture"}')
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[self.existing_runtime(), {}]), \
+                    patch.object(M, 'docker') as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'private regular'):
+                    M.ensure_runtime()
+                docker.assert_not_called()
+
+    def test_new_runtime_creates_private_files_before_docker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[None, None]), \
+                    patch.object(M, 'docker') as docker, patch.object(M, 'Client') as client:
+                client.return_value.query.return_value = '1'
+                M.ensure_runtime()
+                self.assertEqual((state / 'credential.json').stat().st_mode & 0o777, 0o600)
+                self.assertEqual((state / 'container.env').stat().st_mode & 0o777, 0o600)
+                self.assertIn('CLICKHOUSE_PASSWORD=', (state / 'container.env').read_text())
+                self.assertIn(('start', M.NAME), [call.args for call in docker.call_args_list])
+
 
 if __name__ == "__main__":
     unittest.main()
