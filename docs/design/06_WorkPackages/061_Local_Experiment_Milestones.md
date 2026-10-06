@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.410"
+version: "5.411"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: inference socket pin and future volume early stop (offline)
+
+WP-L6-FIN-001: the inference container inspect no longer re-resolves the
+mutable Docker context after validating its fixed account socket. Independently,
+a first volume created after the sampling start now fails `SAMPLE_INVALID`
+before the second context read. Both focused negatives failed before repair;
+FinOps 305 tests (seven Linux-only skips) and `make verify-local-experiment`
+passed after both changes (the fake Dagster worker failure is an intentional
+negative test). Dedicated Colima freshly Stopped. No live Docker, credentials,
+saved report/volume/backup mutation or AgentHouse used-byte measurement (`null /
+NOT_MEASURED`). Lexical socket binding is not daemon authentication, atomicity
+or operator acceptance. Restore only scoped code/tests, preserving retained
+data; original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed Docker socket transport and early volume drift (offline)
 

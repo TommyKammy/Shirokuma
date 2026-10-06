@@ -396,8 +396,11 @@ class RuntimeTests(unittest.TestCase):
             backend=R.Backend(); client=Mock(); client.query.return_value=json.dumps(row())+'\n'
             with patch.object(R.AH,'STATE',state), patch.object(R.AH,'Client',return_value=client), \
                     patch.object(R.AH,'ensure_runtime',side_effect=AssertionError('no start')), \
-                    patch.object(backend,'_command',side_effect=[json.dumps(context),json.dumps(owned)]):
+                     patch.object(backend,'_command',side_effect=[json.dumps(context),json.dumps(owned)]) as command:
                 self.assertEqual(backend.inference(NOW), [row()])
+            self.assertEqual([call.args[0] for call in command.call_args_list], [
+                ['docker', 'context', 'inspect', R.AH.CONTEXT],
+                ['docker', '--host', self._inference_socket(), 'container', 'inspect', R.AH.NAME]])
             client.query.assert_called_once_with(R.inference_sql(NOW))
             owned[0]['NetworkSettings']['Ports']['9000/tcp'] = None
             with patch.object(backend, '_command', side_effect=[json.dumps(context), json.dumps(owned)]), \

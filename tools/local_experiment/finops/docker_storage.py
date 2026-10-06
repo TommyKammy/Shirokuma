@@ -162,7 +162,10 @@ def collect(backend):
         first_container = backend.docker_storage_inspect('container', AH.NAME)
         _container(_object(first_container))
         first_volume = backend.docker_storage_inspect('volume', AH.VOLUME)
-        _identity(_object(first_container), _object(first_volume))
+        first_identity = _identity(_object(first_container), _object(first_volume))
+        # A volume created after this collection began cannot certify a
+        # reference, even if a later read reports the same invalid identity.
+        require(C.stamp(first_identity[2])[1] <= C.stamp(start)[1], 'SAMPLE_INVALID')
         before = [first_context, first_container, first_volume]
         second_context = backend.docker_storage_inspect('context', AH.CONTEXT)
         require(_context(first_context) == _context(second_context), 'IDENTITY_CHANGED')
@@ -170,8 +173,8 @@ def collect(backend):
         require(_container(_object(first_container)) == _container(_object(second_container)),
                 'IDENTITY_CHANGED')
         second_volume = backend.docker_storage_inspect('volume', AH.VOLUME)
-        require(_identity(_object(first_container), _object(first_volume)) ==
-                _identity(_object(second_container), _object(second_volume)), 'IDENTITY_CHANGED')
+        require(first_identity == _identity(_object(second_container), _object(second_volume)),
+                'IDENTITY_CHANGED')
         after = [second_context, second_container, second_volume]
         row = project(*before, *after, request_started_at=start, observed_at=backend.now())
     except Exception as error:

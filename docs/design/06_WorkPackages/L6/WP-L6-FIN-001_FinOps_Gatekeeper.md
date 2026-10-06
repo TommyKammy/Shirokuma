@@ -5,12 +5,30 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.208"
+version: "0.209"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: pin inference read and reject future volume before repeat (offline)
+
+The inference source checked the account's Docker context socket but then used
+the mutable context name for its container inspect. It now directs that inspect
+to the checked fixed socket; a command-argument negative failed before repair.
+Separately, the reference collector now refuses a first volume whose creation
+time is after the collection start before requesting the second context. That
+negative previously continued and reported identity drift; the scoped result is
+now `SAMPLE_INVALID`. `make test-local-finops` passed 305 tests (seven Linux-only
+skips) and `make verify-local-experiment` passed after both changes (its fake
+Dagster failure is an intentional negative test). Fresh `colima list` showed
+`mac-studio-solo` Stopped. No live daemon or credential read, retained report,
+volume or backup modification, or AgentHouse byte measurement (`null /
+NOT_MEASURED`). A lexical socket does not authenticate a daemon or prevent
+symlink redirection; sequential reads are not atomic or operator acceptance.
+Undo only these scoped source checks/tests if needed, preserving retained
+records. Original Vault handoff synchronization pending outside checkout.
 
 ## 2026-10-06: pin Docker reference transport and reject late drift (offline)
 

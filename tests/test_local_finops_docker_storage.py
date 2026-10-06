@@ -207,6 +207,17 @@ class DockerStorageTests(unittest.TestCase):
                          [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
                           ('volume', D.AH.VOLUME)])
 
+    def test_future_first_volume_stops_before_second_pass(self):
+        responses = fixture() + deepcopy(fixture())
+        responses[2][0]['CreatedAt'] = '2026-09-21T00:00:00Z'
+        backend = Mock()
+        backend.now.return_value = NOW
+        backend.docker_storage_inspect.side_effect = responses
+        result = D.collect(backend)
+        self.assertEqual(result['agenthouse']['reason'], 'SAMPLE_INVALID')
+        self.assertEqual(backend.docker_storage_inspect.call_count, 3)
+        self.assertEqual(backend.now.call_count, 1)
+
     def test_container_identity_drift_stops_before_second_volume(self):
         for field, value in (('Id', 'b'*64), ('State', {'Running': True})):
             responses = fixture() + deepcopy(fixture())

@@ -240,7 +240,9 @@ class Backend:
                   host == 'unix://' + home + '/.colima/mac-studio-solo/docker.sock' and
                   all(part not in ('.', '..', '') for part in home.split('/')[1:]),
                   'SCOPE_INVALID')
-        value = _json(self._command(['docker', '--context', AH.CONTEXT, 'container', 'inspect', AH.NAME]))
+        # Do not resolve the mutable context name again after checking its
+        # endpoint; pin this read to the checked account socket instead.
+        value = _json(self._command(['docker', '--host', host, 'container', 'inspect', AH.NAME]))
         C.require(type(value) is list and len(value) == 1 and type(value[0]) is dict,
                   'SCOPE_INVALID')
         container = value[0]
