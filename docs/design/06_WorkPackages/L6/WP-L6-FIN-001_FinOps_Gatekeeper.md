@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.197"
+version: "0.198"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: VM command decoding and mount attribution (offline)
+
+Two independent fail-closed boundaries: a successful fixed child command with
+invalid UTF-8 now reports `READ_FAILED` rather than leaking a decode exception;
+the `df -Pk` result must report a canonical mount containing the fixed k3s
+storage path (root or its ancestor), not an unrelated or misleading prefix.
+Negative fixtures failed before each repair; focused FinOps 284 tests pass
+(seven Linux-only skips). No VM command was executed by these fixtures; the
+dedicated Colima profile was freshly observed stopped. Neither output parsing
+nor a fixed command authenticates the guest or establishes retained-volume
+usage, backup integrity, or operator acceptance. AgentHouse used bytes remain
+`null / NOT_MEASURED`. Roll back only these two guards/tests, retaining saved
+reports; original Vault sync pending outside checkout.
 
 ## 2026-10-06: VM capacity percent and node identity (offline)
 

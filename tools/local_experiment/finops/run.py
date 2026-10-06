@@ -93,7 +93,13 @@ def parse_disk(raw):
                   for i in (1, 2, 3)) and
               fields[4].endswith('%') and fields[4][:-1].isascii() and
               len(fields[4]) <= 4 and fields[4][:-1].isdigit() and
-              int(fields[4][:-1]) <= 100, 'DISK_INVALID')
+               int(fields[4][:-1]) <= 100, 'DISK_INVALID')
+    # df reports the filesystem mount, not necessarily the requested directory.
+    # Refuse a valid-looking row for an unrelated filesystem or a noncanonical path.
+    mount = fields[5]
+    C.require(mount == '/' or (mount == '/' + '/'.join(part for part in mount.split('/') if part) and
+              all(part not in ('.', '..') for part in mount.split('/')[1:]) and
+              (mount == VM_PATH or VM_PATH.startswith(mount + '/'))), 'DISK_INVALID')
     total, used, available = (int(fields[i]) * 1024 for i in (1, 2, 3))
     C.require(0 < total <= 2**63-1 and used + available <= total, 'DISK_INVALID')
     # GNU df rounds up Used / (Used + Available); reserved blocks are not
@@ -132,7 +138,10 @@ class Backend:
                 if not chunk: break
                 raw.extend(chunk); C.require(len(raw) <= MAX_RESPONSE, 'READ_LIMIT')
             C.require(child.wait(timeout=max(0, deadline-time.monotonic())) == 0, 'READ_FAILED')
-            return raw.decode('utf-8')
+            try:
+                return raw.decode('utf-8')
+            except UnicodeDecodeError:
+                raise C.FinOpsError('READ_FAILED') from None
         except BaseException as error:
             original = error; raise
         finally:

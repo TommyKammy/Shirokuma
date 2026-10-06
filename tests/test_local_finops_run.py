@@ -203,6 +203,14 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(row=row), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
                 R.parse_disk(header + row)
 
+    def test_df_mount_must_contain_fixed_storage_path(self):
+        value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        self.assertEqual(R.parse_disk(value.replace(' /\n', ' /var/lib/rancher/k3s\n')), (1024000, 256000))
+        for mount in ('/unrelated', '/var/lib/rancher/k3s/storage-other',
+                      '/var/lib/rancher/../unrelated', '//var/lib/rancher/k3s'):
+            with self.subTest(mount=mount), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
+                R.parse_disk(value.replace(' /\n', f' {mount}\n'))
+
     def test_df_overlong_numeric_field_has_scoped_failure(self):
         value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
         for field in ('1000', '700', '250', '74%'):
@@ -433,6 +441,22 @@ class RuntimeTests(unittest.TestCase):
                 patch.object(R.os, 'killpg') as kill:
             self.assertEqual(R.Backend()._command(['docker', 'context', 'inspect', R.CONTEXT]), 'safe')
         kill.assert_not_called(); process.poll.assert_not_called()
+        selector.close.assert_called_once(); process.stdout.close.assert_called_once()
+
+    def test_successful_command_with_invalid_utf8_is_scoped_failure(self):
+        process = Mock(pid=1234, returncode=None); process.stdout.fileno.return_value = 10
+        def wait(**kwargs):
+            process.returncode = 0
+            return 0
+        process.wait.side_effect = wait
+        selector = Mock(); selector.select.return_value = [True]
+        with patch.object(R.subprocess, 'Popen', return_value=process), \
+                patch.object(R.selectors, 'DefaultSelector', return_value=selector), \
+                patch.object(R.os, 'set_blocking'), patch.object(R.os, 'read', side_effect=[b'\xff', b'']), \
+                patch.object(R.os, 'killpg') as kill, \
+                self.assertRaisesRegex(R.C.FinOpsError, 'READ_FAILED'):
+            R.Backend()._command(['colima', 'ssh', '--profile', 'mac-studio-solo', '--', 'uname', '-m'])
+        kill.assert_not_called()
         selector.close.assert_called_once(); process.stdout.close.assert_called_once()
 
 

@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.399"
+version: "5.400"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: VM command UTF-8 and disk mount scope (offline)
+
+WP-L6-FIN-001: successful child output with invalid UTF-8 now fails with
+`READ_FAILED`, and a syntactically valid `df` row whose mount is unrelated to
+the fixed storage path (or has an ambiguous prefix/path) fails with
+`DISK_INVALID`. The independent negatives failed before repair; focused FinOps
+284 tests pass (seven Linux-only skips). The dedicated Colima profile was
+freshly observed stopped; no live disk/API read or retained report, volume or
+backup modification. AgentHouse bytes remain `null / NOT_MEASURED`. This does
+not authenticate the VM, measure a volume or grant operator acceptance. Revert
+only scoped guards/tests, preserving saved evidence; direct original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-06: VM percent and node identity guards (offline)
 
