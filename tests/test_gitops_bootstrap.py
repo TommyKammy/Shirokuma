@@ -26,6 +26,47 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
+    def test_reconcile_refuses_other_context_before_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "flux-fixture"
+            calls = Path(directory) / "calls"
+            binary.write_text(
+                '#!/bin/sh\n'
+                'if [ "$1" = version ]; then printf "flux: v2.9.2\\n"; exit 0; fi\n'
+                'printf "%s\\n" "$*" >> "$FLUX_FIXTURE_CALLS"\n',
+                encoding="utf-8",
+            )
+            binary.chmod(0o755)
+            env = {**os.environ, "FLUX_FIXTURE_CALLS": str(calls)}
+            result = subprocess.run(
+                ["make", "--no-print-directory", "gitops-reconcile",
+                 "KUBE_CONTEXT=colima-other", f"FLUX={binary}"],
+                cwd=ROOT, env=env, capture_output=True, text=True, timeout=30,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(calls.exists(), "reconcile must not run before scope checks")
+            self.assertIn("dedicated Kubernetes context", result.stdout)
+            dry_run = subprocess.run(
+                ["make", "-n", "--no-print-directory", "gitops-reconcile",
+                 "KUBE_CONTEXT=colima-mac-studio-solo", f"FLUX={binary}"],
+                cwd=ROOT, env=env, capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+            self.assertLess(dry_run.stdout.index("./scripts/colima_baseline.sh status"),
+                            dry_run.stdout.index("reconcile source git"))
+            self.assertFalse(calls.exists())
+            stopped = Path(directory) / "colima-stopped"
+            stopped.write_text('#!/bin/sh\nexit 1\n', encoding="utf-8")
+            stopped.chmod(0o755)
+            failed_baseline = subprocess.run(
+                ["make", "--no-print-directory", "gitops-reconcile",
+                 "KUBE_CONTEXT=colima-mac-studio-solo", f"FLUX={binary}"],
+                cwd=ROOT, env={**env, "COLIMA_BIN": str(stopped)},
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertNotEqual(failed_baseline.returncode, 0)
+            self.assertFalse(calls.exists(), "failed baseline must not reconcile")
+
     def test_renderer_refuses_duplicate_json_keys_at_any_depth(self) -> None:
         for output in (
             '{"kind":"ConfigMap","kind":"Secret"}',

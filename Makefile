@@ -168,6 +168,8 @@ gitops-status:
 	@$(FLUX) get kustomizations -A --context=$(KUBE_CONTEXT)
 
 gitops-reconcile: flux-version-check
+	@test "$(KUBE_CONTEXT)" = colima-mac-studio-solo || { echo "gitops-reconcile requires the dedicated Kubernetes context"; exit 1; }
+	@$(MAKE) --no-print-directory colima-status
 	@$(FLUX) reconcile source git flux-system -n flux-system --context=$(KUBE_CONTEXT)
 	@$(FLUX) reconcile kustomization flux-system -n flux-system --with-source --context=$(KUBE_CONTEXT)
 	@$(FLUX) reconcile kustomization shirokuma-dev -n flux-system --context=$(KUBE_CONTEXT)

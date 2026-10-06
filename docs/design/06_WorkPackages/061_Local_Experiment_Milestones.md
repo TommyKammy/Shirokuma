@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.536"
+version: "5.537"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: reconcile scope and baseline gate (offline)
+
+WP-L0-GITOPS-001: the mutating `gitops-reconcile` Make path now rejects a
+non-dedicated context and checks the dedicated read-only Colima baseline before
+the first Flux write. A fake pinned Flux client with a wrong context made zero
+reconcile calls; a dry run confirmed ordering. Bootstrap 37, teardown 6,
+locked-provider validation, pinned Flux client, design-context and full local
+verifier pass (intentional fake Dagster failure). Independent WP-L1-LAKE-003
+offline renderer recheck passes 144 tests with the previously isolated Helm
+v4.2.2; host v4.2.3 is unchanged. Fresh
+dedicated Colima is Stopped; no VM start, Git/Flux write, retained disk/backup
+read or change. Context spelling and an offline gate do not authenticate a
+cluster, exclude writers or establish live §9, strict admission or operator
+acceptance. Inspect retained disk/backups, writers and Flux scope before a live
+attempt; preserve prior results. Restore only the scoped Make/test change if
+needed. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: offline L0 prerequisites and separate L1 renderer measured
 

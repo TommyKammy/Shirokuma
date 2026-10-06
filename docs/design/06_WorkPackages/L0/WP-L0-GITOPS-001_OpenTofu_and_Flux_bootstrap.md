@@ -5,12 +5,32 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.164"
+version: "0.165"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: scoped reconcile prerequisite (offline)
+
+`make gitops-reconcile` now rejects a context other than
+`colima-mac-studio-solo` before its first Flux write and requires the existing
+read-only `colima-status` baseline to pass before reconciliation. A fake pinned
+Flux client with another context failed without recording a write; a dry run
+confirmed baseline ordering for the dedicated context. This does not prove
+that a context name authenticates the cluster or that a running lab is safe to
+reconcile: inventory disk/backups, continuous writers and prior Flux scope
+before invoking this target. The dedicated profile was freshly Stopped; no VM,
+Git, Kubernetes or retained volume/backup was changed. Focused bootstrap and
+teardown contracts, locked-provider validation, pinned client and design-context
+passed, as did the full local verifier (its fake Dagster failure is an
+intentional negative). Independently, WP-L1-LAKE-003's pinned offline renderer
+passed 144 tests with the isolated Helm v4.2.2 binary; the installed v4.2.3
+remains unchanged. Live §9, strict admission and operator acceptance remain open. To
+recover an earlier local recipe, revert only the Make target and test; never
+discard saved resources or replay an unknown reconciliation. Original Vault
+sync remains pending outside checkout.
 
 ## 2026-10-06: measured offline prerequisites, live boundary retained
 
