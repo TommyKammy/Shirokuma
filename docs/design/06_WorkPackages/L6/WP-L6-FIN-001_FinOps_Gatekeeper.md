@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.260"
+version: "0.261"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 daemon identity text boundary (offline)
+
+The two-snapshot standalone preflight rejects control, C1 and unencodable
+daemon IDs instead of projecting them as stable identities. Four isolated
+malformed-ID negatives previously returned metadata eligibility; focused
+preflight 19 and full local verifier pass (intentional fake Dagster failure).
+Dedicated Colima freshly Stopped; no Docker/VM request or retained report,
+volume or backup read/change. Printable ID syntax is not authenticated daemon
+identity, continuous writer exclusion or permission to traverse retained data:
+`volume_traversal_authorized=False`, AgentHouse bytes `null / NOT_MEASURED`.
+Preserve saved volumes/reports; roll back only the guard/test if a verified
+daemon format requires adjustment. Operator acceptance and original Vault sync
+remain pending outside checkout.
 
 ## 2026-10-06 transient Docker state correlation (offline)
 

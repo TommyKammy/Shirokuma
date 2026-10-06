@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.482"
+version: "5.483"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: credential short reads and daemon ID text (offline)
+
+WP-L2-CH-001 refuses an incomplete credential read even when inode metadata
+remains unchanged (focused 70 tests). Independently WP-L6-FIN-001 refuses four
+control/non-ASCII daemon identities in supplied Docker snapshots (focused 19).
+Both fixtures reproduced false acceptance before repair; full
+`make verify-local-experiment` passes (intentional fake Dagster failure).
+Fresh `colima list`: dedicated profile Stopped. No Docker/VM/HTTP or retained
+credential, volume, report or backup read/change; FinOps traversal remains
+unauthorized and AgentHouse bytes `null / NOT_MEASURED`. Neither offline guard
+authenticates a producer, excludes continuous writers, proves deduplication or
+grants operator acceptance. Revert only the scoped readers/tests if necessary,
+preserving saved records and never replaying uncertain inserts. Original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: credential read identity and transient Docker flags (offline)
 

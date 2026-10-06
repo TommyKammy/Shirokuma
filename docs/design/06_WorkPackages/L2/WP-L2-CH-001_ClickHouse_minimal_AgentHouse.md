@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.32"
+version: "0.33"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 credential short-read refusal (offline)
+
+The private credential reader now requires the number of bytes returned by its
+bounded read to match the unchanged inode's recorded size. An isolated short
+read that omitted only the final LF previously returned valid but incomplete
+JSON; it now refuses with a scoped error. Focused AgentHouse 70 tests and full
+`make verify-local-experiment` pass (intentional fake Dagster failure). Dedicated
+Colima freshly Stopped; no retained credential, volume, report or backup was
+read/changed and no Docker/HTTP request occurred. This does not establish
+credential provenance, prevent same-UID substitutions outside the checks or
+prove live startup/deduplication or operator acceptance. Restore only this
+guard/test on rollback, preserve saved files and never replay unknown inserts.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06 credential read identity recheck (offline)
 

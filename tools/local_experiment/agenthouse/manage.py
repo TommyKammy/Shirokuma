@@ -223,6 +223,8 @@ def read_credential() -> bytes:
                          identity.st_mtime_ns, identity.st_ctime_ns) or
                         (entry.st_dev, entry.st_ino) != (identity.st_dev, identity.st_ino)):
                     raise AgentHouseError('local credential changed during read')
+                if len(content) != identity.st_size:
+                    raise AgentHouseError('local credential read is incomplete')
                 return content
     except OSError:
         raise AgentHouseError('local credential cannot be opened safely') from None

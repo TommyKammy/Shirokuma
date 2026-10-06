@@ -32,6 +32,15 @@ def validate(before, after):
 
 
 class VolumePreflightTests(unittest.TestCase):
+    def test_daemon_identity_refuses_control_and_non_ascii_text(self):
+        for identifier in ('DAEMON:ONE\n', 'DAEMON:\x7fONE', 'DAEMON:\x85ONE', 'DAEMON:\ud800ONE'):
+            value = snapshot()
+            value['daemon']['ID'] = identifier
+            with self.subTest(identifier=repr(identifier)), self.assertRaisesRegex(
+                    V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        self.assertEqual(validate(snapshot(), deepcopy(snapshot()))['state'], 'metadata_eligible')
+
     def test_context_socket_requires_one_clean_user_component(self):
         original = snapshot()['context']['Endpoints']['docker']['Host']
         for host in ('unix:///Users//.colima/mac-studio-solo/docker.sock',

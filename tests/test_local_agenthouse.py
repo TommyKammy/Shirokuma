@@ -20,6 +20,40 @@ SPEC.loader.exec_module(M)
 
 
 class AgentHouseTests(unittest.TestCase):
+    def test_credential_read_refuses_short_content_without_inode_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            path.chmod(0o700)
+            credential = path / 'credential.json'
+            payload = b'{"password":"original"}\n'
+            credential.write_bytes(payload)
+            credential.chmod(0o600)
+            original_fdopen = os.fdopen
+
+            class ShortRead:
+                def __init__(self, file):
+                    self.file = file
+
+                def __enter__(self):
+                    self.file.__enter__()
+                    return self
+
+                def __exit__(self, *args):
+                    return self.file.__exit__(*args)
+
+                def fileno(self):
+                    return self.file.fileno()
+
+                def read(self, size):
+                    return self.file.read(size)[:-1]
+
+            with patch.object(M, 'STATE', path), patch.object(
+                    M.os, 'fdopen', side_effect=lambda *args, **kwargs: ShortRead(
+                        original_fdopen(*args, **kwargs))):
+                with self.assertRaisesRegex(M.AgentHouseError, 'incomplete'):
+                    M.read_credential()
+            self.assertEqual(credential.read_bytes(), payload)
+
     def test_credential_read_refuses_mutation_and_entry_substitution(self):
         for replace_entry in (False, True):
             with self.subTest(replace_entry=replace_entry), tempfile.TemporaryDirectory() as directory:

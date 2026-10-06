@@ -124,8 +124,9 @@ def _project(snapshot):
         r'unix:///Users/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*/\.colima/mac-studio-solo/docker\.sock', host) is not None)
     daemon = snapshot['daemon']
     require(type(daemon) is dict and type(daemon.get('ID')) is str and
-            1 <= len(daemon['ID']) <= 128 and
-            daemon.get('OSType') == 'linux' and daemon.get('Architecture') in ('arm64', 'aarch64') and
+             1 <= len(daemon['ID']) <= 128 and
+            all(33 <= ord(ch) < 127 for ch in daemon['ID']) and
+             daemon.get('OSType') == 'linux' and daemon.get('Architecture') in ('arm64', 'aarch64') and
             daemon.get('DockerRootDir') == ROOT)
     boot = snapshot['boot_id']
     require(type(boot) is str and re.fullmatch(
