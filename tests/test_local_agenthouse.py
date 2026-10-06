@@ -890,6 +890,18 @@ class AgentHouseTests(unittest.TestCase):
                 docker.assert_not_called()
                 self.assertFalse(state.exists())
 
+    def test_orphaned_owned_volume_does_not_get_adopted_by_new_container(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            retained = {'Name': M.VOLUME, 'Labels': {M.LABEL: 'agenthouse-local'}}
+            with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                    patch.object(M, 'inspect_owned', side_effect=[None, retained]), \
+                    patch.object(M, 'docker') as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'owned data volume'):
+                    M.ensure_runtime()
+                docker.assert_not_called()
+                self.assertFalse(state.exists())
+
     def test_existing_runtime_unsafe_credential_does_not_start(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / 'state'

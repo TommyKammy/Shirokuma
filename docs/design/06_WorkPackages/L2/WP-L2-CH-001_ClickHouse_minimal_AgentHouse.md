@@ -5,12 +5,28 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.23"
+version: "0.24"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 orphaned retained volume refuses recreation (offline)
+
+The startup path previously created a new container and credentials when the
+fixed owned volume existed but its container did not. An isolated fixture
+reached readiness (and failed after its bounded 90-second wait) before repair.
+Now this asymmetric inventory refuses recreation before allocating state,
+reading credentials or starting Docker; the converse missing-volume case still
+refuses. Focused AgentHouse 61 tests pass. Dedicated Colima was freshly observed
+Stopped; no live container, credential, retained volume/report/backup was
+accessed or changed. Ownership labels cannot prove that an orphaned volume is
+safe to adopt; inspect identity and retained contents separately before any
+explicit recovery, never silently recreate or replay an unknown insert.
+This fixture does not prove daemon authenticity, live ARM64/deduplication or
+operator acceptance. Revert only this guard/test if required, preserving the
+retained volume and saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 bounded Docker inspection input (offline)
 

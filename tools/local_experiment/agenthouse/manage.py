@@ -268,6 +268,10 @@ def ensure_runtime() -> Client:
     volume = inspect_owned("volume", VOLUME)
     if existing and volume is None:
         raise AgentHouseError("existing AgentHouse requires its original owned data volume; refusing recreation")
+    if existing is None and volume is not None:
+        # The retained volume may contain rows from a container that disappeared.
+        # Never silently attach it to a newly created runtime or rotate credentials.
+        raise AgentHouseError("orphaned owned data volume requires explicit inspection; refusing recreation")
     if existing and (not isinstance(existing.get('Config'), dict) or
                      not isinstance(existing['Config'].get('Image'), str) or
                      not isinstance(existing.get('HostConfig'), dict) or

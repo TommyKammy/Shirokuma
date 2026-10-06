@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.470"
+version: "5.471"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: orphaned AgentHouse volume cannot be silently adopted (offline)
+
+WP-L2-CH-001 refuses new container/credential creation when its fixed owned
+volume exists without the matching container. The negative fixture previously
+reached readiness and timed out; focused AgentHouse 61 tests pass after repair.
+Dedicated Colima freshly observed Stopped; no live Docker/HTTP, retained
+credential/report/volume/backup access or change. This does not authenticate
+Docker, justify adopting saved data, prove ARM64/deduplication or grant operator
+acceptance. AgentHouse usage stays `null / NOT_MEASURED`; preserve the orphaned
+volume on rollback and do not replay uncertain inserts. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent Docker preflight shape and boot-ID guards (offline)
 
