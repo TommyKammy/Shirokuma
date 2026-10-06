@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.416"
+version: "5.417"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse private state, exclusive export and response decoding (offline)
+
+WP-L2-CH-001: direct credential reads bind to the owned 0700 state directory;
+exports create 0600 reports exclusively via that directory rather than replace
+an existing report or follow a symlink. Invalid UTF-8 HTTP reply bytes produce
+a scoped failure. Negative fixtures failed before repair; focused AgentHouse
+and dashboard 20 tests, `make verify-local-experiment`, design-context and
+`git diff --check` passed (the verifier's fake Dagster worker error is an
+intentional negative diagnostic). Dedicated Colima freshly Stopped. No live
+query, saved credential/report/backup/volume change or producer authentication.
+Parent-path substitution, same-UID mutation and partial write on disk failure
+remain outside these checks. Restore only scoped reader/export/query behavior,
+never delete retained reports. Original Vault sync pending outside checkout;
+offline checks are not operator acceptance.
 
 ## 2026-10-06: bounded direct AgentHouse client credential (offline)
 

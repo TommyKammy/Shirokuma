@@ -12,6 +12,23 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline state binding and export retention
+
+The direct credential reader now opens the final state directory with no-follow,
+requires its current owner and 0700 mode, and opens the credential relative to
+that descriptor. An independently tested export path uses exclusive no-follow
+creation relative to the same private directory and creates 0600 files without
+overwriting a retained report or following a report symlink. Invalid UTF-8
+query replies now return a scoped error rather than an uncaught decoding error.
+Three new negative fixture classes failed before repair; focused AgentHouse and
+dashboard tests (20), local verifier, design-context and diff check passed.
+The dedicated Colima profile was freshly Stopped. No live HTTP/volume, saved
+report, credential or backup was read or mutated. A parent-path substitution,
+same-UID state mutation, partial export on write failure and daemon provenance
+are not solved by these checks. Existing reports must be preserved; roll back
+only the reader/export/response changes if needed. Original Vault sync remains
+pending outside checkout; this does not establish operator acceptance.
+
 ## 2026-10-06 offline direct-client credential boundary
 
 The direct AgentHouse client now refuses an oversized, symlinked, non-private

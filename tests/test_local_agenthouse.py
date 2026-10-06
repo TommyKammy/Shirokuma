@@ -84,7 +84,60 @@ class AgentHouseTests(unittest.TestCase):
                 credential.unlink()
                 self.assertEqual(base64.b64decode(M.Client(
                     credential_bytes=b'{"password":"pinned"}').auth).decode(),
-                                 M.USER + ':pinned')
+                                  M.USER + ':pinned')
+
+    def test_direct_client_refuses_redirected_or_public_state_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / 'state'
+            state.mkdir(mode=0o700)
+            credential = state / 'credential.json'
+            credential.write_text('{"password":"fixture-only"}')
+            credential.chmod(0o600)
+            with patch.object(M, 'STATE', state):
+                self.assertIn('fixture-only', base64.b64decode(M.Client().auth).decode())
+                state.chmod(0o755)
+                with self.assertRaises(M.AgentHouseError):
+                    M.Client()
+                state.chmod(0o700)
+                state.rename(root / 'original')
+                state.symlink_to(root / 'original', target_is_directory=True)
+                with self.assertRaises(M.AgentHouseError):
+                    M.Client()
+
+    def test_export_refuses_existing_report_and_symlink_without_modification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            client = Mock()
+            client.query.return_value = '{"event_id":"fixture"}\n'
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock:
+                clock.now.return_value.strftime.return_value = 'fixed'
+                existing = state / 'pawprints-fixed.jsonl'
+                existing.write_text('retained')
+                with self.assertRaises(M.AgentHouseError):
+                    M.export(client)
+                self.assertEqual(existing.read_text(), 'retained')
+                existing.unlink()
+                target = state / 'other'
+                target.write_text('retained')
+                existing.symlink_to(target)
+                with self.assertRaises(M.AgentHouseError):
+                    M.export(client)
+                self.assertEqual(target.read_text(), 'retained')
+                existing.unlink()
+                self.assertEqual(M.export(client), existing)
+                self.assertEqual(existing.read_text(), client.query.return_value)
+                self.assertEqual(existing.stat().st_mode & 0o777, 0o600)
+
+    def test_query_rejects_invalid_utf8_response_with_scoped_error(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.read.return_value = b'\xff'
+        client.opener.open = Mock(return_value=response)
+        with self.assertRaises(M.AgentHouseError):
+            client.query('SELECT 1')
 
     def test_insert_rejects_missing_fields_without_inventing_retry_identity(self):
         complete = M.event("test", "clickhouse")

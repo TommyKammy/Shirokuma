@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 import http.client
@@ -74,20 +75,41 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise AgentHouseError("local AgentHouse must not redirect requests")
 
 
+@contextmanager
+def private_state_fd():
+    """Bind a local read/write to the private state directory, not a child pathname."""
+    try:
+        fd = os.open(STATE, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        identity = os.fstat(fd)
+        if identity.st_uid != os.getuid() or stat.S_IMODE(identity.st_mode) != 0o700:
+            raise AgentHouseError('local AgentHouse state directory is not private')
+    except OSError:
+        raise AgentHouseError('local AgentHouse state directory cannot be opened safely') from None
+    except BaseException:
+        os.close(fd)
+        raise
+    try:
+        yield fd
+    finally:
+        os.close(fd)
+
+
 class Client:
     def __init__(self, *, credential_bytes: bytes | None = None) -> None:
         if credential_bytes is None:
             try:
-                fd = os.open(STATE / "credential.json", os.O_RDONLY | os.O_NOFOLLOW)
-                with os.fdopen(fd, 'rb') as file:
-                    identity = os.fstat(file.fileno())
-                    if (not stat.S_ISREG(identity.st_mode) or identity.st_uid != os.getuid() or
-                            stat.S_IMODE(identity.st_mode) != 0o600 or identity.st_nlink != 1 or
-                            identity.st_size > 16384):
-                        raise AgentHouseError('local credential is not a private regular file')
-                    credential_bytes = file.read(16385)
-                    if len(credential_bytes) > 16384:
-                        raise AgentHouseError('local credential exceeds read limit')
+                with private_state_fd() as state:
+                    fd = os.open('credential.json', os.O_RDONLY | os.O_NOFOLLOW,
+                                 dir_fd=state)
+                    with os.fdopen(fd, 'rb') as file:
+                        identity = os.fstat(file.fileno())
+                        if (not stat.S_ISREG(identity.st_mode) or identity.st_uid != os.getuid() or
+                                stat.S_IMODE(identity.st_mode) != 0o600 or identity.st_nlink != 1 or
+                                identity.st_size > 16384):
+                            raise AgentHouseError('local credential is not a private regular file')
+                        credential_bytes = file.read(16385)
+                        if len(credential_bytes) > 16384:
+                            raise AgentHouseError('local credential exceeds read limit')
             except OSError:
                 raise AgentHouseError('local credential cannot be opened safely') from None
         try:
@@ -108,7 +130,10 @@ class Client:
                 body = response.read(8 * 1024 * 1024 + 1)
                 if len(body) > 8 * 1024 * 1024:
                     raise AgentHouseError("AgentHouse response exceeds the local export limit")
-                return body.decode()
+                try:
+                    return body.decode('utf-8')
+                except UnicodeError:
+                    raise AgentHouseError('local AgentHouse response is not UTF-8') from None
         except (urllib.error.URLError, TimeoutError, http.client.HTTPException) as error:
             raise AgentHouseError("local AgentHouse request failed; verify its scoped runtime") from error
 
@@ -225,9 +250,17 @@ def insert(client: Client, value: dict) -> None:
 
 def export(client: Client) -> Path:
     rows = client.query("SELECT * FROM agenthouse.pawprints FINAL ORDER BY timestamp, event_id FORMAT JSONEachRow")
-    path = STATE / ("pawprints-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".jsonl")
-    path.write_text(rows)
-    path.chmod(0o600)
+    name = "pawprints-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".jsonl"
+    path = STATE / name
+    try:
+        with private_state_fd() as state:
+            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=state)
+            with os.fdopen(fd, 'w', encoding='utf-8') as file:
+                os.fchmod(file.fileno(), 0o600)
+                file.write(rows)
+    except OSError:
+        raise AgentHouseError('local AgentHouse export cannot be created safely') from None
     return path
 
 
