@@ -135,9 +135,12 @@ class ProcessTests(unittest.TestCase):
             row=P.parse_ps(raw,{101})[101]
             self.assertEqual(row['cpu_ms'],expected);self.assertEqual(row['rss_bytes'],2097152)
         for raw in [b'',('999 '+START+' 1 0:00.00\n').encode(),
-                    ('101 '+START+' 1 0:61.00\n').encode(),
-                    ('101 '+START+' -1 0:00.00\n').encode(),
-                    ('101 '+START+' 1 0:00.00\n') .encode()*2]:
+                     ('101 '+START+' 1 0:61.00\n').encode(),
+                     ('101 '+START+' -1 0:00.00\n').encode(),
+                     ('101 '+START+' 1 0:00.00').encode(),
+                     ('101 '+START+' 1 0:00.00\r\n').encode(),
+                     ('101 '+START+' 1 0:00.00\v').encode(),
+                     ('101 '+START+' 1 0:00.00\n') .encode()*2]:
             with self.assertRaises(P.ProcessError):P.parse_ps(raw,{101})
 
     def test_ps_call_is_fixed_pid_only_no_credentials_or_arbitrary_argv(self):

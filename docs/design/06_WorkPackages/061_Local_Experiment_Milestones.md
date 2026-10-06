@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.433"
+version: "5.434"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent procfs and process row framing (offline)
+
+WP-L6-FIN-001 rejects missing final LF and non-LF separators in the caller-
+supplied Linux mountinfo and fixed BSD `ps` sample. Six negatives failed before
+repair; focused 4 procfs and 15 process tests and the full local verifier pass
+(the fake Dagster worker failure is intentional). Dedicated Colima freshly
+Stopped; no live sampling or retained report/volume/backup changes; AgentHouse
+bytes remain `null / NOT_MEASURED`. No VM authentication, cleanup proof or
+operator acceptance. Restore only the scoped readers/tests, preserving saved
+evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent Docker inventory LF framing (offline)
 

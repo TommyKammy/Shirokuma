@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.221"
+version: "0.222"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent procfs and BSD ps row framing (offline)
+
+The caller-supplied Linux mountinfo fixture and fixed BSD `ps` sample readers
+accepted truncated final rows and CRLF; mountinfo additionally split on a
+Unicode NEL and `ps` on vertical tab. Six negative cases failed before repair.
+Both now require LF-terminated rows and reject non-LF separators before
+projection. Focused procfs four and process fifteen tests pass, as does
+`make verify-local-experiment` (its fake Dagster failure is intentional).
+Dedicated Colima freshly Stopped; no live VM/procfs/process sampling, retained
+volume/report/backup mutation or AgentHouse byte measurement (`null /
+NOT_MEASURED`). This cannot authenticate the VM or prove cleanup or operator
+acceptance. Revert only these scoped parsers/tests, retaining saved evidence;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06 fixed Docker inventory LF framing (offline)
 

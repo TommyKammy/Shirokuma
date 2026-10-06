@@ -54,8 +54,14 @@ def _start(raw,pid):
 
 
 def _mount(raw,mount_id):
-    require(type(raw) is bytes and 0<len(raw)<=MAX_MOUNTINFO and b'\x00' not in raw)
-    try:lines=raw.decode('utf-8').splitlines()
+    require(type(raw) is bytes and 0<len(raw)<=MAX_MOUNTINFO and
+            raw.endswith(b'\n') and b'\r' not in raw and b'\x00' not in raw)
+    try:
+        text=raw.decode('utf-8')
+        # Kernel mountinfo is LF-framed; Unicode separators are not records.
+        require(all(char=='\n' or not char.isspace() or char in ' \t'
+                    for char in text))
+        lines=text[:-1].split('\n')
     except UnicodeError:raise ProcfsError('PROCFS_UNVERIFIED') from None
     matches=[];seen=set()
     for line in lines:

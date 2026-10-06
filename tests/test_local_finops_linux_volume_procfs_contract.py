@@ -64,8 +64,11 @@ class ProcfsContractTests(unittest.TestCase):
                  lambda x:x.update(mountinfo=b'19 1 0:20 / /proc rw - proc proc rw,hidepid=2\n'),
                  lambda x:x.update(mountinfo=x['mountinfo']+b'20 19 0:21 / /proc/345 rw - tmpfs tmpfs rw\n'),
                  lambda x:x.update(mountinfo=x['mountinfo']+b'20 19 0:21 / /proc/self/fd rw - tmpfs tmpfs rw\n'),
-                 lambda x:x.update(mountinfo=x['mountinfo']+x['mountinfo']),
-                 lambda x:x.update(mount_namespace_link='mnt:[0]'),
+                  lambda x:x.update(mountinfo=x['mountinfo']+x['mountinfo']),
+                  lambda x:x.update(mountinfo=x['mountinfo'].rstrip(b'\n')),
+                  lambda x:x.update(mountinfo=x['mountinfo'].replace(b'\n',b'\r\n')),
+                  lambda x:x.update(mountinfo=x['mountinfo'].replace(b'\n',b'\xc2\x85')),
+                  lambda x:x.update(mount_namespace_link='mnt:[0]'),
                  lambda x:x.update(pid_namespace_link='pid:[0123]')]
         for change in changes:
             value=inputs();change(value)

@@ -149,7 +149,11 @@ def parse_ps(raw, pids):
     require(type(pids) is set and 0 < len(pids) <= MAX_PROCESSES
             and all(type(pid) is int and pid > 1 for pid in pids), 'SCOPE_INVALID')
     result = {}
-    try: lines = raw.decode('ascii').splitlines()
+    require(raw.endswith(b'\n') and b'\r' not in raw, 'SAMPLE_INVALID')
+    try:
+        text = raw.decode('ascii')
+        require(all(char == '\n' or not char.isspace() or char in ' \t' for char in text))
+        lines = text[:-1].split('\n')
     except UnicodeError: raise ProcessError('SAMPLE_INVALID') from None
     for line in lines:
         parts = line.split()
