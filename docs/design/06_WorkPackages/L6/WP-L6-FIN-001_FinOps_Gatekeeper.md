@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.232"
+version: "0.233"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 procfs stat spacing and suffix (offline)
+
+The caller-supplied stat fixture projected start ticks despite tabs/double
+spaces separating columns or forged trailing fields. Twelve negative cases
+across self/init/target failed before repair; an optional final LF and canonical
+numeric suffix pass. Focused procfs 14 tests and `make verify-local-experiment`
+pass (fake Dagster failure intentional). Dedicated Colima freshly Stopped;
+no guest read or retained report/volume/backup access/change; AgentHouse bytes
+remain `null / NOT_MEASURED`. Fixture syntax cannot authenticate kernel origin
+or authorize a retained-volume scan, and cleanup/operator acceptance remain
+open. Restore only this scoped parser/test, preserving saved evidence. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06 procfs stat numeric fields (offline)
 

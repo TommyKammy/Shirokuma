@@ -183,5 +183,19 @@ class ProcfsContractTests(unittest.TestCase):
                 with self.subTest(field=field, separator=separator),self.assertRaises(P.ProcfsError):
                     P.project(**value)
 
+    def test_stat_numeric_columns_require_kernel_spacing_and_valid_suffix(self):
+        for field, pid in (('self_stat', 101), ('init_stat', 1), ('target_stat', 345)):
+            for raw in (stat_line(pid, 42).replace(b') S 0', b') S\t0', 1),
+                        stat_line(pid, 42).replace(b') S 0', b') S  0', 1),
+                        stat_line(pid, 42) + b' forged',
+                        stat_line(pid, 42) + b' 01'):
+                value=inputs();value[field]=raw
+                if field=='target_stat':value['target_errno']=None
+                with self.subTest(field=field,raw=raw),self.assertRaises(P.ProcfsError):
+                    P.project(**value)
+        value=inputs();value['target_stat']=stat_line(345,42)+b' 0 123\n'
+        value['target_errno']=None
+        self.assertEqual(P.project(**value)['probe']['start_ticks'],'42')
+
 
 if __name__=='__main__':unittest.main()

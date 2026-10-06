@@ -622,6 +622,21 @@ def smoke(client: Client) -> dict:
         reply = json.loads(raw, object_pairs_hook=unique_fields,
                            parse_constant=invalid_constant, parse_int=bounded_integer,
                            parse_float=bounded_number)
+        # Even an unused response field must not hide an unencodable or
+        # excessively deep value behind an otherwise valid count.
+        stack = [(reply, 0)]
+        while stack:
+            item, depth = stack.pop()
+            if depth > 64:
+                raise ValueError('count nesting exceeds limit')
+            if isinstance(item, dict):
+                for key in item:
+                    key.encode('utf-8')
+                stack.extend((child, depth + 1) for child in item.values())
+            elif isinstance(item, list):
+                stack.extend((child, depth + 1) for child in item)
+            elif isinstance(item, str):
+                item.encode('utf-8')
         rows = reply.get('data') if isinstance(reply, dict) else None
     except (TypeError, ValueError, UnicodeError, RecursionError):
         raise AgentHouseError('Pawprint retry readback is invalid; do not replay') from None

@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.448"
+version: "5.449"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent stat framing and smoke count nesting (offline)
+
+WP-L6-FIN-001 refuses malformed spacing or numeric suffix in caller-supplied
+stat fixtures (12 negatives across three identities, optional LF positive).
+WP-L2-CH-001 independently refuses unencodable or deeply nested unused count
+reply fields before smoke export (two negatives). Focused procfs 14 and
+AgentHouse 52 tests, plus `make verify-local-experiment`, pass; its fake
+Dagster worker failure is intentional. Dedicated Colima freshly Stopped; no
+live guest read, insert, retained credential/report/volume/backup access or
+change. AgentHouse bytes stay `null / NOT_MEASURED`. Neither offline fixture
+authenticates a producer, authorizes retained-volume measurement, proves live
+deduplication or operator acceptance. Roll back only the scoped guards/tests,
+preserve saved records and do not replay unknown inserts. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent status diagnostic and procfs stat syntax (offline)
 

@@ -5,12 +5,24 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.14"
+version: "0.15"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 count reply nested values (offline)
+
+Smoke previously accepted a valid count alongside an ignored escaped lone
+surrogate or a >64-level nested field, then proceeded to export. Two negative
+fixtures exposed the gap; smoke now bounds nesting and checks decoded strings
+throughout the count reply before export. Focused AgentHouse 52 tests and full
+local verifier pass (fake Dagster failure intentional). Dedicated Colima freshly
+Stopped; no live insert, saved credential/report/volume/backup access or change.
+This does not authenticate replies, prove live retry deduplication or grant
+operator acceptance. Preserve saved evidence and never replay an ambiguous
+insert; restore only the scoped guard/test. Original Vault sync pending.
 
 ## 2026-10-06 status version reply boundary (offline)
 

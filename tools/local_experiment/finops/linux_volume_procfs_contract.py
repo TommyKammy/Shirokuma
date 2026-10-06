@@ -40,15 +40,20 @@ def _namespace(value,kind):
 
 def _start(raw,pid):
     require(type(raw) is bytes and 0<len(raw)<=MAX_STAT and
-            not any(separator in raw for separator in (b'\n',b'\r',b'\v',b'\f',b'\x00')))
+            not any(separator in raw for separator in (b'\r',b'\v',b'\f',b'\x00')) and
+            (b'\n' not in raw or (raw.endswith(b'\n') and raw.count(b'\n')==1)))
     # Linux /proc/PID/stat has a parenthesized comm with arbitrary spaces or
     # closing parentheses. The last ") " precedes the state and numeric fields.
     prefix=f'{pid} ('.encode()
     require(raw.startswith(prefix))
     tail=raw.rsplit(b') ',1)
     require(len(tail)==2 and tail[0].startswith(prefix))
-    fields=tail[1].split()
+    # Only the final LF is optional; the kernel separates numeric stat fields
+    # with one ASCII space. split() alone accepts forged tabs and empty columns.
+    columns=tail[1].removesuffix(b'\n')
+    fields=columns.split(b' ')
     require(len(fields)>=20 and re.fullmatch(rb'[A-Z?]',fields[0]) is not None)
+    require(all(fields))
     # Fields 4..22 in proc/PID/stat are decimal kernel counters/identifiers.
     # A forged nonnumeric field must not lend credibility to a start tick.
     for field in fields[1:20]:
@@ -57,6 +62,11 @@ def _start(raw,pid):
     tick=fields[19]
     require(re.fullmatch(rb'(?:0|[1-9][0-9]{0,19})',tick) is not None and
             int(tick)<=MAX_NUMBER)
+    # Later stat fields vary by kernel version; when supplied, they must still
+    # be canonical decimal fields rather than unchecked text after starttime.
+    for field in fields[20:]:
+        require(re.fullmatch(rb'-?(?:0|[1-9][0-9]{0,19})',field) is not None and
+                -(MAX_NUMBER+1)<=int(field)<=2**64-1)
     return tick.decode('ascii')
 
 

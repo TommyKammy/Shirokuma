@@ -355,6 +355,18 @@ class AgentHouseTests(unittest.TestCase):
                 self.assertEqual(M.smoke(client)['result'], 'passed')
                 self.assertEqual(inserted.call_count, 14)
 
+    def test_smoke_count_refuses_unexamined_nested_values(self):
+        client = Mock()
+        with patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
+                patch.object(M, 'insert') as inserted, patch.object(M, 'export') as exported:
+            for extra in ('{"bad":"\\ud800"}', '[' * 65 + '0' + ']' * 65):
+                client.query.return_value = ('{"data":[{"n":1,"status":"success"}],'
+                                             '"unused":' + extra + '}')
+                with self.subTest(extra=extra[:30]), self.assertRaises(M.AgentHouseError):
+                    M.smoke(client)
+            self.assertEqual(inserted.call_count, 4)
+            exported.assert_not_called()
+
     def test_smoke_version_reply_is_bounded_before_public_result(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
