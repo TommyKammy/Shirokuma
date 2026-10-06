@@ -895,6 +895,22 @@ class AgentHouseTests(unittest.TestCase):
         response.headers = {'Content-Length': '2'}
         self.assertEqual(client.query('SELECT 1'), '1\n')
 
+    def test_query_refuses_bom_prefixed_response_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        client.opener.open = Mock(return_value=response)
+        for body in (b'\xef\xbb\xbfCode: 241. DB::Exception: failed\n',
+                     b'1\n\xef\xbb\xbfCode: 60. DB::Exception: failed\n'):
+            with self.subTest(body=body):
+                response.headers = {'Content-Length': str(len(body))}
+                response.read.return_value = body
+                with self.assertRaisesRegex(M.AgentHouseError, 'query exception'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 2)
+
     def test_query_refuses_range_reply_on_200_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()

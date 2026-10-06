@@ -125,6 +125,19 @@ class VolumePreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
             validate(value, deepcopy(value))
 
+    def test_nested_mount_destinations_are_ambiguous_even_for_unrelated_container(self):
+        for destination in ('/data/child', '/data/child/grandchild'):
+            value = snapshot()
+            other = value['containers'][1]
+            nested = deepcopy(other['Mounts'][0])
+            nested.update(Source='/var/lib/docker/volumes/second/_data',
+                          Name='second', Destination=destination)
+            other['Mounts'].append(nested)
+            with self.subTest(destination=destination), self.assertRaisesRegex(
+                    V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        self.assertEqual(validate(snapshot(), deepcopy(snapshot()))['state'], 'metadata_eligible')
+
     def test_stopped_fixed_volume_is_metadata_only_not_scan_permission(self):
         value=snapshot();result=validate(value,deepcopy(value))
         self.assertEqual(result,{'state':'metadata_eligible','container_count':2,

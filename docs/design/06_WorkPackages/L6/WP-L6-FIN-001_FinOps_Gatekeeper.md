@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.269"
+version: "0.270"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 nested Docker destinations (offline)
+
+The standalone two-snapshot metadata preflight refuses distinct mounts whose
+destinations overlap (including unrelated containers); exact duplicates and
+equal destinations were already refused. Two nested fixtures were previously
+metadata-eligible; focused preflight 28 and FinOps 382 tests (seven Linux-only
+skips) pass. This deliberately rejects even legitimate nested Docker mounts
+until their visibility can be established; it does not authenticate Docker,
+exclude continuous writers or permit volume traversal (`False`). Dedicated
+Colima freshly Stopped; no VM/Docker, retained volume/report/backup access or
+change. AgentHouse bytes remain `null / NOT_MEASURED`; no operator acceptance.
+Revert only the scoped destination guard/test if verified metadata needs it,
+keeping saved resources. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 incompatible unrelated lifecycle flags (offline)
 

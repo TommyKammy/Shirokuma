@@ -351,7 +351,10 @@ class Client:
                 # ClickHouse can append an exception after beginning a streamed
                 # successful response, without an exception header or a new HTTP
                 # status. Do not promote that body to a write acknowledgement.
-                if re.search(r'(?m)^Code: [0-9]+\. DB::Exception:', text):
+                # A UTF-8 BOM can precede a ClickHouse error line in a
+                # malformed/intermediated response. It must not hide the
+                # exception behind an otherwise successful HTTP status.
+                if re.search(r'(?m)^\ufeff?Code: [0-9]+\. DB::Exception:', text):
                     raise AgentHouseError('local AgentHouse response contains a query exception')
                 return text
         except (urllib.error.URLError, OSError, http.client.HTTPException) as error:

@@ -119,9 +119,11 @@ def _mounts(container):
             require(entry.get('Name') in (None, '') and entry.get('Driver') in (None, ''))
         result.append((entry['Type'], source, destination, name, driver, entry['RW']))
     require(len(set(result)) == len(result))
-    # Distinct mounts at the same destination cannot be treated as a unique
-    # reference inventory even when each tuple is individually well formed.
-    require(len({entry[2] for entry in result}) == len(result))
+    # Overmounted or nested destinations describe an ambiguous visible
+    # filesystem topology, even when the sources themselves are distinct.
+    # Refuse that inventory rather than infer a unique reference layout.
+    require(all(not _overlaps(left[2], right[2])
+                for index, left in enumerate(result) for right in result[index + 1:]))
     return tuple(sorted(result))
 
 

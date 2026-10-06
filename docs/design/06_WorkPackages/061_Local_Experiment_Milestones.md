@@ -5,12 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.495"
+version: "5.496"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent BOM error and nested mount boundaries (offline)
+
+WP-L2-CH-001 refuses BOM-prefixed ClickHouse exception lines on HTTP 200,
+including after streamed text (81 focused tests). WP-L6-FIN-001 independently
+refuses nested destinations in an unrelated Docker mount inventory (28 focused
+preflight, 382 FinOps tests, seven Linux-only skips). Both synthetic negatives
+were metadata/query successes before repair. Dedicated `colima list` freshly
+showed mac-studio-solo Stopped; no live HTTP/Docker/VM, retained credential,
+report, volume or backup read/change. These fixture rules cannot authenticate
+producers, exclude continuous writers or unmarked errors, establish live
+deduplication, authorize volume traversal or grant operator acceptance.
+AgentHouse bytes stay `null / NOT_MEASURED`; never replay an uncertain insert.
+Rollback only scoped guards/tests while preserving saved resources; original
+Vault sync pending outside checkout.
+Combined `make verify-local-experiment` passed on retry (intentional fake
+Dagster worker failure); the first run stopped on an unrelated gateway test's
+macOS `killpg` PermissionError for an exited child. The gateway suite then
+passed alone (31 tests); both original and retry logs are retained privately at
+`tmp/local-experiment/attempt-208-verify.log` and
+`tmp/local-experiment/attempt-208-verify-retry.log`. Design-context and
+`git diff --check` pass. Neither result is live/operator acceptance.
 
 ## 2026-10-06: independent streamed exception and lifecycle consistency (offline)
 

@@ -5,12 +5,24 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.41"
+version: "0.42"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 BOM-prefixed streamed exception (offline)
+
+The 200-response guard also recognizes ClickHouse's exception line when a
+UTF-8 BOM prefixes it at the start of a line. Two synthetic failures previously
+looked like successful inserts; a clean reply still passes (81 focused tests).
+This does not detect arbitrary unmarked errors, authenticate ClickHouse, prove
+live deduplication or authorize replay of an uncertain write. Dedicated Colima
+freshly Stopped; no live HTTP/Docker or retained credentials, reports, volumes
+or backups accessed or changed. Restore only this guard/test if verified live
+behavior requires it, preserving saved data. Original Vault sync pending outside
+checkout; operator acceptance remains open.
 
 ## 2026-10-06 streamed exception body refusal (offline)
 
