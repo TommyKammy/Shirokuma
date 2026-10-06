@@ -36,7 +36,8 @@ def _stamp(value):
 def _path(value):
     require(type(value) is str and value.startswith('/') and not value.startswith('//') and
             len(value) <= 4096 and all(ord(ch) >= 32 and not 127 <= ord(ch) <= 159 for ch in value) and
-            all(unicodedata.category(ch) != 'Cf' for ch in value) and
+            all(unicodedata.category(ch) != 'Cf' and
+                (not ch.isspace() or ch == ' ') for ch in value) and
             all(part not in ('', '.', '..')
             for part in value[1:].split('/')))
     try:

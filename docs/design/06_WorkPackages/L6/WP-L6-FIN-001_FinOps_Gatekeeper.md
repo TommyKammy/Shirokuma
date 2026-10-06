@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.276"
+version: "0.277"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 unrelated mount whitespace boundary (offline)
+
+The supplied two-snapshot Docker inventory previously accepted unrelated
+mount destinations containing NBSP, Unicode line separator or paragraph
+separator, each of which can obscure a path when displayed or copied. Three
+synthetic metadata-eligible cases failed before repair; the standalone guard
+now rejects non-ASCII whitespace in a mount path while allowing visible ASCII
+space. Focused preflight 36 and FinOps 390 tests (seven Linux-only skips) pass;
+`make verify-local-experiment` passes (intentional fake Dagster failure).
+This does not authenticate the daemon, exclude writers or authorize traversal;
+`volume_traversal_authorized=False` and AgentHouse bytes remain `null /
+NOT_MEASURED`. Dedicated Colima remained Stopped; no retained volume, backup
+or report was read or changed. Revert only this scoped guard/test if verified
+Docker compatibility requires it, preserving saved resources. Original Vault
+sync pending outside checkout; live/operator acceptance open.
 
 ## 2026-10-06 plugin-source and invisible mount-path metadata (offline)
 

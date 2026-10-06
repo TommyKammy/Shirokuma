@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.516"
+version: "5.517"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent FinOps mount whitespace (offline)
+
+WP-L6-FIN-001 rejects non-ASCII whitespace in unrelated Docker mount paths
+after three synthetic false metadata-eligible cases. Focused preflight 36 and
+FinOps 390 tests and full local verifier pass (seven Linux-only skips;
+intentional fake Dagster failure). Dedicated Colima remains
+Stopped; no retained data, volume, report or backup read/change. Supplied
+metadata is not authenticated, excludes no continuous writer and authorizes
+no volume traversal; AgentHouse bytes remain `null / NOT_MEASURED`. Roll back
+only the guard/test if verified daemon behavior requires it, retaining saved
+resources. Original Vault sync pending; live/operator acceptance open.
 
 ## 2026-10-06: L0 pinned client gate and stopped-lab diagnostic
 

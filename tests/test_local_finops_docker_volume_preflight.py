@@ -87,6 +87,16 @@ class VolumePreflightTests(unittest.TestCase):
         value['containers'][1]['Mounts'][0]['Destination'] = '/data/café'
         self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
 
+    def test_unrelated_mount_path_refuses_non_ascii_whitespace(self):
+        for marker in ('\u00a0', '\u2028', '\u2029'):
+            value = snapshot()
+            value['containers'][1]['Mounts'][0]['Destination'] = '/data/' + marker + 'hidden'
+            with self.subTest(marker=ord(marker)), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        value = snapshot()
+        value['containers'][1]['Mounts'][0]['Destination'] = '/data/visible space'
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
     def test_nonterminated_container_cannot_report_future_finish(self):
         for status, flag in (('running', 'Running'), ('paused', 'Paused'),
                              ('restarting', 'Restarting')):
