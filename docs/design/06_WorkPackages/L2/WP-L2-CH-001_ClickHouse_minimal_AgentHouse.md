@@ -5,12 +5,31 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.52"
+version: "0.53"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 independent export removal and readback identity checks (offline)
+
+After removing the pending export name and syncing its directory, the publisher
+rechecks the public inode/size/mode/link count before returning success. A
+synthetic public-name swap during staging removal formerly returned the
+substitute as successful; it now fails while retaining both files for inspection.
+Separately the smoke reader checks private mode and link count after reading,
+then checks the public entry's complete identity: synthetic hardlink creation
+during read and mode change after close formerly passed but now fail. These
+checks do not atomically exclude a same-UID writer or prove power-loss durability;
+an ambiguous file may remain visible. 96 focused tests and the combined local
+verifier pass after replacing a test-only `Path.hardlink_to` (absent in the Make
+Python) with `os.link`. The first full verifier failed on that fixture error and
+was not counted as a pass. Dedicated Colima freshly Stopped; no live HTTP/Docker
+or saved report, credential, volume or backup read/change. Preserve ambiguous
+files, never replay an uncertain insert. Revert only the scoped checks/tests if
+verified compatibility requires it, keeping saved records. Original Vault sync
+pending outside checkout; live deduplication and operator acceptance remain open.
 
 ## 2026-10-06 post-link export identity (offline)
 

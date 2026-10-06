@@ -713,6 +713,14 @@ def export(client: Client) -> Path:
                         raise OSError('export changed during publication')
                 os.unlink(staging, dir_fd=state)
             os.fsync(state)
+            # Removal of the staging name and its sync are separate operations.
+            # Do not report success if the published entry changed in between.
+            published = os.stat(name, dir_fd=state, follow_symlinks=False)
+            if (not stat.S_ISREG(published.st_mode) or published.st_uid != os.getuid() or
+                    stat.S_IMODE(published.st_mode) != 0o600 or published.st_nlink != 1 or
+                    (published.st_dev, published.st_ino, published.st_size, published.st_mtime_ns) !=
+                    (written.st_dev, written.st_ino, written.st_size, written.st_mtime_ns)):
+                raise OSError('published export changed after staging removal')
     except OSError:
         raise AgentHouseError('local AgentHouse export cannot be published safely; inspect any pending file') from None
     return path
@@ -735,12 +743,19 @@ def read_smoke_export(path: Path) -> list[dict]:
                 after = os.fstat(file.fileno())
                 if (len(payload) != identity.st_size or
                         len(payload) > 8 * 1024 * 1024 or
+                        not stat.S_ISREG(after.st_mode) or after.st_uid != os.getuid() or
+                        stat.S_IMODE(after.st_mode) != 0o600 or after.st_nlink != 1 or
                         (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
                         (identity.st_dev, identity.st_ino, identity.st_size,
-                         identity.st_mtime_ns, identity.st_ctime_ns)):
+                          identity.st_mtime_ns, identity.st_ctime_ns)):
                     raise AgentHouseError('Pawprint export changed during readback')
             entry = os.stat(path.name, dir_fd=state, follow_symlinks=False)
-            if (entry.st_dev, entry.st_ino) != (identity.st_dev, identity.st_ino):
+            if (not stat.S_ISREG(entry.st_mode) or entry.st_uid != os.getuid() or
+                    stat.S_IMODE(entry.st_mode) != 0o600 or entry.st_nlink != 1 or
+                    (entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns,
+                     entry.st_ctime_ns) !=
+                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
+                     after.st_ctime_ns)):
                 raise AgentHouseError('Pawprint export changed during readback')
         text = payload.decode('utf-8')
         if text and ('\r' in text or not text.endswith('\n')):

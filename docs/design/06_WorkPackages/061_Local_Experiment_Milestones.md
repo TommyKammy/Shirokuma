@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.507"
+version: "5.508"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent export post-removal and readback checks (offline)
+
+WP-L2-CH-001 now refuses a public report substituted after pending-file
+removal and refuses readback with a newly hardlinked or mode-changed report.
+Three synthetic false successes before repair; 96 focused tests,
+`make verify-local-experiment`, `make verify-design-context` and diff check
+pass. First full verifier failed on a test-only `Path.hardlink_to` unavailable
+in its Python; changed the fixture to `os.link` and reran successfully. The
+verifier's fake Dagster worker failure is intentional. Dedicated `colima list`
+freshly showed mac-studio-solo Stopped; no live VM/Docker/HTTP or saved
+credential, report, volume or backup accessed/changed. These bounded
+checks cannot exclude same-UID races, authenticate a producer, establish
+power-loss durability or live deduplication, or confer operator acceptance.
+AgentHouse bytes remain `null / NOT_MEASURED`; FinOps traversal remains
+unauthorized. Preserve ambiguous saved files; never replay an uncertain insert.
+Revert only scoped guards/tests if needed. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: independent export post-link and local-volume source checks (offline)
 

@@ -796,6 +796,69 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaisesRegex(M.AgentHouseError, 'readback'):
                     M.read_smoke_export(report)
 
+    def test_smoke_export_readback_refuses_new_hardlink_during_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            report = state / 'pawprints-20261006T010203000000Z.jsonl'
+            alias = state / 'fixture-alias'
+            report.write_bytes(b'{"event_id":"fixture"}\n')
+            report.chmod(0o600)
+            original_fdopen = M.os.fdopen
+
+            class LinkedReader:
+                def __init__(self, fd, *args):
+                    self.file = original_fdopen(fd, *args)
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return self.file.__exit__(*args)
+
+                def fileno(self):
+                    return self.file.fileno()
+
+                def read(self, size):
+                    data = self.file.read(size)
+                    M.os.link(report, alias)
+                    return data
+
+            with patch.object(M, 'STATE', state), patch.object(M.os, 'fdopen', LinkedReader):
+                with self.assertRaisesRegex(M.AgentHouseError, 'readback'):
+                    M.read_smoke_export(report)
+            self.assertTrue(alias.exists())  # Never remove an ambiguous saved inode.
+
+    def test_smoke_export_readback_refuses_mode_change_after_close(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            report = state / 'pawprints-20261006T010203000000Z.jsonl'
+            report.write_bytes(b'{"event_id":"fixture"}\n')
+            report.chmod(0o600)
+            original_fdopen = M.os.fdopen
+
+            class ChangedAfterClose:
+                def __init__(self, fd, *args):
+                    self.file = original_fdopen(fd, *args)
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    result = self.file.__exit__(*args)
+                    report.chmod(0o644)
+                    return result
+
+                def fileno(self):
+                    return self.file.fileno()
+
+                def read(self, size):
+                    return self.file.read(size)
+
+            with patch.object(M, 'STATE', state), patch.object(M.os, 'fdopen', ChangedAfterClose):
+                with self.assertRaisesRegex(M.AgentHouseError, 'readback'):
+                    M.read_smoke_export(report)
+            self.assertEqual(report.stat().st_mode & 0o777, 0o644)
+
     def test_smoke_export_readback_refuses_invalid_nested_values(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
@@ -876,6 +939,31 @@ class AgentHouseTests(unittest.TestCase):
                     M.export(client)
                 self.assertEqual(report.read_text(), 'retained')
                 self.assertEqual(list(state.glob('*.pending')), [])
+
+    def test_export_refuses_public_name_swap_after_staging_removal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            client = Mock()
+            client.query.return_value = '{"event_id":"original"}\n'
+            original_unlink = M.os.unlink
+            published = state / 'pawprints-fixed.jsonl'
+            moved = state / 'fixture-original'
+
+            def swap_after_unlink(path, *args, **kwargs):
+                result = original_unlink(path, *args, **kwargs)
+                if str(path).endswith('.pending'):
+                    published.rename(moved)
+                    published.write_bytes(b'{"event_id":"substitute"}\n')
+                    published.chmod(0o600)
+                return result
+
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock, \
+                    patch.object(M.os, 'unlink', side_effect=swap_after_unlink):
+                clock.now.return_value.strftime.return_value = 'fixed'
+                with self.assertRaisesRegex(M.AgentHouseError, 'pending'):
+                    M.export(client)
+            self.assertEqual(moved.read_text(), client.query.return_value)
+            self.assertEqual(published.read_text(), '{"event_id":"substitute"}\n')
 
     def test_unencodable_export_reply_does_not_create_report(self):
         with tempfile.TemporaryDirectory() as directory:
