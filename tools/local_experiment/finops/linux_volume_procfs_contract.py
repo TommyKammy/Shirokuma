@@ -75,7 +75,8 @@ def _start(raw,pid):
 
 def _mount(raw,mount_id):
     require(type(raw) is bytes and 0<len(raw)<=MAX_MOUNTINFO and
-            raw.endswith(b'\n') and b'\r' not in raw and b'\x00' not in raw)
+            raw.endswith(b'\n') and
+            not any(byte < 32 and byte != 10 or byte == 127 for byte in raw))
     try:
         text=raw.decode('utf-8')
         # Kernel mountinfo is LF-framed; Unicode separators are not records.

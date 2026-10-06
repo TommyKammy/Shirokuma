@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.455"
+version: "5.456"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: procfs inventory refuses raw control bytes (offline)
+
+WP-L6-FIN-001 refuses raw C0/DEL bytes in unrelated mountinfo rows before
+projecting `/proc`; two negative fixtures reproduced the gap. Focused volume
+suite 62 tests (seven Linux-only skips) and `make verify-local-experiment`
+pass, private log `tmp/local-experiment/attempt-181-verify.log` (intentional
+fake Dagster failure). Dedicated Colima remained Stopped; no VM read, retained
+data/backup change or AgentHouse measurement (`null / NOT_MEASURED`). Offline
+syntax does not authenticate the kernel, prove cleanup, permit retained-volume
+scanning or confer operator acceptance. Restore only scoped procfs parser/tests
+while retaining records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: private worker canonical fdinfo and propagation IDs (offline)
 

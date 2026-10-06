@@ -150,6 +150,16 @@ class ProcfsContractTests(unittest.TestCase):
         with self.assertRaises(P.ProcfsError):
             P.project(**value)
 
+    def test_unrelated_mount_options_refuse_raw_control_bytes(self):
+        for options, super_options in ((b'rw,nosuid\x01', b'rw'),
+                                       (b'rw', b'rw,mode=700\x7f')):
+            value = inputs()
+            value['mountinfo'] += (b'20 19 0:21 / /other ' + options +
+                                   b' - tmpfs tmpfs ' + super_options + b'\n')
+            with self.subTest(options=options, super_options=super_options), \
+                    self.assertRaises(P.ProcfsError):
+                P.project(**value)
+
     def test_procfs_super_options_do_not_project_ambiguous_access_or_visibility(self):
         for options in (b'rw,ro,hidepid=0', b'rw,rw,hidepid=0',
                         b'rw,hidepid=0,hidepid=0', b'hidepid=0',

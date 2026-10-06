@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.239"
+version: "0.240"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent procfs mount inventory control bytes (offline)
+
+The separate caller-supplied procfs contract projected a valid `/proc` despite
+raw C0 or DEL bytes in an unrelated mount row's options. Two negative fixtures
+failed before repair. The bounded mountinfo input now refuses raw controls
+except LF record terminators; escaped path controls remain representable.
+Focused volume suite 62 tests (seven Linux-only skips) and
+`make verify-local-experiment` pass; private verifier output is at
+`tmp/local-experiment/attempt-181-verify.log` (the fake Dagster worker failure
+is expected). Colima remained Stopped; no VM read or retained volume/report/
+backup access or change, AgentHouse usage `null / NOT_MEASURED`. A syntactic
+fixture is not kernel provenance, remote cleanup, safe retained-volume scanning
+or operator acceptance. Revert only this procfs contract/test and preserve
+saved evidence; original Vault sync pending outside checkout.
 
 ## 2026-10-06 private worker fdinfo and propagation ID spelling (offline)
 
