@@ -344,7 +344,10 @@ class AgentHouseTests(unittest.TestCase):
             with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock:
                 clock.now.return_value.strftime.return_value = 'fixed'
                 for reply in ('not json\n', '{"event_id":1}', '[]\n', '{}\n\n',
-                              '{"event_id":"fixture"}\r\n',
+                               '{"event_id":"fixture"}\r\n',
+                               ' {"event_id":"fixture"}\n',
+                               '{"event_id":"fixture"} \n',
+                               '{"event_id":"fixture"}\t\n',
                               '{"a":1}\u2028{"b":2}\n', '{"a":1}\x85{"b":2}\n',
                               '{"event_id":"a","event_id":"b"}\n',
                               '{"value":NaN}\n', '{"value":Infinity}\n',

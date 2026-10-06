@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 export object framing (offline)
+
+The exporter previously saved a JSON object with leading or trailing ASCII
+whitespace as a JSONEachRow line. Three synthetic replies published before
+repair; rows now require an object starting at column one and ending at the
+last column before LF. Escaped whitespace inside JSON strings remains valid.
+Focused 43 tests and `make verify-local-experiment` pass (intentional fake
+Dagster worker failure). Dedicated Colima freshly Stopped; no live query,
+retained report, credential, volume or backup changed. This does not prove
+export field schema or producer authenticity and is not operator acceptance.
+Revert only the scoped parser/test, preserving saved reports and pending files;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06 bounded Docker inspection structure (offline)
 

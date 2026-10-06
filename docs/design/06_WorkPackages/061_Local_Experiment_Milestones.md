@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.436"
+version: "5.437"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06 independent procfs and AgentHouse row separators (offline)
+
+WP-L6-FIN-001 refuses vertical tab/form feed in caller-supplied status/fdinfo
+rows (three negative cases failed before repair; focused five pass). Independently
+WP-L2-CH-001 refuses surrounding ASCII whitespace around a JSONEachRow export
+object (three negatives published before repair; focused 43 pass). Full
+`make verify-local-experiment`, design-context and diff check pass (the fake
+Dagster failure is an intentional negative fixture). Dedicated
+Colima freshly Stopped; no guest procfs, live query, retained credential,
+report, volume or backup mutation. AgentHouse used bytes remain `null /
+NOT_MEASURED`. Neither parser authenticates its producer, proves cleanup or
+confers operator acceptance. Restore only scoped readers/tests while retaining
+saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent Docker JSON and procfs fixture boundaries (offline)
 

@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.223"
+version: "0.224"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 procfs non-LF separator refusal (offline)
+
+The caller-supplied self status and fdinfo samples accepted vertical tab and
+form feed inside or between records while still projecting a valid probe.
+Three negative fixture variants failed before repair (a fourth was already
+refused); the shared LF reader now refuses those separators. Focused five
+procfs tests and `make verify-local-experiment` pass (the fake Dagster worker
+failure is an intentional test). Dedicated Colima
+freshly Stopped; no guest procfs, retained volume/report/backup accessed or
+mutated. AgentHouse used bytes remain `null / NOT_MEASURED`. This does not
+authenticate the VM, prove cleanup or establish operator acceptance. Revert
+only the scoped reader/fixtures, preserving saved records; original Vault sync
+pending outside checkout.
 
 ## 2026-10-06 procfs status/fdinfo complete framing (offline)
 

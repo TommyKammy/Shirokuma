@@ -446,7 +446,10 @@ def export(client: Client) -> Path:
                 raise ValueError('unrepresentable export number')
             return number
         def valid_row(line):
-            if not line:
+            # JSONEachRow emits a single object per physical line, without
+            # whitespace outside it. JSON's permissive surrounding whitespace
+            # must not turn a differently framed reply into a saved report.
+            if not line.startswith('{') or not line.endswith('}'):
                 return False
             value = json.loads(line, object_pairs_hook=unique_fields,
                                 parse_constant=invalid_constant, parse_float=finite_float,

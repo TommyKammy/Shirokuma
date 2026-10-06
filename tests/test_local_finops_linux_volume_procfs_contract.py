@@ -59,8 +59,10 @@ class ProcfsContractTests(unittest.TestCase):
     def test_status_and_fdinfo_require_complete_lf_records(self):
         for field in ('self_status', 'fdinfo'):
             for change in (lambda raw: raw[:-1],
-                           lambda raw: raw.replace(b'\n', b'\r\n'),
-                           lambda raw: raw + b'other:\x00bad\n'):
+                            lambda raw: raw.replace(b'\n', b'\r\n'),
+                            lambda raw: raw + b'other:\x00bad\n',
+                            lambda raw: raw.replace(b'\n', b'\v', 1) + b'\n',
+                            lambda raw: raw + b'other:\fvalue\n'):
                 value=inputs();value[field]=change(value[field])
                 with self.subTest(field=field, raw=value[field]),self.assertRaises(P.ProcfsError):
                     P.project(**value)
