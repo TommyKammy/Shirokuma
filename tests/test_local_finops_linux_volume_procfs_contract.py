@@ -67,6 +67,17 @@ class ProcfsContractTests(unittest.TestCase):
                 with self.subTest(field=field, raw=value[field]),self.assertRaises(P.ProcfsError):
                     P.project(**value)
 
+    def test_status_and_fdinfo_refuse_ambiguous_identity_labels(self):
+        for field, additions in (
+            ('self_status', (b'NSpid: invalid\n', b'NSpid:\n', b'NSpid:\t101 102\n')),
+            ('fdinfo', (b'mnt_id: invalid\n', b'mnt_id:\n', b'mnt_id:\t20\n')),
+        ):
+            for extra in additions:
+                value = inputs()
+                value[field] += extra
+                with self.subTest(field=field, extra=extra), self.assertRaises(P.ProcfsError):
+                    P.project(**value)
+
     def test_wrong_mount_hidden_proc_and_redirected_pid_paths_rejected(self):
         changes=[lambda x:x.update(proc_mount_id=20),
                  lambda x:x.update(fdinfo=b'mnt_id:\t19\nmnt_id:\t19\n'),

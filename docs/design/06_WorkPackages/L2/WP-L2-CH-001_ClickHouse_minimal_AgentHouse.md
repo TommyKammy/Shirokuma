@@ -5,12 +5,27 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.12"
+version: "0.13"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 smoke export nested-value boundary (offline)
+
+Private smoke readback previously accepted a valid matching row alongside an
+unrelated JSON row with an escaped lone surrogate in a key/value or more than
+64 nested levels, although the exporter refuses those forms. Three synthetic
+negative rows reproduced the gap before repair; readback now bounds depth and
+requires UTF-8-encodable strings throughout every row. AgentHouse focused 48
+tests and the full local verifier pass (intentional fake Dagster failure).
+Dedicated Colima was freshly Stopped; no live insert, retained export, volume,
+credential or backup touched. The reader cannot authenticate its producer or
+prevent same-UID substitution, and this does not prove live deduplication or
+operator acceptance. Inspect ambiguous saved evidence without replay; revert
+only the scoped reader/test, keeping saved records. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 smoke export readback framing and ambiguity (offline)
 

@@ -132,9 +132,13 @@ def project(*, boot_id, proc_device, proc_inode, proc_mount_id, mountinfo,
     require(namespace==_namespace(init_pid_namespace_link,'pid'))
     mount_namespace=_namespace(mount_namespace_link,'mnt')
     _start(self_stat,self_pid);_start(init_stat,1)
-    match=re.findall(rb'^NSpid:[ \t]*([^\r\n]+)$',_lf_records(self_status,MAX_STATUS),re.M)
+    status=_lf_records(self_status,MAX_STATUS)
+    info=_lf_records(fdinfo,MAX_STATUS)
+    require(len(re.findall(rb'^NSpid:',status,re.M))==1 and
+            len(re.findall(rb'^mnt_id:',info,re.M))==1)
+    match=re.findall(rb'^NSpid:[ \t]*([^\r\n]+)$',status,re.M)
     require(len(match)==1 and match[0].strip()==str(self_pid).encode())
-    matches=re.findall(rb'^mnt_id:[ \t]*([0-9]+)$',_lf_records(fdinfo,MAX_STATUS),re.M)
+    matches=re.findall(rb'^mnt_id:[ \t]*([0-9]+)$',info,re.M)
     require(len(matches)==1 and matches[0]==str(proc_mount_id).encode())
     _mount(mountinfo,proc_mount_id)
     if target_stat is None:

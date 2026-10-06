@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.230"
+version: "0.231"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 procfs identity label ambiguity (offline)
+
+The caller-supplied procfs fixture accepted an empty/malformed second `NSpid:`
+or `mnt_id:` label alongside the expected valid line. Six variants were tested;
+three were rejected already and three reproduced the gap. The fixture now
+requires exactly one occurrence of each identity label before validating its
+value. Focused procfs 11 tests and full local verifier pass (intentional fake
+Dagster failure). Dedicated Colima was freshly Stopped; no live guest read,
+retained volume/report/backup change or measurement; AgentHouse usage remains
+`null / NOT_MEASURED`. Fixture syntax cannot authenticate kernel provenance,
+prove remote cleanup or authorize scanning retained data. Restore only scoped
+parser/test; retain evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 independent mount-option ambiguity guards (offline)
 

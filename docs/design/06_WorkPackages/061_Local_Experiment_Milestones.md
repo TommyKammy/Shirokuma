@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.446"
+version: "5.447"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent smoke nested values and procfs identity labels (offline)
+
+WP-L2-CH-001 refuses deeply nested or unencodable Unicode values in all rows
+of smoke export readback, matching its exporter boundary. Three isolated
+negative fixtures reproduced acceptance before repair; focused 48 tests pass.
+Independently WP-L6-FIN-001 refuses malformed duplicate `NSpid:`/`mnt_id:`
+labels in caller-supplied procfs fixtures; three of six negatives reproduced
+acceptance before repair, focused 11 tests pass. Full
+`make verify-local-experiment` passes (fake Dagster failure intentional).
+Dedicated Colima freshly Stopped; no live insert, guest read, retained report,
+credential, volume or backup access/change; AgentHouse bytes remain `null /
+NOT_MEASURED`. Neither fixture proves producer authenticity, same-UID isolation,
+safe retained-volume measurement, live deduplication or operator acceptance.
+Revert only scoped parser/reader/tests while retaining saved evidence; never
+replay an ambiguous insert. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: AgentHouse smoke readback rejects corrupt other rows (offline)
 

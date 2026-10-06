@@ -375,6 +375,19 @@ class AgentHouseTests(unittest.TestCase):
                     with self.subTest(suffix=suffix), self.assertRaises(M.AgentHouseError):
                         M.read_smoke_export(report)
 
+    def test_smoke_export_readback_refuses_invalid_nested_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
+            good = '{"event_id":"fixture","status":"success"}\n'
+            with patch.object(M, 'STATE', Path(directory)):
+                for suffix in ('{"other":"\\ud800"}\n',
+                               '{"\\ud800":1}\n',
+                               '{"other":' + '[' * 65 + '0' + ']' * 65 + '}\n'):
+                    report.write_text(good + suffix)
+                    report.chmod(0o600)
+                    with self.subTest(suffix=suffix[:30]), self.assertRaises(M.AgentHouseError):
+                        M.read_smoke_export(report)
+
     def test_export_write_failure_never_publishes_partial_report(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

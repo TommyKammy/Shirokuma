@@ -562,6 +562,19 @@ def read_smoke_export(path: Path) -> list[dict]:
                              parse_float=finite_float)
             if not isinstance(row, dict):
                 raise AgentHouseError('Pawprint export readback is invalid; do not replay')
+            stack = [(row, 0)]
+            while stack:
+                item, depth = stack.pop()
+                if depth > 64:
+                    raise AgentHouseError('Pawprint export readback is invalid; do not replay')
+                if isinstance(item, dict):
+                    for key in item:
+                        key.encode('utf-8')
+                    stack.extend((child, depth + 1) for child in item.values())
+                elif isinstance(item, list):
+                    stack.extend((child, depth + 1) for child in item)
+                elif isinstance(item, str):
+                    item.encode('utf-8')
             rows.append(row)
         return rows
     except (OSError, ValueError, UnicodeError):
