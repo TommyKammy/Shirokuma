@@ -25,6 +25,13 @@ def require(ok, reason='SCOPE_INVALID'):
         raise PreflightError(reason)
 
 
+def _stamp(value):
+    try:
+        return C.stamp(value)
+    except C.FinOpsError:
+        raise PreflightError('SCOPE_INVALID') from None
+
+
 def _path(value):
     require(type(value) is str and value.startswith('/') and not value.startswith('//') and
             len(value) <= 4096 and '\x00' not in value and all(part not in ('', '.', '..')
@@ -73,8 +80,8 @@ def _project(snapshot):
             set(snapshot) == {'context', 'daemon', 'container', 'volume', 'listed_ids',
                               'containers', 'boot_id', 'started_at', 'observed_at', 'listing_complete'} and
             snapshot['listing_complete'] is True)
-    C.stamp(snapshot['started_at'])
-    C.stamp(snapshot['observed_at'])
+    _stamp(snapshot['started_at'])
+    _stamp(snapshot['observed_at'])
     context = snapshot['context']
     require(type(context) is dict and context.get('Name') == AH.CONTEXT)
     endpoints = context.get('Endpoints')
@@ -97,8 +104,11 @@ def _project(snapshot):
             volume['Labels'].get(AH.LABEL) == 'agenthouse-local' and
             volume.get('Driver') == 'local' and volume.get('Scope') == 'local' and
             volume.get('Options') in (None, {}) and _path(volume.get('Mountpoint')) == VOLUME_ROOT)
-    created = D.created_at(volume.get('CreatedAt'))
-    require(C.stamp(created)[1] <= C.stamp(snapshot['started_at'])[1])
+    try:
+        created = D.created_at(volume.get('CreatedAt'))
+    except D.DockerStorageError:
+        raise PreflightError('SCOPE_INVALID') from None
+    require(_stamp(created)[1] <= _stamp(snapshot['started_at'])[1])
     container = snapshot['container']
     require(type(container) is dict)
     config = container.get('Config')
@@ -156,7 +166,7 @@ def validate_pair(before, after, *, now):
     """Compare checked projections; continuous writer quiescence is unproven."""
     first, second = _project(before), _project(after)
     require(first == second, 'IDENTITY_CHANGED')
-    begin, middle, later, end, current = (C.stamp(value)[1] for value in
+    begin, middle, later, end, current = (_stamp(value)[1] for value in
         (before['started_at'], before['observed_at'], after['started_at'],
          after['observed_at'], now))
     require(0 <= middle-begin <= 20*10**9 and 0 <= later-middle and

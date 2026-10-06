@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.251"
+version: "0.252"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 standalone snapshot timestamp refusal (offline)
+
+Malformed start/observation/current timestamps and volume creation time
+previously escaped the private two-snapshot preflight as FinOps/DockerStorage
+exceptions, rather than its scoped refusal. Ten negative fixture cases
+reproduced this; the preflight now translates only those parser failures to
+`SCOPE_INVALID`. Focused preflight 10 tests and `make verify-local-experiment`
+pass (the fake Dagster worker failure is an intentional test). Dedicated
+Colima freshly observed Stopped; no daemon, VM, retained report/volume or
+backup access/change. This is offline syntax handling, not an authenticated
+clock, writer exclusion, traversal permission or AgentHouse measurement:
+`volume_traversal_authorized=False`, bytes `null / NOT_MEASURED`. Roll back
+only this parser translation and test if necessary, preserving saved data.
+Original Vault synchronization pending outside checkout.
 
 ## 2026-10-06 independent preflight shape and boot-ID guards (offline)
 

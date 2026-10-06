@@ -102,6 +102,24 @@ class VolumePreflightTests(unittest.TestCase):
             with self.subTest(boot=boot), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
                 validate(value, deepcopy(value))
 
+    def test_invalid_snapshot_times_fail_as_scoped_preflight_errors(self):
+        for key in ('started_at', 'observed_at'):
+            for bad in (None, [], 'not-a-timestamp'):
+                value = snapshot()
+                value[key] = bad
+                with self.subTest(key=key, bad=bad), self.assertRaisesRegex(
+                        V.PreflightError, 'SCOPE_INVALID'):
+                    validate(value, deepcopy(value))
+        for bad in (None, [], 'not-a-timestamp'):
+            value = snapshot()
+            value['volume']['CreatedAt'] = bad
+            with self.subTest(created=bad), self.assertRaisesRegex(
+                    V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        value = snapshot()
+        with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+            V.validate_pair(value, deepcopy(value), now=None)
+
     def test_other_container_stop_flags_must_be_present_and_stable(self):
         for flag in ('Paused', 'Dead'):
             first = snapshot()

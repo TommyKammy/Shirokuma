@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.471"
+version: "5.472"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: FinOps preflight timestamp failures stay scoped (offline)
+
+WP-L6-FIN-001 translates invalid snapshot start/observation/current and
+volume creation timestamps to `SCOPE_INVALID` instead of leaking unrelated
+parser exceptions. Ten negative fixture cases reproduced the gap; focused
+preflight 10 tests and full local verifier pass (fake Dagster failure is
+intentional). Fresh `colima list`: dedicated profile Stopped. No live daemon,
+VM, retained report/volume or backup access/change. This grants no volume
+traversal (`False`); AgentHouse bytes remain `null / NOT_MEASURED`.
+Source authentication, continuous writer exclusion, cleanup and operator
+acceptance are open. Restore only the guard/test if needed, keeping records;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: orphaned AgentHouse volume cannot be silently adopted (offline)
 
