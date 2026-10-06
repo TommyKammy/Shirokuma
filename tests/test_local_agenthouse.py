@@ -876,6 +876,34 @@ class AgentHouseTests(unittest.TestCase):
         response.headers = {'Content-Length': '0'}
         self.assertEqual(client.query('SELECT 1'), '')
 
+    def test_query_refuses_non_plain_media_type_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.return_value = b'<html>login</html>'
+        client.opener.open = Mock(return_value=response)
+        for fields in ((('Content-Type', 'text/html'),),
+                       (('Content-Type', 'application/xml'),),
+                       (('Content-Type', 'text/plain'), ('Content-Type', 'text/html')),
+                       (('Content-Type', 'text/plain, text/html'),)):
+            with self.subTest(fields=fields):
+                headers = Message()
+                for key, value in fields:
+                    headers.add_header(key, value)
+                response.headers = headers
+                with self.assertRaisesRegex(M.AgentHouseError, 'media type'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 4)
+        response.read.assert_not_called()
+        for content_type in ('text/plain', 'text/plain; charset=UTF-8',
+                             'text/tab-separated-values; charset=UTF-8',
+                             'application/json'):
+            response.headers = {'Content-Type': content_type}
+            response.read.return_value = b'1\n'
+            self.assertEqual(client.query('SELECT 1'), '1\n')
+
     def test_query_refuses_streamed_exception_body_on_200_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()

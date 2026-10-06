@@ -94,6 +94,10 @@ def _lifecycle(container, observed):
     # reported finish later than its current start cannot be prior history.
     if state['Status'] in ('running', 'paused'):
         require(parsed[1] <= parsed[0])
+    # A not-yet-started container cannot have a later termination. Treat
+    # contradictory unrelated lifecycle metadata as an uncertain inventory.
+    if state['Status'] == 'created':
+        require(parsed[1] <= parsed[0])
     # A terminated container with a finish before its start cannot be
     # evidence for a coherent inventory, even if both samples agree.
     if state['Status'] in ('exited', 'dead'):

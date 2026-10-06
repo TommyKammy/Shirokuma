@@ -317,6 +317,19 @@ class Client:
                                if key.lower() == 'content-encoding']))
                 if encodings and encodings != ['identity']:
                     raise AgentHouseError('local AgentHouse response encoding is unsupported')
+                # A proxy or login page can return HTTP 200 with a complete
+                # body. Only the default tab-separated/plain and explicit
+                # JSON formats used by this client are expected; never mistake
+                # an explicitly different media type for a completed insert.
+                # Missing type remains supported by the local transport.
+                types = (response.headers.get_all('Content-Type')
+                         if hasattr(response.headers, 'get_all') else
+                         ([value for key, value in response.headers.items()
+                           if key.lower() == 'content-type']))
+                if types and (len(types) != 1 or not isinstance(types[0], str) or
+                              re.fullmatch(r'(?:text/plain|text/tab-separated-values|application/json)'
+                                           r'(?:; charset=(?:UTF-8|utf-8))?', types[0]) is None):
+                    raise AgentHouseError('local AgentHouse response media type is unsupported')
                 # HTTPMessage.get() returns only one of multiple headers. Do
                 # not accept a write acknowledgement with ambiguous framing or
                 # transfer coding, even if the decoded body happens to fit.

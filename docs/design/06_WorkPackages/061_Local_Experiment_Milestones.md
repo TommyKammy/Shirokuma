@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.499"
+version: "5.500"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent HTTP media type and created chronology (offline)
+
+WP-L2-CH-001 refuses explicit HTML/XML, repeated or combined media types on
+HTTP 200 before acknowledging a query; four synthetic negatives previously
+succeeded, 84 focused tests pass. WP-L6-FIN-001 independently refuses a
+`created` unrelated container whose finish follows its start; one synthetic
+negative was previously metadata-eligible, 31 focused preflight tests pass.
+Dedicated `colima list` freshly showed mac-studio-solo Stopped. No live
+HTTP/Docker/VM or retained credential/report/volume/backup read/change. These
+offline checks cannot authenticate producers, establish live deduplication,
+exclude continuous writers, authorize volume traversal or grant operator
+acceptance. AgentHouse bytes remain `null / NOT_MEASURED`; never replay an
+uncertain insert. Preserve saved resources, revert only scoped guards/tests if
+verified live compatibility differs; original Vault sync pending outside
+checkout. Combined `make verify-local-experiment`, `make verify-design-context`
+and `git diff --check` pass; fake Dagster worker failure in the verifier is an
+intentional negative. No live-runtime or operator acceptance follows.
 
 ## 2026-10-06: independent CR exception and running chronology (offline)
 

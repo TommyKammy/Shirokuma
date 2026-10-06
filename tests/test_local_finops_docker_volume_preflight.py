@@ -32,6 +32,15 @@ def validate(before, after):
 
 
 class VolumePreflightTests(unittest.TestCase):
+    def test_created_unrelated_container_cannot_have_later_finish(self):
+        value = snapshot()
+        state = value['containers'][1]['State']
+        state.update(Status='created', FinishedAt='2026-09-21T00:00:00Z')
+        with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+            validate(value, deepcopy(value))
+        state['FinishedAt'] = state['StartedAt']
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
     def test_unrelated_volume_name_must_use_docker_volume_spelling(self):
         for name in (' another', 'another/child', '../agenthouse', 'another\\child',
                      'another:name', '.hidden', 'another '):

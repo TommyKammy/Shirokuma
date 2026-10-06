@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.272"
+version: "0.273"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 created-container finish chronology (offline)
+
+The standalone two-snapshot metadata guard refuses an unrelated `created`
+container whose last finish follows its reported start. A synthetic negative
+was previously metadata-eligible; equal-time control and 31 focused preflight
+tests pass. This checks only supplied metadata, not Docker identity or writer
+exclusion; `volume_traversal_authorized=False`. Dedicated Colima Stopped; no
+retained volume/report/backup read or change. AgentHouse bytes remain `null /
+NOT_MEASURED`. Revert only this guard/test if verified daemon metadata needs
+it, preserving saved resources. Original Vault sync pending outside checkout;
+no operator acceptance.
 
 ## 2026-10-06 running/paused finish chronology (offline)
 

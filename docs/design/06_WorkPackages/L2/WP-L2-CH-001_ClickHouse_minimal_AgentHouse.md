@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.44"
+version: "0.45"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 explicit HTTP media type boundary (offline)
+
+The query client refuses a 200 reply explicitly labeled HTML/XML, repeated
+Content-Type or comma-combined media types before treating a write as complete.
+It accepts absent type and the plain/tab-separated/JSON types used by its
+current queries. Four synthetic bad acknowledgements were previously accepted;
+84 focused tests pass. This is a conservative header check, not authentication
+of ClickHouse or protection against an incorrectly labeled response. Live
+Content-Type compatibility and deduplication remain unverified while the
+dedicated Colima profile is Stopped; no retained data or credentials were read.
+Do not replay an uncertain insert. Restore only this guard/test if verified
+runtime behavior requires it, retaining saved records. Original Vault sync
+pending outside checkout; no operator acceptance.
 
 ## 2026-10-06 CR-separated and indented-BOM exception text (offline)
 
