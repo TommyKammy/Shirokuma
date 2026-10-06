@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.479"
+version: "5.480"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: directory durability and scoped socket shape (offline)
+
+WP-L2-CH-001 syncs the private state directory after each new credential/env
+file and refuses synthetic file/dir sync failure at all four points before
+Docker creation (focused 67 tests). Independently WP-L6-FIN-001 refuses an
+empty, nested or control-bearing username in a supplied dedicated Docker
+context socket path; three negative fixtures were previously eligible
+(focused preflight 16 tests). Full `make verify-local-experiment` passes;
+the fake Dagster failure is intentional. Fresh dedicated `colima list`:
+Stopped. No Docker/VM/HTTP or retained credential, volume, report or backup
+access/change; AgentHouse bytes remain `null / NOT_MEASURED` and FinOps
+traversal remains unauthorized. Directory fsync is not power-loss atomicity;
+socket syntax is not daemon authentication or continuous writer exclusion.
+Live startup/deduplication, safe scanning and operator acceptance remain open.
+Revert only scoped guards/tests, retain partial private files and saved data,
+never replay an unknown insert. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: private AgentHouse startup sync and separate FinOps mount guard (offline)
 

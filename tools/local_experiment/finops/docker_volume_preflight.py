@@ -106,9 +106,10 @@ def _project(snapshot):
     endpoints = context.get('Endpoints')
     require(type(endpoints) is dict and type(endpoints.get('docker')) is dict)
     host = endpoints['docker'].get('Host')
-    require(type(host) is str and host.startswith('unix:///Users/') and
-            host.endswith('/.colima/mac-studio-solo/docker.sock') and
-            '..' not in host.split('/'))
+    # A suffix match also accepts nested/empty user paths and control-bearing
+    # context endpoints. This is syntax validation, not socket authentication.
+    require(type(host) is str and re.fullmatch(
+        r'unix:///Users/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*/\.colima/mac-studio-solo/docker\.sock', host) is not None)
     daemon = snapshot['daemon']
     require(type(daemon) is dict and type(daemon.get('ID')) is str and
             1 <= len(daemon['ID']) <= 128 and

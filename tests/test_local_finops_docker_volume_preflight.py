@@ -32,6 +32,18 @@ def validate(before, after):
 
 
 class VolumePreflightTests(unittest.TestCase):
+    def test_context_socket_requires_one_clean_user_component(self):
+        original = snapshot()['context']['Endpoints']['docker']['Host']
+        for host in ('unix:///Users//.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/other/nested/.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/other\n/.colima/mac-studio-solo/docker.sock',
+                     'unix:///Users/other\\.colima/mac-studio-solo/docker.sock'):
+            value = snapshot()
+            value['context']['Endpoints']['docker']['Host'] = host
+            with self.subTest(host=repr(host)), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        self.assertEqual(validate(snapshot(), deepcopy(snapshot()))['state'], 'metadata_eligible')
+
     def test_same_destination_with_different_mount_sources_is_ambiguous(self):
         value = snapshot()
         other = value['containers'][1]

@@ -230,6 +230,9 @@ def create_private_file(state: int, name: str, payload: bytes) -> None:
             file.write(payload)
             file.flush()
             os.fsync(file.fileno())
+        # Sync the new directory entry as well as the file contents before
+        # creating a container which will depend on this name after a restart.
+        os.fsync(state)
     except OSError:
         raise AgentHouseError(f'local AgentHouse {name} cannot be created safely') from None
 

@@ -36,7 +36,7 @@ class AgentHouseTests(unittest.TestCase):
             self.assertEqual((path / 'credential.json').read_bytes(), b'{"password":"test"}\n')
 
     def test_new_runtime_refuses_failed_private_file_sync_before_docker_create(self):
-        for failed_sync in (1, 2):
+        for failed_sync in (1, 2, 3, 4):
             with self.subTest(failed_sync=failed_sync), tempfile.TemporaryDirectory() as directory:
                 state = Path(directory) / 'state'
                 state.mkdir(mode=0o700)
@@ -58,7 +58,25 @@ class AgentHouseTests(unittest.TestCase):
                     docker.assert_not_called()
                 self.assertEqual(calls, failed_sync)
                 self.assertTrue((state / 'credential.json').exists())
-                self.assertEqual((state / 'container.env').exists(), failed_sync == 2)
+                self.assertEqual((state / 'container.env').exists(), failed_sync >= 3)
+
+    def test_new_private_file_syncs_file_and_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory)
+            state_path.chmod(0o700)
+            actual_fsync = M.os.fsync
+            synced = []
+
+            def sync(fd):
+                synced.append(fd)
+                actual_fsync(fd)
+
+            with patch.object(M, 'STATE', state_path), patch.object(M.os, 'fsync', side_effect=sync):
+                with M.private_state_fd() as state:
+                    M.create_private_file(state, 'credential.json', b'fixture')
+                    self.assertEqual(len(synced), 2)
+                    self.assertNotEqual(synced[0], state)
+                    self.assertEqual(synced[1], state)
 
     def test_status_version_reply_is_bounded_before_public_result(self):
         for version in ('25.8.4.1\x1b[0m', '25.8.4.1\nother', 'x' * 200, None):

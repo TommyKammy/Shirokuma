@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.257"
+version: "0.258"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 standalone context socket path boundary (offline)
+
+The two-snapshot metadata preflight now requires exactly one nonempty clean
+`/Users/<user>` component before the fixed dedicated Colima socket suffix,
+including dotted local account names. Three malformed endpoints (empty user,
+nested directory and control-bearing user) previously produced
+`metadata_eligible`; the fourth malformed backslash case was already refused.
+Focused preflight 16 tests and full local verifier pass. Fresh dedicated
+Colima observation: Stopped; no Docker/VM or retained report/volume/backup
+access/change. This is a narrow local pathname syntax assumption, not daemon
+or user authentication, continuous writer exclusion or scan permission:
+traversal stays false, AgentHouse bytes `null / NOT_MEASURED`. Validate an
+actual future context before use; revert only the syntax guard/test if its
+verified account naming differs, preserving saved data. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06 duplicate Docker mount destinations (offline)
 
