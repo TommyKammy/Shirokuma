@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.268"
+version: "0.269"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 incompatible unrelated lifecycle flags (offline)
+
+The two-snapshot preflight refuses dead-and-running and paused-but-not-running
+states (including an unrelated container), rather than accepting contradictory
+stable metadata. A positive paused/running fixture remains eligible; focused
+preflight 27 tests pass after correcting an older paused fixture's Running
+flag. Dedicated Colima freshly Stopped; no Docker/VM, saved volume, report or
+backup access/change. This validates supplied flags only, not producer identity,
+continuous writer exclusion or volume traversal authorization (still false).
+AgentHouse bytes remain `null / NOT_MEASURED`; no operator acceptance. Revert
+only this scoped guard/test if verified daemon behavior differs and retain
+saved resources. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 nonterminated-container finish chronology (offline)
 

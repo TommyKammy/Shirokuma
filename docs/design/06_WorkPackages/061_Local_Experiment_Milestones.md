@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.494"
+version: "5.495"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent streamed exception and lifecycle consistency (offline)
+
+WP-L2-CH-001 refuses a ClickHouse `Code: N. DB::Exception:` body on HTTP 200,
+even after partial streamed text, without retrying a write (focused 80 tests).
+WP-L6-FIN-001 independently refuses mutually incompatible lifecycle flags in
+an unrelated Docker inventory entry; corrected a formerly inconsistent paused
+positive fixture (focused preflight 27 tests). Fresh `colima list`: dedicated
+profile Stopped. No live HTTP/Docker/VM, retained credential, report, volume or
+backup read/change. These synthetic boundaries cannot authenticate producers,
+exclude other unmarked errors or continuous writers, prove live deduplication,
+authorize traversal or grant operator acceptance. AgentHouse bytes stay `null /
+NOT_MEASURED`; preserve saved evidence, never replay an uncertain insert, and
+roll back only scoped guards/tests if verified behavior requires it. Original
+Vault sync pending outside checkout. The combined tree passes
+`make verify-local-experiment` (intentional fake Dagster worker failure),
+`make verify-design-context` and `git diff --check`; private verifier log:
+`tmp/local-experiment/attempt-207-verify.log`.
 
 ## 2026-10-06: independent nonterminated Docker finish chronology (offline)
 

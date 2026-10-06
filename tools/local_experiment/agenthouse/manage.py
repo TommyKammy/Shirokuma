@@ -345,9 +345,15 @@ class Client:
                 if declared is not None and len(body) != int(declared):
                     raise AgentHouseError('local AgentHouse response body is incomplete')
                 try:
-                    return body.decode('utf-8')
+                    text = body.decode('utf-8')
                 except UnicodeError:
                     raise AgentHouseError('local AgentHouse response is not UTF-8') from None
+                # ClickHouse can append an exception after beginning a streamed
+                # successful response, without an exception header or a new HTTP
+                # status. Do not promote that body to a write acknowledgement.
+                if re.search(r'(?m)^Code: [0-9]+\. DB::Exception:', text):
+                    raise AgentHouseError('local AgentHouse response contains a query exception')
+                return text
         except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
             raise AgentHouseError("local AgentHouse request failed; verify its scoped runtime") from error
 

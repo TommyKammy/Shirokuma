@@ -876,6 +876,25 @@ class AgentHouseTests(unittest.TestCase):
         response.headers = {'Content-Length': '0'}
         self.assertEqual(client.query('SELECT 1'), '')
 
+    def test_query_refuses_streamed_exception_body_on_200_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        client.opener.open = Mock(return_value=response)
+        for body in (b'Code: 241. DB::Exception: query failed\n',
+                     b'1\nCode: 60. DB::Exception: partial query failed\n'):
+            with self.subTest(body=body):
+                response.headers = {'Content-Length': str(len(body))}
+                response.read.return_value = body
+                with self.assertRaisesRegex(M.AgentHouseError, 'query exception'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 2)
+        response.read.return_value = b'1\n'
+        response.headers = {'Content-Length': '2'}
+        self.assertEqual(client.query('SELECT 1'), '1\n')
+
     def test_query_refuses_range_reply_on_200_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()

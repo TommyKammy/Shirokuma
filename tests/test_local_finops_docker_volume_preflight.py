@@ -37,7 +37,7 @@ class VolumePreflightTests(unittest.TestCase):
                              ('restarting', 'Restarting')):
             value = snapshot()
             other = value['containers'][1]
-            other['State'].update(Status=status, Running=status == 'running',
+            other['State'].update(Status=status, Running=status in ('running', 'paused'),
                                   Paused=status == 'paused', Restarting=status == 'restarting',
                                   FinishedAt='2026-09-27T00:00:01Z')
             with self.subTest(status=status), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
@@ -271,6 +271,19 @@ class VolumePreflightTests(unittest.TestCase):
                 with self.subTest(status=status, set_status=set_status), self.assertRaisesRegex(
                         V.PreflightError, 'SCOPE_INVALID'):
                     validate(value, deepcopy(value))
+
+    def test_unrelated_transient_flags_cannot_describe_incompatible_processes(self):
+        for status, flags in (('dead', {'Running': True}),
+                              ('paused', {'Running': False}),
+                              ('removing', {'Running': True, 'Dead': True})):
+            value = snapshot()
+            value['containers'][1]['State'].update(Status=status, **flags)
+            with self.subTest(status=status, flags=flags), self.assertRaisesRegex(
+                    V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        value = snapshot()
+        value['containers'][1]['State'].update(Status='paused', Paused=True, Running=True)
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
 
     def test_all_containers_not_only_owned_label_and_bind_overlaps(self):
         for source in (V.VOLUME_ROOT, '/var/lib/docker',V.VOLUME_ROOT+'/nested'):

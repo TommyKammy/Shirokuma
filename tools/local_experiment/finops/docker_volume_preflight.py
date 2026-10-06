@@ -73,6 +73,12 @@ def _lifecycle(container, observed):
     # corresponding flags in either snapshot of the inventory.
     for status, flag in (('paused', 'Paused'), ('restarting', 'Restarting'), ('dead', 'Dead')):
         require((state['Status'] == status) == state[flag])
+    # A stable pair cannot make mutually exclusive process states coherent.
+    # In particular, `removing` has no dedicated Boolean flag, so its flags
+    # must not let a running process simultaneously appear dead or paused.
+    require(not (state['Running'] and state['Dead']) and
+            not (state['Paused'] and (state['Dead'] or state['Restarting'])) and
+            (not state['Paused'] or state['Running']))
     times = (state.get('StartedAt'), state.get('FinishedAt'))
     require(all(type(value) is str and 1 <= len(value) <= 64 and
                 all(ord(ch) >= 32 and not 127 <= ord(ch) <= 159 for ch in value)

@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.40"
+version: "0.41"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 streamed exception body refusal (offline)
+
+A 200 response can contain ClickHouse's `Code: N. DB::Exception:` line
+without an exception header, including after streamed result text. The query
+client now refuses those bodies rather than acknowledging an insert. Two
+negative fixtures and a clean reply pass (focused AgentHouse 80 tests). This
+recognizes only that exact textual form: it is not server authentication or
+proof against other unmarked failures. Dedicated Colima freshly Stopped; no
+live HTTP/Docker or saved credential, report, volume or backup accessed or
+changed. Never replay uncertain writes; live deduplication and operator
+acceptance remain open. Revert only this scoped body guard/test if verified
+runtime behavior requires it, retaining saved records. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06 bounded SQL request and partial-range refusal (offline)
 
