@@ -38,7 +38,8 @@ def _namespace(value,kind):
 
 
 def _start(raw,pid):
-    require(type(raw) is bytes and 0<len(raw)<=MAX_STAT and b'\n' not in raw and b'\x00' not in raw)
+    require(type(raw) is bytes and 0<len(raw)<=MAX_STAT and
+            not any(separator in raw for separator in (b'\n',b'\r',b'\v',b'\f',b'\x00')))
     # Linux /proc/PID/stat has a parenthesized comm with arbitrary spaces or
     # closing parentheses. The last ") " precedes the state and numeric fields.
     prefix=f'{pid} ('.encode()

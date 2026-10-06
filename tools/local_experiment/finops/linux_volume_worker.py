@@ -69,7 +69,10 @@ def _mountpoints(raw):
         require(re.fullmatch(r'(?:[^\\]|\\(?:040|011|012|134))*', encoded) is not None)
         value = re.sub(r'\\(040|011|012|134)',
                        lambda match: chr(int(match[1], 8)), encoded)
-        require(value.startswith('/'))
+        # Topology comparison uses lexical paths; do not let a noncanonical
+        # mountpoint alias hide a mount underneath the measured root.
+        require(value.startswith('/') and not value.startswith('//') and
+                os.path.normpath(value) == value)
         result.add(value)
     require(result)
     return result

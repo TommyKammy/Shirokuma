@@ -99,5 +99,14 @@ class ProcfsContractTests(unittest.TestCase):
             value=inputs();change(value)
             with self.subTest(change=change),self.assertRaises(P.ProcfsError):P.project(**value)
 
+    def test_stat_control_separators_cannot_supply_start_ticks(self):
+        for field, pid in (('self_stat', 101), ('init_stat', 1), ('target_stat', 345)):
+            for separator in (b'\r', b'\v', b'\f'):
+                value=inputs()
+                value[field]=stat_line(pid, 42).replace(b') S 0', b') S'+separator+b'0')
+                if field=='target_stat':value['target_errno']=None
+                with self.subTest(field=field, separator=separator),self.assertRaises(P.ProcfsError):
+                    P.project(**value)
+
 
 if __name__=='__main__':unittest.main()

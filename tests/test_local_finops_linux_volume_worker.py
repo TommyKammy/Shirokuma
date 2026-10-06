@@ -37,6 +37,13 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
                 W._mountpoints(raw)
         self.assertEqual(W._mountpoints(row + '\n'), {'/'})
 
+    def test_mountinfo_rejects_noncanonical_mountpoint_aliases(self):
+        for mount in ('/fixture/../fixture/child', '/fixture/./child',
+                      '/fixture//child', '//fixture/child'):
+            row=f'2 1 8:1 /some {mount} rw - ext4 /dev/a rw\n'
+            with self.subTest(mount=mount),self.assertRaises(W.ScanError):
+                W._mountpoints(row)
+
     def test_fdinfo_requires_single_complete_mount_id_field(self):
         canonical = b'pos:\t0\nflags:\t0100000\nmnt_id:\t42\nino:\t7\n'
         self.assertEqual(W._parse_mount_id(canonical), 42)

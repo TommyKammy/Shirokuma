@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.437"
+version: "5.438"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent stat separators and mountpoint aliases (offline)
+
+WP-L6-FIN-001 refuses CR/vertical tab/form feed in procfs stat fixtures before
+projecting ticks, and rejects noncanonical worker mountpoint paths before
+checking volume topology. Nine stat and four mount aliases crossed the
+boundary before repair; focused FinOps 324 tests pass (seven Linux-only skips).
+The full `make verify-local-experiment` passes (intentional fake Dagster failure).
+Dedicated Colima freshly Stopped; no live VM read, retained report/volume/
+backup mutation or AgentHouse byte measurement (`null / NOT_MEASURED`). This
+does not authenticate fixture provenance or establish operator acceptance.
+Restore only scoped readers/tests while retaining saved records; original
+Vault sync pending outside checkout.
 
 ## 2026-10-06 independent procfs and AgentHouse row separators (offline)
 

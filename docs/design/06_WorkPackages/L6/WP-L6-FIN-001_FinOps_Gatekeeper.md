@@ -5,12 +5,30 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.224"
+version: "0.225"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent procfs stat and worker topology aliases (offline)
+
+The pure procfs fixture contract previously projected start ticks despite CR,
+vertical tab or form feed separating stat fields (nine negatives failed before
+repair across self/init/target). It now refuses these control separators. The
+independent Linux volume worker previously admitted noncanonical decoded
+mountpoints with `..`, `.`, repeated or double-leading slashes; four negatives
+failed before repair. It now requires a normalized absolute mountpoint before
+lexical topology comparison. Focused FinOps tests: 324 run, seven Linux-only
+skips. Dedicated Colima freshly Stopped; no guest procfs, retained volume,
+report or backup accessed or changed. `make verify-local-experiment` also
+passes (the fake Dagster worker failure is an intentional negative test).
+AgentHouse bytes remain `null /
+NOT_MEASURED`. Offline fixtures do not authenticate the VM or prove absence of
+transient mounts, cleanup or operator acceptance. Roll back only these scoped
+guards/tests while preserving saved evidence; original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 procfs non-LF separator refusal (offline)
 
