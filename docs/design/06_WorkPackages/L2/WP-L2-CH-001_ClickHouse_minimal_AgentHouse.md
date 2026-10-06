@@ -5,12 +5,27 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.57"
+version: "0.58"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 private state directory stat failure (offline)
+
+After opening the private state directory, a failed `fstat` previously left
+its directory descriptor open. The reader now closes that descriptor and
+reports the existing scoped open failure, without yielding an unverified
+directory to any startup/read/export caller. A synthetic failed stat checks
+that the descriptor is closed; 101 focused AgentHouse tests and combined local
+verifier/design-context/diff checks pass (fake Dagster failure intentional). This does
+not prove saved inode provenance, live ClickHouse startup or deduplication.
+Dedicated Colima remained Stopped; no live HTTP/Docker or retained report,
+credential, volume or backup accessed. Roll back only the scoped descriptor
+cleanup/test if necessary, retaining saved resources and never replaying an
+uncertain insert. Original Vault synchronization pending outside checkout;
+operator acceptance remains open.
 
 ## 2026-10-06 short pinned staging read (offline follow-up)
 

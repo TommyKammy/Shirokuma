@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.513"
+version: "5.514"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: private AgentHouse directory descriptor cleanup (offline)
+
+WP-L2-CH-001 closes its private directory descriptor when the initial `fstat`
+fails, returning a scoped failure rather than leaking an open descriptor. A
+synthetic failure confirms closure; 101 focused tests and combined local
+verifier/design-context/diff checks pass (fake Dagster failure intentional).
+Dedicated Colima
+remained Stopped; no live Docker/HTTP or retained reports, credentials, volumes
+or backups accessed. This is not producer authentication, live deduplication
+or operator acceptance. Keep saved material, never replay uncertain inserts;
+revert only the scoped cleanup/test if needed. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: independent FinOps plugin-source and path-format checks (offline)
 

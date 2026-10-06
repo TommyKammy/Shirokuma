@@ -21,6 +21,27 @@ SPEC.loader.exec_module(M)
 
 
 class AgentHouseTests(unittest.TestCase):
+    def test_private_state_stat_failure_closes_open_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            path.chmod(0o700)
+            original_open = os.open
+            opened = []
+
+            def track_open(*args, **kwargs):
+                fd = original_open(*args, **kwargs)
+                opened.append(fd)
+                return fd
+
+            with patch.object(M, 'STATE', path), patch.object(M.os, 'open', side_effect=track_open), \
+                    patch.object(M.os, 'fstat', side_effect=OSError('fixture stat failure')):
+                with self.assertRaisesRegex(M.AgentHouseError, 'cannot be opened safely'):
+                    with M.private_state_fd():
+                        self.fail('unverified state directory was yielded')
+            self.assertEqual(len(opened), 1)
+            with self.assertRaises(OSError):
+                os.fstat(opened[0])
+
     def test_credential_read_refuses_short_content_without_inode_change(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)

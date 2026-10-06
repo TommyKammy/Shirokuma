@@ -189,10 +189,14 @@ def private_state_fd():
     """Bind a local read/write to the private state directory, not a child pathname."""
     try:
         fd = os.open(STATE, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError:
+        raise AgentHouseError('local AgentHouse state directory cannot be opened safely') from None
+    try:
         identity = os.fstat(fd)
         if identity.st_uid != os.getuid() or stat.S_IMODE(identity.st_mode) != 0o700:
             raise AgentHouseError('local AgentHouse state directory is not private')
     except OSError:
+        os.close(fd)
         raise AgentHouseError('local AgentHouse state directory cannot be opened safely') from None
     except BaseException:
         os.close(fd)
