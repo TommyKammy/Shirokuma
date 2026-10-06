@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.264"
+version: "0.265"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 dead-container timestamp chronology (offline)
+
+The standalone two-snapshot preflight now refuses an unrelated `dead`
+container whose finish timestamp precedes its start. An isolated negative
+previously returned metadata eligibility; a valid ordered dead-container
+fixture remains eligible (focused preflight 23 tests). Dedicated Colima was
+freshly Stopped; no Docker/VM or retained volume/report/backup read or change.
+This is metadata consistency, not Docker authentication or continuous writer
+exclusion; traversal remains unauthorized and AgentHouse usage `null /
+NOT_MEASURED`. Preserve saved resources; revert only this scoped chronology
+check/test if verified daemon metadata requires it. Original Vault sync pending
+outside checkout; no operator acceptance claimed.
 
 ## 2026-10-06 exited-container timestamp chronology (offline)
 

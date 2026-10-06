@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.36"
+version: "0.37"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 ambiguous HTTP response framing (offline)
+
+The client now refuses duplicate Content-Length fields and any Transfer-Encoding
+on a 200 query response before reading the body. Three isolated HTTPMessage
+fixtures previously treated these as completed write acknowledgements; the
+focused 75 AgentHouse tests pass after repair. This conservative framing rule
+does not authenticate the peer, prove that a response without either header is
+complete, or establish live deduplication. Dedicated Colima was freshly Stopped;
+no live HTTP/Docker or retained credential, report, volume or backup was read
+or changed. Do not retry an uncertain insert. Restore only the framing guard
+and fixture if verified live behavior requires it, retaining saved records.
+Original Vault sync remains pending outside checkout.
 
 ## 2026-10-06 declared HTTP body length (offline)
 

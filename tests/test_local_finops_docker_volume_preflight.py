@@ -40,6 +40,16 @@ class VolumePreflightTests(unittest.TestCase):
                 validate(value, deepcopy(value))
         self.assertEqual(validate(snapshot(), deepcopy(snapshot()))['state'], 'metadata_eligible')
 
+    def test_dead_unrelated_container_cannot_finish_before_start(self):
+        value = snapshot()
+        other = value['containers'][1]
+        other['State'].update(Status='dead', Dead=True,
+                              FinishedAt='2026-09-19T23:59:59Z')
+        with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+            validate(value, deepcopy(value))
+        other['State']['FinishedAt'] = '2026-09-20T00:00:10Z'
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
     def test_daemon_identity_refuses_control_and_non_ascii_text(self):
         for identifier in ('DAEMON:ONE\n', 'DAEMON:\x7fONE', 'DAEMON:\x85ONE', 'DAEMON:\ud800ONE'):
             value = snapshot()

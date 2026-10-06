@@ -290,6 +290,19 @@ class Client:
                 # insert/schema query finished. Never retry an ambiguous write.
                 if response.status != 200:
                     raise AgentHouseError('local AgentHouse response status is not a completed query')
+                # HTTPMessage.get() returns only one of multiple headers. Do
+                # not accept a write acknowledgement with ambiguous framing or
+                # transfer coding, even if the decoded body happens to fit.
+                all_lengths = (response.headers.get_all('Content-Length')
+                               if hasattr(response.headers, 'get_all') else
+                               ([response.headers['Content-Length']]
+                                if 'Content-Length' in response.headers else []))
+                all_encodings = (response.headers.get_all('Transfer-Encoding')
+                                 if hasattr(response.headers, 'get_all') else
+                                 ([response.headers['Transfer-Encoding']]
+                                  if 'Transfer-Encoding' in response.headers else []))
+                if len(all_lengths or []) > 1 or all_encodings:
+                    raise AgentHouseError('local AgentHouse response framing is ambiguous')
                 declared = response.headers.get('Content-Length')
                 if declared is not None:
                     # read(amt) can return a short body at EOF without raising

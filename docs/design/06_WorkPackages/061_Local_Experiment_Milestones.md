@@ -5,12 +5,39 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.487"
+version: "5.489"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent dead-container chronology (offline)
+
+WP-L6-FIN-001 also refuses a reversed start/finish interval on an unrelated
+dead container in its standalone two-snapshot metadata check; an isolated
+negative was previously eligible and a valid ordered case remains eligible
+(focused preflight 23 tests). Dedicated Colima freshly Stopped. No Docker/VM,
+retained volume, report or backup access/change. This does not authenticate
+Docker, exclude ongoing writers, authorize volume traversal or prove operator
+acceptance; AgentHouse bytes remain `null / NOT_MEASURED`. Revert only the
+scoped chronology guard/test, preserving saved records. Original Vault sync
+pending outside checkout. The final combined tree passes
+`make verify-local-experiment` (intentional fake Dagster failure),
+`make verify-design-context` and `git diff --check`; private verifier log:
+`tmp/local-experiment/attempt-203-verify.log`.
+
+## 2026-10-06: ambiguous AgentHouse HTTP framing (offline)
+
+WP-L2-CH-001 refuses duplicate declared response lengths or any transfer
+coding on a 200 response before interpreting it as a completed query. Three
+isolated negative fixtures passed as successful writes before repair; focused
+75 tests pass. Fresh dedicated `colima list`: Stopped. No live HTTP/Docker,
+retained credential, report, volume or backup access or change. Missing length
+and untrusted producer remain unresolved; no live deduplication or operator
+acceptance follows. Preserve saved records, never replay an uncertain insert;
+roll back only the scoped framing guard/test if necessary. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent HTTP body-length and FinOps chronology guards (offline)
 

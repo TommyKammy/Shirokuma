@@ -4,6 +4,7 @@ import importlib.util
 import base64
 import copy
 import contextlib
+from email.message import Message
 import io
 import json
 import os
@@ -832,6 +833,27 @@ class AgentHouseTests(unittest.TestCase):
         self.assertEqual(client.opener.open.call_count, 6)
         response.headers = {'Content-Length': '2'}
         self.assertEqual(client.query('SELECT 1'), '1\n')
+
+    def test_query_refuses_ambiguous_response_framing_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.return_value = b'1\n'
+        client.opener.open = Mock(return_value=response)
+        for fields in ((('Content-Length', '2'), ('Content-Length', '2')),
+                       (('Content-Length', '2'), ('Transfer-Encoding', 'chunked')),
+                       (('Transfer-Encoding', 'chunked'),)):
+            with self.subTest(fields=fields):
+                headers = Message()
+                for name, value in fields:
+                    headers.add_header(name, value)
+                response.headers = headers
+                with self.assertRaisesRegex(M.AgentHouseError, 'framing'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 3)
+        response.read.assert_not_called()
 
     def test_unencodable_credential_and_query_fail_before_http(self):
         with self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
