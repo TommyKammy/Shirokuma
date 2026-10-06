@@ -183,6 +183,19 @@ class ProcfsContractTests(unittest.TestCase):
             b' - proc proc ', b' shared:1 master:2 propagate_from:3 - proc proc ')
         self.assertTrue(P.project(**value)['probe']['query_complete'])
 
+    def test_unbindable_cannot_coexist_with_propagation_ids(self):
+        for tags in (b'unbindable shared:1', b'shared:1 unbindable',
+                     b'unbindable master:2', b'propagate_from:3 unbindable'):
+            value = inputs()
+            value['mountinfo'] = value['mountinfo'].replace(
+                b' - proc proc ', b' ' + tags + b' - proc proc ')
+            with self.subTest(tags=tags), self.assertRaises(P.ProcfsError):
+                P.project(**value)
+        value = inputs()
+        value['mountinfo'] = value['mountinfo'].replace(
+            b' - proc proc ', b' unbindable - proc proc ')
+        self.assertTrue(P.project(**value)['probe']['query_complete'])
+
     def test_forged_stat_field_noncanonical_numbers_and_limits_rejected(self):
         changes=[lambda x:x.update(target_stat=stat_line(999,4),target_errno=None),
                  lambda x:x.update(target_stat=stat_line(345,'0123'),target_errno=None),
@@ -205,6 +218,17 @@ class ProcfsContractTests(unittest.TestCase):
                 if field=='target_stat':value['target_errno']=None
                 with self.subTest(field=field,bad=bad),self.assertRaises(P.ProcfsError):
                     P.project(**value)
+
+    def test_kernel_lowercase_process_states_are_visible(self):
+        for state in (b't', b'x'):
+            value = inputs()
+            value['self_stat'] = stat_line(101, 42).replace(b') S ', b') ' + state + b' ', 1)
+            with self.subTest(state=state):
+                self.assertTrue(P.project(**value)['probe']['query_complete'])
+        value = inputs()
+        value['self_stat'] = stat_line(101, 42).replace(b') S ', b') q ', 1)
+        with self.assertRaises(P.ProcfsError):
+            P.project(**value)
 
     def test_stat_negative_zero_is_not_a_canonical_kernel_number(self):
         for field, pid in (('self_stat', 101), ('init_stat', 1), ('target_stat', 345)):

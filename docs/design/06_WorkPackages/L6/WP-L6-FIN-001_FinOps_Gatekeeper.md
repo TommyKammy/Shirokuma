@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.235"
+version: "0.236"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 procfs propagation conflict and lowercase states (offline)
+
+The caller-supplied mount inventory previously projected a visible `/proc`
+with both `unbindable` and a propagation ID. Four contradictory fixtures
+failed before repair; a lone `unbindable` and existing valid propagation
+fixture pass. Independently, Linux's documented lowercase tracing-stop `t`
+and dead `x` stat states failed the fixture contract before repair; these now
+pass, while unknown `q` remains rejected. Focused procfs 20 tests and
+`make verify-local-experiment` pass (its fake Dagster worker failure is an
+intentional negative fixture). Dedicated Colima was freshly Stopped; no VM
+read, retained report/volume/backup access or mutation; AgentHouse bytes stay
+`null / NOT_MEASURED`. Fixture checks cannot authenticate procfs provenance,
+authorize retained-volume scanning, establish cleanup or operator acceptance.
+Revert only the scoped parser/tests and preserve saved resources. Original
+Vault sync remains pending outside this checkout.
 
 ## 2026-10-06 independent procfs number and inventory checks (offline)
 

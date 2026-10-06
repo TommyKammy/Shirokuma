@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.451"
+version: "5.452"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent procfs propagation and process states (offline)
+
+WP-L6-FIN-001 rejects `unbindable` combined with propagation IDs and accepts
+Linux's lowercase `t`/`x` stat states while refusing unknown state `q`.
+Four conflicting mount fixtures and two valid states reproduced the gaps.
+Focused procfs 20 tests and `make verify-local-experiment` pass (intentional
+fake Dagster failure). Dedicated Colima freshly Stopped; no guest read,
+retained data/backup change or AgentHouse byte measurement (`null /
+NOT_MEASURED`). Fixture syntax does not authenticate kernel origin, permit
+retained-volume scanning or grant operator acceptance. Roll back only scoped
+parser/tests and retain saved evidence; original Vault sync pending.
 
 ## 2026-10-06: independent procfs stat and mount inventory syntax (offline)
 

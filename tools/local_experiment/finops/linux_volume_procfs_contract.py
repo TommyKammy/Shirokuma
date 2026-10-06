@@ -52,7 +52,10 @@ def _start(raw,pid):
     # with one ASCII space. split() alone accepts forged tabs and empty columns.
     columns=tail[1].removesuffix(b'\n')
     fields=columns.split(b' ')
-    require(len(fields)>=20 and re.fullmatch(rb'[A-Z?]',fields[0]) is not None)
+    # Linux also reports lowercase tracing-stop/dead states; arbitrary letters
+    # are not valid process states in a caller-supplied stat snapshot.
+    require(len(fields)>=20 and fields[0] in
+            (b'R', b'S', b'D', b'Z', b'T', b't', b'W', b'X', b'x', b'K', b'P', b'I'))
     require(all(fields))
     # Fields 4..22 in proc/PID/stat are decimal kernel counters/identifiers.
     # A forged nonnumeric field must not lend credibility to a start tick.
@@ -125,6 +128,8 @@ def _mount(raw,mount_id):
                 kind=match[1]
             require(kind not in tags)
             tags.add(kind)
+        # An unbindable mount cannot also carry peer/master propagation IDs.
+        require('unbindable' not in tags or len(tags)==1)
         if path=='/proc':matches.append((ident,left,right))
         # A nested mount replacing procfs lookup of any PID is ambiguous.
         require(not re.fullmatch(r'/proc/(?:[0-9]+|self|thread-self)(?:/.*)?',path))
