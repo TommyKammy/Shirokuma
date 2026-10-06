@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.447"
+version: "5.448"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent status diagnostic and procfs stat syntax (offline)
+
+WP-L2-CH-001 bounds the standalone status version reply with the same check
+used by smoke; four bad reply fixtures fail and the valid reply passes.
+Independently WP-L6-FIN-001 rejects nine malformed stat numeric-field fixtures
+before projecting a procfs start tick. Focused AgentHouse 51 and procfs 13
+tests plus `make verify-local-experiment` pass (the fake Dagster failure is an
+intentional negative). Dedicated Colima freshly Stopped; no live insert,
+guest read, retained report, volume, credential or backup access/change.
+Version text does not authenticate ClickHouse; procfs fixture syntax does not
+authenticate kernel provenance or authorize retained-volume measurement.
+AgentHouse bytes remain `null / NOT_MEASURED`; neither WP gains operator
+acceptance. Revert only scoped guards/tests while preserving saved evidence;
+do not replay unknown inserts. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: bounded AgentHouse smoke version reply (offline)
 

@@ -49,6 +49,11 @@ def _start(raw,pid):
     require(len(tail)==2 and tail[0].startswith(prefix))
     fields=tail[1].split()
     require(len(fields)>=20 and re.fullmatch(rb'[A-Z?]',fields[0]) is not None)
+    # Fields 4..22 in proc/PID/stat are decimal kernel counters/identifiers.
+    # A forged nonnumeric field must not lend credibility to a start tick.
+    for field in fields[1:20]:
+        require(re.fullmatch(rb'-?(?:0|[1-9][0-9]{0,18})',field) is not None and
+                abs(int(field))<=MAX_NUMBER)
     tick=fields[19]
     require(re.fullmatch(rb'(?:0|[1-9][0-9]{0,19})',tick) is not None and
             int(tick)<=MAX_NUMBER)

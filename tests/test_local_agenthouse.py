@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 import base64
 import copy
+import contextlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -16,6 +18,20 @@ SPEC.loader.exec_module(M)
 
 
 class AgentHouseTests(unittest.TestCase):
+    def test_status_version_reply_is_bounded_before_public_result(self):
+        for version in ('25.8.4.1\x1b[0m', '25.8.4.1\nother', 'x' * 200, None):
+            with self.subTest(version=version), patch('sys.argv', ['manage.py', 'status']), \
+                    patch.object(M, 'Client') as client_class, contextlib.redirect_stdout(io.StringIO()) as output:
+                client_class.return_value.query.return_value = version
+                self.assertEqual(M.main(), 1)
+                self.assertEqual(json.loads(output.getvalue())['result'], 'failed')
+                client_class.return_value.query.assert_called_once_with('SELECT version()')
+        with patch('sys.argv', ['manage.py', 'status']), patch.object(M, 'Client') as client_class, \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            client_class.return_value.query.return_value = '25.8.4.1\n'
+            self.assertEqual(M.main(), 0)
+            self.assertEqual(json.loads(output.getvalue())['version'], '25.8.4.1')
+
     def test_unknown_usage_remains_null_and_retry_preserves_identity(self):
         value = M.event("test", "clickhouse")
         self.assertIsNone(value["inference_cost_estimate"])

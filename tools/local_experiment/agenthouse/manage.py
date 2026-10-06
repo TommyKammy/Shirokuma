@@ -581,6 +581,15 @@ def read_smoke_export(path: Path) -> list[dict]:
         raise AgentHouseError('Pawprint export readback is invalid; do not replay') from None
 
 
+def checked_version(client: Client) -> str:
+    version = client.query("SELECT version()")
+    if (not isinstance(version, str) or
+            re.fullmatch(r'[0-9]+(?:\.[0-9]+){1,5}\n?', version) is None or
+            len(version) > 128):
+        raise AgentHouseError("Pawprint version reply is invalid")
+    return version.rstrip('\n')
+
+
 def smoke(client: Client) -> dict:
     value = event("runtime.smoke", "clickhouse")
     insert(client, value)
@@ -631,12 +640,8 @@ def smoke(client: Client) -> dict:
     if any(matching[0].get(key) != value[key] for key in
            ('timestamp', 'agent_id', 'task_id', 'action_type', 'target_system')):
         raise AgentHouseError("exported event identity differs from inserted event; do not replay")
-    version = client.query("SELECT version()")
-    if (not isinstance(version, str) or
-            re.fullmatch(r'[0-9]+(?:\.[0-9]+){1,5}\n?', version) is None or
-            len(version) > 128):
-        raise AgentHouseError("Pawprint version reply is invalid; do not replay")
-    return {"result": "passed", "version": version.rstrip('\n'),
+    version = checked_version(client)
+    return {"result": "passed", "version": version,
             "event_id": value["event_id"], "logical_rows": 1, "export": str(path), "endpoint": URL}
 
 
@@ -656,7 +661,7 @@ def main() -> int:
         elif args.command == "export":
             result = {"export": str(export(Client()))}
         else:
-            result = {"result": "ready", "version": Client().query("SELECT version()").strip(), "endpoint": URL}
+            result = {"result": "ready", "version": checked_version(Client()), "endpoint": URL}
         print(json.dumps(result))
         return 0
     except (AgentHouseError, OSError, ValueError, subprocess.SubprocessError) as error:

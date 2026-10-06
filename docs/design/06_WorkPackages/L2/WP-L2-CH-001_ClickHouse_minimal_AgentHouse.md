@@ -5,12 +5,24 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.13"
+version: "0.14"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 status version reply boundary (offline)
+
+The standalone `status` path previously published an unbounded `version()`
+reply after stripping whitespace, unlike `smoke`. Both paths now use the same
+bounded numeric diagnostic; four invalid offline replies fail and a valid LF
+reply succeeds. Focused AgentHouse 51 tests and the local verifier pass. The
+dedicated Colima profile was freshly Stopped; no live request, insert, retained
+report, credential, volume or backup accessed or changed. This diagnostic is
+not ClickHouse identity or deduplication proof. Revert only this shared guard
+and status test; preserve saved evidence and do not replay unknown inserts.
+Original Vault sync pending outside checkout; operator acceptance remains open.
 
 ## 2026-10-06 smoke version diagnostic output boundary (offline)
 
