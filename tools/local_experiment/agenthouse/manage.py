@@ -511,20 +511,48 @@ def smoke(client: Client) -> dict:
     insert(client, value)
     insert(client, value)  # Retry must produce one logical event through FINAL.
     try:
-        reply = json.loads(client.query("SELECT count() AS n, any(status) AS status FROM agenthouse.pawprints FINAL "
-                                        f"WHERE event_id = '{value['event_id']}' FORMAT JSON"))
+        raw = client.query("SELECT count() AS n, any(status) AS status FROM agenthouse.pawprints FINAL "
+                           f"WHERE event_id = '{value['event_id']}' FORMAT JSON")
+        if not isinstance(raw, str) or len(raw.encode('utf-8')) > 64 * 1024:
+            raise ValueError('oversized count reply')
+        def unique_fields(pairs):
+            fields = {}
+            for key, item in pairs:
+                if key in fields:
+                    raise ValueError('duplicate count field')
+                fields[key] = item
+            return fields
+        def bounded_number(text):
+            if len(text) > 128:
+                raise ValueError('oversized count number')
+            number = float(text)
+            if not math.isfinite(number):
+                raise ValueError('unrepresentable count number')
+            return number
+        def bounded_integer(text):
+            if len(text.lstrip('-')) > 128:
+                raise ValueError('oversized count integer')
+            return int(text)
+        def invalid_constant(_text):
+            raise ValueError('nonstandard count number')
+        reply = json.loads(raw, object_pairs_hook=unique_fields,
+                           parse_constant=invalid_constant, parse_int=bounded_integer,
+                           parse_float=bounded_number)
         rows = reply.get('data') if isinstance(reply, dict) else None
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, UnicodeError, RecursionError):
         raise AgentHouseError('Pawprint retry readback is invalid; do not replay') from None
-    if rows != [{"n": "1", "status": "success"}] and rows != [{"n": 1, "status": "success"}]:
+    if (not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or
+            set(rows[0]) != {'n', 'status'} or rows[0]['status'] != 'success' or
+            not (type(rows[0]['n']) is int and rows[0]['n'] == 1 or rows[0]['n'] == '1')):
         raise AgentHouseError("Pawprint insertion or retry readback differs")
     path = export(client)
     try:
         exported = [json.loads(line) for line in path.read_text().splitlines()]
     except (ValueError, UnicodeError):
         raise AgentHouseError('Pawprint export readback is invalid; do not replay') from None
-    if not any(isinstance(row, dict) and row.get("event_id") == value["event_id"] for row in exported):
-        raise AgentHouseError("export omitted the inserted event")
+    matching = [row for row in exported if isinstance(row, dict) and row.get('event_id') == value['event_id']]
+    if len(matching) != 1 or matching[0].get('status') != 'success':
+        raise AgentHouseError("export does not contain exactly one successful inserted event")
     return {"result": "passed", "version": client.query("SELECT version()").strip(),
             "event_id": value["event_id"], "logical_rows": 1, "export": str(path), "endpoint": URL}
 

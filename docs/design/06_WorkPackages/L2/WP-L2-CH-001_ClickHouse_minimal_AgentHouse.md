@@ -5,12 +5,28 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.10"
+version: "0.11"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 independent smoke count and export consistency (offline)
+
+The two deliberate same-ID smoke inserts previously passed on a JSON `true`
+count (Python `True == 1`) or duplicate count keys, and an exported row with
+the matching ID but failed status or a second matching row still passed. Six
+isolated negative variants exposed both gaps before repair; count JSON is now
+bounded and rejects duplicate keys/nonstandard or oversized numbers, and smoke
+requires one successful exported match. Focused AgentHouse 45 tests and the full
+local verifier pass (the fake Dagster worker failure is intentional). Dedicated
+Colima freshly Stopped; no live insert, unknown-request replay, retained report,
+volume, credential or backup mutation. The query/export producers are not
+authenticated; export path substitution and real retry deduplication remain
+unproved. Inspect saved evidence before any live retry. Restore only the scoped
+smoke checks/tests; preserve reports and pending files. Original Vault sync
+pending outside checkout; no operator acceptance is claimed.
 
 ## 2026-10-06 smoke readback failure boundary (offline)
 

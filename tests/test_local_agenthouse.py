@@ -307,6 +307,32 @@ class AgentHouseTests(unittest.TestCase):
                         M.smoke(client)
                 self.assertEqual(inserted.call_count, 6)  # two writes per attempt; no hidden retry
 
+    def test_smoke_refuses_ambiguous_count_and_export_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / 'report.jsonl'
+            report.write_text('{"event_id":"fixture","status":"success"}\n')
+            client = Mock()
+            with patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
+                    patch.object(M, 'insert') as inserted, patch.object(M, 'export', return_value=report):
+                for reply in ('{"data":[{"n":true,"status":"success"}]}',
+                              '{"data":[{"n":1,"n":1,"status":"success"}]}',
+                              '{"data":[{"n":1,"status":"success"}],"data":[]}',
+                              '{"data":[{"n":1,"status":"success"}],"unused":' + '9' * 129 + '}'):
+                    with self.subTest(reply=reply[:60]):
+                        client.query.return_value = reply
+                        with self.assertRaises(M.AgentHouseError):
+                            M.smoke(client)
+                client.query.return_value = '{"data":[{"n":1,"status":"success"}]}'
+                for text in ('{"event_id":"fixture","status":"failed"}\n',
+                             '{"event_id":"fixture","status":"success"}\n' * 2):
+                    with self.subTest(report=text):
+                        report.write_text(text)
+                        with self.assertRaises(M.AgentHouseError):
+                            M.smoke(client)
+                report.write_text('{"event_id":"fixture","status":"success"}\n')
+                self.assertEqual(M.smoke(client)['result'], 'passed')
+                self.assertEqual(inserted.call_count, 14)
+
     def test_export_write_failure_never_publishes_partial_report(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

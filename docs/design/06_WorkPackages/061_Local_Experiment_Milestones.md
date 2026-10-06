@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.442"
+version: "5.443"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent AgentHouse smoke count and export consistency (offline)
+
+WP-L2-CH-001 refuses ambiguous/oversized count JSON and requires exactly one
+successful matching row in the saved export after its two intentional inserts.
+Six negative fixture cases exposed both gaps before repair; focused AgentHouse
+45 tests and full local verifier pass (fake Dagster failure intentional). Dedicated
+Colima freshly Stopped. No live request, unknown-request replay, retained report,
+credential, volume or backup change; usage remains `null / NOT_MEASURED`.
+Producer authenticity, live deduplication, safe retained-volume measurement and
+operator acceptance remain unproved. Restore only scoped smoke checks/tests,
+preserving saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: AgentHouse smoke readback failures (offline)
 
