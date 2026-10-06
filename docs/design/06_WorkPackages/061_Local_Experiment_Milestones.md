@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.411"
+version: "5.412"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: invalid FinOps start clock stops before Docker (offline)
+
+WP-L6-FIN-001: a malformed/absent/pre-epoch initial clock now yields
+`SAMPLE_INVALID` without any Docker inspect, instead of reading the daemon
+before rejecting the sample. The negative failed before repair; FinOps 306
+tests (seven Linux-only skips) and `make verify-local-experiment` passed.
+Fresh dedicated Colima status: not running. No live daemon, retained data,
+backup or credentials touched; AgentHouse bytes remain `null / NOT_MEASURED`.
+This is not daemon authentication, atomicity or operator acceptance. Roll back
+the clock guard/test only; original Vault sync pending outside checkout.
 
 ## 2026-10-06: inference socket pin and future volume early stop (offline)
 

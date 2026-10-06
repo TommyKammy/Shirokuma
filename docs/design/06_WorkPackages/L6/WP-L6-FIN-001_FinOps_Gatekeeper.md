@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.209"
+version: "0.210"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: reject invalid reference clock before Docker reads (offline)
+
+The fixed Docker reference collector formerly issued up to three daemon reads
+with an invalid initial clock before rejecting the sample. It now validates
+the timestamp immediately; malformed, absent and pre-epoch clock fixtures
+return `SAMPLE_INVALID` without any Docker inspection. The negative failed
+before repair. Focused FinOps 306 tests (seven Linux-only skips) and the full
+local verifier passed. Fresh dedicated Colima status reported not running;
+no live daemon, retained volume/report/backup or credential was touched.
+AgentHouse bytes remain `null / NOT_MEASURED`. This does not authenticate the
+daemon, make the reads atomic or satisfy operator acceptance. Revert only the
+clock guard/test if necessary, preserving saved records; original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: pin inference read and reject future volume before repeat (offline)
 

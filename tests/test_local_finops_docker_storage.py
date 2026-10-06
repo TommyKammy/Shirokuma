@@ -218,6 +218,16 @@ class DockerStorageTests(unittest.TestCase):
         self.assertEqual(backend.docker_storage_inspect.call_count, 3)
         self.assertEqual(backend.now.call_count, 1)
 
+    def test_invalid_start_clock_stops_before_any_docker_read(self):
+        for start in (None, 'not-a-timestamp', '1969-12-31T23:59:59Z'):
+            backend = Mock()
+            backend.now.return_value = start
+            backend.docker_storage_inspect.side_effect = fixture() + deepcopy(fixture())
+            with self.subTest(start=start):
+                result = D.collect(backend)
+            self.assertEqual(result['agenthouse']['reason'], 'SAMPLE_INVALID')
+            backend.docker_storage_inspect.assert_not_called()
+
     def test_container_identity_drift_stops_before_second_volume(self):
         for field, value in (('Id', 'b'*64), ('State', {'Running': True})):
             responses = fixture() + deepcopy(fixture())

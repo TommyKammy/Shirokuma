@@ -155,6 +155,8 @@ def validate(value):
 def collect(backend):
     try:
         start = backend.now()
+        # Reject an unusable sample clock before contacting the fixed daemon.
+        C.stamp(start)
         # Check each context reply before querying that context's daemon.
         # Validating only in project() would issue all four daemon reads first.
         first_context = backend.docker_storage_inspect('context', AH.CONTEXT)
