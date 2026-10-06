@@ -12,6 +12,16 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 independent fixture-only preflight recheck
+
+Following the offline L0 conversion repair, standalone Docker metadata
+preflight discovery passes 36 synthetic tests. Fresh dedicated Colima is
+Stopped. No daemon metadata, retained volume, backup or report was inspected
+or changed; fixtures do not establish daemon identity or writer exclusion.
+Volume traversal remains unauthorized and AgentHouse bytes remain `null /
+NOT_MEASURED`. Preserve saved resources; no runtime rollback needed. Live and
+operator criteria remain open, and original Vault sync is pending.
+
 ## 2026-10-06 separate offline traversal-boundary recheck
 
 After the L0 renderer changes, standalone discovery of the two-snapshot Docker

@@ -311,6 +311,7 @@ def load_yaml_text(text: str) -> list[dict[str, Any]]:
             "json",
         ),
         input_text=text,
+        reject_stderr=True,
     )
     if not output.strip():
         raise RenderError("kubectl returned no resources for nonempty YAML")

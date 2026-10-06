@@ -12,6 +12,20 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-06: kubectl conversion warnings fail closed (offline)
+
+An isolated successful kubectl patch returning a ConfigMap plus a warning on
+stderr previously passed resource conversion. Conversion now rejects stderr
+before using stdout, without echoing the warning. The negative failed before
+the fix; bootstrap contracts pass (33), the full local verifier and
+design-context pass. Separately, WP-L6-FIN-001's Docker metadata preflight
+fixtures pass (36); this does not authorize volume traversal. Fresh dedicated
+Colima is Stopped; no VM, remote source, Flux or retained volume/backup was
+inspected or changed. Live §9, source provenance and operator acceptance remain
+open. If pinned kubectl proves warning-bearing output valid, revert only the
+conversion guard/test; retain prior failures and saved resources. Original
+Vault synchronization remains pending outside checkout.
+
 ## 2026-10-06: bounded nested resource lists (offline)
 
 Separately from duplicate-key rejection, the offline kubectl renderer now

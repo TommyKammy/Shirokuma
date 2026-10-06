@@ -112,6 +112,15 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             _verified_tool("kubectl")
         _verified_tool.cache_clear()
 
+    def test_kubectl_resource_conversion_refuses_warning(self) -> None:
+        with patch("tests.gitops_render._verified_tool", return_value="kubectl-fixture"), patch(
+            "tests.gitops_render.subprocess.run", return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout='{"kind":"ConfigMap"}',
+                stderr="warning: conversion may be incomplete\n",
+            ),
+        ), self.assertRaisesRegex(RenderError, "emitted stderr"):
+            load_yaml_text("kind: ConfigMap\n")
+
     def test_renderer_refuses_malformed_resource_list_instead_of_dropping_it(self) -> None:
         for items in (None, {}, "hidden", 1):
             with self.subTest(items=items), self.assertRaises(RenderError):

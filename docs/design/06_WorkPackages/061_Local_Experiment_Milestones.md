@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: offline kubectl conversion warning boundary
+
+WP-L0-GITOPS-001: successful kubectl conversion with a stderr warning
+previously returned resources; it now fails closed without exposing warning
+text. Isolated negative failed before repair; bootstrap 33, full local
+verifier and design-context pass (fake Dagster failure intentional). Separately
+WP-L6-FIN-001 Docker metadata preflight passes 36 fixture tests; no traversal
+authorization follows and AgentHouse usage stays `null / NOT_MEASURED`.
+Fresh dedicated Colima Stopped; no VM start, remote Git, Flux, retained data
+or backup inspection/change. Live §9, authenticated source and operator
+acceptance remain open. Restore only the conversion guard if pinned tool
+semantics require warnings; preserve historical evidence. Original Vault sync
+pending outside checkout.
+
 ## 2026-10-06: bounded offline nested List flattening
 
 WP-L0-GITOPS-001: an independent 20-level nested kubectl `List` negative
