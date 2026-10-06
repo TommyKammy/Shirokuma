@@ -518,7 +518,9 @@ class Kubernetes:
                         or ('generation' in metadata and
                            (type(metadata['generation']) is not int or metadata['generation'] < 1))
                         or type(metadata.get('ownerReferences', [])) is not list
-                       or metadata.get('ownerReferences', [])):
+                         or metadata.get('ownerReferences', [])
+                         or type(metadata.get('finalizers', [])) is not list
+                         or metadata.get('finalizers', [])):
                  raise PolicyError('smoke requires the dedicated local Trino deployment')
             # A controller still observing an older generation has not
             # reconciled this spec; do not lend its image to the smoke.

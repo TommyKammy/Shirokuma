@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.212"
+version: "0.213"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: refuse suspended AgentHouse inference source (offline)
+
+An inspected AgentHouse container reporting `Running=true` could also report
+`Paused`, `Restarting` or `Dead` and still reach the credential/query path.
+Three fixture negatives failed before repair; now explicit true or mistyped
+flags fail `SCOPE_INVALID` before the credential, while absent flags retain
+the minimal fixture contract. Focused FinOps 309 tests passed (seven Linux-only
+skips) and `make verify-local-experiment` passed; the first post-edit run hit an
+indentation error and was repaired before rerun. Dedicated Colima was freshly
+Stopped. No live Docker/query, credentials,
+retained volume/report/backup mutation or AgentHouse byte measurement (`null /
+NOT_MEASURED`). Docker replies do not authenticate a producer or prove a live
+stable process. Roll back only this guard/test, retaining saved data. Original
+Vault handoff sync pending outside checkout.
 
 ## 2026-10-06: validate inference window before Docker inspection (offline)
 

@@ -1253,6 +1253,14 @@ class ScopedResponseTests(unittest.TestCase):
             client.json_request.return_value = reply
             with self.subTest(deletion_grace=key), self.assertRaises(policy.PolicyError):
                 client.image()
+        for finalizers in (['example.test/hold'], 'example.test/hold', None):
+            reply = copy.deepcopy(valid)
+            reply['metadata']['finalizers'] = finalizers
+            client.json_request.return_value = reply
+            with self.subTest(finalizers=finalizers), self.assertRaises(policy.PolicyError):
+                client.image()
+        reply['metadata']['finalizers'] = []
+        self.assertEqual(client.image(), valid['spec']['template']['spec']['containers'][0]['image'])
         for extra in ({'foreignEnvelope': {'enabled': True}},
                       {'items': []}):
             reply = copy.deepcopy(valid)

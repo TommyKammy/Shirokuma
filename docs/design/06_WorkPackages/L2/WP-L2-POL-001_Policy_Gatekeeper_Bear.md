@@ -5,12 +5,23 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.224"
+version: "0.225"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-10-06: fixed smoke image source has no finalizers (offline)
+
+A same-image Trino Deployment with nonempty or malformed finalizers could lend
+its image despite cleanup being subject to another controller. Three negatives
+failed before repair; an explicit empty list passes. Focused policy 166 tests
+and `make verify-local-experiment` passed. No live API/admission, replay of saved requests, retained data/backup
+change or publication. This is an offline source guard, not producer
+authentication, strict live admission or operator acceptance. Revert only the
+source guard/test if needed, keeping saved requests. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: reject terminating grace-period image source (offline)
 
