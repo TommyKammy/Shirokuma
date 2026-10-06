@@ -229,6 +229,13 @@ class AgentHouseTests(unittest.TestCase):
         self.assertIn('valid', base64.b64decode(M.Client(
             credential_bytes=b'{"password":"valid"}').auth).decode())
 
+    def test_credential_refuses_non_utf8_or_bom_encoding(self):
+        value = '{"password":"valid"}'
+        for raw in (value.encode('utf-16'), value.encode('utf-32'),
+                    b'\xef\xbb\xbf' + value.encode('utf-8')):
+            with self.subTest(raw=raw[:8]), self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
+                M.Client(credential_bytes=raw)
+
     def test_direct_client_refuses_redirected_or_public_state_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

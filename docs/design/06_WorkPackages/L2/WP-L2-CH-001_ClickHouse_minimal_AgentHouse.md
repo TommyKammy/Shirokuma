@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 credential encoding ambiguity (offline)
+
+Python's JSON byte decoder accepted UTF-16, UTF-32 and UTF-8 BOM credential
+files although this component generates plain UTF-8 JSON. Three negative
+fixtures reached client setup before repair; only BOM-free UTF-8 is now
+decoded before the existing duplicate-key and token checks. Focused AgentHouse
+42 tests and the full local verifier pass (the fake Dagster failure is an
+intentional fixture). Dedicated Colima freshly Stopped; no live credential read,
+container start, HTTP, retained report/volume or backup change. Existing
+non-UTF-8 retained credentials would require non-destructive inspection before
+startup; do not rotate automatically. This does not authenticate the credential
+producer or grant operator acceptance. Revert only this decoder/test if needed,
+preserving saved files. Original Vault sync pending outside checkout.
+
 ## 2026-10-06 export CRLF row refusal (offline)
 
 JSONEachRow export accepted a CRLF-terminated object because JSON decoding

@@ -12,6 +12,18 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: AgentHouse UTF-8-only credential decoding (offline)
+
+WP-L2-CH-001 refuses UTF-16, UTF-32 and UTF-8 BOM credentials rather than
+silently accepting Python JSON's encoding autodetection. Three negative
+fixtures reproduced the gap; focused 42 tests pass. Dedicated Colima freshly
+Stopped; the full local verifier also passes (intentional fake Dagster
+failure). No live credential/container/HTTP or retained report/volume/backup
+change. Inspect an incompatible saved credential without rotating it before
+future startup. This is not producer authentication or operator acceptance;
+revert only scoped decoder/test, retaining saved resources. Original Vault
+sync pending outside checkout.
+
 ## 2026-10-06: Linux volume worker mount framing (offline)
 
 WP-L6-FIN-001 now rejects truncated/non-LF mountinfo rows and malformed or

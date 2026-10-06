@@ -188,7 +188,14 @@ class Client:
         if credential_bytes is None:
             credential_bytes = read_credential()
         try:
-            credential = json.loads(credential_bytes, object_pairs_hook=unique_credential_fields,
+            # json.loads(bytes) auto-detects UTF-16/32 and BOMs. Only the
+            # generated UTF-8 credential representation is in this scope.
+            if type(credential_bytes) is not bytes:
+                raise ValueError('invalid credential bytes')
+            text = credential_bytes.decode('utf-8')
+            if text.startswith('\ufeff'):
+                raise ValueError('credential BOM')
+            credential = json.loads(text, object_pairs_hook=unique_credential_fields,
                                     parse_constant=invalid_docker_constant)
             if type(credential) is not dict or set(credential) != {'password'}:
                 raise ValueError('invalid credential fields')
