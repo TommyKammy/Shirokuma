@@ -361,7 +361,9 @@ def export(client: Client) -> Path:
                 elif isinstance(item, str):
                     item.encode('utf-8')
             return True
-        if rows and (not rows.endswith('\n') or not all(valid_row(line) for line in rows.splitlines())):
+        # splitlines() also splits on Unicode separators that JSONEachRow does
+        # not use as record delimiters. Only an actual LF frames a row.
+        if rows and (not rows.endswith('\n') or not all(valid_row(line) for line in rows.split('\n')[:-1])):
             raise AgentHouseError('local AgentHouse export is not JSONEachRow')
     except (ValueError, RecursionError, UnicodeError):
         raise AgentHouseError('local AgentHouse export is not JSONEachRow') from None

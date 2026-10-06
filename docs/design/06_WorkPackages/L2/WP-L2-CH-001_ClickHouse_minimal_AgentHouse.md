@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline JSONEachRow LF framing
+
+Export now splits records only at LF, not at Python `splitlines()` Unicode
+separators. Synthetic U+2028 and U+0085 separators between otherwise valid
+objects published a report before repair; they are refused before publication
+afterward. Focused 30 tests and the full local verifier pass. Dedicated Colima
+was freshly Stopped; no live export, retained report, volume or backup changed.
+This only checks framing, not Pawprint schema completeness, producer identity
+or operator acceptance. Revert only this parser/test while retaining saved
+reports and pending files. Original Vault sync pending outside checkout.
+
 ## 2026-10-06 offline decoded export text
 
 JSONEachRow export now rejects escaped lone surrogates in decoded object keys

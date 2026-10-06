@@ -47,8 +47,22 @@ def _json(raw):
             return C.finite_json_float(text)
         except (C.FinOpsError, ValueError):
             raise C.FinOpsError('READ_FAILED') from None
-    return json.loads(raw, object_pairs_hook=pairs, parse_float=finite_float,
-                       parse_constant=lambda _: (_ for _ in ()).throw(C.FinOpsError('READ_FAILED')))
+    try:
+        value = json.loads(raw, object_pairs_hook=pairs, parse_float=finite_float,
+                           parse_constant=lambda _: (_ for _ in ()).throw(C.FinOpsError('READ_FAILED')))
+    except RecursionError:
+        raise C.FinOpsError('READ_FAILED') from None
+    # A small metadata response can still contain unbounded nested containers.
+    # Reject them before a downstream validator traverses the decoded reply.
+    stack = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        C.require(depth <= 64, 'READ_FAILED')
+        if type(item) is dict:
+            stack.extend((child, depth + 1) for child in item.values())
+        elif type(item) is list:
+            stack.extend((child, depth + 1) for child in item)
+    return value
 
 
 def _complete_list(value, kind):

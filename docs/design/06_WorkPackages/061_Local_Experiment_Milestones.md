@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.427"
+version: "5.428"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent offline JSON framing and nesting guards
+
+WP-L2-CH-001 export now requires LF row framing rather than treating Unicode
+line separators as record breaks. U+2028 and U+0085 synthetic two-object
+replies were published before repair, refused afterward. WP-L6-FIN-001 fixed
+metadata reader now refuses more than 64 nested levels or decoder recursion
+with `READ_FAILED`; synthetic 65/1,200-level replies passed before repair.
+AgentHouse focused 30 tests, FinOps focused 107 tests, full
+`make verify-local-experiment`, design-context and secret scan pass. The local
+verifier's fake Dagster worker failure is an intentional negative fixture.
+Dedicated Colima freshly Stopped; no live query/export, retained report,
+volume or backup mutation. AgentHouse usage remains `null / NOT_MEASURED`.
+These guards do not authenticate producers, establish complete schema or prove
+operator acceptance. Restore only scoped parsers/fixtures; preserve saved
+reports and pending files. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: finite FinOps metadata replies (offline)
 

@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 bounded metadata JSON nesting (offline)
+
+The fixed Kubernetes/Docker metadata JSON reader rejects containers deeper
+than 64 levels with scoped `READ_FAILED`, including parser recursion failure.
+Synthetic 65- and 1,200-level replies were accepted before repair; a shallow
+reply still passes. Focused FinOps 107 tests and full local verifier pass.
+Dedicated Colima remained Stopped; no live metadata read or retained report,
+volume or backup mutation. AgentHouse bytes stay `null / NOT_MEASURED`.
+This protects downstream validation but does not authenticate metadata or
+establish operator acceptance. Revert only the nesting guard/fixture,
+preserving saved evidence. Original Vault sync pending outside checkout.
+
 ## 2026-10-06 nonrepresentable metadata numbers (offline)
 
 The fixed FinOps Kubernetes/Docker JSON reply reader now refuses numeric

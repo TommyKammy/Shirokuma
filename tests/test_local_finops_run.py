@@ -19,6 +19,14 @@ class DockerReplyNumberTests(unittest.TestCase):
                 R._json(raw)
         self.assertEqual(R._json('{"nested":1.25}'), {'nested': 1.25})
 
+    def test_metadata_reply_nesting_is_bounded(self):
+        for count in (65, 1200):
+            raw = '{"nested":' + '[' * count + '0' + ']' * count + '}'
+            with self.subTest(count=count), self.assertRaisesRegex(R.C.FinOpsError, 'READ_FAILED'):
+                R._json(raw)
+        self.assertEqual(R._json('{"nested":' + '[' * 63 + '0' + ']' * 63 + '}'),
+                         {'nested': json.loads('[' * 63 + '0' + ']' * 63)})
+
 
 def storage_complete():
     records = []
