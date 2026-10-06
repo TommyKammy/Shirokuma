@@ -5,12 +5,30 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.247"
+version: "0.248"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 bounded Docker metadata replies (offline)
+
+The private metadata transport previously normalized padded/multiline Docker
+`info` replies, accepted deep/nonfinite/underflowing unused context JSON fields,
+and raised an unscoped Unicode error on unencodable context text. Isolated
+negative fixtures reproduced these paths before repair. Formatted daemon info
+now permits only an optional single final LF; JSON metadata has bounded numeric
+tokens, finite representable floats, depth and UTF-8 text, failing with scoped
+`SCOPE_INVALID`. Focused transport 12 tests and the final
+`make verify-local-experiment` pass (intentional fake Dagster failure fixture);
+`make verify-design-context` and diff check pass. Dedicated Colima was observed not running; no daemon,
+VM, saved volume, report, credential or backup was accessed or changed. This
+fixture validation is not Docker/kernel authentication or permission for volume
+traversal; AgentHouse bytes stay `null / NOT_MEASURED`. Writer exclusion, remote
+cleanup and operator acceptance remain open. Roll back only the scoped parser
+and tests, preserving retained resources; original Vault sync pending outside
+this checkout.
 
 ## 2026-10-06 private VM boot reply framing (offline)
 

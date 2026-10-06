@@ -108,6 +108,53 @@ class VolumeTransportTests(unittest.TestCase):
                     T.collect(tool)
                 self.assertEqual(calls[-1][0], 'docker')
 
+    def test_daemon_info_refuses_padding_and_extra_lines(self):
+        for suffix in ('\r\n', '\n\n', '\t', '\u2028'):
+            with self.subTest(suffix=repr(suffix)):
+                tool, calls = backend()
+                original = tool._command.side_effect
+                def changed(args, *, timeout):
+                    raw = original(args, timeout=timeout)
+                    return raw + suffix if 'info' in args else raw
+                tool._command.side_effect = changed
+                with self.assertRaises(T.TransportError):
+                    T.collect(tool)
+                self.assertEqual(len(calls), 2)
+        tool, calls = backend()
+        original = tool._command.side_effect
+        def with_final_lf(args, *, timeout):
+            raw = original(args, timeout=timeout)
+            return raw + '\n' if 'info' in args else raw
+        tool._command.side_effect = with_final_lf
+        self.assertEqual(T.collect(tool)['daemon']['Architecture'], snapshot()['daemon']['Architecture'])
+
+    def test_unencodable_context_reply_fails_scoped_before_daemon_read(self):
+        tool, calls = backend()
+        original = tool._command.side_effect
+        def changed(args, *, timeout):
+            raw = original(args, timeout=timeout)
+            return raw + '\ud800' if 'context' in args else raw
+        tool._command.side_effect = changed
+        with self.assertRaises(T.TransportError):
+            T.collect(tool)
+        self.assertEqual(len(calls), 1)
+
+    def test_docker_json_rejects_deep_and_nonfinite_unused_fields(self):
+        for extra in ('"unused":' + '[' * 1200 + '0' + ']' * 1200,
+                      '"unused":NaN', '"unused":1e999', '"unused":1e-999'):
+            with self.subTest(extra=extra[:40]):
+                tool, calls = backend()
+                original = tool._command.side_effect
+                def changed(args, *, timeout):
+                    raw = original(args, timeout=timeout)
+                    if 'context' in args:
+                        return raw[:-2] + ',' + extra + raw[-2:]
+                    return raw
+                tool._command.side_effect = changed
+                with self.assertRaises(T.TransportError):
+                    T.collect(tool)
+                self.assertEqual(len(calls), 1)
+
     def test_new_container_after_inspection_rejected_by_second_list(self):
         tool,calls=backend();original=tool._command.side_effect;lists=[0]
         def changed(args, *, timeout):

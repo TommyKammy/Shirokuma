@@ -5,12 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.465"
+version: "5.466"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Docker metadata reply boundaries (offline)
+
+WP-L6-FIN-001 private transport refuses padded/multiline daemon info and
+deep, nonfinite or underflowing unused JSON metadata; unencodable context text
+now fails scoped rather than escaping the transport. New negative fixtures
+reproduced the gaps; focused transport 12 tests and final
+`make verify-local-experiment` pass (intentional fake Dagster failure fixture),
+as do design-context and diff check. Private verifier log:
+`tmp/local-experiment/attempt-188-verify-final.log`. A new positive LF fixture
+initially expected the wrong architecture spelling; correcting the test to the
+existing fixture value made focused and final verification pass. Dedicated Colima was
+observed not running; no Docker/VM request or retained volume/report/backup
+change. `volume_traversal_authorized=False`, AgentHouse bytes `null /
+NOT_MEASURED`. Offline replies cannot establish source authenticity, writer
+exclusion, cleanup or operator acceptance. Restore only these parser/fixture
+changes if necessary while retaining saved evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: private boot-ID reply framing (offline)
 

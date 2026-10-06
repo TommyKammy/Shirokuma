@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import re
 import time
@@ -20,16 +21,43 @@ def require(ok):
 
 
 def _json(raw):
-    require(type(raw) is str and len(raw.encode()) <= 2 * 1024 * 1024)
+    require(type(raw) is str)
+    try:
+        require(len(raw.encode('utf-8')) <= 2 * 1024 * 1024)
+    except UnicodeEncodeError:
+        raise TransportError('SCOPE_INVALID') from None
     def unique(pairs):
         value={}
         for key,item in pairs:
             require(key not in value);value[key]=item
         return value
+    def finite_float(text):
+        require(len(text) <= 128)
+        number=float(text)
+        mantissa=re.split('[eE]',text,maxsplit=1)[0]
+        require(math.isfinite(number) and not (number == 0 and re.search('[1-9]',mantissa)))
+        return number
+    def bounded_int(text):
+        require(len(text.lstrip('-')) <= 128)
+        return int(text)
     try:
-        return json.loads(raw, object_pairs_hook=unique,
-                          parse_constant=lambda _: (_ for _ in ()).throw(TransportError('SCOPE_INVALID')))
-    except (ValueError,TypeError):
+        value=json.loads(raw, object_pairs_hook=unique, parse_float=finite_float,
+                         parse_int=bounded_int,
+                         parse_constant=lambda _: (_ for _ in ()).throw(TransportError('SCOPE_INVALID')))
+        stack=[(value,0)]
+        while stack:
+            item,depth=stack.pop()
+            require(depth<=64)
+            if type(item) is dict:
+                for key,child in item.items():
+                    key.encode('utf-8')
+                    stack.append((child,depth+1))
+            elif type(item) is list:
+                stack.extend((child,depth+1) for child in item)
+            elif type(item) is str:
+                item.encode('utf-8')
+        return value
+    except (ValueError,TypeError,UnicodeError,RecursionError):
         raise TransportError('SCOPE_INVALID') from None
 
 
@@ -84,7 +112,12 @@ def collect(backend, *, monotonic=time.monotonic):
     docker=['docker','--host',endpoint]
     info=read([*docker,'info','--format',
                '{{json .ID}}|{{json .OSType}}|{{json .Architecture}}|{{json .DockerRootDir}}'])
-    fields=info.strip().split('|')
+    require(type(info) is str)
+    # Docker's formatted info can include one final LF, but never surrounding
+    # padding, CRLF or additional lines. Do not normalize a malformed reply.
+    body=info[:-1] if info.endswith('\n') else info
+    require(body and body == body.strip() and '\n' not in body and '\r' not in body)
+    fields=body.split('|')
     require(len(fields)==4)
     daemon=dict(zip(('ID','OSType','Architecture','DockerRootDir'),
                     (_json(field) for field in fields)))
