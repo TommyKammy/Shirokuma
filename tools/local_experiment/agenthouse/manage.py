@@ -74,6 +74,10 @@ def finite_docker_float(text):
 
 def decode_docker_json(raw):
     try:
+        # Inspect replies include untrusted optional fields (and may contain
+        # secrets); bound them before allocating a decoded object tree.
+        if type(raw) is not str or len(raw) > 2 * 1024 * 1024 or len(raw.encode('utf-8')) > 2 * 1024 * 1024:
+            raise ValueError('oversized Docker inspection metadata')
         value = json.loads(raw, object_pairs_hook=unique_docker_fields,
                            parse_constant=invalid_docker_constant,
                            parse_int=bounded_docker_int, parse_float=finite_docker_float)

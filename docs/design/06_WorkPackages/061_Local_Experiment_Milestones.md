@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.466"
+version: "5.467"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent AgentHouse Docker inspect size guard (offline)
+
+WP-L2-CH-001 bounds the standalone Docker inspection JSON reply to 2 MiB of
+UTF-8 before parsing, rejecting non-text/unencodable inputs. An oversized
+context fixture previously reached the next Docker read; focused AgentHouse 60
+tests and full local verifier pass after repair (intentional fake Dagster failure
+fixture; private log `tmp/local-experiment/attempt-188-agenthouse-verify.log`).
+This is a decoder limit, not an OS-level stdout cap
+or daemon authentication. Dedicated Colima was observed not running; no live
+Docker request, retained credential/report/volume/backup change or usage
+measurement (`null / NOT_MEASURED`). Live compatibility, deduplication and
+operator acceptance remain open. Restore only scoped decoder/test while
+preserving saved evidence, with no unknown-request replay. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: Docker metadata reply boundaries (offline)
 

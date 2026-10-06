@@ -5,12 +5,27 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.22"
+version: "0.23"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 bounded Docker inspection input (offline)
+
+The standalone Docker context/owned-resource decoder previously parsed an
+arbitrarily large unused inspection field before checking nested shape. An
+oversized synthetic context reply reached the next `docker info` read before
+repair. Now non-text, unencodable or >2 MiB UTF-8 inspection replies fail
+scoped before JSON parsing or runtime access. Focused AgentHouse 60 tests and
+`make verify-local-experiment` pass (intentional fake Dagster failure fixture).
+Dedicated Colima was observed not running; no Docker, credential, saved
+volume/report/backup accessed or changed, usage `null / NOT_MEASURED`.
+This does not independently authenticate Docker, bound subprocess capture at
+the OS pipe level, prove live startup/deduplication or grant operator acceptance.
+Revert only the decoder guard/fixture if needed, retaining saved resources;
+never replay an unknown insert. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 saved-container stopped-state guard (offline)
 

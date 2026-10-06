@@ -205,6 +205,16 @@ class AgentHouseTests(unittest.TestCase):
                     M.inspect_owned('volume', M.VOLUME)
         self.assertEqual(M.decode_docker_json('{"nested":["ordinary"]}'), {'nested': ['ordinary']})
 
+    def test_docker_inspection_reply_is_bounded_before_json_parse(self):
+        endpoint = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
+        oversized = '[{"Name":' + json.dumps(M.CONTEXT) + ',"Endpoints":{"docker":{"Host":' + json.dumps(endpoint) + '}},"unused":"' + 'a' * (2 * 1024 * 1024) + '"}]'
+        with patch.object(M, 'docker', return_value=oversized) as docker:
+            with self.assertRaisesRegex(M.AgentHouseError, 'context metadata'):
+                M.check_context()
+            docker.assert_called_once_with('context', 'inspect', M.CONTEXT)
+        with self.assertRaises(ValueError):
+            M.decode_docker_json('"\ud800"')
+
     def test_context_must_be_dedicated_socket(self):
         expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
         for endpoint in ('unix:///var/run/docker.sock',
