@@ -47,6 +47,22 @@ def projected(component, data=None):
 
 
 class StorageTests(unittest.TestCase):
+    def test_fixed_reference_rejects_deletion_marker_aliases(self):
+        for component in S.TARGETS:
+            original = objects(component)
+            for index in range(len(original)):
+                if original[index] is None:
+                    continue
+                for key in ('DeletionTimestamp', 'DELETIONTIMESTAMP'):
+                    data = deepcopy(original)
+                    obj = data[index][0] if index == 1 else data[index]
+                    obj['metadata'][key] = NOW
+                    with self.subTest(component=component, index=index, key=key), self.assertRaises(S.StorageError):
+                        projected(component, data)
+        data = deepcopy(objects('seaweedfs'))
+        data[0]['metadata']['deletionTimestamp'] = None
+        self.assertEqual(projected('seaweedfs', data)['state'], 'observed')
+
     def test_bound_claim_reported_capacity_cannot_exceed_backing_pv(self):
         for component in ('seaweedfs', 'polaris-postgresql'):
             data = deepcopy(objects(component))

@@ -38,6 +38,16 @@ def row(events='2', known='1'):
 
 
 class ContractTests(unittest.TestCase):
+    def test_component_pod_labels_must_be_object(self):
+        for component in C.COMPONENTS:
+            for phase in ('before', 'after'):
+                for labels in (None, [], 'untrusted'):
+                    args = component_args(component)
+                    args[phase]['metadata']['labels'] = labels
+                    with self.subTest(component=component, phase=phase, labels=labels):
+                        with self.assertRaisesRegex(C.FinOpsError, '^SCOPE_INVALID$'):
+                            C.project_component(component, **args)
+
     def test_three_fixed_components_keep_exact_cpu_and_memory_and_identity(self):
         for component in C.COMPONENTS:
             value = C.project_component(component, **component_args(component))

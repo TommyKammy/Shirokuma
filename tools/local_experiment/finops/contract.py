@@ -87,6 +87,7 @@ def _identity(component, pod):
     require(type(pod) is dict and type(pod.get('metadata')) is dict and type(pod.get('status')) is dict,
             'SCOPE_INVALID')
     meta, status = pod['metadata'], pod['status']
+    require(type(meta.get('labels')) is dict, 'SCOPE_INVALID')
     require(meta.get('namespace') == namespace and U.name(meta.get('name')) and
             meta.get('labels', {}).get('app.kubernetes.io/name') == label and
             meta.get('deletionTimestamp') is None and status.get('phase') == 'Running', 'SCOPE_INVALID')

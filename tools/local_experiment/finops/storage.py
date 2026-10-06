@@ -81,7 +81,9 @@ def _meta(obj, kind, namespace, expected=None):
             obj.get('apiVersion', api_version) == api_version and type(obj.get('metadata')) is dict)
     meta = obj['metadata']
     require(meta.get('namespace') == namespace and
-            (expected is None or meta.get('name') == expected) and meta.get('deletionTimestamp') is None)
+            (expected is None or meta.get('name') == expected) and
+            meta.get('deletionTimestamp') is None and
+            all(key == 'deletionTimestamp' or key.lower() != 'deletiontimestamp' for key in meta))
     name(meta.get('name')); uid(meta.get('uid'))
     return meta
 

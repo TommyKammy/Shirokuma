@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.200"
+version: "0.201"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: fixed storage deletion aliases and component Pod label types (offline)
+
+Two independent reader regressions: 28 synthetic case-variant deletion markers
+on fixed workload/Pod/ReplicaSet/PVC/PV references previously passed the storage
+projection; they now fail closed, while a canonical null marker remains valid.
+Separately, 18 malformed label objects on either read of the three component
+Pods raised raw attribute errors rather than `SCOPE_INVALID`; they now fail with
+the scoped reason. Both focused negatives failed before repair. `make
+test-local-finops` passed 292 cases (seven Linux-only skips), followed by
+`make verify-local-experiment` (the fake Dagster worker failure trace is an
+intentional negative test). Dedicated Colima was freshly listed Stopped. No
+live API/VM, retained report/volume/backup change or AgentHouse used-byte
+measurement (`null / NOT_MEASURED`). These fixtures do not authenticate the
+Kubernetes producer, make the two reads atomic, or grant operator acceptance.
+Rollback only the two scoped guards/tests, retaining saved evidence. Direct
+original Vault sync remains pending outside this checkout.
 
 ## 2026-10-06: typed optional list metadata (offline)
 

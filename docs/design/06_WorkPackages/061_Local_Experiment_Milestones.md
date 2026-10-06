@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.402"
+version: "5.403"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent FinOps storage and component Pod scope guards (offline)
+
+WP-L6-FIN-001: 28 case-variant deletion markers across the four fixed storage
+reference chains and 18 malformed component Pod labels across both reads failed
+before their independent repairs. Focused FinOps 292 tests passed (seven
+Linux-only skips); `make verify-local-experiment` passed with its intentional
+fake Dagster worker failure diagnostic. Dedicated Colima was freshly listed
+Stopped. No live Kubernetes/VM observation, retained report/volume/backup
+mutation or AgentHouse used-byte measurement (`null / NOT_MEASURED`). Offline
+tests cannot establish producer authenticity, atomicity or operator acceptance.
+Restore only the scoped guards/tests if needed, preserving saved evidence;
+original Vault sync remains pending outside checkout.
 
 ## 2026-10-06: policy smoke image deletion alias (offline)
 
