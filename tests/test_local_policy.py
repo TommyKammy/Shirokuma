@@ -1241,6 +1241,12 @@ class ScopedResponseTests(unittest.TestCase):
             client.json_request.return_value = reply
             with self.subTest(metadata_alias=key), self.assertRaises(policy.PolicyError):
                 client.image()
+        for key in ('DeletionTimestamp', 'DELETIONTIMESTAMP'):
+            reply = copy.deepcopy(valid)
+            reply['metadata'][key] = '2026-10-06T00:00:00Z'
+            client.json_request.return_value = reply
+            with self.subTest(deletion_alias=key), self.assertRaises(policy.PolicyError):
+                client.image()
         for extra in ({'foreignEnvelope': {'enabled': True}},
                       {'items': []}):
             reply = copy.deepcopy(valid)

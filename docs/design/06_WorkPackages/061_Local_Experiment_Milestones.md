@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: policy smoke image deletion alias (offline)
+
+WP-L2-POL-001 rejects `DeletionTimestamp`/`DELETIONTIMESTAMP` in a synthetic
+same-image Trino Deployment. An initial guard was placed in a different
+ownership check; the focused test exposed two failures, and moving it to
+the image reader made `make test-local-policy` pass (166 tests). No live
+admission, request replay, retained data/backup mutation or publication.
+The guard cannot authenticate Kubernetes or establish operator acceptance.
+Restore only this scoped guard/test while preserving saved requests; original
+Vault sync remains pending outside checkout.
+
 ## 2026-10-06: optional Kubernetes ListMeta types (offline)
 
 WP-L6-FIN-001: four synthetic non-string `selfLink`/`resourceVersion`

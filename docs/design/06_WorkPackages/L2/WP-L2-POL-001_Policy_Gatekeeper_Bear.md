@@ -12,6 +12,20 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-06: deletion-marker alias in smoke image source (offline)
+
+The fixed Trino Deployment image reader now refuses case-variant
+`deletionTimestamp` metadata even when the canonical field is absent. Two
+synthetic terminating aliases previously lent the image; after the scoped
+guard, `make test-local-policy` passes 166 tests. An initial edit landed in
+the separate policy-ownership check instead of the image reader; the first
+focused run exposed both failures, then the edit was moved to the intended
+read path and retested. No live API/admission, unknown request replay, retained
+data/backup change or GitHub write. This cannot authenticate the source or
+prove strict live admission/operator acceptance. Revert only this image
+guard/test if needed, preserving saved requests. Original Vault sync pending
+outside checkout.
+
 ## 2026-10-06: unambiguous Trino generation keys (offline)
 
 Four synthetic same-image sources with canonical generation/observedGeneration

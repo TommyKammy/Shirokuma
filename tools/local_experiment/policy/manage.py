@@ -332,8 +332,8 @@ def assert_owned(current: dict, expected: dict) -> None:
         same_spec = False
     if (current.get('apiVersion') != API or current.get('kind') != expected['kind']
             or metadata.get('name') != desired['name']
-            or metadata.get('deletionTimestamp') is not None
-            or any(metadata['labels'].get(key) != value for key, value in LABELS.items())
+                         or metadata.get('deletionTimestamp') is not None
+             or any(metadata['labels'].get(key) != value for key, value in LABELS.items())
             or any(metadata['annotations'].get(key) != value for key, value in desired['annotations'].items())
             or not same_spec):
         raise PolicyError('existing dedicated policy identity, owner or content differs; refusing overwrite')
@@ -506,9 +506,11 @@ class Kubernetes:
             if (set(deployment) - {'apiVersion', 'kind', 'metadata', 'spec', 'status'} or
                       deployment.get('apiVersion') != 'apps/v1' or deployment.get('kind') != 'Deployment'
                      or type(metadata) is not dict or metadata.get('name') != 'trino-local'
-                       or metadata.get('namespace') != NAMESPACE
-                        or metadata.get('deletionTimestamp') is not None
-                        or any(type(key) is str and key.lower() == 'generation' and
+                         or metadata.get('namespace') != NAMESPACE
+                         or metadata.get('deletionTimestamp') is not None
+                         or any(type(key) is str and key.lower() == 'deletiontimestamp' and
+                                key != 'deletionTimestamp' for key in metadata)
+                         or any(type(key) is str and key.lower() == 'generation' and
                                key != 'generation' for key in metadata)
                         or ('generation' in metadata and
                            (type(metadata['generation']) is not int or metadata['generation'] < 1))
