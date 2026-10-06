@@ -610,7 +610,8 @@ def smoke(client: Client) -> dict:
             if len(text) > 128:
                 raise ValueError('oversized count number')
             number = float(text)
-            if not math.isfinite(number):
+            mantissa = re.split('[eE]', text, maxsplit=1)[0]
+            if not math.isfinite(number) or (number == 0 and re.search('[1-9]', mantissa)):
                 raise ValueError('unrepresentable count number')
             return number
         def bounded_integer(text):

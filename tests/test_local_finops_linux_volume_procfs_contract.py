@@ -118,6 +118,17 @@ class ProcfsContractTests(unittest.TestCase):
         value['mountinfo']+=b'20 19 0:21 /name\\040with\\040spaces /other rw - tmpfs tmpfs rw\n'
         self.assertTrue(P.project(**value)['probe']['query_complete'])
 
+    def test_mountinfo_requires_canonical_single_space_columns(self):
+        original = inputs()['mountinfo']
+        for row in (original.replace(b'19 1 ', b'19  1 ', 1),
+                    original.replace(b'19 1 ', b'19\t1 ', 1),
+                    original.replace(b' - proc ', b'  - proc ', 1),
+                    original.replace(b' - proc ', b' -  proc ', 1),
+                    original.replace(b' rw,hidepid=0', b' rw,hidepid=0 ', 1)):
+            value = inputs(); value['mountinfo'] = row
+            with self.subTest(row=row), self.assertRaises(P.ProcfsError):
+                P.project(**value)
+
     def test_procfs_super_options_do_not_project_ambiguous_access_or_visibility(self):
         for options in (b'rw,ro,hidepid=0', b'rw,rw,hidepid=0',
                         b'rw,hidepid=0,hidepid=0', b'hidepid=0',

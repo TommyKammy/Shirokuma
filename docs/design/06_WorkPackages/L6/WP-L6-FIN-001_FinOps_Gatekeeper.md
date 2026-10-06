@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.233"
+version: "0.234"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 procfs mountinfo field separators (offline)
+
+Five caller-supplied mountinfo variants with tabs, doubled spaces or a
+trailing space previously projected a procfs candidate. The pure fixture
+contract now requires the kernel's single ASCII space field separator;
+escaped spaces within paths remain supported. Focused procfs 15 tests and
+the full local verifier pass (fake Dagster failure intentional). Dedicated
+Colima freshly Stopped; no VM read or retained report/volume/backup access
+or change; AgentHouse bytes remain `null / NOT_MEASURED`. Canonical fixture
+framing cannot authenticate its origin, authorize a retained-volume scan,
+prove cleanup or establish operator acceptance. Revert only this scoped
+parser/test and preserve saved evidence. Original Vault sync pending.
 
 ## 2026-10-06 procfs stat spacing and suffix (offline)
 

@@ -5,12 +5,24 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.15"
+version: "0.16"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 count reply underflow (offline)
+
+An unused count-reply float such as `1e-999` or `-1e-999` previously
+rounded silently to zero and allowed the smoke path to reach export. Two
+negative fixtures now refuse nonzero mantissas rounded to zero, consistent
+with the export reader. Focused AgentHouse 52 tests and the full local
+verifier pass (its fake Dagster failure is intentional). Dedicated Colima
+freshly Stopped; no live insert, saved credential/report/volume/backup access
+or change. This does not authenticate ClickHouse or prove live deduplication
+or operator acceptance. Revert only this number guard/test, preserve saved
+evidence, and do not replay ambiguous inserts. Original Vault sync pending.
 
 ## 2026-10-06 count reply nested values (offline)
 

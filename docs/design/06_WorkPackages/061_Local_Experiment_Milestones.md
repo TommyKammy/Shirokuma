@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.449"
+version: "5.450"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent count underflow and mountinfo separators (offline)
+
+WP-L2-CH-001 rejects nonzero unused count floats rounded to zero before
+smoke export (two negatives). Independently WP-L6-FIN-001 refuses tabs,
+doubled spaces and trailing spaces in caller-supplied mountinfo (five
+negatives). Both gaps reproduced before repair. Focused AgentHouse 52 and
+procfs 15 tests, plus `make verify-local-experiment`, pass; fake Dagster
+failure is intentional. Dedicated Colima freshly Stopped; no live insert,
+VM read, retained credential/report/volume/backup access or change.
+AgentHouse bytes remain `null / NOT_MEASURED`. These fixtures do not
+authenticate producers, establish live deduplication, safe scanning, cleanup
+or operator acceptance. Roll back only scoped guards/tests and retain saved
+evidence; never replay unknown inserts. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: independent stat framing and smoke count nesting (offline)
 

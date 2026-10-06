@@ -359,12 +359,13 @@ class AgentHouseTests(unittest.TestCase):
         client = Mock()
         with patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
                 patch.object(M, 'insert') as inserted, patch.object(M, 'export') as exported:
-            for extra in ('{"bad":"\\ud800"}', '[' * 65 + '0' + ']' * 65):
+            for extra in ('{"bad":"\\ud800"}', '[' * 65 + '0' + ']' * 65,
+                          '1e-999', '-1e-999'):
                 client.query.return_value = ('{"data":[{"n":1,"status":"success"}],'
                                              '"unused":' + extra + '}')
                 with self.subTest(extra=extra[:30]), self.assertRaises(M.AgentHouseError):
                     M.smoke(client)
-            self.assertEqual(inserted.call_count, 4)
+            self.assertEqual(inserted.call_count, 8)
             exported.assert_not_called()
 
     def test_smoke_version_reply_is_bounded_before_public_result(self):

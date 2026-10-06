@@ -82,9 +82,12 @@ def _mount(raw,mount_id):
     except UnicodeError:raise ProcfsError('PROCFS_UNVERIFIED') from None
     matches=[];seen=set()
     for line in lines:
+        # Kernel mountinfo uses one ASCII space between fields. Splitting on
+        # generic whitespace conceals empty columns and raw tab separators.
+        require('\t' not in line and all(line.split(' ')))
         halves=line.split(' - ')
         require(len(halves)==2)
-        left,right=halves[0].split(),halves[1].split()
+        left,right=halves[0].split(' '),halves[1].split(' ')
         require(len(left)>=6 and len(right)==3 and
                 re.fullmatch(r'[1-9][0-9]*',left[0]) is not None and
                 re.fullmatch(r'[1-9][0-9]*',left[1]) is not None and
