@@ -5,12 +5,23 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 export CRLF row refusal (offline)
+
+JSONEachRow export accepted a CRLF-terminated object because JSON decoding
+ignored the trailing CR; the private report was published. A negative fixture
+failed before repair; literal CR now fails before any file creation, while
+canonical LF remains accepted. Focused AgentHouse 41 tests pass. Dedicated
+Colima freshly Stopped; no live query or retained report, volume or backup
+mutation. This does not authenticate the producer or grant operator acceptance.
+Restore only the scoped export guard/test, preserving saved records; original
+Vault sync pending outside checkout.
 
 ## 2026-10-06 saved-container security and inspection shape (offline)
 

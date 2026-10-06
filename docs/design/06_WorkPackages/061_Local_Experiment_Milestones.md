@@ -5,12 +5,21 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.434"
+version: "5.435"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent AgentHouse export CRLF refusal (offline)
+
+WP-L2-CH-001 refuses a CRLF-terminated JSONEachRow object before publishing a
+report; the negative published one before repair. Focused 41 AgentHouse tests
+pass. Dedicated Colima freshly Stopped; no live export or retained report,
+volume or backup change. Offline parsing is not producer authentication or
+operator acceptance. Roll back only the guard/test, retaining saved evidence;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent procfs and process row framing (offline)
 
