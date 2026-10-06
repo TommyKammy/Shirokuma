@@ -5,12 +5,27 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.246"
+version: "0.247"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 private VM boot reply framing (offline)
+
+The Docker-volume metadata transport previously used `strip()` on the
+`/proc/sys/kernel/random/boot_id` reply, accepting four fixture variants with
+leading padding, extra LF, CRLF or TAB. It now requires one lower-case UUID
+line with exactly one terminating LF. Focused transport nine tests and full
+local verification passed (fake Dagster failure intentional). No VM or Docker
+read was made; dedicated Colima was last observed Stopped. This only checks
+caller-supplied reply syntax, not the authenticity of the VM, kernel boot
+identity or SSH trust. Volume traversal remains unauthorized, AgentHouse bytes
+remain `null / NOT_MEASURED`, and live cleanup, ongoing writer exclusion and
+operator acceptance remain open. Revert this bounded parser/test only if
+necessary; do not delete saved reports, volume or backups. Original Vault
+sync pending outside the checkout.
 
 ## 2026-10-06 saved-volume stopped-state metadata (offline)
 

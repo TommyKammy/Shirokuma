@@ -93,6 +93,21 @@ class VolumeTransportTests(unittest.TestCase):
                 with self.assertRaises(T.TransportError):T.collect(tool)
                 self.assertFalse(any('inspect' in call and 'container' in call for call in calls))
 
+    def test_boot_identity_reply_must_be_one_exact_line(self):
+        for reply in (' ' + snapshot()['boot_id'] + '\n', snapshot()['boot_id'] + '\n\n',
+                      snapshot()['boot_id'] + '\r\n', snapshot()['boot_id'] + '\t\n'):
+            with self.subTest(reply=repr(reply)):
+                tool, calls = backend()
+                original = tool._command.side_effect
+                def changed(args, *, timeout):
+                    if args[0] == 'colima':
+                        return reply
+                    return original(args, timeout=timeout)
+                tool._command.side_effect = changed
+                with self.assertRaises(T.TransportError):
+                    T.collect(tool)
+                self.assertEqual(calls[-1][0], 'docker')
+
     def test_new_container_after_inspection_rejected_by_second_list(self):
         tool,calls=backend();original=tool._command.side_effect;lists=[0]
         def changed(args, *, timeout):

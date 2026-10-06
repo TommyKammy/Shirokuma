@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.464"
+version: "5.465"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: private boot-ID reply framing (offline)
+
+WP-L6-FIN-001 private Docker-volume transport now rejects padded, CRLF and
+multiline boot-ID replies instead of `strip()`-normalizing them; four fixture
+negatives failed before repair. Focused transport nine tests and full
+`make verify-local-experiment` passed (fake Dagster failure intentional).
+Dedicated Colima last observed Stopped; no VM/Docker access, saved report,
+volume or backup change. This cannot authenticate the reply or authorize
+retained-volume traversal; usage stays `null / NOT_MEASURED`, with VM trust,
+remote cleanup, writer exclusion and operator acceptance still open. Roll
+back only the scoped parser/test while retaining saved records. Original
+Vault synchronization pending outside checkout.
 
 ## 2026-10-06: saved AgentHouse and FinOps stopped-state guards (offline)
 

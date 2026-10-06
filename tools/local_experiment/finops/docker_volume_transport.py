@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import time
 
 from tools.local_experiment.agenthouse import manage as AH
@@ -119,9 +120,13 @@ def collect(backend, *, monotonic=time.monotonic):
                   '{{json .ID}}|{{json .OSType}}|{{json .Architecture}}|{{json .DockerRootDir}}'])==info)
     target=[item for item in containers if item.get('Name') == '/'+AH.NAME]
     require(len(target)==1)
-    boot=read(['colima','ssh','--profile','mac-studio-solo','--',
-               'cat','/proc/sys/kernel/random/boot_id']).strip()
-    require(len(boot)==36)
+    boot_reply=read(['colima','ssh','--profile','mac-studio-solo','--',
+                     'cat','/proc/sys/kernel/random/boot_id'])
+    # A procfs cat emits exactly one UUID plus LF. Do not collapse terminal
+    # controls or extra lines into a plausible identity with strip().
+    require(type(boot_reply) is str and re.fullmatch(
+        r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\n', boot_reply) is not None)
+    boot=boot_reply[:-1]
     return {'context':context,'daemon':daemon,'container':target[0],
             'volume':volume,'listed_ids':ids,'containers':containers,'boot_id':boot,
             'started_at':started,'observed_at':backend.now(),'listing_complete':True}
