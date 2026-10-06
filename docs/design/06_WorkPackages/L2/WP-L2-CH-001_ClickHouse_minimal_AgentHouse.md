@@ -12,6 +12,22 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline event identity and export-shape guards
+
+Externally supplied Pawprint IDs must now use the canonical lowercase hyphenated
+UUID spelling and timestamps must use the exact millisecond UTC-shaped spelling
+emitted by `event()`. Noncanonical spellings no longer reach insert, avoiding
+multiple textual identities for the same parsed value. Export checks the bounded
+reply as newline-terminated JSON object rows (or empty for zero rows) before
+creating a private report. Invalid UTF-8, malformed/truncated/non-object and
+oversized fixture replies leave no report. Focused AgentHouse tests (25) pass;
+local verifier and design-context results are recorded in the matching Milestones
+entry. Dedicated Colima was stopped; no live query, retained report, volume or
+backup was touched. This is structural validation, not producer authenticity,
+schema completeness, atomicity on disk failure or operator acceptance. Restore
+only these guards if needed, without deleting existing reports. Original Vault
+sync remains pending outside checkout.
+
 ## 2026-10-06 offline new-container files and startup ordering
 
 New-container startup now creates the credential and `container.env` exclusively

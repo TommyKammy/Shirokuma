@@ -34,7 +34,10 @@ class AgentHouseTests(unittest.TestCase):
                 M.event("test", "clickhouse", **fields)
 
     def test_invalid_event_identity_and_timestamp_fail_before_insert(self):
-        for fields in ({'event_id': 'not-a-uuid'}, {'timestamp': 'yesterday'}):
+        for fields in ({'event_id': 'not-a-uuid'}, {'timestamp': 'yesterday'},
+                       {'event_id': '00000000000000000000000000000001'},
+                       {'timestamp': '2026-1-2 03:04:05.123'},
+                       {'timestamp': '2026-01-02 03:04:05.123000'}):
             with self.subTest(fields=fields), self.assertRaises(M.AgentHouseError):
                 M.event('test', 'clickhouse', **fields)
             value = M.event('test', 'clickhouse')
@@ -164,6 +167,20 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaises(M.AgentHouseError):
                     M.export(client)
                 self.assertEqual(list(state.iterdir()), [])
+
+    def test_malformed_export_reply_does_not_create_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            client = Mock()
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock:
+                clock.now.return_value.strftime.return_value = 'fixed'
+                for reply in ('not json\n', '{"event_id":1}', '[]\n', '{}\n\n',
+                              ' ' * (8 * 1024 * 1024 + 1)):
+                    with self.subTest(reply=reply[:32]):
+                        client.query.return_value = reply
+                        with self.assertRaises(M.AgentHouseError):
+                            M.export(client)
+                        self.assertEqual(list(state.iterdir()), [])
 
     def test_query_rejects_invalid_utf8_response_with_scoped_error(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')

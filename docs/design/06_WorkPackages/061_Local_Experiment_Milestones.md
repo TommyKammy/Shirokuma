@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: AgentHouse event identity and export-shape guards (offline)
+
+WP-L2-CH-001: event UUID and timestamp require the canonical spellings emitted
+by the local producer, including exact millisecond precision; otherwise insert
+is refused before HTTP. Exports reject malformed, truncated, non-object or
+oversized JSONEachRow replies before creating a private report. Focused 25 tests,
+`make verify-local-experiment`, `make verify-design-context` and diff check pass
+(the verifier's fake Dagster failure is an intentional negative test). Dedicated
+Colima freshly stopped; no live query or retained credential/report/volume/backup
+modification. Structural checks do not authenticate producers or prove schema
+completeness or safe handling of disk-write failures. To revert, remove only the
+scoped validation and tests; preserve saved records. Original Vault sync pending
+outside checkout; no operator acceptance is claimed.
+
 ## 2026-10-06: AgentHouse private creation and safe start ordering (offline)
 
 WP-L2-CH-001: exclusive fd-relative 0600 credential and env creation refuses

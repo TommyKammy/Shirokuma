@@ -272,13 +272,17 @@ def event(action: str, target: str, status: str = "success", **fields) -> dict:
             except UnicodeError:
                 raise AgentHouseError(f"invalid UTF-8 Pawprint field: {key}") from None
     try:
-        uuid.UUID(value["event_id"])
+        parsed_id = uuid.UUID(value["event_id"])
     except (ValueError, TypeError, AttributeError):
         raise AgentHouseError('invalid Pawprint event ID') from None
+    if str(parsed_id) != value["event_id"]:
+        raise AgentHouseError('noncanonical Pawprint event ID')
     try:
-        datetime.strptime(value["timestamp"], "%Y-%m-%d %H:%M:%S.%f")
+        parsed_time = datetime.strptime(value["timestamp"], "%Y-%m-%d %H:%M:%S.%f")
     except ValueError:
         raise AgentHouseError('invalid Pawprint timestamp') from None
+    if parsed_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] != value["timestamp"]:
+        raise AgentHouseError('noncanonical Pawprint timestamp')
     return value
 
 
@@ -299,6 +303,16 @@ def export(client: Client) -> Path:
         payload = rows.encode('utf-8')
     except (AttributeError, UnicodeError):
         raise AgentHouseError('local AgentHouse export reply is not UTF-8 text') from None
+    if len(payload) > 8 * 1024 * 1024:
+        raise AgentHouseError('local AgentHouse export exceeds the response limit')
+    # A zero-row export is empty; otherwise JSONEachRow must have complete object lines.
+    try:
+        if rows and (not rows.endswith('\n') or any(
+                not line or not isinstance(json.loads(line), dict)
+                for line in rows.splitlines())):
+            raise AgentHouseError('local AgentHouse export is not JSONEachRow')
+    except json.JSONDecodeError:
+        raise AgentHouseError('local AgentHouse export is not JSONEachRow') from None
     name = "pawprints-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".jsonl"
     path = STATE / name
     try:
