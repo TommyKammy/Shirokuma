@@ -5,12 +5,31 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.250"
+version: "0.251"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent preflight shape and boot-ID guards (offline)
+
+The standalone two-snapshot Docker preflight raised raw attribute/type errors
+on eight malformed nested metadata fixtures instead of its scoped failure.
+It now checks the nested context, volume, container and inventory ID shapes
+before dereferencing or hashing them. Separately, a stable but malformed
+36-character boot ID previously passed the standalone guard; it now requires
+the canonical lower-case UUID grouping used by the private transport. Negative
+fixtures reproduced both gaps before repair. Focused preflight nine tests,
+`make verify-local-experiment`, design-context and diff check pass; the fake
+Dagster worker failure in the full verifier is an intentional negative test.
+Fresh `colima list` reported dedicated `mac-studio-solo` Stopped; no VM/Docker
+request or retained report/volume/backup access or change. Offline fixtures
+do not authenticate a daemon/kernel, exclude ongoing writers, authorize
+retained-volume traversal (`False`), measure AgentHouse bytes (`null /
+NOT_MEASURED`), prove cleanup or grant operator acceptance. Restore only the
+scoped preflight/tests on rollback and preserve saved evidence; original Vault
+sync pending outside checkout.
 
 ## 2026-10-06 all-container stop-flag stability (offline)
 

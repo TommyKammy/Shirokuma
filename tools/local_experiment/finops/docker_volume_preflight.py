@@ -5,6 +5,8 @@ Never persist raw container inspect JSON: it includes environment credentials.
 """
 from __future__ import annotations
 
+import re
+
 from tools.local_experiment.agenthouse import manage as AH
 from tools.local_experiment.finops import contract as C
 from tools.local_experiment.finops import docker_storage as D
@@ -75,7 +77,9 @@ def _project(snapshot):
     C.stamp(snapshot['observed_at'])
     context = snapshot['context']
     require(type(context) is dict and context.get('Name') == AH.CONTEXT)
-    host = context.get('Endpoints', {}).get('docker', {}).get('Host')
+    endpoints = context.get('Endpoints')
+    require(type(endpoints) is dict and type(endpoints.get('docker')) is dict)
+    host = endpoints['docker'].get('Host')
     require(type(host) is str and host.startswith('unix:///Users/') and
             host.endswith('/.colima/mac-studio-solo/docker.sock') and
             '..' not in host.split('/'))
@@ -85,19 +89,25 @@ def _project(snapshot):
             daemon.get('OSType') == 'linux' and daemon.get('Architecture') in ('arm64', 'aarch64') and
             daemon.get('DockerRootDir') == ROOT)
     boot = snapshot['boot_id']
-    require(type(boot) is str and len(boot) == 36 and
-            all(ch in '0123456789abcdef-' for ch in boot))
+    require(type(boot) is str and re.fullmatch(
+        r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', boot) is not None)
     volume = snapshot['volume']
-    require(type(volume) is dict and volume.get('Name') == AH.VOLUME and
-            volume.get('Labels', {}).get(AH.LABEL) == 'agenthouse-local' and
+    require(type(volume) is dict and type(volume.get('Labels')) is dict and
+            volume.get('Name') == AH.VOLUME and
+            volume['Labels'].get(AH.LABEL) == 'agenthouse-local' and
             volume.get('Driver') == 'local' and volume.get('Scope') == 'local' and
             volume.get('Options') in (None, {}) and _path(volume.get('Mountpoint')) == VOLUME_ROOT)
     created = D.created_at(volume.get('CreatedAt'))
     require(C.stamp(created)[1] <= C.stamp(snapshot['started_at'])[1])
     container = snapshot['container']
-    require(type(container) is dict and container.get('Name') == '/' + AH.NAME and
-            container.get('Config', {}).get('Labels', {}).get(AH.LABEL) == 'agenthouse-local' and
-            container.get('Config', {}).get('Image') == AH.IMAGE)
+    require(type(container) is dict)
+    config = container.get('Config')
+    host_config = container.get('HostConfig')
+    require(type(config) is dict and type(config.get('Labels')) is dict and
+            type(host_config) is dict and type(host_config.get('RestartPolicy')) is dict)
+    require(container.get('Name') == '/' + AH.NAME and
+            config['Labels'].get(AH.LABEL) == 'agenthouse-local' and
+            config.get('Image') == AH.IMAGE)
     identifier = container.get('Id')
     require(type(identifier) is str and len(identifier) == 64 and
             all(ch in '0123456789abcdef' for ch in identifier))
@@ -105,7 +115,7 @@ def _project(snapshot):
     require(type(state) is dict and state.get('Status') == 'exited' and
             state.get('Running') is False and state.get('Restarting') is False and
             state.get('Paused') is False and state.get('Dead') is False and
-            container.get('HostConfig', {}).get('RestartPolicy', {}).get('Name') == 'no')
+            host_config['RestartPolicy'].get('Name') == 'no')
     target_lifecycle = _lifecycle(container)
     image_id = container.get('Image')
     require(type(image_id) is str and image_id.startswith('sha256:') and
@@ -121,8 +131,9 @@ def _project(snapshot):
             type(inspected) is list and len(inspected) == len(ids) and
             all(type(item) is str and len(item) == 64 and
                 all(ch in '0123456789abcdef' for ch in item) for item in ids))
-    require(len(set(ids)) == len(ids) and set(ids) == {item.get('Id') for item in inspected
-                                                    if type(item) is dict} and identifier in ids)
+    require(all(type(item) is dict and type(item.get('Id')) is str for item in inspected))
+    require(len(set(ids)) == len(ids) and set(ids) == {item['Id'] for item in inspected}
+            and identifier in ids)
     inventory = []
     for other in inspected:
         require(type(other) is dict)

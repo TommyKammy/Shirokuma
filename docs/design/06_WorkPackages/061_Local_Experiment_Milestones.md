@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.469"
+version: "5.470"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent Docker preflight shape and boot-ID guards (offline)
+
+WP-L6-FIN-001 refuses malformed nested metadata with scoped `SCOPE_INVALID`
+instead of raw exceptions, and independently refuses stable malformed boot
+identities in its standalone snapshot contract. Eight nested-shape and two
+boot-ID negatives exposed the gaps before repair; focused preflight nine,
+`make verify-local-experiment`, design-context and diff check pass (fake
+Dagster worker failure intentional). Fresh `colima list` showed dedicated
+profile Stopped; no live daemon/VM request or retained report/volume/backup
+access/change. Traversal remains unauthorized; AgentHouse usage stays `null /
+NOT_MEASURED`. Snapshot consistency does not prove source authenticity,
+continuous writer exclusion, cleanup or operator acceptance. Revert only
+scoped guards/tests if needed, keeping saved records. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: all-container Docker stop flags (offline)
 

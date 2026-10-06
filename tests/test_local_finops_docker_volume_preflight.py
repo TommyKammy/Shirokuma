@@ -75,6 +75,33 @@ class VolumePreflightTests(unittest.TestCase):
             with self.subTest(missing=flag), self.assertRaises(V.PreflightError):
                 validate(value, deepcopy(value))
 
+    def test_malformed_nested_metadata_fails_scoped(self):
+        changes = [
+            lambda s: s['context'].update(Endpoints=None),
+            lambda s: s['context'].update(Endpoints={'docker': []}),
+            lambda s: s['volume'].update(Labels=[]),
+            lambda s: s['container'].update(Config=None),
+            lambda s: s['container']['Config'].update(Labels=[]),
+            lambda s: s['container'].update(HostConfig=[]),
+            lambda s: s['container']['HostConfig'].update(RestartPolicy=None),
+            lambda s: s['volume'].update(Options=[]),
+            lambda s: s['containers'][1].update(Id=[]),
+        ]
+        for change in changes:
+            value = snapshot()
+            change(value)
+            with self.subTest(change=change), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+
+    def test_boot_identity_requires_canonical_uuid_in_each_snapshot(self):
+        for boot in ('0' * 36, '01234567-89ab-cdef-0123-456789abcde-',
+                     '01234567-89ab-cdef-0123-456789abcdef\n',
+                     '01234567-89ab-cdef-0123-456789abcdeG'):
+            value = snapshot()
+            value['boot_id'] = boot
+            with self.subTest(boot=boot), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+
     def test_other_container_stop_flags_must_be_present_and_stable(self):
         for flag in ('Paused', 'Dead'):
             first = snapshot()
