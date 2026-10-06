@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.441"
+version: "5.442"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse smoke readback failures (offline)
+
+WP-L2-CH-001 maps missing/malformed count and export readback to scoped
+failures after the smoke path's two intentional same-ID inserts. Three
+synthetic negatives exposed raw exceptions; focused AgentHouse 44 tests and
+full local verifier pass (intentional fake Dagster failure). Dedicated Colima
+freshly Stopped; no live insert, unknown-request replay, retained credential,
+report, volume or backup mutation. AgentHouse usage remains `null /
+NOT_MEASURED`. The tests do not prove live deduplication, source authenticity
+or operator acceptance. Preserve saved resources on rollback; original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: independent worker options and procfs mount aliases (offline)
 

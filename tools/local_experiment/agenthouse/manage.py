@@ -510,13 +510,20 @@ def smoke(client: Client) -> dict:
     value = event("runtime.smoke", "clickhouse")
     insert(client, value)
     insert(client, value)  # Retry must produce one logical event through FINAL.
-    rows = json.loads(client.query("SELECT count() AS n, any(status) AS status FROM agenthouse.pawprints FINAL "
-                                  f"WHERE event_id = '{value['event_id']}' FORMAT JSON"))["data"]
+    try:
+        reply = json.loads(client.query("SELECT count() AS n, any(status) AS status FROM agenthouse.pawprints FINAL "
+                                        f"WHERE event_id = '{value['event_id']}' FORMAT JSON"))
+        rows = reply.get('data') if isinstance(reply, dict) else None
+    except (TypeError, ValueError):
+        raise AgentHouseError('Pawprint retry readback is invalid; do not replay') from None
     if rows != [{"n": "1", "status": "success"}] and rows != [{"n": 1, "status": "success"}]:
         raise AgentHouseError("Pawprint insertion or retry readback differs")
     path = export(client)
-    exported = [json.loads(line) for line in path.read_text().splitlines()]
-    if not any(row["event_id"] == value["event_id"] for row in exported):
+    try:
+        exported = [json.loads(line) for line in path.read_text().splitlines()]
+    except (ValueError, UnicodeError):
+        raise AgentHouseError('Pawprint export readback is invalid; do not replay') from None
+    if not any(isinstance(row, dict) and row.get("event_id") == value["event_id"] for row in exported):
         raise AgentHouseError("export omitted the inserted event")
     return {"result": "passed", "version": client.query("SELECT version()").strip(),
             "event_id": value["event_id"], "logical_rows": 1, "export": str(path), "endpoint": URL}

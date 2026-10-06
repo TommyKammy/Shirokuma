@@ -294,6 +294,19 @@ class AgentHouseTests(unittest.TestCase):
                 self.assertEqual(existing.stat().st_mode & 0o777, 0o600)
                 self.assertEqual(list(state.glob('*.pending')), [])
 
+    def test_smoke_invalid_readback_is_scoped_without_replaying_insert(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / 'report.jsonl'
+            report.write_text('{"other":"value"}\n')
+            client = Mock()
+            with patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
+                    patch.object(M, 'insert') as inserted, patch.object(M, 'export', return_value=report):
+                for reply in ('{}', '{"data":null}', '{"data":[{"n":1,"status":"success"}]}'):
+                    client.query.return_value = reply
+                    with self.subTest(reply=reply), self.assertRaises(M.AgentHouseError):
+                        M.smoke(client)
+                self.assertEqual(inserted.call_count, 6)  # two writes per attempt; no hidden retry
+
     def test_export_write_failure_never_publishes_partial_report(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.9"
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 smoke readback failure boundary (offline)
+
+After its two intentional same-ID inserts, `smoke` previously raised raw
+`KeyError` for a missing count `data` or an export row without `event_id`.
+Three isolated malformed-reply cases now produce scoped AgentHouse failures;
+the fixture confirms exactly two inserts per call and no hidden replay.
+Focused AgentHouse 44 tests and the full local verifier pass (intentional fake
+Dagster failure). Dedicated Colima freshly Stopped; no live insert, unknown
+request replay, saved credential, report, volume or backup access or mutation.
+The response still does not authenticate its producer or prove live retry
+deduplication/operator acceptance. Following a failed live smoke, inspect saved
+evidence and do not replay the request. Revert only scoped guard/test, retaining
+saved data. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 export object framing (offline)
 
