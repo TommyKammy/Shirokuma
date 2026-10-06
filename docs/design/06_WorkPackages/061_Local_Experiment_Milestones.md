@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.428"
+version: "5.429"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent metadata text/integer and Docker key guards (offline)
+
+WP-L6-FIN-001 fixed metadata JSON reader refuses decoded lone surrogate text
+and integer tokens over 128 digits with `READ_FAILED`. WP-L2-CH-001 refuses
+ambiguous duplicate Docker context/owned-resource inspection keys before using
+an endpoint or ownership label. Negative fixtures failed before repair; focused
+FinOps 315 (seven Linux-only skips) and AgentHouse 32 tests, plus full
+`make verify-local-experiment`, pass. Dedicated Colima freshly Stopped; no live
+daemon/API, retained report/volume/backup mutation, or AgentHouse byte
+measurement (`null / NOT_MEASURED`). These offline checks cannot authenticate
+producers or establish operator acceptance. Roll back only the scoped readers
+and tests while preserving saved records. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: independent offline JSON framing and nesting guards
 

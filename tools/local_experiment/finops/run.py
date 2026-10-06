@@ -47,8 +47,12 @@ def _json(raw):
             return C.finite_json_float(text)
         except (C.FinOpsError, ValueError):
             raise C.FinOpsError('READ_FAILED') from None
+    def bounded_int(text):
+        C.require(len(text.lstrip('-')) <= 128, 'READ_FAILED')
+        return int(text)
     try:
         value = json.loads(raw, object_pairs_hook=pairs, parse_float=finite_float,
+                           parse_int=bounded_int,
                            parse_constant=lambda _: (_ for _ in ()).throw(C.FinOpsError('READ_FAILED')))
     except RecursionError:
         raise C.FinOpsError('READ_FAILED') from None
@@ -59,9 +63,15 @@ def _json(raw):
         item, depth = stack.pop()
         C.require(depth <= 64, 'READ_FAILED')
         if type(item) is dict:
+            stack.extend((key, depth + 1) for key in item)
             stack.extend((child, depth + 1) for child in item.values())
         elif type(item) is list:
             stack.extend((child, depth + 1) for child in item)
+        elif type(item) is str:
+            try:
+                item.encode('utf-8')
+            except UnicodeError:
+                raise C.FinOpsError('READ_FAILED') from None
     return value
 
 

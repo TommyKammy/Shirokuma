@@ -12,6 +12,17 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 ambiguous Docker inspection fields (offline)
+
+Context and owned container/volume inspection now reject duplicate JSON keys
+at any depth, including a foreign label or socket overwritten by a canonical
+last value. Synthetic negatives crossed the ownership/endpoint boundary before
+repair; focused AgentHouse 32 tests and full local verifier pass. Dedicated
+Colima was freshly Stopped. No live startup, credential, retained report,
+volume or backup changed. This does not authenticate the Docker daemon or
+prove operator acceptance. Restore only the scoped decoder/tests, preserving
+saved resources; original Vault sync pending outside checkout.
+
 ## 2026-10-06 offline JSONEachRow LF framing
 
 Export now splits records only at LF, not at Python `splitlines()` Unicode

@@ -12,6 +12,19 @@ from test_local_finops_contract import NOW, component_args, pod, metrics, row
 
 
 class DockerReplyNumberTests(unittest.TestCase):
+    def test_decoded_metadata_text_is_utf8(self):
+        for raw in ('{"\\ud800": 1}', '{"nested": ["\\udfff"]}'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(R.C.FinOpsError, 'READ_FAILED'):
+                R._json(raw)
+        self.assertEqual(R._json('{"é": ["雪"]}'), {'é': ['雪']})
+
+    def test_metadata_integer_token_is_bounded(self):
+        for raw in ('{"nested":' + '9' * 4301 + '}',
+                    '{"nested": [-' + '9' * 129 + ']}'):
+            with self.subTest(length=len(raw)), self.assertRaisesRegex(R.C.FinOpsError, 'READ_FAILED'):
+                R._json(raw)
+        self.assertEqual(R._json('{"nested": 123}'), {'nested': 123})
+
     def test_nonrepresentable_numbers_are_not_accepted_in_metadata(self):
         for raw in ('{"nested":1e9999}', '{"nested":1e-9999}',
                     '{"nested":[-1e9999]}'):

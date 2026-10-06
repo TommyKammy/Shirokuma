@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.216"
+version: "0.217"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 fixed metadata decoded text and integer bounds (offline)
+
+The fixed Docker/Kubernetes JSON metadata reader now rejects escaped lone
+surrogates in nested values and object keys, and integer tokens longer than
+128 digits. Two surrogate fixtures silently passed before repair; a 4,301-digit
+token raised an unscoped Python error and a 129-digit token passed. Shallow
+UTF-8 text and ordinary integers still pass. Focused FinOps 315 tests (seven
+Linux-only skips) and full local verifier pass. Dedicated Colima was freshly
+Stopped; no live metadata, retained report, volume or backup accessed or
+changed. This does not authenticate producers or establish operator acceptance.
+Restore only scoped reader/fixtures; retain saved evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06 bounded metadata JSON nesting (offline)
 

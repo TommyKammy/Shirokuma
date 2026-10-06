@@ -84,6 +84,23 @@ class AgentHouseTests(unittest.TestCase):
                     with self.assertRaisesRegex(M.AgentHouseError, 'invalid .* inspection'):
                         M.inspect_owned(kind, name)
 
+    def test_ambiguous_owned_inspection_does_not_authorize_runtime(self):
+        for kind, name, reply in (
+            ('container', M.NAME, '[{"Config":{"Labels":{"shirokuma.dev.component":"foreign","shirokuma.dev.component":"agenthouse-local"}}}]'),
+            ('volume', M.VOLUME, '[{"Labels":{"shirokuma.dev.component":"foreign","shirokuma.dev.component":"agenthouse-local"}}]'),
+        ):
+            with self.subTest(kind=kind), patch.object(M, 'docker', return_value=reply):
+                with self.assertRaisesRegex(M.AgentHouseError, 'invalid .* inspection'):
+                    M.inspect_owned(kind, name)
+
+    def test_ambiguous_context_endpoint_stops_before_docker_info(self):
+        expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
+        reply = '[{"Endpoints":{"docker":{"Host":"unix:///foreign","Host":' + json.dumps(expected) + '}}}]'
+        with patch.object(M, 'docker', return_value=reply) as docker:
+            with self.assertRaisesRegex(M.AgentHouseError, 'context metadata'):
+                M.check_context()
+            docker.assert_called_once_with('context', 'inspect', M.CONTEXT)
+
     def test_context_must_be_dedicated_socket(self):
         expected = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
         for endpoint in ('unix:///var/run/docker.sock',
