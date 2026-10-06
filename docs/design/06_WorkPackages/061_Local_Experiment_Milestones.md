@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.484"
+version: "5.485"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent FinOps bind identity projection (offline)
+
+WP-L6-FIN-001 refuses an unrelated Docker bind mount that also reports a
+nonempty volume Name or Driver. Two negative fixtures previously appeared
+metadata-eligible; focused preflight 20 and FinOps 374 tests (seven Linux-only
+skips) pass. Dedicated Colima freshly Stopped. No live Docker/VM, saved volume,
+report or backup access/change. This does not authenticate a metadata producer,
+exclude continuous writers, authorize traversal or prove operator acceptance;
+AgentHouse bytes remain `null / NOT_MEASURED`. Restore only the scoped guard/
+test if needed, retain saved resources. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: partial AgentHouse startup and HTTP acknowledgement (offline)
 

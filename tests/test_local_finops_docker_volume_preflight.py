@@ -215,6 +215,19 @@ class VolumePreflightTests(unittest.TestCase):
                                                              'Destination':'/data','RW':True}]
         self.assertEqual(validate(value,deepcopy(value))['state'],'metadata_eligible')
 
+    def test_bind_mount_cannot_hide_volume_identity_in_unused_fields(self):
+        for field, bad in (('Name', V.AH.VOLUME), ('Driver', 'local')):
+            value = snapshot()
+            value['containers'][1]['Mounts'] = [{'Type': 'bind',
+                'Source': '/var/lib/docker/volumes/other/_data',
+                'Destination': '/data', 'RW': True, field: bad}]
+            with self.subTest(field=field), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        value = snapshot()
+        value['containers'][1]['Mounts'] = [{'Type': 'bind', 'Name': '', 'Driver': '',
+            'Source': '/var/lib/docker/volumes/other/_data', 'Destination': '/data', 'RW': True}]
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
     def test_unrelated_mount_paths_with_controls_are_not_inventory_evidence(self):
         for field in ('Source', 'Destination'):
             for character in ('\n', '\r', '\t', '\x00', '\x7f', '\x85', '\ud800'):

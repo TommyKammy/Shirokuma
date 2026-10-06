@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.261"
+version: "0.262"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 contradictory bind identity (offline)
+
+The standalone two-snapshot Docker mount projection now refuses a bind entry
+that also claims a nonempty volume Name or Driver, instead of silently dropping
+those fields. Two unrelated-container negative fixtures previously remained
+metadata-eligible; empty Docker-style fields and absent fields remain valid.
+Focused preflight 20 and FinOps 374 tests (seven Linux-only skips) pass. Dedicated
+Colima freshly Stopped; no live Docker/VM action or retained volume, report or
+backup access/change. This checks supplied metadata only: it cannot authenticate
+Docker, exclude ongoing writers, authorize traversal (`False`), measure
+AgentHouse bytes (`null / NOT_MEASURED`) or establish operator acceptance.
+Preserve saved data; revert only the scoped bind guard/test if verified daemon
+metadata differs. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 daemon identity text boundary (offline)
 

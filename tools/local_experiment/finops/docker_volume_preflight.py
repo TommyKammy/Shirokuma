@@ -98,6 +98,10 @@ def _mounts(container):
         if entry['Type'] == 'volume':
             name = _label(name, 256)
             driver = _label(driver, 128)
+        else:
+            # Do not erase a contradictory volume identity while projecting a
+            # bind. Docker bind mounts have no volume name or driver.
+            require(entry.get('Name') in (None, '') and entry.get('Driver') in (None, ''))
         result.append((entry['Type'], source, destination, name, driver, entry['RW']))
     require(len(set(result)) == len(result))
     # Distinct mounts at the same destination cannot be treated as a unique
