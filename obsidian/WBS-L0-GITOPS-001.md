@@ -8,6 +8,10 @@ status: local-partial
 
 # WP-L0-GITOPS-001 evidence snapshot
 
+## 2026-10-06 pinned client warnings and overrides
+
+- The Flux gate refuses stderr warnings and caller overrides of pinned v2.9.2; fake cases and installed client pass. Independent OpenTofu formatting and 22 bootstrap/teardown tests plus full local verifier pass offline. The dedicated Colima profile remains Stopped; no live precheck, reconcile, storage/backup inspection or acceptance. Roll back the gate/test only; original Vault sync pending. See WP and Milestones.
+
 ## 2026-10-06 pinned client and stopped runtime
 
 - Installed Flux client matches v2.9.2; the Make version gate now refuses ambiguous extra output or failed clients (seven synthetic cases). A fresh read-only local doctor degraded live cluster/Flux/workloads while the dedicated Colima profile was Stopped. Full local regression and design-context passed. This is neither `flux check --pre` nor remote source or strict admission acceptance. Inventory retained disk/backup/writers and Flux scope before starting the VM; rollback only the version gate/test, not saved state. Original Vault sync pending; see WP and Milestones.

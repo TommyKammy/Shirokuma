@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.517"
+version: "5.518"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: pinned Flux warning and override boundary (offline)
+
+WP-L0-GITOPS-001's local version gate now refuses client stderr warnings and
+`FLUX_VERSION` overrides: two synthetic false successes are closed, while the
+installed v2.9.2 still passes. Independently OpenTofu formatting and 22
+GitOps bootstrap/teardown contract tests pass without apply/destroy. Full
+`make verify-local-experiment` passes (intentional fake Dagster failure).
+Fresh dedicated Colima state is Stopped; no VM start, live Flux/backup/volume
+read or change. `flux check --pre`, storage/writer inventory, Git smoke and
+strict admission remain open; this is not operator acceptance. Revert only
+the gate/test if required, preserving saved resources and historical failures.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent FinOps mount whitespace (offline)
 

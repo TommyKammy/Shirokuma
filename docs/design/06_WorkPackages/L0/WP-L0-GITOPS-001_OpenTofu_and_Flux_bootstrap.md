@@ -5,12 +5,35 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.145"
+version: "0.146"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: pinned client warning and override boundary (offline)
+
+The local `flux-version-check` had accepted a client that printed the expected
+version on stdout but a warning on stderr, because stderr was discarded. It
+also allowed a caller to override `FLUX_VERSION` and pass with an unpinned
+client. The gate now requires the fixed v2.9.2 input, successful exit and
+exactly one combined output line with no warning. The isolated fake-command
+test covers both former false positives, alongside the previous negatives;
+the installed client gate passes. Independently `make tofu-fmt` and the 22
+bootstrap/teardown contract tests pass without applying or destroying anything.
+`make verify-local-experiment` passes (the fake Dagster worker failure is an
+intentional negative), as does `git diff --check`.
+
+Fresh `colima list` reports the dedicated profile Stopped; no VM start,
+`flux check --pre`, live source read, reconcile, retained disk/volume/backup
+inspection or mutation was performed. Formatting and offline contract tests
+cannot attest the VM, writer exclusion, source provenance, strict publication
+admission or operator acceptance. Inventory retained storage/backups, writers
+and dedicated Flux scope before any future start. Roll back only the Make gate
+and its fake-client test if a verified compatibility requirement changes;
+preserve saved resources and historical failures. Original Vault sync remains
+pending outside this checkout.
 
 ## 2026-10-06: bounded local Flux version and stopped-runtime gates
 

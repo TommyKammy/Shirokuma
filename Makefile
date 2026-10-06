@@ -147,7 +147,8 @@ tofu-validate: tofu-init
 
 flux-version-check:
 	@command -v $(FLUX) >/dev/null || { echo "flux $(FLUX_VERSION) is required"; exit 1; }
-	@version="$$( $(FLUX) version --client 2>/dev/null && printf .)" && test "$$version" = $$'flux: $(FLUX_VERSION)\n.' || { echo "flux $(FLUX_VERSION) is required"; exit 1; }
+	@test "$(FLUX_VERSION)" = v2.9.2 || { echo "pinned flux v2.9.2 is required"; exit 1; }
+	@version="$$( $(FLUX) version --client 2>&1 && printf .)" && test "$$version" = $$'flux: v2.9.2\n.' || { echo "pinned flux v2.9.2 is required without client warnings"; exit 1; }
 
 gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init flux-version-check
 	@test -n "$${GITHUB_TOKEN:-}" || { echo "GITHUB_TOKEN is required for Flux bootstrap and is never persisted by this target"; exit 1; }
