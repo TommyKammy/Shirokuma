@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: inference inspected-container identity (offline)
+
+WP-L6-FIN-001: same-image/label/port but foreign or missing container name/ID
+no longer authorizes the next credential read. Five synthetic negatives and
+canonical fixture pass; FinOps 299 tests (seven Linux-only skips) and full
+local verifier pass. Colima was freshly Stopped, with no live Docker or
+credential read, retained data/backup mutation or AgentHouse byte claim
+(`null / NOT_MEASURED`). This is not Docker authentication or live acceptance.
+Rollback is limited to the identity guard/test; original Vault sync pending
+outside checkout.
+
 ## 2026-10-06: FinOps Docker socket account binding (offline)
 
 WP-L6-FIN-001: inference and independent volume-reference readers now scope

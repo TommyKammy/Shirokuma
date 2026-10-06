@@ -12,6 +12,22 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: bind inference inspect reply to fixed container (offline)
+
+The fixed-name Docker inspect reply could previously return a different or
+unidentified container with the same image/label/port and proceed to the local
+credential read. The inference reader now requires the exact `/agenthouse`
+name and a lowercase 64-hex container ID before accessing credentials. Five
+negative identity fixtures and the canonical fixture pass; focused FinOps 299
+tests (seven Linux-only skips) and `make verify-local-experiment` pass (the
+fake Dagster worker failure is an intentional negative diagnostic). Dedicated
+Colima was freshly listed Stopped. No live Docker read, credential access,
+retained report/volume/backup modification or AgentHouse usage measurement
+(`null / NOT_MEASURED`). A syntactically matching inspect reply does not
+authenticate the daemon, prove container continuity or establish operator
+acceptance. Restore only this guard/test if needed; preserve saved records.
+Original Vault sync pending outside checkout.
+
 ## 2026-10-06: bind two Docker socket scopes to the OS account (offline)
 
 The inference reader formerly accepted another account's syntactically valid

@@ -386,7 +386,8 @@ class RuntimeTests(unittest.TestCase):
 
     def test_agenthouse_fixed_read_reuses_client_without_starting_and_rejects_foreign_port(self):
         context = [{'Name': R.AH.CONTEXT, 'Endpoints':{'docker':{'Host':self._inference_socket()}}}]
-        owned = [{'Config':{'Labels':{R.AH.LABEL:'agenthouse-local'},'Image':R.AH.IMAGE},
+        owned = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
+                  'Config':{'Labels':{R.AH.LABEL:'agenthouse-local'},'Image':R.AH.IMAGE},
                   'State':{'Running':True},'NetworkSettings':{'Ports':{'8123/tcp':[
                       {'HostIp':'127.0.0.1','HostPort':'18123'}]}}}]
         with tempfile.TemporaryDirectory() as temp:
@@ -428,9 +429,27 @@ class RuntimeTests(unittest.TestCase):
                 backend.inference(NOW)
             client.assert_not_called()
 
+    def test_agenthouse_inference_requires_inspected_container_identity(self):
+        context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
+        owned = {'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
+                 'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+                 'State': {'Running': True}, 'NetworkSettings': {'Ports': {'8123/tcp': [
+                     {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}
+        for key, invalid in (('Name', '/unrelated'), ('Name', None),
+                             ('Id', None), ('Id', 'b'*63), ('Id', 'A'*64)):
+            container = dict(owned, **{key: invalid})
+            backend = R.Backend()
+            with self.subTest(key=key, invalid=invalid), \
+                    patch.object(backend, '_command', side_effect=[json.dumps(context), json.dumps([container])]), \
+                    patch.object(R.AH, 'Client') as client, \
+                    self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
+                backend.inference(NOW)
+            client.assert_not_called()
+
     def test_agenthouse_inference_refuses_unexpected_published_port(self):
         context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
-        container = [{'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+        container = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
+                      'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
                       'State': {'Running': True}, 'NetworkSettings': {'Ports': {
                           '8123/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '18123'}],
                           '9000/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '19000'}]}}}]

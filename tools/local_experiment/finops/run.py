@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import selectors
@@ -242,6 +243,12 @@ class Backend:
         C.require(type(value) is list and len(value) == 1 and type(value[0]) is dict,
                   'SCOPE_INVALID')
         container = value[0]
+        # An inspect reply is not necessarily for the requested name. Bind the
+        # read to the fixed container before opening its local credential.
+        C.require(container.get('Name') == '/' + AH.NAME and
+                  type(container.get('Id')) is str and
+                  re.fullmatch(r'[0-9a-f]{64}', container['Id']) is not None,
+                  'SCOPE_INVALID')
         config, state, network = (container.get(key) for key in ('Config', 'State', 'NetworkSettings'))
         C.require(type(config) is dict and type(config.get('Labels')) is dict and
                   type(state) is dict and type(network) is dict and
