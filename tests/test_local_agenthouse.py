@@ -360,6 +360,21 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaises(M.AgentHouseError):
                     M.read_smoke_export(foreign)
 
+    def test_smoke_export_readback_refuses_corrupt_other_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            report = state / 'pawprints-20261006T010203000000Z.jsonl'
+            good = '{"event_id":"fixture","status":"success"}\n'
+            with patch.object(M, 'STATE', state):
+                for suffix in ('{"other":1,"other":2}\n', 'not-json\n',
+                               'null\n', '{"other":NaN}\n', '{"other":1}',
+                               '{"other":1e999}\n', '{"other":1e-999}\n',
+                               '{"other":2}\r\n', '\n'):
+                    report.write_text(good + suffix)
+                    report.chmod(0o600)
+                    with self.subTest(suffix=suffix), self.assertRaises(M.AgentHouseError):
+                        M.read_smoke_export(report)
+
     def test_export_write_failure_never_publishes_partial_report(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

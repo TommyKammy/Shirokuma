@@ -529,7 +529,41 @@ def read_smoke_export(path: Path) -> list[dict]:
             entry = os.stat(path.name, dir_fd=state, follow_symlinks=False)
             if (entry.st_dev, entry.st_ino) != (identity.st_dev, identity.st_ino):
                 raise AgentHouseError('Pawprint export changed during readback')
-        return [json.loads(line) for line in payload.decode('utf-8').splitlines()]
+        text = payload.decode('utf-8')
+        if text and ('\r' in text or not text.endswith('\n')):
+            raise AgentHouseError('Pawprint export readback is invalid; do not replay')
+        def unique_fields(pairs):
+            row = {}
+            for key, value in pairs:
+                if key in row:
+                    raise ValueError('duplicate export field')
+                row[key] = value
+            return row
+        def invalid_constant(_value):
+            raise ValueError('nonstandard export number')
+        def bounded_int(value):
+            if len(value.lstrip('-')) > 128:
+                raise ValueError('overlong export integer')
+            return int(value)
+        def finite_float(value):
+            if len(value) > 128:
+                raise ValueError('overlong export float')
+            number = float(value)
+            mantissa = re.split('[eE]', value, maxsplit=1)[0]
+            if not math.isfinite(number) or (number == 0 and re.search('[1-9]', mantissa)):
+                raise ValueError('unrepresentable export number')
+            return number
+        rows = []
+        for line in text.split('\n')[:-1]:
+            if not line.startswith('{') or not line.endswith('}'):
+                raise AgentHouseError('Pawprint export readback is invalid; do not replay')
+            row = json.loads(line, object_pairs_hook=unique_fields,
+                             parse_constant=invalid_constant, parse_int=bounded_int,
+                             parse_float=finite_float)
+            if not isinstance(row, dict):
+                raise AgentHouseError('Pawprint export readback is invalid; do not replay')
+            rows.append(row)
+        return rows
     except (OSError, ValueError, UnicodeError):
         raise AgentHouseError('Pawprint export readback is invalid; do not replay') from None
 

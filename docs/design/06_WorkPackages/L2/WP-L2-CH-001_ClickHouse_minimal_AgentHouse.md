@@ -5,12 +5,28 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.11"
+version: "0.12"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 smoke export readback framing and ambiguity (offline)
+
+The private smoke readback previously used permissive JSON decoding after
+opening its bounded report: a matching successful event could mask a malformed
+other row, duplicate keys, nonstandard/overflowing numbers, CRLF or a missing
+final LF. Nine isolated corrupted suffixes exposed the gap before repair.
+Readback now requires LF-framed JSON objects and bounded finite unambiguous
+numbers and keys throughout the report. Focused AgentHouse 47 tests and the
+full local verifier pass (intentional fake Dagster failure). Dedicated Colima
+was freshly Stopped; no live insertion, saved report, credential, volume or
+backup accessed or changed. This is not report producer authentication or
+same-UID substitution protection, nor does it prove live retry deduplication.
+Inspect an ambiguous saved report without replaying inserts; revert only the
+readback guard/test, preserving all reports. Original Vault sync pending
+outside checkout; no operator acceptance.
 
 ## 2026-10-06 private smoke report readback (offline)
 

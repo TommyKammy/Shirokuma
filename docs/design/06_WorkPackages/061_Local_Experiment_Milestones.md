@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.445"
+version: "5.446"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse smoke readback rejects corrupt other rows (offline)
+
+WP-L2-CH-001 refuses malformed, duplicate-key, nonfinite or ambiguously framed
+other rows in the private smoke export rather than accepting a valid matching
+event alongside them. Nine synthetic corrupt suffixes exposed the gap; focused
+AgentHouse 47 tests and full `make verify-local-experiment` pass (fake Dagster
+failure intentional). Dedicated Colima freshly Stopped; no live inserts,
+retained reports/credentials/volumes/backups accessed or changed. Readback does
+not authenticate the report producer, eliminate same-UID substitution or prove
+live deduplication/operator acceptance. Restore only the scoped reader/test,
+retain saved records and never replay an unknown insert. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: independent mount option ambiguity guards (offline)
 
