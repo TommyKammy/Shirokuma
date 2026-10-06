@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.255"
+version: "0.256"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 standalone inventory text and lifecycle controls (offline)
+
+The two-snapshot volume preflight now rejects invalid lifecycle timestamp text
+for every inspected container (not only the target), control-bearing or
+unencodable unrelated volume names/drivers, and duplicate mount entries.
+Eighteen malformed text/timestamp variants and a duplicate mount reproduced
+eligibility before repair. Focused preflight 14 tests, FinOps 368 tests (seven
+Linux-only skips) and `make verify-local-experiment` pass; its fake Dagster
+worker failure is an intentional negative fixture. Dedicated Colima was freshly
+Stopped; no daemon/VM action, retained report/volume/backup read or change.
+This checks supplied metadata, not producer authentication or continuous writer
+exclusion. Traversal remains unauthorized, AgentHouse bytes `null /
+NOT_MEASURED`; cleanup and operator acceptance remain open. Restore only these
+guards/tests on rollback, retaining saved evidence. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 independent container stop-state scope (offline)
 

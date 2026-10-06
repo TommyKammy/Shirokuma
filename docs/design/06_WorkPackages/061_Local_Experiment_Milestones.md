@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.476"
+version: "5.477"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: standalone volume inventory validation (offline)
+
+WP-L6-FIN-001 refuses malformed lifecycle timestamps in all containers,
+control-bearing or unencodable volume names/drivers and duplicate mount entries
+in the private two-snapshot metadata contract. Nineteen isolated negatives
+reproduced eligibility before repair; focused preflight 14, FinOps 368 (seven
+Linux-only skips) and full `make verify-local-experiment` pass (fake Dagster
+failure intentional). Fresh dedicated Colima observation: Stopped. No live
+Docker/VM, retained volume/report/backup access or change; AgentHouse bytes
+remain `null / NOT_MEASURED`, traversal unauthorized. This is neither daemon
+authentication nor continuous writer exclusion, safe scanning, cleanup proof or
+operator acceptance. Revert only scoped guards/tests while preserving records;
+original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent Docker process and stop-state refusals (offline)
 

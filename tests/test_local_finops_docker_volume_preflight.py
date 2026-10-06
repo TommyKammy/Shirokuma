@@ -104,13 +104,13 @@ class VolumePreflightTests(unittest.TestCase):
 
     def test_invalid_snapshot_times_fail_as_scoped_preflight_errors(self):
         for key in ('started_at', 'observed_at'):
-            for bad in (None, [], 'not-a-timestamp'):
+            for bad in (None, [], 'not-a-timestamp', '2026-09-27T00:00:00Z\n'):
                 value = snapshot()
                 value[key] = bad
                 with self.subTest(key=key, bad=bad), self.assertRaisesRegex(
                         V.PreflightError, 'SCOPE_INVALID'):
                     validate(value, deepcopy(value))
-        for bad in (None, [], 'not-a-timestamp'):
+        for bad in (None, [], 'not-a-timestamp', '2026-09-20T00:00:00Z\n'):
             value = snapshot()
             value['volume']['CreatedAt'] = bad
             with self.subTest(created=bad), self.assertRaisesRegex(
@@ -119,6 +119,8 @@ class VolumePreflightTests(unittest.TestCase):
         value = snapshot()
         with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
             V.validate_pair(value, deepcopy(value), now=None)
+        with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+            V.validate_pair(value, deepcopy(value), now='2026-09-27T00:00:10Z\n')
 
     def test_other_container_stop_flags_must_be_present_and_stable(self):
         for flag in ('Paused', 'Dead'):
@@ -160,6 +162,31 @@ class VolumePreflightTests(unittest.TestCase):
                 with self.subTest(field=field, character=repr(character)), self.assertRaisesRegex(
                         V.PreflightError, 'SCOPE_INVALID'):
                     validate(value, deepcopy(value))
+
+    def test_unrelated_volume_name_and_driver_must_be_encodable_clean_text(self):
+        for field in ('Name', 'Driver'):
+            for character in ('\n', '\x00', '\x7f', '\x85', '\ud800'):
+                value = snapshot()
+                value['containers'][1]['Mounts'][0][field] += character
+                with self.subTest(field=field, character=repr(character)), self.assertRaisesRegex(
+                        V.PreflightError, 'SCOPE_INVALID'):
+                    validate(value, deepcopy(value))
+
+    def test_all_container_lifecycle_timestamps_are_valid(self):
+        for index in (0, 1):
+            for field in ('StartedAt', 'FinishedAt'):
+                for bad in ('not-a-timestamp', '2026-09-20T00:00:00Z\n'):
+                    value = snapshot()
+                    value['containers'][index]['State'][field] = bad
+                    with self.subTest(index=index, field=field, bad=bad), self.assertRaisesRegex(
+                            V.PreflightError, 'SCOPE_INVALID'):
+                        validate(value, deepcopy(value))
+
+    def test_duplicate_unrelated_mount_cannot_lend_stable_inventory(self):
+        value = snapshot()
+        value['containers'][1]['Mounts'].append(deepcopy(value['containers'][1]['Mounts'][0]))
+        with self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+            validate(value, deepcopy(value))
 
     def test_incomplete_or_changed_snapshots_rejected(self):
         changes=[lambda s:s['listed_ids'].pop(),

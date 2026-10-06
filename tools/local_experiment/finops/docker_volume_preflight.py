@@ -44,6 +44,12 @@ def _path(value):
     return value
 
 
+def _label(value, maximum):
+    require(type(value) is str and 1 <= len(value) <= maximum and
+            all(32 <= ord(ch) < 127 for ch in value))
+    return value
+
+
 def _overlaps(a, b):
     return a == b or a.startswith(b + '/') or b.startswith(a + '/')
 
@@ -56,7 +62,11 @@ def _lifecycle(container):
             type(state.get('Paused')) is bool and type(state.get('Dead')) is bool and
             type(container.get('RestartCount')) is int and container['RestartCount'] >= 0)
     times = (state.get('StartedAt'), state.get('FinishedAt'))
-    require(all(type(value) is str and 1 <= len(value) <= 64 for value in times))
+    require(all(type(value) is str and 1 <= len(value) <= 64 and
+                all(ord(ch) >= 32 and not 127 <= ord(ch) <= 159 for ch in value)
+                for value in times))
+    for value in times:
+        _stamp(value)
     return (state['Status'], state['Running'], state['Restarting'],
             state['Paused'], state['Dead'], *times,
             container['RestartCount'])
@@ -74,9 +84,10 @@ def _mounts(container):
         name = entry.get('Name') if entry['Type'] == 'volume' else None
         driver = entry.get('Driver') if entry['Type'] == 'volume' else None
         if entry['Type'] == 'volume':
-            require(type(name) is str and 1 <= len(name) <= 256 and
-                    type(driver) is str and 1 <= len(driver) <= 128)
+            name = _label(name, 256)
+            driver = _label(driver, 128)
         result.append((entry['Type'], source, destination, name, driver, entry['RW']))
+    require(len(set(result)) == len(result))
     return tuple(sorted(result))
 
 
