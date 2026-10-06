@@ -5,12 +5,26 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.46"
+version: "0.47"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 HTTP authentication challenge on 200 (offline)
+
+Independently refuse a nominal 200 query response carrying `WWW-Authenticate`
+or `Proxy-Authenticate` before reading its body or acknowledging an insert.
+Two synthetic bad responses previously succeeded; 87 focused tests pass with
+a challenge-free control. Combined `make verify-local-experiment`,
+`make verify-design-context` and `git diff --check` pass (intentional fake
+Dagster worker failure). This is a conservative header signature, not peer
+authentication or proof against challenges hidden by an intermediary. Dedicated
+Colima remains Stopped; no live query or retained credential/report/volume/
+backup read/change. Never retry an uncertain insert. Revert only this scoped
+guard/test if verified live compatibility requires it, preserving saved data.
+Original Vault sync remains pending outside checkout; operator acceptance open.
 
 ## 2026-10-06 HTTP navigation and body type boundaries (offline)
 

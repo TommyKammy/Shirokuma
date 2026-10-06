@@ -340,6 +340,15 @@ class Client:
                                if key.lower() == name.lower()])
                     if values:
                         raise AgentHouseError('local AgentHouse response contains redirect metadata')
+                # A 200 that challenges the caller (or its proxy) is not an
+                # authenticated ClickHouse completion, even with an empty body.
+                for name in ('WWW-Authenticate', 'Proxy-Authenticate'):
+                    values = (response.headers.get_all(name)
+                              if hasattr(response.headers, 'get_all') else
+                              [value for key, value in response.headers.items()
+                               if key.lower() == name.lower()])
+                    if values:
+                        raise AgentHouseError('local AgentHouse response contains authentication challenge')
                 # HTTPMessage.get() returns only one of multiple headers. Do
                 # not accept a write acknowledgement with ambiguous framing or
                 # transfer coding, even if the decoded body happens to fit.

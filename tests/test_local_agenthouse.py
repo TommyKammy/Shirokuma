@@ -925,6 +925,26 @@ class AgentHouseTests(unittest.TestCase):
         response.headers = {'Content-Length': '0'}
         self.assertEqual(client.query('SELECT 1'), '')
 
+    def test_query_refuses_authentication_challenge_on_200_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        response.read.return_value = b''
+        client.opener.open = Mock(return_value=response)
+        for name in ('WWW-Authenticate', 'Proxy-Authenticate'):
+            with self.subTest(name=name):
+                headers = Message()
+                headers.add_header(name, 'Basic realm="login"')
+                response.headers = headers
+                with self.assertRaisesRegex(M.AgentHouseError, 'authentication challenge'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        response.read.assert_not_called()
+        self.assertEqual(client.opener.open.call_count, 2)
+        response.headers = {'Content-Length': '0'}
+        self.assertEqual(client.query('SELECT 1'), '')
+
     def test_query_refuses_nonbyte_response_body_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()

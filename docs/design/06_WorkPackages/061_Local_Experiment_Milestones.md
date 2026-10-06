@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.501"
+version: "5.502"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent HTTP authentication challenge (offline)
+
+WP-L2-CH-001 refuses a 200 carrying `WWW-Authenticate` or
+`Proxy-Authenticate` before acknowledging a write; two synthetic negatives
+previously succeeded and 87 focused tests pass. Combined
+`make verify-local-experiment`, `make verify-design-context` and
+`git diff --check` pass (fake Dagster worker error is an intentional test);
+private log: `tmp/local-experiment/attempt-212-verify.log`. Dedicated Colima remains
+Stopped; no live HTTP or retained credentials, reports, volumes or backups
+read/changed. This does not authenticate ClickHouse, prove deduplication or
+permit replay of an uncertain write. AgentHouse bytes remain `null /
+NOT_MEASURED`, FinOps traversal unauthorized and operator acceptance open.
+Preserve saved resources, revert only the scoped guard/test if live behavior
+requires it. Original Vault synchronization pending outside checkout.
 
 ## 2026-10-06: independent HTTP navigation and body type guards (offline)
 
