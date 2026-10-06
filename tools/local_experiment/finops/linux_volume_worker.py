@@ -55,8 +55,13 @@ def _identity(info):
 
 def _mountpoints(raw):
     require(type(raw) is str and len(raw.encode('utf-8')) <= MAX_MOUNTINFO, 'READ_LIMIT')
+    # procfs mountinfo is LF-framed. splitlines() silently accepts truncated
+    # records, CRLF and Unicode line separators as independent mount entries.
+    require(raw.endswith('\n') and '\r' not in raw)
+    lines = raw.split('\n')[:-1]
+    require(all(line and line.splitlines() == [line] for line in lines))
     result = set()
-    for line in raw.splitlines():
+    for line in lines:
         fields = line.split(' ')
         require(len(fields) >= 10 and fields[0].isdigit() and fields[4].startswith('/'))
         # mountinfo escapes spaces, tabs, newlines and backslashes as octal.
@@ -87,9 +92,20 @@ def _mount_id(fd):
     with open(f'/proc/self/fdinfo/{fd}', 'rb', buffering=0) as source:
         raw=source.read(4097)
     require(len(raw) <= 4096, 'READ_LIMIT')
-    matches=re.findall(rb'^mnt_id:\s*([0-9]+)$',raw,re.M)
-    require(len(matches)==1 and 0 < int(matches[0]) <= 2**63-1)
-    return int(matches[0])
+    return _parse_mount_id(raw)
+
+
+def _parse_mount_id(raw):
+    # Do not let \s* consume a newline and borrow an ID from another field.
+    require(type(raw) is bytes and raw.endswith(b'\n') and b'\r' not in raw)
+    lines = raw.split(b'\n')[:-1]
+    require(all(line for line in lines))
+    matches = [line[len(b'mnt_id:\t'):] for line in lines if line.startswith(b'mnt_id:')]
+    require(len(matches) == 1 and re.fullmatch(rb'[0-9]+', matches[0]) is not None and
+            len(matches[0]) <= 19)
+    value = int(matches[0])
+    require(0 < value <= 2**63 - 1)
+    return value
 
 
 def _guarded(fd, relative, flags):

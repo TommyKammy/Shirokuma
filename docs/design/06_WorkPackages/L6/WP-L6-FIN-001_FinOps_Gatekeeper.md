@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 Linux volume worker mount framing (offline)
+
+Two independent fixture boundaries were tightened: the worker's mountpoint
+enumeration accepted missing final LF, CRLF and Unicode line separators as
+valid mount rows (five new negatives failed before repair); fdinfo mount ID
+parsing used `\s*`, which could borrow an ID from the following line. Both
+now require complete LF records, and the ID must be one bounded decimal on a
+single `mnt_id` line. Focused volume tests: 34 run, 7 Linux-only skips; full
+`make verify-local-experiment` passed (the fake Dagster worker failure is an
+intentional test). Dedicated Colima was freshly Stopped; no guest `/proc`,
+retained volume, backup or report was accessed or changed. This fixture does
+not authenticate the VM, prove remote cleanup or authorize a live scan;
+AgentHouse bytes remain `null / NOT_MEASURED`. Revert only worker/tests if
+necessary; keep retained records. Original Vault sync pending outside checkout.
+
 ## 2026-10-06 independent procfs and BSD ps row framing (offline)
 
 The caller-supplied Linux mountinfo fixture and fixed BSD `ps` sample readers

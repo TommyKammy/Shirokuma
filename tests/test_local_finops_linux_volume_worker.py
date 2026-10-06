@@ -29,6 +29,24 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
             W._topology(Path('//fixture'), {'/fixture/sub'})
 
+    def test_mountinfo_requires_complete_lf_records(self):
+        row = '1 0 8:1 / / rw - ext4 /dev/a rw'
+        for raw in (row, row + '\r\n', row + '\u2028', row + '\x85',
+                    row + '\n\n', row + '\n' + row + '\r\n'):
+            with self.subTest(raw=repr(raw)), self.assertRaises(W.ScanError):
+                W._mountpoints(raw)
+        self.assertEqual(W._mountpoints(row + '\n'), {'/'})
+
+    def test_fdinfo_requires_single_complete_mount_id_field(self):
+        canonical = b'pos:\t0\nflags:\t0100000\nmnt_id:\t42\nino:\t7\n'
+        self.assertEqual(W._parse_mount_id(canonical), 42)
+        for raw in (canonical[:-1], canonical.replace(b'42\n', b'42\r\n'),
+                    canonical.replace(b'42', b'\n42'),
+                    canonical.replace(b'42', b'0'),
+                    canonical.replace(b'mnt_id:\t42', b'mnt_id:\t42\nmnt_id:\t43')):
+            with self.subTest(raw=raw), self.assertRaises(W.ScanError):
+                W._parse_mount_id(raw)
+
     @unittest.skipIf(LINUX, 'native Linux backend exercised by Linux fixture tests')
     def test_macos_rejects_before_opening_or_enumerating_any_directory(self):
         with patch.object(W.os, 'open') as opened, patch.object(W.os, 'scandir') as enumerated:

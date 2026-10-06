@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: Linux volume worker mount framing (offline)
+
+WP-L6-FIN-001 now rejects truncated/non-LF mountinfo rows and malformed or
+multiline fdinfo mount IDs before any measurement. Five mountinfo negatives
+failed before repair. Focused volume tests: 34 run, seven Linux-only skips;
+full local verifier passed (intentional fake Dagster failure). Dedicated
+Colima freshly Stopped; no guest procfs, retained report/volume/backup change,
+no AgentHouse byte measurement (`null / NOT_MEASURED`). Offline framing does
+not establish VM provenance, cleanup, or operator acceptance. Restore only
+scoped worker/tests, keeping saved records; original Vault sync pending.
+
 ## 2026-10-06: independent AgentHouse export CRLF refusal (offline)
 
 WP-L2-CH-001 refuses a CRLF-terminated JSONEachRow object before publishing a
