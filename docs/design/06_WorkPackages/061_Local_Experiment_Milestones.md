@@ -12,6 +12,16 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: Docker reference context checked before each read pair (offline)
+
+WP-L6-FIN-001: a foreign context now prevents subsequent container/volume
+inspection on both collection passes. Negative fixtures stop at one or four
+fixed calls; FinOps 300 tests (seven Linux-only skips) and the full local
+verifier pass. Colima remained Stopped; no live read, retained volume/backup
+mutation or AgentHouse byte measurement (`null / NOT_MEASURED`). This does not
+authenticate a Docker daemon or remove read-time races. Rollback only the
+collection ordering/test; original Vault sync pending outside checkout.
+
 ## 2026-10-06: inference inspected-container identity (offline)
 
 WP-L6-FIN-001: same-image/label/port but foreign or missing container name/ID

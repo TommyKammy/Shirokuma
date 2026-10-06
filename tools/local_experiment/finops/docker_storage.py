@@ -147,10 +147,18 @@ def validate(value):
 def collect(backend):
     try:
         start = backend.now()
-        before = [backend.docker_storage_inspect(kind, name) for kind, name in
-                  (('context', AH.CONTEXT), ('container', AH.NAME), ('volume', AH.VOLUME))]
-        after = [backend.docker_storage_inspect(kind, name) for kind, name in
-                 (('context', AH.CONTEXT), ('container', AH.NAME), ('volume', AH.VOLUME))]
+        # Check each context reply before querying that context's daemon.
+        # Validating only in project() would issue all four daemon reads first.
+        first_context = backend.docker_storage_inspect('context', AH.CONTEXT)
+        _context(first_context)
+        before = [first_context,
+                  backend.docker_storage_inspect('container', AH.NAME),
+                  backend.docker_storage_inspect('volume', AH.VOLUME)]
+        second_context = backend.docker_storage_inspect('context', AH.CONTEXT)
+        require(_context(first_context) == _context(second_context), 'IDENTITY_CHANGED')
+        after = [second_context,
+                 backend.docker_storage_inspect('container', AH.NAME),
+                 backend.docker_storage_inspect('volume', AH.VOLUME)]
         row = project(*before, *after, request_started_at=start, observed_at=backend.now())
     except Exception as error:
         from tools.local_experiment.gateway import pod_usage as U

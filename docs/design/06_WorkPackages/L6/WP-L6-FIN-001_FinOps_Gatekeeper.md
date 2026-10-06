@@ -12,6 +12,21 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: validate Docker reference context before daemon reads (offline)
+
+The independent AgentHouse volume-reference collector previously gathered all
+six context/container/volume responses before checking the context. It now
+checks each context response before the corresponding container/volume reads,
+and checks for context drift before the second pair. Synthetic foreign contexts
+on either pass stop after one or four reads respectively, with unknown usage.
+Focused FinOps 300 tests (seven Linux-only skips) and the full local verifier
+pass; its fake Dagster worker failure is an intentional negative diagnostic.
+Dedicated Colima remained Stopped; no live Docker/VM, credential access,
+retained volume/report/backup change or AgentHouse byte claim (`null /
+NOT_MEASURED`). Context text does not authenticate the socket/daemon or
+eliminate a race between reads. Revert only this collection ordering/test if
+needed, retaining saved records. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: bind inference inspect reply to fixed container (offline)
 
 The fixed-name Docker inspect reply could previously return a different or

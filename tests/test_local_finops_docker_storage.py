@@ -166,6 +166,20 @@ class DockerStorageTests(unittest.TestCase):
         outer.local_processes.side_effect=R.U.PodUsageCleanupError()
         R.collect(outer);outer.docker_storage.assert_not_called()
 
+    def test_foreign_context_stops_before_daemon_reads_on_either_pass(self):
+        for second in (False, True):
+            responses = fixture() + deepcopy(fixture())
+            responses[3 if second else 0][0]['Endpoints']['docker']['Host'] = 'tcp://foreign'
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.docker_storage_inspect.side_effect = responses
+            with self.subTest(second=second):
+                result = D.collect(backend)
+            self.assertEqual(result['agenthouse']['reason'], 'SCOPE_INVALID')
+            self.assertEqual([call.args for call in backend.docker_storage_inspect.call_args_list],
+                             [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
+                              ('volume', D.AH.VOLUME), ('context', D.AH.CONTEXT)][:4 if second else 1])
+
     def test_backend_only_fixed_scoped_inspect_commands(self):
         backend=R.Backend()
         with patch.object(backend,'_command',side_effect=lambda cmd:json.dumps([{'safe':'metadata'}])) as command:
