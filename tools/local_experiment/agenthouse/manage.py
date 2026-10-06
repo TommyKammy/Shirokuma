@@ -216,6 +216,13 @@ def read_credential() -> bytes:
                 content = file.read(16385)
                 if len(content) > 16384:
                     raise AgentHouseError('local credential exceeds read limit')
+                after = os.fstat(file.fileno())
+                entry = os.stat('credential.json', dir_fd=state, follow_symlinks=False)
+                if ((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
+                        (identity.st_dev, identity.st_ino, identity.st_size,
+                         identity.st_mtime_ns, identity.st_ctime_ns) or
+                        (entry.st_dev, entry.st_ino) != (identity.st_dev, identity.st_ino)):
+                    raise AgentHouseError('local credential changed during read')
                 return content
     except OSError:
         raise AgentHouseError('local credential cannot be opened safely') from None

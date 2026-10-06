@@ -5,12 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.481"
+version: "5.482"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: credential read identity and transient Docker flags (offline)
+
+WP-L2-CH-001 refuses in-place modification or replacement of the private
+credential during read (two isolated negatives; focused 69 tests). Separately
+WP-L6-FIN-001 refuses six unrelated-container transient status/flag
+contradictions in the standalone two-snapshot metadata guard (focused 18).
+`make verify-local-experiment` passes; its fake Dagster failure is intentional.
+Fresh dedicated `colima list`: Stopped. No live Docker/VM/HTTP, retained
+credential/report/volume/backup read or change. Credential provenance and
+same-UID swaps outside the checks, producer authentication, continuous writer
+exclusion, live deduplication, safe retained-volume traversal and operator
+acceptance remain open. FinOps traversal is unauthorized; AgentHouse bytes
+remain `null / NOT_MEASURED`. Restore only scoped guards/tests while retaining
+saved resources and never replaying an uncertain insert. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: private export sync and independent Docker status coherence (offline)
 

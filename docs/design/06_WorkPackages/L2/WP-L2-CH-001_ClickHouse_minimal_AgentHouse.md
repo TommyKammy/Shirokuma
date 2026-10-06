@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.31"
+version: "0.32"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 credential read identity recheck (offline)
+
+The private credential reader now rechecks its open inode metadata and the
+directory entry after reading. Isolated same-size in-place modification and
+entry replacement during the read are refused instead of returning ambiguous
+authentication bytes (69 focused tests and full local verifier pass). The
+dedicated Colima profile was freshly Stopped; no retained credential was read
+or changed, no Docker/HTTP or saved report/volume/backup access. This is not
+protection against same-UID substitution before open or after the final check,
+nor credential provenance or live/operator acceptance. Roll back only the read
+guard/test, preserving saved files; do not rotate or replay unknown inserts.
+Original Vault synchronization remains pending outside the checkout.
 
 ## 2026-10-06 export directory durability (offline)
 

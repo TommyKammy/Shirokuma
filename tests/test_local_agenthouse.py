@@ -6,7 +6,9 @@ import copy
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
+import stat
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -18,6 +20,36 @@ SPEC.loader.exec_module(M)
 
 
 class AgentHouseTests(unittest.TestCase):
+    def test_credential_read_refuses_mutation_and_entry_substitution(self):
+        for replace_entry in (False, True):
+            with self.subTest(replace_entry=replace_entry), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory)
+                path.chmod(0o700)
+                credential = path / 'credential.json'
+                credential.write_bytes(b'{"password":"original"}\n')
+                credential.chmod(0o600)
+                original_fstat = os.fstat
+                changed = False
+
+                def fstat(fd):
+                    nonlocal changed
+                    snapshot = original_fstat(fd)
+                    if stat.S_ISREG(snapshot.st_mode) and not changed:
+                        changed = True
+                        if replace_entry:
+                            other = path / 'replacement'
+                            other.write_bytes(b'{"password":"different"}\n')
+                            other.chmod(0o600)
+                            os.replace(other, credential)
+                        else:
+                            credential.write_bytes(b'{"password":"different"}\n')
+                    return snapshot
+
+                with patch.object(M, 'STATE', path), patch.object(M.os, 'fstat', side_effect=fstat):
+                    with self.assertRaisesRegex(M.AgentHouseError, 'changed during read'):
+                        M.read_credential()
+                self.assertTrue(changed)
+
     def test_new_private_file_requires_durable_write_before_use(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)

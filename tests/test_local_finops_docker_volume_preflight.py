@@ -178,6 +178,19 @@ class VolumePreflightTests(unittest.TestCase):
                     V.PreflightError, 'SCOPE_INVALID'):
                 validate(value, deepcopy(value))
 
+    def test_unrelated_transient_status_matches_its_flag(self):
+        for status, flag in (('paused', 'Paused'), ('restarting', 'Restarting'), ('dead', 'Dead')):
+            for set_status in (False, True):
+                value = snapshot()
+                state = value['containers'][1]['State']
+                if set_status:
+                    state['Status'] = status
+                else:
+                    state[flag] = True
+                with self.subTest(status=status, set_status=set_status), self.assertRaisesRegex(
+                        V.PreflightError, 'SCOPE_INVALID'):
+                    validate(value, deepcopy(value))
+
     def test_all_containers_not_only_owned_label_and_bind_overlaps(self):
         for source in (V.VOLUME_ROOT, '/var/lib/docker',V.VOLUME_ROOT+'/nested'):
             value=snapshot();value['containers'][1]['Mounts']=[{'Type':'bind','Source':source,

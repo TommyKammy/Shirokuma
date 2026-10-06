@@ -69,6 +69,10 @@ def _lifecycle(container):
     elif state['Status'] == 'running':
         require(state['Running'] is True and state['Restarting'] is False and
                 state['Paused'] is False and state['Dead'] is False)
+    # The remaining transient statuses cannot silently contradict their
+    # corresponding flags in either snapshot of the inventory.
+    for status, flag in (('paused', 'Paused'), ('restarting', 'Restarting'), ('dead', 'Dead')):
+        require((state['Status'] == status) == state[flag])
     times = (state.get('StartedAt'), state.get('FinishedAt'))
     require(all(type(value) is str and 1 <= len(value) <= 64 and
                 all(ord(ch) >= 32 and not 127 <= ord(ch) <= 159 for ch in value)

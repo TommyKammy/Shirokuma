@@ -5,12 +5,24 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.259"
+version: "0.260"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 transient Docker state correlation (offline)
+
+The standalone two-snapshot preflight refuses six synthetic unrelated-container
+states where `paused`, `restarting` or `dead` disagrees with its matching flag.
+Focused preflight 18 and full local verifier pass. Fresh dedicated Colima:
+Stopped; no daemon/VM request, retained volume/report/backup access or change.
+This is supplied metadata consistency, not daemon authentication, continuous
+writer exclusion, volume traversal permission (`False`), cleanup or operator
+acceptance; AgentHouse bytes remain `null / NOT_MEASURED`. Revert only the
+state guard/test if needed and preserve saved volumes. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06 unrelated Docker status consistency (offline)
 
