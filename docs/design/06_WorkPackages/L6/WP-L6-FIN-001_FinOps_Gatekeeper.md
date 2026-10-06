@@ -12,6 +12,22 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: pin the inference credential read (offline)
+
+The inference collector now opens the private state directory and credential
+with no-follow descriptors, verifies owner/mode/file identity around a bounded
+read, and passes those bytes to the AgentHouse client instead of reopening the
+checked pathname. A fixture replaces the pathname at client construction and
+confirms the originally read bytes are used; a symlink entry fails before
+client construction. FinOps focused 309 tests (seven Linux-only skips) and
+`make verify-local-experiment` passed after repairing an initial directory-FD
+test failure. Dedicated Colima was freshly Stopped; no live AgentHouse query,
+credential content from the retained runtime, volume or backup mutation, or
+usage measurement (`null / NOT_MEASURED`). This does not prevent same-UID
+mutations before the descriptor opens, authenticate Docker or prove live
+query provenance. Roll back this read/client seam only; preserve saved data.
+Original Vault synchronization pending outside checkout.
+
 ## 2026-10-06: reject OOM-terminated inference state (offline)
 
 An inspected container reporting `Running=true` with `OOMKilled=true` previously

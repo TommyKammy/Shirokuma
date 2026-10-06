@@ -12,6 +12,19 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: descriptor-bound FinOps inference credential (offline)
+
+WP-L6-FIN-001 now passes bytes read from a bounded no-follow credential FD
+to the AgentHouse client rather than reopening the path after metadata checks.
+Offline replacement and symlink cases exercise this boundary. FinOps focused
+309 tests (seven Linux-only skips) and the local verifier passed; an initial
+focused failure from treating a directory FD as a Python binary file was
+corrected and retested. Colima freshly Stopped. No live credential/query,
+retained volume/report/backup change or AgentHouse byte measurement (`null /
+NOT_MEASURED`). Same-UID pre-open mutation, daemon provenance and operator
+acceptance remain unproved. Revert only this scoped reader change, retaining
+saved records. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: independent inference OOM and smoke retention aliases (offline)
 
 WP-L6-FIN-001 refuses a contradictory `Running=true`, `OOMKilled=true`

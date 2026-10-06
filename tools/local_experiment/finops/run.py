@@ -3,6 +3,7 @@
 from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
+import contextlib
 import json
 import pwd
 import os
@@ -273,16 +274,34 @@ class Backend:
                   {'HostIp': '127.0.0.1', 'HostPort': '18123'} and
                   all(binding is None for port, binding in network['Ports'].items()
                       if port != '8123/tcp'), 'SCOPE_INVALID')
-        path = AH.STATE / 'credential.json'
-        parent, before = path.parent.lstat(), path.lstat()
-        C.require(stat.S_ISDIR(parent.st_mode) and parent.st_uid == os.getuid() and
-                  stat.S_IMODE(parent.st_mode) == 0o700 and stat.S_ISREG(before.st_mode) and
-                  before.st_uid == os.getuid() and stat.S_IMODE(before.st_mode) == 0o600 and
-                  before.st_nlink == 1 and before.st_size <= 16384, 'SCOPE_INVALID')
-        client = AH.Client()
-        after = path.lstat()
-        C.require((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) ==
-                  (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns), 'SCOPE_INVALID')
+        # Pin the directory and credential: Client must not reopen a checked
+        # pathname after a replacement, nor follow a symlink to another file.
+        try:
+            with contextlib.ExitStack() as stack:
+                directory = os.open(AH.STATE, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                stack.callback(os.close, directory)
+                parent = os.fstat(directory)
+                C.require(stat.S_ISDIR(parent.st_mode) and parent.st_uid == os.getuid() and
+                          stat.S_IMODE(parent.st_mode) == 0o700, 'SCOPE_INVALID')
+                with os.fdopen(os.open('credential.json', os.O_RDONLY | os.O_NOFOLLOW,
+                                       dir_fd=directory), 'rb') as file:
+                    before = os.fstat(file.fileno())
+                    C.require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid() and
+                              stat.S_IMODE(before.st_mode) == 0o600 and before.st_nlink == 1 and
+                              before.st_size <= 16384, 'SCOPE_INVALID')
+                    credential = file.read(16385)
+                    after = os.fstat(file.fileno())
+                    current = os.stat('credential.json', dir_fd=directory, follow_symlinks=False)
+                    C.require(len(credential) <= 16384 and
+                              (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) ==
+                              (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) ==
+                              (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) and
+                              os.stat(AH.STATE, follow_symlinks=False).st_ino == parent.st_ino and
+                              os.stat(AH.STATE, follow_symlinks=False).st_dev == parent.st_dev,
+                              'SCOPE_INVALID')
+                client = AH.Client(credential_bytes=credential)
+        except (OSError, ValueError):
+            raise C.FinOpsError('SCOPE_INVALID') from None
         raw = client.query(sql)
         C.require(len(raw.encode()) <= 1024**2, 'READ_LIMIT')
         return [_json(line) for line in raw.splitlines() if line.strip()]

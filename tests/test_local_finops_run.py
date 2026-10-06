@@ -403,6 +403,27 @@ class RuntimeTests(unittest.TestCase):
                 ['docker', 'context', 'inspect', R.AH.CONTEXT],
                 ['docker', '--host', self._inference_socket(), 'container', 'inspect', R.AH.NAME]])
             client.query.assert_called_once_with(R.inference_sql(NOW))
+            # Even if a same-account actor replaces the pathname at client
+            # construction, the credential passed to Client is the pinned read.
+            with patch.object(backend, '_command', side_effect=[json.dumps(context), json.dumps(owned)]), \
+                    patch.object(R.AH, 'STATE', state), patch.object(R.AH, 'Client') as factory:
+                def replace(*, credential_bytes):
+                    credential.rename(state / 'old-credential.json')
+                    credential.write_text('{"password":"REPLACED"}')
+                    credential.chmod(0o600)
+                    self.assertEqual(credential_bytes, b'{"password":"FAKE"}')
+                    return client
+                factory.side_effect = replace
+                self.assertEqual(backend.inference(NOW), [row()])
+            credential.unlink()
+            credential.symlink_to(state / 'old-credential.json')
+            with patch.object(backend, '_command', side_effect=[json.dumps(context), json.dumps(owned)]), \
+                    patch.object(R.AH, 'STATE', state), patch.object(R.AH, 'Client') as factory, \
+                    self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
+                backend.inference(NOW)
+            factory.assert_not_called()
+            credential.unlink()
+            (state / 'old-credential.json').rename(credential)
             owned[0]['NetworkSettings']['Ports']['9000/tcp'] = None
             with patch.object(backend, '_command', side_effect=[json.dumps(context), json.dumps(owned)]), \
                     patch.object(R.AH, 'STATE', state), patch.object(R.AH, 'Client', return_value=client):

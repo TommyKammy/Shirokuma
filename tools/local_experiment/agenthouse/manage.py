@@ -74,8 +74,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class Client:
-    def __init__(self) -> None:
-        credential = json.loads((STATE / "credential.json").read_text())
+    def __init__(self, *, credential_bytes: bytes | None = None) -> None:
+        credential = json.loads(credential_bytes if credential_bytes is not None else
+                                (STATE / "credential.json").read_text())
         self.auth = base64.b64encode((USER + ":" + credential["password"]).encode()).decode()
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
