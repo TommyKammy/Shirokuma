@@ -17,7 +17,8 @@ from scripts.verify_gitops_image_admission import (
 )
 from tests.gitops_render import (
     RenderError, RepositoryContext, Resource, _canonical_git_url, _is_local_git_source,
-    _json_stream, _run, _verified_tool, default_repository_context, load_yaml_text,
+    _apply_kustomize_transform, _json_stream, _render_flux_kustomization, _run,
+    _stage_helm_chart, _verified_tool, default_repository_context, load_yaml_text,
 )
 
 
@@ -120,6 +121,48 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             ),
         ), self.assertRaisesRegex(RenderError, "emitted stderr"):
             load_yaml_text("kind: ConfigMap\n")
+
+    def test_kustomize_transform_refuses_success_with_warning(self) -> None:
+        with patch("tests.gitops_render._verified_tool", return_value="kubectl-fixture"), patch(
+            "tests.gitops_render.subprocess.run", return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="kind: ConfigMap\n", stderr="private-warning-marker\n",
+            ),
+        ), self.assertRaises(RenderError) as caught:
+            _apply_kustomize_transform("kind: ConfigMap\n", {"namespace": "test"})
+        self.assertNotIn("private-warning-marker", str(caught.exception))
+
+    def test_flux_build_refuses_success_with_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "base"
+            target.mkdir()
+            context = RepositoryContext.create(root, ["ssh://git@example.invalid/team/repo.git"])
+            resource = Resource(root / "flux.yaml", {
+                "kind": "Kustomization", "metadata": {"name": "test"},
+                "spec": {"path": "./base"},
+            })
+            with patch("tests.gitops_render._validate_flux_build_inputs"), patch(
+                "tests.gitops_render._verified_tool", return_value="flux-fixture"
+            ), patch("tests.gitops_render.load_yaml_text", return_value=[{"kind": "ConfigMap", "apiVersion": "v1"}]), patch("tests.gitops_render.subprocess.run", return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="kind: ConfigMap\n", stderr="private-warning-marker\n",
+            )), self.assertRaises(RenderError) as caught:
+                _render_flux_kustomization(resource, context, "")
+            self.assertNotIn("private-warning-marker", str(caught.exception))
+
+    def test_helm_package_refuses_success_with_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            chart = root / "chart"
+            chart.mkdir()
+            staging = root / "staging"
+            staging.mkdir()
+            with patch("tests.gitops_render._verified_tool", return_value="helm-fixture"), patch(
+                "tests.gitops_render.subprocess.run", return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="packaged", stderr="private-warning-marker\n",
+                ),
+            ), self.assertRaisesRegex(RenderError, "emitted stderr") as caught:
+                _stage_helm_chart(chart, staging)
+            self.assertNotIn("private-warning-marker", str(caught.exception))
 
     def test_renderer_refuses_malformed_resource_list_instead_of_dropping_it(self) -> None:
         for items in (None, {}, "hidden", 1):

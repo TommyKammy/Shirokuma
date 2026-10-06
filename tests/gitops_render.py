@@ -1063,7 +1063,10 @@ def _apply_kustomize_transform(rendered: str, transform: Mapping[str, Any]) -> s
             **transform,
         }
         _write_kustomization(overlay, kustomization)
-        return _run((_verified_tool("kubectl"), "kustomize", str(overlay)))
+        return _run(
+            (_verified_tool("kubectl"), "kustomize", str(overlay)),
+            reject_stderr=True,
+        )
 
 
 def _render_flux_kustomization(
@@ -1100,7 +1103,8 @@ def _render_flux_kustomization(
                 str(kustomization_file),
                 "--local-sources",
                 local_sources,
-            )
+            ),
+            reject_stderr=True,
         )
     values = load_yaml_text(rendered)
     for value in values:
@@ -1724,7 +1728,8 @@ def _stage_helm_chart(
             str(chart_root),
             "--destination",
             str(package_directory),
-        )
+        ),
+        reject_stderr=True,
     )
     archives = sorted(package_directory.glob("*.tgz"))
     if len(archives) != 1:
@@ -1941,7 +1946,7 @@ def _parse_helm_values(
         command.extend(("--values", str(values_file)))
     if assignment is not None:
         command.extend(assignment)
-    documents = load_yaml_text(_run(command))
+    documents = load_yaml_text(_run(command, reject_stderr=True))
     if len(documents) != 1:
         raise RenderError("Helm values parser returned unexpected output")
     encoded = _mapping(documents[0].get("data")).get("values.json")
@@ -2396,7 +2401,7 @@ def _render_helm_release(
             command.append("--skip-tests")
         for values_file in values_files:
             command.extend(("--values", str(values_file)))
-        rendered = _run(command)
+        rendered = _run(command, reject_stderr=True)
 
     for transform in post_renderer_transforms:
         rendered = _apply_kustomize_transform(rendered, transform)

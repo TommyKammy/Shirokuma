@@ -5,12 +5,21 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.280"
+version: "0.281"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent fixture boundary after renderer repair
+
+Docker two-snapshot preflight discovery passed 36 synthetic tests. Dedicated
+Colima freshly observed Stopped; no Docker daemon metadata, retained volume
+or backup was inspected. Fixture success cannot authenticate the daemon or
+exclude writers, does not authorize traversal and leaves AgentHouse bytes
+`null / NOT_MEASURED`. Preserve retained resources; no runtime rollback.
+Live/operator criteria and original Vault sync remain pending.
 
 ## 2026-10-06 independent fixture-only preflight recheck
 

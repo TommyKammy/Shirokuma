@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.162"
+version: "0.163"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: warning-bearing offline render paths
+
+Successful Flux build and kubectl Kustomize transform previously returned
+resources despite stderr warnings; isolated negatives reproduced both. All
+offline render subprocess paths now reject warnings, including Helm package,
+values parser and release template; errors omit untrusted warning text.
+GitOps bootstrap focused 36, full local verifier and design-context passed.
+Dedicated Colima freshly observed Stopped; no VM start or retained storage/
+backup inspection. This is offline fail-closed rendering, not live §9,
+authenticated Git/source, strict admission or operator acceptance. Revert
+only the renderer guards and tests if pinned tool semantics differ, retaining
+previous failures and saved data. Direct Vault sync pending outside checkout.
 
 ## 2026-10-06: kubectl conversion warnings fail closed (offline)
 

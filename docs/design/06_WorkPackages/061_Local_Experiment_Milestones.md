@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.534"
+version: "5.535"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: offline renderer warning closure and separate FinOps boundary
+
+WP-L0-GITOPS-001: zero-exit Flux build and kubectl Kustomize transform
+previously accepted warning-bearing stderr; isolated negatives failed before
+repair. All remaining Helm package/template/values parsing paths now reject
+stderr without echoing warning text. GitOps bootstrap 36 tests, full
+`make verify-local-experiment` and design-context passed (fake Dagster failure
+printed by the full verifier is intentional). Separately, WP-L6-FIN-001
+Docker metadata preflight passed 36 synthetic discovery tests; it does not
+authorize AgentHouse traversal or change `null / NOT_MEASURED`. Fresh dedicated
+Colima Stopped; no VM start, authenticated Git/Flux or retained disk/volume/
+backup read or change. Live §9, strict gate and operator acceptance remain
+open. Roll back only scoped renderer checks if pinned tools need different
+semantics; preserve saved evidence. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: offline kubectl conversion warning boundary
 
