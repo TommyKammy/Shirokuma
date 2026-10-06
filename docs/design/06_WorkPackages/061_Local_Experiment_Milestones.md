@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.419"
+version: "5.420"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse input and export encoding follow-up (offline)
+
+WP-L2-CH-001: non-string SQL and unencodable Pawprint strings now fail
+before HTTP, and an unencodable export reply fails before report creation.
+Three independent negative fixture paths failed before repair. Focused
+AgentHouse/dashboard 25 tests, post-change `make verify-local-experiment`,
+design-context, secret scan and diff check passed (the fake Dagster worker
+error is an intentional negative diagnostic). Dedicated Colima
+freshly stopped; no live query, credential read or retained report/volume/backup
+change. Export write failures may still leave a partial file; same-UID mutation,
+producer authenticity and operator acceptance remain unproved. Roll back only
+the scoped guards/tests and retain saved reports. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06: AgentHouse client and event failure boundaries (offline)
 

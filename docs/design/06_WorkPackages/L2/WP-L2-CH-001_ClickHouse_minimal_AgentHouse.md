@@ -12,6 +12,22 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 offline input and export encoding follow-up
+
+Non-string SQL now fails before HTTP; Pawprint fields with lone Unicode
+surrogates fail before insert even when JSON escaping would conceal them.
+Separately, export pre-encodes the query reply before exclusively creating a
+report, so an unencodable reply cannot leave an empty report. These independent
+negative fixtures failed before repair; focused AgentHouse/dashboard tests pass
+(25), as do the post-change local verifier, design-context, secret scan and diff
+check. The verifier's fake Dagster worker error is an intentional negative
+diagnostic. No live runtime query, credential read, retained report/volume/backup
+change, or producer authentication was performed; the dedicated Colima profile
+was freshly stopped. Partial writes from disk errors and same-UID state changes
+remain unresolved. Restore only these guards if needed, preserving saved
+reports. Original Vault sync remains pending outside checkout; no operator
+acceptance is inferred.
+
 ## 2026-10-06 offline client input and event validation
 
 The direct client now reports malformed Unicode credential passwords and SQL

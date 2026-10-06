@@ -126,6 +126,8 @@ class Client:
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
     def query(self, sql: str) -> str:
+        if type(sql) is not str:
+            raise AgentHouseError('local AgentHouse query requires SQL text')
         try:
             payload = sql.encode('utf-8')
         except UnicodeError:
@@ -236,9 +238,17 @@ def event(action: str, target: str, status: str = "success", **fields) -> dict:
         if type(value[key]) is not bool:
             raise AgentHouseError(f"invalid boolean: {key}")
     for key in ("event_id", "timestamp", "agent_id", "task_id", "repo", "action_type", "target_system",
-                "risk_level", "approval_tier", "model_provider", "model_name", "status", "trace_id"):
+                 "risk_level", "approval_tier", "model_provider", "model_name", "status", "trace_id"):
         if not isinstance(value[key], str):
             raise AgentHouseError(f"invalid string: {key}")
+    # json.dumps escapes lone surrogates, but the HTTP SQL payload must be UTF-8.
+    # Reject them here so an insert cannot fail outside the Pawprint boundary.
+    for key, item in value.items():
+        if isinstance(item, str):
+            try:
+                item.encode('utf-8')
+            except UnicodeError:
+                raise AgentHouseError(f"invalid UTF-8 Pawprint field: {key}") from None
     try:
         uuid.UUID(value["event_id"])
     except (ValueError, TypeError, AttributeError):
@@ -263,15 +273,19 @@ def insert(client: Client, value: dict) -> None:
 
 def export(client: Client) -> Path:
     rows = client.query("SELECT * FROM agenthouse.pawprints FINAL ORDER BY timestamp, event_id FORMAT JSONEachRow")
+    try:
+        payload = rows.encode('utf-8')
+    except (AttributeError, UnicodeError):
+        raise AgentHouseError('local AgentHouse export reply is not UTF-8 text') from None
     name = "pawprints-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".jsonl"
     path = STATE / name
     try:
         with private_state_fd() as state:
             fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                          0o600, dir_fd=state)
-            with os.fdopen(fd, 'w', encoding='utf-8') as file:
+            with os.fdopen(fd, 'wb') as file:
                 os.fchmod(file.fileno(), 0o600)
-                file.write(rows)
+                file.write(payload)
     except OSError:
         raise AgentHouseError('local AgentHouse export cannot be created safely') from None
     return path

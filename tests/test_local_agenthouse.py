@@ -44,6 +44,20 @@ class AgentHouseTests(unittest.TestCase):
                 M.insert(client, value)
             client.query.assert_not_called()
 
+    def test_unencodable_event_fields_fail_before_insert(self):
+        for field in ('action_type', 'target_system', 'agent_id', 'model_name'):
+            action = 'bad\ud800' if field == 'action_type' else 'test'
+            target = 'bad\ud800' if field == 'target_system' else 'clickhouse'
+            fields = {field: 'bad\ud800'} if field not in {'action_type', 'target_system'} else {}
+            with self.subTest(field=field), self.assertRaises(M.AgentHouseError):
+                M.event(action, target, **fields)
+            value = M.event('test', 'clickhouse')
+            value[field] = 'bad\ud800'
+            client = Mock()
+            with self.assertRaises(M.AgentHouseError):
+                M.insert(client, value)
+            client.query.assert_not_called()
+
     def test_insert_uses_json_data_not_sql_interpolation(self):
         value = M.event("x'); DROP TABLE unrelated; --", "clickhouse")
         client = Mock()
@@ -140,6 +154,17 @@ class AgentHouseTests(unittest.TestCase):
                 self.assertEqual(existing.read_text(), client.query.return_value)
                 self.assertEqual(existing.stat().st_mode & 0o777, 0o600)
 
+    def test_unencodable_export_reply_does_not_create_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            client = Mock()
+            client.query.return_value = 'bad\ud800'
+            with patch.object(M, 'STATE', state), patch.object(M, 'datetime') as clock:
+                clock.now.return_value.strftime.return_value = 'fixed'
+                with self.assertRaises(M.AgentHouseError):
+                    M.export(client)
+                self.assertEqual(list(state.iterdir()), [])
+
     def test_query_rejects_invalid_utf8_response_with_scoped_error(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()
@@ -157,6 +182,14 @@ class AgentHouseTests(unittest.TestCase):
         with patch.object(client.opener, 'open') as open_request:
             with self.assertRaisesRegex(M.AgentHouseError, 'invalid SQL'):
                 client.query('SELECT \ud800')
+            open_request.assert_not_called()
+
+    def test_non_string_query_fails_before_http(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        with patch.object(client.opener, 'open') as open_request:
+            for sql in (None, b'SELECT 1', 12):
+                with self.subTest(sql=sql), self.assertRaises(M.AgentHouseError):
+                    client.query(sql)
             open_request.assert_not_called()
 
     def test_insert_rejects_missing_fields_without_inventing_retry_identity(self):
