@@ -836,6 +836,10 @@ def _is_local_git_source(resource: Resource, context: RepositoryContext) -> bool
             "recurseSubmodules",
             "sparseCheckout",
             "verify",
+            "proxySecretRef",
+            "certSecretRef",
+            "provider",
+            "insecure",
         )
         if field in spec and spec[field] not in (None, False, [], {})
     ]

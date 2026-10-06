@@ -14,12 +14,34 @@ from scripts.verify_gitops_image_admission import (
     AdmissionError,
     validate_rendered_image_multiset,
 )
+from tests.gitops_render import RepositoryContext, Resource, _is_local_git_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
+    def test_local_source_rejects_unmodeled_fetch_settings(self) -> None:
+        from tests.gitops_render import RenderError
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            context = RepositoryContext.create(root, ["ssh://git@example.invalid/team/repo.git"])
+            spec = {"url": "ssh://git@example.invalid/team/repo.git", "ref": {"branch": "main"}}
+            source = lambda value: Resource(root / "source.yaml", {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository", "metadata": {"name": "source"}, "spec": value,
+            })
+            self.assertTrue(_is_local_git_source(source(spec), context))
+            for field, value in (
+                ("proxySecretRef", {"name": "alternate-proxy"}),
+                ("certSecretRef", {"name": "alternate-ca"}),
+                ("provider", "azure"),
+                ("insecure", True),
+            ):
+                with self.subTest(field=field), self.assertRaises(RenderError):
+                    _is_local_git_source(source({**spec, field: value}), context)
+
     def test_repository_owns_flux_bootstrap_entrypoints(self) -> None:
         required_files = (
             "opentofu/dev/main.tf",

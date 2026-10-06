@@ -12,6 +12,15 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: GitOps fetch-setting classification (offline)
+
+WP-L0-GITOPS-001: four fake source fetch-setting variants falsely matched the
+declared URL/branch before correction; all are now refused. Bootstrap and
+teardown contract tests pass (23). Dedicated Colima freshly Stopped; no remote
+fetch, retained data/backup change or live Flux acceptance. Existing secretRef
+and remote provenance remain unverified; original Vault sync pending. Revert
+only the scoped renderer/test if verified compatibility requires it.
+
 ## 2026-10-06: GitOps source separator refusal (offline)
 
 WP-L0-GITOPS-001: five source path variants with redundant or absolute

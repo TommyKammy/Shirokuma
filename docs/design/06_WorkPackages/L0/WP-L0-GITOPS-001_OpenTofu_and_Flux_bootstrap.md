@@ -12,6 +12,20 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-06: offline source fetch-setting boundary
+
+Four synthetic GitRepository variants with the declared URL/branch but an
+alternate proxy CA, proxy credential, cloud provider or insecure transport
+were incorrectly treated as repository-local. The offline renderer now refuses
+these nonempty unmodeled fetch settings. The regression reproduced all four
+false accepts before the repair; bootstrap/teardown contract tests pass after
+it. This is only source classification, not remote provenance: the existing
+`secretRef` remains an unverified runtime credential and no remote was fetched.
+Fresh Colima inventory reports `mac-studio-solo` Stopped; no retained data,
+backup, GitHub, VM or Flux operation. Revert only the renderer guard/test if
+verified controller semantics require it. Original Vault sync pending outside
+this checkout; §9 live and operator acceptance remain open.
+
 ## 2026-10-06: offline Git source path separator boundary
 
 An independent check of local-source identity found that collapsing leading,
