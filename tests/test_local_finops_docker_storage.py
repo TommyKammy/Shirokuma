@@ -180,6 +180,33 @@ class DockerStorageTests(unittest.TestCase):
                              [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
                               ('volume', D.AH.VOLUME), ('context', D.AH.CONTEXT)][:4 if second else 1])
 
+    def test_foreign_container_stops_before_volume_read_on_either_pass(self):
+        for second in (False, True):
+            responses = fixture() + deepcopy(fixture())
+            responses[4 if second else 1][0]['Config']['Image'] = 'foreign'
+            backend = Mock()
+            backend.now.return_value = NOW
+            backend.docker_storage_inspect.side_effect = responses
+            with self.subTest(second=second):
+                result = D.collect(backend)
+            self.assertEqual(result['agenthouse']['reason'], 'SCOPE_INVALID')
+            self.assertEqual([call.args for call in backend.docker_storage_inspect.call_args_list],
+                             [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
+                              ('volume', D.AH.VOLUME), ('context', D.AH.CONTEXT),
+                              ('container', D.AH.NAME)][:5 if second else 2])
+
+    def test_foreign_first_volume_stops_before_second_pass(self):
+        responses = fixture() + deepcopy(fixture())
+        responses[2][0]['Driver'] = 'foreign'
+        backend = Mock()
+        backend.now.return_value = NOW
+        backend.docker_storage_inspect.side_effect = responses
+        result = D.collect(backend)
+        self.assertEqual(result['agenthouse']['reason'], 'SCOPE_INVALID')
+        self.assertEqual([call.args for call in backend.docker_storage_inspect.call_args_list],
+                         [('context', D.AH.CONTEXT), ('container', D.AH.NAME),
+                          ('volume', D.AH.VOLUME)])
+
     def test_backend_only_fixed_scoped_inspect_commands(self):
         backend=R.Backend()
         with patch.object(backend,'_command',side_effect=lambda cmd:json.dumps([{'safe':'metadata'}])) as command:

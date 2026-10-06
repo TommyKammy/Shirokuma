@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.205"
+version: "0.206"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: stop Docker reference reads at first invalid identity (offline)
+
+The fixed volume-reference collector previously read the volume and repeated
+the context/container/volume sequence even when the first container or volume
+was already outside the fixed AgentHouse scope. It now checks each container
+before reading its volume and checks the first complete reference before the
+second pass. Negative fixtures failed before repair and now stop at two, three
+or five fixed reads; the original six-read valid case remains. Focused FinOps
+302 tests (seven Linux-only skips) and the full local verifier pass; the fake
+Dagster worker failure in the verifier is an expected negative diagnostic.
+Colima was freshly Stopped. No daemon connection, retained report/volume/backup
+change or AgentHouse byte measurement (`null / NOT_MEASURED`). Replies are
+not daemon authentication, and these sequential checks do not prove atomicity
+or exclusive volume ownership. Roll back only this ordering and test; leave
+retained data untouched. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: validate Docker reference context before daemon reads (offline)
 

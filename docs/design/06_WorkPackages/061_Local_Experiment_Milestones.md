@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.407"
+version: "5.408"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Docker reference fails before unrelated follow-up reads (offline)
+
+WP-L6-FIN-001: malformed first/second container and first volume replies
+previously allowed further fixed reads before projection rejected the sample.
+Now invalid containers stop before the volume read and an invalid first volume
+stops before the second pass. Three negative paths failed before repair; FinOps
+302 tests (seven Linux-only skips) and full local verifier pass. Colima was
+freshly Stopped; no live Docker access, retained data/backup mutation or
+AgentHouse used-byte claim (`null / NOT_MEASURED`). No producer authenticity,
+atomicity or operator acceptance follows from offline fixtures. Roll back only
+the collector sequencing/test; original Vault sync pending outside checkout.
 
 ## 2026-10-06: Docker reference context checked before each read pair (offline)
 

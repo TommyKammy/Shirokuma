@@ -73,17 +73,32 @@ def created_at(value):
         raise DockerStorageError('SAMPLE_INVALID') from None
 
 
-def _identity(container, volume):
-    require(type(container) is dict and type(volume) is dict)
+def _container(container):
+    require(type(container) is dict)
     config = container.get('Config', {}); state = container.get('State', {})
     require(type(config) is dict and type(state) is dict)
-    container_labels, volume_labels = config.get('Labels'), volume.get('Labels')
-    require(type(container_labels) is dict and type(volume_labels) is dict)
+    container_labels = config.get('Labels')
+    require(type(container_labels) is dict)
     identifier = container.get('Id')
     require(type(identifier) is str and re.fullmatch(r'[0-9a-f]{64}', identifier))
     require(container.get('Name') == '/' + AH.NAME and
             container_labels.get(AH.LABEL) == 'agenthouse-local' and
             config.get('Image') == AH.IMAGE and type(state.get('Running')) is bool)
+    mounts = container.get('Mounts')
+    require(type(mounts) is list and len(mounts) == 1)
+    mount = mounts[0]
+    require(type(mount) is dict and mount.get('Type') == 'volume' and
+            mount.get('Name') == AH.VOLUME and mount.get('Driver') == 'local' and
+            mount.get('Source') == '/var/lib/docker/volumes/' + AH.VOLUME + '/_data' and
+            mount.get('Destination') == '/var/lib/clickhouse' and mount.get('RW') is True)
+    return identifier, state['Running']
+
+
+def _identity(container, volume):
+    identifier, running = _container(container)
+    require(type(volume) is dict)
+    volume_labels = volume.get('Labels')
+    require(type(volume_labels) is dict)
     require(volume.get('Name') == AH.VOLUME and volume_labels.get(AH.LABEL) == 'agenthouse-local'
             and volume.get('Driver') == 'local' and volume.get('Scope') == 'local'
             and (volume.get('Options') is None or
@@ -93,15 +108,8 @@ def _identity(container, volume):
     # A matching suffix under another directory is not the fixed named volume.
     require(type(mountpoint) is str and
             mountpoint == '/var/lib/docker/volumes/' + AH.VOLUME + '/_data')
-    mounts = container.get('Mounts')
-    require(type(mounts) is list and len(mounts) == 1)
-    mount = mounts[0]
-    require(type(mount) is dict and mount.get('Type') == 'volume' and
-            mount.get('Name') == AH.VOLUME and mount.get('Driver') == 'local' and
-            mount.get('Source') == mountpoint and mount.get('Destination') == '/var/lib/clickhouse' and
-            mount.get('RW') is True)
     # Do not publish host paths or infer that other containers cannot also use this volume.
-    return (identifier, state['Running'], created, mountpoint)
+    return (identifier, running, created, mountpoint)
 
 
 def project(context_before, container_before, volume_before, context_after, container_after,
@@ -151,13 +159,16 @@ def collect(backend):
         # Validating only in project() would issue all four daemon reads first.
         first_context = backend.docker_storage_inspect('context', AH.CONTEXT)
         _context(first_context)
-        before = [first_context,
-                  backend.docker_storage_inspect('container', AH.NAME),
-                  backend.docker_storage_inspect('volume', AH.VOLUME)]
+        first_container = backend.docker_storage_inspect('container', AH.NAME)
+        _container(_object(first_container))
+        first_volume = backend.docker_storage_inspect('volume', AH.VOLUME)
+        _identity(_object(first_container), _object(first_volume))
+        before = [first_context, first_container, first_volume]
         second_context = backend.docker_storage_inspect('context', AH.CONTEXT)
         require(_context(first_context) == _context(second_context), 'IDENTITY_CHANGED')
-        after = [second_context,
-                 backend.docker_storage_inspect('container', AH.NAME),
+        second_container = backend.docker_storage_inspect('container', AH.NAME)
+        _container(_object(second_container))
+        after = [second_context, second_container,
                  backend.docker_storage_inspect('volume', AH.VOLUME)]
         row = project(*before, *after, request_started_at=start, observed_at=backend.now())
     except Exception as error:
