@@ -5,12 +5,23 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.438"
+version: "5.439"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent worker fdinfo control refusal (offline)
+
+WP-L6-FIN-001 bounds its private worker fdinfo parser and refuses NUL, VT,
+FF and CR in any row before reading the mount ID. Three new synthetic negatives
+passed before repair; focused FinOps 325 tests pass (seven Linux-only skips).
+The full verifier preceded this follow-up. Dedicated Colima last observed
+Stopped; no live VM read, retained volume/report/backup changes or AgentHouse
+byte measurement (`null / NOT_MEASURED`). No authenticated provenance or
+operator acceptance. Revert only the scoped guard/test, preserving saved
+records; original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent stat separators and mountpoint aliases (offline)
 

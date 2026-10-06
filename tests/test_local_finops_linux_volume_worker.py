@@ -54,6 +54,15 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(W.ScanError):
                 W._parse_mount_id(raw)
 
+    def test_fdinfo_refuses_non_lf_separators_and_embedded_nul(self):
+        canonical = b'pos:\t0\nflags:\t0100000\nmnt_id:\t42\n'
+        for raw in (canonical.replace(b'pos:\t0', b'pos:\t0\x00'),
+                    canonical.replace(b'pos:\t0', b'pos:\t0\v'),
+                    canonical.replace(b'pos:\t0', b'pos:\t0\f'),
+                    canonical.replace(b'pos:\t0', b'pos:\t0\r')):
+            with self.subTest(raw=raw), self.assertRaises(W.ScanError):
+                W._parse_mount_id(raw)
+
     @unittest.skipIf(LINUX, 'native Linux backend exercised by Linux fixture tests')
     def test_macos_rejects_before_opening_or_enumerating_any_directory(self):
         with patch.object(W.os, 'open') as opened, patch.object(W.os, 'scandir') as enumerated:

@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.225"
+version: "0.226"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent worker fdinfo controls (offline)
+
+The private Linux volume worker's direct fdinfo mount-ID parser previously
+accepted NUL, vertical tab and form feed in unrelated rows; three negatives
+failed before repair. It now bounds the complete input and refuses these
+controls (and CR) before projecting the ID. Focused FinOps 325 tests pass,
+seven Linux-only skips. The full verifier from the immediately preceding
+procfs/mountpoint commit predates this follow-up; no live VM or retained
+volume/report/backup access, AgentHouse bytes remain `null / NOT_MEASURED`.
+Fixture parsing does not authenticate kernel origin or prove safe measurement.
+Restore only the scoped parser/test while preserving saved records; original
+Vault sync pending outside checkout.
 
 ## 2026-10-06 independent procfs stat and worker topology aliases (offline)
 

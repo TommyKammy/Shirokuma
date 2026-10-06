@@ -100,7 +100,8 @@ def _mount_id(fd):
 
 def _parse_mount_id(raw):
     # Do not let \s* consume a newline and borrow an ID from another field.
-    require(type(raw) is bytes and raw.endswith(b'\n') and b'\r' not in raw)
+    require(type(raw) is bytes and 0 < len(raw) <= 4096 and raw.endswith(b'\n') and
+            not any(separator in raw for separator in (b'\r', b'\x00', b'\v', b'\f')))
     lines = raw.split(b'\n')[:-1]
     require(all(line for line in lines))
     matches = [line[len(b'mnt_id:\t'):] for line in lines if line.startswith(b'mnt_id:')]
