@@ -134,7 +134,11 @@ def collect(backend, *, monotonic=time.monotonic):
     volume['Labels']={AH.LABEL:labels.get(AH.LABEL)}
     ids_text=read([*docker,'container','ls','-a','--no-trunc',
                    '--format','{{.ID}}'])
-    require(type(ids_text) is str and len(ids_text.encode()) <= 16384)
+    require(type(ids_text) is str)
+    try:
+        require(len(ids_text.encode('ascii')) <= 16384)
+    except UnicodeEncodeError:
+        raise TransportError('SCOPE_INVALID') from None
     # Docker's --format emits one LF-terminated ID per row. Python splitlines()
     # also accepts CR and Unicode separators that the producer did not emit.
     require(ids_text.endswith('\n') and '\r' not in ids_text)

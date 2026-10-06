@@ -5,12 +5,26 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.248"
+version: "0.249"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 Docker container-list encoding boundary (offline)
+
+The private metadata transport now requires the Docker ID listing to be ASCII
+before bounded row parsing. A malformed surrogate in a fake reply previously
+escaped as `UnicodeEncodeError`; it now fails as scoped `SCOPE_INVALID` before
+any container inspect. Focused transport 12 tests and full local verification
+pass. Dedicated Colima was observed stopped; no Docker or VM access, saved
+report, retained volume, credential or backup mutation. This is not daemon
+authentication or live volume measurement: traversal remains unauthorized,
+AgentHouse bytes remain `null / NOT_MEASURED`; remote cleanup, writer
+exclusion and operator acceptance remain open. Revert only this parser/test
+change if necessary, retaining saved evidence. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 bounded Docker metadata replies (offline)
 

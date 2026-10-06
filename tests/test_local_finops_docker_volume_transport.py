@@ -80,7 +80,7 @@ class VolumeTransportTests(unittest.TestCase):
         self.assertEqual(len(calls),1)
 
     def test_container_listing_requires_docker_lf_framing(self):
-        for separator in ('\u2028', '\r\n', '\x85'):
+        for separator in ('\u2028', '\r\n', '\x85', '\ud800'):
             with self.subTest(separator=repr(separator)):
                 tool,calls=backend()
                 original=tool._command.side_effect

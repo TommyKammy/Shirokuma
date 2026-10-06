@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.467"
+version: "5.468"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: Docker container-list encoding guard (offline)
+
+WP-L6-FIN-001 private transport rejects unencodable/non-ASCII ID-list replies
+with bounded `SCOPE_INVALID` before per-container inspection. Focused transport
+12 tests and `make verify-local-experiment` pass; private log:
+`tmp/local-experiment/attempt-189-verify-finops.log`. Dedicated Colima was
+read-only observed stopped; no live Docker/VM request, retained report,
+credential, volume or backup change. This does not authenticate Docker or
+authorize retained-volume traversal: AgentHouse usage remains `null /
+NOT_MEASURED`; cleanup and operator acceptance remain open. Revert only the
+scoped parser/test while retaining records. Original Vault sync pending.
 
 ## 2026-10-06: independent AgentHouse Docker inspect size guard (offline)
 
