@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.234"
+version: "0.235"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 independent procfs number and inventory checks (offline)
+
+The caller-supplied stat fixture accepted `-0` for an intervening counter
+across self/init/target, and the mountinfo fixture accepted contradictory,
+repeated or absent access modes in unrelated rows while projecting a valid
+`/proc`. Isolated negatives failed before repair. The stat fields now require
+canonical signed decimals; every mount row requires unambiguous access tokens
+on both sides of the separator. Mount IDs/parent/device numbers are limited
+to 19 digits before integer conversion (including a 5,000-digit negative
+fixture). Focused procfs 18 tests, `make verify-local-experiment`,
+`make verify-design-context` and diff check pass (the verifier's fake Dagster
+failure is intentional). No guest or retained volume was read;
+this offline contract neither authenticates the fixture producer nor authorizes
+scanning a retained volume, proves cleanup or grants operator acceptance.
+Restore only scoped parser/tests while preserving saved evidence; original
+Vault sync pending outside the checkout.
 
 ## 2026-10-06 procfs mountinfo field separators (offline)
 

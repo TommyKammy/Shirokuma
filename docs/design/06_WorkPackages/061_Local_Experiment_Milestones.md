@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.450"
+version: "5.451"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent procfs stat and mount inventory syntax (offline)
+
+WP-L6-FIN-001 rejects negative-zero stat fields and ambiguous mount access
+options even on unrelated mount rows; long mount number tokens are bounded
+before integer conversion. Seven isolated negatives reproduced acceptance
+before repair; an additional superblock negative also passes after repair.
+Focused procfs 18 tests, `make verify-local-experiment`,
+design-context and diff check pass (fake Dagster failure intentional).
+Dedicated Colima freshly Stopped;
+no guest read, live insert, retained report/volume/backup/credential change
+or AgentHouse byte measurement (`null / NOT_MEASURED`). Offline fixture syntax
+cannot authenticate the VM/kernel, prove cleanup, permit retained-volume
+scanning or establish operator acceptance. Revert only scoped parser/tests,
+retain saved records; original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent count underflow and mountinfo separators (offline)
 

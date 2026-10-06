@@ -129,6 +129,27 @@ class ProcfsContractTests(unittest.TestCase):
             with self.subTest(row=row), self.assertRaises(P.ProcfsError):
                 P.project(**value)
 
+    def test_oversized_mount_numbers_fail_with_scoped_error(self):
+        original = inputs()['mountinfo']
+        for old, new in ((b'19 1 ', b'1' * 5000 + b' 1 '),
+                         (b'19 1 ', b'19 ' + b'1' * 5000 + b' '),
+                         (b'0:20 ', b'0:' + b'1' * 5000 + b' ')):
+            value = inputs()
+            value['mountinfo'] = original.replace(old, new, 1)
+            with self.subTest(field=old, raw_length=len(new)), self.assertRaises(P.ProcfsError):
+                P.project(**value)
+
+    def test_unrelated_mount_rows_do_not_hide_ambiguous_options(self):
+        for option in (b'ro,rw', b'rw,rw', b'nosuid', b'rw,'):
+            value = inputs()
+            value['mountinfo'] += b'20 19 0:21 / /other ' + option + b' - tmpfs tmpfs rw\n'
+            with self.subTest(option=option), self.assertRaises(P.ProcfsError):
+                P.project(**value)
+        value = inputs()
+        value['mountinfo'] += b'20 19 0:21 / /other rw - tmpfs tmpfs rw,ro\n'
+        with self.assertRaises(P.ProcfsError):
+            P.project(**value)
+
     def test_procfs_super_options_do_not_project_ambiguous_access_or_visibility(self):
         for options in (b'rw,ro,hidepid=0', b'rw,rw,hidepid=0',
                         b'rw,hidepid=0,hidepid=0', b'hidepid=0',
@@ -184,6 +205,15 @@ class ProcfsContractTests(unittest.TestCase):
                 if field=='target_stat':value['target_errno']=None
                 with self.subTest(field=field,bad=bad),self.assertRaises(P.ProcfsError):
                     P.project(**value)
+
+    def test_stat_negative_zero_is_not_a_canonical_kernel_number(self):
+        for field, pid in (('self_stat', 101), ('init_stat', 1), ('target_stat', 345)):
+            value = inputs()
+            value[field] = stat_line(pid, 42).replace(b') S 0', b') S -0', 1)
+            if field == 'target_stat':
+                value['target_errno'] = None
+            with self.subTest(field=field), self.assertRaises(P.ProcfsError):
+                P.project(**value)
 
     def test_stat_control_separators_cannot_supply_start_ticks(self):
         for field, pid in (('self_stat', 101), ('init_stat', 1), ('target_stat', 345)):

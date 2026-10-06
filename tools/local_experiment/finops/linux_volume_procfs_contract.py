@@ -57,7 +57,7 @@ def _start(raw,pid):
     # Fields 4..22 in proc/PID/stat are decimal kernel counters/identifiers.
     # A forged nonnumeric field must not lend credibility to a start tick.
     for field in fields[1:20]:
-        require(re.fullmatch(rb'-?(?:0|[1-9][0-9]{0,18})',field) is not None and
+        require(re.fullmatch(rb'(?:0|[1-9][0-9]{0,18}|-[1-9][0-9]{0,18})',field) is not None and
                 abs(int(field))<=MAX_NUMBER)
     tick=fields[19]
     require(re.fullmatch(rb'(?:0|[1-9][0-9]{0,19})',tick) is not None and
@@ -65,7 +65,7 @@ def _start(raw,pid):
     # Later stat fields vary by kernel version; when supplied, they must still
     # be canonical decimal fields rather than unchecked text after starttime.
     for field in fields[20:]:
-        require(re.fullmatch(rb'-?(?:0|[1-9][0-9]{0,19})',field) is not None and
+        require(re.fullmatch(rb'(?:0|[1-9][0-9]{0,19}|-[1-9][0-9]{0,19})',field) is not None and
                 -(MAX_NUMBER+1)<=int(field)<=2**64-1)
     return tick.decode('ascii')
 
@@ -89,10 +89,10 @@ def _mount(raw,mount_id):
         require(len(halves)==2)
         left,right=halves[0].split(' '),halves[1].split(' ')
         require(len(left)>=6 and len(right)==3 and
-                re.fullmatch(r'[1-9][0-9]*',left[0]) is not None and
-                re.fullmatch(r'[1-9][0-9]*',left[1]) is not None and
+                re.fullmatch(r'[1-9][0-9]{0,18}',left[0]) is not None and
+                re.fullmatch(r'[1-9][0-9]{0,18}',left[1]) is not None and
                 int(left[1])<=MAX_NUMBER and
-                re.fullmatch(r'(?:0|[1-9][0-9]*):(?:0|[1-9][0-9]*)',left[2]) is not None and
+                re.fullmatch(r'(?:0|[1-9][0-9]{0,18}):(?:0|[1-9][0-9]{0,18})',left[2]) is not None and
                 all(int(part)<=MAX_NUMBER for part in left[2].split(':')))
         # A noncanonical mountpoint could disguise an overmount below /proc.
         # Decode the four mountinfo path escapes before lexical comparison.
@@ -106,6 +106,13 @@ def _mount(raw,mount_id):
         canonical_path(left[3])
         path=canonical_path(left[4])
         ident=int(left[0]);require(ident<=MAX_NUMBER and ident not in seen);seen.add(ident)
+        # A malformed unrelated row cannot be silently ignored while treating
+        # this caller-supplied snapshot as a complete mount inventory.
+        for option_field in (left[5], right[2]):
+            tokens=option_field.split(',')
+            require(tokens[0] in ('rw','ro') and all(tokens) and
+                    len(tokens)==len(set(tokens)) and
+                    not any(token in ('rw','ro') for token in tokens[1:]))
         # The columns between mount options and " - " are propagation tags,
         # not arbitrary evidence. Refuse malformed IDs and contradictory tags.
         tags=set()
