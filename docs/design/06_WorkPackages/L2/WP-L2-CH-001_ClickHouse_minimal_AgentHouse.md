@@ -5,12 +5,32 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.33"
+version: "0.34"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 partial startup and query acknowledgement (offline)
+
+When both owned Docker resources are absent, first-time startup now refuses
+either preexisting private credential or environment file before creating any
+new file or Docker resource. Such a file may be left by an interrupted or
+failed creation; even a valid-looking credential is not evidence that the
+previous attempt completed. Independently, the HTTP client requires status
+200 before reading a query reply, refusing other 2xx statuses rather than
+claiming an insert/schema request finished. It does not retry uncertain writes.
+Focused 72 AgentHouse tests pass. Dedicated Colima freshly Stopped; no saved
+credential, report, volume or backup read/change and no live Docker/HTTP
+request. Existing container reuse still requires its original credential;
+offline response fixtures cannot authenticate ClickHouse or establish live
+deduplication, ARM64 behavior, completed writes or operator acceptance.
+Partial private files may occupy up to two small files plus overhead; retain
+and inspect them before an explicit recovery, not automatic deletion or replay.
+Roll back only the two guards/tests if verified live behavior requires it,
+preserving all saved files and volume. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06 credential short-read refusal (offline)
 

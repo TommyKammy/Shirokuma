@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.483"
+version: "5.484"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: partial AgentHouse startup and HTTP acknowledgement (offline)
+
+WP-L2-CH-001 refuses leftover private credential/env files before first-time
+resource creation and separately refuses non-200 successful HTTP responses as
+unacknowledged queries; no write is retried. Focused 72 AgentHouse tests pass.
+Fresh `colima list`: dedicated profile Stopped. No live Docker/HTTP, retained
+credential/report/volume/backup access or change. Partial startup files remain
+private and require explicit inspection; AgentHouse used bytes stay `null /
+NOT_MEASURED`, FinOps traversal unauthorized. Offline fixtures do not prove
+source authenticity, completed live inserts, deduplication, ARM64 compatibility
+or operator acceptance. Revert only scoped guards/tests, preserve saved state
+and never replay an uncertain insert. Original Vault sync pending outside
+checkout.
 
 ## 2026-10-06: credential short reads and daemon ID text (offline)
 

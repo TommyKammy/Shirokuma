@@ -778,10 +778,28 @@ class AgentHouseTests(unittest.TestCase):
         response = Mock()
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
+        response.status = 200
         response.read.return_value = b'\xff'
         client.opener.open = Mock(return_value=response)
         with self.assertRaises(M.AgentHouseError):
             client.query('SELECT 1')
+
+    def test_query_refuses_noncompleted_success_status_without_read_or_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        client.opener.open = Mock(return_value=response)
+        for status in (201, 202, 204, None):
+            with self.subTest(status=status):
+                response.status = status
+                with self.assertRaisesRegex(M.AgentHouseError, 'response status'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 4)
+        response.read.assert_not_called()
+        response.status = 200
+        response.read.return_value = b'1\n'
+        self.assertEqual(client.query('SELECT 1'), '1\n')
 
     def test_unencodable_credential_and_query_fail_before_http(self):
         with self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
@@ -1024,6 +1042,24 @@ class AgentHouseTests(unittest.TestCase):
                 self.assertEqual(target.read_text(), 'keep')
                 docker.assert_not_called()
 
+    def test_new_runtime_refuses_partial_private_files_before_any_creation(self):
+        for name in ('credential.json', 'container.env'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                state = Path(directory) / 'state'
+                state.mkdir(mode=0o700)
+                partial = state / name
+                partial.write_bytes(b'partial startup; retain for inspection')
+                partial.chmod(0o600)
+                with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
+                        patch.object(M, 'inspect_owned', side_effect=[None, None]), \
+                        patch.object(M, 'docker') as docker, patch.object(M, 'create_private_file') as create:
+                    with self.assertRaisesRegex(M.AgentHouseError, 'inspect partial startup state'):
+                        M.ensure_runtime()
+                    create.assert_not_called()
+                    docker.assert_not_called()
+                self.assertEqual(partial.read_bytes(), b'partial startup; retain for inspection')
+                self.assertEqual({item.name for item in state.iterdir()}, {name})
+
     def test_new_runtime_refuses_dangling_credential_link(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / 'state'
@@ -1048,7 +1084,7 @@ class AgentHouseTests(unittest.TestCase):
             with patch.object(M, 'STATE', state), patch.object(M, 'check_context'), \
                     patch.object(M, 'inspect_owned', side_effect=[None, None]), \
                     patch.object(M, 'docker') as docker:
-                with self.assertRaisesRegex(M.AgentHouseError, 'invalid format'):
+                with self.assertRaisesRegex(M.AgentHouseError, 'inspect partial startup state'):
                     M.ensure_runtime()
                 self.assertFalse((state / 'container.env').exists())
                 docker.assert_not_called()

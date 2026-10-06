@@ -286,6 +286,10 @@ class Client:
                                          headers={"Authorization": "Basic " + self.auth}, method="POST")
         try:
             with self.opener.open(request, timeout=30) as response:
+                # A successful transport alone is not acknowledgement that an
+                # insert/schema query finished. Never retry an ambiguous write.
+                if response.status != 200:
+                    raise AgentHouseError('local AgentHouse response status is not a completed query')
                 body = response.read(8 * 1024 * 1024 + 1)
                 if len(body) > 8 * 1024 * 1024:
                     raise AgentHouseError("AgentHouse response exceeds the local export limit")
@@ -324,11 +328,20 @@ def ensure_runtime() -> Client:
             raise AgentHouseError('existing AgentHouse is not unambiguously stopped; refusing startup')
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     with private_state_fd() as state:
-        try:
-            os.stat('credential.json', dir_fd=state, follow_symlinks=False)
-        except FileNotFoundError:
-            if existing:
+        if existing:
+            try:
+                os.stat('credential.json', dir_fd=state, follow_symlinks=False)
+            except FileNotFoundError:
                 raise AgentHouseError("existing AgentHouse requires its original local credential; refusing rotation")
+        else:
+            # A previous failed creation may have left either file behind.
+            # Do not silently promote partial state into a fresh container.
+            for name in ('credential.json', 'container.env'):
+                try:
+                    os.stat(name, dir_fd=state, follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
+                raise AgentHouseError(f'local AgentHouse {name} already exists; inspect partial startup state')
             create_private_file(state, 'credential.json',
                                 (json.dumps({'password': secrets.token_urlsafe(36)}) + '\n').encode())
     if not existing:
