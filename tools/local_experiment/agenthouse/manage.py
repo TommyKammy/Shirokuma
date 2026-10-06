@@ -805,7 +805,7 @@ def read_smoke_export(path: Path) -> list[dict]:
                     item.encode('utf-8')
             rows.append(row)
         return rows
-    except (OSError, ValueError, UnicodeError):
+    except (OSError, ValueError, UnicodeError, RecursionError):
         raise AgentHouseError('Pawprint export readback is invalid; do not replay') from None
 
 

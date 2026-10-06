@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.508"
+version: "5.509"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: AgentHouse readback parser recursion (offline)
+
+WP-L2-CH-001 now refuses a deeply nested saved JSONL report with a scoped
+error, rather than leaking `RecursionError` (isolated negative reproduced;
+97 focused tests and combined local verifier/design-context/diff checks pass;
+the fake Dagster worker failure is intentional). Dedicated `colima list` showed mac-studio-solo
+Stopped; no live HTTP/Docker or retained report, credential, volume or backup
+read/change. This synthetic boundary cannot authenticate producers or prove
+live deduplication or operator acceptance. Preserve saved reports, never
+replay uncertain inserts; revert only the scoped guard/test if necessary.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent export post-removal and readback checks (offline)
 

@@ -872,6 +872,15 @@ class AgentHouseTests(unittest.TestCase):
                     with self.subTest(suffix=suffix[:30]), self.assertRaises(M.AgentHouseError):
                         M.read_smoke_export(report)
 
+    def test_smoke_export_readback_scopes_parser_recursion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
+            report.write_text('{"other":' + '[' * 1200 + '0' + ']' * 1200 + '}\n')
+            report.chmod(0o600)
+            with patch.object(M, 'STATE', Path(directory)):
+                with self.assertRaisesRegex(M.AgentHouseError, 'readback'):
+                    M.read_smoke_export(report)
+
     def test_export_write_failure_never_publishes_partial_report(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

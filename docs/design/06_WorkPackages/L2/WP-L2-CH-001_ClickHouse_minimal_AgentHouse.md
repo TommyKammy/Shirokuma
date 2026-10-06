@@ -5,12 +5,27 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.53"
+version: "0.54"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 readback parser recursion boundary (offline)
+
+A deeply nested, private JSONL report previously escaped the smoke readback
+with a raw `RecursionError` instead of a scoped failure. The readback now
+refuses parser recursion as an invalid report, without replaying an insert or
+removing the saved file. The isolated negative failed before the repair; 97
+focused tests and `make verify-local-experiment`, design-context and diff
+checks pass (the fake Dagster failure is an intentional negative). Dedicated
+Colima freshly Stopped, with no live HTTP/Docker
+or retained report, credential, volume or backup read/change. A synthetic
+parser rejection cannot authenticate the report producer or prove live
+deduplication; operator acceptance remains open. Restore only the scoped
+exception guard/test if needed, preserving saved material. Original Vault
+sync remains pending outside this checkout.
 
 ## 2026-10-06 independent export removal and readback identity checks (offline)
 
