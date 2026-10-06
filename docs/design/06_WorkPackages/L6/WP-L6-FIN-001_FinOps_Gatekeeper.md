@@ -5,12 +5,28 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.245"
+version: "0.246"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 saved-volume stopped-state metadata (offline)
+
+The private Docker metadata transport discarded `Paused` and `Dead`, allowing
+an `exited` target with contradictory or absent flags to be classified as
+metadata-eligible. Eight negative fixture variants reproduced this before
+repair. Transport now projects both flags without environment or secret fields;
+the offline preflight requires both to be explicitly false. Focused preflight
+six and transport eight tests and full local verification passed (fake Dagster
+failure intentional). Dedicated Colima was observed Stopped; no guest read,
+retained report/volume/backup access or change. Metadata eligibility still
+sets `volume_traversal_authorized=False`; AgentHouse bytes remain `null /
+NOT_MEASURED`. No continuous writer exclusion, daemon authenticity, remote
+cleanup, trusted VM binding or operator acceptance is established. Roll back
+only the scoped projection/preflight/tests while preserving saved records;
+original Vault sync pending outside the checkout.
 
 ## 2026-10-06 boot-ID path overmount fixture (offline)
 

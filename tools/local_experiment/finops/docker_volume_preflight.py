@@ -102,6 +102,7 @@ def _project(snapshot):
     state = container.get('State')
     require(type(state) is dict and state.get('Status') == 'exited' and
             state.get('Running') is False and state.get('Restarting') is False and
+            state.get('Paused') is False and state.get('Dead') is False and
             container.get('HostConfig', {}).get('RestartPolicy', {}).get('Name') == 'no')
     target_lifecycle = _lifecycle(container)
     image_id = container.get('Image')

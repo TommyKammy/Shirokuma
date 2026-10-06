@@ -624,6 +624,8 @@ class AgentHouseTests(unittest.TestCase):
     def existing_runtime():
         return {
             "Config": {"Image": M.IMAGE},
+            "State": {"Status": "exited", "Running": False, "Paused": False,
+                      "Restarting": False, "Dead": False},
             "HostConfig": {"PortBindings": {"8123/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18123"}]},
                            "NanoCpus": 2_000_000_000, "Memory": 4 * 1024**3,
                            "NetworkMode": "default", "Privileged": False,
@@ -668,6 +670,31 @@ class AgentHouseTests(unittest.TestCase):
                 existing["Mounts"] = mounts
                 with self.assertRaisesRegex(M.AgentHouseError, "owned data volume"):
                     self.ensure_existing(existing)
+
+    def test_existing_runtime_requires_unambiguously_stopped_state(self):
+        self.ensure_existing(self.existing_runtime())
+        created = self.existing_runtime()
+        created['State']['Status'] = 'created'
+        self.ensure_existing(created)
+        for field, value in (('Status', 'running'), ('Status', 'paused'),
+                             ('Status', 'restarting'), ('Status', 'dead'),
+                             ('Status', 'unknown'), ('Running', True),
+                             ('Paused', True), ('Restarting', True), ('Dead', True)):
+            existing = self.existing_runtime()
+            existing['State'][field] = value
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(
+                    M.AgentHouseError, 'stopped'):
+                self.ensure_existing(existing)
+        for field in ('Status', 'Running', 'Paused', 'Restarting', 'Dead'):
+            existing = self.existing_runtime()
+            del existing['State'][field]
+            with self.subTest(missing=field), self.assertRaisesRegex(
+                    M.AgentHouseError, 'stopped'):
+                self.ensure_existing(existing)
+        existing = self.existing_runtime()
+        existing['State'] = None
+        with self.assertRaisesRegex(M.AgentHouseError, 'stopped'):
+            self.ensure_existing(existing)
 
     def test_readiness_requires_exact_select_one_reply(self):
         # The ClickHouse plain-text response has one LF; arbitrary surrounding

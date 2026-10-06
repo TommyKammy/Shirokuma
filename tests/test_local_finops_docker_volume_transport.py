@@ -52,6 +52,8 @@ class VolumeTransportTests(unittest.TestCase):
         tool,calls=backend();data=T.collect(tool)
         self.assertEqual(len(calls),9)
         self.assertEqual(data['listed_ids'],snapshot()['listed_ids'])
+        self.assertIs(data['container']['State']['Paused'], False)
+        self.assertIs(data['container']['State']['Dead'], False)
         self.assertNotIn('do-not-publish',repr(data))
         self.assertEqual(V.validate_pair(data,deepcopy(data),now='2026-09-27T00:00:10Z')
                          ['volume_traversal_authorized'],False)

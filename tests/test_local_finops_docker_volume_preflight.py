@@ -9,7 +9,8 @@ def snapshot():
     context, containers, volumes = fixture()
     container=containers[0];container['Image']='sha256:'+'b'*64
     container['State'].update(Status='exited',Restarting=False,
-        StartedAt='2026-09-20T00:00:00Z',FinishedAt='2026-09-20T00:00:10Z')
+        Paused=False,Dead=False,StartedAt='2026-09-20T00:00:00Z',
+        FinishedAt='2026-09-20T00:00:10Z')
     container['RestartCount']=0
     container['HostConfig']={'RestartPolicy':{'Name':'no'}}
     volume=volumes[0];volume['Options']=None
@@ -60,6 +61,18 @@ class VolumePreflightTests(unittest.TestCase):
             value=snapshot();change(value)
             with self.subTest(change=change),self.assertRaises(V.PreflightError):
                 validate(value,deepcopy(value))
+
+    def test_target_cannot_be_paused_dead_or_ambiguously_stopped(self):
+        for flag in ('Paused', 'Dead'):
+            for replacement in (True, None, 'false'):
+                value = snapshot()
+                value['container']['State'][flag] = replacement
+                with self.subTest(flag=flag, replacement=replacement), self.assertRaises(V.PreflightError):
+                    validate(value, deepcopy(value))
+            value = snapshot()
+            del value['container']['State'][flag]
+            with self.subTest(missing=flag), self.assertRaises(V.PreflightError):
+                validate(value, deepcopy(value))
 
     def test_all_containers_not_only_owned_label_and_bind_overlaps(self):
         for source in (V.VOLUME_ROOT, '/var/lib/docker',V.VOLUME_ROOT+'/nested'):

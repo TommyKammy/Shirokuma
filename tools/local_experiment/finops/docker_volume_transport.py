@@ -51,7 +51,7 @@ def _container(value):
             type(host.get('RestartPolicy')) is dict)
     return {'Id':value.get('Id'),'Name':value.get('Name'),'Image':value.get('Image'),
             'State':{key:state.get(key) for key in
-                     ('Status','Running','Restarting','StartedAt','FinishedAt')},
+                     ('Status','Running','Paused','Restarting','Dead','StartedAt','FinishedAt')},
             'RestartCount':value.get('RestartCount'),
             'Mounts':[{key:entry.get(key) for key in
                        ('Type','Name','Driver','Source','Destination','RW')}

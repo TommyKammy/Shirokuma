@@ -5,12 +5,28 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.21"
+version: "0.22"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 saved-container stopped-state guard (offline)
+
+An existing owned container with Docker status `running` (or absent/contradictory
+running, paused, restarting or dead flags) previously reached `docker start`
+and subsequent setup SQL. Fifteen fixture negatives reproduced acceptance before
+repair. Startup now requires explicit `created` or `exited` with all four flags
+false, before credential or filesystem access. Focused AgentHouse 59 tests and
+full local verification passed (the fake Dagster failure is intentional).
+Dedicated Colima was freshly observed Stopped; no Docker start, saved credential,
+report, volume or backup accessed or changed. This snapshot check cannot
+authenticate Docker or eliminate inspection-to-start races; saved-container
+compatibility, live ARM64, deduplication and operator acceptance remain open.
+Inspect live identity/state before future startup; if incompatible, revert only
+this guard/test, preserve saved records and never replay unknown inserts.
+Original Vault synchronization pending outside the checkout.
 
 ## 2026-10-06 context identity and unattended restart boundary (offline)
 

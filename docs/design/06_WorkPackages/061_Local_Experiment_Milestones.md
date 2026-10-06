@@ -5,12 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.463"
+version: "5.464"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: saved AgentHouse and FinOps stopped-state guards (offline)
+
+WP-L2-CH-001 now rejects existing Docker containers not explicitly `created`
+or `exited` with Running/Paused/Restarting/Dead all false before credential
+access or startup; 15 fixture negatives failed before repair. Independently,
+WP-L6-FIN-001 projects Paused/Dead in private Docker metadata and refuses an
+ambiguous `exited` volume target; eight negatives failed before repair. Focused
+AgentHouse 59, volume preflight six and transport eight tests and full
+`make verify-local-experiment` pass (fake Dagster failure intentional).
+Dedicated Colima freshly observed Stopped. No live Docker/VM action, saved
+credential/report/volume/backup access or change, and no unknown-request replay.
+FinOps remains metadata-only with `volume_traversal_authorized=False`,
+AgentHouse usage `null / NOT_MEASURED`. Offline fixtures do not authenticate
+Docker, exclude races or ongoing writers, prove live startup/cleanup, or grant
+operator acceptance. Revert only scoped guards/projection/tests and preserve
+retained resources. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: independent procfs boot-ID overmount boundary (offline)
 

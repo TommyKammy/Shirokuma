@@ -270,6 +270,15 @@ def ensure_runtime() -> Client:
                      not isinstance(existing.get('Mounts'), list) or
                      any(not isinstance(mount, dict) for mount in existing['Mounts'])):
         raise AgentHouseError('existing AgentHouse inspection is malformed; refusing startup')
+    if existing:
+        state = existing.get('State')
+        # `docker start` can be a no-op for an already running container. Do
+        # not mistake that for a scoped startup or write schema into a runtime
+        # that was active before this operation.
+        if (type(state) is not dict or state.get('Status') not in ('created', 'exited') or
+                any(state.get(flag) is not False for flag in
+                    ('Running', 'Paused', 'Restarting', 'Dead'))):
+            raise AgentHouseError('existing AgentHouse is not unambiguously stopped; refusing startup')
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     with private_state_fd() as state:
         try:
