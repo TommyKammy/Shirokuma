@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.461"
+version: "5.462"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent context identity and restart-policy checks (offline)
+
+WP-L2-CH-001 now refuses a Docker context reply with a foreign or absent name
+even if its socket matches, and refuses existing containers configured for
+unattended restart (or missing/ambiguous restart policy). Eleven fixture
+negatives failed before repair; focused AgentHouse 58 tests and full
+`make verify-local-experiment` pass (intentional fake Dagster failure).
+Dedicated Colima freshly observed Stopped; no live Docker, credential,
+retained report/volume/backup access or change. AgentHouse usage `null /
+NOT_MEASURED`. Fixtures cannot authenticate the daemon, establish saved
+container compatibility, live ARM64/deduplication or operator acceptance.
+Inspect identity and policy before any live startup; revert only scoped
+guards/tests while retaining saved records, never replay unknown inserts.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06: exact AgentHouse architecture reply (offline)
 

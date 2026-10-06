@@ -118,6 +118,8 @@ def check_context() -> None:
         if not isinstance(contexts, list) or len(contexts) != 1:
             raise ValueError('invalid context count')
         data = contexts[0]
+        if not isinstance(data, dict) or data.get('Name') != CONTEXT:
+            raise ValueError('context identity mismatch')
         endpoint = data["Endpoints"]["docker"]["Host"]
     except (ValueError, TypeError, KeyError, IndexError):
         raise AgentHouseError("dedicated Colima Docker context metadata is invalid") from None
@@ -308,6 +310,13 @@ def ensure_runtime() -> Client:
                 {key: mounts[0].get(key) for key in expected_mount} != expected_mount):
             raise AgentHouseError("existing AgentHouse must mount only its owned data volume read-write")
         host_config = existing["HostConfig"]
+        # A retained container must not restart itself outside an explicit
+        # local operation after a daemon or host restart.
+        policy = host_config.get('RestartPolicy')
+        if (type(policy) is not dict or set(policy) != {'Name', 'MaximumRetryCount'} or
+                type(policy['Name']) is not str or policy['Name'] != 'no' or
+                type(policy['MaximumRetryCount']) is not int or policy['MaximumRetryCount'] != 0):
+            raise AgentHouseError('existing AgentHouse restart policy differs; refusing startup')
         if host_config.get("NanoCpus") != 2_000_000_000 or host_config.get("Memory") != 4 * 1024**3:
             raise AgentHouseError("existing AgentHouse resource limits must remain 2 CPU and 4 GiB")
         # PortBindings alone do not constrain a host-networked or privileged

@@ -5,12 +5,31 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.20"
+version: "0.21"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 context identity and unattended restart boundary (offline)
+
+Two independent startup fixtures exposed gaps: a Docker context inspection
+reporting another (or missing) context name with the expected socket reached
+`docker info`, and an existing container with `always`, `unless-stopped`, or
+`on-failure` restart policy reached `docker start`. Context inspection now
+requires the fixed requested name as well as the socket. Saved-container
+startup requires Docker's explicit `no` restart policy with integer zero retry
+count; missing/ambiguous fields fail before credential read or start. Focused
+AgentHouse 58 tests and `make verify-local-experiment` pass; the verifier's fake
+Dagster failure is intentional. Dedicated Colima was observed Stopped, so
+actual saved-container compatibility, daemon identity, ARM64 execution, live
+deduplication and operator acceptance remain unverified. No daemon, retained
+credential/report/volume/backup accessed or changed; usage stays `null /
+NOT_MEASURED`. Before future live startup, inspect saved context/container
+identity and policy without altering retained resources. Revert only these
+two guards/fixtures if incompatible, preserving saved records; never replay
+unknown inserts. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 exact architecture diagnostic (offline)
 

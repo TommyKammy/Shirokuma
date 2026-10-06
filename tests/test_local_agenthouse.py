@@ -215,14 +215,28 @@ class AgentHouseTests(unittest.TestCase):
                 with self.assertRaisesRegex(M.AgentHouseError, "dedicated"):
                     M.check_context()
                 self.assertEqual(docker.call_count, 1)
-        config = [{"Endpoints": {"docker": {"Host": expected}}}]
+        config = [{"Name": M.CONTEXT, "Endpoints": {"docker": {"Host": expected}}}]
         with patch.object(M, "docker", side_effect=[json.dumps(config), 'aarch64']) as docker:
             M.check_context()
             self.assertEqual(docker.call_count, 2)
 
+    def test_context_reply_must_identify_requested_context(self):
+        endpoint = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
+        for name in (None, 'default', M.CONTEXT + '-other', ''):
+            context = {'Endpoints': {'docker': {'Host': endpoint}}}
+            if name is not None:
+                context['Name'] = name
+            with self.subTest(name=name), patch.object(M, 'docker', return_value=json.dumps([context])) as docker:
+                with self.assertRaisesRegex(M.AgentHouseError, 'context metadata'):
+                    M.check_context()
+                docker.assert_called_once_with('context', 'inspect', M.CONTEXT)
+        with patch.object(M, 'docker', side_effect=[json.dumps([{
+                'Name': M.CONTEXT, 'Endpoints': {'docker': {'Host': endpoint}}}]), 'arm64\n']):
+            M.check_context()
+
     def test_architecture_reply_requires_one_exact_line(self):
         endpoint = 'unix://' + str(Path.home() / '.colima/mac-studio-solo/docker.sock')
-        config = json.dumps([{'Endpoints': {'docker': {'Host': endpoint}}}])
+        config = json.dumps([{'Name': M.CONTEXT, 'Endpoints': {'docker': {'Host': endpoint}}}])
         for architecture in ('aarch64\n', 'arm64', 'arm64\n'):
             with self.subTest(architecture=architecture), patch.object(M, 'docker', side_effect=[config, architecture]):
                 M.check_context()
@@ -614,6 +628,7 @@ class AgentHouseTests(unittest.TestCase):
                            "NanoCpus": 2_000_000_000, "Memory": 4 * 1024**3,
                            "NetworkMode": "default", "Privileged": False,
                             "PidMode": "", "IpcMode": "private", "UTSMode": "",
+                            "RestartPolicy": {"Name": "no", "MaximumRetryCount": 0},
                             "PublishAllPorts": False,
                            "SecurityOpt": ["no-new-privileges:true"],
                            "CapAdd": None, "Devices": [], "Binds": None},
@@ -726,6 +741,21 @@ class AgentHouseTests(unittest.TestCase):
         private = self.existing_runtime()
         private['HostConfig']['IpcMode'] = ''  # Docker's other default spelling.
         self.ensure_existing(private)
+
+    def test_existing_runtime_refuses_unattended_restart_policy(self):
+        for policy in (None, {}, {'Name': 'always', 'MaximumRetryCount': 0},
+                       {'Name': 'unless-stopped', 'MaximumRetryCount': 0},
+                       {'Name': 'on-failure', 'MaximumRetryCount': 1},
+                       {'Name': 'no', 'MaximumRetryCount': 1},
+                       {'Name': 'no', 'MaximumRetryCount': False}):
+            existing = self.existing_runtime()
+            existing['HostConfig']['RestartPolicy'] = policy
+            with self.subTest(policy=policy), self.assertRaisesRegex(M.AgentHouseError, 'restart policy'):
+                self.ensure_existing(existing)
+        existing = self.existing_runtime()
+        del existing['HostConfig']['RestartPolicy']
+        with self.assertRaisesRegex(M.AgentHouseError, 'restart policy'):
+            self.ensure_existing(existing)
 
     def test_existing_runtime_refuses_lost_security_options_or_host_access(self):
         for key, values in (("SecurityOpt", ([], ["no-new-privileges:false"],
