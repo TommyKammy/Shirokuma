@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 import time
+import unicodedata
 from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -50,10 +51,9 @@ def _complete_list(value, kind):
     # unrecognized sibling must not silently describe a partial list.
     return (set(value) in ({'kind', 'apiVersion', 'items'},
                            {'kind', 'apiVersion', 'items', 'metadata'}) and
-            value.get('kind') == kind and value.get('apiVersion') == 'v1' and
-            type(metadata) is dict and
-            not any(type(key) is str and key.lower() in ('continue', 'remainingitemcount')
-                    and key not in ('continue', 'remainingItemCount') for key in metadata) and
+             value.get('kind') == kind and value.get('apiVersion') == 'v1' and
+             type(metadata) is dict and
+             set(metadata) <= {'selfLink', 'resourceVersion', 'continue', 'remainingItemCount'} and
             ('remainingItemCount' not in metadata or
              (type(metadata['remainingItemCount']) is int and metadata['remainingItemCount'] == 0)) and
             metadata.get('continue', '') == '' and
@@ -92,7 +92,7 @@ def parse_disk(raw):
     fields = lines[1].split()
     # Do not accept control-bearing device identifiers as capacity provenance.
     C.require(len(fields) == 6 and fields[0] and fields[5].startswith('/') and
-              all(ord(char) >= 32 and ord(char) != 127 and not 128 <= ord(char) <= 159
+              all(unicodedata.category(char) not in ('Cc', 'Cf')
                   for char in fields[0]) and
               all(len(fields[i]) <= 19 and fields[i].isascii() and fields[i].isdigit()
                   for i in (1, 2, 3)) and

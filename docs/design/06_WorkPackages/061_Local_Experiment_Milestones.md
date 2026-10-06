@@ -5,12 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.401"
+version: "5.402"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: bounded FinOps ListMeta and VM filesystem identity (offline)
+
+WP-L6-FIN-001: component PodList/NodeList and both storage PodList reads now
+refuse unexpected ListMeta keys; separately the `df` identity parser refuses
+Unicode formatting controls. Ten negative subcases failed before the repairs;
+canonical optional ListMeta fields pass. Focused FinOps 290 tests pass (seven
+Linux-only skips) after both changes; the subsequent full
+`make verify-local-experiment` passes after both repairs (the fake Dagster
+worker failure is an intentional negative diagnostic). Dedicated Colima was
+freshly listed Stopped. No live API/VM, retained report/volume/backup change
+or AgentHouse used-byte claim (`null / NOT_MEASURED`). These offline checks
+neither authenticate sources, prove atomicity nor grant operator acceptance.
+Revert only scoped guards/tests if needed, preserving saved evidence; original
+Vault sync remains pending outside checkout.
 
 ## 2026-10-06: fixed FinOps list and disk source envelopes (offline)
 

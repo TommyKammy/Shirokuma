@@ -5,12 +5,30 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.199"
+version: "0.200"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06: bounded list metadata and VM identity text (offline)
+
+Two independent source checks: the component PodList/NodeList and both reads of
+the storage PodList now refuse unknown ListMeta fields, including a hidden
+`pagination` field and case-variant `ResourceVersion`; ordinary optional
+`selfLink`, `resourceVersion`, empty `continue` and zero remaining count pass.
+Eight fixture negatives failed before repair. Separately, two Unicode format
+characters in the `df` filesystem identifier failed negative tests before the
+parser refused them as `DISK_INVALID`. `make test-local-finops` passed 290 tests
+(seven Linux-only skips) after both repairs; post-disk full
+`make verify-local-experiment` passed, including its intentional fake Dagster
+worker failure diagnostic. The dedicated Colima profile was freshly listed
+Stopped; no live API/VM read, report/volume/backup mutation or AgentHouse
+used-byte measurement (`null / NOT_MEASURED`). These offline controls cannot
+authenticate the producer, prove atomic sampling or grant operator acceptance.
+Restore only the scoped readers/parser/tests if needed, preserving saved
+evidence. Direct original Vault sync pending outside checkout.
 
 ## 2026-10-06: fixed list envelopes and disk identity controls (offline)
 

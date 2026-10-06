@@ -111,6 +111,18 @@ class RuntimeTests(unittest.TestCase):
                     self.assertFalse(R._complete_list({**valid, **extra}, kind))
             self.assertTrue(R._complete_list(valid, kind))
 
+    def test_component_lists_refuse_unexpected_metadata_fields(self):
+        for kind in ('PodList', 'NodeList'):
+            valid = {'kind': kind, 'apiVersion': 'v1', 'items': [], 'metadata': {}}
+            for field in ('pagination', 'ResourceVersion'):
+                reply = deepcopy(valid)
+                reply['metadata'][field] = {'continue': 'next'}
+                with self.subTest(kind=kind, field=field):
+                    self.assertFalse(R._complete_list(reply, kind))
+            valid['metadata'].update(selfLink='', resourceVersion='42', remainingItemCount=0)
+            valid['metadata']['continue'] = ''
+            self.assertTrue(R._complete_list(valid, kind))
+
     def backend(self):
         value = Mock()
         value.now.return_value = NOW
@@ -239,6 +251,12 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(device=repr(device)), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
                 R.parse_disk(value.replace('/dev/vda1', device))
         self.assertEqual(R.parse_disk(value), (1024000, 256000))
+
+    def test_df_refuses_unicode_format_controls_in_filesystem_identity(self):
+        value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        for device in ('/dev/vda1\u202e', '/dev/vda1\u200b'):
+            with self.subTest(device=repr(device)), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
+                R.parse_disk(value.replace('/dev/vda1', device))
 
     def test_vm_disk_refuses_wrong_architecture_before_df(self):
         backend = R.Backend()
