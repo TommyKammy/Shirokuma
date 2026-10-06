@@ -234,6 +234,15 @@ class RuntimeTests(unittest.TestCase):
         for bad in (value + value, value.replace('250', '-1'), value.replace('1000', '0')):
             with self.assertRaises(R.C.FinOpsError): R.parse_disk(bad)
 
+    def test_df_requires_complete_lf_framing(self):
+        value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
+        for bad in (value[:-1], value.replace('on\n', 'on\u2028'),
+                    value.replace('on\n', 'on\x85'), value.replace('\n', '\r\n'),
+                    value + '\n', '\n' + value):
+            with self.subTest(bad=repr(bad)), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
+                R.parse_disk(bad)
+        self.assertEqual(R.parse_disk(value), (1024000, 256000))
+
     def test_df_rejects_misidentified_or_inconsistent_capacity(self):
         value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
         for bad in (value.replace('1024-blocks', '512-blocks'),

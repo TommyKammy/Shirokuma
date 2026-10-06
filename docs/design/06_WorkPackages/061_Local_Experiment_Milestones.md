@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: complete VM df LF framing (offline)
+
+WP-L6-FIN-001 rejects missing final LF, Unicode separator, CRLF and additional
+rows in the fixed VM disk command output before projecting capacity. The first
+focused run failed its CRLF negative; the repaired focused suite passes 317
+tests (seven Linux-only skips). Dedicated Colima freshly Stopped; no live VM
+capacity read or retained data/backup change, AgentHouse bytes remain `null /
+NOT_MEASURED`. This cannot authenticate the VM or establish operator
+acceptance. Roll back only the scoped parser/test, retaining saved reports;
+original Vault sync pending outside checkout.
+
 ## 2026-10-06: bounded Docker numbers and unambiguous AgentHouse credential (offline)
 
 WP-L2-CH-001 refuses extreme Docker context/volume number tokens before

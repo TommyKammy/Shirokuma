@@ -12,6 +12,19 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 complete VM disk row framing (offline)
+
+The fixed `df -Pk` parser now requires two LF-terminated rows without CR,
+rejecting a truncated final row, extra blank row, Unicode line separator or
+CRLF rather than treating it as an ordinary capacity observation. The first
+focused run exposed that CRLF was still accepted through whitespace splitting;
+after tightening, 317 FinOps tests pass (seven Linux-only skips). Dedicated
+Colima was freshly Stopped, so this is not a live VM capacity observation; no
+retained report, volume or backup changed and AgentHouse bytes remain `null /
+NOT_MEASURED`. Framing alone cannot authenticate the guest or grant operator
+acceptance. Restore only the scoped parser/test, preserving saved reports;
+original Vault sync pending outside checkout.
+
 ## 2026-10-06 bounded inference numeric tokens (offline)
 
 The fixed AgentHouse inference JSONEachRow decoder now refuses integer tokens
