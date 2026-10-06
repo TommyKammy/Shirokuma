@@ -11,6 +11,15 @@ from tools.local_experiment.finops import run as R
 from test_local_finops_contract import NOW, component_args, pod, metrics, row
 
 
+class DockerReplyNumberTests(unittest.TestCase):
+    def test_nonrepresentable_numbers_are_not_accepted_in_metadata(self):
+        for raw in ('{"nested":1e9999}', '{"nested":1e-9999}',
+                    '{"nested":[-1e9999]}'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(R.C.FinOpsError, 'READ_FAILED'):
+                R._json(raw)
+        self.assertEqual(R._json('{"nested":1.25}'), {'nested': 1.25})
+
+
 def storage_complete():
     records = []
     for component in R.S.TARGETS:

@@ -42,7 +42,12 @@ def _json(raw):
         for key, item in items:
             C.require(key not in value, 'READ_FAILED'); value[key] = item
         return value
-    return json.loads(raw, object_pairs_hook=pairs,
+    def finite_float(text):
+        try:
+            return C.finite_json_float(text)
+        except (C.FinOpsError, ValueError):
+            raise C.FinOpsError('READ_FAILED') from None
+    return json.loads(raw, object_pairs_hook=pairs, parse_float=finite_float,
                        parse_constant=lambda _: (_ for _ in ()).throw(C.FinOpsError('READ_FAILED')))
 
 

@@ -12,6 +12,18 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 nonrepresentable metadata numbers (offline)
+
+The fixed FinOps Kubernetes/Docker JSON reply reader now refuses numeric
+exponents that overflow to infinity or round a nonzero value to zero. Three
+synthetic nested replies passed before repair; focused FinOps 312 tests pass
+(seven Linux-only skips); full local verifier, design-context, secret scan and
+diff check also pass. Dedicated Colima remained stopped; no live metadata
+read, retained report, volume or backup mutation. AgentHouse bytes remain
+`null / NOT_MEASURED`. This does not authenticate the metadata producer or
+establish operator acceptance. Revert only the numeric reply guard/test,
+preserving saved reports. Original Vault sync pending outside checkout.
+
 ## 2026-10-06 escaped surrogate inference reply (offline)
 
 The JSONEachRow inference reader now refuses unencodable decoded object keys

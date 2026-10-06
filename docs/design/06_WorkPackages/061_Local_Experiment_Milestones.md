@@ -12,6 +12,20 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: finite FinOps metadata replies (offline)
+
+WP-L6-FIN-001 refuses overflowing and underflowing JSON float exponents in
+fixed Kubernetes/Docker metadata replies before projection. Three nested
+negative fixtures passed before repair; focused 312 FinOps tests (seven
+Linux-only skips), full local verifier, design-context, direct secret scan and
+diff check pass afterward. An attempted `make scan-secrets` had no target;
+the repository scan was run via `scripts/verify_supply_chain.py scan-secrets`.
+Dedicated Colima remained stopped; no live
+metadata read or retained report/volume/backup mutation. AgentHouse usage
+remains `null / NOT_MEASURED`. This cannot authenticate the producer or prove
+operator acceptance. Restore only the scoped parser/fixture and retain saved
+reports. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: decoded AgentHouse export text (offline)
 
 WP-L2-CH-001 rejects escaped lone surrogates in JSONEachRow object keys and
