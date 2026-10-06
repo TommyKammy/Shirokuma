@@ -296,10 +296,11 @@ class AgentHouseTests(unittest.TestCase):
 
     def test_smoke_invalid_readback_is_scoped_without_replaying_insert(self):
         with tempfile.TemporaryDirectory() as directory:
-            report = Path(directory) / 'report.jsonl'
+            report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
             report.write_text('{"other":"value"}\n')
+            report.chmod(0o600)
             client = Mock()
-            with patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
+            with patch.object(M, 'STATE', Path(directory)), patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
                     patch.object(M, 'insert') as inserted, patch.object(M, 'export', return_value=report):
                 for reply in ('{}', '{"data":null}', '{"data":[{"n":1,"status":"success"}]}'):
                     client.query.return_value = reply
@@ -309,10 +310,11 @@ class AgentHouseTests(unittest.TestCase):
 
     def test_smoke_refuses_ambiguous_count_and_export_rows(self):
         with tempfile.TemporaryDirectory() as directory:
-            report = Path(directory) / 'report.jsonl'
+            report = Path(directory) / 'pawprints-20261006T010203000000Z.jsonl'
             report.write_text('{"event_id":"fixture","status":"success"}\n')
+            report.chmod(0o600)
             client = Mock()
-            with patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
+            with patch.object(M, 'STATE', Path(directory)), patch.object(M, 'event', return_value={'event_id': 'fixture'}), \
                     patch.object(M, 'insert') as inserted, patch.object(M, 'export', return_value=report):
                 for reply in ('{"data":[{"n":true,"status":"success"}]}',
                               '{"data":[{"n":1,"n":1,"status":"success"}]}',
@@ -332,6 +334,31 @@ class AgentHouseTests(unittest.TestCase):
                 report.write_text('{"event_id":"fixture","status":"success"}\n')
                 self.assertEqual(M.smoke(client)['result'], 'passed')
                 self.assertEqual(inserted.call_count, 14)
+
+    def test_smoke_export_readback_rejects_redirected_and_oversized_reports(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            report = state / 'pawprints-20261006T010203000000Z.jsonl'
+            foreign = Path(directory) / 'foreign'
+            foreign.write_text('{"event_id":"fixture","status":"success"}\n')
+            report.symlink_to(foreign)
+            with patch.object(M, 'STATE', state):
+                with self.assertRaises(M.AgentHouseError):
+                    M.read_smoke_export(report)
+                report.unlink()
+                report.write_text(foreign.read_text())
+                report.chmod(0o644)
+                with self.assertRaises(M.AgentHouseError):
+                    M.read_smoke_export(report)
+                report.chmod(0o600)
+                self.assertEqual(M.read_smoke_export(report)[0]['event_id'], 'fixture')
+                with report.open('ab') as file:
+                    file.truncate(8 * 1024 * 1024 + 1)
+                with self.assertRaises(M.AgentHouseError):
+                    M.read_smoke_export(report)
+                with self.assertRaises(M.AgentHouseError):
+                    M.read_smoke_export(foreign)
 
     def test_export_write_failure_never_publishes_partial_report(self):
         with tempfile.TemporaryDirectory() as directory:

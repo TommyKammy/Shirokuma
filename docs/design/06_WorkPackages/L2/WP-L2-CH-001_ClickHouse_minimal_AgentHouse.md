@@ -12,6 +12,22 @@ tags: [shirokuma, wp, l2, observability]
 
 # ClickHouse minimal AgentHouse
 
+## 2026-10-06 private smoke report readback (offline)
+
+Smoke no longer reopens its just-published export through an unrestricted
+pathname. It requires the fixed report name under the private state directory,
+opens the entry no-follow relative to that directory, bounds it to 8 MiB and
+checks owner, mode, link count and inode stability before assessing the saved
+row. Symlink, public-mode, oversized and out-of-scope fixtures fail closed;
+focused 46 tests and the full local verifier pass (fake Dagster failure is an
+intentional test). The dedicated Colima profile was freshly Stopped. No live
+inserts, saved export, volume or backup were accessed or changed. A same-UID
+writer can still substitute content before open; this does not authenticate
+ClickHouse or prove live retry deduplication. On ambiguous smoke failure inspect
+the retained report, never replay an unknown insert. Restore only this readback
+guard/test, preserving saved resources. Original Vault sync pending outside
+checkout; no operator acceptance.
+
 ## 2026-10-06 independent smoke count and export consistency (offline)
 
 The two deliberate same-ID smoke inserts previously passed on a JSON `true`

@@ -506,6 +506,34 @@ def export(client: Client) -> Path:
     return path
 
 
+def read_smoke_export(path: Path) -> list[dict]:
+    """Read the just-published report from the private directory, without following links."""
+    try:
+        if path.parent != STATE or not re.fullmatch(r'pawprints-\d{8}T\d{12}Z\.jsonl', path.name):
+            raise AgentHouseError('Pawprint export path is outside the private report scope')
+        with private_state_fd() as state:
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=state)
+            with os.fdopen(fd, 'rb') as file:
+                identity = os.fstat(file.fileno())
+                if (not stat.S_ISREG(identity.st_mode) or identity.st_uid != os.getuid() or
+                        stat.S_IMODE(identity.st_mode) != 0o600 or identity.st_nlink != 1 or
+                        identity.st_size > 8 * 1024 * 1024):
+                    raise AgentHouseError('Pawprint export is not a private bounded report')
+                payload = file.read(8 * 1024 * 1024 + 1)
+                after = os.fstat(file.fileno())
+                if (len(payload) > 8 * 1024 * 1024 or
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
+                        (identity.st_dev, identity.st_ino, identity.st_size,
+                         identity.st_mtime_ns, identity.st_ctime_ns)):
+                    raise AgentHouseError('Pawprint export changed during readback')
+            entry = os.stat(path.name, dir_fd=state, follow_symlinks=False)
+            if (entry.st_dev, entry.st_ino) != (identity.st_dev, identity.st_ino):
+                raise AgentHouseError('Pawprint export changed during readback')
+        return [json.loads(line) for line in payload.decode('utf-8').splitlines()]
+    except (OSError, ValueError, UnicodeError):
+        raise AgentHouseError('Pawprint export readback is invalid; do not replay') from None
+
+
 def smoke(client: Client) -> dict:
     value = event("runtime.smoke", "clickhouse")
     insert(client, value)
@@ -546,10 +574,7 @@ def smoke(client: Client) -> dict:
             not (type(rows[0]['n']) is int and rows[0]['n'] == 1 or rows[0]['n'] == '1')):
         raise AgentHouseError("Pawprint insertion or retry readback differs")
     path = export(client)
-    try:
-        exported = [json.loads(line) for line in path.read_text().splitlines()]
-    except (ValueError, UnicodeError):
-        raise AgentHouseError('Pawprint export readback is invalid; do not replay') from None
+    exported = read_smoke_export(path)
     matching = [row for row in exported if isinstance(row, dict) and row.get('event_id') == value['event_id']]
     if len(matching) != 1 or matching[0].get('status') != 'success':
         raise AgentHouseError("export does not contain exactly one successful inserted event")

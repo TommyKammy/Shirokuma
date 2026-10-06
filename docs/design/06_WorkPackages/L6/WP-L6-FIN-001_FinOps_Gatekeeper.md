@@ -12,6 +12,20 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 procfs superblock option ambiguity (offline)
+
+The separate caller-supplied procfs fixture contract admitted contradictory or
+repeated `rw`/`ro`, duplicate visibility options and a missing access option
+while projecting a mount candidate. Six synthetic superblock variants exposed
+the gap before repair; superblock options now start with exactly one access
+mode and contain no repeated tokens. Focused procfs nine tests and the full
+local verifier pass (fake Dagster failure intentional). Dedicated Colima
+freshly Stopped; no guest read or retained volume/report/backup access or
+mutation, AgentHouse usage remains `null / NOT_MEASURED`. This does not
+authenticate kernel origin, authorize a retained-volume scan or establish
+cleanup/operator acceptance. Restore only the scoped fixture contract/test,
+preserving saved evidence. Original Vault sync pending outside checkout.
+
 ## 2026-10-06 independent procfs parent/device structure (offline)
 
 The pure caller-supplied mountinfo contract projected a procfs candidate from

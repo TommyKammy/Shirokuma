@@ -107,6 +107,16 @@ class ProcfsContractTests(unittest.TestCase):
         value['mountinfo']+=b'20 19 0:21 /name\\040with\\040spaces /other rw - tmpfs tmpfs rw\n'
         self.assertTrue(P.project(**value)['probe']['query_complete'])
 
+    def test_procfs_super_options_do_not_project_ambiguous_access_or_visibility(self):
+        for options in (b'rw,ro,hidepid=0', b'rw,rw,hidepid=0',
+                        b'rw,hidepid=0,hidepid=0', b'hidepid=0',
+                        b'rw,hidepid=0,', b'rw,hidepid=0,gid=0,gid=0'):
+            value=inputs()
+            value['mountinfo']=value['mountinfo'].replace(b'proc proc rw,hidepid=0',
+                                                        b'proc proc '+options)
+            with self.subTest(options=options),self.assertRaises(P.ProcfsError):
+                P.project(**value)
+
     def test_forged_stat_field_noncanonical_numbers_and_limits_rejected(self):
         changes=[lambda x:x.update(target_stat=stat_line(999,4),target_errno=None),
                  lambda x:x.update(target_stat=stat_line(345,'0123'),target_errno=None),

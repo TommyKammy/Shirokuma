@@ -12,6 +12,23 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: independent smoke report and procfs option boundaries (offline)
+
+WP-L2-CH-001 now opens the smoke export relative to its private state directory
+without following a report symlink, validates its fixed name, ownership,
+permissions, link count, bounded size and inode before assessing the saved
+matching row. WP-L6-FIN-001 separately refuses conflicting, repeated or
+missing procfs superblock access options in caller-supplied mountinfo fixtures.
+Four smoke readback classes and six procfs option negatives are covered; focused
+AgentHouse 46 and procfs nine tests and full `make verify-local-experiment`
+pass. The fake Dagster worker failure in the verifier is intentional. Dedicated
+Colima freshly Stopped; no live insert, VM read, retained report/volume/backup
+access or change; AgentHouse bytes remain `null / NOT_MEASURED`. Original Vault
+sync pending outside checkout. Neither offline fix authenticates a producer,
+eliminates same-UID substitution, proves safe retained-volume scanning or grants
+operator acceptance. Restore only the scoped readers/tests while preserving
+saved records; inspect ambiguous insert evidence without replay.
+
 ## 2026-10-06: independent procfs parent/device structure (offline)
 
 WP-L6-FIN-001 rejects negative/overflowing parent ID and malformed/overflowing
