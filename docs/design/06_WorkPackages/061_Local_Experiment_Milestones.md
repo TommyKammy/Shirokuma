@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.519"
+version: "5.520"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: GitOps URL identity and offline tool drift
+
+WP-L0-GITOPS-001: two false matches of query/fragment Git URLs to the
+repository-local source were reproduced and refused; ambiguous path spelling
+also fails closed. Focused 2, bootstrap 16, formatting, pinned Flux client,
+design-context and full local verifier pass (intentional fake Dagster failure).
+Independent Iceberg gate fails with 44 tool-dependent errors: Helm installed
+v4.2.3 versus renderer pin v4.2.2 and kubectl rejecting non-Kubernetes JSON.
+No pin relaxation or acceptance claim. Dedicated Colima freshly Stopped; no
+VM start, live source/backup/volume read, writer exclusion or reconcile.
+Remote provenance, Git smoke, strict admission and operator acceptance remain
+open. Preserve retained resources; restore only scoped matcher/test if verified
+compatibility requires. Original Vault sync pending outside checkout.
 
 ## 2026-10-06: renderer Flux output and independent teardown checks (offline)
 

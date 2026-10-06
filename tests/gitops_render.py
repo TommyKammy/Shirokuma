@@ -339,14 +339,21 @@ def load_manifest_resources(root: Path) -> list[Resource]:
 
 
 def _canonical_git_url(value: str) -> str:
-    raw = value.strip()
+    raw = value
     scp_match = re.fullmatch(r"(?P<user>[^@/\s]+)@(?P<host>[^:/\s]+):(?P<path>.+)", raw)
     if scp_match:
         host = scp_match.group("host").lower()
         path = scp_match.group("path")
     else:
         parsed = urlsplit(raw)
-        if not parsed.hostname:
+        if (
+            parsed.scheme.lower() not in {"http", "https", "ssh"}
+            or not parsed.hostname
+            or parsed.query
+            or parsed.fragment
+            or "?" in raw
+            or "#" in raw
+        ):
             raise RenderError(f"unsupported Git repository URL: {value}")
         host = parsed.hostname.lower()
         default_port = {
@@ -363,6 +370,14 @@ def _canonical_git_url(value: str) -> str:
         if port is not None and port != default_port:
             host = f"{host}:{port}"
         path = parsed.path
+    # URL fragments/queries are not part of the checked-out Git artifact, and
+    # URL/path normalization must not silently turn another source into local.
+    if (
+        raw != raw.strip()
+        or not re.fullmatch(r"[A-Za-z0-9._~/-]+", path)
+        or any(part in {".", ".."} for part in path.split("/"))
+    ):
+        raise RenderError(f"unsupported Git repository URL: {value}")
     normalized_path = path.strip("/").removesuffix(".git")
     if not normalized_path:
         raise RenderError(f"unsupported Git repository URL: {value}")

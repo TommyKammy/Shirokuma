@@ -5,12 +5,38 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.147"
+version: "0.148"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: offline source URL identity and independent tool inventory
+
+The GitOps renderer previously considered a GitRepository URL with a query or
+fragment identical to the declared repository context because URL parsing
+discarded those fields. Two direct negative fixtures reproduced the false
+match. The local-source matcher now refuses these suffixes and ambiguous
+path spellings (dot components, escapes, non-path punctuation), preserving
+the normal source match and non-default port isolation. Focused 2 tests,
+bootstrap contract 16, `make tofu-fmt`, `make flux-version-check`,
+`make verify-design-context`, `make verify-local-experiment` and diff check
+pass (the local verifier's fake Dagster failure is intentional). This is
+offline source **text** classification, not remote repository provenance.
+
+An independent read-only tool check found installed Helm v4.2.3 while the
+renderer pins v4.2.2. `make verify-iceberg-table-bootstrap` failed with
+44 errors, including that version gate and kubectl rejecting non-Kubernetes
+JSON during the manifest scan. No version pin was changed or these failures
+called acceptance. Fresh dedicated `colima list` shows Stopped and
+`colima status --profile mac-studio-solo` confirms it is not running. No VM
+start, Helm release, Flux reconcile, GitHub request or saved volume/backup
+access/change. Before live work inspect retained disk/backup, writers and
+Flux scope. Restore only the URL matcher/test if verified URL semantics
+require it; keep saved resources and historical evidence. Original Vault
+sync is pending outside checkout. Live source identity, strict admission,
+Git smoke and operator acceptance remain open.
 
 ## 2026-10-06: align offline renderer with pinned client gate
 

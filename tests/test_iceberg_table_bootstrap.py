@@ -16,6 +16,8 @@ from typing import Any, Iterator
 from gitops_render import (
     RenderError,
     RepositoryContext,
+    Resource,
+    _git_source_matches_context_url,
     default_repository_context,
     iceberg_bootstrap_manifests,
     load_yaml_file,
@@ -3064,6 +3066,34 @@ class HelmRenderingTests(RepositoryFixture):
         self.helm_release()
         with self.assertRaises(RenderError):
             self.detect(self.context(other_port))
+
+    def test_git_source_url_must_not_alias_a_different_artifact(self) -> None:
+        context = self.context(LOCAL_GIT_URL)
+        for url in (
+            LOCAL_GIT_URL + "?ref=other",
+            LOCAL_GIT_URL + "#other",
+            LOCAL_GIT_URL.replace("/Shirokuma", "/other/../Shirokuma"),
+            LOCAL_GIT_URL.replace("/Shirokuma", "/%53hirokuma"),
+        ):
+            with self.subTest(url=url):
+                source = Resource(
+                    self.root / "source.yaml",
+                    {
+                        "apiVersion": "source.toolkit.fluxcd.io/v1",
+                        "kind": "GitRepository",
+                        "spec": {"url": url},
+                    },
+                )
+                self.assertFalse(_git_source_matches_context_url(source, context))
+        source = Resource(
+            self.root / "source.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "spec": {"url": LOCAL_GIT_URL},
+            },
+        )
+        self.assertTrue(_git_source_matches_context_url(source, context))
 
     def test_repository_context_authorizes_url_branch_pairs(self) -> None:
         first = "ssh://git@example.com/platform/first.git"
