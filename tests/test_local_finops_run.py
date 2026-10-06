@@ -183,10 +183,25 @@ class RuntimeTests(unittest.TestCase):
                     value.replace('700 250', '800 250'),
                     value.replace('74%', 'unknown'),
                     value.replace('74%', '101%'),
+                    value.replace('74%', '0%'),
+                    value.replace('74%', '75%'),
                     value.replace(' /\n', ' relative\n'),
                     value.replace('/dev/vda1', '')):
             with self.subTest(bad=bad), self.assertRaises(R.C.FinOpsError):
                 R.parse_disk(bad)
+
+    def test_df_capacity_uses_ceiling_of_used_over_non_reserved_blocks(self):
+        header = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+        for row in ('/dev/vda1 1000 0 1000 0% /\n',
+                    '/dev/vda1 1000 1 999 1% /\n',
+                    '/dev/vda1 1000 700 0 100% /\n',
+                    '/dev/vda1 1000 700 250 74% /\n'):
+            with self.subTest(row=row):
+                self.assertEqual(R.parse_disk(header + row)[0], 1024000)
+        for row in ('/dev/vda1 1000 0 0 0% /\n',
+                    '/dev/vda1 1000 700 250 73% /\n'):
+            with self.subTest(row=row), self.assertRaisesRegex(R.C.FinOpsError, 'DISK_INVALID'):
+                R.parse_disk(header + row)
 
     def test_df_overlong_numeric_field_has_scoped_failure(self):
         value = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1000 700 250 74% /\n'
@@ -291,6 +306,20 @@ class RuntimeTests(unittest.TestCase):
                 self.assertRaises(R.C.FinOpsError):
             backend.component('trino')
         self.assertIsNone(backend.server); self.assertEqual(read.call_count, 1)
+
+    def test_malformed_node_identity_has_scoped_failure_before_pod_read(self):
+        for item in ({}, {'status': None}, {'status': {}},
+                     {'status': {'nodeInfo': None}},
+                     {'status': {'nodeInfo': {'architecture': 'arm64', 'kubeletVersion': None}}},
+                     {'status': {'nodeInfo': {'architecture': 'arm64', 'kubeletVersion': []}}}):
+            backend = R.Backend()
+            nodes = {'kind': 'NodeList', 'apiVersion': 'v1', 'metadata': {}, 'items': [item]}
+            with self.subTest(item=item), patch.object(R.U, '_local_server', return_value='https://127.0.0.1:6443'), \
+                    patch.object(backend, '_read', return_value=nodes) as read, \
+                    self.assertRaisesRegex(R.C.FinOpsError, 'SCOPE_INVALID'):
+                backend.component('trino')
+            self.assertIsNone(backend.server)
+            self.assertEqual(read.call_count, 1)
 
     def test_malformed_node_page_refuses_pod_read_and_clears_server(self):
         for metadata in (None, [], {'continue': None}, {'continue': False},

@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.398"
+version: "5.399"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: VM percent and node identity guards (offline)
+
+WP-L6-FIN-001: contradictory `df` displayed percentages and an undefined
+non-reserved denominator now fail with `DISK_INVALID`; five malformed node
+identity variants now fail with `SCOPE_INVALID` before Pod reads. Negatives
+failed before repair; focused FinOps 282 tests pass (seven Linux-only skips),
+as do `make verify-local-experiment`, design-context, scoped secret scan and
+diff check (its fake Dagster worker failure is an intentional negative test).
+Dedicated Colima was freshly listed Stopped; no live API/VM read, retained
+report/volume/backup change or AgentHouse used-byte claim (`null /
+NOT_MEASURED`). Offline checks neither authenticate sources nor grant operator
+acceptance. Revert only scoped guards/tests if needed, retaining saved
+evidence; original Vault sync pending outside checkout.
 
 ## 2026-10-06: VM disk text and fixed-command controls (offline)
 

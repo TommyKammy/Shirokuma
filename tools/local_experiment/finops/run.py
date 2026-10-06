@@ -96,6 +96,11 @@ def parse_disk(raw):
               int(fields[4][:-1]) <= 100, 'DISK_INVALID')
     total, used, available = (int(fields[i]) * 1024 for i in (1, 2, 3))
     C.require(0 < total <= 2**63-1 and used + available <= total, 'DISK_INVALID')
+    # GNU df rounds up Used / (Used + Available); reserved blocks are not
+    # available to ordinary users and must not enter this denominator.
+    C.require(used + available > 0 and
+              int(fields[4][:-1]) == (100 * used + used + available - 1) // (used + available),
+              'DISK_INVALID')
     return total, available
 
 
@@ -162,8 +167,12 @@ class Backend:
         try:
             nodes = self._read('/api/v1/nodes', deadline)
             C.require(_complete_list(nodes, 'NodeList') and len(nodes['items']) == 1, 'SCOPE_INVALID')
-            info = nodes['items'][0]['status']['nodeInfo']
-            C.require(info.get('architecture') == 'arm64' and 'k3s' in info.get('kubeletVersion', ''), 'SCOPE_INVALID')
+            node = nodes['items'][0]
+            C.require(type(node) is dict and type(node.get('status')) is dict, 'SCOPE_INVALID')
+            info = node['status'].get('nodeInfo')
+            C.require(type(info) is dict and info.get('architecture') == 'arm64' and
+                      type(info.get('kubeletVersion')) is str and 'k3s' in info['kubeletVersion'],
+                      'SCOPE_INVALID')
         except BaseException:
             self.server = None; raise
 
