@@ -5,12 +5,21 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.523"
+version: "5.524"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: complete checked-in source contract (offline)
+
+WP-L0-GITOPS-001: a malformed additional checked-in GitRepository can no longer
+vanish from the offline declared source set; the failing isolated fixture now
+passes. Bootstrap/teardown 27 and full local verifier pass (fake Dagster
+failure is intentional). No remote fetch or lab start; this is
+declaration consistency, not live Flux or remote provenance. Keep saved state;
+Vault sync pending outside checkout and live §9/operator gates remain open.
 
 ## 2026-10-06: independent offline Git identity and malformed authority checks
 

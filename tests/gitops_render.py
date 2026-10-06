@@ -433,25 +433,24 @@ def default_repository_context(source_root: Path, deploy_root: Path) -> Reposito
         )
     sources: list[tuple[str, str, str | None]] = []
     for resource in load_yaml_file(sync_path):
-        if (
-            resource.get("kind") != "GitRepository"
-            or resource.get("apiVersion")
-            != EXPECTED_API_VERSIONS["GitRepository"]
-        ):
+        if resource.get("kind") != "GitRepository":
             continue
+        if resource.get("apiVersion") != EXPECTED_API_VERSIONS["GitRepository"]:
+            raise RenderError("checked-in GitRepository has unsupported apiVersion")
         spec = _mapping(resource.get("spec"))
         url = spec.get("url")
         branch = _mapping(spec.get("ref")).get("branch")
-        if isinstance(url, str) and isinstance(branch, str) and branch:
-            secret = spec.get("secretRef")
-            if secret is not None and (
-                not isinstance(secret, dict)
-                or set(secret) != {"name"}
-                or not isinstance(secret["name"], str)
-                or not secret["name"]
-            ):
-                raise RenderError("GitRepository has an invalid secret reference")
-            sources.append((url, branch, secret["name"] if secret else None))
+        if not isinstance(url, str) or not isinstance(branch, str) or not branch:
+            raise RenderError("checked-in GitRepository requires URL and branch")
+        secret = spec.get("secretRef")
+        if secret is not None and (
+            not isinstance(secret, dict)
+            or set(secret) != {"name"}
+            or not isinstance(secret["name"], str)
+            or not secret["name"]
+        ):
+            raise RenderError("GitRepository has an invalid secret reference")
+        sources.append((url, branch, secret["name"] if secret else None))
     if not sources:
         raise RenderError(f"no GitRepository URL found in {sync_path}")
     return RepositoryContext.create(

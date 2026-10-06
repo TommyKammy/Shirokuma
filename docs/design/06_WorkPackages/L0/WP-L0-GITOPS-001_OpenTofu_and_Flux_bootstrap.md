@@ -5,12 +5,25 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.151"
+version: "0.152"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: checked-in Git source completeness (offline)
+
+An independent fixture showed that the checked-in source context silently
+ignored an additional GitRepository with a missing branch while accepting a
+valid neighbor. It now refuses any incomplete GitRepository URL/branch or
+unsupported GitRepository API version instead of shrinking the declared source
+set. Focused bootstrap/teardown contracts (27) and full local verifier pass
+(intentional fake Dagster failure). The dedicated VM remains
+Stopped; this offline declaration check does not fetch the remote or establish
+runtime/credential authenticity, strict admission or operator acceptance.
+Preserve saved resources; restore only the scoped context reader/test if
+verified declaration semantics differ. Original Vault sync remains pending.
 
 ## 2026-10-06: unambiguous offline source identities
 
