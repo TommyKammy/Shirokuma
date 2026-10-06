@@ -12,6 +12,16 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06 escaped surrogate inference reply (offline)
+
+The JSONEachRow inference reader now refuses unencodable decoded object keys
+and string values (including escaped lone surrogates) before projection.
+Focused 311 FinOps tests pass with seven Linux-only skips. Dedicated Colima
+remained stopped; no live query, report, retained volume or backup was changed.
+This guards reply interpretation, not producer authenticity or operator
+acceptance. AgentHouse bytes remain `null / NOT_MEASURED`. Revert only this
+reply check/test while preserving saved reports. Original Vault sync pending.
+
 ## 2026-10-06: bound inference reply nesting (offline)
 
 A UTF-8 JSONEachRow reply under the 1 MiB byte cap could still contain over

@@ -335,9 +335,19 @@ class Backend:
             value, depth = stack.pop()
             C.require(depth <= 64, 'INFERENCE_INVALID')
             if type(value) is dict:
+                try:
+                    for key in value:
+                        key.encode('utf-8')
+                except UnicodeError:
+                    raise C.FinOpsError('INFERENCE_INVALID') from None
                 stack.extend((child, depth + 1) for child in value.values())
             elif type(value) is list:
                 stack.extend((child, depth + 1) for child in value)
+            elif type(value) is str:
+                try:
+                    value.encode('utf-8')
+                except UnicodeError:
+                    raise C.FinOpsError('INFERENCE_INVALID') from None
         return rows
 
     def local_processes(self):

@@ -12,6 +12,16 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: FinOps decoded inference text (offline)
+
+WP-L6-FIN-001 rejects escaped lone surrogates in JSONEachRow keys/values
+before projecting inference records. Focused FinOps 311 tests pass (seven
+Linux-only skips). Dedicated Colima freshly stopped; no live query or retained
+report, volume or backup mutation. AgentHouse usage remains `null /
+NOT_MEASURED`. Reply decoding does not authenticate producers or establish
+operator acceptance. Roll back only the parser guard/fixtures, preserving
+saved records. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: bounded AgentHouse export nesting (offline)
 
 WP-L2-CH-001 now refuses JSONEachRow values nested beyond 64 levels and

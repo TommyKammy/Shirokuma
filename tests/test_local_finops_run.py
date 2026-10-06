@@ -486,7 +486,9 @@ class RuntimeTests(unittest.TestCase):
                 for reply in (' ', '\n', '{}', '{}\n\n', '{}\n \n',
                               '{"events":1,"events":2}\n', '{"events":NaN}\n',
                               '{"events":Infinity}\n', '{"nested":{"value":-Infinity}}\n',
-                               '{"events":1e9999}\n', '{"nested":' + '[' * 1200 + '0' + ']' * 1200 + '}\n'):
+                               '{"events":1e9999}\n', '{"\\ud800":1}\n',
+                               '{"nested":{"value":"\\ud800"}}\n',
+                               '{"nested":' + '[' * 1200 + '0' + ']' * 1200 + '}\n'):
                     with self.subTest(reply=reply[:80]), self.assertRaisesRegex(R.C.FinOpsError, 'INFERENCE_INVALID'):
                         client.query.return_value = reply
                         backend.inference(NOW)
