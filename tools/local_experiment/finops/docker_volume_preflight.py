@@ -112,6 +112,9 @@ def _mounts(container):
         driver = entry.get('Driver') if entry['Type'] == 'volume' else None
         if entry['Type'] == 'volume':
             name = _label(name, 256)
+            # A Docker volume name is not a path or arbitrary printable text.
+            # Do not normalize a malformed unrelated reference into inventory.
+            require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', name) is not None)
             driver = _label(driver, 128)
         else:
             # Do not erase a contradictory volume identity while projecting a

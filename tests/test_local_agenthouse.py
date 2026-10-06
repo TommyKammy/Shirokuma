@@ -911,6 +911,26 @@ class AgentHouseTests(unittest.TestCase):
                     client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
         self.assertEqual(client.opener.open.call_count, 2)
 
+    def test_query_refuses_indented_exception_line_without_retry(self):
+        client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status = 200
+        client.opener.open = Mock(return_value=response)
+        for body in (b'  Code: 241. DB::Exception: failed\n',
+                     b'1\n\tCode: 60. DB::Exception: failed\n',
+                     b'\xef\xbb\xbf  Code: 60. DB::Exception: failed\n'):
+            with self.subTest(body=body):
+                response.headers = {'Content-Length': str(len(body))}
+                response.read.return_value = body
+                with self.assertRaisesRegex(M.AgentHouseError, 'query exception'):
+                    client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
+        self.assertEqual(client.opener.open.call_count, 3)
+        response.read.return_value = b'Code: 60. ordinary output\n'
+        response.headers = {'Content-Length': str(len(response.read.return_value))}
+        self.assertEqual(client.query('SELECT 1'), 'Code: 60. ordinary output\n')
+
     def test_query_refuses_range_reply_on_200_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
         response = Mock()

@@ -5,12 +5,25 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.270"
+version: "0.271"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 unrelated volume name spelling (offline)
+
+The standalone two-snapshot Docker metadata guard refuses path-like or otherwise
+invalid volume names in unrelated container mounts; seven previously eligible
+negative fixtures now fail, while dotted and hyphenated valid names remain
+eligible (focused preflight 29, FinOps 383 tests, seven Linux-only skips).
+Dedicated Colima freshly Stopped; no VM/Docker or retained volume/report/backup
+access/change. This checks supplied metadata, not producer authenticity,
+continuous writer exclusion or safe traversal (`False`). AgentHouse bytes stay
+`null / NOT_MEASURED`; no operator acceptance. Roll back only this scoped
+guard/test if verified daemon metadata requires it, preserving saved resources.
+Original Vault sync pending outside checkout.
 
 ## 2026-10-06 nested Docker destinations (offline)
 

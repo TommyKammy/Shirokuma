@@ -5,12 +5,37 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.496"
+version: "5.498"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06 unrelated Docker volume name spelling (offline)
+
+WP-L6-FIN-001 independently refuses invalid Docker volume names on unrelated
+mounts. Seven malformed names were formerly metadata-eligible; focused preflight
+29 and FinOps 383 tests pass (seven Linux-only skips). Dedicated Colima freshly
+Stopped; no VM/Docker or retained volume/report/backup read/change. This offline
+rule cannot authenticate Docker, exclude continuous writers, authorize retained
+volume traversal or establish operator acceptance. AgentHouse bytes remain
+`null / NOT_MEASURED`. Preserve saved resources; revert only this guard/test if
+needed. Combined `make verify-local-experiment`, `make verify-design-context`
+and `git diff --check` pass (fake Dagster worker failure is an intentional
+negative). Original Vault sync pending outside checkout.
+
+## 2026-10-06 indented ClickHouse error body boundary (offline)
+
+WP-L2-CH-001 refuses indented ClickHouse exception lines on HTTP 200, including
+after streamed text or BOM. Three negative fixture writes were previously
+acknowledged; focused AgentHouse 82 tests pass. Dedicated Colima freshly
+Stopped; no live HTTP/Docker or retained credential/report/volume/backup
+read/change. This signature does not authenticate the producer, establish live
+deduplication or justify retry of an uncertain insert. AgentHouse usage remains
+`null / NOT_MEASURED`, FinOps traversal unauthorized, operator acceptance open.
+Restore only this guard/test if needed, preserve saved data; original Vault
+sync pending outside checkout.
 
 ## 2026-10-06: independent BOM error and nested mount boundaries (offline)
 

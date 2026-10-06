@@ -5,12 +5,25 @@ title: "ClickHouse minimal AgentHouse"
 status: local-verified
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.42"
+version: "0.43"
 area: "workpackage"
 tags: [shirokuma, wp, l2, observability]
 ---
 
 # ClickHouse minimal AgentHouse
+
+## 2026-10-06 indented streamed exception refusal (offline)
+
+The HTTP 200 body guard also refuses a ClickHouse `Code: N. DB::Exception:`
+line preceded by ASCII spaces/tabs, optionally after a BOM or earlier streamed
+text. Three formerly acknowledged synthetic writes now fail without retry;
+ordinary `Code:` output without `DB::Exception:` still passes (82 focused
+tests). Dedicated Colima freshly Stopped; no live HTTP/Docker, saved credential,
+report, volume or backup access/change. This is a conservative text signature,
+not authenticated producer evidence, live deduplication or operator acceptance.
+Preserve saved data and never replay an uncertain insert; revert only this
+guard/test if verified live behavior requires it. Original Vault sync pending
+outside checkout.
 
 ## 2026-10-06 BOM-prefixed streamed exception (offline)
 

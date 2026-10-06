@@ -32,6 +32,18 @@ def validate(before, after):
 
 
 class VolumePreflightTests(unittest.TestCase):
+    def test_unrelated_volume_name_must_use_docker_volume_spelling(self):
+        for name in (' another', 'another/child', '../agenthouse', 'another\\child',
+                     'another:name', '.hidden', 'another '):
+            value = snapshot()
+            value['containers'][1]['Mounts'][0]['Name'] = name
+            with self.subTest(name=name), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        for name in ('other.volume_1', 'other-volume'):
+            value = snapshot()
+            value['containers'][1]['Mounts'][0]['Name'] = name
+            self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
     def test_nonterminated_container_cannot_report_future_finish(self):
         for status, flag in (('running', 'Running'), ('paused', 'Paused'),
                              ('restarting', 'Restarting')):
