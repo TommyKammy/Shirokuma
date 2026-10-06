@@ -464,6 +464,30 @@ class RuntimeTests(unittest.TestCase):
                     self.assertRaises(R.C.FinOpsError):
                 backend.inference(NOW)
 
+    def test_inference_does_not_silently_drop_partial_or_blank_rows(self):
+        context = [{'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}]
+        container = [{'Name': '/' + R.AH.NAME, 'Id': 'a'*64,
+                      'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},
+                      'Mounts': self._inference_mounts(), 'State': {'Running': True},
+                      'NetworkSettings': {'Ports': {'8123/tcp': [
+                          {'HostIp': '127.0.0.1', 'HostPort': '18123'}]}}}]
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp)
+            credential = state / 'credential.json'
+            credential.write_text('{"password":"fixture"}')
+            credential.chmod(0o600)
+            backend = R.Backend()
+            client = Mock()
+            with patch.object(R.AH, 'STATE', state), patch.object(R.AH, 'Client', return_value=client), \
+                    patch.object(backend, '_command', side_effect=lambda args: json.dumps(
+                        context if args[1] == 'context' else container)):
+                client.query.return_value = ''
+                self.assertEqual(backend.inference(NOW), [])
+                for reply in (' ', '\n', '{}', '{}\n\n', '{}\n \n'):
+                    with self.subTest(reply=reply), self.assertRaisesRegex(R.C.FinOpsError, 'INFERENCE_INVALID'):
+                        client.query.return_value = reply
+                        backend.inference(NOW)
+
     def test_agenthouse_malformed_inspection_refuses_before_credentials(self):
         context = {'Name': R.AH.CONTEXT, 'Endpoints': {'docker': {'Host': self._inference_socket()}}}
         owned = [{'Config': {'Labels': {R.AH.LABEL: 'agenthouse-local'}, 'Image': R.AH.IMAGE},

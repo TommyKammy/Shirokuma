@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.423"
+version: "5.424"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent FinOps inference reply completeness (offline)
+
+WP-L6-FIN-001: inference refuses truncated, whitespace-only and blank-line
+JSONEachRow replies rather than projecting zero events from incomplete output;
+empty zero-row output still passes. Invalid JSON and non-object rows are scoped
+`INFERENCE_INVALID`. Focused FinOps 311 tests (seven Linux-only skips),
+`make verify-local-experiment`, design-context and diff check pass (the
+verifier's fake Dagster worker failure is an intentional negative diagnostic).
+Dedicated Colima freshly Stopped; no live query, credential, retained volume,
+report or backup mutation; AgentHouse used bytes remain `null / NOT_MEASURED`.
+Reply checks are not producer authentication or operator acceptance. Restore
+only the parser/test, preserving saved evidence; original Vault sync pending.
 
 ## 2026-10-06: AgentHouse missing volume and malformed Docker replies (offline)
 

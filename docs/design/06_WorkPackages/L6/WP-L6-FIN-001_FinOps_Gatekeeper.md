@@ -12,6 +12,19 @@ tags: [shirokuma, wp, l6, finops]
 
 # FinOps Gatekeeper with inference and disk watermark cost
 
+## 2026-10-06: refuse partial inference JSONEachRow replies (offline)
+
+The fixed inference query now accepts empty output for zero rows but refuses
+whitespace-only, unterminated or blank-line JSONEachRow output rather than
+silently treating incomplete data as zero events. Malformed JSON and non-object
+rows fail with scoped `INFERENCE_INVALID`; valid rows still reach the existing
+contract checks. Focused FinOps 311 tests pass (seven Linux-only skips). Dedicated
+Colima was freshly Stopped; no live query, credential, report, volume or backup
+changed and AgentHouse used bytes remain `null / NOT_MEASURED`. The reply shape
+does not authenticate the producer or prove live model accounting. Restore only
+this reply parser/test if required; preserve saved evidence. Original Vault sync
+pending outside checkout; no operator acceptance.
+
 ## 2026-10-06: refuse unencodable inference reply (offline)
 
 An unencodable synthetic AgentHouse query string previously raised an unscoped

@@ -309,7 +309,16 @@ class Backend:
         except UnicodeError:
             raise C.FinOpsError('INFERENCE_INVALID') from None
         C.require(size <= 1024**2, 'READ_LIMIT')
-        return [_json(line) for line in raw.splitlines() if line.strip()]
+        # JSONEachRow emits one complete object per newline, or no bytes for
+        # zero rows. Never silently discard blank/truncated lines as zero events.
+        C.require(not raw or (raw.endswith('\n') and all(line.strip() for line in raw.split('\n')[:-1])),
+                  'INFERENCE_INVALID')
+        try:
+            rows = [_json(line) for line in raw.split('\n')[:-1]] if raw else []
+        except (ValueError, C.FinOpsError):
+            raise C.FinOpsError('INFERENCE_INVALID') from None
+        C.require(all(type(line) is dict for line in rows), 'INFERENCE_INVALID')
+        return rows
 
     def local_processes(self):
         # Runtime imports are isolated in the already installed Lab environment.
