@@ -104,7 +104,7 @@ def _mountpoints(raw):
             if option == 'unbindable':
                 kind = option
             else:
-                match = re.fullmatch(r'(shared|master|propagate_from):([0-9]{1,19})', option)
+                match = re.fullmatch(r'(shared|master|propagate_from):([1-9][0-9]{0,18})', option)
                 require(match is not None and 0 < int(match[2]) <= 2**63 - 1)
                 kind = match[1]
             require(kind not in tags)
@@ -160,8 +160,8 @@ def _parse_mount_id(raw):
     lines = raw.split(b'\n')[:-1]
     require(all(line for line in lines))
     matches = [line[len(b'mnt_id:\t'):] for line in lines if line.startswith(b'mnt_id:')]
-    require(len(matches) == 1 and re.fullmatch(rb'[0-9]+', matches[0]) is not None and
-            len(matches[0]) <= 19)
+    require(len(matches) == 1 and
+            re.fullmatch(rb'[1-9][0-9]{0,18}', matches[0]) is not None)
     value = int(matches[0])
     require(0 < value <= 2**63 - 1)
     return value

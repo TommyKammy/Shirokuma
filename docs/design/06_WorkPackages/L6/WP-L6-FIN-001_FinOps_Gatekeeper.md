@@ -5,12 +5,29 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.238"
+version: "0.239"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 private worker fdinfo and propagation ID spelling (offline)
+
+The separate worker accepted a leading-zero fdinfo mount ID and three
+leading-zero propagation IDs even though its mount inventory and the independent
+procfs fixture require canonical decimal identity. Four negative fixtures
+reproduced acceptance before the guard; a bounded canonical fdinfo field and
+propagation tags now fail closed, while the valid IDs remain accepted. Focused
+volume suite: 61 tests (seven Linux-only skips); full
+`make verify-local-experiment` passed (fake Dagster failure is an intentional
+negative test). The first focused invocation used an incompatible unittest
+import path and failed collection; discovery with `-s tests` passed. Dedicated
+Colima observed Stopped; no VM read, retained volume/report/backup access or
+mutation; AgentHouse bytes remain `null / NOT_MEASURED`. These fixture checks
+do not authenticate the kernel, authorize a retained-volume scan, establish
+cleanup or operator acceptance. Restore only the scoped worker/test changes
+while preserving saved records. Original Vault sync pending outside checkout.
 
 ## 2026-10-06 private worker numeric mount identity (offline)
 

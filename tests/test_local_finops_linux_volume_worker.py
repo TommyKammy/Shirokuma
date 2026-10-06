@@ -85,8 +85,9 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
     def test_mountinfo_refuses_conflicting_or_repeated_propagation(self):
         row = '2 1 8:1 /some /fixture/child rw {tags} - ext4 /dev/a rw\n'
         for tags in ('shared:1 shared:2', 'master:1 master:1',
-                     'unbindable unbindable', 'unbindable shared:1',
-                     'master:1 unbindable', 'propagate_from:1 unbindable'):
+                      'unbindable unbindable', 'unbindable shared:1',
+                      'master:1 unbindable', 'propagate_from:1 unbindable',
+                      'shared:01', 'master:0002', 'propagate_from:03'):
             with self.subTest(tags=tags), self.assertRaisesRegex(W.ScanError, 'SCOPE_INVALID'):
                 W._mountpoints(row.format(tags=tags))
         for tags in ('unbindable', 'shared:1 master:2 propagate_from:3'):
@@ -133,9 +134,11 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
         canonical = b'pos:\t0\nflags:\t0100000\nmnt_id:\t42\nino:\t7\n'
         self.assertEqual(W._parse_mount_id(canonical), 42)
         for raw in (canonical[:-1], canonical.replace(b'42\n', b'42\r\n'),
-                    canonical.replace(b'42', b'\n42'),
-                    canonical.replace(b'42', b'0'),
-                    canonical.replace(b'mnt_id:\t42', b'mnt_id:\t42\nmnt_id:\t43')):
+                     canonical.replace(b'42', b'\n42'),
+                     canonical.replace(b'42', b'0'),
+                     canonical.replace(b'mnt_id:\t42', b'mnt_id:\t042'),
+                     canonical.replace(b'mnt_id:\t42', b'mnt_id:\t' + b'9' * 20),
+                     canonical.replace(b'mnt_id:\t42', b'mnt_id:\t42\nmnt_id:\t43')):
             with self.subTest(raw=raw), self.assertRaises(W.ScanError):
                 W._parse_mount_id(raw)
 

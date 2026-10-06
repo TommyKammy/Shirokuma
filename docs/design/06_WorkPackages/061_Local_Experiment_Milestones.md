@@ -5,12 +5,25 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.454"
+version: "5.455"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: private worker canonical fdinfo and propagation IDs (offline)
+
+WP-L6-FIN-001 rejects leading-zero fdinfo and propagation IDs; four isolated
+fixtures reproduced acceptance before repair. Focused volume suite 61 tests
+(seven Linux-only skips) and `make verify-local-experiment` pass, with its fake
+Dagster failure intentional. One initial focused invocation failed collection
+due to an incompatible unittest import path; discovery from `tests` passed.
+Dedicated Colima freshly Stopped; no VM read, retained data/backup change or
+AgentHouse measurement (`null / NOT_MEASURED`). Offline syntax is not kernel
+provenance, remote cleanup, permission to scan a retained volume or operator
+acceptance. Revert only the worker guard/tests, retain saved evidence; original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: private worker numeric mount identity (offline)
 
