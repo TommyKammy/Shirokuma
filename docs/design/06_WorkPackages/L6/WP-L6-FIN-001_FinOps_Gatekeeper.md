@@ -5,12 +5,31 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-06
-version: "0.275"
+version: "0.276"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 2026-10-06 plugin-source and invisible mount-path metadata (offline)
+
+The standalone two-snapshot guard now refuses an unrelated non-local Docker
+volume claiming a source within (or enclosing) Docker's local volume tree;
+three synthetic plugin-source aliases are rejected while a separate plugin
+source remains eligible. Independently, mount paths containing Unicode format
+controls (including bidi overrides/isolates and joiners) are rejected instead
+of letting an invisible path component enter the inventory; three negative
+fixtures and a visible Unicode path control pass. Focused preflight: 35 tests;
+combined `make verify-local-experiment` passed (fake Dagster worker failure is
+an intentional negative). Dedicated `colima list` showed mac-studio-solo
+Stopped; no Docker/VM or retained volume/report/backup was read or changed.
+These conservative metadata rules neither authenticate Docker nor exclude
+continuous writers; traversal stays unauthorized, AgentHouse bytes remain
+`null / NOT_MEASURED`, and operator acceptance remains open. If verified
+daemon metadata needs different spelling, restore only these rules/tests while
+keeping saved resources. Original Vault synchronization pending outside this
+checkout.
 
 ## 2026-10-06 unrelated local-volume source coherence (offline)
 

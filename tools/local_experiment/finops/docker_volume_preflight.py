@@ -6,6 +6,7 @@ Never persist raw container inspect JSON: it includes environment credentials.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from tools.local_experiment.agenthouse import manage as AH
 from tools.local_experiment.finops import contract as C
@@ -35,6 +36,7 @@ def _stamp(value):
 def _path(value):
     require(type(value) is str and value.startswith('/') and not value.startswith('//') and
             len(value) <= 4096 and all(ord(ch) >= 32 and not 127 <= ord(ch) <= 159 for ch in value) and
+            all(unicodedata.category(ch) != 'Cf' for ch in value) and
             all(part not in ('', '.', '..')
             for part in value[1:].split('/')))
     try:
@@ -128,6 +130,10 @@ def _mounts(container):
             # A different source must not masquerade as an unrelated volume.
             if driver == 'local':
                 require(source == ROOT + '/volumes/' + name + '/_data')
+            else:
+                # A plugin volume cannot claim a path inside Docker's local
+                # volume tree without obscuring which local volume it aliases.
+                require(not _overlaps(source, ROOT + '/volumes'))
         else:
             # Do not erase a contradictory volume identity while projecting a
             # bind. Docker bind mounts have no volume name or driver.

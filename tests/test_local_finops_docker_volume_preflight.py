@@ -64,6 +64,29 @@ class VolumePreflightTests(unittest.TestCase):
         value = snapshot()
         self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
 
+    def test_plugin_volume_cannot_claim_local_volume_tree(self):
+        for source in ('/var/lib/docker/volumes',
+                       '/var/lib/docker/volumes/unrelated/_data',
+                       '/var/lib/docker/volumes/agenthouse-local/_data'):
+            value = snapshot()
+            mount = value['containers'][1]['Mounts'][0]
+            mount.update(Driver='fixture-plugin', Source=source)
+            with self.subTest(source=source), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        value = snapshot()
+        value['containers'][1]['Mounts'][0].update(Driver='fixture-plugin', Source='/plugin/other')
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
+    def test_unrelated_mount_path_refuses_invisible_format_characters(self):
+        for marker in ('\u202e', '\u2066', '\u200d'):
+            value = snapshot()
+            value['containers'][1]['Mounts'][0]['Destination'] = '/data/' + marker + 'hidden'
+            with self.subTest(marker=ord(marker)), self.assertRaisesRegex(V.PreflightError, 'SCOPE_INVALID'):
+                validate(value, deepcopy(value))
+        value = snapshot()
+        value['containers'][1]['Mounts'][0]['Destination'] = '/data/café'
+        self.assertEqual(validate(value, deepcopy(value))['state'], 'metadata_eligible')
+
     def test_nonterminated_container_cannot_report_future_finish(self):
         for status, flag in (('running', 'Running'), ('paused', 'Paused'),
                              ('restarting', 'Restarting')):

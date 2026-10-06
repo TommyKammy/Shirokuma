@@ -5,12 +5,26 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.512"
+version: "5.513"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: independent FinOps plugin-source and path-format checks (offline)
+
+WP-L6-FIN-001 refuses a supplied plugin volume source overlapping Docker's
+local volume tree and, independently, invisible Unicode format controls in
+mount paths. Three synthetic negatives for each rule and visible/plugin controls
+pass; 35 focused preflight tests and `make verify-local-experiment` pass (the
+fake Dagster worker failure is intentional). Dedicated Colima freshly Stopped;
+no Docker/VM, retained volumes, reports or backups accessed. This supplied
+inventory does not authenticate its producer, exclude continuous writers or
+authorize volume traversal; AgentHouse bytes remain `null / NOT_MEASURED` and
+live/operator acceptance open. Roll back only the scoped metadata rules/tests
+if verified daemon compatibility differs; preserve saved resources. Original
+Vault sync pending outside checkout.
 
 ## 2026-10-06: pinned staging short-read follow-up (offline)
 
