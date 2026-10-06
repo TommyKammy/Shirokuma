@@ -3095,6 +3095,35 @@ class HelmRenderingTests(RepositoryFixture):
         )
         self.assertTrue(_git_source_matches_context_url(source, context))
 
+    def test_git_source_transport_and_principal_are_part_of_identity(self) -> None:
+        context = self.context(LOCAL_GIT_URL)
+        for url in (
+            LOCAL_GIT_URL.replace("ssh://git@", "https://"),
+            LOCAL_GIT_URL.replace("ssh://git@", "http://"),
+            LOCAL_GIT_URL.replace("ssh://git@", "ssh://other@"),
+            LOCAL_GIT_URL.replace("ssh://git@", "ssh://git:password@"),
+            LOCAL_GIT_URL.replace("ssh://git@", "https://other@"),
+        ):
+            with self.subTest(url=url):
+                source = Resource(
+                    self.root / "source.yaml",
+                    {
+                        "apiVersion": "source.toolkit.fluxcd.io/v1",
+                        "kind": "GitRepository",
+                        "spec": {"url": url},
+                    },
+                )
+                self.assertFalse(_git_source_matches_context_url(source, context))
+        scp_source = Resource(
+            self.root / "source.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "spec": {"url": "git@github.com:TommyKammy/Shirokuma"},
+            },
+        )
+        self.assertTrue(_git_source_matches_context_url(scp_source, context))
+
     def test_repository_context_authorizes_url_branch_pairs(self) -> None:
         first = "ssh://git@example.com/platform/first.git"
         second = "ssh://git@example.com/platform/second.git"

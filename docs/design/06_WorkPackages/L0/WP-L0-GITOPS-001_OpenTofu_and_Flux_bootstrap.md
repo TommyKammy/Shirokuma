@@ -5,12 +5,35 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-05
-version: "0.148"
+version: "0.149"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-06: offline Git transport and principal identity
+
+The renderer previously identified a repository by host/path/port only: a
+GitRepository switching from SSH to HTTP(S), or changing its SSH username,
+could be classified as the declared local source. Source identity now includes
+transport and SSH principal; scp-style `git@host:path` remains equivalent to
+`ssh://git@host/path`. Embedded passwords and HTTP userinfo fail closed. Five
+negative source cases and the scp positive pass, along with the existing URL
+cases, the full local verifier, bootstrap 16 and teardown 6 contract tests,
+the pinned Flux client gate and OpenTofu validation. OpenTofu init used only
+already installed locked providers and did not apply or destroy resources.
+
+Fresh `colima list` and stopped-profile status show the dedicated VM Stopped;
+no live Git or Kubernetes request, Flux reconcile, GitHub write, retained
+volume/backup inventory or deletion. URL classification is not remote source
+authentication. The separate Iceberg gate still has the previously recorded
+Helm pin/kubectl tool drift; no pin was relaxed. Before live work inventory
+retained disk/backups, writers and Flux scope, then measure §9 gates without
+replaying unknown operations. Revert only this matcher/test if verified source
+semantics require it, preserving saved resources and historical failures.
+Original Vault sync is pending outside this checkout; strict admission and
+operator acceptance remain open.
 
 ## 2026-10-06: offline source URL identity and independent tool inventory
 

@@ -344,6 +344,7 @@ def _canonical_git_url(value: str) -> str:
     if scp_match:
         host = scp_match.group("host").lower()
         path = scp_match.group("path")
+        transport = f"ssh://{scp_match.group('user')}@"
     else:
         parsed = urlsplit(raw)
         if (
@@ -356,6 +357,15 @@ def _canonical_git_url(value: str) -> str:
         ):
             raise RenderError(f"unsupported Git repository URL: {value}")
         host = parsed.hostname.lower()
+        # A different transport or SSH principal can select different Git
+        # content even when host/path match. Embedded passwords are not a
+        # stable source identity and must never be echoed in diagnostics.
+        if parsed.password is not None or (parsed.username and parsed.scheme.lower() != "ssh"):
+            raise RenderError("unsupported Git repository URL credentials")
+        transport = (
+            f"ssh://{parsed.username}@" if parsed.username
+            else f"{parsed.scheme.lower()}://"
+        )
         default_port = {
             "http": 80,
             "https": 443,
@@ -381,7 +391,7 @@ def _canonical_git_url(value: str) -> str:
     normalized_path = path.strip("/").removesuffix(".git")
     if not normalized_path:
         raise RenderError(f"unsupported Git repository URL: {value}")
-    return f"{host}/{normalized_path}"
+    return f"{transport}{host}/{normalized_path}"
 
 
 def default_repository_context(source_root: Path, deploy_root: Path) -> RepositoryContext:

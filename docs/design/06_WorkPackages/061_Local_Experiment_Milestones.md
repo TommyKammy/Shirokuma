@@ -5,12 +5,24 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-06
-version: "5.520"
+version: "5.521"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-06: GitOps transport identity and independent bootstrap check
+
+WP-L0-GITOPS-001: offline matcher now distinguishes SSH from HTTP(S) and SSH
+principals; embedded credentials are refused, with scp/SSH equivalence kept.
+Focused 3, bootstrap 16, teardown 6 and full local verifier pass; pinned Flux
+gate and locked-provider OpenTofu init/validate pass without apply. Dedicated
+Colima freshly Stopped; no live source/VM, writer, volume or backup inspection,
+reconcile or GitHub write. Prior Iceberg Helm/kubectl drift remains open;
+strict gate and operator acceptance are not claimed. Revert only matcher/test
+on verified incompatibility, preserving retained evidence. Original Vault sync
+pending outside checkout.
 
 ## 2026-10-06: GitOps URL identity and offline tool drift
 
