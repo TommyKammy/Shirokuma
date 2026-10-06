@@ -12,6 +12,17 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-06: policy smoke identity alias guard (offline)
+
+WP-L2-POL-001 refuses a fixed Trino Deployment with conflicting case-variant
+name/namespace fields before lending its image to a smoke test. Four negative
+fixtures failed before repair; focused 166 policy tests and the full local
+verifier pass (intentional fake Dagster worker failure). Dedicated Colima
+freshly Stopped; no live API/admission or unknown-request replay, retained
+data/backup changes or publication. This does not prove producer authenticity,
+strict admission or operator acceptance. Revert only the scoped guard/test,
+preserving saved evidence; original Vault sync pending outside checkout.
+
 ## 2026-10-06: independent credential and Pawprint text guards (offline)
 
 WP-L2-CH-001 now refuses extra credential fields and non-URL-safe passwords

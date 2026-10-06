@@ -12,6 +12,19 @@ tags: [shirokuma, workpackage, l2, policy]
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
 
+## 2026-10-06: unambiguous smoke image identity keys (offline)
+
+Four synthetic Trino Deployment replies with canonical name/namespace plus
+conflicting case-variant identity fields previously lent an image; they now
+fail closed. The negative focused run failed four cases before repair; after
+repair 166 policy tests and `make verify-local-experiment` pass (its fake
+Dagster worker failure is an intentional negative fixture). The dedicated
+Colima profile was freshly Stopped;
+no live admission/API, saved request replay, retained data/backup mutation or
+publication. This reply check cannot authenticate Kubernetes or establish
+strict live admission/operator acceptance. Restore only the scoped guard/test,
+preserving saved requests. Original Vault sync pending outside checkout.
+
 ## 2026-10-06: unambiguous smoke source retention metadata (offline)
 
 A fixed-image Deployment with a case-variant finalizers or ownerReferences

@@ -1267,6 +1267,13 @@ class ScopedResponseTests(unittest.TestCase):
             client.json_request.return_value = reply
             with self.subTest(finalizer_alias=key), self.assertRaises(policy.PolicyError):
                 client.image()
+        for key, value in (('Name', 'foreign'), ('NAME', 'foreign'),
+                           ('Namespace', 'foreign'), ('NAMESPACE', 'foreign')):
+            reply = copy.deepcopy(valid)
+            reply['metadata'][key] = value
+            client.json_request.return_value = reply
+            with self.subTest(identity_alias=key), self.assertRaises(policy.PolicyError):
+                client.image()
         for extra in ({'foreignEnvelope': {'enabled': True}},
                       {'items': []}):
             reply = copy.deepcopy(valid)

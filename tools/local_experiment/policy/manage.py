@@ -523,7 +523,10 @@ class Kubernetes:
                          or metadata.get('finalizers', [])):
                  raise PolicyError('smoke requires the dedicated local Trino deployment')
             if any(type(key) is str and key.lower() in ('finalizers', 'ownerreferences') and
-                   key not in ('finalizers', 'ownerReferences') for key in metadata):
+                    key not in ('finalizers', 'ownerReferences') for key in metadata):
+                raise PolicyError('smoke requires the dedicated local Trino deployment')
+            if any(type(key) is str and key.lower() in ('name', 'namespace') and
+                   key not in ('name', 'namespace') for key in metadata):
                 raise PolicyError('smoke requires the dedicated local Trino deployment')
             # A controller still observing an older generation has not
             # reconciled this spec; do not lend its image to the smoke.
