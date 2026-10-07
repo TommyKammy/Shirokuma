@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-07
-version: "1.1"
+version: "1.2"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -18,7 +18,34 @@ The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
 
-**Fresh inspect-only result (2026-10-07):** all listed Colima profiles,
+**2026-10-07 authorized inspection follow-up:** the former host-read blocker
+is resolved in the owner-authorized parent context; dedicated stopped-disk
+copies and checkout-scoped evidence are available under
+`tmp/local-experiment/lab-inspection-20261007/`. All eight copy sets match
+source data extents/hole maps; root/data ext4 are clean. K3s SQLite **with WAL**
+is readable/integrity `ok`. Fifty-eight containers are stopped/restart=no;
+nineteen named Docker volumes and two retained PVC directories are mapped.
+The k3s-disabled inspection boot succeeded with no containers running, then
+the VM was stopped and source profile configuration remained unchanged.
+File-level recovery was rehearsed; full VM/application restoration is not
+claimed. See [DEV-04E](04E_Dedicated_Lab_Inspection_and_Recovery.md).
+
+**API-only follow-up:** a transient k3s stage with agent/scheduler/controller
+manager/cloud-controller disabled returned `/readyz=ok` with zero containers.
+Original resource snapshots were saved; all eight Flux resources and three
+completed Jobs are now suspended, four application workloads and four Flux
+controllers have replicas=0. Eleven stopped app/Flux Pod objects were retired
+with UID preconditions; both PVs and both PVCs retain their original UIDs.
+The API-only service and VM were normally stopped afterward.
+
+**Next runtime boundary:** recheck persisted inhibition, then observe dedicated
+node and selectively enable the four pinned Flux controllers while sources,
+child reconciliations, retained application writers and completed Jobs stay
+inhibited. Normal Node/Flux readiness is still **unverified**. Do not replay
+saved requests, blindly restore disks/original writer counts, or restart the
+old stopped batch. Exact metadata rollback is recorded in DEV-04E.
+
+**Earlier batch observation (preserved, superseded for inspection access):** all listed Colima profiles,
 including dedicated `mac-studio-solo`, are Stopped. Host free space is about
 2.22 TiB; four owned metadata dumps match the saved baseline, but VM/PVC
 retention and recovery are not established. Batch `gate-188rjc1d` attempt 001

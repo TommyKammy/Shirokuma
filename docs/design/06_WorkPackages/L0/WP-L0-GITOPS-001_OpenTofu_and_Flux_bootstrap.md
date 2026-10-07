@@ -5,12 +5,45 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-07
-version: "0.168"
+version: "0.169"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-07: approved cold inspection and bounded recovery route
+
+The owner requested resolving the prior inspection-access/retention blocker.
+The authorized parent inspected the dedicated profile, made eight private
+cold image/configuration copies, and compared all reported data extents plus
+hole maps (53,962,405,731 data bytes). Read-only cold ext4 parsing and copied
+k3s SQLite **including WAL** established stopped service/container and Flux
+desired state. A k3s-disabled inspection boot confirmed zero running Docker
+containers, k3s inactive/disabled, nineteen named volumes and two local-path
+PVC directories; it was normally stopped afterward with source profile config
+unchanged. Private evidence: `tmp/local-experiment/lab-inspection-20261007/`.
+
+The inspected route and version-preserving file-level recovery rehearsal are
+documented in [DEV-04E](../../04_Development/04E_Dedicated_Lab_Inspection_and_Recovery.md).
+This resolves access and makes retained-state inspection possible without
+starting writers; it does **not** prove complete host/disaster recovery or
+booted application restore. Root Flux suspension is insufficient: six child
+Kustomizations are unsuspended with prune enabled. Normal k3s startup remains
+gated on an API-only/no-agent staging procedure and explicit child/job/writer
+inhibition. A subsequent API-only stage was then tested: `/readyz=ok` with
+zero containers and the ordinary k3s service inactive. Private original
+resource snapshots and UID/version preconditions accompany 19 scoped
+inhibition changes (eight Flux resources and three completed Jobs suspended;
+four app workloads and four Flux Deployments scaled to zero). Eleven stopped
+app/Flux Pod objects were retired with UID preconditions; both PVs/PVCs keep
+their identities. The API-only service/VM were stopped, leaving a controlled
+next-node-start baseline rather than an unknown writer state. Normal Node/Flux
+readiness and application restore remain unverified. Do not replay old
+requests or auto-restore newer disk state; exact metadata rollback is in DEV-04E.
+Original `gate-188rjc1d` safety stop and failed broader verifier remain unchanged.
+No new runner session, API/SQL backend request, production/operator acceptance
+or acceptance-checkbox change is claimed by this follow-up.
 
 ## 2026-10-07: L0 owned inventory and runtime NO-GO
 
