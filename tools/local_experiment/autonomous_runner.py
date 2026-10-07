@@ -393,7 +393,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--execute', action='store_true', help='opt in to model requests; plan is the default')
     parser.add_argument('--use-pro-weekly-limit', action='store_true',
                         help='allow repeated calls only after the OpenAI OAuth label check')
-    parser.add_argument('--model', help='explicit openai/model ID available to the ChatGPT subscription')
+    parser.add_argument('--model', default='openai/gpt-6.1-sol',
+                        help='session model (default: openai/gpt-6.1-sol)')
     parser.add_argument('--max-runs', type=int)
     parser.add_argument('--max-minutes', type=int)
     args = parser.parse_args(argv)

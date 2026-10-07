@@ -122,7 +122,8 @@ class AutonomousRunnerTests(unittest.TestCase):
             self.assertEqual(R.main(['--max-runs', '500', '--max-minutes', '10080']), 0)
         plan = json.loads(out.getvalue())
         self.assertEqual((plan['planned_max_runs'], plan['planned_max_minutes']), (500, 10080))
-        self.assertEqual(plan['subscription_preflight'], 'not_checked')
+        self.assertEqual(plan['subscription_preflight'], 'openai_oauth_label_present')
+        self.assertEqual(plan['model'], 'openai/gpt-6.1-sol')
         with self.assertRaisesRegex(R.RunnerError, 'BUDGET_INVALID'):
             R.run(self.root, self.vault, str(self.cli), max_runs=501, max_minutes=10080, model=self.model)
         with self.assertRaisesRegex(R.RunnerError, 'BUDGET_INVALID'):
@@ -216,7 +217,7 @@ class AutonomousRunnerTests(unittest.TestCase):
 
     def test_astra_is_a_bounded_toolless_consultant_not_the_primary_model(self):
         config = json.loads((R.ROOT/'opencode.jsonc').read_text())
-        self.assertNotIn('model', config)
+        self.assertEqual(config['model'], 'openai/gpt-6.1-sol')
         adviser = config['agents']['astra-advisor']
         self.assertEqual((adviser['mode'], adviser['model']),
                          ('subagent', 'openai/gpt-6-astra'))

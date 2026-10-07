@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "model": "openai/gpt-6.1-sol",
   "experimental": {
     "policies": [
       { "action": "provider.use", "resource": "*", "effect": "deny" },

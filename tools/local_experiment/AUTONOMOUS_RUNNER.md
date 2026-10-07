@@ -1,5 +1,13 @@
 # Bounded local OpenCode continuation (Shirokuma)
 
+On 2026-10-07 the owner selected **GPT-6.1 Sol** for each new primary
+development session. Project `opencode.jsonc` and the runner's `--model`
+default are `openai/gpt-6.1-sol`. Existing session history is unchanged;
+the 500-total run has stopped at `run_budget_reached` and its successor
+remains on `POLICY_REVIEW_HOLD`. This model setting does not restart it.
+The optional, tool-less Astra blocker consultation remains a separate
+previously approved exception; OAuth/no-new-spending checks still apply.
+
 This is an **opt-in local runner**, not an unattended daemon or the GitHub
 supervisor. It works only from the dedicated `local/autonomous-experiment`
 checkout with a clean worktree and an existing Vault handoff. Each attempt
