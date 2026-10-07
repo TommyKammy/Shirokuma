@@ -1,5 +1,10 @@
 # Bounded local OpenCode continuation (Shirokuma)
 
+**2026-10-07 restart allocation:** 100 new starts after the reconciled old
+500, hence current `SERIES_LIMIT=600`. The historical 1000 ceiling below is
+not the active allocation. Six-session/120-minute batches still need a named
+gate and functional review between launches; no automatic 100-session job.
+
 On 2026-10-07 the owner selected **GPT-6.1 Sol** for each new primary
 development session. Project `opencode.jsonc` and the runner's `--model`
 default are `openai/gpt-6.1-sol`. Existing session history is unchanged;

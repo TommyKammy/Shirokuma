@@ -2,15 +2,29 @@
 project: Shirokuma
 doc_id: "DEV-04C"
 title: "Gate-driven local continuation after the 500-session series"
-status: planned
+status: accepted
 created: 2026-10-06
-updated: 2026-10-06
-version: "1.0"
+updated: 2026-10-07
+version: "1.1"
 area: development
 tags: [shirokuma, local, gates, development]
 ---
 
 # Gate-driven local continuation
+
+## 2026-10-07 restart allocation
+
+The owner requested resumption with **100 new session slots**, not a 100-session
+unreviewed run. The previous series ended at 500; this allocation stops at
+**600 cumulative starts**, counting failures and unknown starts. The older
+1000 ceiling and held successor do not authorize more than these 100 now.
+Primary sessions use `openai/gpt-6.1-sol`. The source run's 240 results and
+checkpoints, descendant history and final specific server session were
+reconciled as succeeded/idle/non-active before activation. Historical missing
+results remain missing. The original seven-day deadline still applies.
+Select batches of at most six/120 minutes and review gate-linked functional
+evidence between them. Do not auto-spend the remaining 100 slots or restart
+an unknown request; the original automatic extension job stays unloaded.
 
 This replaces the unbounded *scheduling policy* after the running 500-total
 series ends. Do not edit its checkout or interrupt a live OpenCode request.

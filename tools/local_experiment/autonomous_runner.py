@@ -38,7 +38,8 @@ MAX_MINUTES = 120
 ORIGINAL_WEEK_MINUTES = 7 * 24 * 60
 MISSION_BYTES = 4096
 MISSION_WP = 'WP-L0-GITOPS-001'
-SERIES_LIMIT = 1000
+# Owner's 2026-10-07 restart allocation: 100 new starts after the old 500.
+SERIES_LIMIT = 600
 SOURCE_RUN = 'run-qjiwuw2k'
 FIRST_RUN = 'run-3au9fp_4'
 
