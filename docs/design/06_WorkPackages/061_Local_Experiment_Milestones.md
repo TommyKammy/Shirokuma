@@ -4,13 +4,48 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-06
-version: "5.539"
+updated: 2026-10-07
+version: "5.540"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-07: L0 readiness inventory — safely blocked, batch stopped
+
+WP-L0-GITOPS-001 / `L0_GITOPS_READINESS`, batch `gate-188rjc1d` attempt 001:
+fresh Colima listing confirms the dedicated aarch64 profile Stopped, configured
+16 CPUs/96 GiB/400 GiB, and all listed profiles Stopped. Host free space is
+about 2.22 TiB. Four owned metadata dump backups total 3,387,469 bytes, mode
+0600, with stable read identities and hashes/sizes matching the 2026-10-02
+baseline; this does not cover VM/PVC recovery or restore correctness.
+Private compact inventory:
+`tmp/local-experiment/autonomous-runner/gate-188rjc1d/attempt-001/l0-inventory.json`.
+See the WP's dated inventory table for scope and recovery requirements.
+
+**NO-GO:** profile-config read was `permission.rejected`; no permission bypass.
+Current storage mappings, retained guest writer/restart policies, unknown saved
+requests and prior live Flux scope/recovery remain unestablished. No dedicated
+VM start or Kubernetes/doctor probe was attempted; no fresh Node/four-controller/
+Source/Kustomization readiness exists. No runtime changes need restoring.
+Keep retained state and the stopped profile intact. All eleven WP acceptance
+boxes stay unchecked. Safe continuation requires approved dedicated host/guest
+inspection and an owned backup/writer/recovery inventory, not another offline
+micro-fix or request replay. Stop this batch at the safety boundary.
+
+`make flux-version-check` PASS; single OAuth/no-key route preflight PASS for
+`openai/gpt-6.1-sol` (not independent billing proof). No nested runner, Astra,
+other-profile operation, GitHub write, reset or backup/data deletion. Original
+Vault direct sync pending; retained historical logs and failures unchanged.
+
+Validation: design-context, inventory assertions
+(inventory mode, NO-GO, backup matches, eleven unchecked criteria), and diff
+check PASS. `make verify-local-experiment` FAILED, exit 2 at
+`test-local-policy` (166 tests; 11 failures, 2 errors in source/manifest read
+and race assertions). Cause unestablished; no out-of-gate repair or retry.
+Original private `verify-local-experiment.log` beside the inventory retained,
+SHA-256 `ab6af62cad25e1622c008c43d4964abddc9e05014434651cf0d324de7b78c1b1`.
 
 ## 2026-10-06: dedicated-context status read (offline)
 

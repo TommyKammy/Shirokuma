@@ -4,13 +4,63 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-06
-version: "0.167"
+updated: 2026-10-07
+version: "0.168"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-07: L0 owned inventory and runtime NO-GO
+
+Gate `L0_GITOPS_READINESS`, manually selected batch `gate-188rjc1d`, attempt
+001: fresh inspect-only evidence is in private
+`tmp/local-experiment/autonomous-runner/gate-188rjc1d/attempt-001/l0-inventory.json`.
+This is a **partial owned inventory**, not a retention or startup clearance.
+
+| Scope | Fresh observation / limit |
+| --- | --- |
+| Dedicated profile | `colima list --json`: `mac-studio-solo`, Stopped, aarch64, 16 CPUs, 96 GiB memory, configured 400 GiB disk; all listed profiles Stopped. No other profile action. |
+| Host disk | `df -k .` and filesystem statistics show about 2.22 TiB available; retained VM disk allocation and PVC bytes remain NOT_MEASURED. |
+| Owned backups | Four `tmp/local-experiment/metadata/backup-*.dump` files, 3,387,469 bytes total, mode 0600; stable file identities during read, SHA-256/size match the saved 2026-10-02 metadata baseline. These are metadata dumps, not a whole-VM/PVC recovery inventory or a fresh restore test. |
+| Known writer surfaces | Repository metadata Compose project `shirokuma-local-metadata` declares PostgreSQL/search retained volumes and a migration service; historical notes also identify retained k3s workloads and Warehouse saved requests. Current guest writers, restart policies and unknown-request disposition are UNKNOWN. No writer started or request replayed. |
+| Flux scope | Checked-in v2.9.2 manifests declare four controllers and root `flux-system` Source/Kustomization, branch `main`, `prune: true`. Actual persisted scope is UNKNOWN; the 2026-10-02 suspended-root observation is stale, not startup clearance or an approved current source revision. |
+
+**NO-GO:** the dedicated host profile configuration read returned
+`permission.rejected` in this noninteractive session. No alternate tool/path
+was used to obtain it. Current profile identity/storage mappings, startup
+behavior, stopped-guest writer inventory and retained-state recovery are not
+established. Starting k3s to discover them would itself restart unknown writers.
+Consequently no VM start, Node/API/Flux/doctor probe, suspend/reconcile, migration,
+reset, GitHub write or retained-state mutation was performed. No fresh live
+readiness evidence exists; all eleven acceptance boxes remain unchecked.
+
+Focused non-runtime check: `make flux-version-check` PASS (v2.9.2).
+The existing zero-model-request subscription preflight passed for explicit
+`openai/gpt-6.1-sol` with one OpenAI OAuth connection and no API-key/base-URL
+route; billing was not independently verified. No Astra consultation or nested
+runner was launched. These checks do not pass the live gate.
+
+Record validation: design-context, inventory mode/decision/backup checks,
+eleven-unchecked-criteria check and `git diff --check` PASS.
+`make verify-local-experiment` exited 2 at `test-local-policy`: 166 tests,
+11 failures and 2 errors in manifest/source read and race assertions.
+Root cause is not established; no unrelated repair or retry was attempted.
+The original private `verify-local-experiment.log` beside the inventory is
+retained (SHA-256
+`ab6af62cad25e1622c008c43d4964abddc9e05014434651cf0d324de7b78c1b1`).
+Do not describe this batch's broader regression check as green.
+
+Resume only in an approved inspection context that can establish the dedicated
+profile/config and storage identity, enumerate retained guest workloads and
+restart policies plus saved-request disposition, map backups to retained
+volumes with a recovery procedure, and establish prior Flux scope/source
+identity. Preserve historical failures; do not infer replay safety from saved
+completion claims. Recovery for this attempt: no runtime changes to restore;
+keep the dedicated profile Stopped and all volumes, backups and source-run
+evidence intact. Stop this batch at the safety boundary, not `more_work`.
+Original Vault remains untouched; direct synchronization is pending.
 
 ## 2026-10-06: status scope for the dedicated context (offline)
 
