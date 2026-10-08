@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.13"
+version: "1.14"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,22 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 local admission diagnosis (`gate-n0xgt8ew`, parent review pending):**
+Exact inhibited candidate/live guards and four ARM64 ledger/inventory pins match;
+bootstrap admission passes. Strict retained scans fail HIGH7/6/6/6, old local-lab
+expiry remains rejected. Publisher record pass is not fresh cryptographic proof
+(Flux versions do not enter canonical retained-bundle checks). Existing owned
+native policy8/binding8 matches content/typecheck, unchanged: `shirokuma-dev`
+digest syntax only, not Flux/publisher/CVE/source admission. Missing local-only
+risk decision, transitive render/image inventory, fetched bytes/commit/transport
+and scoped enforcement/applied provenance remain. Proposal002 requests only a
+non-activating local evidence contract for parent review. Fresh live51 latest
+05:09:29 UTC passes inhibition/readiness/retention; no startup/runtime changes.
+Doctor degraded, policy11 failures/2 errors and security5 failures preserved.
+No gate/checkbox/operator acceptance. Runtime left for parent probe/idle-worker
+cleanup; never restore writers/Jobs/sources. Private evidence/rollback in newest
+WP/Milestones; Vault sync pending.
 
 **2026-10-08 inhibited candidate (`gate-9w3pac_6`, parent review pending):**
 Repository-only contract binds available full commit `0486612d`/tree and root/six

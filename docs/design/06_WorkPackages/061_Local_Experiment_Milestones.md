@@ -5,12 +5,46 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.544"
+version: "5.545"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: local admission requirements diagnosed without activation
+
+WP-L0-GITOPS-001 / `gate-n0xgt8ew`, local_admission/diagnose: exact inhibited
+candidate matches fresh live owner/spec guards; four ARM64 pins match inventory/
+ledger and bootstrap admission passes. Sixteen input blobs equal candidate commit.
+Strict retained SBOM/publisher record checks pass, **not fresh cryptographic
+verification**: Flux records do not enter the canonical retained-bundle branch.
+Strict retained scans fail HIGH=7/6/6/6 (CRITICAL0); exact25 tuples/hashes saved.
+Legacy local-lab expiry remains 2026-09-13 and rejected, not renewed/waived.
+
+Fresh owned native policy8/binding8 content/typecheck matches expected projection
+and is unchanged; no admission webhooks observed. This `shirokuma-dev` digest-
+syntax bridge neither covers `flux-system` nor verifies publishers/CVE risk/Git
+source identity. No live allow/deny test or policy activation. Missing local-only
+risk decision, transitive render/image inventory, transport/fetched bytes/commit,
+scoped enforcement/applied provenance remain separate evidence dependencies.
+
+Latest live51 probe 05:09:29 UTC passes Node/Lease/four pinned controllers/Pods,
+Flux8/Jobs3 suspend/app owners0/PV/PVC preservation. Initial/final UIDs/non-Lease
+specs and full Flux/PV/PVC objects match. Already-running lab; no runtime mutations,
+startup, fetch/apply/redirect/unsuspend or writer start. Doctor remains degraded.
+Diagnosis7/source8/bootstrap40/supervisor15/continuation5/runner22/bears11/Go/
+design-context/secret scan pass. Initial harness/mock and control-reader size
+failures retained/corrected. Security87 retains5 failures; broad local verifier
+retains policy166 failures11/errors2; no unrelated fix or acceptance waiver.
+
+Private evidence/rollback in newest WP entry. Proposal002 selects only a
+non-activating candidate/image/hash/exact-finding evidence contract, with missing
+risk/render decisions explicit, for independent parent review. No new capability
+or gate pass. Leave safe runtime for parent probe/terminal-worker cleanup; preserve
+all retained disks/volumes/PV/PVC/backups/failures and source/Job/app inhibition.
+OAuth-only Sol preflight is not billing proof; Vault sync pending. Checkboxes and
+full L0/operator acceptance remain unchanged.
 
 ## 2026-10-08: inhibited commit/tree-bound source candidate, not fetched/applied evidence
 

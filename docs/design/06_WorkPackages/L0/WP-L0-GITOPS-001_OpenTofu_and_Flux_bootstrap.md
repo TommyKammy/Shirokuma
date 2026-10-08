@@ -5,12 +5,83 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.175"
+version: "0.176"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: read-only local admission diagnosis (gate-n0xgt8ew)
+
+`L0_DEPENDENCY_CONTINUATION`, local_admission/diagnose: evaluated the existing
+inhibited candidate at full commit `0486612d0671c01c16d40ce445e39788d86de69b`
+against fresh complete runtime observations and existing strict image validators.
+`tools/local_experiment/admission_diagnosis.py` reproduces this read-only check;
+its result always leaves admission/gate acceptance false. Exact candidate equality
+rejects owner/spec/inhibition drift; ledger/image mismatch and changed artifact
+hashes fail closed. There is no activation CLI or runtime writer.
+
+All four image pins match the ARM64 resident ledger and Flux bootstrap inventory;
+the existing bootstrap image-admission verifier passes. Sixteen configuration,
+validator and retained evidence blobs match the selected candidate commit.
+Strict SBOM and publisher **record** checks pass individually, but retained strict
+scans reject source HIGH=7, kustomize/helm/notification HIGH=6 each (CRITICAL=0).
+Exact 25 finding tuples, report hashes, scanner/DB identities are saved privately.
+These are August scan findings, not a fresh advisory rescan. The historical
+local-lab exception expired 2026-09-13; its verifier still fails. No renewal/waiver.
+
+Publisher identity is upstream GitHub Actions OIDC, not the Shirokuma configuration
+commit. The strict signed-index validator's canonical retained-bundle branch is
+not selected for these Flux versions: a passing retained `verified:true` record
+does **not** prove freshly verified signatures. No cosign/registry request was
+made. Fresh API inspection finds eight native policies/eight bindings matching
+owned expected content/current type-check status, no admission webhooks. Existing
+bridge scope is `shirokuma-dev`, not Flux controllers in `flux-system`; it checks
+digest syntax, not publisher signatures/CVE risk/source provenance. All sixteen
+objects unchanged between reads; no binding activation or live allow/deny claim.
+
+Missing local evidence is explicit: a candidate/image/evidence-bound local-only
+risk decision, transitive rendered input and complete image/workload inventory,
+reviewed local transport/verified fetched artifact bytes and commit, then fresh
+scoped enforcement/applied revision observations. None is inferred from Ready,
+matching pins or old exception approval. Candidate transport remains unselected;
+the old branch-only unsuspended committed root must still not be applied.
+
+Fresh complete live51 probes pass on the already-running dedicated VM/node,
+latest 05:09:29 UTC: Node/fresh Lease, four pinned ready controllers/Pods,
+Flux8/Jobs3 suspended, app owners0, original PV/PVC identities/specs. Initial/final
+UID sets and non-Lease specs match; Flux/PV/PVC full objects unchanged. Fourteen
+Docker containers have system/Flux names only, not a whole-runtime census. No
+startup, resource mutation, transport change, fetch/apply/unsuspension or writer
+start. Fresh doctor remains degraded for intentional inhibition.
+
+Diagnosis7/source8/bootstrap40/supervisor15/continuation5/runner22/bears11, Go CLI/
+internal tests, design-context and secret scan pass. Initial unittest harness
+compatibility failure and exhausted mock sequence are retained and corrected;
+two diagnostic control-reader size mismatches are retained (existing bounded
+owner/mode/no-follow snapshot reader used instead; no permission bypass).
+Security87 still fails five historical expiry/ledger-related tests; broad local
+verifier still fails policy166 with 11 failures/2 errors. No unrelated repair.
+
+Private inputs/results/probes/doctor/logs:
+`tmp/local-experiment/autonomous-runner/gate-n0xgt8ew/attempt-001/admission-diagnosis/`.
+Typed measured-blocker proposal:
+`tmp/local-experiment/gate-continuation/series-fpveebm3/proposal-002.json`.
+Next concrete dependency is local_admission/repository_repair: a **non-activating**
+local evidence contract binding candidate, four publisher/scan hashes and exact
+HIGH findings, leaving risk-decision/render gaps explicit. Parent review must
+select it; no invented approval, exception renewal, transport selection, binding
+change or runtime write. All eleven boxes/full L0/operator acceptance remain open.
+Single OAuth/explicit Sol preflight passed, not independent billing proof; original
+Vault untouched, direct sync pending. No nested runner/subagent/additional model
+request launched.
+
+Recovery: repository rollback of diagnostic/tests/docs only, no runtime fields to
+restore. Leave safe inhibited node/controllers available for independent parent
+probe and normal VM stop only after worker idle/non-active. Never restore app
+counts or unsuspend sources/Jobs automatically. Preserve retained disks/volumes,
+PV/PVCs, backups and all original failed operation/session evidence.
 
 ## 2026-10-08: repository-only inhibited source candidate (gate-9w3pac_6)
 
