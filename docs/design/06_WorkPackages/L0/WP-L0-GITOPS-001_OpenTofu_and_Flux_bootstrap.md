@@ -5,12 +5,69 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.170"
+version: "0.171"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: API-only secondary-owner repair; parent verification pending
+
+`L0_OWNER_CHAIN_REPAIR`, `gate-8ancmu2h` attempt 001: dedicated inspection
+boot only, ordinary k3s inactive/disabled, agent/scheduler/controller-manager/
+cloud-controller disabled, loopback API `/readyz=ok`, zero containers. Captured
+complete Deployment/ReplicaSet/Pod owner references, UIDs/resourceVersions and
+original objects before six one-shot JSON Patches. Each tests UID, observed
+resourceVersion and replicas=1 before replacing replicas with zero. Six known
+Polaris/Trino/four Flux secondary owners now request zero; all eight scoped
+ReplicaSets and eight app/Flux parents are zero, with no app/Flux Pods.
+
+Fresh final inventory preserves the complete object UID set and owner chains;
+the only spec changes are those six replica fields. Eight Flux resources and
+three completed Jobs remain suspended. Both PV/PVC pairs retain original
+UIDs/specs; nineteen named Docker volumes and both retained PVC directories
+remain present on the dedicated ext4 data mount. Original eight cold copies,
+recovery rehearsal and earlier safety stops remain untouched. Boot/API write
+disk metadata; no disk-byte immutability or application-restore claim.
+
+Private evidence: `tmp/local-experiment/autonomous-runner/gate-8ancmu2h/attempt-001/`
+(`owner-prior.json`, `owner-after.json`, `owner-final.json`, owner-chain snapshots,
+`inhibition-plan.json`, six intent/result pairs, `rollback-metadata.json`,
+retained mount/volume/directory and guest-headroom observations). **Left active
+for independent parent probe:** `shirokuma-l0-owner-repair-8ancmu2h.service`.
+No normal Node/Flux/workload startup, source unsuspension or writer restoration.
+Parent must verify terminal worker and fresh runtime before another mission;
+parent owns normal dedicated VM stop at finite-loop end. This worker's live
+probe is not the parent's independent verification or L0 gate acceptance.
+
+Observed k3s rewrites process argv to `/usr/local/bin/k3s server`; the initial
+pre-mutation argv assertion failed without mutation. Parent probe now checks
+the single running dedicated API unit's recorded ExecStart flags, active state,
+Restart=no/KillMode and MainPID matched to the single live k3s server PID.
+Negative tests reject missing flags, PID mismatch, non-loopback binding,
+inactive/restarting unit and ambiguous units/processes. Corrected focused
+supervisor/runner suite: 32 PASS; initial nonexistent test-module import error
+retained in session evidence. Worker live probe/final owner-spec comparison,
+design-context and diff check PASS. Broader `make verify-local-experiment`
+FAILED: policy suite 166 tests, 11 failures/2 errors, no unrelated repair.
+Private log SHA-256:
+`c1d1512f2a42b6cf43c836bf0545fa8a546cf714e57b23f805e430dc0a6abeb4`.
+
+Rollback is **not automatic**: after a separate writer-safety review, GET the
+selected same-UID ReplicaSet, verify owner chain, then atomically test UID,
+fresh resourceVersion and current replicas=0 before replacing only replicas
+with captured original value 1. Record intent/result and never retry an unknown
+outcome. Do not wholesale apply snapshots, unsuspend sources/Jobs, restore
+writers/disks or delete retained storage. API stop (parent-controlled):
+`colima ssh --profile mac-studio-solo -- sudo systemctl stop shirokuma-l0-owner-repair-8ancmu2h.service`,
+then confirm inactive ordinary/API units and zero containers before normal
+`colima stop mac-studio-solo`. Prefix shell commands with `rtk proxy`.
+OAuth-only Sol preflight passed; no independent billing verification, Astra,
+nested runner or external writes. Original Vault sync pending outside checkout.
+Repair increment observed; all L0 acceptance boxes remain unchanged, normal
+Node/four-controller readiness unverified. No further safe work in this repair
+mission; stop for parent review, not automatic continuation within this worker.
 
 ## 2026-10-08: fresh API inhibition; secondary-owner startup blocker
 

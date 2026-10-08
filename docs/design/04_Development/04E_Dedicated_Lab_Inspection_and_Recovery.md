@@ -5,7 +5,7 @@ title: "Dedicated lab inspection and cold recovery boundary"
 status: accepted
 created: 2026-10-07
 updated: 2026-10-08
-version: "1.1"
+version: "1.2"
 area: development
 tags: [shirokuma, local, retention, recovery]
 ---
@@ -98,6 +98,32 @@ the recovered state through the same **k3s-disabled inspection route**, and
 verify data mounts/SQLite/volume references before considering workload startup.
 
 ## Normal Kubernetes startup is a separate gate
+
+### 2026-10-08 API-only secondary-owner repair observation
+
+Repair worker `gate-8ancmu2h` preserved complete owner/resource originals and
+inhibited six known nonzero app/Flux ReplicaSets using UID/resourceVersion and
+original-replica JSON Patch tests. Fresh final owner/spec inventory shows only
+the six expected changes, all scoped parents/secondary owners zero, no scoped
+Pods, Flux8/Jobs3 suspended, original PV/PVC UIDs/specs, zero containers and
+nineteen volumes/two retained PVC directories present. No normal node start.
+API-only `shirokuma-l0-owner-repair-8ancmu2h.service` remains available for
+independent parent verification; parent owns subsequent finite-end normal stop.
+This is a worker repair observation, not parent clearance or L0 acceptance.
+
+Private snapshots/intents/results and exact rollback are in
+`tmp/local-experiment/autonomous-runner/gate-8ancmu2h/attempt-001/` and the WP.
+Never automatically restore replicas/unsuspend sources or Jobs. Any deliberate
+field rollback needs a separate writer-safety review, same UID/owner chain,
+fresh resourceVersion and current replicas=0 tests, replacing only the selected
+field with its captured original value. Preserve changed disks before any
+cold recovery; original cold copies and failed stops remain untouched.
+
+k3s rewrites live argv: inspect the active transient unit's ExecStart disabled
+flags and match its MainPID to the single live k3s server, rather than assuming
+`ps args` retains launch flags. The parent probe now tests this binding. No
+agent/scheduler/controller-manager/cloud-controller or writer may start in
+this repair-only stage.
 
 ### 2026-10-08 secondary-owner finding: parent inhibition is insufficient
 

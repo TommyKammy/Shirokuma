@@ -31,6 +31,24 @@ def fixture():
 
 
 class SupervisorTests(unittest.TestCase):
+    def test_api_launch_accepts_rewritten_argv_only_with_matching_unit(self):
+        processes = 'PID COMMAND\n1898 /usr/local/bin/k3s server\n'
+        units = 'shirokuma-l0-owner-repair-test.service loaded active running test\n'
+        props = ('ActiveState=active\nMainPID=1898\nRestart=no\nKillMode=control-group\n'
+                 'ExecStart={ path=/usr/local/bin/k3s ; argv[]=/usr/local/bin/k3s server '
+                 '--disable-agent --disable-scheduler --disable-controller-manager '
+                 '--disable-cloud-controller --https-listen-port=55737 --bind-address=127.0.0.1 ; }\n')
+        self.assertEqual(S.api_only_launch(processes, units, props), units.split()[0])
+        for old, new in [('MainPID=1898', 'MainPID=999'), ('ActiveState=active', 'ActiveState=inactive'),
+                         ('Restart=no', 'Restart=always'), ('--disable-agent', '--enable-agent'),
+                         ('--bind-address=127.0.0.1', '--bind-address=0.0.0.0')]:
+            with self.subTest(old=old), self.assertRaises(S.R.RunnerError):
+                S.api_only_launch(processes, units, props.replace(old, new))
+        for p, u in [(processes+processes, units), (processes, units+units),
+                     ('PID COMMAND\n', units), (processes, '')]:
+            with self.assertRaises(S.R.RunnerError):
+                S.api_only_launch(p, u, props)
+
     def test_valid_repair(self):
         data = fixture()
         S.validate(data, copy.deepcopy(data), S.REPAIR)

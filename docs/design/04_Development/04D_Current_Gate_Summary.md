@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.5"
+version: "1.6"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -30,6 +30,19 @@ real state independently, then selects Node/four-controller readiness only on
 verified inhibition (maximum two worker sessions/120 minutes). Unknown worker
 outcomes/new safety causes and failed parent probes still hold; this is not yet
 a general multi-WP repair planner. See AUTONOMOUS_RUNNER.md for exact limits.
+
+**2026-10-08 repair worker observation (parent review pending):**
+`gate-8ancmu2h` captured complete owner chains and original secondary owners,
+then inhibited six matching ReplicaSets with UID/resourceVersion/replica guards.
+Fresh scoped parent/ReplicaSet replicas are zero, scoped Pods absent,
+Flux8/Jobs3 suspended, PV/PVC UIDs/specs preserved, zero containers. API-only
+`shirokuma-l0-owner-repair-8ancmu2h.service` is left active for the independent
+parent probe; ordinary k3s remains inactive/disabled. No Node/Flux/workload
+startup, gate acceptance or automatic writer restoration. Parent review and
+finite-loop cleanup are pending; below stopped-profile observations are historical,
+not the current dedicated runtime state. Private evidence and exact rollback
+are in the WP's repair entry. The argv-rewriting probe defect is repaired/tested;
+broader policy verification still fails (11 failures/2 errors).
 
 **2026-10-08 fresh startup blocker:** `gate-uklhzopt` re-observed API-only
 inhibition with `/readyz=ok`, zero containers, eight suspended Flux resources,

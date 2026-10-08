@@ -5,12 +5,41 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.541"
+version: "5.542"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: API-only owner-chain inhibition observed; independent review pending
+
+WP-L0-GITOPS-001 / `L0_OWNER_CHAIN_REPAIR`, `gate-8ancmu2h` attempt 001:
+preserved originals and complete owner chains, then inhibited six matching
+ReplicaSets using atomic UID/resourceVersion/original-replica tests, no retries.
+Fresh complete inventory/spec comparison: only six intended replica changes;
+eight scoped ReplicaSets/eight parents zero, no scoped Pods, Flux8/Jobs3
+suspended, original PV/PVC UIDs/specs, nineteen volumes/two PVC directories,
+zero containers. No normal k3s/node/controller/workload start or writer restore.
+
+API-only unit `shirokuma-l0-owner-repair-8ancmu2h.service` remains active for
+the parent's independent terminal-worker/runtime review and normal finite-end
+VM stop. Worker observations are not parent verification or live L0 acceptance.
+Private originals, mutation intents/results, final inventory, exact guarded
+rollback and disk/mount evidence live at
+`tmp/local-experiment/autonomous-runner/gate-8ancmu2h/attempt-001/`.
+Original cold copies/rehearsal/stops preserved; no retained-data deletion,
+saved-request replay, GitHub writes or nested runner. Vault sync pending.
+
+k3s argv rewriting caused a pre-mutation diagnostic assertion failure; parent
+probe repaired to bind systemd launch flags/active/no-restart unit to the live
+server PID. Focused supervisor/runner 32 PASS, worker live probe and complete
+owner/spec assertions PASS, design-context/diff PASS. Initial test-module import
+error preserved; corrected module passes. Broad verifier remains FAILED with
+11 policy failures/2 errors (166 tests), SHA-256
+`c1d1512f2a42b6cf43c836bf0545fa8a546cf714e57b23f805e430dc0a6abeb4`.
+See WP for exact rollback; never auto-restore replicas or unsuspend sources/Jobs.
+Repair mission ends here; parent decides any separately verified readiness mission.
 
 ## 2026-10-08: L0 API baseline verified; ReplicaSet race blocks node startup
 

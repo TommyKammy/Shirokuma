@@ -203,17 +203,44 @@ def validate(items, baseline, stage):
                   'NODE_NOT_FRESH_READY')
 
 
+def api_only_launch(processes, units, properties):
+    """k3s rewrites argv; bind systemd's launch flags to the live server PID."""
+    servers = [line.split(None, 1) for line in processes.splitlines()
+               if '/usr/local/bin/k3s server' in line]
+    names = [line.split()[0] for line in units.splitlines() if line.strip()]
+    R.require(len(servers) == 1 and len(names) == 1 and
+              names[0].startswith('shirokuma-l0-') and names[0].endswith('.service'),
+              'API_ONLY_FLAGS_UNVERIFIED')
+    fields = dict(line.split('=', 1) for line in properties.splitlines() if '=' in line)
+    launch = fields.get('ExecStart', '').split()
+    R.require(fields.get('ActiveState') == 'active' and fields.get('Restart') == 'no' and
+              fields.get('KillMode') == 'control-group' and
+              fields.get('MainPID') == servers[0][0] and fields.get('MainPID', '0') != '0' and
+              'path=/usr/local/bin/k3s' in launch and 'argv[]=/usr/local/bin/k3s' in launch and
+              all(flag in launch for flag in ('--disable-agent', '--disable-scheduler',
+                  '--disable-controller-manager', '--disable-cloud-controller',
+                  '--https-listen-port=55737', '--bind-address=127.0.0.1')),
+              'API_ONLY_FLAGS_UNVERIFIED')
+    return names[0]
+
+
 def probe(root, stage, directory, number):
     prefix = ['colima', 'ssh', '--profile', PROFILE, '--']
     if stage == REPAIR:
         state = command(prefix+['systemctl', 'show', 'k3s', '--property=ActiveState', '--value'], root)
         R.require(state.strip() == b'inactive',
                   'NORMAL_K3S_ACTIVE')
-        processes = command(prefix+['ps', '-eo', 'args'], root).decode().splitlines()
-        servers = [line for line in processes if '/usr/local/bin/k3s server' in line]
-        R.require(len(servers) == 1 and all(flag in servers[0].split() for flag in
-                  ('--disable-agent', '--disable-scheduler', '--disable-controller-manager',
-                   '--disable-cloud-controller')), 'API_ONLY_FLAGS_UNVERIFIED')
+        processes = command(prefix+['ps', '-eo', 'pid,args'], root).decode()
+        units = command(prefix+['systemctl', 'list-units', 'shirokuma-l0-*.service',
+                        '--state=running', '--plain', '--no-legend', '--no-pager'], root).decode()
+        names = [line.split()[0] for line in units.splitlines() if line.strip()]
+        R.require(len(names) == 1 and names[0].startswith('shirokuma-l0-') and
+                  names[0].endswith('.service'), 'API_ONLY_FLAGS_UNVERIFIED')
+        properties = command(prefix+['systemctl', 'show', names[0], '--property=ActiveState',
+            '--property=MainPID', '--property=ExecStart', '--property=Restart', '--property=KillMode'], root).decode()
+        unit = api_only_launch(processes, units, properties)
+        R.save_json(directory/f'api-launch-{number:02d}.json',
+                    {'unit': unit, 'processes': processes, 'properties': properties})
     raw = command(prefix+['sudo', 'k3s', 'kubectl', '--request-timeout=20s',
                          'get', RESOURCES, '-A', '-o', 'json'], root)
     value = json.loads(raw)
