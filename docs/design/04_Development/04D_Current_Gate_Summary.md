@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.24"
+version: "1.25"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,23 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 isolated build (`gate-xezx_z6k`, parent review pending):**
+source-controller v1.9.6 commit456fa323/tree8c7afc98 pinned before dependency-only
+patch; one owned0600 nonexecuted static Linux/ARM64 binary. Go/Syft confirm six
+requested versions. Upstream15 packages/482 test+subtests and API12 pass;
+signature-unit attempt terminated on monitor race, envtest/OCI integrations excluded.
+Fresh offline binary-derived SBOM scan317 Go packages: HIGH8/CRITICAL0, all HIGH
+stdlib1.26.5 (DB lists stable1.26.6, unbuilt); lower/unknown findings remain.
+7.598GiB retained, insufficient safe headroom for new toolchain/build with no
+cleanup; parent conservative7GiB guard remains held. Scope all profiles freshly
+Stopped, ledger/pins/runtime/old holds unchanged, admission/L0 false. Repository12
+focused/design/secret/diff pass; broad verifier has four AF_UNIX path-length errors.
+Stop/no_safe_work, no later batch scheduled. Exact hashes/source/patch/tests/DB/
+failed reports in `tmp/local-experiment/flux-local-build/build-aoa39q7w/`;
+reproduction/base/image/publisher gaps in `tools/local_experiment/flux_local_build.md`.
+Original Vault sync pending; preserve caches/source/binary/failures, repository-only
+rollback. This does not authorize image assembly or runtime activation.
 
 **Candidate result and next repair approach:** `candidate-hn94027w` collected
 Flux v2.9.6 exact ARM64 children: S/K/H/N HIGH9/5/5/9, CRITICAL0 (28 occurrences).

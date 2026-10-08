@@ -5,12 +5,46 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.551"
+version: "5.552"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: patched source-controller binary, remaining stdlib HIGH/capacity hold
+
+WP-L0-GITOPS-001 / gate-xezx_z6k / `L0_FLUX_LOCAL_BUILD`:
+upstream v1.9.6 pinned commit456fa323/tree8c7afc98 before dependency-only patch;
+installed Go1.26.5 cross-compiled one owned0600 nonexecuted static Linux/ARM64 ELF.
+All six requested versions confirmed by Go metadata/Syft; source/archive/patch/
+module/test/build/scan/hash records in
+`tmp/local-experiment/flux-local-build/build-aoa39q7w/`. Binary SHA256
+9dc840eea23a3c5ef6c40f07f4fbd5e930770de2d4068688b28f04f5bd2ec596.
+Upstream Helm/reconcile/helpers15 tested packages/482 tests+subtests and API12
+pass; signature-unit attempt terminated on disk-monitor race (preserved/no replay),
+envtest/image-producing/race tests excluded. Fresh Trivy0.72.0 offline binary-derived
+SBOM scan detects317 Go packages, HIGH8/CRITICAL0/MEDIUM2/LOW2/UNKNOWN1 at06:47:50UTC;
+eight HIGH stdlib1.26.5 findings list fixed stable1.26.6, not built/proven.
+xcrypto0.55 retains lower/unknown findings. Empty rootfs-file scan and flag-error
+attempt are retained, not clearance. DB Updated2026-10-07T07:38:55UTC/download
+06:45:38UTC today, binary/SBOM/scan/DB hashes bound.
+
+7.592GiB retained/free>2220GiB; conservative7GiB guard tripped at known exit0 DB
+download, separate read-only reconciliation/no replay. Helper fixes vanished-file
+race, counts allocated blocks and preserves both guard errors/terminal outcomes.
+Only small inspection used256MiB reserve under8GiB; no safe headroom for another
+toolchain/build without prohibited cleanup. Parent7GiB guard unchanged/held.
+Fresh profiles all Stopped before/after; ledger/pins/runtime/security originals,
+retained data/backups and counters unchanged. No image execution/assembly, startup,
+approval/exception/admission/source activation/publication/nested runner. Base digest
+unproven; other controllers HIGH5/5/9, full image/publisher/source/live acceptance
+open. Stop/no_safe_work, not gate pass or new-batch authorization. Vault sync pending;
+repository-only rollback, preserve all evidence/caches. Reproduction and exact image/
+base declarations in `tools/local_experiment/flux_local_build.md` and newest WP.
+Repository focused12/design-context/secret/diff pass; broad local verifier exits2
+on four warehouse lifecycle115 AF_UNIX path-length errors under isolated TMPDIR,
+failure preserved/no unrelated repair. Final allocation approximately7.598GiB.
 
 ## 2026-10-08: four retained Flux ARM64 digests freshly scanned, 94 HIGH held
 

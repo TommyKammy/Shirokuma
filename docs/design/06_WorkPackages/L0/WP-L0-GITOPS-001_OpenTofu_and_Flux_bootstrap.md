@@ -5,12 +5,60 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.184"
+version: "0.185"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: isolated patched ARM64 binary; stdlib/capacity hold (gate-xezx_z6k)
+
+`L0_FLUX_LOCAL_BUILD`: single upstream v1.9.6 tag fetch resolved before patching
+to commit456fa323ef6a4b977f220cf2c60298bf193497ba,
+tree8c7afc98517458261d6713f8c28668c5e2d14107. Unpatched tar/source, full module
+patch/build list/checksums and command receipts preserved privately under
+`tmp/local-experiment/flux-local-build/build-aoa39q7w/`. Installed Go1.26.5,
+isolated private HOME/Go caches/temp; no global install/toolchain download.
+One owned0600 nonexecuted static Linux/ARM64 source-controller ELF, 94,109,858
+bytes, SHA2569dc840eea23a3c5ef6c40f07f4fbd5e930770de2d4068688b28f04f5bd2ec596.
+Go metadata/Syft confirm go-git5.19.2/Fulcio1.8.6/xcrypto0.55/xmod0.40/
+grpc1.83.2/oras2.6.2; original API/source behavior untouched.
+
+Upstream host-native Helm/reconciliation/helper tests:15 tested packages,
+482 test/subtest passes; API12 passes, module verification passed. Signature
+unit attempt terminated-15 on monitor temporary-file race and is not replayed;
+controller envtest/OCI-image-producing integrations/race tests not exercised.
+Syft binary-only CycloneDX318 components, fresh Trivy0.72.0 offline SBOM scan
+06:47:50UTC detects317 Go packages: **HIGH8/CRITICAL0/MEDIUM2/LOW2/UNKNOWN1**.
+DB Updated2026-10-07T07:38:55.515026687Z, downloaded06:45:38.694613Z today.
+Eight HIGH affect stdlib1.26.5 (DB lists stable1.26.6, unbuilt/unverified),
+xcrypto0.55 retains MEDIUM/UNKNOWN; **not vulnerability clearance or image readiness**.
+Empty direct rootfs-file report and unsupported SBOM flag failure preserved,
+not counted as successful scans. Binary→SBOM→scan hashes and full findings bound.
+
+Generated7.592GiB/free>2220GiB; DB download exited0 while conservative7GiB
+monitor raised at exit, separately reconciled read-only with DB metadata/hash;
+original unknown receipt unchanged, no retrieval replay. Monitor fixed for vanished
+compiler files, allocated-block counting and guard/terminal-outcome separation.
+Bounded inspection alone used256MiB reserve below8GiB; further compile/toolchain
+retrieval held because safe headroom is insufficient without prohibited cleanup.
+Parent's independent7GiB guard also remains held, not relaxed by worker evidence.
+
+Fresh before/after all profiles Stopped/byte-identical; ledger/pins/runtime/old
+holds/counters, retained disks/PV/PVC/backups unchanged. No OCI assembly/execution,
+VM/container startup, source/apply/unsuspend, risk approval/exception/activation,
+external publication or nested runner. Existing candidate image/base declarations
+and other-controller HIGH5/5/9 dependencies recorded without inventing base pins;
+full image/base/publisher/source/admission/live L0/operator acceptance remain open.
+Eleven checkboxes unchanged; stop/no_safe_work, no successor batch authorization.
+Original Vault untouched/sync pending. Repository-only rollback; preserve all
+mission caches/source/binary/failures. Detailed reproduction/identity/remaining
+findings: [`flux_local_build.md`](../../../../tools/local_experiment/flux_local_build.md).
+Repository focused12/design-context/secret/diff checks pass. Broad
+`make verify-local-experiment` exits2 with four warehouse lifecycle115 AF_UNIX
+path-length errors in required isolated TMPDIR; failure retained/no workaround,
+no unrelated repair. Final allocation approximately7.598GiB, within8GiB.
 
 ## 2026-10-08: upstream candidate remains rejected; isolate source-controller rebuild
 
