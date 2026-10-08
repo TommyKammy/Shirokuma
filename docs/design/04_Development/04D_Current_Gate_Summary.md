@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.3"
+version: "1.4"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,16 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 policy revision:** owner-approved DEV-04C now allows bounded,
+reviewed autonomous blocker resolution and new-mission selection without
+routine human restart instructions. The ReplicaSet blocker below remains
+unresolved; do not mistake this scheduling change for runtime clearance.
+Current usage is 502/600 starts (restart 2/100, remaining 98); original week
+and all retention/routing restrictions remain. The runner remains fail-closed;
+an unattended parent supervisor is not yet implemented or running. Next work
+is the bounded API-only owner-chain repair and separate evidence verification,
+plus validated supervisor transitions—not a blind replay of this stopped batch.
 
 **2026-10-08 fresh startup blocker:** `gate-uklhzopt` re-observed API-only
 inhibition with `/readyz=ok`, zero containers, eight suspended Flux resources,

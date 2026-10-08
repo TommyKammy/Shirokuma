@@ -4,8 +4,8 @@ doc_id: "ADR-0034"
 title: "Use autonomous local experimental development"
 status: accepted
 created: 2026-09-16
-updated: 2026-10-06
-version: "1.6"
+updated: 2026-10-08
+version: "1.7"
 area: adr
 tags: [shirokuma, adr, local, development]
 ---
@@ -146,6 +146,20 @@ be edited to activate the policy mid-attempt. The advisor cannot establish
 runtime truth or override a retained-data/safety stop.
 
 ## Verification and completion
+
+**2026-10-08 owner-approved scheduling revision:** replace manual-only batch
+selection with DEV-04C's finite reviewed autonomous remediation loop. Preserve
+the original seven-day guard and current 100-new-start allocation (600 cumulative,
+502 used/98 remaining at adoption), GPT-6.1 Sol and OAuth/no-new-spending route.
+Safety stops inhibit dependent actions; parent supervision separately reconciles
+session/operation state and fresh runtime evidence, then selects an authorized
+repair or a new HEAD-bound gate mission without repeated human restart commands.
+Unknown operations are never replayed; denied permissions are never bypassed.
+At most six sessions/120 minutes per batch and two repair execution sessions per
+unchanged blocker/approach, then change the evidence-backed approach or hold
+that gate. Missing authority or irreducible safety uncertainty goes to the owner.
+Historical failures and the held 1000-extension remain intact. This decision
+authorizes implementation, not a claim that a supervisor is already running.
 
 Keep focused tests, relevant policy/negative checks, ARM64 and resource evidence
 for resident components, and rollback notes. Run wider integration or repository

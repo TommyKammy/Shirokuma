@@ -4,8 +4,8 @@ doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
-updated: 2026-10-06
-version: "0.7.2"
+updated: 2026-10-08
+version: "0.7.3"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -117,13 +117,25 @@ automatic 500-to-1000 extension was **unloaded and put on hold**. The 1000
 ceiling is a maximum, not a target or permission to auto-start 500 more. At
 the 500 boundary first reconcile the original run and its final server session,
 result, checkpoint and clean descendant HEAD. Then use the gate-driven,
-manually selected short-batch policy in
+gate-focused short-batch policy in
 `docs/design/04_Development/04C_Gate_Driven_Local_Continuation.md` with its
 short current-gate index. Prioritize L0 GitOps live evidence; never turn a
 commit, `more_work`, offline tests or checkbox edits into gate acceptance.
 Keep the original seven-day deadline, OAuth-only route, stop-on-error and
 no-new-spending boundaries. Count failures and unknown starts; never replay
 one to fill the budget. Do not erase retained evidence or worktrees.
+
+On 2026-10-08 the owner adopted DEV-04C's reviewed autonomous remediation loop:
+stop unsafe actions, not automatically all development. A parent supervision
+phase may select bounded in-scope repair and successor missions after separate
+terminal-session, operation, runtime and budget review, without repeated owner
+restart instructions. Never replay unknown operations or bypass denied access.
+Keep GPT-6.1 Sol, 600 cumulative/100 restart starts (98 remaining at adoption),
+the original week, six-session/120-minute batches and immutable failure records.
+Limit unchanged blocker/approach repairs to two execution sessions, then change
+the evidence-backed approach or hold that gate. Ask the owner only for missing
+authority or irreducible safety uncertainty. Policy adoption does not itself
+implement/start a supervisor or loosen the runner's fail-closed checks.
 
 The owner also requested a **conditional GPT-6 Astra consultation** when a
 coding session meets a genuine difficult blocker. In sessions with the updated

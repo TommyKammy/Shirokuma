@@ -1,5 +1,24 @@
 # Bounded local OpenCode continuation (Shirokuma)
 
+**2026-10-08 policy precedence:** DEV-04C now authorizes finite autonomous
+parent supervision: classify a terminal stop, perform authorized bounded
+investigation/repair, independently verify outcomes, then select a new mission.
+Ordinary in-scope technical defects do not require a human restart instruction.
+The manual-only/no-successor statements below are historical scheduling rules;
+their safety checks and immutable evidence remain. Six-session/120-minute
+batches, two repair execution sessions per unchanged blocker/approach, 600
+cumulative starts, original week and OAuth-only/no-new-spending boundaries
+still apply. Repair/review session starts count too; remaining at adoption is 98.
+
+**Implementation status:** the runner is still a bounded worker launcher, not
+an implemented/running autonomous supervisor. It supports separately reviewed
+resolved safety stops; it does not yet launch unresolved diagnostic missions,
+classify arbitrary failures, independently query server/runtime evidence or
+enforce cross-batch blocker counters. Keep those paths fail-closed until tested;
+never fabricate a resolution attestation. A worker must not recursively launch
+another runner. The old 1000-extension remains unloaded. Policy approval is not
+proof of unattended operation or functional acceptance.
+
 **2026-10-07 restart allocation:** 100 new starts after the reconciled old
 500, hence current `SERIES_LIMIT=600`. The historical 1000 ceiling below is
 not the active allocation. Six-session/120-minute batches still need a named

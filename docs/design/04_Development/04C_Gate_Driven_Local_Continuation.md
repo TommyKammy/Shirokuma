@@ -4,13 +4,110 @@ doc_id: "DEV-04C"
 title: "Gate-driven local continuation after the 500-session series"
 status: accepted
 created: 2026-10-06
-updated: 2026-10-07
-version: "1.1"
+updated: 2026-10-08
+version: "1.2"
 area: development
 tags: [shirokuma, local, gates, development]
 ---
 
 # Gate-driven local continuation
+
+## 2026-10-08: reviewed autonomous remediation and continuation
+
+The owner accepted the proposed gate-focused autonomous supervision policy.
+This section supersedes the **manual-selection/no-successor scheduling** rules
+below, not their safety, evidence or budget requirements. The historical
+1000-extension stays unloaded on `POLICY_REVIEW_HOLD`. This is a new finite
+local loop, not the GitHub supervisor, a recurring launchd job, an allowance
+renewal or permission to blindly restart failed work.
+
+At adoption the reconciled usage is **502/600 cumulative starts, 2/100 restart
+starts, 98 remaining**. Recalculate from preserved start evidence before each
+launch. Failures, unknown starts and newly started repair/review model sessions
+consume the same allocation; supervision is not a free accounting exception.
+Keep GPT-6.1 Sol, the original seven-day deadline, single OpenAI OAuth/no API-key
+route and no-new-spending boundaries. Each batch remains at most six sessions
+and 120 minutes, with separate evidence review between batches.
+
+### State machine and stop classification
+
+`SELECT_GATE -> EXECUTE_BOUNDED_MISSION -> RECONCILE -> REVIEW` then:
+
+| Classification | Next action |
+| --- | --- |
+| PROGRESSED | Select the next measurable increment or dependency-ready gate |
+| REPAIRABLE | Inhibit the unsafe action; investigate/repair within standing authority, verify, then reconsider the gate |
+| STALLED | Change the approach or select a genuine gate dependency, not unrelated offline micro-hardening |
+| UNKNOWN_EXECUTION | Read-only session/operation reconciliation; no new mutation until outcome is established; never replay the uncertain operation |
+| NEEDS_OWNER | Hold the out-of-scope action; ask for the specific missing decision, continuing genuinely independent authorized work if safe |
+| EXHAUSTED | Terminate on budget/deadline/quota/routing boundary; no renewal or paid fallback |
+
+Ordinary technical uncertainty and dedicated-lab configuration defects are
+development tasks, not repeated owner-approval gates. Unknown ownership or
+retention calls for authorized read-only inspection before mutation. An
+irreducible safety uncertainty remains a hold, not presumed clearance.
+Permission rejection must be preserved: do not bypass access controls, change
+global permissions or automatically re-request a rejected operation. Use
+already approved accessible evidence or escalate genuinely missing access.
+New spending, retained-data/backup deletion, public exposure, GitHub writes and
+other out-of-scope actions still require a separate owner decision.
+
+### Review and new missions, not failed-operation replay
+
+The worker must not recursively invoke the runner. A separate parent review
+phase verifies the exact worker's terminal outcome/idle/non-active state,
+operation disposition, original result/checkpoint, clean descendant HEAD,
+budget/deadline/routing and fresh gate evidence before selecting a **new
+HEAD-bound mission**. Safety stops terminate the unsafe action/worker, not
+automatically the whole development process. In-mission safe repairs may
+continue; changed scope needs a new mission. Human restart instructions are
+not required for ordinary in-scope investigation, repair or gate transitions.
+
+Do not trust worker prose, commits, checkboxes or checkpoints as sufficient
+proof. For runtime repair, independently inspect the complete owner/resource
+scope, UIDs, writer state, retained PV/PVC/volume identities and recovery.
+Store review evidence separately and preserve original stops/failures. An
+attestation's valid form alone does not prove its contents.
+
+A terminal failure permits investigation, not automatic replay. An unresolved
+safety stop permits only a bounded diagnostic/repair mission with the dangerous
+action prohibited. A resolved stop permits a separately reviewed new gate
+mission. These transitions must be implemented/tested before a scheduler uses
+them; do not forge a budget stop or resolution attestation to pass the existing
+runner, which currently requires resolution before a subsequent gate launch.
+
+### Bounded repairs, progress and owner communication
+
+- Track stable blocker identity (gate, root cause, affected resources), attempts
+  and outcomes across batches. At most **two repair execution sessions per
+  unchanged blocker/approach**; then require a materially different hypothesis
+  supported by observations or hold that gate. Cosmetic changes/renaming do
+  not reset the counter. Do not spend the remaining allocation unconditionally.
+- Measure complete prerequisite validation, verified risk inhibition and live
+  gate observations within their actual scope. Offline tests/commits alone are
+  not runtime readiness, production/human acceptance or completion percentages.
+- Report milestones, changed risks, holds and termination without asking for
+  another restart command. Request owner intervention only for missing authority
+  or irreducible safety uncertainty that cannot be resolved within scope.
+- Keep a compact private decision record: gate/blocker ID, baseline,
+  classification, prior run/session/HEAD, operation outcomes, allowed next action,
+  prohibited actions, verification, recovery, attempt count and remaining budget.
+  Keep raw logs, credentials and retained data out of Git.
+
+### Adoption is not operational proof
+
+This policy authorizes implementing and using the finite reviewed loop within
+the current allocation. **It does not mean an unattended supervisor is already
+implemented, tested or running.** At adoption both L0 batches are stopped and
+no supervision process is active. Validate exhausted budgets, active/unknown
+sessions, stale reviews/HEADs, repeated blockers, denied access, unsafe repairs
+and valid new-mission transitions before claiming unattended continuation.
+
+The immediate dependency is the API-only Deployment/ReplicaSet/Pod owner-chain
+inhibition found by `gate-uklhzopt`: capture original identities/state, inhibit
+known secondary owners with UID/version guards, then independently verify all
+owners/Pods and retained volumes before node startup. Do not start kubelet to
+test whether the race occurs; preserve the original safety stop.
 
 ## 2026-10-07 restart allocation
 

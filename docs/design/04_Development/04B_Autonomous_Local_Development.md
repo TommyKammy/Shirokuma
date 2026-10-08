@@ -4,8 +4,8 @@ doc_id: "DEV-04B"
 title: "Autonomous Local Development"
 status: accepted
 created: 2026-09-16
-updated: 2026-10-06
-version: "1.4"
+updated: 2026-10-08
+version: "1.5"
 area: development
 tags: [shirokuma, local, development]
 ---
@@ -18,6 +18,18 @@ Do not create Issues or PRs, write to GitHub, publish externally, or wait for a
 fresh approval on an operation already inside that standing scope.
 
 ## Loop
+
+The owner's 2026-10-08 revision in DEV-04C authorizes a finite, reviewed
+autonomous repair/continuation loop. A safety stop inhibits the unsafe action;
+the parent classifies/reconciles it and selects authorized investigation or
+repair without routinely requesting a human restart. Separately verify repair
+evidence before a new gate mission. Unknown operation outcomes remain
+read-only reconciliation holds, permission rejection is never bypassed, and
+out-of-scope actions still require an owner decision. Two repair execution
+sessions per unchanged blocker/approach, evidence review between six-session/
+120-minute batches, the original week and current 600 cumulative ceiling bound
+the loop. This supersedes manual-only scheduling, not safety or acceptance.
+Implementation/startup of a supervisor must be verified separately from policy.
 
 1. Read the relevant WP and dependencies, root/scoped AGENTS instructions and
    related design records. Check current code and lab state; dated notes are
