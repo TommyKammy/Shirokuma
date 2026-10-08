@@ -285,7 +285,7 @@ def probe(root, stage, directory, number):
         R.require(all(n.startswith('k8s_') and ('_kube-system_' in n or '_flux-system_' in n)
                       for n in running), 'UNEXPECTED_RUNNING_CONTAINER')
     return {'stage': stage, 'observed_at': datetime.now(timezone.utc).isoformat(),
-            'objects': len(value['items']), 'running_containers': len(running), 'verified': True}
+            'objects': len(value['items']), 'docker_running_containers': len(running), 'verified': True}
 
 
 def mission(head, stage):

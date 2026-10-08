@@ -5,12 +5,44 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.172"
+version: "0.173"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: autonomous successor and independent scoped readiness verification
+
+Parent `loop-82wu_3jx` passed API-only inhibition verification and automatically
+selected readiness worker `gate-3t2bauf_` without an owner restart instruction.
+That worker subsequently safety-stopped because the supervisor incorrectly
+required Node status heartbeat newer than 180 seconds despite a fresh Lease.
+Kubernetes's unchanged status default is five minutes; Lease renewal is ten
+seconds. Commit `3acd617` repairs freshness using Ready=true, the exact Node
+UID/holder-bound Lease (renewal within duration capped at 40 seconds, future
+skew <=2 seconds), plus status age <=600 seconds. Supervisor14/runner21 focused
+tests pass; the broader policy suite failure remains preserved.
+
+The parent re-observed the completed operation disposition and API-only desired
+state before restarting the existing inhibited node/four-controller state.
+Private `tmp/local-experiment/gate-supervisor/lease-review-brrwinpx/` contains
+the prestart snapshot, independent live 51-object probe, review, summary and
+normal-stop cleanup. At 04:10:57 UTC, Node Ready/Lease freshness, four pinned
+Flux Deployments available/ready and corresponding Ready Pods passed; Flux8
+and Jobs3 remained suspended, retained app owners zero, PV/PVC UIDs/specs
+unchanged. Docker listed zero running containers (Docker-only scope, not a
+whole-runtime census). No resource mutation replay or model session was added.
+All profiles are Stopped after normal dedicated VM cleanup. Original failures
+and safety checkpoint are immutable; separate resolution review records the
+later evidence. Restore neither app counts nor source/Job suspension blindly.
+
+This establishes the narrow Node/four-controller readiness milestone and actual
+automatic mission transition, not full L0/source/reconciliation, doctor health,
+application recovery or human acceptance. Doctor/source/local-admission gates
+remain open; no checkbox change. Usage is 504 cumulative starts, restart4/100,
+96 remaining under the original week. The finite L0 loop ended; general
+multi-WP planning and arbitrary-stop remediation are still incomplete.
 
 ## 2026-10-08: scoped Node/four-controller readiness observed; parent review pending
 

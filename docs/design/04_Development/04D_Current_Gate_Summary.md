@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.8"
+version: "1.9"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -18,7 +18,31 @@ The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
 
-**2026-10-08 readiness worker observation (parent review pending):**
+**2026-10-08 parent-verified scoped readiness (04:10:57 UTC):**
+The automatic successor actually ran after fresh parent inhibition verification.
+Its final safety stop was caused by an invalid 180-second Ready-status cutoff:
+Kubernetes normally reports unchanged Node status every five minutes while
+renewing the Node Lease every ten seconds. The failed observations remain
+unchanged. `3acd617` uses Ready=true plus UID/holder-bound fresh Lease (at most
+40 seconds, bounded clock skew) and status age at most 600 seconds, with
+negative tests for stale/missing/foreign/future Leases and non-Ready Nodes.
+
+Parent `lease-review-brrwinpx` reopened API-only inspection and independently
+verified owner/spec/retention scope before starting the existing node/controller
+state. Its fresh 51-object probe passed: Node Ready plus fresh Lease, four
+digest-matching available/ready Deployments and matching Ready Pods, suspended
+Flux8/Jobs3 and inhibited retained application owners. Docker listed zero running
+containers; this is a Docker observation, not a whole-runtime census.
+No model session or resource mutation replay was added. Exact source worker
+was succeeded/idle/non-active. Parent normally stopped the dedicated VM and
+all profiles were independently observed Stopped. Both original HELD summaries
+and worker safety checkpoint remain intact; a separate resolution review exists.
+Usage: **504/600, restart4/100, remaining96**. The finite invocation has ended,
+not an active unattended multi-WP planner. Next gate work is scoped source/local
+admission and degraded doctor investigation; no source/Job unsuspension is
+authorized merely by these readiness results. Full L0/human acceptance remains open.
+
+**Earlier readiness worker observation (superseded parent-review status):**
 `gate-3t2bauf_` follows successful fresh parent API-only inhibition verification
 in `loop-82wu_3jx`, then independently rechecks complete owner/spec/UID and
 retention scope. API-only stopped cleanly before dedicated normal k3s startup.
