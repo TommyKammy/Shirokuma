@@ -4,19 +4,33 @@ doc_id: "DEV-04D"
 title: "Current local gate summary"
 status: active
 created: 2026-10-06
-updated: 2026-10-07
-version: "1.2"
+updated: 2026-10-08
+version: "1.3"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
-# Current gate summary (dated 2026-10-07; re-observe before acting)
+# Current gate summary (dated 2026-10-08; re-observe before acting)
 
 **Priority:** L0 foundation, especially
 [`WP-L0-GITOPS-001`](../06_WorkPackages/L0/WP-L0-GITOPS-001_OpenTofu_and_Flux_bootstrap.md).
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 fresh startup blocker:** `gate-uklhzopt` re-observed API-only
+inhibition with `/readyz=ok`, zero containers, eight suspended Flux resources,
+three suspended Jobs, eight zero-replica app/Flux parent workloads and preserved
+PV/PVC UIDs. Expanded secondary-owner inventory found Polaris/Trino and four
+Flux ReplicaSets each still requesting one replica. Starting controller-manager
+and kubelet could race Pod recreation against Deployment scale-down. No node
+start/Flux scale was attempted; both transient APIs and the dedicated VM were
+stopped. All profiles are Stopped. Sources/Kustomizations remain suspended
+with stale Ready conditions; stopped-lab doctor is degraded. **Next start is
+blocked on separately reviewed API-only secondary-owner inhibition and complete
+owner/Pod checks**, not cleared by the earlier parent-only snapshot. See the
+WP's 2026-10-08 entry and private attempt evidence. This batch stops; no automatic
+successor or acceptance claim.
 
 **2026-10-07 authorized inspection follow-up:** the former host-read blocker
 is resolved in the owner-authorized parent context; dedicated stopped-disk

@@ -4,13 +4,83 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-07
-version: "0.169"
+updated: 2026-10-08
+version: "0.170"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: fresh API inhibition; secondary-owner startup blocker
+
+`L0_GITOPS_READINESS`, batch `gate-uklhzopt` attempt 001: one dedicated
+inspection VM start using DEV-04E's `--kubernetes=false --activate=false
+--ssh-config=false --save-config=false` route. Explicit profile
+`mac-studio-solo`; guest API observations use `sudo k3s kubectl`, not a default
+host context. Ordinary k3s remained inactive/disabled; Docker had zero running
+containers. Two separately recorded API-only transient services used disabled
+agent/scheduler/controller-manager/cloud-controller and loopback port 55737;
+both returned `/readyz=ok`. Private evidence:
+`tmp/local-experiment/autonomous-runner/gate-uklhzopt/attempt-001/`.
+
+Independent API snapshots confirm eight suspended Flux resources, three
+suspended completed Jobs, four app workloads and four digest-pinned Flux
+Deployments at replicas=0, no app/Flux Pods, and unchanged Node/PV/PVC resource
+UIDs against the preserved original snapshots. Controller templates match the
+inhibited snapshot. No reconciliation or resource mutation was performed.
+
+**Startup NO-GO:** the prior snapshot omitted ReplicaSets. Fresh expanded
+`get replicasets,replicationcontrollers,hpa -A -o json` found eleven ReplicaSets,
+no ReplicationControllers/HPA. `polaris-8685578868` and
+`trino-local-77d97b477f` each retain `spec.replicas=1`, with controller-owner
+UIDs matching the zero-replica Deployments. Four Flux ReplicaSets also retain
+one replica; two older app ReplicaSets are zero, and three system ReplicaSets
+are one. With controller-manager disabled, Deployment scale-down has not
+propagated to these secondary owners. Starting normal k3s can race ReplicaSet
+Pod creation against Deployment scale-down. No unsafe race was executed.
+Node startup and selective Flux scaling therefore stopped; there were **zero
+normal Node starts and zero Flux scale operations**. This is a precisely
+observed inhibition gap, not evidence that the recorded nineteen parent-field
+changes drifted or that a retained writer actually ran.
+
+Source/root/six child Kustomization statuses are captured privately without
+reconciliation. All remain suspended; all Ready conditions refer to earlier
+generations. GitRepository generation 3 still reports observed generation 2;
+root generation 2 has a Ready condition for generation 1. Saved Ready=True
+does not prove fresh source/controller readiness or acceptance.
+After normal dedicated VM stop, read-only `go run ./cmd/shirokuma doctor
+--profile local-experiment --output json` returned exit 0, overall degraded,
+healthy loopback scope for `colima-mac-studio-solo`, and degraded cluster/Flux/
+four app checks. SQL and publication were not evaluated. This is stopped-lab
+diagnostics, not live readiness.
+
+Recovery completed: both transient APIs stopped, ordinary k3s inactive,
+zero containers before dedicated VM stop, all profiles freshly Stopped. No
+retained storage/backup deletion, saved-request replay, original-field restore,
+other-profile action or GitHub publication. Boot/API writes metadata; disk-byte
+immutability and VM/application recovery are not claimed. Cold backup/rehearsal,
+prior snapshots and original `gate-188rjc1d` stop remain untouched. Original
+Vault sync is pending outside this checkout.
+
+Next separately reviewed mission must include all secondary owners and a
+UID/resourceVersion-preconditioned API-only inhibition of the six nonzero
+app/Flux ReplicaSets, preserving prior state and never retrying an unknown
+mutation. Verify complete owner inventory and zero app/Flux Pods before any
+node startup; do not blindly restore writers or unsuspend children. This batch
+stops at the safety boundary; no acceptance checkbox changes or later batch
+authorization. OAuth-only preflight passed for explicit `openai/gpt-6.1-sol`;
+no independent billing verification, nested run or Astra consultation.
+
+Validation: private evidence assertions (six nonzero secondary owners with
+matching Deployment UIDs, retained Node/PV/PVC identities, zero app/Flux Pods,
+final stopped profiles), design-context and diff check PASS.
+`make verify-local-experiment` FAILED at `test-local-policy`: 166 tests,
+11 failures/2 errors in manifest/source read and race assertions, matching the
+earlier failure counts; cause not established and no out-of-gate repair/retry.
+New private `verify-local-experiment.log` SHA-256:
+`696909fe4334f340797b7d9520e10cdf2ff5ff53e28742fe678b5eb94c72de8b`.
+The original failure log remains unchanged.
 
 ## 2026-10-07: approved cold inspection and bounded recovery route
 

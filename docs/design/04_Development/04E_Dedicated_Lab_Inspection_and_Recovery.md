@@ -4,8 +4,8 @@ doc_id: "DEV-04E"
 title: "Dedicated lab inspection and cold recovery boundary"
 status: accepted
 created: 2026-10-07
-updated: 2026-10-07
-version: "1.0"
+updated: 2026-10-08
+version: "1.1"
 area: development
 tags: [shirokuma, local, retention, recovery]
 ---
@@ -98,6 +98,33 @@ the recovered state through the same **k3s-disabled inspection route**, and
 verify data mounts/SQLite/volume references before considering workload startup.
 
 ## Normal Kubernetes startup is a separate gate
+
+### 2026-10-08 secondary-owner finding: parent inhibition is insufficient
+
+Fresh API-only observations in private
+`tmp/local-experiment/autonomous-runner/gate-uklhzopt/attempt-001/` confirm the
+nineteen inhibited parent fields, zero app/Flux Pods and unchanged PV/PVC UIDs.
+However, `get replicasets,replicationcontrollers,hpa -A -o json` shows eleven
+ReplicaSets, including six nonzero app/Flux owners: Polaris, Trino and the four
+Flux controllers each still request one replica. Their ownerReferences match
+the zero-replica Deployments. No HPA/ReplicationController was observed.
+
+The disabled controller-manager has not propagated parent scale-down. Normal
+startup could race ReplicaSet Pod creation against Deployment reconciliation;
+retiring old Pods alone does not remove that risk. **Do not proceed directly
+from the earlier parent-field validation to node startup.** A subsequent reviewed
+mission must preserve secondary-owner originals and inhibit those six matching
+ReplicaSets with atomic UID/resourceVersion conditions while agent/scheduler/
+controller-manager remain disabled. Inventory every owner surface, ensure no
+app/Flux Pod or unexpected workload, and recheck retained identities before
+startup. Unknown identities/mutations stop the dependent operation. Do not
+restore original writer replicas, replay Jobs or unsuspend Flux automatically.
+
+This batch made no resource mutations or node/controller starts. Both API-only
+services and the dedicated VM were stopped with zero running containers. No
+disk restoration/deletion was performed; original cold backup, recovery rehearsal
+and safety-stop evidence remain intact. Source/Kustomization status is saved
+but Ready conditions are stale; normal Node/Flux readiness remains unverified.
 
 ### Subsequent API-only validation and inhibition (2026-10-07)
 

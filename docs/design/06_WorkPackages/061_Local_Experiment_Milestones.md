@@ -4,13 +4,53 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-07
-version: "5.540"
+updated: 2026-10-08
+version: "5.541"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: L0 API baseline verified; ReplicaSet race blocks node startup
+
+WP-L0-GITOPS-001 / `L0_GITOPS_READINESS`, `gate-uklhzopt` attempt 001:
+fresh dedicated inspection boot and two API-only stages returned `/readyz=ok`
+with zero containers and ordinary k3s inactive. Eight Flux resources/three Jobs
+remain suspended, four retained app workloads/four pinned Flux Deployments
+remain zero, no app/Flux Pods, original Node/PV/PVC UIDs match. Expanded live
+owner inspection found Polaris/Trino and four Flux ReplicaSets still requesting
+one replica. The parent-only inhibition cannot guarantee no writer-Pod
+recreation race when controller-manager/kubelet start. **NO-GO** for node and
+controller startup; no secondary-owner mutation performed in this batch.
+
+Private evidence: `tmp/local-experiment/autonomous-runner/gate-uklhzopt/attempt-001/`
+(`api-fresh-inhibited.json`, `owner-inventory.json`, `owner-summary.json`,
+`owner-stage-inhibited.json`, `source-kustomization-observations.json`, shutdown
+records and `doctor-stopped.json`). All Flux Ready conditions are stale for
+their current generations; suspension is not source readiness. Scoped doctor
+after shutdown: exit 0, overall degraded, healthy scope only; SQL/publication
+not evaluated. No fresh Node/four-controller readiness or acceptance claim.
+
+Two local observation errors are retained: initial inventory assertion used
+an inhibited snapshot omitting Node (fixed by joining the original Node UID),
+and an extra-owner GET issued after API shutdown failed with connection refused.
+Neither was an unknown mutation; a separate API-only stage collected the
+missing owner evidence, without retrying a mutation or starting normal k3s.
+
+Both APIs stopped, zero containers, dedicated VM normally stopped, all profiles
+Stopped. Zero Node starts/Flux scales, no requests replayed, retained disks/
+volumes/backups and original safety stop preserved. Subsequent reviewed work
+needs secondary-owner inhibition before startup; this batch stops, not
+`more_work`. Original Vault direct sync pending. OAuth-only route preflight
+passed; billing not independently verified. Historical broad-verifier failure
+is unchanged; no unrelated repair or acceptance-checkbox edit.
+
+Evidence assertions, design-context and diff check PASS. Fresh
+`make verify-local-experiment` FAILED at `test-local-policy` (166 tests,
+11 failures/2 errors); no unrelated repair/retry. New private log SHA-256:
+`696909fe4334f340797b7d9520e10cdf2ff5ff53e28742fe678b5eb94c72de8b`.
+Original 2026-10-07 failure evidence remains intact.
 
 ## 2026-10-07: L0 readiness inventory — safely blocked, batch stopped
 
