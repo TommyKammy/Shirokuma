@@ -117,7 +117,7 @@ def commands(directory, images):
             '--output', 'cyclonedx-json'], component+'.sbom.json'
 
 
-def execute(directory, env, name, argv, output):
+def execute(directory, env, name, argv, output, *, deadline=None):
     executable = shutil.which(argv[0])
     F.R.require(executable is not None, 'REFRESH_INSTALLED_TOOL_MISSING')
     check_budget(directory)
@@ -134,7 +134,8 @@ def execute(directory, env, name, argv, output):
             started = time.monotonic()
             while process.poll() is None:
                 check_budget(directory)
-                F.R.require(time.monotonic()-started < 1000, 'REFRESH_OPERATION_TIMEOUT')
+                F.R.require(time.monotonic()-started < 1000 and
+                            (deadline is None or time.monotonic() < deadline), 'REFRESH_OPERATION_TIMEOUT')
                 time.sleep(0.5)
             code = process.returncode
             disposition = 'succeeded' if code == 0 else 'failed'

@@ -4,6 +4,19 @@
 
 ### Exact-digest evidence refresh after completed finding diagnosis
 
+**After refresh:** a parent-owned, zero-model-call candidate investigation is
+available via `flux_pin_candidate.py --execute --discovery <absolute discovery>`.
+Public release metadata/install.yaml must already be captured in the private
+discovery scope. The tool accepts only a stable Flux2 release with exactly the
+four named controller tags, no controller major change/downgrade. Resolve tags
+once, retain immutable parent indexes, require one Linux/ARM64 descriptor and
+check the child digest, then scan/SBOM only those immutable children. Existing
+ledger/pins are never changed. At most two persistent candidate reservations,
+120-minute shared deadline passed into each operation, original week/disk guards,
+shared parent lock and stopped VM checks. No replay, publisher acceptance, risk
+approval, model requests, image execution or runtime successor. Reported release
+tags are public metadata observations, not cryptographic publisher proof.
+
 The completed finding worker's `no_safe_work` now records
 `FINDINGS_REFRESH_CAPABILITY_REQUIRED`, not an admission-pivot scope error.
 `python -m tools.local_experiment.flux_refresh_supervisor` defaults to zero calls.

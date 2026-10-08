@@ -5,12 +5,37 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.182"
+version: "0.183"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: parent refresh verification and isolated candidate investigation
+
+Parent independently verified gate-3f5odnk2 terminal succeeded/idle/non-active,
+valid no_safe_work and clean descendant HEAD66c8cb55. Refreshed4 reports/DB
+snapshot reproduce HIGH21/36/18/19, CRITICAL0, full hashes and ARM64/Linux identity;
+all profiles Stopped and old ledger unchanged. Fresh evidence does not grant
+admission; parent classification FRESH_SCAN_EVIDENCE_ONLY. Starts514/600, remaining86.
+
+Anonymous GET release metadata/install.yaml observed stable Flux2 v2.9.6,
+S/K/H/N controller tags v1.9.6/v1.9.6/v1.6.5/v1.9.4. Recorded once privately in
+`tmp/local-experiment/flux-pin-discovery/discovery-yp11cspa/`; no signed publisher
+claim or pin change. The next parent-owned read-only investigation uses
+`flux_pin_candidate.py` to resolve each tag once, retain exact index/unique
+ARM64-child binding, then collect fresh full scans/SBOMs for those child digests.
+Installed-tool isolation, no-replay receipts and disk guards reuse the verified
+refresh collector. Max120minutes, at most2 persistent reservations, same original
+week; zero new model requests. No build/image execution, VM/container startup,
+policy activation, current pin/ledger overwrite or risk exception.
+
+Candidate scan/fixed-package/publisher evidence are still pending. Even zero
+HIGH/CRITICAL cannot prove publisher acceptance or authorize runtime changes.
+Recovery is repository-only rollback of the candidate tool; preserve all old/new
+private evidence, retained disks/backups and original failure records. No new
+resident component, PV/PVC or retained storage change; generated data bounded8GiB.
 
 ## 2026-10-08: fresh exact-digest Flux scans, strict rejection retained (gate-3f5odnk2)
 

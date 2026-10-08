@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.22"
+version: "1.23"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -18,7 +18,24 @@ The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
 
-**2026-10-08 exact-digest refresh (`gate-3f5odnk2`, parent review pending):**
+**Parent review and next measurable dependency:** `gate-3f5odnk2` is independently
+succeeded/idle/non-active (`ses_ee5db2f1affem4NZko8BBCpwyA`), valid no_safe_work,
+clean HEAD `66c8cb553ceebd6aa36e2c2a64b248cb9415387e`. Parent summary is
+`FRESH_SCAN_EVIDENCE_ONLY`; independent reobservation with the launcher's Python
+environment reproduces exact hashes/HIGH counts/DB times, ledger unchanged and
+all profiles Stopped. Starts **514/600, restart14/100, remaining86**.
+
+Anonymous public metadata discovery found stable **Flux v2.9.6** (published
+2026-10-01), with S/K/H/N tags v1.9.6/v1.9.6/v1.6.5/v1.9.4. These are observed
+release metadata, not accepted pins/publisher proof. Private records:
+`tmp/local-experiment/flux-pin-discovery/discovery-yp11cspa/`.
+Next `flux_pin_candidate.py` resolves those tags once to immutable parent indexes
+and unique ARM64 child digests, then scans only the children with isolated
+installed tools. Zero model starts, max120minutes/two persistent reservations,
+VM stays stopped; no current ledger/pin change, approval or runtime successor.
+Candidate scan/publisher/fixed-package results remain unverified until collection.
+
+**2026-10-08 exact-digest refresh (`gate-3f5odnk2`, parent-reviewed evidence only):**
 All four unchanged ARM64 Flux digests freshly scanned06:15:41–06:16:08UTC,
 Trivy0.72.0; DB UpdatedAt2026-10-07T07:38:55UTC/download06:15:35UTC today.
 HIGH21/36/18/19, CRITICAL0:94 occurrences/42 IDs versus retained25/10.
