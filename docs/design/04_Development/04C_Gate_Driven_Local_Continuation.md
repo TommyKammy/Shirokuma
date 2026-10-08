@@ -5,7 +5,7 @@ title: "Gate-driven local continuation after the 500-session series"
 status: accepted
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.3"
+version: "1.4"
 area: development
 tags: [shirokuma, local, gates, development]
 ---
@@ -95,6 +95,19 @@ runner, which currently requires resolution before a subsequent gate launch.
   Keep raw logs, credentials and retained data out of Git.
 
 ### Adoption is not operational proof
+
+Post-readiness implementation: `tools/local_experiment/gate_continuation.py`
+adds evidence-reviewed next-mission selection instead of terminating after two
+fixed stages. One worker/120-minute batch at a time under the remaining allocation
+and original deadline; milestone reports are informational, not stop conditions.
+Initial capabilities cover L0 doctor/source-identity/local-admission diagnosis
+and repository repair only, with runtime sources/Jobs/app writers inhibited.
+Typed next-mission proposals cannot widen capabilities or supply parent shell
+commands. Real API/doctor observations, terminal worker state, descendant HEAD
+and fixed relevant tests precede successors. Persistent two-reservation limits
+apply to each topic/approach; stalled/exhausted/unsafe work holds. This is not
+blanket arbitrary-WP planning or automatic unsuspension. The original finite
+repair/readiness supervisor remains available but is not the ongoing planner.
 
 Initial implementation: `tools/local_experiment/gate_supervisor.py` implements
 the finite owner-chain repair -> independent live verification -> Node/Flux

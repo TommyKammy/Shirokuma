@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.9"
+version: "1.10"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,17 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**Continuation scheduling correction:** the finite readiness job had ended,
+leaving no process to choose the next gate. `gate_continuation.py` now provides
+the post-readiness parent loop, initially investigating degraded doctor and
+source/local-admission dependencies, with independent live reviews between
+single-session/120-minute batches. It does not stop on milestone/commit alone.
+Activation is recorded separately; ceiling remains 96 starts available at this
+boundary, clipped to cumulative600/original week. Initial runtime capability is
+observation only: sources/Jobs remain suspended and retained writers zero.
+Invalid proposals, exhausted same-approach counters or unsafe/unknown execution
+are still genuine holds; no claimed full L0 acceptance or arbitrary-stop repair.
 
 **2026-10-08 parent-verified scoped readiness (04:10:57 UTC):**
 The automatic successor actually ran after fresh parent inhibition verification.

@@ -1,5 +1,45 @@
 # Bounded local OpenCode continuation (Shirokuma)
 
+## Continuing beyond the readiness milestone (2026-10-08)
+
+`python -m tools.local_experiment.gate_continuation` is the post-readiness
+parent loop. It does **not** exit merely because the fixed repair/readiness
+sequence ended. With `--execute --use-pro-weekly-limit --max-sessions 96`, it
+selects one bounded L0 dependency mission at a time, independently reconciles
+the server, live readiness/retention/inhibition, and real doctor output, then
+checks a private proposal before selecting the next mission. Each worker is
+a single-session batch capped at 120 minutes. The enclosing loop is clipped
+to the original week, and every start still passes the cumulative-600 runner
+gate. Ninety-six is the remaining ceiling at activation, not a consumption goal.
+
+Initial topics are `doctor`, `source_identity`, `local_admission`; approaches
+are `diagnose` and `repository_repair`, with at most two persistent reservations
+per exact topic/approach across invocations. No arbitrary shell commands or
+new runtime authority can be supplied through the proposal. Scope allows
+repository repairs and observation of the existing dedicated node/four Flux
+controllers; all sources/children/Jobs remain suspended and app owners zero.
+No source redirect/unsuspension, new runtime resource, policy binding activation,
+retained writer startup, publication or spending is included. A new capability
+needs separate implementation/review under DEV-04C, not prose in a proposal.
+
+The worker writes one exclusive owned 0600 proposal at the mission-supplied
+path, exact keys: `schema_version:1`, `topic`, `approach`, `progress`
+(`measured_blocker`, `functional_change`, `no_progress`), `next_topic`,
+`next_approach`, `next_target` (30–350 single-line characters). The parent
+checks scope, captures real API/doctor results, and independently runs fixed
+Python bears and Go CLI/internal tests for a claimed functional code change.
+These certify a bounded increment, **not** overall gate acceptance or complete
+progress proof from prose/tests alone. No-progress cannot repeat the same
+approach; exhausted counters, invalid proposals or failed probes hold rather
+than filling slots with cosmetic work.
+
+Milestone reports do not terminate scheduling. Unknown/failed/unsafe workers,
+denied access or changed invariants still hold without automatic replay; this
+initial continuation does not infer arbitrary new-stop repairs. On termination
+the parent stops only the dedicated VM when worker state is confirmed terminal.
+It shares the finite supervisor lock, uses no launchd/cron and does not revive
+the old 1000-extension. Private state is under `tmp/local-experiment/gate-continuation/`.
+
 **2026-10-08 policy precedence:** DEV-04C now authorizes finite autonomous
 parent supervision: classify a terminal stop, perform authorized bounded
 investigation/repair, independently verify outcomes, then select a new mission.
