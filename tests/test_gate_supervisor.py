@@ -1,5 +1,5 @@
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import unittest
 import tempfile
 from contextlib import ExitStack
@@ -89,6 +89,10 @@ class SupervisorTests(unittest.TestCase):
         node = data[0]
         node['status']['conditions'] = [{'type': 'Ready', 'status': 'True',
             'lastHeartbeatTime': datetime.now(timezone.utc).isoformat()}]
+        data.append({'kind': 'Lease', 'metadata': {'uid': 'lease', 'name': node['metadata']['name'],
+            'namespace': 'kube-node-lease', 'ownerReferences': [{'kind': 'Node', 'uid': node['metadata']['uid']}]},
+            'spec': {'holderIdentity': node['metadata']['name'], 'leaseDurationSeconds': 40,
+                     'renewTime': datetime.now(timezone.utc).isoformat()}})
         for rs in list(data):
             if rs['kind'] == 'ReplicaSet' and rs['metadata']['namespace'] == 'flux-system':
                 data.append({'kind': 'Pod', 'metadata': {'uid': 'pod'+rs['metadata']['name'],
@@ -107,6 +111,24 @@ class SupervisorTests(unittest.TestCase):
         with mock.patch('sys.argv', ['supervisor']), mock.patch.object(S, 'supervise') as run:
             self.assertEqual(S.main(), 0)
             run.assert_not_called()
+
+    def test_node_uses_uid_bound_fresh_lease_not_180_second_status_cutoff(self):
+        node = fixture()[0]
+        now = datetime.now(timezone.utc)
+        node['status']['conditions'] = [{'type': 'Ready', 'status': 'True',
+              'lastHeartbeatTime': (now-timedelta(seconds=240)).isoformat()}]
+        lease = {'metadata': {'name': node['metadata']['name'],
+                   'ownerReferences': [{'kind': 'Node', 'uid': node['metadata']['uid']}]},
+                 'spec': {'holderIdentity': node['metadata']['name'], 'leaseDurationSeconds': 40,
+                          'renewTime': (now-timedelta(seconds=10)).isoformat()}}
+        S.node_freshness(node, [lease])
+        for bad in ([], [dict(lease, spec=dict(lease['spec'], renewTime=(now-timedelta(seconds=50)).isoformat()))],
+                    [dict(lease, spec=dict(lease['spec'], renewTime=(now+timedelta(seconds=20)).isoformat()))],
+                    [dict(lease, spec=dict(lease['spec'], holderIdentity='foreign'))],
+                    [dict(lease, metadata=dict(lease['metadata'], ownerReferences=[{'kind':'Node','uid':'other'}]))]):
+            with self.assertRaises(S.R.RunnerError): S.node_freshness(node, bad)
+        node['status']['conditions'][0]['status'] = 'False'
+        with self.assertRaises(S.R.RunnerError): S.node_freshness(node, [lease])
 
     def test_budget_and_cross_invocation_repair_cap(self):
         with self.assertRaises(S.R.RunnerError): S.supervise(Path('/unused'), Path('/unused'), 4, 120)

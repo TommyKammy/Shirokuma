@@ -32,7 +32,16 @@ Only after passing can it create a separate resolution review. A terminal
 `complete` stage uses `verified_stage_new_mission_no_replay`; it is scoped
 evidence, not full acceptance. Original records remain immutable.
 
-Readiness verification requires fresh Node heartbeat/Ready, four available
+Readiness verification requires Node Ready plus a fresh UID/holder-bound Node
+Lease (renewal within its duration, capped at 40 seconds; at most two seconds
+future clock skew). Ready status reporting may be up to 600 seconds old,
+allowing Kubernetes's default five-minute status interval; stale/missing/foreign
+Leases, non-Ready Nodes or excessively stale status still fail. See
+https://kubernetes.io/docs/reference/node/node-status/#heartbeats . The former
+180-second status-only cutoff incorrectly rejected a healthy fresh Lease;
+its failed observations remain preserved. Prestart `require_live=False`
+checks only desired-state/ownership/retention and must never count as readiness.
+The final live probe always requires liveness. It also requires four available
 digest-matching Flux Deployments and live matching Ready Pods, suspended
 sources/Jobs, zero app owners and unchanged retained PV/PVC specs/UIDs. Raw
 observations and decisions are private under `tmp/local-experiment/gate-supervisor/`.

@@ -26,7 +26,7 @@ FLUX = {'source-controller', 'kustomize-controller', 'helm-controller', 'notific
 APP_NS = {'shirokuma-dev', 'shirokuma-storage'}
 SCOPED_NS = APP_NS | {'flux-system'}
 RESOURCES = ('nodes,deployments,statefulsets,replicasets,replicationcontrollers,'
-             'daemonsets,hpa,jobs,cronjobs,pods,pv,pvc,'
+             'daemonsets,hpa,jobs,cronjobs,pods,pv,pvc,leases,'
              'kustomizations.kustomize.toolkit.fluxcd.io,gitrepositories.source.toolkit.fluxcd.io')
 
 
@@ -122,7 +122,7 @@ def no_active_worker(root):
         R.require(session['location']['directory'] != str(root), 'WORKTREE_SESSION_ACTIVE')
 
 
-def validate(items, baseline, stage):
+def validate(items, baseline, stage, require_live=True):
     """Fail closed on owner drift, retained identity drift or incomplete inventory."""
     R.require(stage in (REPAIR, READY), 'STAGE_INVALID')
     original = {i['metadata']['uid']: i for i in baseline}
@@ -140,7 +140,8 @@ def validate(items, baseline, stage):
     for obj in items:
         kind = obj['kind']; meta = obj['metadata']; ns = meta.get('namespace')
         spec = obj.get('spec', {}); status = obj.get('status', {})
-        R.require(ns is None or ns in SCOPED_NS | {'kube-system'}, 'UNEXPECTED_NAMESPACE')
+        R.require(ns is None or ns in SCOPED_NS | {'kube-system'} or
+                  (kind == 'Lease' and ns == 'kube-node-lease'), 'UNEXPECTED_NAMESPACE')
         if kind in ('PersistentVolume', 'PersistentVolumeClaim'):
             R.require(meta['uid'] in original and spec == original[meta['uid']]['spec'], 'RETAINED_STATE_DRIFT')
         if kind in ('Kustomization', 'GitRepository', 'Job'):
@@ -159,7 +160,7 @@ def validate(items, baseline, stage):
                     old_images = [c['image'] for c in original[meta['uid']]['spec']['template']['spec']['containers']]
                     R.require(images == old_images and all('@sha256:' in x for x in images), 'FLUX_IMAGE_DRIFT')
                     flux.add(meta['name'])
-                    if stage == READY:
+                    if stage == READY and require_live:
                         R.require(status.get('observedGeneration') == meta['generation'] and
                                   status.get('availableReplicas') == 1 and status.get('readyReplicas') == 1,
                                   'FLUX_NOT_READY')
@@ -183,8 +184,8 @@ def validate(items, baseline, stage):
             parent = current[refs[0]['uid']]
             owner = current[parent['metadata']['ownerReferences'][0]['uid']]
             R.require(owner['metadata']['name'] in FLUX, 'POD_OWNER_UNKNOWN')
-            R.require(any(c['type'] == 'Ready' and c['status'] == 'True' for c in
-                          status.get('conditions', [])) and not meta.get('deletionTimestamp'),
+            R.require((not require_live or any(c['type'] == 'Ready' and c['status'] == 'True' for c in
+                          status.get('conditions', []))) and not meta.get('deletionTimestamp'),
                       'FLUX_POD_NOT_READY')
             R.require([c['image'] for c in spec['containers']] ==
                       [c['image'] for c in owner['spec']['template']['spec']['containers']],
@@ -194,13 +195,41 @@ def validate(items, baseline, stage):
     R.require(sum(i['kind'] in ('Kustomization', 'GitRepository') for i in items) == 8 and
               sum(i['kind'] == 'Job' for i in items) == 3, 'INVENTORY_INCOMPLETE')
     if stage == READY:
-        R.require(ready_pods == FLUX and secondary_replicas == {name: 1 for name in FLUX},
+        R.require(secondary_replicas == {name: 1 for name in FLUX},
                   'FLUX_LIVE_PODS_INCOMPLETE')
-        ready = [c for c in nodes[0]['status']['conditions'] if c['type'] == 'Ready']
-        R.require(len(ready) == 1 and ready[0]['status'] == 'True' and
-                  abs((datetime.now(timezone.utc)-datetime.fromisoformat(
-                      ready[0]['lastHeartbeatTime'].replace('Z', '+00:00'))).total_seconds()) < 180,
-                  'NODE_NOT_FRESH_READY')
+    if stage == READY and require_live:
+        R.require(ready_pods == FLUX, 'FLUX_LIVE_PODS_INCOMPLETE')
+        node_freshness(nodes[0], [i for i in items if i['kind'] == 'Lease' and
+                       i['metadata'].get('namespace') == 'kube-node-lease'])
+
+
+def node_freshness(node, leases):
+    """Ready status normally reports every five minutes; Lease every ten seconds.
+
+    Bind a fresh Lease to the exact node UID and holder. No stale-status-only
+    pass, missing-Lease fallback, or future-timestamp absolute-value shortcut.
+    """
+    meta = node['metadata']
+    ready = [c for c in node['status']['conditions'] if c['type'] == 'Ready']
+    R.require(len(ready) == 1 and ready[0]['status'] == 'True' and len(leases) == 1,
+              'NODE_NOT_FRESH_READY')
+    lease = leases[0]; spec = lease['spec']; lm = lease['metadata']
+    refs = lm.get('ownerReferences', [])
+    duration = spec.get('leaseDurationSeconds')
+    R.require(lm['name'] == meta['name'] and spec.get('holderIdentity') == meta['name'] and
+              len(refs) == 1 and refs[0].get('kind') == 'Node' and refs[0].get('uid') == meta['uid'] and
+              type(duration) is int and 0 < duration <= 60, 'NODE_LEASE_IDENTITY_UNVERIFIED')
+    now = datetime.now(timezone.utc)
+    def age(stamp):
+        try:
+            parsed = datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+            R.require(parsed.tzinfo is not None, 'NODE_NOT_FRESH_READY')
+            return (now-parsed).total_seconds()
+        except (ValueError, TypeError, AttributeError):
+            raise R.RunnerError('NODE_NOT_FRESH_READY') from None
+    R.require(-2 <= age(spec.get('renewTime')) <= min(duration, 40) and
+              -2 <= age(ready[0].get('lastHeartbeatTime')) <= 600,
+              'NODE_NOT_FRESH_READY')
 
 
 def api_only_launch(processes, units, properties):
