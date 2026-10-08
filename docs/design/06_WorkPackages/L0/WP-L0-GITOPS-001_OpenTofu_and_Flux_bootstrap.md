@@ -5,12 +5,101 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.171"
+version: "0.172"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: scoped Node/four-controller readiness observed; parent review pending
+
+`L0_CONTROLLER_READINESS`, `gate-3t2bauf_` attempt 001 follows the parent's
+fresh `loop-82wu_3jx/reobserve-review.json` inhibition probe at 03:59:36 UTC.
+Worker independently rechecked complete API-only owner chains/specs against
+the repair's final snapshot: identical UID set/specs, all eight scoped parents
+and eight secondary owners zero, no scoped Pods, Flux8/Jobs3 suspended,
+original PV/PVC specs/UIDs and zero containers. Ordinary k3s inactive/disabled;
+systemd launch flags/MainPID confirm the sole no-agent API unit.
+Eight cold copies freshly match their recorded extent/data digests. Nineteen
+Docker volume names and two retained PVC directories are preserved on ext4
+`/dev/vdb1`; host/guest available space approximately 2.22 TiB/322 GiB.
+An initial read-only backup assertion confused source and clone inodes;
+inspection of the verifier resolved it, with zero runtime mutations at that point.
+
+Stopped `shirokuma-l0-parent-reobserve.service` cleanly, checked both API/normal
+units inactive with MainPID=0, no server process and zero containers, then
+started **only** existing dedicated `k3s` (without enabling the disabled unit).
+Fresh Node Ready observed before Flux scale, with all scoped owners still zero.
+Four one-shot Deployment patches test UID, fresh resourceVersion, replicas=0
+and the unchanged digest-pinned template before replacing only replicas with 1.
+No source, Job, application, image, storage or policy mutation was performed.
+
+Live complete probe at 04:03:03 UTC: dedicated node Ready with fresh heartbeat;
+all four existing Flux Deployments observedGeneration=3/generation=3,
+availableReplicas=readyReplicas=1, each with a matching digest-pinned Ready Pod
+and one requested secondary-owner replica. Four app workloads/all app
+ReplicaSets remain zero; no app Pods. Flux8/Jobs3 still suspended and retained
+PV/PVC UIDs/specs unchanged. Fourteen running Docker containers are restricted
+to Kubernetes system/Flux namespaces. Final handoff inventory passed the same
+scoped readiness validator; runtime remains live for independent parent review.
+
+**Final freshness hold:** a later `probe-03.json` fails
+`NODE_NOT_FRESH_READY`: at 04:06:11 UTC, Node Ready=True still has
+lastHeartbeatTime=04:02:17 UTC, outside the parent's 180-second requirement.
+Read-only Node Lease GET shows renewTime=04:06:01.642163 UTC. This distinguishes
+a fresh lease from a stale Ready-condition heartbeat; it does not waive the
+existing validator or claim node failure/recovery. Earlier 04:03:03 readiness
+pass is retained, not substituted for the failing final probe. No mutations
+after this failure; independent parent review must resolve freshness before
+accepting this gate. Runtime remains for that review/parent-controlled cleanup.
+
+Source status is **not fresh reconciliation acceptance**: root/six child Ready
+conditions still refer to previous generations, despite top-level
+observedGeneration advancing. Suspended GitRepository now reports Ready=True
+at generation 3, but ArtifactInStorage remains generation 2; saved status is
+recorded without inferring a new fetch or approved source revision.
+Read-only scoped doctor exits 0, overall **degraded**: local-scope/API healthy,
+Flux response incomplete and four inhibited app workload responses incomplete.
+Direct guest owner/Deployment/Pod observations support this narrower controller
+readiness result; they do not waive doctor degradation. SQL/publication untested.
+
+Private originals, intents/results, readiness/retention/source/doctor observations
+and rollback live in
+`tmp/local-experiment/autonomous-runner/gate-3t2bauf_/attempt-001/`:
+`pre-start-owners.json`, `normal-node-owners.json`, `probe-02.json`,
+`handoff-live-owners.json`, `controller-observations.json`,
+`source-kustomization-observations.json`, `doctor-live.stdout`,
+`cold-backup-identity-recheck.json`, four scale intent/result pairs and
+`rollback-metadata.json`, plus `probe-03.json`, `final-node-lease.stdout` and
+`final-freshness-gap.json`. Boot/API/controller startup changes disk metadata;
+no byte-immutability, application restore or retained-volume byte measurement
+is claimed. Original cold backup/rehearsal/failures remain unchanged.
+
+Recovery: parent independently probes terminal worker and runtime, then normally
+stops dedicated VM at finite-loop end. `sudo systemctl stop k3s` through explicit
+`colima ssh --profile mac-studio-solo --`, then `colima stop mac-studio-solo`;
+prefix shell commands with `rtk proxy`. No writer restoration/unsuspension.
+If separately reviewed Flux-only scale rollback is needed, GET each same-UID
+Deployment, verify unchanged template, JSON Patch tests UID/fresh version/
+replicas=1/template and replace only replicas with zero, preserving intent/result
+and never replaying unknown outcomes. Do not wholesale apply snapshots; retain
+changed disks before any deliberate cold recovery. Normal k3s remains disabled.
+
+Validation: supervisor 13 tests/runner 21 tests PASS; complete live inhibition,
+initial readiness, retention and backup assertions, design-context, secret scan
+and diff check PASS. Final readiness probe FAILED as described above.
+`make verify-local-experiment`
+FAILED at existing policy suite (166 tests, 11 failures/2 errors), no unrelated
+repair/retry. Private log SHA-256:
+`5ab500b50bd51cfb2329c7c798df7d6fb8364ce6b4551d0567e39b4574a6e3c3`.
+OAuth-only explicit Sol preflight passed, not independent billing proof.
+No nested supervisor/runner, Astra, GitHub writes, retained-data deletion or
+saved-request replay. Original Vault sync pending outside checkout. This worker
+stops further mutations at the final freshness hold for parent verification;
+no later batch authorized and no gate-pass checkpoint.
+All eleven WP acceptance boxes remain unchanged; full L0/source/doctor/operator
+acceptance and full-nuke authorization remain open.
 
 ## 2026-10-08: API-only secondary-owner repair; parent verification pending
 

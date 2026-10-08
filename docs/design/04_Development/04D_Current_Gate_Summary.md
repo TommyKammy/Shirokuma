@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.7"
+version: "1.8"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,32 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 readiness worker observation (parent review pending):**
+`gate-3t2bauf_` follows successful fresh parent API-only inhibition verification
+in `loop-82wu_3jx`, then independently rechecks complete owner/spec/UID and
+retention scope. API-only stopped cleanly before dedicated normal k3s startup.
+Fresh Node Ready and four existing digest-pinned Flux Deployments available/
+ready=1 with matching Ready Pods observed at 04:03:03 UTC. Only four guarded
+Flux replica fields changed 0→1; all apps/secondary owners zero, Flux8/Jobs3
+suspended, retained PV/PVC specs/UIDs, nineteen volumes/two PVC directories
+preserved. Eight cold copies freshly match original extent digests. Runtime
+left live for independent parent probe and finite-end normal VM stop.
+Doctor remains degraded (API/scope healthy, incomplete Flux/app responses);
+root/child Ready conditions stale, GitRepository Ready generation advanced but
+artifact condition stale. No new source/reconciliation acceptance inferred.
+Supervisor13/runner21 tests PASS; broad policy suite still 11 failures/2 errors.
+See newest WP/Milestones entry for private evidence and exact rollback. Original
+stops/backups remain unchanged; no source/Job unsuspension or writer restore.
+This is a narrow worker observation, not independently accepted L0 or a new
+batch authorization. Older pending/Stopped notes below are historical, not
+current runtime facts. Usage is now 504/600 starts (restart4/100, remaining96)
+including this still-active worker; terminal outcome requires parent review.
+**Final probe hold:** `NODE_NOT_FRESH_READY` at 04:06:11 UTC: Ready condition
+heartbeat 04:02:17 exceeds 180 seconds, although Lease renewTime 04:06:01.642163
+is fresh. Earlier readiness pass is preserved but does not waive this failed
+final check. No further mutations; parent must resolve freshness before gate
+acceptance, and owns runtime cleanup. No gate-pass checkpoint claimed.
 
 **2026-10-08 policy revision:** owner-approved DEV-04C now allows bounded,
 reviewed autonomous blocker resolution and new-mission selection without

@@ -12,6 +12,52 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-08: dedicated Node and four pinned Flux controllers Ready (worker scope)
+
+WP-L0-GITOPS-001 / `L0_CONTROLLER_READINESS`, `gate-3t2bauf_` attempt 001:
+parent fresh API-only inhibition review followed by worker's complete UID/spec/
+owner recheck, zero scoped parents/ReplicaSets/Pods/containers, Flux8/Jobs3
+suspended, PV/PVC preserved. Eight cold-backup extent digests rehashed/matched,
+nineteen volumes/two PVC directories unchanged. Initial source-vs-clone inode
+assertion error was read-only and resolved by inspecting the original verifier.
+
+API-only stopped cleanly before normal dedicated k3s start (unit not enabled).
+Node Ready first; then only four existing digest-pinned Flux Deployment replica
+fields changed 0→1 with atomic UID/version/replica/template tests, no retries.
+04:03:03 UTC live probe: Node fresh Ready, four Deployment generation/observed
+generation=3, available/ready=1, matching Ready Pods and secondary-owner replicas.
+Four app workloads/all app secondary owners zero, no app Pods, Flux8/Jobs3
+suspended, original PV/PVC specs/UIDs. Running containers restricted to system/
+Flux. Runtime left live for parent's independent terminal-worker/runtime probe
+and finite-end dedicated VM stop; this is not parent acceptance.
+
+Final live probe FAILED `NODE_NOT_FRESH_READY`: at 04:06:11 UTC, Ready=True
+lastHeartbeatTime=04:02:17 exceeds the validator's 180-second limit. Node Lease
+freshly renewed at 04:06:01.642163. Initial fresh pass remains retained, but
+cannot replace this failed final probe or waive the parent's check. No further
+mutation; parent must resolve freshness before gate acceptance. Private
+`probe-03.json`, `final-node-lease.stdout`, `final-freshness-gap.json` preserve it.
+
+Scoped doctor exit 0 remains degraded: local scope/API healthy, Flux/workload
+responses incomplete. Root/six child Ready conditions stale; GitRepository
+Ready condition advances to generation 3 but ArtifactInStorage stays generation
+2. No fresh source fetch/reconciliation or approved source revision inferred.
+No SQL, full L0, production/operator or full-nuke acceptance. WP checkboxes unchanged.
+
+Private evidence and exact guarded Flux-only rollback:
+`tmp/local-experiment/autonomous-runner/gate-3t2bauf_/attempt-001/`, detailed WP
+entry. Parent normally stops k3s/dedicated VM without restoring writers or
+unsuspending sources/Jobs. Preserve changed disks before cold recovery; original
+cold copies/rehearsal/failures retained. No saved-request replay, retained-data
+deletion, external writes, Astra or nested run. Vault direct sync pending.
+Supervisor 13/runner 21 tests, initial scoped live/backup assertions, design-context,
+secret scan and diff check PASS; broad
+local verifier FAILED (policy 166 tests, 11 failures/2 errors), preserved log
+SHA-256 `5ab500b50bd51cfb2329c7c798df7d6fb8364ce6b4551d0567e39b4574a6e3c3`.
+Single OAuth/explicit Sol routing check is not independent billing proof.
+Final readiness check failed as above; worker stops mutations for parent review
+at this freshness hold, not a gate-pass checkpoint or automatic later batch.
+
 ## 2026-10-08: API-only owner-chain inhibition observed; independent review pending
 
 WP-L0-GITOPS-001 / `L0_OWNER_CHAIN_REPAIR`, `gate-8ancmu2h` attempt 001:
