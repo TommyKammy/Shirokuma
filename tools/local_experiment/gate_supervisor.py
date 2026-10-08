@@ -271,7 +271,60 @@ def mission(head, stage):
         recovery='Parent will independently probe terminal worker and runtime, then normally stop dedicated VM at finite-loop end. Preserve original and changed metadata/disk evidence. Do not restore writer replicas or unsuspend sources/Jobs. Keep cold-backup, PV/PVC/volumes and all failed results. Record mutations and exact rollback.')
 
 
-def supervise(root, vault, max_sessions, minutes):
+def check_resume_budget(root, max_sessions, minutes):
+    base = root/'tmp/local-experiment/autonomous-runner'
+    birth = (base/R.FIRST_RUN).stat().st_birthtime
+    R.require(time.time()+minutes*60 < birth+R.ORIGINAL_WEEK_MINUTES*60,
+              'ORIGINAL_WEEK_EXPIRED')
+    started = 500
+    for run in base.glob('gate-*'):
+        summary = R.private_json(run/'summary.json', 'PRIOR_GATE_RUN_UNVERIFIED')
+        count = len(list(run.glob('attempt-*')))
+        R.require(type(summary.get('attempts')) is int and summary['attempts'] == count,
+                  'PRIOR_GATE_RUN_UNVERIFIED')
+        started += count
+    R.require(started+max_sessions <= R.SERIES_LIMIT, 'SERIES_BUDGET_EXCEEDED')
+
+
+def reopen_completed_repair(root, vault, prior, directory):
+    """Reobserve a terminal completed repair, never repeat its resource mutations."""
+    R.require(prior.parent == root/'tmp/local-experiment/autonomous-runner' and
+              prior.name.startswith('gate-'), 'RESUME_SCOPE_INVALID')
+    summary, result, _ = terminal(root, prior)
+    R.require(summary['reason'] == 'agent_complete_claim' and result['reason'] == 'complete',
+              'RESUME_NOT_COMPLETED_REPAIR')
+    head = R.checkout_head(root, vault)
+    R.require(R.git(root, 'merge-base', '--is-ancestor', result['head_after'], head) == '',
+              'RESUME_HISTORY_UNVERIFIED')
+    no_active_worker(root)
+    profiles = [json.loads(line) for line in command(['colima', 'list', '--json'], root).splitlines()]
+    R.require(any(p['name'] == PROFILE and p['status'] == 'Stopped' for p in profiles),
+              'RESUME_RUNTIME_NOT_STOPPED')
+    R.save_json(directory/'reobserve-intent.json', {'source_run': prior.name, 'head': head,
+                'repeat_resource_mutations': False, 'scope': 'k3s-disabled inspection plus API-only'})
+    command(['colima', 'start', PROFILE, '--kubernetes=false', '--activate=false',
+             '--ssh-config=false', '--save-config=false'], root, timeout=180)
+    prefix = ['colima', 'ssh', '--profile', PROFILE, '--']
+    R.require(command(prefix+['systemctl', 'show', 'k3s', '--property=ActiveState', '--value'], root).strip()
+              == b'inactive' and not command(prefix+['docker', 'ps', '-q'], root).strip(),
+              'RESUME_UNEXPECTED_WRITER')
+    command(prefix+['sudo', 'systemd-run', '--unit=shirokuma-l0-parent-reobserve',
+            '--property=Type=notify', '--property=Restart=no', '--property=KillMode=control-group',
+            '--property=EnvironmentFile=/etc/systemd/system/k3s.service.env',
+            '/usr/local/bin/k3s', 'server', '--disable-agent', '--disable-scheduler',
+            '--disable-controller-manager', '--disable-cloud-controller', '--disable=traefik',
+            '--https-listen-port=55737', '--bind-address=127.0.0.1'], root, timeout=90)
+    observed = probe(root, REPAIR, directory, 0)
+    R.save_json(directory/'reobserve-review.json', observed)
+    gate = root/'tmp/local-experiment/gate-batches'
+    for source in sorted(prior.parent.glob('gate-*')):
+        path = gate/f'review-{source.name}.json'
+        source_summary = R.private_json(source/'summary.json', 'PRIOR_GATE_RUN_UNVERIFIED')
+        if source_summary['reason'] != 'run_budget_reached' and not path.exists():
+            R.save_json(path, attestation(root, source, head))
+
+
+def supervise(root, vault, max_sessions, minutes, resume_run=None):
     R.require(1 <= max_sessions <= 3 and 1 <= minutes <= 120, 'BUDGET_INVALID')
     parent = root/'tmp/local-experiment/gate-supervisor'
     parent.mkdir(mode=0o700, exist_ok=True)
@@ -285,12 +338,20 @@ def supervise(root, vault, max_sessions, minutes):
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         # A second invocation cannot reset the stable repair counter.
         prior_claims = sum(1 for d in parent.glob('loop-*') for p in d.glob('repair-start-*.json'))
-        R.require(prior_claims < 2, 'REPAIR_APPROACH_EXHAUSTED')
+        R.require(resume_run is not None or prior_claims < 2, 'REPAIR_APPROACH_EXHAUSTED')
         directory = Path(tempfile.mkdtemp(prefix='loop-', dir=parent))
         deadline = time.monotonic()+minutes*60
         stage = REPAIR
         runs = root/'tmp/local-experiment/autonomous-runner'
         gate = root/'tmp/local-experiment/gate-batches'
+        if resume_run is not None:
+            # Prove disposition before any reinspection start. Resource changes
+            # are not replayed; the new worker measures only the next gate.
+            check_resume_budget(root, max_sessions, minutes)
+            terminal(root, resume_run)
+            confirmed_idle = True
+            reopen_completed_repair(root, vault, resume_run, directory)
+            stage = READY
         # Reconcile every unresolved stop, including earlier preserved boundaries.
         for prior in sorted(runs.glob('gate-*')):
             s = R.private_json(prior/'summary.json', 'PRIOR_GATE_RUN_UNVERIFIED')
@@ -366,6 +427,8 @@ def main():
     p.add_argument('--use-pro-weekly-limit', action='store_true')
     p.add_argument('--max-sessions', type=int, default=2)
     p.add_argument('--max-minutes', type=int, default=120)
+    p.add_argument('--resume-completed-repair', type=Path,
+                   help='reobserve a terminal completed repair without replay, then measure readiness')
     args = p.parse_args()
     if not args.execute:
         print(json.dumps({'mode': 'plan-only', 'active_calls': 0, 'stages': [REPAIR, READY],
@@ -376,7 +439,8 @@ def main():
         previous = signal.getsignal(signal.SIGTERM)
         signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
         try:
-            directory = supervise(R.ROOT, R.VAULT, args.max_sessions, args.max_minutes)
+            directory = supervise(R.ROOT, R.VAULT, args.max_sessions, args.max_minutes,
+                                  args.resume_completed_repair)
         finally:
             signal.signal(signal.SIGTERM, previous)
         print(json.dumps({'evidence': str(directory), 'full_acceptance': False}))

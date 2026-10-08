@@ -166,5 +166,32 @@ class SupervisorTests(unittest.TestCase):
                     self.assertEqual([c.kwargs['mission']['gate_id'] for c in run.call_args_list], [S.REPAIR, S.READY])
                     self.assertEqual(probe.call_count, 2)
 
+    def test_completed_repair_resume_selects_next_gate_without_repair_worker(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            (root/'tmp/local-experiment/autonomous-runner').mkdir(parents=True)
+            stack.enter_context(mock.patch.object(S.R, 'checkout_head', return_value='a'*40))
+            stack.enter_context(mock.patch.object(S.R, 'subscription_preflight'))
+            stack.enter_context(mock.patch.object(S, 'check_resume_budget'))
+            stack.enter_context(mock.patch.object(S, 'no_active_worker'))
+            stack.enter_context(mock.patch.object(S, 'terminal'))
+            reopen = stack.enter_context(mock.patch.object(S, 'reopen_completed_repair'))
+            stack.enter_context(mock.patch.object(S, 'probe', return_value={'verified': True}))
+            stack.enter_context(mock.patch.object(S, 'command'))
+            run = stack.enter_context(mock.patch.object(S.R, 'run', return_value=('run_budget_reached', root/'fake-run')))
+            S.supervise(root, root/'vault', 1, 120, root/'prior')
+            reopen.assert_called_once()
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.kwargs['mission']['gate_id'], S.READY)
+
+    def test_resume_rejects_uncompleted_worker_before_runtime_command(self):
+        with mock.patch.object(S, 'terminal', return_value=({'reason': 'agent_safety_boundary_claim'},
+                  {'reason': 'safety_boundary'}, 'ses_test')), mock.patch.object(S, 'command') as cmd:
+            root = Path('/workspace')
+            prior = root/'tmp/local-experiment/autonomous-runner/gate-test'
+            with self.assertRaisesRegex(S.R.RunnerError, 'RESUME_NOT_COMPLETED_REPAIR'):
+                S.reopen_completed_repair(root, root/'vault', prior, root/'evidence')
+            cmd.assert_not_called()
+
 
 if __name__ == '__main__': unittest.main()

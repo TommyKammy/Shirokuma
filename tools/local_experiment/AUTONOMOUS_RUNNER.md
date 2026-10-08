@@ -46,6 +46,15 @@ those terminate with a classified hold. It does not endlessly schedule other
 WPs, unsuspend sources or revive the old 1000-extension. Live operation must be
 reported separately from test success; workers cannot recursively launch it.
 
+For a terminal completed repair with failed parent verification,
+`--resume-completed-repair <absolute gate-run path>` rechecks the exact server
+session/ancestry, budget/week and stopped dedicated runtime, then starts only
+k3s-disabled inspection plus API-only reobservation. It never repeats the
+repair's resource mutations. Fresh independent validation must pass before
+resolution reviews or the readiness worker. Failed reobservation still holds.
+Because k3s rewrites argv, the parent binds the live server PID to systemd
+MainPID/ExecStart and exact disabled-component flags, not argv flags alone.
+
 **2026-10-07 restart allocation:** 100 new starts after the reconciled old
 500, hence current `SERIES_LIMIT=600`. The historical 1000 ceiling below is
 not the active allocation. Six-session/120-minute batches still need a named

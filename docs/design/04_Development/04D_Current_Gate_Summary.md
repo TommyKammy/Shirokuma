@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.6"
+version: "1.7"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -20,9 +20,9 @@ but that flexibility does not prove the L0 gate was passed.
 
 **2026-10-08 policy revision:** owner-approved DEV-04C now allows bounded,
 reviewed autonomous blocker resolution and new-mission selection without
-routine human restart instructions. The ReplicaSet blocker below remains
-unresolved; do not mistake this scheduling change for runtime clearance.
-Current usage is 502/600 starts (restart 2/100, remaining 98); original week
+routine human restart instructions. The ReplicaSet repair below has a worker
+completion claim but still needs successful independent parent verification.
+Current usage is 503/600 starts (restart 3/100, remaining 97); original week
 and all retention/routing restrictions remain. The runner remains fail-closed;
 an initial finite L0 parent supervisor is now implemented and tested, with
 activation recorded separately. It selects API-only owner-chain repair, probes
@@ -32,15 +32,24 @@ outcomes/new safety causes and failed parent probes still hold; this is not yet
 a general multi-WP repair planner. See AUTONOMOUS_RUNNER.md for exact limits.
 
 **2026-10-08 repair worker observation (parent review pending):**
+
+The first supervisor held at `API_ONLY_FLAGS_UNVERIFIED`, using the old
+in-memory argv-based probe despite the worker's committed probe fix. No
+readiness successor ran. Parent cleanup stopped the dedicated VM; all profiles
+were independently observed Stopped afterward. The original HELD summary stays
+unchanged. The tested completed-repair resume route reopens API-only inspection
+for fresh parent verification **without repeating resource mutations**, then
+selects readiness only if verification passes. The exact worker server session
+is independently reconciled succeeded/idle/non-active.
 `gate-8ancmu2h` captured complete owner chains and original secondary owners,
 then inhibited six matching ReplicaSets with UID/resourceVersion/replica guards.
 Fresh scoped parent/ReplicaSet replicas are zero, scoped Pods absent,
 Flux8/Jobs3 suspended, PV/PVC UIDs/specs preserved, zero containers. API-only
 `shirokuma-l0-owner-repair-8ancmu2h.service` is left active for the independent
 parent probe; ordinary k3s remains inactive/disabled. No Node/Flux/workload
-startup, gate acceptance or automatic writer restoration. Parent review and
-finite-loop cleanup are pending; below stopped-profile observations are historical,
-not the current dedicated runtime state. Private evidence and exact rollback
+startup, gate acceptance or automatic writer restoration. Parent review is
+pending; first-loop cleanup completed and stopped the VM. The left-active
+description is the worker handoff, not current runtime state. Private evidence and exact rollback
 are in the WP's repair entry. The argv-rewriting probe defect is repaired/tested;
 broader policy verification still fails (11 failures/2 errors).
 
