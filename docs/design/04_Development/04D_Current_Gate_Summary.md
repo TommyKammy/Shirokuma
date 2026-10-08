@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.4"
+version: "1.5"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -24,9 +24,12 @@ routine human restart instructions. The ReplicaSet blocker below remains
 unresolved; do not mistake this scheduling change for runtime clearance.
 Current usage is 502/600 starts (restart 2/100, remaining 98); original week
 and all retention/routing restrictions remain. The runner remains fail-closed;
-an unattended parent supervisor is not yet implemented or running. Next work
-is the bounded API-only owner-chain repair and separate evidence verification,
-plus validated supervisor transitions—not a blind replay of this stopped batch.
+an initial finite L0 parent supervisor is now implemented and tested, with
+activation recorded separately. It selects API-only owner-chain repair, probes
+real state independently, then selects Node/four-controller readiness only on
+verified inhibition (maximum two worker sessions/120 minutes). Unknown worker
+outcomes/new safety causes and failed parent probes still hold; this is not yet
+a general multi-WP repair planner. See AUTONOMOUS_RUNNER.md for exact limits.
 
 **2026-10-08 fresh startup blocker:** `gate-uklhzopt` re-observed API-only
 inhibition with `/readyz=ok`, zero containers, eight suspended Flux resources,

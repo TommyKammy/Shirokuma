@@ -10,14 +10,41 @@ batches, two repair execution sessions per unchanged blocker/approach, 600
 cumulative starts, original week and OAuth-only/no-new-spending boundaries
 still apply. Repair/review session starts count too; remaining at adoption is 98.
 
-**Implementation status:** the runner is still a bounded worker launcher, not
-an implemented/running autonomous supervisor. It supports separately reviewed
-resolved safety stops; it does not yet launch unresolved diagnostic missions,
-classify arbitrary failures, independently query server/runtime evidence or
-enforce cross-batch blocker counters. Keep those paths fail-closed until tested;
-never fabricate a resolution attestation. A worker must not recursively launch
-another runner. The old 1000-extension remains unloaded. Policy approval is not
-proof of unattended operation or functional acceptance.
+**Implementation:** `python -m tools.local_experiment.gate_supervisor` is a
+finite L0 parent supervisor. Default is a zero-call plan; execution additionally
+requires `--execute --use-pro-weekly-limit --max-sessions 2 --max-minutes 120`.
+It starts one API-only secondary-owner repair worker, independently queries the
+exact server session and live Kubernetes state, then automatically selects one
+Node/four-controller readiness worker if repair is verified. Each worker is a
+single-session batch accounted by the existing runner. The persistent repair
+counter allows at most two reservations across invocations for this approach;
+even a preflight-failed reservation conservatively consumes that repair counter,
+though only actual runner starts consume the session allocation.
+
+Unresolved terminal safety stops can admit **only** `L0_OWNER_CHAIN_REPAIR`
+through private `repair-review-<run>.json`, bound to current HEAD and exact
+original evidence with `allowed_gate:L0_OWNER_CHAIN_REPAIR` and decision
+`terminal_safety_stop_repair_only_no_replay`. This attests terminal inspection
+eligibility, **not resolution**. The prompt explicitly forbids node/controller/
+writer startup. Parent live verification includes Deployment/ReplicaSet/Pod
+owners, storage identities, suspended sources/Jobs and zero running containers.
+Only after passing can it create a separate resolution review. A terminal
+`complete` stage uses `verified_stage_new_mission_no_replay`; it is scoped
+evidence, not full acceptance. Original records remain immutable.
+
+Readiness verification requires fresh Node heartbeat/Ready, four available
+digest-matching Flux Deployments and live matching Ready Pods, suspended
+sources/Jobs, zero app owners and unchanged retained PV/PVC specs/UIDs. Raw
+observations and decisions are private under `tmp/local-experiment/gate-supervisor/`.
+The parent normally stops only the dedicated VM after confirmed terminal workers.
+If worker/server outcome is unknown it does not issue runtime mutations. Cleanup
+failure is recorded as unconfirmed and is not retried.
+
+This first finite implementation does **not** infer safe repairs for arbitrary
+new safety stops, denied permissions, failed workers or failed parent probes:
+those terminate with a classified hold. It does not endlessly schedule other
+WPs, unsuspend sources or revive the old 1000-extension. Live operation must be
+reported separately from test success; workers cannot recursively launch it.
 
 **2026-10-07 restart allocation:** 100 new starts after the reconciled old
 500, hence current `SERIES_LIMIT=600`. The historical 1000 ceiling below is

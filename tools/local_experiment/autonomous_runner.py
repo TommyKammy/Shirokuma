@@ -216,43 +216,53 @@ def private_json(path: Path, code: str) -> dict:
         raise RunnerError(code) from None
 
 
-def reviewed_safety_stop(root: Path, prior: Path, summary: dict, head: str) -> bool:
+def reviewed_safety_stop(root: Path, prior: Path, summary: dict, head: str,
+                         repair_only: bool = False) -> bool:
     """Accept a resolved, terminal safety stop for a NEW mission, never replay.
 
     This is an independently prepared review attestation, not remote proof.
     Missing/failed/unknown sessions still refuse; original evidence is immutable.
     """
-    if summary.get('reason') != 'agent_safety_boundary_claim':
+    if summary.get('reason') not in ('agent_safety_boundary_claim', 'agent_complete_claim'):
         return False
     number = summary['attempts']
     require(number > 0, 'PRIOR_GATE_RUN_UNVERIFIED')
     last = prior / f'attempt-{number:03d}'
     result = private_json(last / 'result.json', 'PRIOR_GATE_RUN_UNVERIFIED')
     checkpoint = private_json(last / 'checkpoint.json', 'PRIOR_GATE_RUN_UNVERIFIED')
-    review = private_json(root / 'tmp/local-experiment/gate-batches' /
-                          f'review-{prior.name}.json', 'SAFETY_STOP_NOT_REVIEWED')
+    gate = root / 'tmp/local-experiment/gate-batches'
+    diagnostic = repair_only and not (gate / f'review-{prior.name}.json').exists()
+    review = private_json(gate / f'{"repair-review" if diagnostic else "review"}-{prior.name}.json',
+                          'SAFETY_STOP_NOT_REVIEWED')
+    reason = 'complete' if summary['reason'] == 'agent_complete_claim' else 'safety_boundary'
+    decision = ('terminal_safety_stop_repair_only_no_replay' if diagnostic else
+                'verified_stage_new_mission_no_replay' if reason == 'complete' else
+                'blocker_resolved_new_mission_no_replay')
     resolution = review.get('resolution_head')
     require(type(resolution) is str and re.fullmatch(r'[0-9a-f]{40}', resolution) and
             type(result.get('head_after')) is str and
             re.fullmatch(r'[0-9a-f]{40}', result['head_after']) and
-            result.get('reason') == 'safety_boundary' and
+            result.get('reason') == reason and
             review.get('schema_version') == 1 and review.get('source_run') == prior.name and
             review.get('original_summary') == summary and
             review.get('original_result') == result and
-            review.get('decision') == 'blocker_resolved_new_mission_no_replay' and
+            review.get('decision') == decision and
+            (not diagnostic or (reason == 'safety_boundary' and resolution == head and
+             review.get('allowed_gate') == 'L0_OWNER_CHAIN_REPAIR')) and
             review.get('server_outcome') == 'succeeded_idle_nonactive' and
             type(review.get('last_session_id')) is str and
             re.fullmatch(r'ses_[A-Za-z0-9]+', review['last_session_id']) and
             read_checkpoint(last / 'checkpoint.json',
                             {'nonce': checkpoint.get('nonce'), 'iteration': number},
-                            result['head_after']) == 'safety_boundary' and
+                            result['head_after']) == reason and
             git(root, 'merge-base', '--is-ancestor', result['head_after'], resolution) == '' and
             git(root, 'merge-base', '--is-ancestor', resolution, head) == '',
             'SAFETY_STOP_NOT_REVIEWED')
     return True
 
 
-def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int) -> None:
+def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
+                   repair_only: bool = False) -> None:
     """Require an independently reviewed boundary; refuse missing/unknown runs.
 
     ready.json is a local review attestation, NOT independent server or billing
@@ -311,7 +321,7 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int) -> No
                     all((prior / f'attempt-{i:03d}/result.json').exists()
                          for i in range(1, number + 1)), 'PRIOR_GATE_RUN_UNVERIFIED')
             require(result.get('reason') == 'run_budget_reached' or
-                    reviewed_safety_stop(root, prior, result, head),
+                    reviewed_safety_stop(root, prior, result, head, repair_only),
                     'PRIOR_GATE_RUN_UNVERIFIED')
             started += number
         require(started + max_runs <= SERIES_LIMIT, 'SERIES_BUDGET_EXCEEDED')
@@ -349,6 +359,12 @@ This is not proof of provider billing. Never print the account listing.
 
 
 def prompt(control: dict, handoff: Path, model: str, mission: dict | None = None) -> str:
+    repair = ("\nREPAIR-ONLY CAPABILITY: mac-studio-solo inspection/API-only stage per DEV-04E. "
+              "Never start the normal k3s unit, agent, scheduler or controller-manager, "
+              "scale Flux above zero, unsuspend sources/Jobs or start application writers. "
+              "Only capture/review and inhibit matching secondary owners using UID/version "
+              "guards. Unknown mutation or permission rejection ends mutation work.\n"
+              if mission and mission['gate_id'] == 'L0_OWNER_CHAIN_REPAIR' else '')
     gate = (f"""This *entire batch* has ONE objective in {mission['wp_id']} ({mission['gate_id']}).
 Baseline: {mission['baseline']}
 Required evidence: {mission['target_evidence']}
@@ -367,7 +383,7 @@ docs/design/04_Development/04C_Gate_Driven_Local_Continuation.md and the short
 docs/design/04_Development/04D_Current_Gate_Summary.md first. Read relevant
 sections of the current WP, Milestones ledger and private Vault handoff snapshot
 at {handoff}; do not ingest their entire historical logs as an instruction.
-{gate}The original Vault,
+{gate}{repair}The original Vault,
 parent workspace AGENTS.md, and ~/.codex are outside this noninteractive CLI's
 approved filesystem; do not try to bypass a permission rejection. The root
 checkout AGENTS.md and this prompt carry the relevant scope. Prefix shell
@@ -530,7 +546,8 @@ def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int
     try:
         before_batch = checkout_head(root, vault)
         require(mission['head_before'] == before_batch, 'MISSION_HEAD_CHANGED')
-        gate_preflight(root, before_batch, max_runs, max_minutes)
+        gate_preflight(root, before_batch, max_runs, max_minutes,
+                       repair_only=mission['gate_id'] == 'L0_OWNER_CHAIN_REPAIR')
         parent = root / 'tmp/local-experiment/autonomous-runner'
         original_deadline = (parent / FIRST_RUN).stat().st_birthtime + ORIGINAL_WEEK_MINUTES * 60
         directory = Path(tempfile.mkdtemp(prefix='gate-', dir=parent))

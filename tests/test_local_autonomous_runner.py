@@ -182,6 +182,18 @@ class AutonomousRunnerTests(unittest.TestCase):
                   'server_outcome': 'succeeded_idle_nonactive', 'resolution_head': head}
         self.write_private_json(path, review)
         self.assertTrue(R.reviewed_safety_stop(self.root, prior, summary, head))
+        path.unlink()  # Disposable test fixture only, not retained run evidence.
+        diagnostic = dict(review, decision='terminal_safety_stop_repair_only_no_replay',
+                          allowed_gate='L0_OWNER_CHAIN_REPAIR')
+        repair_path = path.with_name('repair-review-gate-safetytest.json')
+        self.write_private_json(repair_path, diagnostic)
+        self.assertTrue(R.reviewed_safety_stop(self.root, prior, summary, head, True))
+        with self.assertRaises(R.RunnerError):
+            R.reviewed_safety_stop(self.root, prior, summary, head)
+        self.write_private_json(repair_path, dict(diagnostic, allowed_gate='L0_CONTROLLER_READINESS'))
+        with self.assertRaises(R.RunnerError):
+            R.reviewed_safety_stop(self.root, prior, summary, head, True)
+        self.write_private_json(path, review)
         for bad in (dict(review, server_outcome='failed'),
                     dict(review, original_result=dict(result, reason='more_work')),
                     dict(review, resolution_head='0'*40)):

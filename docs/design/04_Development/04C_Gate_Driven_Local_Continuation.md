@@ -5,7 +5,7 @@ title: "Gate-driven local continuation after the 500-session series"
 status: accepted
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.2"
+version: "1.3"
 area: development
 tags: [shirokuma, local, gates, development]
 ---
@@ -95,6 +95,17 @@ runner, which currently requires resolution before a subsequent gate launch.
   Keep raw logs, credentials and retained data out of Git.
 
 ### Adoption is not operational proof
+
+Initial implementation: `tools/local_experiment/gate_supervisor.py` implements
+the finite owner-chain repair -> independent live verification -> Node/Flux
+readiness sequence, using at most two single-session batches in one 120-minute
+invocation. Terminal unresolved safety stops are admitted only to a HEAD-bound
+repair-only mission; a resolution review is generated only after the parent
+checks real API state. Repeated approach reservations are counted across
+invocations. Arbitrary new stops/probe failures remain holds, not automatically
+classified as safe repairs. See AUTONOMOUS_RUNNER.md for exact capability,
+verification and cleanup contracts. This is an initial scoped implementation,
+not the entire multi-WP planner; runtime activation is a separate observation.
 
 This policy authorizes implementing and using the finite reviewed loop within
 the current allocation. **It does not mean an unattended supervisor is already
