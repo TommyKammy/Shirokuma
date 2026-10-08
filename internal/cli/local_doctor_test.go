@@ -27,6 +27,62 @@ func localControllerJSON() string {
 	return `{"items":[` + strings.Join(controllers, ",") + `]}`
 }
 
+// kubectl's JSON printer aggregates reads into List/v1, with no shared
+// resourceVersion even when individual API objects have versions.
+func kubectlAggregateJSON(items string) string {
+	return strings.Replace(items, `{"items":`, `{"apiVersion":"v1","kind":"List","metadata":{"resourceVersion":""},"items":`, 1)
+}
+
+func TestLocalDoctorAcceptsKubectlAggregateList(t *testing.T) {
+	responses := localDoctorResponses()
+	for i := 2; i < len(responses); i++ {
+		responses[i].output = kubectlAggregateJSON(responses[i].output)
+	}
+	report := runLocalExperimentDoctor(context.Background(), &fakeRunner{responses: responses}, localExperimentContext, time.Now())
+	if report.Status != "healthy" {
+		t.Fatalf("complete kubectl aggregate rejected: %#v", report.Checks)
+	}
+}
+
+func TestLocalDoctorKubectlAggregateStillReportsInhibition(t *testing.T) {
+	controllers := kubectlAggregateJSON(localControllerJSON())
+	resources := kubectlAggregateJSON(strings.Replace(localFluxJSON(), `"ref":{"branch":"main"}`, `"suspend":true,"ref":{"branch":"main"}`, 1))
+	flux := checkFluxForProfile(context.Background(), &fakeRunner{responses: []fakeResponse{{output: controllers}, {output: resources}}}, localExperimentContext, true)
+	if flux.Status != "degraded" || strings.Contains(flux.Summary, "incomplete") || !strings.Contains(flux.Summary, "suspended") {
+		t.Fatalf("suspended source misclassified: %#v", flux)
+	}
+	responses := localWorkloadResponses()
+	for i := range responses {
+		responses[i].output = kubectlAggregateJSON(strings.ReplaceAll(responses[i].output, `"replicas":1`, `"replicas":0`))
+		// Scale-to-zero has no positive rollout counters.
+		for _, field := range []string{"availableReplicas", "readyReplicas", "updatedReplicas"} {
+			responses[i].output = strings.ReplaceAll(responses[i].output, `"`+field+`":1`, `"`+field+`":0`)
+		}
+	}
+	for _, check := range checkLocalLakehouse(context.Background(), &fakeRunner{responses: responses}, localExperimentContext) {
+		if check.Status != "degraded" || !strings.Contains(check.Summary, "no positive desired replica count") {
+			t.Fatalf("inhibited workload misclassified: %#v", check)
+		}
+	}
+}
+
+func TestLocalKubectlAggregateDoesNotWaiveCompleteness(t *testing.T) {
+	for _, mutation := range []struct{ old, replacement string }{
+		{`"resourceVersion":""`, `"resourceVersion":null`},
+		{`"resourceVersion":""`, `"resourceVersion":"","continue":"next-page"`},
+		{`"resourceVersion":""`, `"resourceVersion":"","remainingItemCount":1`},
+		{`"apiVersion":"v1"`, `"apiVersion":"apps/v1"`},
+		{`"kind":"List"`, `"kind":"DeploymentList"`},
+		{`"metadata":{"name":`, `"metadata":{"resourceVersion":"","name":`},
+	} {
+		raw := []byte(strings.Replace(kubectlAggregateJSON(localControllerJSON()), mutation.old, mutation.replacement, 1))
+		var list kubernetesResourceList
+		if err := json.Unmarshal(raw, &list); err != nil || !localInventoryIncomplete(list, raw) {
+			t.Fatalf("incomplete aggregate accepted (%s): %v", mutation.replacement, err)
+		}
+	}
+}
+
 func TestLocalFluxRequiresControllerAPIVersion(t *testing.T) {
 	for _, version := range []string{``, `"v1"`, `null`} {
 		for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"} {

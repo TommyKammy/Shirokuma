@@ -12,6 +12,34 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-10-08: doctor reports actual inhibited state after live protocol repair
+
+WP-L0-GITOPS-001 / `gate-uc9gsp8y`, doctor/diagnose: exact live kubectl
+`List/v1` responses contain empty list-level resourceVersion, incorrectly
+classified as incomplete. No MCP transport is involved in this CLI execution.
+Validator now accepts that explicit aggregate envelope without relaxing
+pagination, member identity/version or malformed/null-response guards.
+Three regression tests pass (two reproduced failures before fix); full Go
+CLI/internal suite and parent-fixed bears11 pass. Doctor at 04:38:28 UTC remains
+degraded for intentional Flux suspension/app replicas0, no incomplete-response
+messages. This is diagnostic repair, not source/reconciliation or L0 acceptance.
+
+Dedicated API-only owner/spec/UID recheck passed before existing k3s start;
+nineteen volume/two PVC directory names preserved. Read-only initial Lease
+comparison and warmup `FLUX_NOT_READY` failures remain retained. Subsequent
+complete live readiness/inhibition probe passed Node/Lease, four pinned Flux,
+Flux8/Jobs3 suspended, app owners0 and PV/PVC specs/UIDs. No Kubernetes patches,
+unsuspension, policy activation or retained writer start. Runtime left for
+parent independent review/normal dedicated VM stop after worker idle; never
+restore application counts/Jobs/sources automatically.
+
+Evidence/rollback in newest WP entry and private
+`tmp/local-experiment/autonomous-runner/gate-uc9gsp8y/attempt-001/doctor-diagnosis/`.
+Broad local verifier retains existing policy166 failures11/errors2; no waiver.
+Next proposal is source-identity diagnosis of stale suspended artifact/applied
+revision claims, not runtime source activation. OAuth-only Sol checked, not
+independent billing proof; Vault sync pending. No acceptance checkbox changes.
+
 ## 2026-10-08: dedicated Node and four pinned Flux controllers Ready (worker scope)
 
 WP-L0-GITOPS-001 / `L0_CONTROLLER_READINESS`, `gate-3t2bauf_` attempt 001:

@@ -630,9 +630,14 @@ func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
 			}
 		}
 	}
+	// kubectl's JSON printer creates an aggregate List/v1 with an empty
+	// list-level resourceVersion. It is not an atomic API snapshot, but this
+	// alone is not truncation. Keep pagination and per-object version checks;
+	// do not infer a shared revision from this client-produced envelope.
+	kubectlAggregate := list.Kind == "List" && list.APIVersion == "v1"
 	return list.Items == nil || list.Metadata.Continue != "" ||
 		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
-		(list.Metadata.ResourceVersion != nil && (len(*list.Metadata.ResourceVersion) == 0 ||
+		(list.Metadata.ResourceVersion != nil && ((!kubectlAggregate && len(*list.Metadata.ResourceVersion) == 0) ||
 			len(*list.Metadata.ResourceVersion) > 1024 || strings.IndexFunc(*list.Metadata.ResourceVersion, func(r rune) bool {
 			return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r)
 		}) >= 0)) ||

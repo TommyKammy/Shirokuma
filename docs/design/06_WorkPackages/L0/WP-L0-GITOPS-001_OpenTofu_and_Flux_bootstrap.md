@@ -12,6 +12,62 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-08: live doctor aggregate-list protocol repair (gate-uc9gsp8y)
+
+`L0_DEPENDENCY_CONTINUATION`, doctor/diagnose: fresh inhibited-lab doctor
+reproduced exit 0 / degraded with healthy scope/API and incomplete Flux/app
+responses. Its `execRunner` reads kubectl stdout directly, not an MCP response.
+Exact host reads returned canonical `List/v1`, `metadata.resourceVersion:""`:
+kubectl's aggregate JSON envelope has no shared API revision. The validator
+mistook this normal envelope for truncation before evaluating suspension.
+
+Repair in `internal/cli/doctor.go` permits the empty **list-level** version only
+for explicit `List/v1`. Null/malformed versions, pagination, incomplete members,
+duplicates and empty per-object versions still fail closed. Aggregation is not
+an atomic snapshot or source provenance. Three new regression tests cover
+healthy aggregate responses, inhibited workloads/sources and retained negative
+guards; the first two failed before repair and all pass afterward. Full Go
+CLI/internal tests, vet, parent-fixed bears tests (11), design-context, secret
+scan and diff check pass. Final complete live probe independently passes again.
+
+Fresh post-repair doctor at 04:38:28 UTC remains degraded, now explicitly for
+suspended sources/children and four zero-desired-replica applications, not
+incomplete responses. Root suspension retains its existing informational
+exception; it is not root/source acceptance. Complete live probe then passed
+Node/fresh Lease, four pinned ready/available controllers with matching Pods,
+Flux8/Jobs3 suspended, inhibited app owners and original PV/PVC identities/specs.
+Earlier post-start probes failed `FLUX_NOT_READY` during controller warmup and
+remain retained; no resource mutation/restart was replayed to obtain the pass.
+
+Before normal startup, dedicated k3s-disabled inspection confirmed inactive/
+disabled k3s, Docker0 and original nineteen volume/two PVC-directory names.
+API-only launch flags/MainPID and complete UID/spec/owner set matched parent's
+prestart snapshot (51 objects); only expected Lease renewTime changes excluded.
+An initial overly strict read-only Lease comparison failed and is recorded.
+API-only stopped cleanly with MainPID0/no server before starting existing k3s.
+No Kubernetes patches, source redirection/unsuspension, policy binding, app
+startup, retained-data deletion or saved-request replay. Boot/service activity
+writes OS/k3s metadata; disk byte-immutability/restore is not claimed.
+
+Private evidence:
+`tmp/local-experiment/autonomous-runner/gate-uc9gsp8y/attempt-001/doctor-diagnosis/`
+(intent, inspection, prestart review, six probes, exact response JSON,
+doctor-before/after stdout and verification logs). `make verify-local-experiment`
+still fails at existing policy suite: 166 tests, 11 failures/2 errors. No waiver
+or unrelated repair. Single OpenAI OAuth/explicit Sol check passed, not billing
+proof. Original Vault remains untouched; direct sync pending outside checkout.
+
+Next concrete dependency proposed to parent: read-only source-identity diagnosis
+of the suspended GitRepository artifact versus root/child applied revisions.
+Fresh source generation=3/Ready=3 but ArtifactInStorage=2; root generation=2/
+Ready=1 with a different applied revision. These saved status fields cannot
+prove a fetch of current checkout HEAD. Keep all reconcilers/writers inhibited.
+Runtime remains available for independent parent probe; parent normally stops
+the dedicated VM after worker terminal/idle confirmation. Repository rollback
+is only this validator/test change; do not restore app counts, unsuspend Jobs/
+sources or apply saved snapshots. Preserve changed disks before cold recovery.
+All eleven acceptance boxes remain unchanged; no full L0/operator acceptance.
+
 ## 2026-10-08: autonomous successor and independent scoped readiness verification
 
 Parent `loop-82wu_3jx` passed API-only inhibition verification and automatically

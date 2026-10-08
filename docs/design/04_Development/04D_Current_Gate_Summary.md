@@ -18,6 +18,19 @@ The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
 
+**2026-10-08 doctor worker diagnosis (`gate-uc9gsp8y`, parent review pending):**
+Live kubectl aggregate `List/v1` has empty list-level resourceVersion; doctor
+wrongly called complete responses incomplete. Bounded validator repair and
+regressions pass; live doctor now explains suspended Flux/app replicas0 while
+remaining degraded. Fresh worker readiness/inhibition/PV/PVC probe passes;
+warmup failures preserved. No source/Job unsuspension or resource patches.
+Runtime left available for parent independent review; do not infer current
+VM state from earlier Stopped notes. Next proposed dependency is read-only
+source identity: generation-current Ready on suspended GitRepository does not
+make older ArtifactInStorage/root/child applied revisions current provenance.
+Policy11 failures/2 errors and full L0 acceptance gaps remain. See newest WP/
+Milestones for evidence and recovery; original Vault sync pending.
+
 **Continuation scheduling correction:** the finite readiness job had ended,
 leaving no process to choose the next gate. `gate_continuation.py` now provides
 the post-readiness parent loop, initially investigating degraded doctor and
