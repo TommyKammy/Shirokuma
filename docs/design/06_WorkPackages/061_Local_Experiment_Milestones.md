@@ -5,12 +5,48 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.552"
+version: "5.553"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: Go1.26.6 binary HIGH repair, final attempt/test-capacity hold
+
+WP-L0-GITOPS-001 / gate-ayqdekwa / `L0_FLUX_LOCAL_BUILD`, second/final approach
+execution. Official stable Go1.26.6 darwin/arm64 archive/checksum verified; private
+toolchain/caches and GOTOOLCHAIN=local. Same pinned456fa323/tree8c7afc98 archive,
+exact retained six-module/transitive patch, no source-tag refetch/old-cache writes.
+Checksum detected enclosing-checkout git-apply no-op; failure evidence/unpatched
+files preserved, no replay; copied only checked patched module files. One
+owned0600 single-link nonexecuted static Linux/ARM64 binary SHA256
+899cfcbcf2c9f3813a917a2b12f50f799bc81dc5dff5e99b9bd1f1423828cf36.
+Go metadata/Syft confirm1.26.6/six versions. Binary SBOM318 components/new offline
+Trivy0.72.0 scan317 packages at07:08:31UTC: **HIGH0/CRITICAL0/MEDIUM2/LOW2/UNKNOWN1**,
+all five lower/unknown findings exactly preserved, prior eight stdlib HIGH absent.
+Hash-verified DB copy only, Updated2026-10-07T07:38:55UTC/downloaded06:45:38UTC;
+initial capacity reservation refused before copy, preserved/no download replay.
+
+Module verification/list pass. Native tests vet-off/p1/512MiB reserve terminated-15
+by7.5GiB guard at07:10:50UTC after16 test/subtest/two package passes, incomplete;
+no replay/API start, no signature/envtest/OCI/race retry. New approximately7.569GiB,
+old7.598GiB reservation charged unchanged, combined15.167GiB/free>2200GiB, below
+hard8/16GiB; no cleanup, original7GiB hold/counters intact. No mission-specific
+compiler/test process at read-only check; further build/test/cache writes held.
+Focused tooling18 pass; broad verifier exit2, warehouse115 four AF_UNIX path-length
+errors retained under required private TMPDIR, no unrelated repair/workaround.
+Final design-context/secret-scan/diff checks pass; no full-gate acceptance claim.
+
+Private source/archive/patch/toolchain/checksums/metadata/full scans/tests/failures:
+`tmp/local-experiment/flux-local-build/build-don5ufj3/`; reproduction/remaining
+base/image/publisher and K/H/N HIGH5/5/9 dependencies: `flux_local_build.md` and
+newest WP. All profiles freshly Stopped, ledger/pins unchanged; no OCI assembly/
+execution/startup/runtime/source/apply/unsuspend/approval/policy/admission changes.
+Retained disks/PV/PVC/backups unchanged. Parent independently inspects metadata and
+scope; binary finding reduction is not image readiness/full L0/operator acceptance.
+Stop/no_safe_work, approach exhausted/no later batch scheduled; checkboxes unchanged,
+Vault sync pending, repository-only rollback and preserve all retained evidence.
 
 ## 2026-10-08: patched source-controller binary, remaining stdlib HIGH/capacity hold
 

@@ -11,9 +11,51 @@ from pathlib import Path
 import shutil
 import stat
 import subprocess
+import tarfile
 import time
 
 GIB = 1024 ** 3
+
+
+def extract_verified_archive(archive, destination, sha256, size=None, executable=False):
+    """Extract checked regular files only into a new private destination.
+
+    Used for the retained source snapshot and the public Go archive, not OCI
+    layers. Reject links, special files and traversal before any extraction.
+    """
+    archive, destination = Path(archive), Path(destination)
+    fd = os.open(archive, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, 'rb') as stream:
+        st = os.fstat(stream.fileno())
+        if not stat.S_ISREG(st.st_mode) or (size is not None and st.st_size != size):
+            raise RuntimeError('BUILD_ARCHIVE_IDENTITY_HOLD')
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        if digest != sha256:
+            raise RuntimeError('BUILD_ARCHIVE_CHECKSUM_HOLD')
+        stream.seek(0)
+        with tarfile.open(fileobj=stream) as tar:
+            members = tar.getmembers()
+            names = set()
+            for member in members:
+                path = Path(member.name)
+                if (path.is_absolute() or '..' in path.parts or
+                        not (member.isfile() or member.isdir()) or path in names):
+                    raise RuntimeError('BUILD_ARCHIVE_CONTENT_HOLD')
+                names.add(path)
+            destination.mkdir(mode=0o700)
+            for member in members:
+                target = destination/member.name
+                for parent in reversed(target.parent.relative_to(destination).parents):
+                    (destination/parent).mkdir(mode=0o700, exist_ok=True)
+                target.parent.mkdir(mode=0o700, exist_ok=True)
+                if member.isdir():
+                    target.mkdir(mode=0o700, exist_ok=True)
+                else:
+                    mode = 0o700 if executable and member.mode & 0o111 else 0o600
+                    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
+                    with os.fdopen(fd, 'wb') as out, tar.extractfile(member) as source:
+                        shutil.copyfileobj(source, out)
+    return dict(sha256=digest, size=st.st_size, members=len(members))
 
 
 def save(path, data):

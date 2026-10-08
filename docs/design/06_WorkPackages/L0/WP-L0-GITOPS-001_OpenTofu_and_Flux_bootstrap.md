@@ -5,12 +5,62 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.186"
+version: "0.187"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: final Go1.26.6 binary repair; HIGH0, tests/capacity held (gate-ayqdekwa)
+
+Second/final same-approach `L0_FLUX_LOCAL_BUILD` execution retained under
+`tmp/local-experiment/flux-local-build/build-don5ufj3/`. Official public Go release
+metadata identifies stable1.26.6; darwin/arm64 archive64,772,321 bytes SHA256
+2dc95ce4675829f2df0e86b28bcef3283635902062a5f0580ca659bf570f3204 verified before
+private extraction. Explicit toolchain reports1.26.6, GOTOOLCHAIN=local/private
+HOME/Go caches/temp, no global install/shared/old cache writes or model fallback.
+Reconstructed pinned commit456fa323/tree8c7afc98 from the retained archive and
+hash-checked original patched go.mod/go.sum; six-module/transitive patch unchanged.
+Source tag not refetched, `.git`/old Go caches not copied. An enclosing-repository
+git-apply no-op was caught by checksums; receipt/unpatched module files retained,
+no replay, only verified module files copied as the corrective approach.
+
+One owned0600 single-link static Linux/ARM64 ELF, never executed, SHA256
+899cfcbcf2c9f3813a917a2b12f50f799bc81dc5dff5e99b9bd1f1423828cf36. Go/Syft
+confirm stdlib1.26.6 and all six prior fixed module versions. New binary-derived
+CycloneDX318 components/fresh Trivy0.72.0 scan317 packages at07:08:31UTC:
+**HIGH0/CRITICAL0/MEDIUM2/LOW2/UNKNOWN1**. Exact five non-HIGH findings preserved;
+eight previous stdlib HIGH absent only in this binary scan, not full-image clearance.
+Old DB/hash-verified metadata copied read-only into new cache, no retrieval replay;
+DB Updated2026-10-07T07:38:55UTC/downloaded2026-10-08T06:45:38UTC, no ignores.
+An initial copy capacity reservation refused before transfer while compilation
+held temporary files; after known build exit0 the initial copy fit. Hold retained.
+
+Module verification/list passed. Native unit run with vet off/p1/512MiB reserve
+hit the7.5GiB guard and was terminated-15 at07:10:50UTC after16 test/subtest passes
+in two packages. **Incomplete, not upstream test acceptance**; no replay, API tests
+not started. Signature-unit failure from attempt1 not repeated; envtest/OCI/race
+remain excluded. Current new allocation approximately7.569GiB; old reservation
+7.598GiB remains charged despite a lower subsequent allocated-block observation,
+combined approximately15.167GiB below16GiB/free>2200GiB. No cleanup/quota reset,
+old7GiB parent hold unchanged. Read-only process check found no mission compiler/
+test process. Further build/test/cache writes held; this approach is exhausted.
+
+Archive helper verifies checksum/size and rejects links/traversal/special/duplicate
+members, private directories/nonexecuted source modes; focused tooling18 pass.
+Final design-context/secret-scan/diff checks pass, not gate acceptance.
+Broad local verifier exit2, four AF_UNIX path-length errors in warehouse115 under
+private TMPDIR preserved, no unrelated fix/workaround. Full provenance, receipts,
+hashes, lower findings, original exact candidate image/base/publisher gaps and other
+controller HIGH5/5/9 dependencies in
+[`flux_local_build.md`](../../../../tools/local_experiment/flux_local_build.md).
+All profiles freshly Stopped; ledger/pins unchanged, no runtime/image assembly/
+execution/startup/source/apply/unsuspend/admission/riskDecision/policy/approval
+changes, retained disks/PV/PVC/backups untouched. Parent independently verifies
+new metadata/scope; no publisher/image/L0/operator acceptance or checkbox edits.
+Stop/no_safe_work, no later batch scheduled. Original Vault untouched/sync pending.
+Rollback repository changes only; preserve all source/patch/caches/binaries/failures.
 
 ## 2026-10-08: read-only build reobservation and final same-approach toolchain repair
 

@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.26"
+version: "1.27"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,24 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 final toolchain repair (`gate-ayqdekwa`, parent review pending):**
+Official stable Go1.26.6 archive/checksum/private toolchain verified; same pinned
+456fa323/tree8c7afc98 and exact prior six-module patch, no source-tag refetch or
+old-scope writes. Owned0600 nonexecuted static ARM64 binary SHA256899cfcbc;
+metadata/Syft confirm1.26.6/six modules. New binary-derived SBOM318/scan317 at
+07:08:31UTC HIGH0/CRITICAL0, unchanged MEDIUM2/LOW2/UNKNOWN1. No full-image clearance.
+Module verification passes, native tests hit7.5GiB guard and terminate-15 after
+16 test/subtest/two package passes, incomplete/no replay; API not started,
+old signature failure not replayed. New7.569GiB plus unchanged booked old7.598GiB
+=15.167GiB below combined16GiB/free>2200GiB. All retained bytes/caches/failures
+preserved, original parent7GiB hold/counters unchanged; no compiler/test process
+at scoped read-only check. All profiles freshly Stopped, ledger/pins unchanged;
+no image/runtime/source/policy/admission/approval changes. Focused18 pass, broad
+verifier four AF_UNIX errors retained. Second/final approach exhausted, stop/
+no_safe_work; no successor scheduled. Private build-don5ufj3 evidence and
+`flux_local_build.md` record tests/capacity/base/image/publisher/other-controller
+dependencies. Vault sync pending, repository-only rollback; full L0 remains false.
 
 **2026-10-08 isolated build (`gate-xezx_z6k`, parent review pending):**
 source-controller v1.9.6 commit456fa323/tree8c7afc98 pinned before dependency-only

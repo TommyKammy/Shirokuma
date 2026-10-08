@@ -1,5 +1,84 @@
 # Isolated source-controller build observation (2026-10-08)
 
+## Final Go toolchain repair (`gate-ayqdekwa`)
+
+Second/final same-approach execution, retained separately in
+`tmp/local-experiment/flux-local-build/build-don5ufj3/`. **Binary-only evidence;
+image, publisher, admission and L0 acceptance remain false.**
+
+Public `https://go.dev/dl/?mode=json&include=all` lists stable `go1.26.6`.
+Downloaded once from `https://go.dev/dl/go1.26.6.darwin-arm64.tar.gz`:
+64,772,321 bytes, official metadata SHA256
+`2dc95ce4675829f2df0e86b28bcef3283635902062a5f0580ca659bf570f3204`,
+verified before extraction. Private toolchain reports `go1.26.6 darwin/arm64`;
+all Go commands use its explicit path and `GOTOOLCHAIN=local`. No global install,
+automatic alternate toolchain, shared cache or old-scope write.
+
+Reconstructed from the retained unpatched archive (SHA25663cec74b) of the exact
+commit456fa323ef6a4b977f220cf2c60298bf193497ba/tree8c7afc98, without fetching
+the source tag or copying `.git`/old Go caches. Retained full patch SHA25654419682.
+`git apply` inside the enclosing checkout returned0 but skipped the root-relative
+patch; checksum validation caught the no-op before compilation. Receipt and
+unpatched module files preserved; no replay. Copied only the two prior patched
+go.mod/go.sum files after verifying their recorded hashes, with all other source
+files from the verified archive. This preserves exactly the original six-module
+and transitive patch, with no new source/dependency behavior changes.
+
+Same Linux/ARM64 build flags as the first attempt. One owned0600, single-link,
+static AArch64 ELF, 94,175,394 bytes, never executed, SHA256
+`899cfcbcf2c9f3813a917a2b12f50f799bc81dc5dff5e99b9bd1f1423828cf36`.
+Go metadata and binary-derived Syft CycloneDX agree on stdlib1.26.6 and all six
+fixed versions listed below. New SBOM318 components; fresh Trivy0.72.0 offline
+scan317 packages at **2026-10-08T07:08:31UTC**: **HIGH0/CRITICAL0/MEDIUM2/LOW2/
+UNKNOWN1**. The exact five non-HIGH findings below are preserved, not ignored.
+This is disappearance of the eight stdlib HIGH findings in the **binary** scan,
+not full-image clearance or runtime functionality evidence.
+
+Copied only the necessary prior DB/metadata into a private new scanner cache,
+verified both hashes, and scanned anew; no DB retrieval or old-cache writes.
+DB UpdatedAt2026-10-07T07:38:55.515026687Z/downloaded2026-10-08T06:45:38.694613Z,
+unchanged from the retained first snapshot. Initial DB-copy reservation was
+refused while compiler temporary files consumed headroom; no file-copy operation
+started then. After known build exit0 and temporary-file retirement, the initial
+copy fit the guard. Both preflight hold and subsequent copy provenance retained.
+
+`go mod verify` and full module-list observation passed. Host-native upstream
+tests used `-mod=readonly -vet=off -p=1 -count=1 -json`, GOMAXPROCS2 and the existing
+helper's512MiB reserve (7.5GiB write guard below hard8GiB). This guard terminated
+the run with known exit-15 after **16 test/subtest passes/two package passes**;
+this is an incomplete test run, not upstream test acceptance. Receipt/stdout/stderr
+remain, no replay. API tests were **not started** after the capacity hold. Controller
+envtest/OCI integrations/race/signature tests remain excluded; no signature replay.
+Final allocation approximately7.569GiB, with the old7.598GiB reservation retained
+for combined accounting (approximately15.167GiB, below16GiB); no quota reset or
+cleanup. No scope-specific compiler/test process remained at the read-only check.
+The later old-scope allocation observation was lower than the prior reservation;
+keep the larger booked count, not a quota reset. Named old source/patch/module/
+binary/SBOM/scan hashes reproduce; full old-cache byte identity was not independently
+proved, and no explanation for the allocation difference is asserted.
+Tests and final scope observation are recorded in the matching WP/Milestones.
+Archive extraction now verifies checksum/size before writes and rejects traversal,
+links, special files and duplicate names; source files are nonexecutable and every
+extracted directory private. Focused tooling18 tests pass. Broad local verifier
+exit2: warehouse lifecycle115 tests have four `AF_UNIX path too long` errors in
+the required private TMPDIR, retained without unrelated repairs or an external
+temp workaround. No terminated signature-test replay.
+Final design-context, repository secret-scan and diff checks pass.
+New/old mission scopes each remain bounded8GiB, combined16GiB, free16GiB required;
+old conservative7GiB hold/counters are not reset or erased. Preserve all generated
+inputs/caches/failed receipts. Original Vault sync pending; repository-only rollback.
+
+The exact candidate image identities/base declarations/other-controller dependencies
+below remain unchanged: no immutable base digest, assembled image, image digest or
+publisher proof established. No OCI assembly/execution, VM/container start,
+pin/ledger/riskDecision changes, approval, policy/source/apply/unsuspend/activation,
+nested runner or later-batch authorization. Parent must independently inspect the
+new binary metadata and scope. This second attempt exhausts the unchanged approach;
+stop/no_safe_work for this batch, with incomplete tests/capacity/full-image gates
+held. No successor is scheduled.
+
+## Retained first attempt
+
 WP-L0-GITOPS-001 / `L0_FLUX_LOCAL_BUILD`, worker `gate-xezx_z6k`.
 Private retained evidence: `tmp/local-experiment/flux-local-build/build-aoa39q7w/`.
 **Patched binary evidence only; remaining vulnerabilities and image gate held.**

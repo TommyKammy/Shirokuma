@@ -1,5 +1,8 @@
 import os
+import hashlib
+import io
 from pathlib import Path
+import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -25,6 +28,50 @@ class EvidenceTests(unittest.TestCase):
         link.symlink_to(path)
         with self.assertRaises(FileExistsError):
             B.save(link, b'replacement')
+
+    def archive(self, name='go/bin/go', kind=tarfile.REGTYPE):
+        path = self.directory/'archive.tar'
+        with tarfile.open(path, 'w') as tar:
+            member = tarfile.TarInfo(name)
+            member.type = kind
+            member.mode = 0o755
+            member.size = 3 if kind == tarfile.REGTYPE else 0
+            tar.addfile(member, io.BytesIO(b'abc') if member.size else None)
+        return path, hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def test_checked_archive_private_modes_and_no_overwrite(self):
+        path, digest = self.archive()
+        dest = self.directory/'toolchain'
+        B.extract_verified_archive(path, dest, digest, path.stat().st_size, executable=True)
+        self.assertEqual((dest/'go/bin/go').stat().st_mode & 0o777, 0o700)
+        self.assertEqual((dest/'go').stat().st_mode & 0o777, 0o700)
+        self.assertEqual((dest/'go/bin').stat().st_mode & 0o777, 0o700)
+        with self.assertRaises(FileExistsError):
+            B.extract_verified_archive(path, dest, digest)
+
+    def test_archive_checksum_and_size_before_writes(self):
+        path, digest = self.archive()
+        dest = self.directory/'output'
+        for sha, size in [('0'*64, None), (digest, 1)]:
+            with self.assertRaises(RuntimeError):
+                B.extract_verified_archive(path, dest, sha, size)
+            self.assertFalse(dest.exists())
+
+    def test_archive_rejects_links_and_traversal_before_writes(self):
+        for name, kind in [('../escape', tarfile.REGTYPE), ('/escape', tarfile.REGTYPE),
+                           ('link', tarfile.SYMTYPE), ('hardlink', tarfile.LNKTYPE)]:
+            with self.subTest(name=name, kind=kind):
+                path, digest = self.archive(name, kind)
+                dest = self.directory/'output'
+                with self.assertRaises(RuntimeError):
+                    B.extract_verified_archive(path, dest, digest)
+                self.assertFalse(dest.exists())
+
+    def test_archive_source_not_executable(self):
+        path, digest = self.archive()
+        dest = self.directory/'source'
+        B.extract_verified_archive(path, dest, digest)
+        self.assertEqual((dest/'go/bin/go').stat().st_mode & 0o777, 0o600)
 
     def test_environment_is_private_and_drops_credentials(self):
         with mock.patch.dict(os.environ, {'GITHUB_TOKEN': 'fixture', 'GOPROXY': 'unsafe',
