@@ -5,7 +5,7 @@ title: "Gate-driven local continuation after the 500-session series"
 status: accepted
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.5"
+version: "1.6"
 area: development
 tags: [shirokuma, local, gates, development]
 ---
@@ -77,6 +77,19 @@ them; do not forge a budget stop or resolution attestation to pass the existing
 runner, which currently requires resolution before a subsequent gate launch.
 
 ### Bounded repairs, progress and owner communication
+
+After completed exact-finding diagnosis, the next implemented capability is
+evidence-only refresh of the four existing ARM64 Flux digests using installed
+scanner tools and public read-only registry/DB retrieval. This is covered by
+standing local experimental dependency work, but is deliberately separate from
+the preceding no-fetch diagnosis. One session/120minutes, at most two persistent
+refresh reservations, unchanged cumulative600/original week/OAuth gates. VM
+stays stopped, isolated checkout cache only; no image execution, global installs,
+risk approvals/exceptions, replacement pins or runtime/policy activation. Parent
+reconciles known held runs separately, binds their immutable originals and ledger,
+and validates output identity/times/DB snapshot without granting admission. See
+`flux_refresh_supervisor.py` and its exact review/output contracts in the runner
+guide. Missing/stale evidence or unknown retrieval outcomes remain holds.
 
 A terminal `no_safe_work` for the proved exhausted local-admission evidence
 contract scope may select exact Flux finding/exposure/freshness diagnosis after

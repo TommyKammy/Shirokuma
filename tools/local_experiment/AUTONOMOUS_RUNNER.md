@@ -2,6 +2,44 @@
 
 ## Continuing beyond the readiness milestone (2026-10-08)
 
+### Exact-digest evidence refresh after completed finding diagnosis
+
+The completed finding worker's `no_safe_work` now records
+`FINDINGS_REFRESH_CAPABILITY_REQUIRED`, not an admission-pivot scope error.
+`python -m tools.local_experiment.flux_refresh_supervisor` defaults to zero calls.
+`--execute --use-pro-weekly-limit` selects one session/120-minute evidence-only
+mission under the same cumulative600/original-week/OAuth gates. Standing local
+development authority covers installed-tool scanning and public read-only image/
+DB retrieval; the earlier diagnosis capability itself did not allow these actions.
+
+The parent independently reconciles the two exact held runs `gate-azr7paf4`
+and `gate-5d3ur67c`, binds their original summary/result/checkpoint/server/HEAD
+and the unchanged resident ledger hash in separate `refresh-review-<run>.json`
+attestations. Runner admission is limited to `L0_FLUX_EVIDENCE_REFRESH`, not
+generic continuation or old held scopes. Unknown runs/operations still hold;
+old results, independent reviews and topic counters are not rewritten/reset.
+There are at most two persistent refresh reservations, not a new allocation.
+
+Only the four current linux/arm64 Flux digest references may be fetched/scanned.
+Use installed trivy/syft/crane/cosign, isolate cache/temp/output in the private
+`tmp/local-experiment/flux-refresh/refresh-*` directory, keep newly generated
+data under8GiB and at least16GiB free. No global installs/shared-cache changes,
+image execution, VM/container starts, registry writes, replacement pins, policy
+activation, risk approval/exception or retained evidence overwrite/deletion.
+VM must remain Stopped before/after; protected security/infra/clusters inputs
+must have no committed delta. This mode does not require starting the VM just
+to scan remote bytes and never auto-cleans retained evidence.
+
+The worker writes owned0600 `scanner-version.json` (Trivy JSON version/DB snapshot)
+and `<component>.trivy.json` in the mission directory. Parent checks exact digest,
+ARM64/Linux identity, scanner agreement, scan time within the mission and DB
+UpdatedAt within48hours. Missing/malformed/stale artifacts are held, not success.
+The snapshot does not independently prove the scanner's exact internal DB-use
+history, signatures or absence of vulnerability. Full findings remain recorded;
+even fresh scan evidence grants no admission or L0 acceptance. A follow-up runtime
+or image-upgrade capability needs its own concrete evidence review. CLI failures
+remain unreplayed; a later parent can reconcile them read-only.
+
 **No-safe-work scope classification:** a terminal `no_safe_work` is not a
 global completion claim. The first supported independent transition leaves
 exhausted `local_admission/repository_repair` held and selects the genuinely

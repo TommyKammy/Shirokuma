@@ -98,5 +98,14 @@ class ContinuationTests(unittest.TestCase):
         self.assertIn('riskDecision change',v['stop_conditions'])
         self.assertIn('Next proposal stays flux_findings',v['target_evidence'])
 
+    def test_completed_findings_no_safe_work_is_not_admission_pivot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp)
+            r=dict(report(),topic='flux_findings',approach='diagnose',next_topic='flux_findings')
+            with self.assertRaisesRegex(C.R.RunnerError,'FINDINGS_REFRESH_CAPABILITY_REQUIRED'):
+                C.independent_findings_review(d,d/'gate-fixture',r,
+                    {'reason':'agent_no_safe_work_claim'},{'reason':'no_safe_work'},'ses_fixture','a'*40,d,{})
+            self.assertTrue((d/'findings-held-gate-fixture.json').exists())
+
 
 if __name__ == '__main__': unittest.main()

@@ -185,6 +185,13 @@ def resume_held_review(root, vault, old, worker, directory):
 
 def independent_findings_review(root, worker, report, summary, result, sid, head, directory, observed):
     """Only a proved exhausted contract scope can pivot to exact finding analysis."""
+    if (report['topic'], report['approach']) == ('flux_findings', 'diagnose'):
+        R.require(summary.get('reason') == 'agent_no_safe_work_claim' and result['reason'] == 'no_safe_work',
+                  'INDEPENDENT_SCOPE_UNVERIFIED')
+        R.save_json(directory/f'findings-held-{worker.name}.json', {
+            'worker': worker.name, 'proposal': report, 'live_invariants': observed,
+            'gate_acceptance': False, 'risk_approval': False, 'counter_reset': False})
+        raise R.RunnerError('FINDINGS_REFRESH_CAPABILITY_REQUIRED')
     R.require((report['topic'], report['approach']) == ('local_admission', 'repository_repair') and
               summary.get('reason') == 'agent_no_safe_work_claim' and result['reason'] == 'no_safe_work',
               'INDEPENDENT_SCOPE_UNVERIFIED')

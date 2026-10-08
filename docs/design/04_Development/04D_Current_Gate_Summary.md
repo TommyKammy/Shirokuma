@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.20"
+version: "1.21"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -33,6 +33,20 @@ full Flux/PV/PVC/network unchanged. Refresh/upgrade outside this mission remains
 held; worker stops/no_safe_work, not full gate completion. Old exhausted scopes
 held; Vault sync pending.
 Leave safe runtime for independent parent probe/idle-worker cleanup. No gate pass.
+
+**Parent outcome and next capability:** the finding worker is independently
+succeeded/idle/non-active (`ses_ee5e88acdffeURkr5O3N7Am1RT`), valid stop/no_safe_work,
+clean descendant HEAD `d032eedc74cafea139219fea9b24191541fced8b`. The parent had
+already passed fresh live/doctor/progress observations but incorrectly sent its
+finding hold through the exhausted-admission transition, yielding
+`INDEPENDENT_SCOPE_UNVERIFIED`; this is a planner defect, not risk acceptance.
+Original series/worker evidence stays intact, dedicated and other profiles
+independently observed Stopped. Usage **513/600, restart13/100, remaining87**.
+New `flux_refresh_supervisor.py` selects an evidence-only installed-tool refresh
+of four existing ARM64 digests, public read-only retrieval, isolated local cache,
+VM stays stopped. No approvals/exceptions/replacement pins or runtime activation.
+Old scopes/counters remain held; parent validates fresh identity/DB/timestamps
+separately from vulnerability rejection. Activation/outcome are separate records.
 
 **Continuation outcome:** the resumed loop ran six workers and passed five
 parent reviews/automatic successors. `gate-azr7paf4` then checkpointed

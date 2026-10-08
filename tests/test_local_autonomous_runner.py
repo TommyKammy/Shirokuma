@@ -252,6 +252,32 @@ class AutonomousRunnerTests(unittest.TestCase):
         with self.assertRaises(R.RunnerError): R.reviewed_independent_stop(self.root,prior,summary,head,gate)
         self.assertEqual(json.loads((prior/'summary.json').read_text()),summary)
 
+    def test_refresh_review_is_known_run_gate_ledger_and_original_bound(self):
+        head=self.git('rev-parse','HEAD')
+        ledger=self.root/'security/resident-images.json'
+        ledger.parent.mkdir(parents=True,exist_ok=True); ledger.write_text('{}')
+        prior=self.root/'tmp/local-experiment/autonomous-runner/gate-5d3ur67c'
+        summary=dict(schema_version=1,result='stopped',attempts=1,reason='agent_no_safe_work_claim')
+        result=dict(head_before=head,head_after=head,reason='no_safe_work')
+        cp=dict(schema_version=1,nonce='a'*32,iteration=1,head=head,decision='stop',reason='no_safe_work')
+        self.write_private_json(prior/'attempt-001/result.json',result)
+        self.write_private_json(prior/'attempt-001/checkpoint.json',cp)
+        gate='L0_FLUX_EVIDENCE_REFRESH'
+        self.assertFalse(R.reviewed_refresh_stop(self.root,prior,summary,head,'L0_DEPENDENCY_CONTINUATION'))
+        self.assertFalse(R.reviewed_refresh_stop(self.root,prior.with_name('gate-unknown'),summary,head,gate))
+        with self.assertRaises(R.RunnerError): R.reviewed_refresh_stop(self.root,prior,summary,head,gate)
+        review=dict(schema_version=1,source_run=prior.name,original_summary=summary,original_result=result,
+            checkpoint=cp,reviewed_head=head,last_session_id='ses_fixture',server_outcome='succeeded_idle_nonactive',
+            allowed_gate=gate,ledger_sha256=R.hashlib.sha256(ledger.read_bytes()).hexdigest(),
+            decision='held_scope_exact_digest_evidence_refresh_no_replay')
+        p=self.root/'tmp/local-experiment/gate-batches/refresh-review-gate-5d3ur67c.json'
+        self.write_private_json(p,review)
+        self.assertTrue(R.reviewed_refresh_stop(self.root,prior,summary,head,gate))
+        for bad in (dict(review,server_outcome='failed'),dict(review,ledger_sha256='b'*64),
+                    dict(review,checkpoint=dict(cp,reason='complete'))):
+            self.write_private_json(p,bad)
+            with self.assertRaises(R.RunnerError): R.reviewed_refresh_stop(self.root,prior,summary,head,gate)
+
     def test_plan_is_zero_model_calls_and_requires_explicit_budget(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \

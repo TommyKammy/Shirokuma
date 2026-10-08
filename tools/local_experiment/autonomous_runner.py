@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -317,6 +318,36 @@ def reviewed_independent_stop(root: Path, prior: Path, summary: dict, head: str,
     return True
 
 
+def reviewed_refresh_stop(root: Path, prior: Path, summary: dict, head: str,
+                          next_gate: str | None) -> bool:
+    """Evidence-only capability; original admission/finding scopes remain held."""
+    if next_gate != 'L0_FLUX_EVIDENCE_REFRESH' or prior.name not in ('gate-azr7paf4', 'gate-5d3ur67c'):
+        return False
+    require(summary.get('reason') == 'agent_no_safe_work_claim' and summary.get('attempts') == 1,
+            'REFRESH_REVIEW_INVALID')
+    last = prior/'attempt-001'
+    result = private_json(last/'result.json', 'REFRESH_REVIEW_INVALID')
+    checkpoint = private_json(last/'checkpoint.json', 'REFRESH_REVIEW_INVALID')
+    review = private_json(root/'tmp/local-experiment/gate-batches'/f'refresh-review-{prior.name}.json',
+                          'REFRESH_REVIEW_REQUIRED')
+    reviewed_head = review.get('reviewed_head')
+    require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
+            review.get('original_summary') == summary and review.get('original_result') == result and
+            review.get('checkpoint') == checkpoint and result.get('reason') == 'no_safe_work' and
+            review.get('allowed_gate') == next_gate and
+            review.get('decision') == 'held_scope_exact_digest_evidence_refresh_no_replay' and
+            review.get('server_outcome') == 'succeeded_idle_nonactive' and
+            type(review.get('last_session_id')) is str and
+            re.fullmatch(r'ses_[A-Za-z0-9]+', review['last_session_id']) and
+            review.get('ledger_sha256') == hashlib.sha256((root/'security/resident-images.json').read_bytes()).hexdigest() and
+            type(reviewed_head) is str and re.fullmatch(r'[0-9a-f]{40}', reviewed_head) and
+            read_checkpoint(last/'checkpoint.json', {'nonce': checkpoint.get('nonce'), 'iteration': 1},
+                            result.get('head_after')) == 'no_safe_work' and
+            git(root, 'merge-base', '--is-ancestor', result['head_after'], reviewed_head) == '' and
+            git(root, 'merge-base', '--is-ancestor', reviewed_head, head) == '', 'REFRESH_REVIEW_INVALID')
+    return True
+
+
 def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
                    repair_only: bool = False, independent_gate: str | None = None) -> None:
     """Require an independently reviewed boundary; refuse missing/unknown runs.
@@ -379,7 +410,8 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
                          for i in range(1, number + 1))), 'PRIOR_GATE_RUN_UNVERIFIED')
             require(result.get('reason') == 'run_budget_reached' or
                     (reviewed_transport_stop(root, prior, result, head) if transport else
-                     reviewed_independent_stop(root, prior, result, head, independent_gate)
+                      (reviewed_refresh_stop(root, prior, result, head, independent_gate) or
+                       reviewed_independent_stop(root, prior, result, head, independent_gate))
                      if result.get('reason') == 'agent_no_safe_work_claim' else
                      reviewed_safety_stop(root, prior, result, head, repair_only)),
                     'PRIOR_GATE_RUN_UNVERIFIED')
