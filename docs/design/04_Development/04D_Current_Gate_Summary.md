@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.17"
+version: "1.18"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,20 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 complete evidence contract (`gate-azr7paf4`, parent review pending):**
+Complete builder/validator bind full inhibited candidate0486612d, regenerated
+inventory and nine occurrences/eight references with commit-bound ARM64/SBOM/
+publisher/scan records, exact findings and 19 unavailable Secret references.
+Rehashed omissions/approvals and fresh inhibition drift reject. Strict Flux
+HIGH7/6/6/6 remains blocked, risk decision missing/null, all acceptance/activation
+false. Fresh live51 final05:41:20 UTC passes; UIDs/non-Lease specs/full Flux/PV/PVC
+unchanged, contract revalidated, doctor degraded. No start/runtime writes/fetch/
+transport selection/policy activation. Admission22/render11/Go pass; policy11
+failures/2 errors and prior stops retained. Proposal006 requests only concrete
+HIGH/freshness risk-disposition diagnosis for parent review under existing limits.
+Evidence/rollback in newest WP/Milestones; Vault sync pending. Leave safe runtime
+for parent probe/idle-worker cleanup; never restore writers/unsuspend sources/Jobs.
 
 **2026-10-08 complete image diagnosis (`gate-vq8p7nl2`, parent review pending):**
 Nine occurrences/eight distinct references at candidate0486612d have commit-bound

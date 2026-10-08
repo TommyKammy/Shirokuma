@@ -5,12 +5,37 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.548"
+version: "5.549"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: complete image/runtime-gap evidence contract, no activation
+
+WP-L0-GITOPS-001 / `gate-azr7paf4`, local_admission/repository_repair:
+`build_complete`/`validate_complete` bind the full inhibited candidate, regenerated
+inventory and all nine image occurrences/eight references to commit-bound ARM64/
+SBOM/publisher/scan records and exact findings. Five Secret identities/19 unavailable
+repository references explicit, not live absence. Rehashed tampering and fresh
+inhibition drift reject. Original four-controller contract API retained.
+Strict HIGH7/6/6/6/CRITICAL0 remains blocking, five non-Flux occurrences retain
+HIGH0/CRITICAL0; risk decision null, fetched/applied null, admission/activation/
+runtime-input completeness/full gate false. No fresh crypto/image bytes/rescan.
+
+Fresh live51 final05:41:20 UTC passes; UIDs/non-Lease specs/full Flux/PV/PVC
+objects unchanged, complete contract revalidated. Doctor degraded, no startup/
+runtime writes/fetch/transport selection/policy activation. Admission22/render11/
+Go pass; broad verifier still policy166 failures11/errors2. Incorrect design
+Make target failure retained; corrected design-context/final diff checks pass. All prior failures
+and eleven checkboxes unchanged. Private contract/probes/logs/recovery in newest
+WP entry; proposal006 requests only concrete HIGH/freshness risk-disposition
+diagnosis for independent parent selection under unchanged limits. No successor
+launch or acceptance claim. OAuth-only Sol is routing, not billing proof; Vault
+sync pending. Small private artifact impact only, retained disks/volumes/PV/PVC/
+backups preserved. Leave runtime for parent probe/idle-worker cleanup, never
+restore app counts/unsuspend sources or Jobs.
 
 ## 2026-10-08: complete inventory admission diagnosis, strict risk blockers preserved
 

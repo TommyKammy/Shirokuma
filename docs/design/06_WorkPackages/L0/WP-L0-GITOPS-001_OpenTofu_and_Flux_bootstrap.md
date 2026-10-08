@@ -5,12 +5,61 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.179"
+version: "0.180"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: complete non-activating admission contract (gate-azr7paf4)
+
+`L0_DEPENDENCY_CONTINUATION`, local_admission/repository_repair: extended
+`admission_contract` with `build_complete`/`validate_complete`, retaining the
+original four-controller API. Full inhibited candidate, regenerated transitive
+inventory and complete diagnosis are bound by exact records/SHA256. All nine
+image occurrences/eight distinct references retain commit-bound ARM64 ledger,
+SBOM/publisher/scan paths/hashes, exact publisher/scanner metadata and findings.
+Five Secret identities/19 repository-unavailable references remain explicit,
+not live absence. Validation regenerates everything; occurrence/finding/reference
+omission, platform/publisher/artifact changes, approval or activation reject even
+when the caller recomputes hashes. Fresh inhibition drift also rejects.
+
+Private real contract uses candidate `0486612d0671c01c16d40ce445e39788d86de69b`.
+Flux strict HIGH7/6/6/6 and CRITICAL0 remain blocking; five non-Flux occurrences
+retain HIGH0/CRITICAL0. Risk decision missing/null, admission/activation/runtime
+inputs/gate false, fetched/applied commits null, transport unselected. No fresh
+crypto verification, fetched image bytes or advisory rescan claimed.
+
+Fresh live51 final 05:41:20 UTC passes Node/Lease/four pinned controller readiness,
+Flux8/Jobs3 suspension and retained app owners0. Initial/final UIDs/non-Lease specs
+and full Flux/PV/PVC objects unchanged; contract revalidates against final probe.
+Docker14 names are system/Flux scoped, not a whole-runtime census. Fresh doctor
+remains degraded. No VM/node start, runtime resource write, source fetch/redirection/
+unsuspension, transport selection, policy activation or writer start.
+
+Admission22 (three new complete-contract tests), render11 and Go CLI/internal
+tests pass. Broad local verifier preserves policy166 failures11/errors2. Initial
+`check-design-context` target did not exist; failure retained, corrected
+`verify-design-context` and final diff check pass. Prior stops/failures and all
+eleven checkboxes unchanged.
+
+Private evidence: `tmp/local-experiment/autonomous-runner/gate-azr7paf4/attempt-001/complete-contract/`
+(complete-contract, contract-summary, final-stability, probes, doctor and test logs).
+Proposal006 in `tmp/local-experiment/gate-continuation/series-fpveebm3/` requests
+only read-only diagnosis of exact HIGH findings/freshness for a concrete risk-
+disposition or pinned-image remediation dependency. Parent must review/select
+within its persistent approach/budget limits; this does not authorize a successor
+or risk approval. Full L0/operator acceptance remains open. Single OAuth/explicit
+Sol routing passed, not independent billing proof. Original Vault untouched,
+sync pending; supplied launch script not executed, no nested runner.
+
+Recovery: rollback only this repository API/tests/docs/Make target, not retained
+private evidence. Small private JSON/render-staging/log disk impact, no resident
+component/storage/backup/export changes. Preserve disks/volumes/PV/PVC identities
+and failure records. Leave safe runtime for independent parent probe; parent stops
+VM only after idle/non-active worker confirmation. Never restore application
+replicas or unsuspend sources/Jobs automatically.
 
 ## 2026-10-08: complete nine-occurrence admission diagnosis (gate-vq8p7nl2)
 

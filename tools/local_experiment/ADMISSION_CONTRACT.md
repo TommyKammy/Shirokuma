@@ -27,8 +27,31 @@ hashes, foreign candidates, added approvals or any other record change reject.
 A saved contract never authorizes fetch/apply, transport selection, unsuspension,
 new resources, policy binding changes or retained writer start.
 
-The next concrete dependency is a commit-bound transitive rendered-input and
-complete image/workload inventory, still repository-only and non-activating.
+## Complete inventory extension
+
+`build_complete(root, candidate, items, baseline, staging, binary='kubectl')`
+regenerates the commit-bound transitive inventory and admission diagnosis, then
+binds their full records and SHA256 values to the full inhibited candidate.
+`validate_complete` requires exact regeneration with fresh scoped observations;
+recomputing hashes after omitting an occurrence, finding or unavailable reference
+does not pass. Run `make test-local-complete-admission-contract`.
+
+All nine rendered image occurrences (eight distinct references, including the
+repeated Polaris image) retain their exact workload/container scope, commit-bound
+ARM64 ledger identity, SBOM/publisher/scan artifact paths/hashes, publisher identity,
+scanner/DB dates and complete blocking findings/multiplicity. Five distinct Secret
+identities/19 repository-unavailable references remain explicit, not claims of live
+absence. Missing ledger identities remain diagnostic gaps, never silent omissions.
+The ledger ARM64 label is not verified image bytes. Strict Flux HIGH7/6/6/6 remains
+rejected; five non-Flux occurrences have retained HIGH0/CRITICAL0 checks.
+
+Risk decision stays missing/null; admission/runtime-input completeness/activation/
+gate flags stay false, fetched/applied commits null and transport unselected.
+This extension replaces neither the original four-controller contract API nor
+its existing saved record format. There is still no network or runtime-write API.
+
+The next concrete dependency is disposition of the exact blocking findings and
+missing local-only risk decision against this complete evidence, without activation.
 Risk disposition requires separate explicit review bound to this evidence; do
 not fabricate approval to fill the field. Fetched artifact bytes/commit, scoped
 enforcement and applied provenance also remain unverified.

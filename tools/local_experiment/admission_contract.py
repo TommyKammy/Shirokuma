@@ -112,3 +112,34 @@ def validate(root, contract, candidate, items, baseline):
     """Exact regeneration rejects any approval, omitted finding or stale binding."""
     R.require(contract == build(root, candidate, items, baseline), 'LOCAL_EVIDENCE_CONTRACT_DRIFT')
     return True
+
+
+def build_complete(root, candidate, items, baseline, staging, binary='kubectl'):
+    """Bind every rendered occurrence and unavailable input; grant no admission.
+
+    Local import avoids the diagnostic's dependency on the four-controller
+    contract. Both the inventory and diagnosis are regenerated from local bytes,
+    not accepted from caller-supplied completeness or approval claims.
+    """
+    from tools.local_experiment import inventory_admission as D
+    inventory = D.I.build(root, candidate, staging, binary)
+    diagnosis = D.diagnose(root, candidate, inventory, items, baseline, staging, binary)
+    return {'schema_version': 1, 'mode': 'non_activating_complete_inventory_admission_evidence',
+            'candidate': copy.deepcopy(candidate), 'candidate_sha256': C.digest(candidate),
+            'transitive_render_inventory': {
+                'status': 'repository_complete_runtime_gaps' if inventory['repository_inventory_complete'] else 'incomplete',
+                'inventory_sha256': C.digest(inventory), 'inventory': inventory},
+            'inventory_admission_diagnosis': diagnosis,
+            'diagnosis_sha256': C.digest(diagnosis),
+            'local_risk_decision': {'status': 'missing', 'decision': None},
+            'runtime_inputs_complete': False, 'admission_verified': False,
+            'gate_acceptance': False, 'activation_authorized': False,
+            'fetched_commit': None, 'applied_commit': None,
+            'limitations': copy.deepcopy(diagnosis['limitations'])}
+
+
+def validate_complete(root, contract, candidate, items, baseline, staging, binary='kubectl'):
+    """Regenerate all images/findings/references and fresh inhibition guards."""
+    R.require(contract == build_complete(root, candidate, items, baseline, staging, binary),
+              'LOCAL_EVIDENCE_COMPLETE_CONTRACT_DRIFT')
+    return True
