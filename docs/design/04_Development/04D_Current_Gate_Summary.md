@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.10"
+version: "1.11"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,20 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 source diagnosis (`gate-x1girm_f`, parent review pending):**
+Fresh inhibited live51 probe passes; existing VM/node/controllers were already
+running and no runtime mutation/start was performed. Source Ready generation3
+does not refresh ArtifactInStorage generation2; root/all six child Kustomization
+Ready conditions remain stale. Source/children `f0d804b9`, root `59f38dc2` exist
+as local ancestors, not current observation HEAD `77748a96`. All seven configured
+path trees equal HEAD, not full provenance or transitive-render equality. Offline
+root render omits all eight Flux suspensions and retains external branch-only
+main: do not apply/unsuspend it. Next proposal is a repository-only pinned,
+inhibited local-source candidate contract; parent must review/select the mission.
+Runtime remains available for parent inspection/terminal-worker cleanup. Full L0,
+artifact bytes, fetched HEAD and operator acceptance remain unverified; doctor/
+policy failures and Vault sync pending remain. See newest WP/Milestones entry.
 
 **2026-10-08 doctor worker diagnosis (`gate-uc9gsp8y`, parent review pending):**
 Live kubectl aggregate `List/v1` has empty list-level resourceVersion; doctor

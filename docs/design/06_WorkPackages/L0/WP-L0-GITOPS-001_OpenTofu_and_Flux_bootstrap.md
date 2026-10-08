@@ -5,12 +5,76 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.173"
+version: "0.174"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: suspended source provenance diagnosed (gate-x1girm_f)
+
+`L0_DEPENDENCY_CONTINUATION`, source_identity/diagnose: the dedicated VM was
+already Running; no VM/node/service startup or resource mutation was performed.
+Fresh complete 51-object probe at 04:42:03 UTC passes Node/fresh Lease, four
+digest-pinned ready controllers/matching Pods, Flux8/Jobs3 suspended, retained
+app parent/secondary owners zero and original PV/PVC UIDs/specs. Fourteen Docker
+containers are confined to system/Flux names; this is not a whole-runtime census.
+
+Local-only Git inspection at checkout HEAD
+`77748a96199dc6bff688e37d0af7f892fc4d6664` establishes:
+
+| Suspended resource | Generation / Ready generation | Recorded revision |
+| --- | --- | --- |
+| GitRepository `flux-system` | 3 / 3; ArtifactInStorage=2 | `f0d804b9da8f185d86e8fa36acc0895674b228b6` |
+| Root `flux-system` | 2 / 1 | `59f38dc26a1a02203df9c629360d863e4856a2ba` |
+| Six children | catalog 4/3, storage 3/2, other four 2/1 | `f0d804b9da8f185d86e8fa36acc0895674b228b6` |
+
+All eight top-level observedGeneration fields equal generation, **not** proof
+of current reconciliation. Artifact lastUpdateTime remains 2026-09-16T04:17:37Z;
+its recorded digest is not independently verified artifact bytes. Both commit
+objects exist locally and are ancestors of HEAD (858/851 intervening commits),
+neither equal HEAD. Cached `origin/main` points to the artifact commit; local
+`main` points to `b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b`. Neither ref is a
+fresh observation of remote main. Git inspection disabled lazy fetching and
+replacement objects; no fetch or artifact download was attempted.
+
+All seven configured path tree IDs match their corresponding HEAD path trees,
+with zero changed files in those paths. This is narrower than whole-commit,
+transitive rendered-input, runtime state or artifact-byte equality. The offline
+HEAD root render succeeds, but its GitRepository remains external branch `main`
+without a commit pin; source/root/six child definitions all omit `suspend`.
+Consequently neither matching path trees nor current source Ready authorizes
+applying that root or resuming its prune-enabled children over retained writers.
+
+**Concrete next dependency:** prepare/test a repository-only inhibited local
+source candidate contract bound to an available full commit/tree and root path,
+preserving four pinned controllers at one and all eight Flux suspensions. A
+candidate is not fetched/applied provenance. Parent proposal selects
+source_identity/repository_repair; no runtime redirection, unsuspension, new
+resources, admission activation or writer startup is authorized by this result.
+
+Private evidence is under
+`tmp/local-experiment/autonomous-runner/gate-x1girm_f/attempt-001/source-diagnosis/`
+(`probe-01.json`, `provenance.json`, `root-render.yaml`, diagnostic assertions,
+routing and verification logs); typed proposal is
+`tmp/local-experiment/gate-continuation/series-a6fazzwr/proposal-002.json`.
+Focused bootstrap40/teardown6 and design-context pass; diagnostic assertions
+confirm local object availability, condition staleness and seven path-tree matches.
+Fresh `make verify-local-experiment` fails at policy166 with the same 11 failures/
+2 errors (private `local-verifier.log`); no unrelated repair or waiver. Diff check
+passes. No acceptance checkbox changed; doctor degradation and earlier stops remain.
+Final 04:46:29 UTC complete live probe passes again: all 51 UIDs and non-Lease
+specs unchanged; Flux/PV/PVC full objects unchanged. Fresh doctor remains degraded
+for intentional source/child suspension and app replicas0, not protocol incompleteness.
+Single OAuth/explicit Sol routing passed, not independent billing proof. Original
+Vault remains untouched; direct sync pending outside checkout.
+
+Recovery: repository evidence notes only; no runtime fields require rollback.
+Leave the inhibited node/controllers for independent parent inspection; parent
+owns normal VM stop after this worker is terminal/idle/non-active. Never restore
+application counts, unsuspend sources/Jobs or apply saved snapshots. Retained
+disks, volumes, PV/PVCs, backups and failure records remain preserved.
 
 ## 2026-10-08: live doctor aggregate-list protocol repair (gate-uc9gsp8y)
 

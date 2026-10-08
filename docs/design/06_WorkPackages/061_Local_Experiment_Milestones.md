@@ -5,12 +5,39 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.542"
+version: "5.543"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: suspended Flux revisions mapped to local Git objects
+
+WP-L0-GITOPS-001 / `gate-x1girm_f`, source_identity/diagnose: fresh live51
+readiness/inhibition/retention probe passes on already-running dedicated lab,
+without startup or resource mutation. Source Ready generation3 is current but
+ArtifactInStorage generation2 remains old; root Ready2/1 and six child Ready
+conditions are stale despite current top-level observedGeneration. Source/children
+record `f0d804b9`, root `59f38dc2`; both are available local ancestor commits,
+neither observation HEAD `77748a96`. Cached origin/main is not fresh remote proof.
+
+Seven configured path trees match HEAD, not whole-commit/transitive-render or
+artifact-byte equivalence. Offline root render succeeds but keeps external
+branch-only main and omits all eight Flux suspensions. The next concrete source
+dependency is a repository-only full-commit/tree-bound inhibited candidate
+contract, **not** applying this root, fetching or resuming retained writers.
+Proposal002 selects source_identity/repository_repair for independent parent
+review. No source/Job unsuspension, admission binding activation or new resources.
+
+Bootstrap40/teardown6, diagnostic assertions, design-context and diff check pass;
+fresh local verifier still fails at policy166 (11 failures/2 errors). Private
+source-diagnosis evidence and recovery are linked in the newest WP entry. Doctor
+degradation/prior stops remain; L0/operator acceptance and checkboxes unchanged.
+Final 04:46:29 UTC live51 probe passes with unchanged UIDs/non-Lease specs and
+Flux/PV/PVC objects; fresh doctor is still degraded for suspension/app replicas0.
+Leave safe existing runtime for parent probe/terminal-worker cleanup, never restore
+writers automatically. OAuth-only Sol checked, not billing proof; Vault sync pending.
 
 ## 2026-10-08: doctor reports actual inhibited state after live protocol repair
 
