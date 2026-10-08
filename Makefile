@@ -751,6 +751,11 @@ test-local-render-inventory:
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_render_inventory.py'
 verify-local-experiment: test-local-render-inventory
 
+.PHONY: test-local-inventory-admission
+test-local-inventory-admission:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_inventory_admission.py'
+verify-local-experiment: test-local-inventory-admission
+
 .PHONY: local-mlflow-sync local-mlflow-prepare local-mlflow-plan local-mlflow-import local-mlflow-start local-mlflow-status local-mlflow-stop test-local-mlflow
 local-mlflow-sync:
 	@uv sync --project tools/local_experiment/mlflow --locked --no-build

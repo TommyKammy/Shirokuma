@@ -5,12 +5,37 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.547"
+version: "5.548"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: complete inventory admission diagnosis, strict risk blockers preserved
+
+WP-L0-GITOPS-001 / `gate-vq8p7nl2`, local_admission/diagnose: regenerated inhibited
+candidate/inventory at `0486612d`, evaluated nine occurrences/eight distinct images
+against commit-bound ARM64 ledger and SBOM/publisher/scan blobs. Five non-Flux
+occurrences pass retained strict checks HIGH0/CRITICAL0; Flux HIGH7/6/6/6 remains
+blocked. Exact findings/hash/publisher/scanner records retained, not fresh crypto,
+image bytes or advisory rescan. PostgreSQL alone selects canonical retained-bundle
+branch. Five distinct Secret identities/19 unavailable repository references keep
+workload scope, not live absence; no Secret contents inspected. Risk decision null,
+transport unselected, fetched/applied null, admission/activation/full L0 false.
+
+Fresh live51 latest 05:33:13 UTC passes readiness/inhibition/retention; initial/final
+UIDs/non-Lease specs/full Flux/PV/PVC objects unchanged. Doctor05:33:16 degraded.
+No start/runtime writes/fetch/transport/policy activation. Admission19/render11/
+source8/Go/design-context/diff checks pass; broad verifier retains policy166
+failures11/errors2. Initial constant and
+aged-snapshot rejection evidence preserved; no permission bypass/operation replay.
+Private evidence/recovery in newest WP entry. Proposal005 requests only the
+complete-inventory non-activating contract extension for independent parent review.
+No checkbox/operator acceptance; original Vault sync pending. OAuth-only Sol
+preflight is routing, not billing proof. Small private logs only; retained storage/
+backups/failures preserved. Leave runtime for parent probe/idle-worker cleanup,
+never restore app counts or unsuspend sources/Jobs automatically.
 
 ## 2026-10-08: complete repository render inventory, runtime/admission gaps retained
 

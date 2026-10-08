@@ -5,12 +5,64 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.178"
+version: "0.179"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: complete nine-occurrence admission diagnosis (gate-vq8p7nl2)
+
+`L0_DEPENDENCY_CONTINUATION`, local_admission/diagnose: added reproducible
+`tools/local_experiment/inventory_admission.py`, documentation and focused tests.
+Regenerated the existing inhibited candidate/render inventory at commit
+`0486612d0671c01c16d40ce445e39788d86de69b` against fresh scoped observations.
+All nine occurrences (eight distinct references) match exact ARM64 ledger rows;
+ledger and SBOM/publisher/scan bytes match candidate-commit blobs. Five non-Flux
+occurrences are Polaris, Polaris-admin, PostgreSQL, Polaris in Iceberg bootstrap,
+and SeaweedFS, not five distinct images. Their retained SBOM/publisher/strict scan
+checks pass with HIGH0/CRITICAL0; Flux retains strict HIGH7/6/6/6, CRITICAL0.
+Exact finding records/multiplicity, hashes, publisher identities and scan dates
+are retained. PostgreSQL enters the canonical retained-bundle validator branch;
+other selected versions do not. Neither branch selection nor record passes are
+fresh signature verification, fetched image bytes or a current advisory rescan.
+
+Five distinct Secret identities have 19 repository-unavailable reference
+occurrences. Their workload scope remains explicit; no Secret values read and
+no live absence inferred. Risk decision remains missing/null, transport unselected,
+fetched/applied commits null; admission/activation/runtime-input/gate flags false.
+Missing/ambiguous exact ledger identities remain gaps, inventory tampering rejects,
+unavailable/changed/non-commit artifacts fail closed. No risk waiver or approval.
+
+Fresh complete live51 probe passes, latest 05:33:13 UTC: Node/fresh Lease, four
+pinned ready controllers/Pods, Flux8/Jobs3 suspended and retained app owners0.
+Initial/final UIDs/non-Lease specs/full Flux/PV/PVC objects unchanged. Fresh doctor
+05:33:16 UTC remains degraded (exit0 is not health acceptance). No VM/node start,
+runtime resource write, fetch, transport choice, apply, binding activation or writer
+start; safe inhibited runtime remains available for independent parent probe.
+
+Focused admission19 (including three new inventory tests)/render11/source8,
+Go CLI/internal, design-context and diff checks pass. Broad
+local verifier still fails policy166 with 11 failures/2 errors; prior failures and
+all eleven checkboxes remain unchanged. Initial missing constant failed before
+runtime inspection; a later diagnostic rejected an aged initial Lease snapshot.
+Both failures recorded privately; fresh read-only probe used, no request replay.
+
+Private evidence: `tmp/local-experiment/autonomous-runner/gate-vq8p7nl2/attempt-001/inventory-admission/`,
+especially `final-diagnosis.json`, `final-stability.json`, `probe-03.json`, doctor
+and test logs. Proposal005 in `tmp/local-experiment/gate-continuation/series-fpveebm3/`
+requests only a non-activating complete-inventory evidence contract extension,
+binding all occurrences/findings/runtime-reference gaps, risk decision still null.
+Parent independently reviews/selects the next mission; diagnostic completion is
+not L0/operator acceptance or permission for another batch. Single OAuth/explicit
+Sol preflight passed, not billing proof; original Vault untouched/sync pending.
+
+Recovery: rollback only this repository module/tests/docs/Make target. Small
+private JSON/text/log disk impact; no retained storage/backup/export or resident
+component changes. Preserve disks/volumes/PV/PVC identities and original failures.
+Leave safe runtime for parent probe; parent stops VM only after worker idle/non-active.
+Never restore app replicas or unsuspend sources/Jobs automatically.
 
 ## 2026-10-08: commit-bound transitive inhibited inventory (gate-r_2f0fyd)
 

@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.16"
+version: "1.17"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,20 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 complete image diagnosis (`gate-vq8p7nl2`, parent review pending):**
+Nine occurrences/eight distinct references at candidate0486612d have commit-bound
+ARM64 ledger/SBOM/publisher/scan evidence. Five non-Flux occurrences pass retained
+strict scans HIGH0/CRITICAL0; Flux HIGH7/6/6/6 remains rejected. Five Secret
+identities/19 references unavailable in repository renders, not proven live absent.
+No fresh crypto/image bytes/advisory rescan; local risk decision missing/null,
+admission/activation/gate false. Live51 latest05:33:13 UTC passes with unchanged
+UIDs/non-Lease specs/full Flux/PV/PVC objects; doctor05:33:16 degraded. No startup,
+runtime writes/fetch/transport selection/policy activation. Admission19/render11
+pass; policy11 failures/2 errors and prior stops remain. Proposal005 requests only
+complete-inventory non-activating evidence-contract extension for parent selection.
+Private evidence/rollback in newest WP/Milestones; Vault sync pending. Leave safe
+runtime for parent probe/idle-worker cleanup, never restore writers/unsuspend Jobs.
 
 **2026-10-08 transitive inventory (`gate-r_2f0fyd`, parent review pending):**
 Commit-only inventory binds candidate0486612d, 33 files/seven paths, 57 resources,
