@@ -2,6 +2,29 @@
 
 ## Continuing beyond the readiness milestone (2026-10-08)
 
+**No-safe-work scope classification:** a terminal `no_safe_work` is not a
+global completion claim. The first supported independent transition leaves
+exhausted `local_admission/repository_repair` held and selects the genuinely
+different `flux_findings` question: exact HIGH IDs, affected/fixed package
+versions, exposure and evidence freshness, not another evidence-contract
+extension. The parent requires two preserved old reservations, the exact
+terminal no-safe checkpoint/result, a findings/freshness proposal and fresh
+inhibition/retention/readiness plus doctor observations. Existing counters are
+never reset. `independent-review-<run>.json` binds original evidence, reviewed
+HEAD/server and `allowed_gate:L0_FLUX_FINDINGS_DIAGNOSIS`, with decision
+`held_scope_new_independent_diagnosis_no_replay`. This admits only that new
+diagnostic gate; it does not resolve the old hold or admit generic continuation.
+
+The new topic has its own two-reservation-per-approach limits because its
+evidence-backed hypothesis is materially different. No riskDecision change,
+approval, exception, fetch/rescan, policy activation or runtime mutation is
+authorized. Strict HIGH rejection stays rejected. New proposals remain in
+`flux_findings` until a separate capability review; this is not topic-renaming
+to refill counters. Unknown no-safe scopes remain holds. The running loop can
+perform this verified transition automatically. For the preserved old held
+series, `--resume-held-series <series> --held-worker <gate-run>` reobserves
+the known safe node/controller state without replaying contract mutations.
+
 `python -m tools.local_experiment.gate_continuation` is the post-readiness
 parent loop. It does **not** exit merely because the fixed repair/readiness
 sequence ended. With `--execute --use-pro-weekly-limit --max-sessions 96`, it

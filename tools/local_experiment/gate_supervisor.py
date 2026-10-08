@@ -370,6 +370,50 @@ def reopen_completed_repair(root, vault, prior, directory):
             R.save_json(path, attestation(root, source, head))
 
 
+def reopen_ready_state(root, directory):
+    """Parent reobservation of the already-inhibited four-controller state."""
+    no_active_worker(root)
+    check_resume_budget(root, 0, 10)
+    profiles = [json.loads(line) for line in command(['colima', 'list', '--json'], root).splitlines()]
+    if any(p['name'] == PROFILE and p['status'] == 'Running' for p in profiles):
+        return probe(root, READY, directory, 0)
+    R.require(any(p['name'] == PROFILE and p['status'] == 'Stopped' for p in profiles),
+              'REOBSERVE_RUNTIME_UNVERIFIED')
+    command(['colima', 'start', PROFILE, '--kubernetes=false', '--activate=false',
+             '--ssh-config=false', '--save-config=false'], root, timeout=180)
+    prefix = ['colima', 'ssh', '--profile', PROFILE, '--']
+    R.require(command(prefix+['systemctl', 'show', 'k3s', '--property=ActiveState', '--value'], root).strip()
+              == b'inactive' and not command(prefix+['docker', 'ps', '-q'], root).strip(),
+              'REOBSERVE_UNEXPECTED_WRITER')
+    unit = 'shirokuma-l0-continuation-reobserve'
+    command(prefix+['sudo', 'systemd-run', '--unit='+unit, '--property=Type=notify',
+            '--property=Restart=no', '--property=KillMode=control-group',
+            '--property=EnvironmentFile=/etc/systemd/system/k3s.service.env',
+            '/usr/local/bin/k3s', 'server', '--disable-agent', '--disable-scheduler',
+            '--disable-controller-manager', '--disable-cloud-controller', '--disable=traefik',
+            '--https-listen-port=55737', '--bind-address=127.0.0.1'], root, timeout=90)
+    processes = command(prefix+['ps', '-eo', 'pid,args'], root).decode()
+    units = command(prefix+['systemctl', 'list-units', 'shirokuma-l0-*.service',
+                    '--state=running', '--plain', '--no-legend', '--no-pager'], root).decode()
+    props = command(prefix+['systemctl', 'show', unit+'.service', '--property=ActiveState',
+                    '--property=MainPID', '--property=ExecStart', '--property=Restart', '--property=KillMode'], root).decode()
+    api_only_launch(processes, units, props)
+    value = json.loads(command(prefix+['sudo', 'k3s', 'kubectl', '--request-timeout=20s',
+                                     'get', RESOURCES, '-A', '-o', 'json'], root))
+    R.require(value.get('kind') == 'List' and not value.get('metadata', {}).get('continue'),
+              'INVENTORY_INCOMPLETE')
+    R.save_json(directory/'reobserve-prestart.json', value)
+    baseline = baseline_file(root/'tmp/local-experiment/lab-inspection-20261007/api-prior-resources.json')['items']
+    validate(value['items'], baseline, READY, require_live=False)
+    R.require(not command(prefix+['docker', 'ps', '-q'], root).strip(), 'REOBSERVE_UNEXPECTED_WRITER')
+    command(prefix+['sudo', 'systemctl', 'stop', unit+'.service'], root, timeout=90)
+    command(prefix+['sudo', 'systemctl', 'start', 'k3s.service'], root, timeout=90)
+    for name in sorted(FLUX):
+        command(prefix+['sudo', 'k3s', 'kubectl', 'rollout', 'status', 'deployment/'+name,
+                        '-n', 'flux-system', '--timeout=90s'], root, timeout=100)
+    return probe(root, READY, directory, 0)
+
+
 def supervise(root, vault, max_sessions, minutes, resume_run=None):
     R.require(1 <= max_sessions <= 3 and 1 <= minutes <= 120, 'BUDGET_INVALID')
     parent = root/'tmp/local-experiment/gate-supervisor'

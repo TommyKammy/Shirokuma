@@ -5,7 +5,7 @@ title: "Gate-driven local continuation after the 500-session series"
 status: accepted
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.4"
+version: "1.5"
 area: development
 tags: [shirokuma, local, gates, development]
 ---
@@ -77,6 +77,16 @@ them; do not forge a budget stop or resolution attestation to pass the existing
 runner, which currently requires resolution before a subsequent gate launch.
 
 ### Bounded repairs, progress and owner communication
+
+A terminal `no_safe_work` for the proved exhausted local-admission evidence
+contract scope may select exact Flux finding/exposure/freshness diagnosis after
+separate parent review. Preserve the old no-safe scope and its two counters;
+the new question must be materially different and supported by retained HIGH
+findings and the completed contract, not a cosmetic rename. The implemented
+independent gate permits no approval/exception/riskDecision change, fetch/rescan,
+policy activation or runtime mutation. It has its own bounded counters and
+cannot reopen the old scope merely through a proposal. Unknown no-safe causes
+remain holds. See the exact independent-review contract in AUTONOMOUS_RUNNER.md.
 
 - Track stable blocker identity (gate, root cause, affected resources), attempts
   and outcomes across batches. At most **two repair execution sessions per

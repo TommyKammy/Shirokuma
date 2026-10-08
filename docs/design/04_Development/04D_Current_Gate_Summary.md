@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.18"
+version: "1.19"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,16 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**Continuation outcome:** the resumed loop ran six workers and passed five
+parent reviews/automatic successors. `gate-azr7paf4` then checkpointed
+`stop/no_safe_work`; parent classified it unsupported and stopped the VM.
+Original summaries/checkpoints/counters stay intact. Usage: **512/600 starts,
+restart12/100, remaining88**. The next supported transition preserves exhausted
+admission-contract work as held and separately diagnoses exact Flux HIGH IDs,
+affected/fixed versions, exposure and stale evidence. It requires fresh parent
+runtime/doctor/terminal review, never grants risk approval, and does not reset
+the old counters. Strict HIGH rejection and riskDecision=null remain.
 
 **2026-10-08 complete evidence contract (`gate-azr7paf4`, parent review pending):**
 Complete builder/validator bind full inhibited candidate0486612d, regenerated

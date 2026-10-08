@@ -68,5 +68,35 @@ class ContinuationTests(unittest.TestCase):
             self.assertEqual(C.main(), 0)
             run.assert_not_called()
 
+    def test_independent_findings_keeps_old_counters_and_no_safe_stop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); d=root/'review'; d.mkdir()
+            (root/'tmp/local-experiment/gate-batches').mkdir(parents=True)
+            worker=root/'tmp/local-experiment/autonomous-runner/gate-held'
+            (worker/'attempt-001').mkdir(parents=True)
+            C.R.save_json(worker/'attempt-001/checkpoint.json', {'reason':'no_safe_work'})
+            state={'reason':'agent_no_safe_work_claim'}; result={'reason':'no_safe_work'}
+            r=dict(report(),topic='local_admission',approach='repository_repair',
+                   next_target='Diagnose retained Flux HIGH findings and evidence freshness without approval.')
+            with self.assertRaisesRegex(C.R.RunnerError,'EXHAUSTED_SCOPE_UNVERIFIED'):
+                C.independent_findings_review(root,worker,r,state,result,'ses_fixture','a'*40,d,{})
+            for n in range(2):
+                p=root/'tmp/local-experiment/gate-continuation'/f'series-{n}'
+                p.mkdir(parents=True)
+                C.R.save_json(p/'reservation-001.json',dict(topic='local_admission',approach='repository_repair'))
+            nxt=C.independent_findings_review(root,worker,r,state,result,'ses_fixture','a'*40,d,{'verified':True})
+            self.assertEqual(nxt['next_topic'],'flux_findings')
+            self.assertEqual(len(list((root/'tmp/local-experiment/gate-continuation').glob('series-*/reservation-*.json'))),2)
+            review=C.R.private_json(root/'tmp/local-experiment/gate-batches/independent-review-gate-held.json','TEST')
+            self.assertEqual(review['held_scope'],'local_admission/repository_repair')
+            self.assertEqual(review['allowed_gate'],C.FINDINGS_GATE)
+
+    def test_finding_mission_never_approves_or_activates(self):
+        v=C.objective('a'*40,'flux_findings','diagnose','Analyze exact retained HIGH finding IDs and evidence freshness without approval.','private/proposal.json')
+        self.assertEqual(v['gate_id'],C.FINDINGS_GATE)
+        self.assertIn('no approvals',v['stop_conditions'])
+        self.assertIn('riskDecision change',v['stop_conditions'])
+        self.assertIn('Next proposal stays flux_findings',v['target_evidence'])
+
 
 if __name__ == '__main__': unittest.main()

@@ -20,9 +20,10 @@ import re
 from tools.local_experiment import gate_supervisor as S
 
 R = S.R
-TOPICS = {'doctor', 'source_identity', 'local_admission'}
+TOPICS = {'doctor', 'source_identity', 'local_admission', 'flux_findings'}
 APPROACHES = {'diagnose', 'repository_repair'}
 GATE = 'L0_DEPENDENCY_CONTINUATION'
+FINDINGS_GATE = 'L0_FLUX_FINDINGS_DIAGNOSIS'
 
 
 def proposal(value):
@@ -52,12 +53,15 @@ def reserve(root, topic, approach, directory, number):
 
 
 def objective(head, topic, approach, target, report):
-    return dict(schema_version=1, wp_id='WP-L0-GITOPS-001', gate_id=GATE,
+    risk = (' Exact Flux HIGH finding IDs/affected versions/fixed versions/exposure/freshness analysis only; '
+            'no approvals, exceptions, riskDecision change, scan/fetch, policy activation or runtime writes.'
+            if topic == 'flux_findings' else '')
+    return dict(schema_version=1, wp_id='WP-L0-GITOPS-001', gate_id=FINDINGS_GATE if risk else GATE,
         head_before=head,
         baseline='Node/four pinned Flux controller readiness independently verified; all source/root/child Flux and completed Jobs suspended, retained app owners zero. See DEV-04D/04E. Prior stops and degraded doctor/policy suite remain real evidence.',
-        target_evidence=f'{topic}/{approach}: {target} Write private supervisor proposal to {report}. Read report contract in tools/local_experiment/gate_continuation.py; propose only the next concrete L0 dependency, never unrelated offline hardening.',
+        target_evidence=f'{topic}/{approach}: {target} Write private supervisor proposal to {report}. Read contract in tools/local_experiment/gate_continuation.py.'+(' Next proposal stays flux_findings; exhausted scopes remain held.' if risk else ''),
         allowed_scope='WP-L0-GITOPS-001 source identity, doctor protocol or local admission only. Repository implementation/tests and dedicated mac-studio-solo inspection/observation allowed. Before normal node start recheck complete API-only owner/spec/UID inhibition per DEV-04E. Keep existing four pinned Flux controllers at one, sources/children/Jobs suspended and retained app owners zero. NO source redirection/unsuspension, writer start, new runtime resources or policy binding activation in this diagnostic/repository-repair capability.',
-        stop_conditions='Unknown operation/session, denied access, owner/retention drift, quota/routing changes or new spending inhibit dependent actions. No nested runner, GitHub writes, public exposure, whole-Colima reset, saved-request replay or retained-data/backup deletion. Do not treat a milestone as the end of the overall process; the parent selects the next mission after review.',
+        stop_conditions='Unknown operation/session, denied access, owner/retention drift, quota/routing changes or new spending inhibit dependent actions. No nested runner, GitHub writes, public exposure, whole-Colima reset, saved-request replay or retained-data/backup deletion. Parent selects next mission after review.'+risk,
         recovery='Record observations/changes and scoped rollback, preserve all retained disks/PV/PVC/volume identities and failure records. Leave safe node/controller runtime available for independent parent probe. Parent stops dedicated VM on termination only after worker is confirmed idle/non-active. Never restore application counts or unsuspend sources/Jobs automatically.')
 
 
@@ -152,7 +156,61 @@ def resume_review(root, vault, old, directory):
     return report
 
 
-def run(root, vault, max_sessions, max_minutes, resume_series=None):
+def resume_held_review(root, vault, old, worker, directory):
+    """Keep exhausted admission work held; select a genuinely different inquiry."""
+    R.require(old.parent == root/'tmp/local-experiment/gate-continuation' and old.name.startswith('series-') and
+              worker.parent == root/'tmp/local-experiment/autonomous-runner' and worker.name.startswith('gate-'),
+              'RESUME_SCOPE_INVALID')
+    state = R.private_json(old/'summary.json', 'RESUME_UNVERIFIED')
+    R.require(state == {'classification': 'HELD', 'reason': 'STOP_CLASSIFICATION_UNSUPPORTED',
+                       'runtime_cleanup_permitted': True}, 'RESUME_UNVERIFIED')
+    slots = sorted(old.glob('mission-*.json'))
+    R.require(slots, 'RESUME_UNVERIFIED')
+    number = int(slots[-1].stem.split('-')[-1])
+    prior = R.private_json(slots[-1], 'RESUME_UNVERIFIED')
+    report = proposal(R.private_json(old/f'proposal-{number:03d}.json', 'CONTINUATION_REPORT_INVALID'))
+    summary, result, sid = S.terminal(root, worker)
+    R.require(summary.get('reason') == 'agent_no_safe_work_claim' and
+              result['reason'] == 'no_safe_work' and result['head_before'] == prior['head_before'] and
+              (report['topic'], report['approach']) == ('local_admission', 'repository_repair'),
+              'INDEPENDENT_SCOPE_UNVERIFIED')
+    head = R.checkout_head(root, vault)
+    R.require(R.git(root, 'merge-base', '--is-ancestor', result['head_after'], head) == '', 'HISTORY_UNVERIFIED')
+    observed = S.reopen_ready_state(root, directory)
+    doctor(root, directory, 0)
+    progress(root, prior['head_before'], head, report, directory, 0)
+    return independent_findings_review(root, worker, report, summary, result, sid, head,
+                                       directory, observed)
+
+
+def independent_findings_review(root, worker, report, summary, result, sid, head, directory, observed):
+    """Only a proved exhausted contract scope can pivot to exact finding analysis."""
+    R.require((report['topic'], report['approach']) == ('local_admission', 'repository_repair') and
+              summary.get('reason') == 'agent_no_safe_work_claim' and result['reason'] == 'no_safe_work',
+              'INDEPENDENT_SCOPE_UNVERIFIED')
+    count = 0
+    for path in (root/'tmp/local-experiment/gate-continuation').glob('series-*/reservation-*.json'):
+        value = R.private_json(path, 'CONTINUATION_COUNTER_UNVERIFIED')
+        count += (value['topic'], value['approach']) == ('local_admission', 'repository_repair')
+    R.require(count == 2, 'EXHAUSTED_SCOPE_UNVERIFIED')
+    # The report must actually identify findings/freshness, not an arbitrary rename.
+    R.require('HIGH' in report['next_target'] and 'freshness' in report['next_target'],
+              'NEW_HYPOTHESIS_UNVERIFIED')
+    R.save_json(directory/f'independent-review-{worker.name}.json', {'prior_report': report, 'live_invariants': observed,
+                'held_scope': 'local_admission/repository_repair',
+                'new_hypothesis': 'Exact HIGH IDs, affected/fixed versions, exposure and stale evidence; not another evidence-contract extension',
+                'risk_approval': False, 'counter_reset': False})
+    R.save_json(root/'tmp/local-experiment/gate-batches'/f'independent-review-{worker.name}.json',
+                dict(schema_version=1, source_run=worker.name, original_summary=summary, original_result=result,
+                     checkpoint=R.private_json(worker/'attempt-001/checkpoint.json', 'CHECKPOINT_INVALID'),
+                     reviewed_head=head, last_session_id=sid, server_outcome='succeeded_idle_nonactive',
+                     decision='held_scope_new_independent_diagnosis_no_replay',
+                     held_scope='local_admission/repository_repair', allowed_gate=FINDINGS_GATE))
+    return dict(report, next_topic='flux_findings', next_approach='diagnose',
+                next_target='Analyze the exact retained Flux HIGH finding IDs, affected/fixed package versions, controller exposure and evidence freshness. Produce a concrete pinned-image or evidence-refresh dependency; preserve strict rejection and null riskDecision, no approval/exception/fetch/rescan/activation/runtime mutation.')
+
+
+def run(root, vault, max_sessions, max_minutes, resume_series=None, held_series=None, held_worker=None):
     R.require(1 <= max_sessions <= 96 and 1 <= max_minutes <= R.ORIGINAL_WEEK_MINUTES,
               'BUDGET_INVALID')
     parent = root/'tmp/local-experiment/gate-continuation'
@@ -175,13 +233,19 @@ def run(root, vault, max_sessions, max_minutes, resume_series=None):
             report = resume_review(root, vault, resume_series, directory)
             idle = True
             topic, approach, target = report['next_topic'], report['next_approach'], report['next_target']
+        if held_series is not None:
+            R.require(resume_series is None and held_worker is not None, 'RESUME_SCOPE_INVALID')
+            report = resume_held_review(root, vault, held_series, held_worker, directory)
+            idle = True
+            topic, approach, target = report['next_topic'], report['next_approach'], report['next_target']
         for number in range(1, max_sessions+1):
             minutes = min(120, int((deadline-time.time())//60))
             R.require(minutes >= 1, 'ORIGINAL_WEEK_OR_LOOP_EXPIRED')
             before = R.checkout_head(root, vault)
             S.no_active_worker(root)
             R.subscription_preflight('opencode', S.MODEL, root)
-            R.gate_preflight(root, before, 1, minutes)
+            R.gate_preflight(root, before, 1, minutes,
+                            independent_gate=FINDINGS_GATE if topic == 'flux_findings' else None)
             reserve(root, topic, approach, directory, number)
             report_path = directory/f'proposal-{number:03d}.json'
             mission = objective(before, topic, approach, target, str(report_path.relative_to(root)))
@@ -200,15 +264,23 @@ def run(root, vault, max_sessions, max_minutes, resume_series=None):
                 receipt = reconcile_transport(root, worker, before, worker_deadline)
                 reason = 'server_reconciled_only'
             idle = True
-            R.require(reason in ('run_budget_reached', 'agent_complete_claim', 'server_reconciled_only'), 'STOP_CLASSIFICATION_UNSUPPORTED')
+            R.require(reason in ('run_budget_reached', 'agent_complete_claim', 'server_reconciled_only',
+                                 'agent_no_safe_work_claim'), 'STOP_CLASSIFICATION_UNSUPPORTED')
             report = proposal(R.private_json(report_path, 'CONTINUATION_REPORT_INVALID'))
             R.require((report['topic'], report['approach']) == (topic, approach), 'CONTINUATION_REPORT_SCOPE_CHANGED')
+            R.require(topic != 'flux_findings' or report['next_topic'] == 'flux_findings',
+                      'INDEPENDENT_SCOPE_EXPANSION_UNREVIEWED')
             after = R.checkout_head(root, vault)
             observed = S.probe(root, S.READY, directory, number)
             doctor(root, directory, number)
             progress(root, before, after, report, directory, number)
+            if reason == 'agent_no_safe_work_claim':
+                summary, result, sid = S.terminal(root, worker)
+                report = independent_findings_review(root, worker, report, summary, result, sid,
+                                                     after, directory, observed)
             R.save_json(directory/f'review-{number:03d}.json', {
-                'classification': 'REVIEWED_DEPENDENCY_INCREMENT', 'worker': worker.name,
+                'classification': ('HELD_SCOPE_NEW_INDEPENDENT_DIAGNOSIS' if reason == 'agent_no_safe_work_claim'
+                                   else 'REVIEWED_DEPENDENCY_INCREMENT'), 'worker': worker.name,
                 'head': after, 'live_invariants': observed, 'proposal': report,
                 'gate_acceptance': False})
             if reason == 'agent_complete_claim':
@@ -243,6 +315,8 @@ def main():
     p.add_argument('--max-sessions', type=int, default=96)
     p.add_argument('--max-minutes', type=int, default=R.ORIGINAL_WEEK_MINUTES)
     p.add_argument('--resume-series', type=Path, help='review a completed transport-failed worker without replay')
+    p.add_argument('--resume-held-series', type=Path, help='select independent finding diagnosis after admission scope exhaustion')
+    p.add_argument('--held-worker', type=Path)
     args = p.parse_args()
     if not args.execute:
         print(json.dumps({'mode': 'plan-only', 'active_calls': 0, 'topics': sorted(TOPICS),
@@ -250,10 +324,14 @@ def main():
         return 0
     try:
         R.require(args.use_pro_weekly_limit, 'BUDGET_REQUIRED')
+        R.require((args.resume_held_series is None) == (args.held_worker is None) and
+                  not (args.resume_series is not None and args.resume_held_series is not None),
+                  'RESUME_SCOPE_INVALID')
         old = signal.getsignal(signal.SIGTERM)
         signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
         try:
-            d = run(R.ROOT, R.VAULT, args.max_sessions, args.max_minutes, args.resume_series)
+            d = run(R.ROOT, R.VAULT, args.max_sessions, args.max_minutes, args.resume_series,
+                    args.resume_held_series, args.held_worker)
         finally:
             signal.signal(signal.SIGTERM, old)
         print(json.dumps({'evidence': str(d), 'full_acceptance': False}))

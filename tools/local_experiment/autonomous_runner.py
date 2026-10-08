@@ -287,8 +287,38 @@ def reviewed_transport_stop(root: Path, prior: Path, summary: dict, head: str) -
     return True
 
 
+def reviewed_independent_stop(root: Path, prior: Path, summary: dict, head: str,
+                              next_gate: str | None) -> bool:
+    """Leave a no-safe-work scope held; admit only a distinct diagnostic gate."""
+    if summary.get('reason') != 'agent_no_safe_work_claim' or next_gate != 'L0_FLUX_FINDINGS_DIAGNOSIS':
+        return False
+    require(summary.get('attempts') == 1, 'INDEPENDENT_REVIEW_INVALID')
+    last = prior/'attempt-001'
+    result = private_json(last/'result.json', 'INDEPENDENT_REVIEW_INVALID')
+    checkpoint = private_json(last/'checkpoint.json', 'INDEPENDENT_REVIEW_INVALID')
+    review = private_json(root/'tmp/local-experiment/gate-batches'/f'independent-review-{prior.name}.json',
+                          'INDEPENDENT_REVIEW_REQUIRED')
+    reviewed_head = review.get('reviewed_head')
+    require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
+            review.get('original_summary') == summary and review.get('original_result') == result and
+            review.get('checkpoint') == checkpoint and result.get('reason') == 'no_safe_work' and
+            review.get('decision') == 'held_scope_new_independent_diagnosis_no_replay' and
+            review.get('held_scope') == 'local_admission/repository_repair' and
+            review.get('allowed_gate') == next_gate and
+            review.get('server_outcome') == 'succeeded_idle_nonactive' and
+            type(review.get('last_session_id')) is str and
+            re.fullmatch(r'ses_[A-Za-z0-9]+', review['last_session_id']) and
+            type(reviewed_head) is str and re.fullmatch(r'[0-9a-f]{40}', reviewed_head) and
+            read_checkpoint(last/'checkpoint.json', {'nonce': checkpoint.get('nonce'), 'iteration': 1},
+                            result.get('head_after')) == 'no_safe_work' and
+            git(root, 'merge-base', '--is-ancestor', result['head_after'], reviewed_head) == '' and
+            git(root, 'merge-base', '--is-ancestor', reviewed_head, head) == '',
+            'INDEPENDENT_REVIEW_INVALID')
+    return True
+
+
 def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
-                   repair_only: bool = False) -> None:
+                   repair_only: bool = False, independent_gate: str | None = None) -> None:
     """Require an independently reviewed boundary; refuse missing/unknown runs.
 
     ready.json is a local review attestation, NOT independent server or billing
@@ -349,6 +379,8 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
                          for i in range(1, number + 1))), 'PRIOR_GATE_RUN_UNVERIFIED')
             require(result.get('reason') == 'run_budget_reached' or
                     (reviewed_transport_stop(root, prior, result, head) if transport else
+                     reviewed_independent_stop(root, prior, result, head, independent_gate)
+                     if result.get('reason') == 'agent_no_safe_work_claim' else
                      reviewed_safety_stop(root, prior, result, head, repair_only)),
                     'PRIOR_GATE_RUN_UNVERIFIED')
             started += number
@@ -575,7 +607,8 @@ def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int
         before_batch = checkout_head(root, vault)
         require(mission['head_before'] == before_batch, 'MISSION_HEAD_CHANGED')
         gate_preflight(root, before_batch, max_runs, max_minutes,
-                       repair_only=mission['gate_id'] == 'L0_OWNER_CHAIN_REPAIR')
+                       repair_only=mission['gate_id'] == 'L0_OWNER_CHAIN_REPAIR',
+                       independent_gate=mission['gate_id'])
         parent = root / 'tmp/local-experiment/autonomous-runner'
         original_deadline = (parent / FIRST_RUN).stat().st_birthtime + ORIGINAL_WEEK_MINUTES * 60
         directory = Path(tempfile.mkdtemp(prefix='gate-', dir=parent))

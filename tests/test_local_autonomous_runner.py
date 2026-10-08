@@ -228,6 +228,30 @@ class AutonomousRunnerTests(unittest.TestCase):
             self.write_private_json(path, bad)
             with self.assertRaises(R.RunnerError): R.reviewed_transport_stop(self.root, prior, summary, after)
 
+    def test_no_safe_scope_can_only_admit_independent_finding_gate(self):
+        head = self.git('rev-parse', 'HEAD')
+        prior = self.root/'tmp/local-experiment/autonomous-runner/gate-nosafe'
+        summary = dict(schema_version=1, result='stopped', attempts=1, reason='agent_no_safe_work_claim')
+        result = dict(head_before=head, head_after=head, reason='no_safe_work')
+        cp = dict(schema_version=1, nonce='a'*32, iteration=1, head=head, decision='stop', reason='no_safe_work')
+        self.write_private_json(prior/'summary.json', summary)
+        self.write_private_json(prior/'attempt-001/result.json', result)
+        self.write_private_json(prior/'attempt-001/checkpoint.json', cp)
+        gate = 'L0_FLUX_FINDINGS_DIAGNOSIS'
+        self.assertFalse(R.reviewed_independent_stop(self.root,prior,summary,head,None))
+        with self.assertRaises(R.RunnerError): R.reviewed_independent_stop(self.root,prior,summary,head,gate)
+        path = self.root/'tmp/local-experiment/gate-batches/independent-review-gate-nosafe.json'
+        review = dict(schema_version=1, source_run=prior.name, original_summary=summary,
+            original_result=result, checkpoint=cp, reviewed_head=head, last_session_id='ses_fixture',
+            server_outcome='succeeded_idle_nonactive', held_scope='local_admission/repository_repair',
+            allowed_gate=gate, decision='held_scope_new_independent_diagnosis_no_replay')
+        self.write_private_json(path,review)
+        self.assertTrue(R.reviewed_independent_stop(self.root,prior,summary,head,gate))
+        self.assertFalse(R.reviewed_independent_stop(self.root,prior,summary,head,'L0_DEPENDENCY_CONTINUATION'))
+        self.write_private_json(path,dict(review,server_outcome='failed'))
+        with self.assertRaises(R.RunnerError): R.reviewed_independent_stop(self.root,prior,summary,head,gate)
+        self.assertEqual(json.loads((prior/'summary.json').read_text()),summary)
+
     def test_plan_is_zero_model_calls_and_requires_explicit_budget(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
