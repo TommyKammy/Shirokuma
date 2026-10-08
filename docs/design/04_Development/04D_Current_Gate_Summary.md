@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.15"
+version: "1.16"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,19 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 transitive inventory (`gate-r_2f0fyd`, parent review pending):**
+Commit-only inventory binds candidate0486612d, 33 files/seven paths, 57 resources,
+nine workloads/images and inhibited projection hashes; repository scope complete,
+runtime inputs incomplete (five absent Secret identities/external image bytes).
+Bound contract preserves HIGH7/6/6/6, CRITICAL0, missing/null risk decision and
+admission/activation/gate false. Latest live51 05:26:40 UTC passes, UIDs/non-Lease
+specs/full Flux/PV/PVC objects unchanged. No startup/runtime write/fetch/transport
+choice/apply/policy activation. Doctor degraded and policy11 failures/2 errors
+remain. Proposal004 requests only read-only local admission diagnosis of all nine
+images and missing inputs; parent must independently review/select. Private
+evidence/rollback in newest WP/Milestones, Vault sync pending. Leave runtime for
+parent probe/idle-worker cleanup; never restore writers/unsuspend Flux/Jobs.
 
 **2026-10-08 local evidence contract (`gate-5djsi8d4`, parent review pending):**
 Non-activating builder/validator bind full inhibited candidate, four ARM64 image

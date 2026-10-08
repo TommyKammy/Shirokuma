@@ -1,10 +1,13 @@
 import copy
 import json
+import shutil
+import tempfile
 from pathlib import Path
 import unittest
 from unittest import mock
 
 from tools.local_experiment import admission_contract as A
+from tools.local_experiment import render_inventory as I
 from test_source_candidate import observations
 
 
@@ -59,6 +62,28 @@ class AdmissionContractTests(unittest.TestCase):
             if change == 'extra': value['approved'] = True
             with self.subTest(change=change), self.assertRaisesRegex(A.R.RunnerError, 'CONTRACT_DRIFT'):
                 A.validate(self.root, value, self.candidate, self.items, self.baseline)
+
+    @unittest.skipUnless(shutil.which('kubectl'), 'local kubectl renderer unavailable')
+    def test_transitive_inventory_binding_preserves_strict_findings_and_rejects_approval(self):
+        original = self.build()
+        with tempfile.TemporaryDirectory() as staging:
+            bound = I.bind_admission(self.root, original, self.candidate, self.items, self.baseline, staging)
+            self.assertEqual(bound['controllers'], original['controllers'])
+            self.assertEqual(bound['local_risk_decision'], {'status': 'missing', 'decision': None})
+            self.assertFalse(bound['admission_verified'])
+            self.assertFalse(bound['activation_authorized'])
+            self.assertFalse(bound['gate_acceptance'])
+            inventory = bound['transitive_render_inventory']['inventory']
+            self.assertTrue(inventory['repository_inventory_complete'])
+            self.assertFalse(inventory['runtime_inputs_complete'])
+            self.assertEqual(len(inventory['renders']), 7)
+            self.assertEqual(len(inventory['workloads']), 9)
+            self.assertEqual(len(inventory['images']), 9)
+            self.assertEqual(bound['transitive_render_inventory']['inventory_sha256'], A.C.digest(inventory))
+            self.assertEqual(original['transitive_render_inventory']['status'], 'missing')
+            original['local_risk_decision']['decision'] = 'approved'
+            with self.assertRaisesRegex(A.R.RunnerError, 'CONTRACT_DRIFT'):
+                I.bind_admission(self.root, original, self.candidate, self.items, self.baseline, staging)
 
     def test_candidate_inhibition_drift_rejected(self):
         self.items[-3]['spec']['suspend'] = False

@@ -5,12 +5,40 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.546"
+version: "5.547"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: complete repository render inventory, runtime/admission gaps retained
+
+WP-L0-GITOPS-001 / `gate-r_2f0fyd`, source_identity/repository_repair: commit-only
+transitive renderer/inventory binds candidate `0486612d`, 33 files/seven paths,
+57 resources/nine workloads/nine image occurrences and inhibited projection
+hashes. Plugin/external inputs are inhibited, unknown/unavailable inputs explicit;
+independent local children remain visible when another child is blocked. Exact
+inventory regeneration rejects edits. Bound non-activating evidence preserves
+HIGH7/6/6/6/CRITICAL0 and missing/null risk decision; all admission/activation/gate
+flags false. Five distinct Secret identities unavailable; external image bytes,
+runtime inputs, ARM64/app publisher/scan acceptance and fetched/applied identity
+remain open. No applyable output, transport selection/fetch or runtime writes.
+
+Latest live51 05:26:40 UTC passes on already-running lab; UID scope/non-Lease specs
+and full Flux/PV/PVC objects unchanged, final candidate/inventory revalidated.
+Node/four pinned controllers ready, Flux8/Jobs3 suspended, app owners0 maintained;
+doctor degraded. Render11/source8/contract9/supervisor15/continuation5/runner22/
+bears11/Go pass; broad verifier still policy166 failures11/errors2. Initial default
+Python/PyYAML failure and conservative intermediate force-field gaps retained,
+resolved within existing venv/render dialect, no installation or failure erasure.
+
+Private final evidence/rollback in newest WP entry. Proposal004 requests only
+read-only local admission diagnosis against the full image inventory, for parent
+review; no gate/operator acceptance or checkbox change. Original Vault sync
+pending; OAuth-only Sol is routing, not billing proof. Small private text/log
+impact only, disks/volumes/PV/PVC/backups/failures retained. Leave safe runtime for
+parent probe/idle-worker cleanup; never restore writers/unsuspend sources or Jobs.
 
 ## 2026-10-08: exact retained local evidence bound without admission activation
 

@@ -5,12 +5,73 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.177"
+version: "0.178"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: commit-bound transitive inhibited inventory (gate-r_2f0fyd)
+
+`L0_DEPENDENCY_CONTINUATION`, source_identity/repository_repair: implemented
+`tools/local_experiment/render_inventory.py`, documentation, focused Make target
+and regressions. Only existing commit `0486612d0671c01c16d40ce445e39788d86de69b`
+objects feed local plugin-disabled `kubectl kustomize`; exact blob/SHA256 inputs,
+renderer executable SHA256, canonical render/resource and inhibited projection
+hashes bind the whole candidate. All seven configured paths, 33 transitive files
+(including generated Java source), 57 resources, nine workloads and nine image
+occurrences are inventoried. Root replacements/postBuild constants are included.
+Four controller images match candidate pins; every image is digest-pinned, not
+proof of fetched bytes, publisher/scan/ARM64 acceptance for the five app images.
+
+Unknown/external configs, generators, missing/nonregular inputs, repository escapes,
+cycles, unsupported substitutions/nested Flux and unsafe workload surfaces remain
+gaps. A blocked child does not conceal independent available inventories. No
+incomplete closure reaches the renderer. Every standard normal/init/ephemeral
+container occurrence is covered. Duplicate keys/resources and pin/scope drift
+reject. Committed root is still branch-only/unsuspended and unsafe to apply;
+candidate projections remain suspended/replicas0 except the four controllers1,
+source commit-pinned with unselected transport. Inventory returns hashes, not an
+applyable manifest. This repository inventory is complete within the stated
+supported dialect, **not** full Flux execution or runtime-input completeness.
+
+Five distinct referenced Secret identities are absent from repository renders:
+Flux transport, Polaris PostgreSQL/root, SeaweedFS application and storage
+credentials. Their contents were not inspected. Image bytes/runtime-generated
+StatefulSet PVCs remain separate inputs. `bind_admission` revalidates original
+contract/fresh candidate before attaching inventory/hash; exact strict HIGH7/6/6/6,
+CRITICAL0 and publisher/scan outcomes remain unchanged. Local risk decision is
+missing/null; fetched/applied provenance null, admission/activation/gate false.
+
+Fresh live51 observations on already-running dedicated runtime pass, latest
+05:26:40 UTC: Node/Lease, four pinned ready controllers/Pods, Flux8/Jobs3 suspended,
+retained app owners0 and original PV/PVC identities/specs. Initial/final UID sets,
+non-Lease specs and complete Flux/PV/PVC objects unchanged; final bound inventory
+revalidates. Doctor remains degraded. No startup, runtime write, fetch, transport
+choice, apply/redirect/unsuspend/new resource/policy binding or writer start.
+
+Render11/source8/contract9/supervisor15/continuation5/runner22/bears11 and Go CLI/
+internal tests pass. Broad `make PYTHON=tools/local_experiment/llm/.venv/bin/python
+verify-local-experiment` retains policy166 failures11/errors2. Initial default
+Python lacked PyYAML; existing project venv succeeds, no install. Intermediate
+inventory conservatively flagged Flux `force` (a reconciliation, not render field);
+that incomplete record remains retained and superseded by final inventory, not
+retroactively changed. Prior failures/stops and all eleven checkboxes unchanged.
+
+Private evidence: `tmp/local-experiment/autonomous-runner/gate-r_2f0fyd/attempt-001/render-inventory/`,
+especially `final-inventory.json`, `final-bound-contract.json`, `final-stability.json`
+and `probe-04.json`. Proposal004 in `tmp/local-experiment/gate-continuation/series-fpveebm3/`
+requests only local_admission/diagnose of the complete nine-image inventory,
+candidate-commit ARM64/publisher/scan evidence and unavailable inputs. Parent must
+independently select/review; no risk approval or activation inferred. OAuth-only
+explicit Sol routing passed, not billing proof; original Vault untouched/sync pending.
+
+Recovery: repository-only rollback of implementation/tests/docs/Make target. Small
+temporary committed-text/private JSON/log disk impact; no resident component or
+retained-storage/backup/export change. Preserve retained disks, volumes/PV/PVCs,
+backups and failures. Leave inhibited runtime for parent probe/idle-worker cleanup;
+never restore app counts or unsuspend sources/Jobs automatically.
 
 ## 2026-10-08: non-activating local admission evidence contract (gate-5djsi8d4)
 

@@ -746,6 +746,11 @@ test-local-admission-contract:
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_admission_contract.py'
 verify-local-experiment: test-local-admission-contract
 
+.PHONY: test-local-render-inventory
+test-local-render-inventory:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_render_inventory.py'
+verify-local-experiment: test-local-render-inventory
+
 .PHONY: local-mlflow-sync local-mlflow-prepare local-mlflow-plan local-mlflow-import local-mlflow-start local-mlflow-status local-mlflow-stop test-local-mlflow
 local-mlflow-sync:
 	@uv sync --project tools/local_experiment/mlflow --locked --no-build
