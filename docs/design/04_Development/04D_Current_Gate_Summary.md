@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.27"
+version: "1.28"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -35,6 +35,24 @@ verifier four AF_UNIX errors retained. Second/final approach exhausted, stop/
 no_safe_work; no successor scheduled. Private build-don5ufj3 evidence and
 `flux_local_build.md` record tests/capacity/base/image/publisher/other-controller
 dependencies. Vault sync pending, repository-only rollback; full L0 remains false.
+
+**Parent classification and distinct next stage:** exact server
+`ses_ee5aeb3cbffetPFHNYsOQAvxvV` independently succeeded/idle/non-active,
+valid no_safe_work, clean checkout. ELF/hash899cfcbc and recorded Go1.26.6/
+SBOM/scan evidence bind the binary; HIGH0/CRITICAL0 is binary-only and tests remain
+incomplete. Parent original conservative capacity HELD summary is not rewritten.
+The two binary-build executions are exhausted; **no third compile/test attempt**.
+Usage516/600, restart16/100, remaining84, original week unchanged.
+
+Distinct zero-model next stage `flux_local_image.py`: derive a local-only archive
+from the already observed immutable source-controller candidate ARM64 child and
+the verified patched binary overlay, correct metadata to explicitly unsigned
+Shirokuma-local attribution, then full archive SBOM/scan (OS plus Go binary).
+No image execution/load/import, daemon startup, registry writes, existing pins/
+ledger changes, risk approvals or admission. Dedicated/all profiles stay Stopped,
+isolated tools/cache, max120minutes/8GiB and two image-stage reservations. Old
+build data/failures/counters remain held; full image scan/publisher/test/runtime
+acceptance are pending separate evidence. Collection startup/outcome separately.
 
 **2026-10-08 isolated build (`gate-xezx_z6k`, parent review pending):**
 source-controller v1.9.6 commit456fa323/tree8c7afc98 pinned before dependency-only

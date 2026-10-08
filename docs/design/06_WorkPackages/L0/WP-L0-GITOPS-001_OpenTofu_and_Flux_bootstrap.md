@@ -5,12 +5,37 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.187"
+version: "0.188"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: parent binary review and separate offline image-archive stage
+
+Parent independently reconciles exact gate-ayqdekwa server/idle/checkpoint/result,
+clean checkout and binary ELF/hash899cfcbc. Go1.26.6/binary/SBOM/scan hashes bind
+HIGH0/CRITICAL0 binary-only result with MEDIUM2/LOW2/UNKNOWN1 retained. New toolchain
+unit tests are incomplete; original parent capacity HELD summary remains intact.
+Two binary repair executions exhausted, no third compile/test attempt. Starts516/600,
+remaining84; existing ledger/pins unchanged, all profiles Stopped, no L0 acceptance.
+
+Next distinct parent-owned zero-model stage: `flux_local_image.py` appends only
+the verified binary at usr/local/bin/source-controller to the already observed
+immutable ARM64 candidate image child, saves an archive locally and corrects
+labels to unsigned Shirokuma experimental attribution. Preserve upstream source
+provenance separately, never claim upstream signature covers the derived image.
+Collect complete archive Trivy/Syft evidence (OS and Go packages), exact local
+image/archive/config/binary identities and fresh scanner/DB times. At most2
+image-stage reservations, max120minutes/8GiB per mission/free16GiB, same original
+week. No compile/test replay, image execution/load/import, daemon/VM/container
+startup, external registry write, existing pin/ledger replacement, approval/
+exception/admission activation or runtime successor. Local assembly is newly
+selected under standing local development authority, not retroactively part of
+the old no-assembly binary mission. Tests/publisher/other-controller repair and
+runtime/source/admission gates remain held. Keep all old/new evidence/caches/
+backups; repository-only rollback, no auto-cleanup. Actual image scan pending.
 
 ## 2026-10-08: final Go1.26.6 binary repair; HIGH0, tests/capacity held (gate-ayqdekwa)
 

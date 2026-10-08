@@ -4,6 +4,26 @@
 
 ### Exact-digest evidence refresh after completed finding diagnosis
 
+**After the second binary repair:** do not schedule a third unchanged binary
+build. `flux_local_image.py --execute` is a different parent-owned, zero-model
+offline image-archive stage. It independently checks the exact final build server,
+ELF/hash/Go1.26.6/SBOM/binary-scan evidence, uses the previously resolved immutable
+ARM64 source-controller candidate as base, and appends one deterministic binary
+layer with `crane append --output <local tar>`; no push/load/import is constructed.
+Rewrite local archive metadata so version/description/labels explicitly identify
+an unsigned Shirokuma local experiment, not an upstream release/signature.
+
+Then calculate local image digest, scan via Trivy `--input` and Syft
+`docker-archive:` (no daemon), requiring ARM64/Linux, OS results, and detected
+Go1.26.6 stdlib packages. Preserve complete findings and scanner/DB/scan times;
+even zero HIGH/CRITICAL is not test/publisher/admission acceptance. Private isolated
+cache, shared parent lock, stopped profiles/current ledger checks, original week,
+max120minutes/8GiB and two image-stage reservations. Old build counters/failures
+and data stay unchanged; no compile/test replay, image execution, VM/container
+startup, external registry writes, current pin replacement or risk approval.
+This new assembly capability is selected under standing local development scope,
+not a widening of the already completed no-assembly binary worker's mission.
+
 **After candidates remain HIGH:** `flux_local_build_supervisor.py` is a separate
 one-session/120-minute isolated source-controller rebuild mission, default zero
 calls, explicit `--execute --use-pro-weekly-limit` required. Before selecting this
