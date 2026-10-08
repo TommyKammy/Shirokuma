@@ -37,11 +37,11 @@ evaluation rather than silently rebuilding the selected candidate.
   unselected, verified fetched/applied provenance absent. A source Ready flag
   or exact image pin cannot fill these gaps.
 
-The next bounded repository dependency is a **non-activating local evidence
-contract** binding this candidate, retained publisher/scan hashes and exact
-findings, with explicit local-only risk-decision and render-inventory gaps.
-Missing decisions must remain missing, not be fabricated as acceptance. Parent
-review selects that mission separately. This does not authorize source transport
+The repository now provides a [non-activating local evidence contract](ADMISSION_CONTRACT.md)
+binding this candidate, retained publisher/scan hashes and exact findings, with
+explicit local-only risk-decision and render-inventory gaps. Missing decisions
+remain missing, not fabricated as acceptance. Parent review selects the next
+render-inventory dependency separately. This does not authorize source transport
 selection, fetch/apply, policy activation or writer start. Later artifact,
 transport and live enforcement observations need their own scoped review.
 

@@ -5,12 +5,67 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.176"
+version: "0.177"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: non-activating local admission evidence contract (gate-5djsi8d4)
+
+`L0_DEPENDENCY_CONTINUATION`, local_admission/repository_repair: implemented
+`tools/local_experiment/admission_contract.py`, contract documentation and a focused
+Make target. Builder/validator bind the full inhibited candidate at commit
+`0486612d0671c01c16d40ce445e39788d86de69b`, including commit/tree/paths and private
+UID/spec guards, to four ARM64 image references, ledger hash and each retained
+SBOM/publisher/scan path/hash. All input bytes must match candidate-commit blobs;
+changed artifacts/ledger or contract edits reject. This is JSON evidence, not an
+applyable manifest, risk approval or activation request.
+
+Exact blocking records retain target/class/type, package/version/fix/path metadata
+and multiplicity, including CRITICAL findings if present. Real retained evidence
+reproduces HIGH=7/6/6/6, CRITICAL=0, strict scans blocked. Publisher record pass is
+not fresh cryptographic proof; August scans are not a fresh advisory rescan.
+Local risk decision and transitive render inventory remain explicitly missing/null;
+admission/gate/activation always false. No expired exception renewal, invented
+approval, transport choice, fetched/applied provenance or enforcement claim.
+
+Fresh complete live51 probes on the already-running lab pass, latest 05:15:03 UTC:
+Node/fresh Lease, four existing digest-pinned ready controllers/Pods, Flux8/Jobs3
+suspended, retained app owners0 and original PV/PVC identities/specs. Initial/final
+UID scope and non-Lease specs match; complete Flux/PV/PVC objects unchanged.
+Contract revalidates against final observations. Fourteen Docker containers have
+system/Flux names only, not a whole-runtime census. No VM/node startup or runtime
+write, new resource, fetch/apply/redirect/unsuspend/policy change/writer start.
+Fresh doctor remains degraded for intentional inhibition.
+
+Contract8/diagnosis7/source8/supervisor15/continuation5/runner22/bears11, full Go
+CLI/internal tests, design-context, secret scan and diff check pass. Initial wrong
+supervisor/continuation patterns discovered zero tests and failed; logs retained,
+correct filenames rerun successfully, no zero-test pass counted. Fresh
+`make verify-local-experiment` still fails policy166 with 11 failures/2 errors;
+prior security5 failures and safety/transport stops remain unaltered evidence.
+
+Private contract, hashes/findings, three live probes, stability/doctor/test logs:
+`tmp/local-experiment/autonomous-runner/gate-5djsi8d4/attempt-001/admission-contract/`.
+Typed functional-change proposal:
+`tmp/local-experiment/gate-continuation/series-fpveebm3/proposal-003.json`.
+Next proposed concrete L0 dependency is source_identity/repository_repair:
+commit-bound transitive rendered inputs and complete workload/image inventory,
+still repository-only, with external/unavailable inputs explicit and no runtime
+activation. Parent independently reviews/selects the next mission. Risk review,
+transport/fetched-byte identity and scoped enforcement/applied provenance remain
+open. All eleven checkboxes/full L0/operator acceptance unchanged. Single OAuth/
+explicit Sol preflight passed, not independent billing proof; original Vault
+untouched and direct sync pending. No nested runner or additional model request.
+
+Recovery: rollback only repository implementation/tests/docs/Make target; no
+runtime fields to restore. Small private JSON/log disk impact only, no resident
+component or retained storage/export/backup change. Preserve all retained disks,
+volumes/PV/PVC identities, backups and failures. Leave safe inhibited runtime for
+parent probe; parent normally stops VM only after worker idle/non-active. Never
+restore app counts or unsuspend sources/Jobs automatically.
 
 ## 2026-10-08: read-only local admission diagnosis (gate-n0xgt8ew)
 

@@ -5,12 +5,40 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.545"
+version: "5.546"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: exact retained local evidence bound without admission activation
+
+WP-L0-GITOPS-001 / `gate-5djsi8d4`, local_admission/repository_repair: new
+non-activating contract binds full inhibited commit/tree/path/UID/spec candidate
+to four ARM64 images, ledger and retained SBOM/publisher/scan hashes. Bytes must
+match selected candidate commit blobs; exact HIGH/CRITICAL records preserve scope,
+package/version/fix/path metadata and multiplicity. Fresh local evaluation retains
+HIGH7/6/6/6, CRITICAL0 and strict rejection. Publisher record pass is not fresh
+crypto verification; August scans are not a current rescan. Risk decision/render
+inventory missing/null; admission/gate/activation false, no approval/waiver renewal.
+
+Latest fresh complete live51 probe 05:15:03 UTC passes readiness/inhibition/retention
+on already-running lab; initial/final UIDs/non-Lease specs and full Flux/PV/PVC
+objects unchanged, contract revalidated. No startup or runtime writes, transport
+choice/fetch/apply/redirect/unsuspend/policy activation or writer start. Doctor
+remains degraded. Contract8/diagnosis7/source8/supervisor15/continuation5/runner22/
+bears11/Go/design-context/secret-scan pass. Two initial wrong-pattern zero-test
+failures retained and corrected. Local verifier retains policy166 failures11/
+errors2; historical security5 failures and safety/transport stops remain real.
+
+Private evidence and rollback in newest WP entry; proposal003 selects only the
+repository-only transitive render/workload/image inventory dependency for parent
+review. No checkboxes/L0/operator acceptance, missing risk decision and transport/
+fetched/enforced/applied identity still open. Small private JSON/log impact only;
+all retained disks/volumes/PV/PVC/backups/failures preserved. Runtime left for
+independent parent probe/idle-worker cleanup, never restore writers/Jobs/sources.
+OAuth-only Sol routing checked, not billing proof; original Vault sync pending.
 
 ## 2026-10-08: local admission requirements diagnosed without activation
 
