@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.19"
+version: "1.20"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,22 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 Flux finding diagnosis (`gate-5d3ur67c`, parent review pending):**
+Exact10 IDs/25 HIGH occurrences, installed/fixed packages and conditional exposure
+documented in `tools/local_experiment/FLUX_FINDINGS.md`; S/K/H/N HIGH7/6/6/6,
+CRITICAL0 unchanged. DB55.201/scan55.012 days old at06:00:32UTC. Fresh live51
+readiness/inhibition/retention passes and namespace network objects observed;
+no reachability/exploitability/enforcement claim. Concrete held dependency:
+separately scoped current evidence refresh for four exact ARM64 digests or new
+fixed-package proven immutable Flux pins; no safe replacement digest established.
+No scan/fetch/start/runtime mutation/approval/exception/activation; riskDecision
+null, strict rejection/full L0 false. Focused41 pass; broad policy11failures/2errors
+and doctor degraded remain. Final06:05:08UTC live51 passes; UIDs/non-Lease specs,
+full Flux/PV/PVC/network unchanged. Refresh/upgrade outside this mission remains
+held; worker stops/no_safe_work, not full gate completion. Old exhausted scopes
+held; Vault sync pending.
+Leave safe runtime for independent parent probe/idle-worker cleanup. No gate pass.
 
 **Continuation outcome:** the resumed loop ran six workers and passed five
 parent reviews/automatic successors. `gate-azr7paf4` then checkpointed

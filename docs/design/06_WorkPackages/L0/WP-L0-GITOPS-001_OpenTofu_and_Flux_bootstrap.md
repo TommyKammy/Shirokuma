@@ -5,12 +5,61 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.180"
+version: "0.181"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: exact retained Flux HIGH/freshness diagnosis (gate-5d3ur67c)
+
+`L0_FLUX_FINDINGS_DIAGNOSIS`, flux_findings/diagnose: added commit-bound,
+read-only `flux_findings.diagnose`, four regression tests and
+[`FLUX_FINDINGS.md`](../../../../tools/local_experiment/FLUX_FINDINGS.md).
+The document enumerates all 10 IDs/25 HIGH occurrences, exact installed/fixed
+versions, controller/target scope, advisory-conditional exposure and uncertainties.
+Full retained records/multiplicity and ledger/SBOM/scan/publisher hashes bind
+candidate0486612d. S/K/H/N HIGH7/6/6/6, CRITICAL0 unchanged. DB age55.201 days,
+scan age55.012 days at06:00:32UTC; hashes are identity, not refreshed advisories.
+
+Fresh live51 probes05:59:12/06:00:32UTC pass complete readiness/inhibition/retention.
+Read-only Flux namespace Service/Endpoints/Ingress/NetworkPolicy inspection:
+three ClusterIP services (S artifacts, N events/webhook), no namespace Ingress,
+metrics/health listeners and permissive configured egress/webhook/metrics rules.
+No packet/enforcement/public-exposure proof or vulnerable-call reachability claim.
+Suspension does not stop controller listeners. Doctor remains degraded.
+No startup/runtime writes/approvals/exception/risk change/fetch/rescan/activation.
+
+Concrete dependency is separately scoped current evidence refresh for all four
+exact ARM64 digests; if findings persist, new immutable Flux pins must prove the
+documented fixed packages/Go toolchain and matching SBOM/publisher/scan evidence.
+No replacement digest is established; package FixedVersion is not a Flux release
+recommendation. Refresh/upgrade is prohibited in this mission. Strict HIGH reject,
+riskDecision null, admission/activation/full L0 false. Old exhausted scopes held.
+
+Final fresh live51 check06:05:08UTC passes; initial/final UIDs, non-Lease specs,
+full Flux/PV/PVC and namespace network objects unchanged. Diagnosis regenerated
+against final observation. Further refresh/upgrade is held outside this mission;
+checkpoint stops/no_safe_work, not full gate completion.
+
+Focused41 tests pass (findings/contract/inventory/continuation/supervisor). Initial
+module-style invocation had three fixture import errors; corrected tests-path
+invocation passes without code changes to historical tests. Broad verifier still
+policy166 failures11/errors2. Go CLI/internal, design-context and diff checks pass.
+Prior stops/failures and eleven checkboxes unchanged.
+Private diagnosis/network/live/doctor/test/stability records:
+`tmp/local-experiment/autonomous-runner/gate-5d3ur67c/attempt-001/findings/`.
+Proposal001 in `tmp/local-experiment/gate-continuation/series-te0f4f3q/` stays
+flux_findings; parent selects only after independent terminal/live/budget review.
+No nested launcher executed. OAuth-only explicit Sol check passed, not billing
+proof. Original Vault untouched, sync pending.
+
+Recovery: repository-only rollback of this module/tests/document/ledger notes,
+not private evidence or prior failures. Small private JSON/log disk impact only;
+no resident component, retained disk/volume/PV/PVC/backup/export change. Leave
+safe runtime for parent probe; parent stops VM only after worker idle/non-active.
+Never restore app counts or unsuspend Flux/Jobs automatically. No gate acceptance.
 
 ## 2026-10-08: complete non-activating admission contract (gate-azr7paf4)
 

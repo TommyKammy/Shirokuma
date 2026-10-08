@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.549"
+version: "5.550"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: Flux HIGH package/exposure/freshness dependency diagnosis
+
+WP-L0-GITOPS-001 / `gate-5d3ur67c`, flux_findings/diagnose:
+commit-bound report and documented exact10 IDs/25 HIGH occurrences, installed/
+fixed versions, controller targets and conditional exposure; HIGH7/6/6/6,
+CRITICAL0 unchanged. DB55.201/scan55.012 days old. No proven replacement Flux
+digest; separately scoped four-digest evidence refresh/new fixed-package pinned
+images is the concrete dependency, not an authorized scan/upgrade/approval.
+Fresh live51 checks05:59:12/06:00:32UTC pass readiness/inhibition/retention;
+Flux namespace services/endpoints/policies observed read-only, no reachability/
+enforcement/exploitability claim. Final live51 at06:05:08UTC passes, UIDs/non-Lease
+specs/full Flux/PV/PVC/network unchanged; diagnosis regenerated. Refresh/upgrade
+remains outside mission, stop/no_safe_work rather than full gate completion.
+Doctor degraded, riskDecision null, strict
+reject/admission/activation/full L0 false. No startup/runtime mutation/fetch/rescan.
+Focused41 pass; initial fixture import errors retained, corrected tests-path run
+passes; Go/design-context/diff checks pass. Broad policy166 still failures11/errors2. Eleven checkboxes/prior stops
+unchanged. Private evidence/recovery and flux_findings proposal001 in newest WP;
+Vault sync pending. Runtime left for parent independent probe/idle-worker cleanup,
+never restore writers/unsuspend sources or Jobs. No gate/operator acceptance.
 
 ## 2026-10-08: complete image/runtime-gap evidence contract, no activation
 
