@@ -287,6 +287,31 @@ class AutonomousRunnerTests(unittest.TestCase):
         candidate.write_text('{"changed":true}')
         with self.assertRaises(R.RunnerError):R.reviewed_refresh_stop(self.root,prior,summary,head,'L0_FLUX_LOCAL_BUILD')
 
+    def test_toolchain_repair_review_binds_original_binary(self):
+        head=self.git('rev-parse','HEAD')
+        ledger=self.root/'security/resident-images.json';ledger.parent.mkdir(parents=True,exist_ok=True);ledger.write_text('{}')
+        candidate=self.root/'tmp/local-experiment/flux-pin-candidate/candidate-hn94027w/summary.json'
+        candidate.parent.mkdir(parents=True);candidate.write_text('{}')
+        binary=self.root/'tmp/local-experiment/flux-local-build/build-aoa39q7w/source-controller'
+        binary.parent.mkdir(parents=True);binary.write_bytes(b'prior-build')
+        prior=self.root/'tmp/local-experiment/autonomous-runner/gate-xezx_z6k'
+        summary=dict(schema_version=1,result='stopped',attempts=1,reason='agent_no_safe_work_claim')
+        result=dict(head_before=head,head_after=head,reason='no_safe_work')
+        cp=dict(schema_version=1,nonce='a'*32,iteration=1,head=head,decision='stop',reason='no_safe_work')
+        self.write_private_json(prior/'attempt-001/result.json',result)
+        self.write_private_json(prior/'attempt-001/checkpoint.json',cp)
+        review=dict(schema_version=1,source_run=prior.name,original_summary=summary,original_result=result,
+            checkpoint=cp,reviewed_head=head,last_session_id='ses_fixture',server_outcome='succeeded_idle_nonactive',
+            allowed_gate='L0_FLUX_LOCAL_BUILD',decision='held_scope_isolated_source_build_no_replay',
+            ledger_sha256=R.hashlib.sha256(ledger.read_bytes()).hexdigest(),
+            candidate_summary_sha256=R.hashlib.sha256(candidate.read_bytes()).hexdigest(),
+            prior_binary_sha256=R.hashlib.sha256(binary.read_bytes()).hexdigest())
+        self.write_private_json(self.root/'tmp/local-experiment/gate-batches/build-review-gate-xezx_z6k.json',review)
+        self.assertTrue(R.reviewed_refresh_stop(self.root,prior,summary,head,'L0_FLUX_LOCAL_BUILD'))
+        self.assertFalse(R.reviewed_refresh_stop(self.root,prior,summary,head,'L0_FLUX_EVIDENCE_REFRESH'))
+        binary.write_bytes(b'changed')
+        with self.assertRaises(R.RunnerError):R.reviewed_refresh_stop(self.root,prior,summary,head,'L0_FLUX_LOCAL_BUILD')
+
     def test_plan_is_zero_model_calls_and_requires_explicit_budget(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \

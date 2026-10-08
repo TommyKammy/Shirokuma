@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.25"
+version: "1.26"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -34,6 +34,23 @@ failed reports in `tmp/local-experiment/flux-local-build/build-aoa39q7w/`;
 reproduction/base/image/publisher gaps in `tools/local_experiment/flux_local_build.md`.
 Original Vault sync pending; preserve caches/source/binary/failures, repository-only
 rollback. This does not authorize image assembly or runtime activation.
+
+**Parent reobservation and bounded second repair:** exact server
+`ses_ee5c3d00effelBEHNEk0S2SWl7` independently succeeded/idle/non-active, valid
+no_safe_work, clean checkout. Parent verifies ELF/hash, recorded source identity,
+patch/go.mod/go.sum/SBOM/scan hashes and exact8 HIGH stdlib1.26.5 findings listing
+stable1.26.6. Observed max logical/allocated bytes **8,157,929,472 (7.598GiB)**,
+below hard8GiB but above unchanged conservative7GiB guard; original HELD capacity
+summary remains intact. No additional writes to that old scope or cleanup.
+
+`--resume-toolchain-repair` selects the second/final unchanged-approach execution:
+stable Go1.26.6, same pinned source/dependency patch, fresh private build scope,
+copy minimum source/read old inputs only; no source-tag refetch, old cache writes
+or terminated signature-test replay. Each mission max8GiB, combined at most16GiB
+with all old bytes retained, free16GiB required; not a quota/counter reset. Exact
+old session/CP/result/binary hash separately reviewed before successor. Original
+week/OAuth/600 and two-execution limits persist. Starts515/600, remaining85 before
+launch; successful Go1.26.6 build/clearance/image/publisher acceptance unverified.
 
 **Candidate result and next repair approach:** `candidate-hn94027w` collected
 Flux v2.9.6 exact ARM64 children: S/K/H/N HIGH9/5/5/9, CRITICAL0 (28 occurrences).

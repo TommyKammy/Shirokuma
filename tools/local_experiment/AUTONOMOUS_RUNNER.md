@@ -27,6 +27,19 @@ OCI base or publisher trust; these require separate evidence review. Unknown CLI
 or operation outcomes hold without replay. New fixed artifacts are experimental
 local provenance, never falsely attributed to the upstream publisher.
 
+`--resume-toolchain-repair` handles the proved first build's stdlib1.26.5
+dependency without replay. The parent verifies its exact8 HIGH findings listing
+stable1.26.6, source/patch/SBOM/scan hashes, ELF and terminal session; a separate
+build-review binds its original no-safe result and binary hash. Preserve old
+capacity HELD summary: 7.598GiB is below hard8GiB but above the unchanged7GiB
+conservative guard, not authority to write more in that old scope. A second/final
+reservation uses a new private max8GiB directory, minimum copied source and
+Go1.26.6 toolchain/caches; old inputs stay read-only and terminated signature
+tests/source retrieval/unknown operations are not replayed. Combined retained
+allocation is bounded16GiB, free16GiB required. Counters, original week and
+cumulative starts never reset. Successful compilation/zero HIGH/full image/
+publisher or runtime acceptance all require new evidence, not this resume flag.
+
 **After refresh:** a parent-owned, zero-model-call candidate investigation is
 available via `flux_pin_candidate.py --execute --discovery <absolute discovery>`.
 Public release metadata/install.yaml must already be captured in the private

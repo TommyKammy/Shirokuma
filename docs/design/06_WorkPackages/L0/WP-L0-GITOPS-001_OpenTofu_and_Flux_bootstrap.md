@@ -5,12 +5,33 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.185"
+version: "0.186"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: read-only build reobservation and final same-approach toolchain repair
+
+Parent independently reconciles gate-xezx_z6k exact terminal server, no_safe_work
+checkpoint/result and clean descendant HEAD. ELF SHA2569dc840ee, source commit456fa323/
+tree8c7afc98 and patch/go.mod/go.sum/SBOM/scan hashes reproduce; exact8 HIGH findings
+are stdlib1.26.5 and record stable1.26.6 fix. Current logical/allocated maximum
+8,157,929,472 bytes is below the first mission hard8GiB but above its conservative
+7GiB bulk-write guard. Keep original parent HELD summary/failures and all bytes;
+no further old-scope build/toolchain writes or cleanup. Binary evidence remains
+partial, no image/operator acceptance. VM/all profiles Stopped, ledger/pins unchanged.
+
+Second/final execution for this approach is an isolated Go1.26.6 build with the
+same pinned source/dependency patch, minimal copied source and new private caches,
+verified toolchain identity/checksum and fresh binary-derived SBOM/scan/tests.
+Do not replay terminated signature tests, old source tag retrieval or old unknown
+operations. Old inputs read-only. New mission8GiB cap plus retained prior8GiB
+means bounded combined16GiB; counters are not reset and free16GiB remains required.
+Same1worker/120minutes/OAuth/600/original-week limits; starts515/600 before launch.
+No image assembly/execution, pin/ledger changes, risk approval, VM/container start,
+policy activation or runtime successor. Record actual launch/outcome separately.
 
 ## 2026-10-08: isolated patched ARM64 binary; stdlib/capacity hold (gate-xezx_z6k)
 

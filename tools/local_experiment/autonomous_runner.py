@@ -323,7 +323,7 @@ def reviewed_refresh_stop(root: Path, prior: Path, summary: dict, head: str,
     """Evidence-only capability; original admission/finding scopes remain held."""
     gates = {
         'L0_FLUX_EVIDENCE_REFRESH': ('refresh', ('gate-azr7paf4', 'gate-5d3ur67c')),
-        'L0_FLUX_LOCAL_BUILD': ('build', ('gate-azr7paf4', 'gate-5d3ur67c', 'gate-3f5odnk2')),
+        'L0_FLUX_LOCAL_BUILD': ('build', ('gate-azr7paf4', 'gate-5d3ur67c', 'gate-3f5odnk2', 'gate-xezx_z6k')),
     }
     if next_gate not in gates or prior.name not in gates[next_gate][1]:
         return False
@@ -344,6 +344,9 @@ def reviewed_refresh_stop(root: Path, prior: Path, summary: dict, head: str,
                                       else 'held_scope_isolated_source_build_no_replay') and
             (prefix != 'build' or review.get('candidate_summary_sha256') ==
              hashlib.sha256((root/'tmp/local-experiment/flux-pin-candidate/candidate-hn94027w/summary.json').read_bytes()).hexdigest()) and
+            (prior.name != 'gate-xezx_z6k' or
+             review.get('prior_binary_sha256') == hashlib.sha256(
+                 (root/'tmp/local-experiment/flux-local-build/build-aoa39q7w/source-controller').read_bytes()).hexdigest()) and
             review.get('server_outcome') == 'succeeded_idle_nonactive' and
             type(review.get('last_session_id')) is str and
             re.fullmatch(r'ses_[A-Za-z0-9]+', review['last_session_id']) and
