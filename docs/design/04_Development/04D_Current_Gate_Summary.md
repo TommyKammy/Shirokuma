@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.21"
+version: "1.22"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,19 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 exact-digest refresh (`gate-3f5odnk2`, parent review pending):**
+All four unchanged ARM64 Flux digests freshly scanned06:15:41–06:16:08UTC,
+Trivy0.72.0; DB UpdatedAt2026-10-07T07:38:55UTC/download06:15:35UTC today.
+HIGH21/36/18/19, CRITICAL0:94 occurrences/42 IDs versus retained25/10.
+Four new Syft SBOMs/config observations separate; publisher proof not refreshed.
+VM/all profiles observed Stopped, isolated private cache/reports retained;
+approximately1.343GiB/free2272GiB. Ledger/pins/security originals/old holds/counters
+unchanged, strict rejection/riskDecision null, admission/full L0 false. Parent
+validation and separately scoped fixed-package immutable-pin/publisher-binding
+remediation required; no runtime successor/transport/apply/activation authorized.
+Private evidence, precise times/hashes/recovery in newest WP and flux_refresh_scan.md;
+Vault sync pending. This replaces stale-scan freshness only, not risk acceptance.
 
 **2026-10-08 Flux finding diagnosis (`gate-5d3ur67c`, parent review pending):**
 Exact10 IDs/25 HIGH occurrences, installed/fixed packages and conditional exposure

@@ -5,12 +5,39 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.550"
+version: "5.551"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: four retained Flux ARM64 digests freshly scanned, 94 HIGH held
+
+WP-L0-GITOPS-001 / `gate-3f5odnk2`, `L0_FLUX_EVIDENCE_REFRESH`:
+installed Trivy0.72.0/public DB refresh, UpdatedAt2026-10-07T07:38:55.515026687Z,
+DownloadedAt2026-10-08T06:15:35.041092Z. Four exact unchanged digests/configs
+Linux/ARM64; actual scan06:15:41/49/58 and06:16:08UTC. HIGH21/36/18/19,
+CRITICAL0:94 occurrences/42 IDs, +32IDs/no prior HIGH ID removed. Four new
+Syft SBOMs separate; no fresh publisher verification (signed indexes out of scope).
+Private owned0600 reports/version/DB snapshot hashes/receipts under
+`tmp/local-experiment/flux-refresh/refresh-9k8bpz7j/`; collection06:16:11UTC,
+approximately1.343GiB/free2272GiB. Initial local mode-validation failure retained;
+Trivy-created0644 cache files normalized narrowly with bytes unchanged, collector
+regression added. No image retrieval replay, cache deletion or retained overwrite.
+All profiles freshly Stopped before/after; no runtime/API/transport/admission changes.
+Ledger/manifests/security evidence, old holds/results/counters/null riskDecision,
+strict HIGH reject and eleven checkboxes unchanged. Parent review, separately
+scoped fixed-package immutable-pin remediation and fresh publisher binding remain;
+source/enforcement/applied provenance/full L0/operator acceptance not established.
+Collector/tests/docs increment only, no nested runner or supplied launcher execution.
+Original Vault untouched/sync pending. Details/recovery in newest WP entry and
+`tools/local_experiment/flux_refresh_scan.md`; no retained storage/backup/export impact.
+Focused12/design-context/diff pass. Broad first failed a fixture-umask assertion
+(mocked Docker, refused loopback readiness read); child umask022 rerun preserved
+the failure and passed that stage/policy166, then4 warehouse115 errors were
+AF_UNIX path too long in mission-local temp. No external temp or unrelated repair;
+both logs retained, broad not green, prior historical policy failures unchanged.
 
 ## 2026-10-08: Flux HIGH package/exposure/freshness dependency diagnosis
 

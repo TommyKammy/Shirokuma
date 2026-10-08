@@ -5,12 +5,57 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.181"
+version: "0.182"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: fresh exact-digest Flux scans, strict rejection retained (gate-3f5odnk2)
+
+`L0_FLUX_EVIDENCE_REFRESH`: collected four full fresh Trivy0.72.0 reports for
+only the unchanged retained Linux/ARM64 digests. Public DB UpdatedAt
+2026-10-07T07:38:55.515026687Z, downloaded2026-10-08T06:15:35.041092Z.
+Actual scan times06:15:41/06:15:49/06:15:58/06:16:08UTC; HIGH21/36/18/19,
+CRITICAL0. Total94 HIGH occurrences/42 IDs (32 new IDs, all10 old IDs remain),
+not a vulnerability-free result. Crane configs prove observed ARM64/Linux;
+four new Syft SBOMs are separate. Publisher proof remains historical/unrefreshed:
+signed parent indexes are outside these four authorized image inputs.
+
+Added exclusive/no-replay installed-tool collector and focused regression tests.
+Remote-only scan/SBOM collection uses empty private Docker config and isolated
+HOME/cache/temp; no credential inspection, image code execution or daemon access.
+Private mission evidence is
+`tmp/local-experiment/flux-refresh/refresh-9k8bpz7j/`, including scanner-version,
+full scans/SBOMs/configs, command receipts, DB hashes and refresh-observations.
+Initial post-scan mode check stopped on Trivy's explicit0644 DB/cache metadata;
+only these newly generated files were chmod0600, preserved bytes unchanged,
+and the collector now narrowly normalizes generated modes/rejects unsafe links.
+All checked evidence owned0600 under0700 mission directory. No retrieval replay.
+Collection completed06:16:11.972430UTC, approximately1.343GiB generated and
+2272GiB free, within8GiB/16GiB limits; new cache/evidence retained, no cleanup.
+
+All profiles freshly observed Stopped before/after; VM stays stopped. Ledger hash,
+pins/manifests/security evidence unchanged; old holds/results/counters, null risk
+decision and strict HIGH rejection preserved. No approvals/exceptions, admission/
+policy activation, source transport/fetch/apply/unsuspend or runtime mutation.
+Current HIGH remediation needs separately scoped fixed-package immutable pins;
+parent must independently validate refresh output and publisher binding. Source/
+enforcement/applied provenance and full L0/operator acceptance remain open.
+No checkbox/gate pass or runtime successor. Original Vault untouched, sync pending.
+
+Focused12 refresh tests/design-context/diff pass. Broad verifier first failed an
+AgentHouse test because inherited scanner umask077 made its unsafe fixture private
+(Docker mocked, loopback read refused, no real startup). Separate child umask022
+verification passed that stage/policy166, then warehouse lifecycle115 had4 errors:
+AF_UNIX path too long in mission-local temp. Both logs/results preserved; no
+external-temp workaround or unrelated code changes. Historical11policy failures/
+2errors are not erased by this observation; broad verification is not green.
+
+Detailed times/hashes/dependencies and repository-only rollback:
+[`flux_refresh_scan.md`](../../../../tools/local_experiment/flux_refresh_scan.md).
+No retained storage/PV/PVC/backup/export change or new resident component.
 
 ## 2026-10-08: exact retained Flux HIGH/freshness diagnosis (gate-5d3ur67c)
 
