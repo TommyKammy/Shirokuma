@@ -24,6 +24,16 @@ startup, external registry writes, current pin replacement or risk approval.
 This new assembly capability is selected under standing local development scope,
 not a widening of the already completed no-assembly binary worker's mission.
 
+Completed scanner-format holds can be reobserved with
+`flux_local_image.reobserve(root, image_directory)`. It accepts only the original
+`LOCAL_IMAGE_SCAN_UNVERIFIED` hold, checks exact source/binary hashes, succeeded
+scan/SBOM/scanner/digest operation receipts, freshness and local attribution, then
+reads the archive's digest again without retrieval/assembly/scanning. Accept
+stdlib version forms `1.26.6` and `v1.26.6` only; wrong/prerelease versions or
+missing real OS/binary package evidence remain invalid. Original summary is never
+rewritten; separate exclusive `parent-resolution.json` records the outcome with
+tests/publisher/admission/gate_acceptance false and operation_replay false.
+
 **After candidates remain HIGH:** `flux_local_build_supervisor.py` is a separate
 one-session/120-minute isolated source-controller rebuild mission, default zero
 calls, explicit `--execute --use-pro-weekly-limit` required. Before selecting this

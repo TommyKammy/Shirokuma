@@ -1,4 +1,6 @@
 import io
+from datetime import datetime,timezone
+import copy
 import json
 from pathlib import Path
 import tarfile
@@ -46,6 +48,24 @@ class ImageTests(unittest.TestCase):
     def test_default_does_not_collect_or_request_models(self):
         with mock.patch('sys.argv',['image']),mock.patch.object(I,'collect') as collect:
             self.assertEqual(I.main(),0);collect.assert_not_called()
+
+    def test_stdlib_version_forms_require_real_os_and_exact_binary_scope(self):
+        now=datetime.now(timezone.utc)
+        scanner={'Version':'1','VulnerabilityDB':{'UpdatedAt':now.isoformat()}}
+        scan={'CreatedAt':now.isoformat(),'Trivy':{'Version':'1'},
+            'Metadata':{'ImageConfig':{'architecture':'arm64','os':'linux'}},
+            'Results':[{'Class':'os-pkgs','Packages':[{'Name':'alpine-baselayout'}]},
+                {'Type':'gobinary','Target':'usr/local/bin/source-controller',
+                 'Packages':[{'Name':'stdlib','Version':'v1.26.6'}],
+                 'Vulnerabilities':[{'Severity':'MEDIUM'}]}]}
+        self.assertEqual(I.scan_observation(scan,scanner,now.timestamp())['HIGH'],0)
+        scan['Results'][1]['Packages'][0]['Version']='1.26.6'
+        self.assertEqual(I.scan_observation(scan,scanner,now.timestamp())['MEDIUM'],1)
+        for version in ('v1.26.5','v1.26.6-rc.1','1.26.60','unknown'):
+            bad=copy.deepcopy(scan);bad['Results'][1]['Packages'][0]['Version']=version
+            with self.assertRaises(I.R.RunnerError):I.scan_observation(bad,scanner,now.timestamp())
+        for bad in (dict(scan,Results=scan['Results'][1:]),dict(scan,Results=scan['Results'][:1])):
+            with self.assertRaises(I.R.RunnerError):I.scan_observation(bad,scanner,now.timestamp())
 
 
 if __name__=='__main__':unittest.main()

@@ -21,6 +21,26 @@ R, S, P = B.R, B.S, B.P
 TAG = 'shirokuma-local/source-controller:v1.9.6-go1.26.6-experimental'
 
 
+def scan_observation(scan,scanner,started):
+    def stamp(value):
+        parsed=datetime.fromisoformat(value.replace('Z','+00:00'))
+        R.require(parsed.tzinfo is not None,'LOCAL_IMAGE_TIME_UNVERIFIED')
+        return parsed.timestamp()
+    R.require(-120<=time.time()-stamp(scanner.get('VulnerabilityDB',{}).get('UpdatedAt'))<=48*3600 and
+              started-120<=stamp(scan.get('CreatedAt'))<=time.time()+120 and
+              scan.get('Trivy',{}).get('Version')==scanner.get('Version'),'LOCAL_IMAGE_FRESHNESS_UNVERIFIED')
+    config=scan.get('Metadata',{}).get('ImageConfig',{})
+    R.require(scan.get('Results') and config.get('architecture')=='arm64' and config.get('os')=='linux' and
+              any(result.get('Class')=='os-pkgs' and result.get('Packages') for result in scan['Results']) and
+              any(result.get('Type')=='gobinary' and result.get('Target')=='usr/local/bin/source-controller' and
+                  any(pkg.get('Name')=='stdlib' and pkg.get('Version') in ('1.26.6','v1.26.6')
+                      for pkg in result.get('Packages',[])) for result in scan['Results']),
+              'LOCAL_IMAGE_SCAN_UNVERIFIED')
+    findings=[v for result in scan['Results'] for v in result.get('Vulnerabilities',[])]
+    return {severity:sum(v.get('Severity')==severity for v in findings)
+            for severity in ('HIGH','CRITICAL','MEDIUM','LOW','UNKNOWN')}
+
+
 def relabel_archive(source, destination, binary_hash):
     """Rewrite only metadata, keeping layer bytes; never extract or run a member."""
     with tarfile.open(source,'r:*') as archive:
@@ -123,23 +143,7 @@ def collect(root):
                 '--config',str(directory/'scan-work/syft.yaml'),'--output','cyclonedx-json'],'image.sbom.json')
         scan=S.baseline_file(directory/'image.trivy.json')
         scanner=R.private_json(directory/'scanner-version.json','LOCAL_IMAGE_DB_UNVERIFIED')
-        def stamp(value):
-            parsed=datetime.fromisoformat(value.replace('Z','+00:00'))
-            R.require(parsed.tzinfo is not None,'LOCAL_IMAGE_TIME_UNVERIFIED')
-            return parsed.timestamp()
-        R.require(-120<=time.time()-stamp(scanner.get('VulnerabilityDB',{}).get('UpdatedAt'))<=48*3600 and
-                  started-120<=stamp(scan.get('CreatedAt'))<=time.time()+120 and
-                  scan.get('Trivy',{}).get('Version')==scanner.get('Version'),'LOCAL_IMAGE_FRESHNESS_UNVERIFIED')
-        config=scan.get('Metadata',{}).get('ImageConfig',{})
-        R.require(scan.get('Results') and config.get('architecture')=='arm64' and config.get('os')=='linux' and
-                  any(result.get('Class')=='os-pkgs' for result in scan['Results']) and
-                  any(result.get('Type')=='gobinary' and
-                      any(pkg.get('Name')=='stdlib' and pkg.get('Version')=='1.26.6'
-                          for pkg in result.get('Packages',[])) for result in scan['Results']),
-                  'LOCAL_IMAGE_SCAN_UNVERIFIED')
-        findings=[v for result in scan['Results'] for v in result.get('Vulnerabilities',[])]
-        counts={severity:sum(v.get('Severity')==severity for v in findings)
-                for severity in ('HIGH','CRITICAL','MEDIUM','LOW','UNKNOWN')}
+        counts=scan_observation(scan,scanner,started)
         R.require(P.F.inputs(root)[1]==ledger_hash and P.F.stopped(root)==profiles,'LOCAL_IMAGE_SCOPE_DRIFT')
         P.Scan.check_budget(directory)
         P.Scan.save(directory/'summary.json',dict(classification='LOCAL_IMAGE_SCAN_EVIDENCE_ONLY',
@@ -155,6 +159,46 @@ def collect(root):
                 reason=str(error) if isinstance(error,R.RunnerError) else type(error).__name__,
                 operation_replay=False,admission=False))
         raise
+    finally:fcntl.flock(fd,fcntl.LOCK_UN);os.close(fd)
+
+
+def reobserve(root,directory):
+    """Resolve only a completed scanner-format hold, without retrieval/assembly."""
+    R.require(directory.parent==root/'tmp/local-experiment/flux-local-image' and
+              directory.name.startswith('image-') and not directory.is_symlink(),'LOCAL_IMAGE_SCOPE_INVALID')
+    original=R.private_json(directory/'summary.json','LOCAL_IMAGE_ORIGINAL_UNVERIFIED')
+    R.require(original.get('classification')=='LOCAL_IMAGE_DEPENDENCY_HELD' and
+              original.get('reason')=='LOCAL_IMAGE_SCAN_UNVERIFIED','LOCAL_IMAGE_ORIGINAL_UNVERIFIED')
+    fd=os.open(root/'tmp/local-experiment/gate-supervisor/lock',os.O_RDWR|os.O_NOFOLLOW)
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        S.no_active_worker(root);S.check_resume_budget(root,0,10)
+        profiles=P.F.stopped(root);_,binary,_=verified_binary(root)
+        intent=R.private_json(directory/'intent.json','LOCAL_IMAGE_INPUT_UNVERIFIED')
+        R.require(intent['binary']['sha256']==binary['sha256'] and
+                  intent['ledger_sha256']==P.F.inputs(root)[1],'LOCAL_IMAGE_INPUT_CHANGED')
+        for operation,output in (('full-image-scan','image.trivy.json'),('image-sbom','image.sbom.json'),
+                                 ('local-digest','image-digest.stdout'),('scanner-version','scanner-version.json')):
+            receipt=R.private_json(directory/(operation+'.finished.json'),'LOCAL_IMAGE_OPERATION_UNVERIFIED')
+            R.require(receipt.get('returncode')==0 and receipt.get('disposition')=='succeeded' and
+                      receipt.get('output_sha256')==hashlib.sha256((directory/output).read_bytes()).hexdigest(),
+                      'LOCAL_IMAGE_OPERATION_UNVERIFIED')
+        scan=S.baseline_file(directory/'image.trivy.json')
+        counts=scan_observation(scan,R.private_json(directory/'scanner-version.json','LOCAL_IMAGE_DB_UNVERIFIED'),
+                                datetime.fromisoformat(intent['started_at']).timestamp())
+        R.require(scan['Metadata']['ImageConfig']['config']['Labels'].get('io.shiro.local.binary-sha256')==binary['sha256'],
+                  'LOCAL_IMAGE_ATTRIBUTION_UNVERIFIED')
+        observed_digest=S.command(['crane','digest',TAG,'--tarball',str(directory/'source-controller.tar')],root,timeout=60).decode().strip()
+        R.require(observed_digest==(directory/'image-digest.stdout').read_text().strip(),
+                  'LOCAL_IMAGE_ARCHIVE_CHANGED')
+        P.Scan.check_budget(directory)
+        result=dict(classification='PARENT_VERIFIED_LOCAL_IMAGE_SCAN_EVIDENCE_ONLY',original_summary=original,
+            severity_counts=counts,archive_sha256=hashlib.sha256((directory/'source-controller.tar').read_bytes()).hexdigest(),
+            local_image_digest=(directory/'image-digest.stdout').read_text().strip(),binary_sha256=binary['sha256'],
+            runtime_unchanged=True,profiles=profiles,operation_replay=False,model_calls=0,
+            tests_complete=False,publisher_verified=False,admission=False,gate_acceptance=False)
+        R.save_json(directory/'parent-resolution.json',result)
+        return result
     finally:fcntl.flock(fd,fcntl.LOCK_UN);os.close(fd)
 
 

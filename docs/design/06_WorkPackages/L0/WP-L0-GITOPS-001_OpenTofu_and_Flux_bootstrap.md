@@ -5,12 +5,41 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.188"
+version: "0.189"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: parent-verified local source-controller full-image scan milestone
+
+`image-qv4_7qqh` assembled a local archive from exact candidate child5f2e5cd1 and
+the patched Go1.26.6 binary899cfcbc. No execution/import/load/push occurred. Local
+image digest is `sha256:4b83002260e14b92ea5e4da0d9d40d32086900f7c1fc4098c46e3fac01084262`;
+archive SHA2560bdac040. Metadata explicitly marks unsigned Shirokuma local patched
+provenance, not an upstream release/signature. Full-image Trivy includes OS17
+Alpine3.23.6 packages and Go317 packages with stdlibv1.26.6; **HIGH0/CRITICAL0,
+MEDIUM3/LOW2/UNKNOWN1**. Full findings and independent Syft SBOM remain private.
+
+Original parent `LOCAL_IMAGE_SCAN_UNVERIFIED` is preserved: the scanner's
+stdlib Version was `v1.26.6`, while the validator expected `1.26.6`. Regression
+fix accepts only those exact equivalents, rejecting wrong/RC/missing versions,
+missing OS or mismatched binary scope. Parent independently reobserved completed
+command dispositions/output hashes, binary/build/DB/time/config attribution and
+local archive digest without retrieval/assembly/scan replay. Separate resolution:
+`tmp/local-experiment/flux-local-image/image-qv4_7qqh/parent-resolution.json`.
+Current pins/ledger unchanged, all profiles Stopped, no model starts (516/600).
+
+This proves one derived archive's narrow scan evidence, not runtime functionality,
+new-toolchain test completion, publisher verification or admission/L0 acceptance.
+Tests remain capacity-held; two binary execution attempts exhausted, no third
+scheduled. Other controllers/source/enforcement remain open. No runtime successor
+or active invocation after reobservation. Next capability must be a distinct
+evidence-reviewed test-capacity/other-controller approach; no counter reset.
+Image4 focused tests/design-context/secret/diff pass; broader failures retained.
+Recovery is repository-only rollback, preserving all archive/layers/cache/source/
+failure records and retained disks/backups. No auto-cleanup or registry publication.
 
 ## 2026-10-08: parent binary review and separate offline image-archive stage
 

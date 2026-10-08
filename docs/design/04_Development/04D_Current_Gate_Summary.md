@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.28"
+version: "1.29"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,29 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**Parent-verified local full-image milestone (2026-10-08):** isolated source-controller
+archive `image-qv4_7qqh` has **HIGH0/CRITICAL0, MEDIUM3/LOW2/UNKNOWN1**, covering
+Alpine3.23.6 OS17 packages and patched Go1.26.6 binary317 packages. Local image
+digest `sha256:4b83002260e14b92ea5e4da0d9d40d32086900f7c1fc4098c46e3fac01084262`.
+Archive and scan/SBOM/scanner/digest receipts/hashes independently checked;
+unsigned Shirokuma-local attribution binds binary899cfcbc, not upstream signature.
+
+Original image summary stays `LOCAL_IMAGE_SCAN_UNVERIFIED`: Trivy stdlib Version
+`v1.26.6` differed from the original parent expectation `1.26.6`. Exact equivalent
+forms are now accepted, wrong/RC/missing versions and incomplete OS/binary scans
+still reject. Separate `parent-resolution.json` reobserves the completed artifacts
+without retrieval/assembly/scan replay or model starts. All profiles Stopped,
+current ledger/pins unchanged. Usage remains516/600, restart16/100, remaining84.
+
+This is a **single derived full-image scan milestone**, not deployed mitigation,
+test completion, publisher verification, admission or full L0 acceptance. New
+toolchain tests remain incomplete/capacity-held; two binary attempts stay exhausted.
+Other three controllers, source/admission/enforcement remain open. No invocation
+is active after this parent reobservation; no third binary attempt or runtime
+successor has been launched. Next work must select a materially different bounded
+test-capacity/other-controller capability with evidence review, not reset counters
+or infer deployment authority from zero HIGH.
 
 **2026-10-08 final toolchain repair (`gate-ayqdekwa`, parent review pending):**
 Official stable Go1.26.6 archive/checksum/private toolchain verified; same pinned
