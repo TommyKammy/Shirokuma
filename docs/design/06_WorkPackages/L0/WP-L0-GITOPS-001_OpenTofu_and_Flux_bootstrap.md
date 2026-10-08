@@ -5,12 +5,71 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.174"
+version: "0.175"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: repository-only inhibited source candidate (gate-9w3pac_6)
+
+`L0_DEPENDENCY_CONTINUATION`, source_identity/repository_repair: implemented
+`tools/local_experiment/source_candidate.py` and its contract documentation.
+The offline builder binds available full commit
+`0486612d0671c01c16d40ce445e39788d86de69b`, repository tree
+`6fcbf835aa2d03cb2d1ae1863d139a46a46056e4`, fixed root path
+`./deploy/gitops/clusters/local-lite` and all six child path trees. This is the
+existing pre-increment commit, not a claim that a source fetched the eventual
+worker HEAD. Git lazy fetching/replacement objects are disabled; symbolic/short
+refs, unavailable/noncommit objects and missing/blob/traversal paths fail closed.
+Dirty working-tree edits do not alter commit-bound identity.
+
+Candidate source has only `ref.commit`, suspension true and **unselected local
+transport**. It is a JSON contract, not an applyable Kubernetes manifest. All
+seven candidate Kustomizations stay suspended; four existing pinned controller
+images/replicas1 are recorded. UID/spec hashes bind observed owners, Flux, Jobs
+and PV/PVCs privately. Jobs stay suspended, retained app owners zero. Existing
+source URL is neither copied into candidate transport nor changed. Fetched and
+applied commit evidence stays null; artifact bytes, transitive rendering, local
+admission and full gate acceptance remain unverified. The old committed root
+still lacks these suspensions and must not be applied.
+
+Fresh complete probes at 04:56:18, 04:58:38 and 04:59:46 UTC pass on the
+already-running dedicated VM/node: Node/fresh Lease, four digest-pinned ready
+controllers/matching Pods, Flux8/Jobs3 suspended, retained application owners0,
+original PV/PVC identities/specs. Initial/final 51 UID sets and non-Lease specs
+match; complete Flux/PV/PVC objects unchanged. Final candidate guards match the
+fresh final probe. Fourteen Docker containers are system/Flux names only; not
+a whole-runtime census. No startup, fetch, artifact download, apply, source
+redirection, unsuspension, writer start, new resource or policy activation.
+Fresh doctor 04:59:45 UTC remains degraded for intentional suspension/replicas0.
+
+Eight candidate regressions pass, including dirty-checkout isolation, unavailable
+objects, path/blob rejection, source/owner/inhibition/retention drift and image
+pins. Supervisor15, continuation5, corrected runner22, bears11, full Go CLI/
+internal tests, design-context, secret scan and staged diff check pass. The initial
+wrong runner test pattern discovered zero tests and is retained, not counted as a
+pass; corrected filename was run separately. `make verify-local-experiment`
+still fails at policy166:
+11 failures/2 errors, unchanged historical scope; no waiver or unrelated repair.
+
+Private candidate, probes, guard comparison, doctor and verification logs:
+`tmp/local-experiment/autonomous-runner/gate-9w3pac_6/attempt-001/source-candidate/`.
+Typed proposal:
+`tmp/local-experiment/gate-continuation/series-fpveebm3/proposal-001.json`.
+Next concrete dependency is read-only **local_admission/diagnose**: identify
+which candidate/image identity requirements existing strict publisher checks
+cannot satisfy locally, without changing policy bindings or transport. Parent
+must independently review terminal worker, live scope and proposal before a
+new mission. No acceptance checkbox or gate-pass claim. OAuth-only explicit Sol
+preflight passed, not billing proof; original Vault untouched, direct sync pending.
+
+Recovery: repository rollback of builder/tests/docs/Make target only; no runtime
+fields changed. Leave existing inhibited node/controllers for parent independent
+probe and normal VM stop only after this worker is idle/non-active. Never restore
+app counts or unsuspend Jobs/sources automatically. All retained disks, volumes,
+PV/PVCs, backups, original failures and stopped-run evidence remain preserved.
 
 ## 2026-10-08: suspended source provenance diagnosed (gate-x1girm_f)
 

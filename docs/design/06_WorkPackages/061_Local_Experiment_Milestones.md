@@ -5,12 +5,39 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-08
-version: "5.543"
+version: "5.544"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-08: inhibited commit/tree-bound source candidate, not fetched/applied evidence
+
+WP-L0-GITOPS-001 / `gate-9w3pac_6`, source_identity/repository_repair:
+offline builder binds existing full commit `0486612d0671c01c16d40ce445e39788d86de69b`,
+repository tree, root and six child path trees, with source/root/children all
+suspended and four digest-pinned controllers at replicas1. UID/spec guards bind
+observed owners/Jobs/PV/PVCs. Local transport is intentionally unselected;
+contract is not an apply manifest. No URL change/fetch/apply/unsuspension/policy
+activation; fetched/applied evidence null, artifact/render/admission acceptance
+unverified. Existing unsafe branch-only root must still not be applied.
+
+Fresh complete 51-object probes on already-running lab pass, latest 04:59:46 UTC;
+initial/final UID sets and non-Lease specs match, Flux/PV/PVC full objects unchanged,
+candidate guards match final probe. No runtime mutation/start. Doctor remains
+degraded for intentional suspension/app replicas0. Candidate8/supervisor15/
+continuation5/corrected runner22/bears11/Go/design-context pass. Initial wrong
+runner pattern ran zero tests, preserved and corrected. Local verifier still
+fails policy166 with 11 failures/2 errors; no unrelated fix or acceptance waiver.
+
+Private candidate/evidence, typed proposal and rollback in newest WP entry.
+Next proposed dependency: read-only local-admission diagnosis against strict
+publisher identity requirements, no binding activation/transport selection.
+Parent review pending; leave safe node/controllers available for independent
+probe/terminal-worker cleanup. Keep writers0/Jobs and Flux suspended, all retained
+identities/disks/volumes/backups/failures. OAuth-only Sol checked, not billing
+proof; Vault sync pending. All L0 checkboxes/operator acceptance remain open.
 
 ## 2026-10-08: suspended Flux revisions mapped to local Git objects
 

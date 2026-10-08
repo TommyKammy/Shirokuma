@@ -736,6 +736,11 @@ test-local-autonomous-runner:
 
 verify-local-experiment: test-local-autonomous-runner
 
+.PHONY: test-local-source-candidate
+test-local-source-candidate:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_source_candidate.py'
+verify-local-experiment: test-local-source-candidate
+
 .PHONY: local-mlflow-sync local-mlflow-prepare local-mlflow-plan local-mlflow-import local-mlflow-start local-mlflow-status local-mlflow-stop test-local-mlflow
 local-mlflow-sync:
 	@uv sync --project tools/local_experiment/mlflow --locked --no-build

@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.12"
+version: "1.13"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,19 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**2026-10-08 inhibited candidate (`gate-9w3pac_6`, parent review pending):**
+Repository-only contract binds available full commit `0486612d`/tree and root/six
+child paths, source/root/children suspended, four existing pinned controllers1,
+private UID/spec guards. Transport unselected; no fetch/apply/redirect/unsuspend
+or policy activation. Candidate identity is not fetched/applied provenance;
+existing branch-only root remains unsafe to apply. Fresh live51 probes pass on
+already-running lab, final 04:59:46 UTC, UIDs/non-Lease specs and Flux/PV/PVC
+objects unchanged. Doctor still degraded; policy11 failures/2 errors preserved.
+Next proposal is read-only local_admission/diagnose against strict publisher
+identity requirements; parent must independently review before selecting it.
+No L0/operator acceptance or checkbox change; Vault sync pending. Runtime left
+available for parent probe/terminal-worker cleanup, never restore writers/Jobs.
 
 **Transport reconciliation follow-up:** doctor worker `gate-uc9gsp8y` passed
 parent review and the continuation automatically selected source diagnosis.
