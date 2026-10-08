@@ -261,6 +261,32 @@ def reviewed_safety_stop(root: Path, prior: Path, summary: dict, head: str,
     return True
 
 
+def reviewed_transport_stop(root: Path, prior: Path, summary: dict, head: str) -> bool:
+    """Separate server reconciliation, not a recreated missing runner result."""
+    if summary.get('reason') != 'OPENCODE_RUN_FAILED' or summary.get('attempts') != 1:
+        return False
+    require(not (prior/'attempt-001/result.json').exists(), 'TRANSPORT_REVIEW_INVALID')
+    checkpoint = private_json(prior/'attempt-001/checkpoint.json', 'TRANSPORT_REVIEW_INVALID')
+    review = private_json(root/'tmp/local-experiment/gate-batches'/f'transport-review-{prior.name}.json',
+                          'TRANSPORT_REVIEW_REQUIRED')
+    before = review.get('before_head')
+    require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
+            review.get('original_summary') == summary and review.get('checkpoint') == checkpoint and
+            review.get('decision') == 'server_success_new_mission_no_replay' and
+            review.get('server_outcome') == 'succeeded_idle_nonactive' and
+            type(review.get('last_session_id')) is str and
+            re.fullmatch(r'ses_[A-Za-z0-9]+', review['last_session_id']) and
+            type(before) is str and re.fullmatch(r'[0-9a-f]{40}', before) and
+            checkpoint.get('head') != before and
+            read_checkpoint(prior/'attempt-001/checkpoint.json',
+                            {'nonce': checkpoint.get('nonce'), 'iteration': 1}, checkpoint.get('head'))
+            in ('more_work', 'complete') and
+            git(root, 'merge-base', '--is-ancestor', before, checkpoint['head']) == '' and
+            git(root, 'merge-base', '--is-ancestor', checkpoint['head'], head) == '',
+            'TRANSPORT_REVIEW_INVALID')
+    return True
+
+
 def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
                    repair_only: bool = False) -> None:
     """Require an independently reviewed boundary; refuse missing/unknown runs.
@@ -314,14 +340,16 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
                     stat.S_IMODE(state.st_mode) == 0o700, 'PRIOR_GATE_RUN_UNVERIFIED')
             result = private_json(prior / 'summary.json', 'PRIOR_GATE_RUN_UNVERIFIED')
             number = result.get('attempts')
+            transport = result.get('reason') == 'OPENCODE_RUN_FAILED' and number == 1
             require(type(number) is int and 0 <= number <= MAX_RUNS and
                     result.get('schema_version') == 1 and
                     result.get('result') == 'stopped' and
                     len(list(prior.glob('attempt-*'))) == number and
-                    all((prior / f'attempt-{i:03d}/result.json').exists()
-                         for i in range(1, number + 1)), 'PRIOR_GATE_RUN_UNVERIFIED')
+                    (transport or all((prior / f'attempt-{i:03d}/result.json').exists()
+                         for i in range(1, number + 1))), 'PRIOR_GATE_RUN_UNVERIFIED')
             require(result.get('reason') == 'run_budget_reached' or
-                    reviewed_safety_stop(root, prior, result, head, repair_only),
+                    (reviewed_transport_stop(root, prior, result, head) if transport else
+                     reviewed_safety_stop(root, prior, result, head, repair_only)),
                     'PRIOR_GATE_RUN_UNVERIFIED')
             started += number
         require(started + max_runs <= SERIES_LIMIT, 'SERIES_BUDGET_EXCEEDED')

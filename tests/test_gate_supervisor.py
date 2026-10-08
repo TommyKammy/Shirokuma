@@ -1,4 +1,5 @@
 import copy
+import json
 from datetime import datetime, timezone, timedelta
 import unittest
 import tempfile
@@ -162,7 +163,7 @@ class SupervisorTests(unittest.TestCase):
                     'location': {'directory': str(root)}}
             for session, active in [(dict(base, outcome='failed'), {}), (base, {'ses_test': {}})]:
                 with mock.patch.object(S, 'api', side_effect=[{'data': session}, {'data': active}]):
-                    with self.assertRaisesRegex(S.R.RunnerError, 'SESSION_NOT_TERMINAL'):
+                    with self.assertRaisesRegex(S.R.RunnerError, 'SESSION_NOT_TERMINAL|SERVER_SESSION_FAILED'):
                         S.terminal(root, prior)
 
     def test_automatic_successor_only_after_live_review(self):
@@ -187,6 +188,28 @@ class SupervisorTests(unittest.TestCase):
                     S.supervise(root, root/'vault', 2, 120)
                     self.assertEqual([c.kwargs['mission']['gate_id'] for c in run.call_args_list], [S.REPAIR, S.READY])
                     self.assertEqual(probe.call_count, 2)
+
+    def test_transport_success_needs_exact_error_checkpoint_and_server_proof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); prior = root/'gate-test'; attempt = prior/'attempt-001'
+            attempt.mkdir(parents=True)
+            S.R.save_json(prior/'summary.json', dict(attempts=1, reason='OPENCODE_RUN_FAILED'))
+            S.R.save_json(attempt/'checkpoint.json', dict(schema_version=1, nonce='a'*32,
+                iteration=1, head='b'*40, decision='continue', reason='more_work'))
+            session = dict(id='ses_test', outcome='succeeded', time={'idle':1},
+                          model={'providerID':'openai','id':'gpt-6.1-sol'},
+                          location={'directory':str(root)})
+            for kind, success in [('provider.transport',True),('provider.authentication',False)]:
+                (attempt/'stdout.jsonl').write_text(json.dumps(dict(type='error',sessionID='ses_test',
+                    error={'type':kind,'message':'WebSocket closed with code 1000'}))+'\n')
+                with mock.patch.object(S,'api',side_effect=[{'data':session},{'data':{}}]), \
+                     mock.patch.object(S.R,'git',side_effect=lambda root,*args: 'b'*40 if args[0]=='rev-parse' else ''):
+                    if success:
+                        _, result, _ = S.terminal(root,prior,expected_before='a'*40)
+                        self.assertTrue(result['server_reconciled_only'])
+                    else:
+                        with self.assertRaises(S.R.RunnerError): S.terminal(root,prior,expected_before='a'*40)
+            self.assertFalse((attempt/'result.json').exists())
 
     def test_completed_repair_resume_selects_next_gate_without_repair_worker(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:

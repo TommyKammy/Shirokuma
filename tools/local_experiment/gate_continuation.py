@@ -15,6 +15,7 @@ import stat
 import subprocess
 import tempfile
 import time
+import re
 
 from tools.local_experiment import gate_supervisor as S
 
@@ -99,7 +100,59 @@ def progress(root, before, after, report, directory, number):
     # acceptance. Live readiness and invariant checks are separately mandatory.
 
 
-def run(root, vault, max_sessions, max_minutes):
+def transport_receipt(root, worker, before):
+    summary, result, sid = S.terminal(root, worker, expected_before=before)
+    R.require(result.get('server_reconciled_only') is True and result['reason'] in ('more_work', 'complete'),
+              'TRANSPORT_RECONCILIATION_INVALID')
+    return dict(schema_version=1, source_run=worker.name, original_summary=summary,
+                checkpoint=R.private_json(worker/'attempt-001/checkpoint.json', 'CHECKPOINT_INVALID'),
+                before_head=before, last_session_id=sid, server_outcome='succeeded_idle_nonactive',
+                decision='server_success_new_mission_no_replay')
+
+
+def failed_worker_path(root, reason):
+    match = re.fullmatch(r'OPENCODE_RUN_FAILED evidence=tmp/local-experiment/autonomous-runner/(gate-[a-z0-9_]+)', reason)
+    R.require(match is not None, 'FAILED_RUN_NOT_RECONCILABLE')
+    return root/'tmp/local-experiment/autonomous-runner'/match[1]
+
+
+def reconcile_transport(root, worker, before, deadline):
+    # CLI transport termination is not server cancellation. Wait read-only for
+    # this exact server session; never start another worker while it is active.
+    while True:
+        try:
+            return transport_receipt(root, worker, before)
+        except R.RunnerError as error:
+            if str(error) != 'SESSION_NOT_TERMINAL' or time.time()+5 >= deadline:
+                raise
+            time.sleep(5)
+
+
+def resume_review(root, vault, old, directory):
+    R.require(old.parent == root/'tmp/local-experiment/gate-continuation' and old.name.startswith('series-'),
+              'RESUME_SCOPE_INVALID')
+    summary = R.private_json(old/'summary.json', 'RESUME_UNVERIFIED')
+    R.require(summary.get('classification') == 'HELD', 'RESUME_UNVERIFIED')
+    worker = failed_worker_path(root, summary.get('reason', ''))
+    slots = sorted(old.glob('mission-*.json'))
+    R.require(slots, 'RESUME_UNVERIFIED')
+    number = int(slots[-1].stem.split('-')[-1])
+    prior = R.private_json(slots[-1], 'RESUME_UNVERIFIED')
+    receipt = transport_receipt(root, worker, prior['head_before'])
+    report = proposal(R.private_json(old/f'proposal-{number:03d}.json', 'CONTINUATION_REPORT_INVALID'))
+    after = R.checkout_head(root, vault)
+    observed = S.probe(root, S.READY, directory, 0)
+    doctor(root, directory, 0)
+    progress(root, prior['head_before'], after, report, directory, 0)
+    R.save_json(directory/'resumed-review.json', {'worker': worker.name, 'proposal': report,
+                'live_invariants': observed, 'original_series': old.name, 'no_replay': True})
+    path = root/'tmp/local-experiment/gate-batches'/f'transport-review-{worker.name}.json'
+    R.require(not path.exists(), 'TRANSPORT_ALREADY_RECONCILED')
+    R.save_json(path, receipt)
+    return report
+
+
+def run(root, vault, max_sessions, max_minutes, resume_series=None):
     R.require(1 <= max_sessions <= 96 and 1 <= max_minutes <= R.ORIGINAL_WEEK_MINUTES,
               'BUDGET_INVALID')
     parent = root/'tmp/local-experiment/gate-continuation'
@@ -118,6 +171,10 @@ def run(root, vault, max_sessions, max_minutes):
         deadline = min(time.time()+max_minutes*60, original)
         topic, approach = 'doctor', 'diagnose'
         target = 'Reproduce degraded doctor against inhibited live lab; distinguish incomplete MCP/protocol responses from intentional app/Flux suspension and identify one reproducible gate-linked repair.'
+        if resume_series is not None:
+            report = resume_review(root, vault, resume_series, directory)
+            idle = True
+            topic, approach, target = report['next_topic'], report['next_approach'], report['next_target']
         for number in range(1, max_sessions+1):
             minutes = min(120, int((deadline-time.time())//60))
             R.require(minutes >= 1, 'ORIGINAL_WEEK_OR_LOOP_EXPIRED')
@@ -132,11 +189,18 @@ def run(root, vault, max_sessions, max_minutes):
                       ('baseline', 'target_evidence', 'allowed_scope', 'stop_conditions', 'recovery')), 'MISSION_INVALID')
             R.save_json(directory/f'mission-{number:03d}.json', mission)
             idle = False
-            reason, worker = R.run(root, vault, 'opencode', max_runs=1, max_minutes=minutes,
-                                   model=S.MODEL, mission=mission)
-            S.terminal(root, worker)
+            receipt = None
+            worker_deadline = min(deadline, time.time()+minutes*60)
+            try:
+                reason, worker = R.run(root, vault, 'opencode', max_runs=1, max_minutes=minutes,
+                                       model=S.MODEL, mission=mission)
+                S.terminal(root, worker)
+            except R.RunnerError as error:
+                worker = failed_worker_path(root, str(error))
+                receipt = reconcile_transport(root, worker, before, worker_deadline)
+                reason = 'server_reconciled_only'
             idle = True
-            R.require(reason in ('run_budget_reached', 'agent_complete_claim'), 'STOP_CLASSIFICATION_UNSUPPORTED')
+            R.require(reason in ('run_budget_reached', 'agent_complete_claim', 'server_reconciled_only'), 'STOP_CLASSIFICATION_UNSUPPORTED')
             report = proposal(R.private_json(report_path, 'CONTINUATION_REPORT_INVALID'))
             R.require((report['topic'], report['approach']) == (topic, approach), 'CONTINUATION_REPORT_SCOPE_CHANGED')
             after = R.checkout_head(root, vault)
@@ -150,6 +214,8 @@ def run(root, vault, max_sessions, max_minutes):
             if reason == 'agent_complete_claim':
                 R.save_json(root/'tmp/local-experiment/gate-batches'/f'review-{worker.name}.json',
                             S.attestation(root, worker, after))
+            if receipt is not None:
+                R.save_json(root/'tmp/local-experiment/gate-batches'/f'transport-review-{worker.name}.json', receipt)
             topic, approach, target = report['next_topic'], report['next_approach'], report['next_target']
             print(f'CONTINUATION_REVIEWED session={number} next={topic}/{approach}', flush=True)
         R.save_json(directory/'summary.json', {'classification': 'SESSION_ALLOCATION_REACHED', 'sessions': max_sessions})
@@ -176,6 +242,7 @@ def main():
     p.add_argument('--use-pro-weekly-limit', action='store_true')
     p.add_argument('--max-sessions', type=int, default=96)
     p.add_argument('--max-minutes', type=int, default=R.ORIGINAL_WEEK_MINUTES)
+    p.add_argument('--resume-series', type=Path, help='review a completed transport-failed worker without replay')
     args = p.parse_args()
     if not args.execute:
         print(json.dumps({'mode': 'plan-only', 'active_calls': 0, 'topics': sorted(TOPICS),
@@ -186,7 +253,7 @@ def main():
         old = signal.getsignal(signal.SIGTERM)
         signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
         try:
-            d = run(R.ROOT, R.VAULT, args.max_sessions, args.max_minutes)
+            d = run(R.ROOT, R.VAULT, args.max_sessions, args.max_minutes, args.resume_series)
         finally:
             signal.signal(signal.SIGTERM, old)
         print(json.dumps({'evidence': str(d), 'full_acceptance': False}))

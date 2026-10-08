@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.11"
+version: "1.12"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -18,7 +18,18 @@ The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
 
-**2026-10-08 source diagnosis (`gate-x1girm_f`, parent review pending):**
+**Transport reconciliation follow-up:** doctor worker `gate-uc9gsp8y` passed
+parent review and the continuation automatically selected source diagnosis.
+`gate-x1girm_f` then exited CLI with WebSocket code1000, but exact server session
+`ses_ee62f34cbffejRW24zoADBOUrn` is independently succeeded/idle/non-active.
+Its valid continue/more_work checkpoint HEAD is
+`e147d0a4c2c2c10b44ef14f9fba65ff84f3cbbfd`; checkout is clean. CLI summary stays
+`OPENCODE_RUN_FAILED`, runner result remains missing. The new transport-only
+reconciliation route preserves these originals and requires fresh parent
+runtime/doctor/proposal review before the next repository-only source candidate
+mission. Current starts: **506/600, restart6/100, remaining94**; no deadline renewal.
+
+**2026-10-08 source diagnosis (`gate-x1girm_f`, parent live review pending):**
 Fresh inhibited live51 probe passes; existing VM/node/controllers were already
 running and no runtime mutation/start was performed. Source Ready generation3
 does not refresh ArtifactInStorage generation2; root/all six child Kustomization

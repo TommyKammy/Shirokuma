@@ -40,6 +40,29 @@ the parent stops only the dedicated VM when worker state is confirmed terminal.
 It shares the finite supervisor lock, uses no launchd/cron and does not revive
 the old 1000-extension. Private state is under `tmp/local-experiment/gate-continuation/`.
 
+### CLI transport failures with completed server work
+
+A WebSocket code1000 CLI failure is **not** replay permission or remote
+cancellation. The parent may wait read-only for that exact server session,
+then reconcile only when it is succeeded/idle/non-active, the stream's errors
+are exclusively `provider.transport` / `WebSocket closed with code 1000`, a
+valid `more_work`/`complete` checkpoint exists and its HEAD descends from the
+original mission. Unknown/failed/auth/quota/other-error states still hold.
+Fresh live invariants, doctor and proposal review must pass before a successor.
+
+The parent writes a separate 0600 `transport-review-<gate-run>.json` with
+schema_version=1, source_run, exact original_summary/checkpoint, before_head,
+last_session_id, server_outcome=`succeeded_idle_nonactive`, and
+decision=`server_success_new_mission_no_replay`. The original CLI failure and
+missing runner result remain missing; no `result.json` is synthesized. The
+runner checks this attestation's evidence binding/ancestry, not the remote truth;
+the parent queries the actual server. All starts still consume the same budget.
+
+`--resume-series <absolute prior series directory>` independently reviews a
+transport-held completed worker and its proposal without rerunning it, then
+selects its next bounded mission. It is not an arbitrary error override and
+cannot extend the original week or reset persistent approach counters.
+
 **2026-10-08 policy precedence:** DEV-04C now authorizes finite autonomous
 parent supervision: classify a terminal stop, perform authorized bounded
 investigation/repair, independently verify outcomes, then select a new mission.

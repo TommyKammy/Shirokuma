@@ -62,11 +62,12 @@ def baseline_file(path):
         os.close(fd)
 
 
-def terminal(root, prior):
+def terminal(root, prior, expected_before=None):
     summary = R.private_json(prior/'summary.json', 'PRIOR_GATE_RUN_UNVERIFIED')
     R.require(summary['attempts'] == 1, 'SUPERVISOR_SINGLE_WORKER_REQUIRED')
     attempt = prior/'attempt-001'
     ids = set()
+    errors = []
     def walk(value):
         if isinstance(value, dict):
             for k, v in value.items():
@@ -79,20 +80,36 @@ def terminal(root, prior):
                 walk(v)
     for line in (attempt/'stdout.jsonl').read_text().splitlines():
         try:
-            walk(json.loads(line))
+            event = json.loads(line)
+            walk(event)
+            if isinstance(event, dict) and event.get('type') == 'error':
+                errors.append(event.get('error', {}))
         except ValueError:
             pass
     R.require(len(ids) == 1, 'SESSION_ID_UNVERIFIED')
     sid = ids.pop()
     session = api(root, '/api/session/'+sid)['data']
     active = api(root, '/api/session/active')
+    R.require(session.get('outcome') not in ('failed', 'cancelled', 'interrupted'),
+              'SERVER_SESSION_FAILED')
     R.require(session['outcome'] == 'succeeded' and session['time'].get('idle') and
               sid not in json.dumps(active) and
               session['model']['providerID'] == 'openai' and
               session['model']['id'] == 'gpt-6.1-sol' and
               session['location']['directory'] == str(root), 'SESSION_NOT_TERMINAL')
-    result = R.private_json(attempt/'result.json', 'PRIOR_GATE_RUN_UNVERIFIED')
     checkpoint = R.private_json(attempt/'checkpoint.json', 'PRIOR_GATE_RUN_UNVERIFIED')
+    if not (attempt/'result.json').exists():
+        R.require(summary['reason'] == 'OPENCODE_RUN_FAILED' and expected_before is not None and
+                  errors and all(isinstance(e, dict) and e.get('type') == 'provider.transport' and
+                  e.get('message') == 'WebSocket closed with code 1000' for e in errors),
+                  'FAILED_RUN_NOT_RECONCILABLE')
+        R.require(R.git(root, 'merge-base', '--is-ancestor', expected_before, checkpoint['head']) == '' and
+                  R.git(root, 'merge-base', '--is-ancestor', checkpoint['head'],
+                        R.git(root, 'rev-parse', 'HEAD')) == '', 'TRANSPORT_HISTORY_UNVERIFIED')
+        result = {'head_before': expected_before, 'head_after': checkpoint['head'],
+                  'reason': checkpoint['reason'], 'server_reconciled_only': True}
+    else:
+        result = R.private_json(attempt/'result.json', 'PRIOR_GATE_RUN_UNVERIFIED')
     R.require(R.read_checkpoint(attempt/'checkpoint.json',
               {'nonce': checkpoint['nonce'], 'iteration': 1}, result['head_after']) == result['reason'],
               'CHECKPOINT_INVALID')

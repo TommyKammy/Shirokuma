@@ -204,6 +204,30 @@ class AutonomousRunnerTests(unittest.TestCase):
                          dict(summary, reason='OPENCODE_RUN_FAILED'), head))
         self.assertEqual((prior / 'summary.json').read_bytes(), original)
 
+    def test_transport_review_keeps_missing_result_and_original_failure(self):
+        before = self.git('rev-parse', 'HEAD')
+        self.git('commit', '--allow-empty', '-m', 'transport fixture descendant')
+        after = self.git('rev-parse', 'HEAD')
+        prior = self.root/'tmp/local-experiment/autonomous-runner/gate-transport'
+        summary = dict(schema_version=1, result='stopped', attempts=1, reason='OPENCODE_RUN_FAILED')
+        cp = dict(schema_version=1, nonce='a'*32, iteration=1, head=after,
+                  decision='continue', reason='more_work')
+        self.write_private_json(prior/'summary.json', summary)
+        self.write_private_json(prior/'attempt-001/checkpoint.json', cp)
+        with self.assertRaises(R.RunnerError): R.reviewed_transport_stop(self.root, prior, summary, after)
+        review = dict(schema_version=1, source_run=prior.name, original_summary=summary,
+                      checkpoint=cp, before_head=before, last_session_id='ses_fixture',
+                      server_outcome='succeeded_idle_nonactive', decision='server_success_new_mission_no_replay')
+        path = self.root/'tmp/local-experiment/gate-batches/transport-review-gate-transport.json'
+        self.write_private_json(path, review)
+        self.assertTrue(R.reviewed_transport_stop(self.root, prior, summary, after))
+        self.assertFalse((prior/'attempt-001/result.json').exists())
+        self.assertEqual(json.loads((prior/'summary.json').read_text()), summary)
+        for bad in (dict(review, server_outcome='failed'), dict(review, before_head=after),
+                    dict(review, checkpoint=dict(cp, nonce='b'*32))):
+            self.write_private_json(path, bad)
+            with self.assertRaises(R.RunnerError): R.reviewed_transport_stop(self.root, prior, summary, after)
+
     def test_plan_is_zero_model_calls_and_requires_explicit_budget(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \
