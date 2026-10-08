@@ -4,6 +4,29 @@
 
 ### Exact-digest evidence refresh after completed finding diagnosis
 
+**After candidates remain HIGH:** `flux_local_build_supervisor.py` is a separate
+one-session/120-minute isolated source-controller rebuild mission, default zero
+calls, explicit `--execute --use-pro-weekly-limit` required. Before selecting this
+new approach parent revalidates candidate scans and the absence of newer observed
+same-series stable controller tags. It binds exact three known no-safe holds in
+separate `build-review-<run>.json` records with decision
+`held_scope_isolated_source_build_no_replay`, gate `L0_FLUX_LOCAL_BUILD`, current
+ledger hash and `candidate_summary_sha256`; runner verifies immutable originals,
+checkpoint/HEAD ancestry and hashes. No old scope/counter is reset/replayed.
+
+Only one Linux/ARM64 source-controller binary is in scope: pinned upstream source,
+module fixes, upstream tests and build/SBOM/binary-scan evidence, private source/
+module/toolchain caches. Temporary private Go toolchain download is permitted;
+global installs/settings, image execution/assembly, VM/container starts, current
+pin/ledger changes, approvals/exceptions and runtime successors are excluded.
+At most two persistent build reservations, same cumulative600/original-week/
+OAuth gates. Parent checks stopped profiles, repository/ledger scope, disk bounds
+and inspects ELF/Go build metadata **without executing the binary**. The narrow
+metadata classification does not prove patched package closure, tests, a safe
+OCI base or publisher trust; these require separate evidence review. Unknown CLI
+or operation outcomes hold without replay. New fixed artifacts are experimental
+local provenance, never falsely attributed to the upstream publisher.
+
 **After refresh:** a parent-owned, zero-model-call candidate investigation is
 available via `flux_pin_candidate.py --execute --discovery <absolute discovery>`.
 Public release metadata/install.yaml must already be captured in the private

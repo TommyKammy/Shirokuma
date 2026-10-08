@@ -277,6 +277,15 @@ class AutonomousRunnerTests(unittest.TestCase):
                     dict(review,checkpoint=dict(cp,reason='complete'))):
             self.write_private_json(p,bad)
             with self.assertRaises(R.RunnerError): R.reviewed_refresh_stop(self.root,prior,summary,head,gate)
+        candidate=self.root/'tmp/local-experiment/flux-pin-candidate/candidate-hn94027w/summary.json'
+        candidate.parent.mkdir(parents=True);candidate.write_text('{}')
+        build=dict(review,allowed_gate='L0_FLUX_LOCAL_BUILD',
+                   decision='held_scope_isolated_source_build_no_replay',
+                   candidate_summary_sha256=R.hashlib.sha256(candidate.read_bytes()).hexdigest())
+        self.write_private_json(p.with_name('build-review-gate-5d3ur67c.json'),build)
+        self.assertTrue(R.reviewed_refresh_stop(self.root,prior,summary,head,'L0_FLUX_LOCAL_BUILD'))
+        candidate.write_text('{"changed":true}')
+        with self.assertRaises(R.RunnerError):R.reviewed_refresh_stop(self.root,prior,summary,head,'L0_FLUX_LOCAL_BUILD')
 
     def test_plan_is_zero_model_calls_and_requires_explicit_budget(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \

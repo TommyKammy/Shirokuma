@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-08
-version: "1.23"
+version: "1.24"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -17,6 +17,24 @@ tags: [shirokuma, local, handoff, gates]
 The integrated plan's L0→L1→L2 sequence and actual gate measurements still
 matter. ADR-0034 permits local experiments across dependency-ready WPs,
 but that flexibility does not prove the L0 gate was passed.
+
+**Candidate result and next repair approach:** `candidate-hn94027w` collected
+Flux v2.9.6 exact ARM64 children: S/K/H/N HIGH9/5/5/9, CRITICAL0 (28 occurrences).
+Current pinned images still have94 HIGH; the candidate comparison is **not** an
+applied mitigation. Four index/child bindings, scans/SBOMs and DB times retained;
+publisher unverified, admission false, existing pins/ledger/runtime unchanged.
+Public same-series controller tag lists independently show no newer stable
+patch tags for all four components. Do not repeat candidate scans to fill slots.
+
+Next `flux_local_build_supervisor.py` selects a materially different repair:
+ONE isolated source-controller v1.9.6 patched Linux/ARM64 binary, pinned upstream
+source, corrected module versions, tests/build/SBOM/scan evidence. One model
+session/120minutes, at most two persistent reservations, original week/600/OAuth
+unchanged. Temporary private module/toolchain caches only; no global install,
+image execution/image assembly, VM/container start, pin/ledger changes, risk
+approvals or runtime successor. Separate build-review binds known original holds
+and candidate-summary hash; parent inspects ELF/Go metadata, not operator/image
+acceptance. Before launch usage remains514/600, remaining86; launch/result separate.
 
 **Parent review and next measurable dependency:** `gate-3f5odnk2` is independently
 succeeded/idle/non-active (`ses_ee5db2f1affem4NZko8BBCpwyA`), valid no_safe_work,

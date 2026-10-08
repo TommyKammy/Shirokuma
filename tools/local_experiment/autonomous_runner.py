@@ -321,21 +321,29 @@ def reviewed_independent_stop(root: Path, prior: Path, summary: dict, head: str,
 def reviewed_refresh_stop(root: Path, prior: Path, summary: dict, head: str,
                           next_gate: str | None) -> bool:
     """Evidence-only capability; original admission/finding scopes remain held."""
-    if next_gate != 'L0_FLUX_EVIDENCE_REFRESH' or prior.name not in ('gate-azr7paf4', 'gate-5d3ur67c'):
+    gates = {
+        'L0_FLUX_EVIDENCE_REFRESH': ('refresh', ('gate-azr7paf4', 'gate-5d3ur67c')),
+        'L0_FLUX_LOCAL_BUILD': ('build', ('gate-azr7paf4', 'gate-5d3ur67c', 'gate-3f5odnk2')),
+    }
+    if next_gate not in gates or prior.name not in gates[next_gate][1]:
         return False
+    prefix, _ = gates[next_gate]
     require(summary.get('reason') == 'agent_no_safe_work_claim' and summary.get('attempts') == 1,
             'REFRESH_REVIEW_INVALID')
     last = prior/'attempt-001'
     result = private_json(last/'result.json', 'REFRESH_REVIEW_INVALID')
     checkpoint = private_json(last/'checkpoint.json', 'REFRESH_REVIEW_INVALID')
-    review = private_json(root/'tmp/local-experiment/gate-batches'/f'refresh-review-{prior.name}.json',
+    review = private_json(root/'tmp/local-experiment/gate-batches'/f'{prefix}-review-{prior.name}.json',
                           'REFRESH_REVIEW_REQUIRED')
     reviewed_head = review.get('reviewed_head')
     require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
             review.get('original_summary') == summary and review.get('original_result') == result and
             review.get('checkpoint') == checkpoint and result.get('reason') == 'no_safe_work' and
             review.get('allowed_gate') == next_gate and
-            review.get('decision') == 'held_scope_exact_digest_evidence_refresh_no_replay' and
+            review.get('decision') == ('held_scope_exact_digest_evidence_refresh_no_replay' if prefix == 'refresh'
+                                      else 'held_scope_isolated_source_build_no_replay') and
+            (prefix != 'build' or review.get('candidate_summary_sha256') ==
+             hashlib.sha256((root/'tmp/local-experiment/flux-pin-candidate/candidate-hn94027w/summary.json').read_bytes()).hexdigest()) and
             review.get('server_outcome') == 'succeeded_idle_nonactive' and
             type(review.get('last_session_id')) is str and
             re.fullmatch(r'ses_[A-Za-z0-9]+', review['last_session_id']) and

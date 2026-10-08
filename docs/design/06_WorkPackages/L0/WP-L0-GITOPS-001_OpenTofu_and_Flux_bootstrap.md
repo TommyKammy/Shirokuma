@@ -5,12 +5,37 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-08
-version: "0.183"
+version: "0.184"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-08: upstream candidate remains rejected; isolate source-controller rebuild
+
+Parent candidate collection completed: Flux v2.9.6 immutable ARM64 S/K/H/N
+HIGH9/5/5/9, CRITICAL0, 28 occurrences versus current pin94. Full index-to-child,
+fresh scans/SBOMs/DB observations in
+`tmp/local-experiment/flux-pin-candidate/candidate-hn94027w/`. No publisher proof,
+admission=false, all profiles Stopped, original ledger/pins unchanged. No applied
+mitigation. Four additional read-only tag lists show no newer stable same-series
+controller patches, receipts retained; no tag resolution/scan replay.
+
+New bounded approach is isolated source-controller v1.9.6 source rebuild only.
+Current source candidate findings require fixed go-git5.19.2, Fulcio1.8.6,
+x/crypto0.55.0, x/mod0.40.0, grpc1.83.2 and oras-go2.6.2 or proven stable fixed
+successors. Resolve upstream source tag once to full commit/tree, preserve patch,
+compile/test Linux/ARM64 with private module/toolchain caches, retain build metadata,
+SBOM/fresh binary scan and failures. One model session/120minutes, unchanged
+budget/week/OAuth and old counters; new build approach at most two reservations.
+Parent rechecks candidate/current ledger/terminal holds, then ELF/Go metadata
+independently. Binary evidence is not a fixed full OCI image or functional/runtime
+acceptance. Other three controllers/base packages and publisher/source/admission
+gates remain open; no approval/exception, pin replacement, image execution/assembly,
+VM/container startup, activation, source fetch/apply/unsuspend. Model launch and
+actual build results recorded separately. Repository-only rollback; preserve all
+source snapshots, failed results, caches and retained backups/PV/PVC/disk identities.
 
 ## 2026-10-08: parent refresh verification and isolated candidate investigation
 
