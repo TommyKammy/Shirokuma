@@ -60,6 +60,18 @@ evidence refuses launch; a batch counts against the original 1000 ceiling
 including failed starts. A prior nonbudget or missing gate-run summary
 requires investigation, not a blind next batch.
 
+A terminal `agent_safety_boundary_claim` may permit a **new** mission only
+after an independent review resolves its blocker. Preserve the original
+summary/result/checkpoint and specific server session. The private 0600
+`gate-batches/review-<gate-run>.json` attests schema_version=1, source_run,
+exact original_summary and original_result, resolution_head (full descendant
+commit), last_session_id, server_outcome=`succeeded_idle_nonactive`, and
+decision=`blocker_resolved_new_mission_no_replay`. The runner validates the
+original safety checkpoint and ancestry; it does not independently query the
+server or prove the review. Failed/unknown/nonterminal sessions and other
+nonbudget stop reasons remain blocked. This is never permission to repeat the
+old failed action, erase evidence, renew the week or increase the allocation.
+
 Only after all preflights and a current mission selection, plan without a
 model request; then deliberately execute at most six sessions:
 

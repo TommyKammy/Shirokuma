@@ -159,6 +159,39 @@ class AutonomousRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(R.RunnerError, 'REVIEW_HOLD_UNVERIFIED'):
             R.gate_preflight(self.root, head, 1, 1)
 
+    def test_resolved_safety_stop_needs_terminal_review_and_preserves_original(self):
+        self.write_mission()
+        head = self.git('rev-parse', 'HEAD')
+        prior = self.root / 'tmp/local-experiment/autonomous-runner/gate-safetytest'
+        summary = {'schema_version': 1, 'result': 'stopped', 'attempts': 1,
+                   'reason': 'agent_safety_boundary_claim'}
+        result = {'head_before': head, 'head_after': head, 'reason': 'safety_boundary'}
+        checkpoint = dict(schema_version=1, nonce='a'*32, iteration=1, head=head,
+                          decision='stop', reason='safety_boundary')
+        self.write_private_json(prior / 'summary.json', summary)
+        self.write_private_json(prior / 'attempt-001/result.json', result)
+        self.write_private_json(prior / 'attempt-001/checkpoint.json', checkpoint)
+        original = (prior / 'summary.json').read_bytes()
+        with self.assertRaisesRegex(R.RunnerError, 'SAFETY_STOP_NOT_REVIEWED'):
+            R.reviewed_safety_stop(self.root, prior, summary, head)
+        path = self.root / 'tmp/local-experiment/gate-batches/review-gate-safetytest.json'
+        review = {'schema_version': 1, 'source_run': prior.name,
+                  'original_summary': summary, 'original_result': result,
+                  'decision': 'blocker_resolved_new_mission_no_replay',
+                  'last_session_id': 'ses_fixture123',
+                  'server_outcome': 'succeeded_idle_nonactive', 'resolution_head': head}
+        self.write_private_json(path, review)
+        self.assertTrue(R.reviewed_safety_stop(self.root, prior, summary, head))
+        for bad in (dict(review, server_outcome='failed'),
+                    dict(review, original_result=dict(result, reason='more_work')),
+                    dict(review, resolution_head='0'*40)):
+            self.write_private_json(path, bad)
+            with self.assertRaises(R.RunnerError):
+                R.reviewed_safety_stop(self.root, prior, summary, head)
+        self.assertFalse(R.reviewed_safety_stop(self.root, prior,
+                         dict(summary, reason='OPENCODE_RUN_FAILED'), head))
+        self.assertEqual((prior / 'summary.json').read_bytes(), original)
+
     def test_plan_is_zero_model_calls_and_requires_explicit_budget(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \

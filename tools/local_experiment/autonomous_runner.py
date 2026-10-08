@@ -216,6 +216,42 @@ def private_json(path: Path, code: str) -> dict:
         raise RunnerError(code) from None
 
 
+def reviewed_safety_stop(root: Path, prior: Path, summary: dict, head: str) -> bool:
+    """Accept a resolved, terminal safety stop for a NEW mission, never replay.
+
+    This is an independently prepared review attestation, not remote proof.
+    Missing/failed/unknown sessions still refuse; original evidence is immutable.
+    """
+    if summary.get('reason') != 'agent_safety_boundary_claim':
+        return False
+    number = summary['attempts']
+    require(number > 0, 'PRIOR_GATE_RUN_UNVERIFIED')
+    last = prior / f'attempt-{number:03d}'
+    result = private_json(last / 'result.json', 'PRIOR_GATE_RUN_UNVERIFIED')
+    checkpoint = private_json(last / 'checkpoint.json', 'PRIOR_GATE_RUN_UNVERIFIED')
+    review = private_json(root / 'tmp/local-experiment/gate-batches' /
+                          f'review-{prior.name}.json', 'SAFETY_STOP_NOT_REVIEWED')
+    resolution = review.get('resolution_head')
+    require(type(resolution) is str and re.fullmatch(r'[0-9a-f]{40}', resolution) and
+            type(result.get('head_after')) is str and
+            re.fullmatch(r'[0-9a-f]{40}', result['head_after']) and
+            result.get('reason') == 'safety_boundary' and
+            review.get('schema_version') == 1 and review.get('source_run') == prior.name and
+            review.get('original_summary') == summary and
+            review.get('original_result') == result and
+            review.get('decision') == 'blocker_resolved_new_mission_no_replay' and
+            review.get('server_outcome') == 'succeeded_idle_nonactive' and
+            type(review.get('last_session_id')) is str and
+            re.fullmatch(r'ses_[A-Za-z0-9]+', review['last_session_id']) and
+            read_checkpoint(last / 'checkpoint.json',
+                            {'nonce': checkpoint.get('nonce'), 'iteration': number},
+                            result['head_after']) == 'safety_boundary' and
+            git(root, 'merge-base', '--is-ancestor', result['head_after'], resolution) == '' and
+            git(root, 'merge-base', '--is-ancestor', resolution, head) == '',
+            'SAFETY_STOP_NOT_REVIEWED')
+    return True
+
+
 def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int) -> None:
     """Require an independently reviewed boundary; refuse missing/unknown runs.
 
@@ -270,11 +306,13 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int) -> No
             number = result.get('attempts')
             require(type(number) is int and 0 <= number <= MAX_RUNS and
                     result.get('schema_version') == 1 and
-                    result.get('reason') == 'run_budget_reached' and
                     result.get('result') == 'stopped' and
                     len(list(prior.glob('attempt-*'))) == number and
                     all((prior / f'attempt-{i:03d}/result.json').exists()
-                        for i in range(1, number + 1)), 'PRIOR_GATE_RUN_UNVERIFIED')
+                         for i in range(1, number + 1)), 'PRIOR_GATE_RUN_UNVERIFIED')
+            require(result.get('reason') == 'run_budget_reached' or
+                    reviewed_safety_stop(root, prior, result, head),
+                    'PRIOR_GATE_RUN_UNVERIFIED')
             started += number
         require(started + max_runs <= SERIES_LIMIT, 'SERIES_BUDGET_EXCEEDED')
     except OSError:
