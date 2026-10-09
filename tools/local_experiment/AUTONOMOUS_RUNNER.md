@@ -16,6 +16,83 @@ Go invocation/download/retained writes/runtime or execution successor. Parent
 checks terminal state/diff/retained hashes/stopped profiles and nonempty focused
 test discovery; final plan review and separate test capability are still required.
 
+Planning-only contract: `tools/local_experiment/flux_test_plan.py` has no executor
+or CLI subprocess path. `inspect(checkout)` returns a detailed typed proposal and
+selected source hashes; `validate(proposal)` rejects altered argv, environment,
+unit scope, numeric types, deadlines, budgets and inconsistent hold decisions.
+The small three-key worker `test-plan.json` remains a navigation/control receipt,
+not a source of parent commands or an execution authorization. The parent must
+independently reproduce measurements and review actual inputs, not merely validate
+form. Neither this module nor the existing planning supervisor executes a unit.
+
+#### Small-unit proposal / measured capacity hold (2026-10-09)
+
+Private evidence is repository-relative under
+`tmp/local-experiment/test-capacity-plan/plan-nu7t5m6c/`:
+`detailed-plan-v3.json` (current typed proposal), `evidence.json` (original receipt
+hashes, exact package dispositions, source file hashes), `verification-final.json` and
+focused Python stdout/stderr receipts. The first `detailed-plan.json` is retained
+as an earlier diagnostic, before adding historical cache/temp measurements;
+v2 and initial verification are also retained before package-start replay guards.
+
+- Final Go1.26.6 root operation: terminal -15, 16 tests/subtests/two packages
+  passed; only cache/error/helm package starts observed. Signature operation under
+  Go1.26.5: terminal -15, 19 tests/subtests/two package passes, not full success.
+  Old root Go1.26.5: exit0, 482 tests/subtests/15 packages. Isolated API Go1.26.6:
+  exit0, 12 tests/subtests/one package. Matching stdout hashes bind these counts.
+  Missing/mismatched/nonterminal receipts classify unknown and hold; never replay.
+  An index package start in the final root receipt also holds these proposals,
+  even if that package reports partial passes; it cannot be renamed as new work.
+- Propose **only** two disjoint index groups under Go1.26.6, not the interrupted
+  multi-package root/signature argv: `index-state` (eight top-level tests) and
+  `index-digest` (seven). Both use `./internal/index`, exact anchored `-run`
+  selectors stored in the planner, readonly module mode, vet-off, p1, count1,
+  JSON output, Go timeout120s and parent wall deadline600s including compile.
+  Index was not started in the final interrupted root operation. These smaller
+  new groups do not establish full package/suite/race/vet/signature coverage.
+- Minimum source skeleton: unchanged root go.mod/go.sum, api/go.mod for the
+  local replace declaration, and the two index Go files; 212992 bytes including
+  conservative directory/block rounding. No main/controller/source refetch.
+  Production imports are stdlib plus go-digest; tests add Gomega. Transitive
+  module graph/OS build constraints and copied module integrity still need parent
+  verification. The **whole retained module-cache seed is a conservative upper
+  bound, not a proved minimum dependency closure**; do not authorize bulk copying
+  it from this plan. A smaller offline seed needs separately verified closure.
+- Module-cache measured logical1886563267/charged2094657536 bytes; isolated-copy
+  ceiling2173394944 includes directory blocks. Retained final compile cache
+  charged3015270400/temp1138393088; successful API compile cache194912256/temp0.
+  These are dated retained measurements, not predictions for a cold index test.
+  Per-unit proposed *enforced ceilings*, not measured peak claims: compile1GiB,
+  temp512MiB, receipts16MiB, plus source/seed =3800997888 bytes. No old compile
+  cache reuse/writes; a capacity/deadline failure holds, not a retry invitation.
+- Both builds remain charged8137981952/8127361024 bytes, hard8GiB not exceeded,
+  bulk7GiB writes inhibited. Combined16GiB leaves only914526208 bytes, insufficient
+  even for one proposed seed. Two retained new units would total23867338752 bytes
+  including old builds, exceeding17179869184 by6687469568. Free2415442382848 bytes
+  does not remove that retention limit. No threshold/counter/allowance change.
+- Proposed new exclusive owned0700 scopes: `tmp/rv/ixs` / `tmp/rv/ixd`; fresh
+  writable HOME/GOCACHE/GOMODCACHE/GOPATH/XDG/docker/temp children, TMPDIR `/t`
+  child (repository-relative path in proposal, parent resolves under checkout).
+  Parent checks the resulting absolute socket-path headroom, exact toolchain
+  archive/executable identity, no preexisting scopes/symlinks and copied source
+  hashes. Old toolchain read-only; no inherited GOFLAGS/workspace/proxy/credential
+  routing. GOENV off, GOWORK off, GOTOOLCHAIN local, GOPROXY/GOSUMDB off, CGO off,
+  GOMAXPROCS2. Missing offline inputs hold, no downloads or silent fallback.
+
+Decision **hold**. First parent reviews terminal worker, coherent diff, fixed
+Python tests, original receipts and retained hashes/stopped profiles. No current
+runtime observation was made by this repository-only worker; `before.json` is
+the parent's dated baseline. Worker verification:25 planner/10 capacity tests,
+design-context and diff-check pass; all19 retained baseline hashes match in
+`retained-check.json`. Before selecting even one unit the parent needs a
+materially smaller, identity-verified offline seed and budgets fitting unchanged
+combined retention/free-space limits, plus a separately reviewed fixed-argv
+execution capability with owned-process termination and no-replay receipts.
+No new capability, runner/successor, counter reset, third binary attempt or test
+execution is authorized here. Preserve all old failures/bytes; rollback only
+repository planner/notes changes. Vault untouched, sync pending. Upstream,
+publisher, admission and full L0/operator acceptance remain incomplete.
+
 `--execute --use-pro-weekly-limit --resume-series <absolute restart scope>`
 reviews an already terminal repository repair with the exact original
 SUPERVISOR_PROBE_FAILED hold, without a new worker or rewritten failure. Parent

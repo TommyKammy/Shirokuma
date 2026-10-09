@@ -5,12 +5,40 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-09
-version: "5.554"
+version: "5.555"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-09: L0 typed small-unit plan; unchanged retention capacity holds execution
+
+WP-L0-GITOPS-001 / `gate-vpbadha7` / `L0_FLUX_TEST_CAPACITY_PLAN`: planner and
+validator propose only two fixed disjoint index groups with minimal source,
+isolated offline caches/short temp,120s test timeout/600s wall deadline. Read-only
+original receipt hashes confirm old root482/15 success, signature19/2 known
+terminated, final root16/2 known terminated, API12/1 success; no index start in
+final root. Unknown outcomes hold, no partial-pass acceptance or interrupted replay.
+
+Old charged totals8137981952/8127361024,914526208 remaining under16GiB. Full module
+seed copy upper2173394944 (not minimum closure); per-unit total3800997888 with
+1GiB compile/512MiB temp/16MiB receipts. Both new units retained would exceed
+combined ceiling by6687469568; free2415442382848 does not waive it. Historical
+cache/temp snapshots measured, proposed limits not peak predictions. `hold` needs
+parent-verified smaller offline seed/budgets and a separate fixed execution
+capability, not new allowance/cleanup/counter reset. 25 planner Python tests pass;
+focused checks/receipts in `tmp/local-experiment/test-capacity-plan/plan-nu7t5m6c/`.
+Detailed contract in `tools/local_experiment/AUTONOMOUS_RUNNER.md`, current typed
+`detailed-plan-v3.json` plus original hash bindings `evidence.json` retained.
+
+No Go/build/download/refetch/VM/image/runtime/registry/pin/ledger/approval/admission
+operation, runner or successor. Parent's stopped-profile baseline remains dated,
+not a fresh worker runtime claim. Parent terminal/diff/fixed-tests/retention review
+pending; no full upstream/publisher/admission/L0 acceptance or checkbox change.
+Worker also passes10 focused capacity regressions/design-context/diff-check;
+all19 original baseline hashes match in `retained-check.json`. Original records/
+bytes preserved; repository-only rollback; Vault untouched/sync pending.
 
 ## 2026-10-09: L0 repository capacity/supervision repair, not pilot or acceptance
 

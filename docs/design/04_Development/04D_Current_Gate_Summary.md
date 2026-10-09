@@ -5,12 +5,28 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-09
-version: "1.34"
+version: "1.35"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-09; re-observe before acting)
+
+**Planning worker result (2026-10-09; parent review pending):**
+`gate-vpbadha7` implements typed read-only small-unit planner/validator,25 Python
+regressions. Original hashes classify old root/API successful, signature/final
+root known-terminated; no replay. Two disjoint fixed index groups proposed with
+minimal source/isolated short offline caches and600s unit walls. **Hold:** old
+combined16GiB leaves914526208 bytes, smaller than whole-module seed2173394944
+alone; each proposed bounded unit3800997888. Whole seed is a conservative upper,
+not minimum closure; parent must verify a smaller offline seed and fitting budgets
+before separately selecting any fixed test unit. No Go/build/download/source
+refetch/VM/runtime execution, retained writes/deletion, thresholds/counter resets,
+third binary attempt or successor. Evidence under
+`tmp/local-experiment/test-capacity-plan/plan-nu7t5m6c/`, detail in runner notes/WP.
+Parent terminal/diff/tests/retention/profile review pending; stopped profiles are
+parent baseline, not fresh worker live observations. Vault sync pending; full
+upstream/publisher/admission/L0 acceptance remains unresolved.
 
 **Owner-requested small-unit planning restart (2026-10-09):** select one Sol
 session/max45minutes, gate L0_FLUX_TEST_CAPACITY_PLAN. Investigate known test

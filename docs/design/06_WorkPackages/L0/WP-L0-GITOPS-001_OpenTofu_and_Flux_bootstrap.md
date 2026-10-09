@@ -5,12 +5,47 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-09
-version: "0.191"
+version: "0.192"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-09: small-unit planner implemented; capacity hold, no test execution
+
+`gate-vpbadha7` / `L0_FLUX_TEST_CAPACITY_PLAN`: typed read-only planner/validator
+and focused Python regressions, not a third binary attempt or interrupted-test
+replay. Matching original receipt/output hashes distinguish old root success
+(482/15), known-terminated signature (19/2) and final root (16/2), and completed
+Go1.26.6 API (12/1); partial passes never complete a terminated operation.
+Final root starts cache/error/helm only, not index. Propose two fixed disjoint
+index groups, minimal212992-byte source skeleton, isolated short writable scopes,
+offline/local toolchain environment,120s Go timeout/600s parent wall deadline.
+
+**Hold:** old retained charged8137981952+8127361024 leaves914526208 bytes under
+unchanged combined16GiB. Measured whole-module seed copy upper2173394944 alone
+exceeds this; each proposed bounded unit totals3800997888 bytes (compile1GiB,
+temp512MiB, receipts16MiB). Whole seed is not a proved minimum module closure;
+cache/temp ceilings are proposals, not measured future peaks. Free>2249GiB does
+not waive retention. Historical final/API cache/temp measured read-only, no old
+cache reuse/writes, cleanup or limit/counter reset. Parent must prove a materially
+smaller offline seed/resource plan before considering a fixed single-unit mission.
+
+Detailed proposal/evidence/focused verification:
+`tmp/local-experiment/test-capacity-plan/plan-nu7t5m6c/`; current
+`detailed-plan-v3.json`, immutable original hashes in `evidence.json`, small
+owned0600 `test-plan.json`. See `tools/local_experiment/AUTONOMOUS_RUNNER.md`
+for exact scope, units, budgets, independent review and recovery requirements.
+No Go invocation/build/download, source refetch, runtime/image execution, VM start,
+registry/pin/ledger/approval/admission change, runner or successor. Parent baseline
+records stopped profiles; no fresh runtime observation in this repository worker.
+25 planner regressions pass; parent independently repeats fixed tests and reviews
+terminal/diff/retention before any selection. Hold is not full gate acceptance;
+upstream/signature/publisher/admission/L0 remain open, checkboxes unchanged.
+Focused capacity10/design-context/diff-check also pass; all19 selected baseline
+hashes match in `retained-check.json`, without altering retained inputs.
+Rollback repository changes only, retain all private/original data. Vault sync pending.
 
 ## 2026-10-09: repository capacity observation repair; parent pilot review pending
 
