@@ -79,6 +79,19 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+Subsequent planning worker `gate-vpbadha7` at6a9a0c4 produced typed fixed
+index-state/index-digest proposals and25 passing Python regressions. Parent
+independently confirmed server succeeded/idle, remeasured validated v3 plan,
+unchanged19 retained hashes and all profiles Stopped; separate receipt
+`tmp/local-experiment/test-capacity-plan/plan-nu7t5m6c/parent-independent-review.json`.
+Execution remains held: combined16GiB leaves914526208 bytes, whole offline
+module-seed copy needs2173394944 before compile/temp. No Go invocation/test/
+build/download or unknown/interrupted replay. Minimum package-specific offline
+dependency seed and fitting budgets must be separately derived and verified;
+no deletion, ceiling increase, old-cache writes or third binary attempt.
+Usage518/600, remaining82, original deadline unchanged. Planning acceptance
+does not authorize execution or complete full upstream/publisher/admission/L0.
+
 Parent outcome: separate `tmp/local-experiment/safe-restart-review/review-mv27dels/`
 completed terminal/retention/stopped-profile/capacity review and fixed Go1.26.6
 API pilot. `tmp/rv/api-w8dk1t4k` passed12 tests/subtests and1 package, exit0;

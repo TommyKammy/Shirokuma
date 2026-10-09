@@ -5,12 +5,26 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-09
-version: "1.35"
+version: "1.36"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-09; re-observe before acting)
+
+**Independent parent planning review completed (2026-10-09):** worker
+`gate-vpbadha7` terminal succeeded/idle, clean descendant6a9a0c4. Parent separately
+reran25 planner tests, remeasured all plan inputs and validated detailed-plan-v3;
+measurements/outcomes/units/blockers match,19 retained hashes unchanged and all
+profiles freshly Stopped. Separate `plan-nu7t5m6c/parent-independent-review.json`
+records **hold_test_execution_combined_retention_budget**: remaining914526208
+bytes versus whole module-seed copy2173394944, before new compile/temp budgets.
+No Go test launched or unknown replay, no threshold/data/counter change. Usage
+518/600, remaining82; original deadline unchanged. Next evidence-backed approach
+is read-only derivation/integrity verification of a package-specific minimum
+offline seed and genuinely fitting compile/temp/receipt bounds, not whole-cache
+copy or cosmetic retry. Current execution remains held; full upstream/admission/
+L0 acceptance unresolved.
 
 **Planning worker result (2026-10-09; parent review pending):**
 `gate-vpbadha7` implements typed read-only small-unit planner/validator,25 Python
