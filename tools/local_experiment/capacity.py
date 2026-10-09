@@ -4,6 +4,8 @@ Only the owned 0700 scope is measured. Each regular entry is charged the larger
 of its logical size and allocated blocks, including repeated hard-link entries.
 Limits are observations (not exceptions); unsafe or unreadable inputs fail closed.
 """
+from __future__ import annotations
+
 import os
 from pathlib import Path
 import stat

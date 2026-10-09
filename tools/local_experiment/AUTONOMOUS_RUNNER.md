@@ -4,6 +4,16 @@
 
 ### 2026-10-09 owner-selected safe restart
 
+`--execute --use-pro-weekly-limit --resume-series <absolute restart scope>`
+reviews an already terminal repository repair with the exact original
+SUPERVISOR_PROBE_FAILED hold, without a new worker or rewritten failure. Parent
+tests use sys.executable and persist both streams/count/exit; zero tests fail.
+Separate safe-restart-review receipts retain the original hold and terminal
+session identity; only the fixed previously unstarted API pilot is eligible.
+Other holds, unknown sessions, changed retained artifacts/profiles or exhausted
+pilot reservations inhibit execution. Deferred capacity annotations support
+system Python3.9 as well as the private launch interpreter.
+
 `python -m tools.local_experiment.restart_supervisor` defaults to no calls.
 `--execute --use-pro-weekly-limit` selects one repo-only GPT-6.1 Sol45minute
 capacity/supervision repair, then **conditionally** one fixed API-module pilot

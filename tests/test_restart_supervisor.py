@@ -7,6 +7,29 @@ from tools.local_experiment import restart_supervisor as S
 
 
 class RestartTests(unittest.TestCase):
+    def test_capacity_parent_records_test_count_and_interpreter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            result=mock.Mock(returncode=0,stdout=b'',stderr=b'Ran 17 tests in 0.1s\nOK\n')
+            with mock.patch.object(S.subprocess,'run',return_value=result) as run:
+                S.capacity_tests(root,root)
+                self.assertEqual(run.call_args.args[0][0],S.sys.executable)
+            result.stderr=b'Ran 0 tests in 0s\nOK\n'
+            other=root/'empty';other.mkdir()
+            with mock.patch.object(S.subprocess,'run',return_value=result):
+                with self.assertRaisesRegex(S.R.RunnerError,'CAPACITY_PARENT_TESTS_FAILED'):
+                    S.capacity_tests(root,other)
+
+    def test_resume_rejects_other_hold_without_worker_or_pilot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);old=root/'tmp/local-experiment/safe-restart/restart-test'
+            old.mkdir(parents=True,mode=0o700)
+            S.R.save_json(old/'summary.json',dict(classification='HELD',operation_replay=False,reason='UNKNOWN'))
+            with mock.patch.object(S.R,'run') as run,mock.patch.object(S,'api_pilot') as pilot:
+                with self.assertRaisesRegex(S.R.RunnerError,'RESTART_RESUME_UNVERIFIED'):
+                    S.resume_review(root,root/'vault',old)
+                run.assert_not_called();pilot.assert_not_called()
+
     def test_default_does_not_start_workers_or_pilot(self):
         with mock.patch('sys.argv',['restart']),mock.patch.object(S,'run') as run:
             self.assertEqual(S.main(),0);run.assert_not_called()

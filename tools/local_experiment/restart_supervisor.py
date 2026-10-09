@@ -6,10 +6,12 @@ import hashlib
 import importlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import tarfile
 import time
@@ -72,6 +74,21 @@ def review_capacity(root):
                   'CAPACITY_PARENT_REVIEW_FAILED')
         observed.append({'scope':name,'observation':value})
     return observed
+
+
+def capacity_tests(root,directory):
+    """Use the launch interpreter and preserve both outputs even on failure."""
+    argv=[sys.executable,'-m','unittest','discover','-s','tests','-p','test_capacity*.py','-q']
+    R.save_json(directory/'parent-capacity-tests.started.json',dict(argv=argv))
+    result=subprocess.run(argv,cwd=root,capture_output=True,timeout=120)
+    R.require(len(result.stdout)+len(result.stderr)<=R.MAX_LOG_BYTES,'OUTPUT_LIMIT_EXCEEDED')
+    R.private_file(directory/'parent-capacity-tests.stdout',result.stdout)
+    R.private_file(directory/'parent-capacity-tests.stderr',result.stderr)
+    R.save_json(directory/'parent-capacity-tests.finished.json',dict(exit_code=result.returncode,
+        interpreter=sys.executable,stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),
+        stderr_sha256=hashlib.sha256(result.stderr).hexdigest()))
+    R.require(result.returncode==0 and re.search(rb'Ran [1-9][0-9]* tests?\b',result.stderr),
+              'CAPACITY_PARENT_TESTS_FAILED')
 
 
 def measure(directory):
@@ -241,8 +258,7 @@ def run(root,vault):
              'RESTART_SCOPE_DRIFT')
         R.require(retained(root)==before and F.stopped(root)==profiles,'RESTART_RETENTION_DRIFT')
         proposal=plan(R.private_json(directory/'restart-plan.json','RESTART_PLAN_INVALID'))
-        output=S.command(['python3','-m','unittest','discover','-s','tests','-p','test_capacity*.py','-q'],root,timeout=120)
-        R.private_file(directory/'parent-capacity-tests.log',output)
+        capacity_tests(root,directory)
         observed=review_capacity(root)
         R.save_json(directory/'capacity-review.json',dict(head=after,worker=worker.name,proposal=proposal,
             observations=observed,old_scopes_held=True,counters_reset=False,gate_acceptance=False))
@@ -264,13 +280,81 @@ def run(root,vault):
     finally:fcntl.flock(fd,fcntl.LOCK_UN);os.close(fd)
 
 
+def resume_review(root,vault,old):
+    """Review terminal repo repair; never re-launch its worker or rewrite its hold."""
+    R.require(old.parent==root/'tmp/local-experiment/safe-restart' and old.name.startswith('restart-') and
+              not old.is_symlink(),'RESTART_RESUME_SCOPE_INVALID')
+    state=old.lstat()
+    R.require(stat.S_ISDIR(state.st_mode) and state.st_uid==os.getuid() and
+              stat.S_IMODE(state.st_mode)==0o700,'RESTART_RESUME_SCOPE_INVALID')
+    original=R.private_json(old/'summary.json','RESTART_RESUME_UNVERIFIED')
+    R.require(original==dict(classification='HELD',operation_replay=False,reason='SUPERVISOR_PROBE_FAILED'),
+              'RESTART_RESUME_UNVERIFIED')
+    before=S.baseline_file(old/'before.json')
+    proposal=plan(R.private_json(old/'restart-plan.json','RESTART_PLAN_INVALID'))
+    mission=R.private_json(old/'mission.json','RESTART_RESUME_UNVERIFIED')
+    R.require(mission.get('gate_id')==GATE and mission.get('head_before')==before['head'],
+              'RESTART_RESUME_UNVERIFIED')
+    candidates=[]
+    for worker in (root/'tmp/local-experiment/autonomous-runner').glob('gate-*'):
+        result=worker/'attempt-001/result.json'
+        if result.exists() and R.private_json(result,'RESTART_RESUME_UNVERIFIED').get('head_before')==before['head']:
+            candidates.append(worker)
+    R.require(len(candidates)==1,'RESTART_RESUME_WORKER_UNVERIFIED')
+    worker=candidates[0]
+    parent=root/'tmp/local-experiment/safe-restart-review';parent.mkdir(mode=0o700,exist_ok=True)
+    state=parent.lstat()
+    R.require(stat.S_ISDIR(state.st_mode) and state.st_uid==os.getuid() and stat.S_IMODE(state.st_mode)==0o700,
+              'RESTART_RESUME_SCOPE_INVALID')
+    fd=os.open(root/'tmp/local-experiment/gate-supervisor/lock',os.O_RDWR|os.O_NOFOLLOW)
+    directory=None;deadline=time.monotonic()+120*60
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        S.no_active_worker(root);S.check_resume_budget(root,0,60)
+        summary,result,sid=S.terminal(root,worker)
+        R.require(result['reason']=='no_safe_work','RESTART_RESUME_UNVERIFIED')
+        head=R.checkout_head(root,vault)
+        R.require(R.git(root,'merge-base','--is-ancestor',before['head'],result['head_after'])=='' and
+                  R.git(root,'merge-base','--is-ancestor',result['head_after'],head)=='',
+                  'RESTART_RESUME_HISTORY_INVALID')
+        R.require(retained(root)==before['retained'] and F.stopped(root)==before['profiles'],
+                  'RESTART_RETENTION_DRIFT')
+        # No new worker/session or repair reservation; pilot's own reservations persist.
+        directory=Path(tempfile.mkdtemp(prefix='review-',dir=parent))
+        capacity_tests(root,directory)
+        observed=review_capacity(root)
+        R.save_json(directory/'capacity-review.json',dict(head=head,worker=worker.name,session=sid,
+            original_series=old.name,original_summary=original,proposal=proposal,observations=observed,
+            worker_replayed=False,model_calls=0,old_scopes_held=True,counters_reset=False,gate_acceptance=False))
+        if proposal['decision']=='ready_for_api_pilot':api_pilot(root,directory,deadline)
+        R.require(retained(root)==before['retained'] and F.stopped(root)==before['profiles'],
+                  'RESTART_RETENTION_DRIFT')
+        R.save_json(directory/'summary.json',dict(classification='RESTART_RESUME_REVIEW_COMPLETED',
+            worker=worker.name,model_calls=0,worker_replayed=False,capacity_review=True,
+            pilot_launched=proposal['decision']=='ready_for_api_pilot',automatic_runtime_successor=False,
+            gate_acceptance=False))
+        print(json.dumps({'evidence':str(directory),'model_calls':0,'capacity_review':True}))
+    except Exception as error:
+        if directory is not None and not (directory/'summary.json').exists():
+            R.save_json(directory/'summary.json',dict(classification='HELD',operation_replay=False,
+                reason=str(error) if isinstance(error,R.RunnerError) else type(error).__name__))
+        raise
+    finally:fcntl.flock(fd,fcntl.LOCK_UN);os.close(fd)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--execute',action='store_true');p.add_argument('--use-pro-weekly-limit',action='store_true');args=p.parse_args()
+    p.add_argument('--execute',action='store_true');p.add_argument('--use-pro-weekly-limit',action='store_true')
+    p.add_argument('--resume-series',type=Path,help='review a completed repository repair without re-launching it')
+    args=p.parse_args()
     if not args.execute:
-        print(json.dumps({'mode':'plan-only','active_calls':0,'first_session_minutes':45,'pilot_minutes':60}));return 0
+        print(json.dumps({'mode':'plan-only','active_calls':0,
+            'first_session_minutes':0 if args.resume_series is not None else 45,'pilot_minutes':60}));return 0
     try:
-        R.require(args.use_pro_weekly_limit,'BUDGET_REQUIRED');run(R.ROOT,R.VAULT);return 0
+        R.require(args.use_pro_weekly_limit,'BUDGET_REQUIRED')
+        if args.resume_series is None:run(R.ROOT,R.VAULT)
+        else:resume_review(R.ROOT,R.VAULT,args.resume_series)
+        return 0
     except (R.RunnerError,OSError,ValueError,KeyError,RuntimeError,ImportError) as error:
         print(str(error) if isinstance(error,R.RunnerError) else 'RESTART_UNVERIFIED_STATE');return 1
 

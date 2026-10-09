@@ -5,12 +5,25 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-09
-version: "1.31"
+version: "1.32"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-09; re-observe before acting)
+
+**Parent interpreter hold and separate review recovery (2026-10-09):** original
+restart `restart-hr2zj9uf/summary.json` remains HELD/SUPERVISOR_PROBE_FAILED.
+Worker `gate-_g0u5c6u` ended no_safe_work at7a543bd, server succeeded/idle;
+all19 retained hashes match. Parent test used system Python3.9.6 and failed
+importing evaluated `Path | str` annotation. Deferred annotations now support
+that interpreter (capacity17 tests pass); parent tests use its launch interpreter,
+retain stdout/stderr/exit/count, and reject zero discovered tests. Restart11
+tests pass. No worker replay or new model start. A separately recorded
+`--resume-series` review may verify the completed repair and launch only the
+previously unstarted fixed API pilot. Other hold reasons remain rejected;
+original worker/hold/evidence and pilot reservation limits are preserved.
+Usage517/600, remaining83; original deadline unchanged, VM stays Stopped.
 
 **Repository repair worker observation (2026-10-09; parent review pending):**
 `gate-_g0u5c6u` implements typed `capacity.observe`: hard used>=8GiB/free<16GiB
