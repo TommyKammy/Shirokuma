@@ -312,6 +312,28 @@ class AutonomousRunnerTests(unittest.TestCase):
         binary.write_bytes(b'changed')
         with self.assertRaises(R.RunnerError):R.reviewed_refresh_stop(self.root,prior,summary,head,'L0_FLUX_LOCAL_BUILD')
 
+    def test_restart_review_leaves_old_scope_held_and_gate_bound(self):
+        head=self.git('rev-parse','HEAD')
+        ledger=self.root/'security/resident-images.json';ledger.parent.mkdir(parents=True,exist_ok=True);ledger.write_text('{}')
+        prior=self.root/'tmp/local-experiment/autonomous-runner/gate-ayqdekwa'
+        summary=dict(schema_version=1,result='stopped',attempts=1,reason='agent_no_safe_work_claim')
+        result=dict(head_before=head,head_after=head,reason='no_safe_work')
+        cp=dict(schema_version=1,nonce='a'*32,iteration=1,head=head,decision='stop',reason='no_safe_work')
+        self.write_private_json(prior/'attempt-001/result.json',result)
+        self.write_private_json(prior/'attempt-001/checkpoint.json',cp)
+        gate='L0_SUPERVISION_CAPACITY_REPAIR'
+        self.assertFalse(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_FLUX_LOCAL_BUILD'))
+        self.assertFalse(R.reviewed_restart_stop(self.root,prior.with_name('gate-unknown'),summary,head,gate))
+        with self.assertRaises(R.RunnerError):R.reviewed_restart_stop(self.root,prior,summary,head,gate)
+        review=dict(schema_version=1,source_run=prior.name,original_summary=summary,original_result=result,
+            checkpoint=cp,reviewed_head=head,last_session_id='ses_fixture',server_outcome='succeeded_idle_nonactive',
+            allowed_gate=gate,decision='old_scope_held_repository_capacity_repair_no_replay',
+            ledger_sha256=R.hashlib.sha256(ledger.read_bytes()).hexdigest())
+        self.write_private_json(self.root/'tmp/local-experiment/gate-batches/restart-review-gate-ayqdekwa.json',review)
+        self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,gate))
+        ledger.write_text('{"changed":true}')
+        with self.assertRaises(R.RunnerError):R.reviewed_restart_stop(self.root,prior,summary,head,gate)
+
     def test_plan_is_zero_model_calls_and_requires_explicit_budget(self):
         with mock.patch.object(R, 'ROOT', self.root), mock.patch.object(R, 'VAULT', self.vault), \
              mock.patch.object(R.shutil, 'which', return_value=str(self.cli)), \

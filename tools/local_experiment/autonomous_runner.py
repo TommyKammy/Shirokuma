@@ -421,7 +421,8 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
                          for i in range(1, number + 1))), 'PRIOR_GATE_RUN_UNVERIFIED')
             require(result.get('reason') == 'run_budget_reached' or
                     (reviewed_transport_stop(root, prior, result, head) if transport else
-                      (reviewed_refresh_stop(root, prior, result, head, independent_gate) or
+                       (reviewed_restart_stop(root, prior, result, head, independent_gate) or
+                        reviewed_refresh_stop(root, prior, result, head, independent_gate) or
                        reviewed_independent_stop(root, prior, result, head, independent_gate))
                      if result.get('reason') == 'agent_no_safe_work_claim' else
                      reviewed_safety_stop(root, prior, result, head, repair_only)),
@@ -430,6 +431,33 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
         require(started + max_runs <= SERIES_LIMIT, 'SERIES_BUDGET_EXCEEDED')
     except OSError:
         raise RunnerError('GATE_NOT_RECONCILED') from None
+
+
+def reviewed_restart_stop(root, prior, summary, head, gate):
+    """Owner-selected repo-only restart repair; never reopens old build scopes."""
+    known = {'gate-azr7paf4', 'gate-5d3ur67c', 'gate-3f5odnk2', 'gate-xezx_z6k', 'gate-ayqdekwa'}
+    if gate != 'L0_SUPERVISION_CAPACITY_REPAIR' or prior.name not in known:
+        return False
+    require(summary.get('reason') == 'agent_no_safe_work_claim' and summary.get('attempts') == 1,
+            'RESTART_REVIEW_INVALID')
+    last = prior/'attempt-001'
+    result = private_json(last/'result.json', 'RESTART_REVIEW_INVALID')
+    cp = private_json(last/'checkpoint.json', 'RESTART_REVIEW_INVALID')
+    review = private_json(root/'tmp/local-experiment/gate-batches'/f'restart-review-{prior.name}.json',
+                          'RESTART_REVIEW_REQUIRED')
+    reviewed_head = review.get('reviewed_head')
+    require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
+            review.get('original_summary') == summary and review.get('original_result') == result and
+            review.get('checkpoint') == cp and review.get('allowed_gate') == gate and
+            review.get('decision') == 'old_scope_held_repository_capacity_repair_no_replay' and
+            review.get('server_outcome') == 'succeeded_idle_nonactive' and
+            type(review.get('last_session_id')) is str and re.fullmatch(r'ses_[A-Za-z0-9]+',review['last_session_id']) and
+            review.get('ledger_sha256') == hashlib.sha256((root/'security/resident-images.json').read_bytes()).hexdigest() and
+            type(reviewed_head) is str and re.fullmatch(r'[0-9a-f]{40}',reviewed_head) and
+            read_checkpoint(last/'checkpoint.json', {'nonce':cp.get('nonce'),'iteration':1},result.get('head_after'))=='no_safe_work' and
+            git(root,'merge-base','--is-ancestor',result['head_after'],reviewed_head)=='' and
+            git(root,'merge-base','--is-ancestor',reviewed_head,head)=='','RESTART_REVIEW_INVALID')
+    return True
 
 
 def subscription_preflight(binary: str, model: str, root: Path) -> None:

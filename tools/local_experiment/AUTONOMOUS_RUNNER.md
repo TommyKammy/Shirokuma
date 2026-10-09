@@ -2,6 +2,38 @@
 
 ## Continuing beyond the readiness milestone (2026-10-08)
 
+### 2026-10-09 owner-selected safe restart
+
+`python -m tools.local_experiment.restart_supervisor` defaults to no calls.
+`--execute --use-pro-weekly-limit` selects one repo-only GPT-6.1 Sol45minute
+capacity/supervision repair, then **conditionally** one fixed API-module pilot
+after independent parent review. Max120minute enclosing parent, original deadline,
+cumulative600, no model/provider fallback, old counter/retained-state preservation.
+At most two persistent restart reservations and two distinct API pilot reservations.
+
+New gate `L0_SUPERVISION_CAPACITY_REPAIR` only: exact five known no-safe runs are
+independently terminal-reconciled and separately bound by `restart-review-<run>.json`
+(original summary/result/checkpoint, reviewed HEAD/session, current ledger hash,
+decision `old_scope_held_repository_capacity_repair_no_replay`). This does not
+admit old build/runtime missions or unknown stops. No failure/result rewrite.
+
+Worker implements `capacity.observe(path)` with used_bytes=sum max(logical,
+allocated), hard_limit_exceeded and bulk_writes_allowed; separate conservative
+7GiB writing stop and8GiB/free16GiB observations, never loosen writer guards.
+Parent uses its own preloaded accounting, checks retained hashes/stopped profiles,
+runs fixed capacity tests and validates owned0600 restart-plan.json with exact
+keys schema_version=1, decision=ready_for_api_pilot|hold, pilot_package=api,
+notes30–350 single-line characters. No arbitrary command/authority from a proposal.
+
+If ready, parent verifies retained API source against source snapshot, verifies
+Go1.26.6 binary against the recorded archive, copies minimal source into short
+new tmp/rv/api-* scope and runs fixed native API go tests with entirely new writable
+Go/home/temp caches. Old inputs/toolchain are read-only. No root/signature test
+replay, third source-controller build, source tag fetch, runtime/image execution,
+registry writes, pin/ledger changes, risk approval or cleanup. Empty-test exit0
+does not pass. The pilot is one new narrow verification approach, max60minutes,
+and cannot claim full upstream tests, publisher/admission or L0 acceptance.
+
 ### Exact-digest evidence refresh after completed finding diagnosis
 
 **After the second binary repair:** do not schedule a third unchanged binary

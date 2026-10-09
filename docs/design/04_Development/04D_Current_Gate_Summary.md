@@ -4,13 +4,36 @@ doc_id: "DEV-04D"
 title: "Current local gate summary"
 status: active
 created: 2026-10-06
-updated: 2026-10-08
-version: "1.29"
+updated: 2026-10-09
+version: "1.30"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
-# Current gate summary (dated 2026-10-08; re-observe before acting)
+# Current gate summary (dated 2026-10-09; re-observe before acting)
+
+**Owner-selected safe restart (2026-10-09):** implement the proposed sequence,
+not a blind restart. `restart_supervisor.py` selects one repository-only
+supervision/capacity repair worker (GPT-6.1 Sol, maximum45minutes), independently
+verifies retained hashes/terminal state/stopped profiles/focused tests and compares
+the new observe contract with fixed parent logical/allocated accounting. Split
+7GiB bulk-write inhibition from read-only8GiB hard-limit observation without
+changing either threshold, deleting data or resetting old build counters.
+
+Only after that review, a typed ready plan permits one separate narrow API-module
+test pilot: verified unchanged upstream API source copied into short private
+`tmp/rv/api-*`, verified retained Go1.26.6 toolchain read-only, new writable Go
+caches/temp, explicit API-only fixed argv. No third source-controller binary
+build, replay of terminated root/signature tests, source refetch or old cache
+writes. One new pilot approach, max60minutes with enclosing parent120minute
+deadline and persistent two-reservation limits; no runtime successor. Default
+plan is zero-call. Old summaries/checkpoints/evidence/counters remain held.
+
+Before launch starts516/600, remaining84, clean HEAD54b8064/no active worker/all
+profiles Stopped. Original deadline2026-10-09T23:31:54Z (Oct10 08:31JST), approximately
+15hours remaining at preflight. All Oct8 scan claims below remain dated evidence,
+not automatically current advisory/DB freshness. Launch and pilot outcomes are
+separate observations; no admission/publisher/full L0 acceptance.
 
 **Priority:** L0 foundation, especially
 [`WP-L0-GITOPS-001`](../06_WorkPackages/L0/WP-L0-GITOPS-001_OpenTofu_and_Flux_bootstrap.md).

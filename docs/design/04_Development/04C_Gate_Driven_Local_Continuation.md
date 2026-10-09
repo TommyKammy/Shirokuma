@@ -4,13 +4,35 @@ doc_id: "DEV-04C"
 title: "Gate-driven local continuation after the 500-session series"
 status: accepted
 created: 2026-10-06
-updated: 2026-10-08
-version: "1.6"
+updated: 2026-10-09
+version: "1.7"
 area: development
 tags: [shirokuma, local, gates, development]
 ---
 
 # Gate-driven local continuation
+
+## 2026-10-09: owner-selected reviewed safe restart
+
+The owner explicitly asked to execute the proposed restart sequence: first one
+repository-only supervision/capacity repair (max45minutes), then independent
+parent review, then only a ready typed plan may select one new narrow API-module
+test pilot (max60minutes, enclosing parent120minutes). Separate conservative7GiB
+bulk-write inhibition and8GiB hard/free16GiB read-only observation without changing
+thresholds, deleting retained data or resetting the two exhausted binary-build
+attempts. Known original terminal sessions/results/checkpoints/HEADs/ledger are
+bound separately for this repository repair, not generic old-scope admission.
+
+Pilot verifies immutable API source/toolchain, uses minimum source copy and new
+short private writable caches/temp, no old cache writes or refetch/replay of old
+interrupted tests. API package verification under final Go1.26.6 had not started;
+it is a new resource-planned narrow test approach, not a third binary rebuild or
+cosmetic scope rename. At most two persistent reservations per restart/pilot
+approach, original600/weekly/OAuth/no-spending limits remain. Unknown sessions or
+operations hold dependent execution. Default is no calls. All profiles remain
+Stopped, no image execution/registry writes/current pin changes/approval/admission
+or automatic runtime successor. Full upstream/publisher/L0 acceptance and current
+advisory freshness remain separate from capacity repair or API-only success.
 
 ## 2026-10-08: reviewed autonomous remediation and continuation
 

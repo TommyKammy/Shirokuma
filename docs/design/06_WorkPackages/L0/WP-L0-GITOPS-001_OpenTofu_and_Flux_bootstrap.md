@@ -4,13 +4,39 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-08
-version: "0.189"
+updated: 2026-10-09
+version: "0.190"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-09: owner-selected safe repository repair and conditional API pilot
+
+Owner asked to execute recommended safe restart. Select one45minute repo-only
+capacity/supervision mission, not a third source binary rebuild. Introduce typed
+read-only logical/allocated usage observation separating conservative7GiB bulk
+write guard from8GiB hard limit/free16GiB. Preserve thresholds, old capacity
+HELD summaries and all retained data/counters. Parent independently tests contract
+and unchanged artifacts/profiles/terminal sessions before any successor.
+
+Only a reviewed typed ready plan allows one new narrow upstream API-module pilot:
+minimum source copy validated against the pinned source snapshot, archived Go1.26.6
+checksum/executable verified before execution, old toolchain read-only, new private
+HOME/Go caches/short TMPDIR under tmp/rv. Fixed go test api module argv, no worker-
+proposed commands, old caches untouched. This is API-only verification never
+started under the final Go1.26.6 attempt, not replay of interrupted15package/root/
+signature tests or a new binary rebuild. Separate pilot maximum60minutes and
+two persistent reservations; enclosing parent maximum120minutes/original week.
+No test count0 accepted as success, no inference of full upstream completion.
+
+Before launch starts516/600, remaining84, original deadline2026-10-09T23:31:54Z,
+all profiles Stopped and checkout clean. No registry/runtime/source/pin/ledger/
+approval/exception/admission changes, new spending, data deletion or publication.
+Old scan timestamps remain historical, not a freshness renewal. Parent review,
+worker launch and actual pilot outcome must be recorded separately. Repository-
+only rollback; preserve failures/source/archives/cache/backups/PV/PVC/disk identities.
 
 ## 2026-10-08: parent-verified local source-controller full-image scan milestone
 
