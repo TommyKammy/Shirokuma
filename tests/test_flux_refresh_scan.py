@@ -49,8 +49,8 @@ class CollectionTests(unittest.TestCase):
             list(F.commands(Path('/private/mission'), images))
 
     def test_budget_stops_before_hard_limit(self):
-        with mock.patch.object(F, 'usage', return_value=7*F.GIB), \
-             mock.patch.object(F.shutil, 'disk_usage', return_value=mock.Mock(free=30*F.GIB)):
+        with mock.patch.object(F.C, 'observe', return_value=dict(used_bytes=7*F.GIB,
+                free_bytes=30*F.GIB, hard_limit_exceeded=False, bulk_writes_allowed=False)):
             with self.assertRaises(F.F.R.RunnerError):
                 F.check_budget(Path('/unused'))
 

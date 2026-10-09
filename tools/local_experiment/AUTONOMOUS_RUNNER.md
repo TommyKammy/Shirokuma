@@ -17,13 +17,28 @@ independently terminal-reconciled and separately bound by `restart-review-<run>.
 decision `old_scope_held_repository_capacity_repair_no_replay`). This does not
 admit old build/runtime missions or unknown stops. No failure/result rewrite.
 
-Worker implements `capacity.observe(path)` with used_bytes=sum max(logical,
-allocated), hard_limit_exceeded and bulk_writes_allowed; separate conservative
-7GiB writing stop and8GiB/free16GiB observations, never loosen writer guards.
+`capacity.observe(path)` returns typed `Observation` (a JSON-compatible TypedDict):
+`used_bytes`, `free_bytes`, `hard_limit_exceeded`, `bulk_writes_allowed`. Owned0700
+root required; owned regular files/directories only, no symlink/special-file
+following. FD-relative traversal fails closed on denied enumeration/stat and
+directory replacement; only vanished children are tolerated for active Go temp
+files. Sum max(logical,allocated) per regular entry, including hard-link entries.
+No writes/chmod/cleanup or exception merely for reaching a capacity threshold.
+Hard guard: used>=8GiB or free<16GiB. Bulk allowed: used<7GiB AND free>=17GiB.
+These retain the original conservative writer margins, not a hard-cap increase.
+Build's explicit256MiB–1GiB inspection reserve still has its previous bound
+used<8GiB-reserve/free>=17GiB; it is not permission to resume old bulk writes.
+Post-worker build validation now checks only hard observation, while new
+reservations/scan writers retain the bulk guard. Pilot checks before launch and
+during the owned process-group operation; guard stops remain no-replay records.
 Parent uses its own preloaded accounting, checks retained hashes/stopped profiles,
 runs fixed capacity tests and validates owned0600 restart-plan.json with exact
 keys schema_version=1, decision=ready_for_api_pilot|hold, pilot_package=api,
 notes30–350 single-line characters. No arbitrary command/authority from a proposal.
+Focused contract/caller regressions: `python -m unittest discover -s tests -p
+'test_capacity*.py' -v`, plus build/refresh/restart tests. Default plan remains
+zero-call. Worker capacity observations and a ready proposal are not independent
+terminal/session/retention/budget review or permission for a worker-launched pilot.
 
 If ready, parent verifies retained API source against source snapshot, verifies
 Go1.26.6 binary against the recorded archive, copies minimal source into short

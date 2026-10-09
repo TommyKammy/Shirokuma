@@ -4,13 +4,41 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-08
-version: "5.553"
+updated: 2026-10-09
+version: "5.554"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-09: L0 repository capacity/supervision repair, not pilot or acceptance
+
+WP-L0-GITOPS-001 / `gate-_g0u5c6u` / `L0_SUPERVISION_CAPACITY_REPAIR`:
+typed read-only capacity separates8GiB/free16GiB hard guard from unchanged7GiB/
+free17GiB bulk guard. FD-relative owned0700 observation counts max(logical,
+allocated) per file; permission/ownership/type errors reject, soft/hard thresholds
+report booleans without exception. Build post-worker validation no longer applies
+bulk inhibition to observation; writer/inspection guards and no-replay records stay.
+
+Fresh retained scopes used8137981952/8127361024 bytes, both hard=false/bulk=false,
+independently measured equal; free>2250GiB. All19 baseline hash bindings match;
+fresh Colima list matches baseline/all profiles Stopped. Old summaries/counters/
+bytes retained, no source builds/Go tests/downloads/runtime/image execution or
+pin/ledger/approval/admission changes. Historical scans not renewed. OAuth-only
+preflight succeeds; no billing-ledger proof asserted. Initial build test fixture
+alias error preserved in new diagnostics, corrected by resolving its new temp path.
+Final capacity17/build19/refresh12/restart9/runner26 tests pass (83 total),
+design-context14 tests/validator, secret scan and diff checks pass. New mock
+post-worker fixture's missing isolated ROOT binding was corrected and recorded.
+No broad local verifier: broader Go/runtime work is outside this repair mission.
+
+Evidence: `tmp/local-experiment/safe-restart/restart-hr2zj9uf/`, including focused
+tests, worker observation and exact typed ready plan. Parent independently reviews
+terminal/session/operation/retention/capacity/budget before any separate API-only
+pilot. No pilot launched here; full upstream/publisher/admission/L0 acceptance
+remain false. Repository-only rollback, preserve originals/failures; Vault sync
+pending without accessing original Vault. No later batch or runner launch.
 
 ## 2026-10-08: Go1.26.6 binary HIGH repair, final attempt/test-capacity hold
 

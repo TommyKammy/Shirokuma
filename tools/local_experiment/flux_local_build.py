@@ -14,6 +14,8 @@ import subprocess
 import tarfile
 import time
 
+from tools.local_experiment import capacity as C
+
 GIB = 1024 ** 3
 
 
@@ -67,23 +69,16 @@ def save(path, data):
 
 
 def usage(directory):
-    total = 0
-    for base, _, files in os.walk(directory, followlinks=False):
-        for name in files:
-            try:
-                st = (Path(base)/name).lstat()
-                total += max(st.st_size, st.st_blocks * 512)
-            except FileNotFoundError:
-                # Go removes temporary compiler inputs during active builds.
-                # A vanished entry contributes no currently retained bytes.
-                continue
-    return total
+    return C.observe(directory)['used_bytes']
 
 
 def budget(directory, reserve_bytes=GIB):
     if not 256 * 1024**2 <= reserve_bytes <= GIB:
         raise ValueError('BUILD_RESERVE_INVALID')
-    if usage(directory) >= 8 * GIB - reserve_bytes or shutil.disk_usage(directory).free < 17 * GIB:
+    observed = C.observe(directory)
+    # Keep the prior bounded inspection reserve; it is not bulk-write permission.
+    if (observed['hard_limit_exceeded'] or observed['used_bytes'] >= 8 * GIB - reserve_bytes
+            or observed['free_bytes'] < 17 * GIB):
         raise RuntimeError('BUILD_DISK_HOLD')
 
 

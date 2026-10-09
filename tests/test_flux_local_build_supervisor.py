@@ -48,7 +48,7 @@ class BuildTests(unittest.TestCase):
             self.assertTrue(30<=len(value[key])<=650)
 
     def test_reobservation_accepts_only_exact_stdlib_repair_and_preserves_old_summary(self):
-        from tools.local_experiment import flux_local_build as Local
+        from tools.local_experiment import capacity as C
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);old=root/'tmp/local-experiment/flux-local-build/build-aoa39q7w'
             old.mkdir(parents=True);(old/'source').mkdir()
@@ -64,7 +64,8 @@ class BuildTests(unittest.TestCase):
                 InstalledVersion='1.26.5',FixedVersion='1.26.6') for _ in range(8)]}]}
             with mock.patch.object(B,'verify_binary',return_value={'sha256':'a'*64}), \
                  mock.patch.object(B.S,'baseline_file',side_effect=[record,scan]), \
-                 mock.patch.object(Local,'usage',return_value=int(7.60*1024**3)):
+                 mock.patch.object(C,'observe',return_value=dict(used_bytes=int(7.60*1024**3),
+                      free_bytes=30*C.GIB,hard_limit_exceeded=False,bulk_writes_allowed=False)):
                 result=B.reobserve_first_build(root)
                 self.assertFalse(result['old_scope_writes'])
                 self.assertFalse(result['operation_replay'])
@@ -73,6 +74,47 @@ class BuildTests(unittest.TestCase):
             with mock.patch.object(B,'verify_binary',return_value={'sha256':'a'*64}), \
                  mock.patch.object(B.S,'baseline_file',side_effect=[record,scan]):
                 with self.assertRaises(B.R.RunnerError):B.reobserve_first_build(root)
+
+    def test_post_worker_read_only_validation_uses_hard_not_bulk_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);lock=root/'tmp/local-experiment/gate-supervisor'
+            lock.mkdir(parents=True);(lock/'lock').touch()
+            (root/'tmp/local-experiment/gate-batches').mkdir()
+            def private(path, error):
+                if path.name=='candidate-inputs.json':return {'images':[]}
+                if path.name=='stable-tag-observations.json':
+                    return {'observations':[{'newer_same_series':False} for _ in range(4)]}
+                return {}
+            terminal=({'reason':'agent_no_safe_work_claim'},
+                      {'reason':'no_safe_work','head_after':'a'*40},'known-session')
+            def git(root, *args):
+                return 'tools/local_experiment/flux_local_build.py' if args[0]=='diff' else ''
+            with mock.patch.object(B.R,'ROOT',root), \
+                 mock.patch.object(B.R,'checkout_head',side_effect=['a'*40,'b'*40]), \
+                 mock.patch.object(B.S,'no_active_worker'), \
+                 mock.patch.object(B.R,'subscription_preflight'), \
+                 mock.patch.object(B.S,'check_resume_budget'), \
+                 mock.patch.object(B.F,'stopped',return_value=[]), \
+                 mock.patch.object(B.F,'inputs',return_value=([],'a'*64)), \
+                 mock.patch.object(B.R,'private_json',side_effect=private), \
+                 mock.patch.object(B.S,'baseline_file',return_value={'started_at':'2026-10-08T00:00:00Z'}), \
+                 mock.patch.object(B.F,'verify_scans',return_value={}), \
+                 mock.patch.object(B.hashlib,'sha256',return_value=mock.Mock(hexdigest=lambda:'a'*64)), \
+                 mock.patch.object(Path,'read_bytes',return_value=b'fixture'), \
+                 mock.patch.object(B.P.Scan,'check_budget') as writer_guard, \
+                 mock.patch.object(B.P.Scan,'observation',return_value=dict(used_bytes=7*1024**3+1,
+                     free_bytes=30*1024**3,hard_limit_exceeded=False,bulk_writes_allowed=False)), \
+                 mock.patch.object(B.S,'terminal',return_value=terminal), \
+                 mock.patch.object(B.R,'git',side_effect=git), \
+                 mock.patch.object(B.R,'gate_preflight'), \
+                 mock.patch.object(B.R,'run',return_value=('agent_no_safe_work_claim',root/'worker')), \
+                 mock.patch.object(B,'verify_binary',return_value={'sha256':'a'*64}), \
+                 mock.patch.object(B.S,'command',return_value=b'GOOS=linux GOARCH=arm64 github.com/fluxcd/source-controller'):
+                B.run(root,root/'vault')
+                writer_guard.assert_called_once()  # Only the new empty reservation.
+            summary=next((root/'tmp/local-experiment/flux-local-build').glob('build-*/summary.json'))
+            self.assertIn('BINARY_METADATA_EVIDENCE_ONLY',summary.read_text())
+            self.assertIn('"admission":false',summary.read_text())
 
 
 if __name__=='__main__':unittest.main()

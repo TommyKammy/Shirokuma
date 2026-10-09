@@ -61,8 +61,14 @@ def review_capacity(root):
     for name in ('build-aoa39q7w','build-don5ufj3'):
         directory=root/'tmp/local-experiment/flux-local-build'/name
         value=C.observe(directory)
-        R.require(isinstance(value,dict) and value.get('used_bytes')==measure(directory) and
-                  value.get('hard_limit_exceeded') is False and value.get('bulk_writes_allowed') is False,
+        R.require(isinstance(value,dict) and set(value)=={'used_bytes','free_bytes',
+                  'hard_limit_exceeded','bulk_writes_allowed'} and
+                  type(value['used_bytes']) is int and type(value['free_bytes']) is int and
+                  value['used_bytes']>=0 and value['free_bytes']>=16*1024**3 and
+                  value['used_bytes']==measure(directory) and
+                  7*1024**3<=value['used_bytes']<8*1024**3 and
+                  shutil.disk_usage(directory).free>=16*1024**3 and
+                  value['hard_limit_exceeded'] is False and value['bulk_writes_allowed'] is False,
                   'CAPACITY_PARENT_REVIEW_FAILED')
         observed.append({'scope':name,'observation':value})
     return observed
@@ -70,8 +76,12 @@ def review_capacity(root):
 
 def measure(directory):
     """Parent-side accounting stays loaded across the worker's code changes."""
+    st=directory.lstat()
+    R.require(stat.S_ISDIR(st.st_mode) and st.st_uid==os.getuid() and
+              stat.S_IMODE(st.st_mode)==0o700,'CAPACITY_INPUT_UNSAFE')
     total=0
-    for base,dirs,files in os.walk(directory,followlinks=False):
+    def fail(error):raise error
+    for base,dirs,files in os.walk(directory,followlinks=False,onerror=fail):
         for name in dirs+files:
             st=(Path(base)/name).lstat()
             R.require(st.st_uid==os.getuid() and not stat.S_ISLNK(st.st_mode) and
@@ -111,6 +121,7 @@ def pilot_tests(evidence,tool,source,extra,timeout):
     directory=evidence.directory
     env=evidence.environment();env.update(extra)
     argv=[str(tool),'test','-mod=readonly','-p=2','-count=1','-json','-timeout=15m','./...']
+    R.require(C.observe(directory)['bulk_writes_allowed'] is True,'API_PILOT_WRITE_GUARD')
     R.save_json(directory/'api-unit-tests.started.json',dict(argv=argv,cwd=str(source),
         started_at=datetime.now(timezone.utc).isoformat(),process_group_owned=True))
     process=None;error=None

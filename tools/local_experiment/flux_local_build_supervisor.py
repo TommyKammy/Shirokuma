@@ -49,9 +49,10 @@ def reobserve_first_build(root):
     R.require(len(high)==8 and all(v.get('Severity')=='HIGH' and v.get('PkgName')=='stdlib' and
               v.get('InstalledVersion')=='1.26.5' and '1.26.6' in v.get('FixedVersion','') for v in high),
               'BUILD_TOOLCHAIN_REPAIR_UNVERIFIED')
-    from tools.local_experiment import flux_local_build as Local
-    allocated=Local.usage(old)
-    R.require(allocated<8*1024**3,'BUILD_PRIOR_HARD_LIMIT_EXCEEDED')
+    from tools.local_experiment import capacity as C
+    observed=C.observe(old)
+    allocated=observed['used_bytes']
+    R.require(not observed['hard_limit_exceeded'],'BUILD_PRIOR_HARD_LIMIT_EXCEEDED')
     return dict(binary=binary, prior_allocated_bytes=allocated, remaining_high=8,
                 repair='verified stable Go1.26.6 rebuild', old_scope_writes=False,
                 original_summary_unchanged=True, operation_replay=False)
@@ -126,7 +127,9 @@ def run(root,vault,resume=False):
         R.require(all(p.startswith(('docs/design/','tools/local_experiment/flux_local_build',
                                     'tests/test_flux_local_build')) for p in changes) and
                   F.inputs(root)[1]==ledger_hash and F.stopped(root)==profiles,'BUILD_SCOPE_DRIFT')
-        P.Scan.check_budget(directory)
+        # Post-worker evidence validation is read-only, not a bulk-write retry.
+        observed=P.Scan.observation(directory)
+        R.require(not observed['hard_limit_exceeded'],'BUILD_HARD_LIMIT_EXCEEDED')
         try:
             binary=verify_binary(directory/'source-controller')
             metadata=S.command(['go','version','-m',str(directory/'source-controller')],root,timeout=30)

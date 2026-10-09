@@ -15,6 +15,7 @@ import subprocess
 import time
 
 from tools.local_experiment import flux_refresh_supervisor as F
+from tools.local_experiment import capacity as C
 
 GIB = 1024**3
 
@@ -34,21 +35,19 @@ def save(path, value):
 
 
 def usage(directory):
-    total = 0
-    for base, dirs, files in os.walk(directory, followlinks=False):
-        for name in dirs + files:
-            entry = Path(base)/name
-            st = entry.lstat()
-            F.R.require(not stat.S_ISLNK(st.st_mode), 'REFRESH_CACHE_SYMLINK')
-            if stat.S_ISREG(st.st_mode):
-                total += st.st_size
-    return total
+    return observation(directory)['used_bytes']
+
+
+def observation(directory):
+    try:
+        return C.observe(directory)
+    except (C.CapacityError, OSError) as error:
+        raise F.R.RunnerError('REFRESH_CAPACITY_INPUT_UNSAFE') from error
 
 
 def check_budget(directory):
     # Stop conservatively before the mission's hard 8 GiB/16 GiB boundaries.
-    F.R.require(usage(directory) < 7*GIB and
-                shutil.disk_usage(directory).free >= 17*GIB, 'REFRESH_DISK_BUDGET_INVALID')
+    F.R.require(observation(directory)['bulk_writes_allowed'], 'REFRESH_DISK_BUDGET_INVALID')
 
 
 def secure_generated(work):

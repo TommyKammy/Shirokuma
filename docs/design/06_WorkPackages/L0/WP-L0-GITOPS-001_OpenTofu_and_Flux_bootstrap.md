@@ -5,12 +5,42 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-09
-version: "0.190"
+version: "0.191"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-09: repository capacity observation repair; parent pilot review pending
+
+`gate-_g0u5c6u` / `L0_SUPERVISION_CAPACITY_REPAIR`: implemented typed read-only
+`capacity.observe`. Owned0700 root/owned regular entries, FD-relative no-follow
+traversal, sum max(logical,allocated); unsafe/denied input fails closed. Hard guard
+used>=8GiB/free<16GiB and bulk used<7GiB/free>=17GiB are separate booleans.
+Post-worker build parent uses hard observation rather than bulk guard; write
+callers and bounded256MiB–1GiB inspection reserves retain original thresholds.
+API pilot guard now checks before operation launch and while its owned group runs.
+
+Worker's fresh observations: old scopes8137981952 and8127361024 bytes, both hard
+false/bulk false, free>2250GiB; independent parent-style accounting matches.
+These current allocated-size snapshots do not rewrite historical capacity claims.
+All19 selected retained hash bindings and full stopped-profile list match restart
+baseline. No old-scope writes, counter resets, deletion, source/controller builds,
+Go tests, downloads, image/runtime execution or ledger/pin/security changes.
+OAuth-only routing preflight passed, not independent billing proof. Private logs,
+observations and typed restart plan reside in
+`tmp/local-experiment/safe-restart/restart-hr2zj9uf/`.
+Focused capacity17/build19/refresh12/restart9/runner26 tests pass (83 total),
+design-context14 tests/validator, secret scan and diff checks pass. Full local
+verifier deliberately not run: its broader Go/runtime work exceeds this mission.
+Two isolated fixture setup errors are retained in diagnostic notes, not erased.
+
+Independent terminal/session/retention/budget review and separate API-only pilot
+remain pending; ready proposal does not authorize worker execution. Full upstream
+tests/publisher/admission/L0 acceptance remain false; Oct8 scans remain historical.
+Rollback repository repair only, retain all original artifacts/failures/counters.
+Vault left untouched/outside approved access; sync pending. No later batch scheduled.
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 

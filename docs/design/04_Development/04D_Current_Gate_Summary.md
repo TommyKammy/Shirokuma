@@ -5,12 +5,26 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-09
-version: "1.30"
+version: "1.31"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-09; re-observe before acting)
+
+**Repository repair worker observation (2026-10-09; parent review pending):**
+`gate-_g0u5c6u` implements typed `capacity.observe`: hard used>=8GiB/free<16GiB
+separate from unchanged bulk used<7GiB/free>=17GiB. Post-worker build validation
+uses hard observation; writers/inspection reserves/no-replay guards remain.
+Retained scopes freshly measured8137981952/8127361024 bytes, hard=false/bulk=false;
+independent accounting matches and all19 selected retained hashes match baseline.
+Full Colima list freshly Stopped. No retained writes/deletion/counter resets,
+builds/Go tests/downloads/runtime/image execution or pin/ledger/admission changes.
+Evidence/ready typed plan: `tmp/local-experiment/safe-restart/restart-hr2zj9uf/`.
+Parent independently reviews terminal/session/retention/budget and fixed tests
+before any separate API-only pilot. No pilot launched by worker, no gate pass or
+later batch scheduled; scans remain dated, full upstream/publisher/L0 still open.
+Vault untouched, sync pending. Original launch/count notes below remain dated.
 
 **Owner-selected safe restart (2026-10-09):** implement the proposed sequence,
 not a blind restart. `restart_supervisor.py` selects one repository-only

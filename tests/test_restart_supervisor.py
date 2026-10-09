@@ -74,7 +74,8 @@ class RestartTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);evidence=mock.Mock(directory=root)
             evidence.environment.return_value={'PATH':'/unused'}
-            capacity=mock.Mock();capacity.observe.return_value={'bulk_writes_allowed':False}
+            capacity=mock.Mock();capacity.observe.side_effect=[{'bulk_writes_allowed':True},
+                                                             {'bulk_writes_allowed':False}]
             process=mock.Mock(returncode=None);process.poll.return_value=None
             def terminate(p):p.returncode=-15
             with mock.patch.object(S.importlib,'import_module',return_value=capacity), \
@@ -87,6 +88,17 @@ class RestartTests(unittest.TestCase):
             record=S.R.private_json(root/'api-unit-tests.finished.json','TEST')
             self.assertEqual(record['returncode'],-15)
             self.assertEqual(record['disposition'],'held_no_replay')
+
+    def test_pilot_initial_guard_does_not_start_operation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);evidence=mock.Mock(directory=root)
+            capacity=mock.Mock();capacity.observe.return_value={'bulk_writes_allowed':False}
+            with mock.patch.object(S.importlib,'import_module',return_value=capacity), \
+                 mock.patch.object(S.subprocess,'Popen') as launch:
+                with self.assertRaisesRegex(S.R.RunnerError,'API_PILOT_WRITE_GUARD'):
+                    S.pilot_tests(evidence,Path('/unused/go'),root,{},60)
+                launch.assert_not_called()
+            self.assertEqual(list(root.iterdir()),[])
 
 
 if __name__=='__main__':unittest.main()

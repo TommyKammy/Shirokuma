@@ -14,7 +14,7 @@ class EvidenceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.directory = Path(self.tmp.name)
+        self.directory = Path(self.tmp.name).resolve()
         self.directory.chmod(0o700)
         self.evidence = B.Evidence(self.directory)
 
@@ -90,9 +90,9 @@ class EvidenceTests(unittest.TestCase):
         B.save(self.directory/'file', b'abc')
         st = (self.directory/'file').stat()
         self.assertEqual(B.usage(self.directory), max(3, st.st_blocks*512))
-        with mock.patch.object(Path, 'lstat', side_effect=FileNotFoundError):
+        with mock.patch.object(B.C.os, 'stat', side_effect=FileNotFoundError):
             self.assertEqual(B.usage(self.directory), 0)
-        with mock.patch.object(Path, 'lstat', side_effect=PermissionError):
+        with mock.patch.object(B.C.os, 'stat', side_effect=PermissionError):
             with self.assertRaises(PermissionError):
                 B.usage(self.directory)
 
@@ -108,7 +108,9 @@ class EvidenceTests(unittest.TestCase):
 
     def test_budget_rejects_without_launch(self):
         self.evidence.environment(create=True)
-        with mock.patch.object(B, 'usage', return_value=7*B.GIB), mock.patch.object(B.subprocess, 'Popen') as launch:
+        with mock.patch.object(B.C, 'observe', return_value=dict(used_bytes=7*B.GIB,
+                free_bytes=30*B.GIB, hard_limit_exceeded=False, bulk_writes_allowed=False)), \
+                mock.patch.object(B.subprocess, 'Popen') as launch:
             with self.assertRaises(RuntimeError):
                 self.evidence.command('blocked', ['go', 'version'])
             launch.assert_not_called()
