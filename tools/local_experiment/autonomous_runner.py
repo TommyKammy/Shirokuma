@@ -436,20 +436,35 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
 def reviewed_restart_stop(root, prior, summary, head, gate):
     """Owner-selected repo-only restart repair; never reopens old build scopes."""
     known = {'gate-azr7paf4', 'gate-5d3ur67c', 'gate-3f5odnk2', 'gate-xezx_z6k', 'gate-ayqdekwa'}
-    if gate != 'L0_SUPERVISION_CAPACITY_REPAIR' or prior.name not in known:
+    planning = gate == 'L0_FLUX_TEST_CAPACITY_PLAN'
+    if planning:
+        known.add('gate-_g0u5c6u')
+    if gate not in ('L0_SUPERVISION_CAPACITY_REPAIR', 'L0_FLUX_TEST_CAPACITY_PLAN') or prior.name not in known:
         return False
     require(summary.get('reason') == 'agent_no_safe_work_claim' and summary.get('attempts') == 1,
             'RESTART_REVIEW_INVALID')
     last = prior/'attempt-001'
     result = private_json(last/'result.json', 'RESTART_REVIEW_INVALID')
     cp = private_json(last/'checkpoint.json', 'RESTART_REVIEW_INVALID')
-    review = private_json(root/'tmp/local-experiment/gate-batches'/f'restart-review-{prior.name}.json',
+    prefix = 'test-plan-review' if planning else 'restart-review'
+    review = private_json(root/'tmp/local-experiment/gate-batches'/f'{prefix}-{prior.name}.json',
                           'RESTART_REVIEW_REQUIRED')
+    if planning:
+        evidence = root/'tmp/local-experiment/safe-restart-review/review-mv27dels'
+        completed = private_json(evidence/'summary.json', 'RESTART_REVIEW_INVALID')
+        pilot = private_json(evidence/'pilot-review.json', 'RESTART_REVIEW_INVALID')
+        require(completed.get('classification') == 'RESTART_RESUME_REVIEW_COMPLETED' and
+                completed.get('capacity_review') is True and completed.get('worker_replayed') is False and
+                pilot.get('classification') == 'API_PACKAGE_TESTS_PASSED' and pilot.get('exit_code') == 0 and
+                review.get('completed_review_sha256') == hashlib.sha256((evidence/'summary.json').read_bytes()).hexdigest() and
+                review.get('pilot_review_sha256') == hashlib.sha256((evidence/'pilot-review.json').read_bytes()).hexdigest(),
+                'RESTART_REVIEW_INVALID')
     reviewed_head = review.get('reviewed_head')
     require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
             review.get('original_summary') == summary and review.get('original_result') == result and
             review.get('checkpoint') == cp and review.get('allowed_gate') == gate and
-            review.get('decision') == 'old_scope_held_repository_capacity_repair_no_replay' and
+            review.get('decision') == ('old_scope_held_test_capacity_planning_no_execution' if planning else
+                                       'old_scope_held_repository_capacity_repair_no_replay') and
             review.get('server_outcome') == 'succeeded_idle_nonactive' and
             type(review.get('last_session_id')) is str and re.fullmatch(r'ses_[A-Za-z0-9]+',review['last_session_id']) and
             review.get('ledger_sha256') == hashlib.sha256((root/'security/resident-images.json').read_bytes()).hexdigest() and

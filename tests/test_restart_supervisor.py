@@ -7,6 +7,21 @@ from tools.local_experiment import restart_supervisor as S
 
 
 class RestartTests(unittest.TestCase):
+    def test_test_planning_default_is_zero_calls(self):
+        with mock.patch('sys.argv',['restart','--test-plan']),mock.patch.object(S,'test_planning') as run:
+            self.assertEqual(S.main(),0);run.assert_not_called()
+
+    def test_test_planning_exhausted_reservations_inhibit_launch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);parent=root/'tmp/local-experiment/test-capacity-plan'
+            parent.mkdir(parents=True,mode=0o700)
+            for n in range(2):(parent/f'plan-{n}').mkdir()
+            lock=root/'tmp/local-experiment/gate-supervisor';lock.mkdir();(lock/'lock').touch()
+            with mock.patch.object(S.R,'run') as run:
+                with self.assertRaisesRegex(S.R.RunnerError,'TEST_PLAN_APPROACH_EXHAUSTED'):
+                    S.test_planning(root,root/'vault')
+                run.assert_not_called()
+
     def test_capacity_parent_records_test_count_and_interpreter(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

@@ -5,12 +5,26 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-09
-version: "1.33"
+version: "1.34"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-09; re-observe before acting)
+
+**Owner-requested small-unit planning restart (2026-10-09):** select one Sol
+session/max45minutes, gate L0_FLUX_TEST_CAPACITY_PLAN. Investigate known test
+outcomes/retained source read-only and implement a typed regression-tested planner
+with measured minimum input/cache/temp/free-space budgets and unit deadlines.
+No Go invocation/test/build/download, source refetch, interrupted-test replay,
+old cache writes or runtime successor in this worker. Parent fixed planner tests
+and retention/terminal review precede a substantive plan review; a ready proposal
+does not authorize execution. Six known no-safe scopes remain held and are
+separately reviewed for this planning-only gate, binding completed capacity/API
+receipts. Two persistent planning reservations, old build counters unchanged.
+Preflight13:36Z: no active worker, OAuth-only route verified,19 retained hashes
+and stopped profiles match, budget allows one45minute session before original
+23:31:54Z deadline. Launch count and terminal outcome recorded separately.
 
 **Parent-reviewed safe restart completed (2026-10-09T09:10:16Z):** separate
 `tmp/local-experiment/safe-restart-review/review-mv27dels/` verifies terminal

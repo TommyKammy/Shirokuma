@@ -342,17 +342,96 @@ def resume_review(root,vault,old):
     finally:fcntl.flock(fd,fcntl.LOCK_UN);os.close(fd)
 
 
+def test_planning(root,vault):
+    """One repo-only planning session; no Go test/build or execution successor."""
+    parent=root/'tmp/local-experiment/test-capacity-plan';parent.mkdir(mode=0o700,exist_ok=True)
+    state=parent.lstat()
+    R.require(stat.S_ISDIR(state.st_mode) and state.st_uid==os.getuid() and stat.S_IMODE(state.st_mode)==0o700,
+              'TEST_PLAN_SCOPE_INVALID')
+    fd=os.open(root/'tmp/local-experiment/gate-supervisor/lock',os.O_RDWR|os.O_NOFOLLOW)
+    directory=None
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        R.require(len(list(parent.glob('plan-*')))<2,'TEST_PLAN_APPROACH_EXHAUSTED')
+        head=R.checkout_head(root,vault);S.no_active_worker(root);S.check_resume_budget(root,1,45)
+        R.subscription_preflight('opencode',S.MODEL,root)
+        profiles=F.stopped(root);before=retained(root)
+        baseline=S.baseline_file(root/'tmp/local-experiment/safe-restart/restart-hr2zj9uf/before.json')
+        R.require(before==baseline['retained'] and profiles==baseline['profiles'],'RESTART_RETENTION_DRIFT')
+        directory=Path(tempfile.mkdtemp(prefix='plan-',dir=parent))
+        R.save_json(directory/'before.json',dict(head=head,retained=before,profiles=profiles))
+        gate='L0_FLUX_TEST_CAPACITY_PLAN'
+        evidence=root/'tmp/local-experiment/safe-restart-review/review-mv27dels'
+        for name in PRIOR+('gate-_g0u5c6u',):
+            worker=root/'tmp/local-experiment/autonomous-runner'/name
+            summary,result,sid=S.terminal(root,worker)
+            receipt=dict(schema_version=1,source_run=name,original_summary=summary,original_result=result,
+                checkpoint=R.private_json(worker/'attempt-001/checkpoint.json','CHECKPOINT_INVALID'),
+                reviewed_head=head,last_session_id=sid,server_outcome='succeeded_idle_nonactive',
+                allowed_gate=gate,ledger_sha256=before['security/resident-images.json'],
+                completed_review_sha256=hashlib.sha256((evidence/'summary.json').read_bytes()).hexdigest(),
+                pilot_review_sha256=hashlib.sha256((evidence/'pilot-review.json').read_bytes()).hexdigest(),
+                decision='old_scope_held_test_capacity_planning_no_execution')
+            path=root/'tmp/local-experiment/gate-batches'/f'test-plan-review-{name}.json'
+            if not path.exists():R.save_json(path,receipt)
+            R.require(R.reviewed_restart_stop(root,worker,summary,head,gate),'TEST_PLAN_PRIOR_INVALID')
+        objective=dict(schema_version=1,wp_id='WP-L0-GITOPS-001',gate_id=gate,head_before=head,
+            baseline='Capacity repair independently reviewed; retained builds below hard8GiB but bulk7GiB writes held. Isolated Go1.26.6 API12 tests/1package passed. Root/signature tests incomplete; two binary builds exhausted. All profiles Stopped, immutable failures preserved.',
+            target_evidence='Investigate retained source/test receipts read-only. Implement a typed small-unit test plan and validation with regression tests, measured input/cache/temp/free-space budgets and fixed per-unit deadlines. Write owned0600 '+str((directory/'test-plan.json').relative_to(root))+': schema_version=1, decision=ready_for_parent_review|hold, notes30-350 chars. Provide detailed repo-relative plan/evidence; no execution in this worker.',
+            allowed_scope='Repository-only tools/local_experiment/flux_test_plan.py, tests/test_flux_test_plan.py, matching design/WP/runner notes; small new diagnostic receipts in this plan scope. Inspect retained source/module/test outcomes read-only. Distinguish successful, known terminated and unknown operations; propose materially different bounded test units with isolated writable caches/short TMPDIR and parent approval of fixed argv.',
+            stop_conditions='No Go invocation/tests/build/downloads, source refetch, binary/image/runtime execution, VM start, registry/publication writes, pins/ledger/approval/admission change, retained writes/deletion, retry-counter reset, third binary attempt, replay of unknown operations or blind replay of interrupted tests. Do not launch a runner or successor. No new spending/provider fallback.',
+            recovery='Commit coherent planner/validator and focused Python tests. Preserve all original records and retained bytes. Parent reviews terminal worker, diff, fixed tests, budgets and proposals before selecting any test unit. This worker only plans; neither a commit nor ready plan authorizes execution or establishes full upstream/publisher/admission/L0 acceptance.')
+        for key in ('baseline','target_evidence','allowed_scope','stop_conditions','recovery'):
+            R.require(30<=len(objective[key])<=650,'MISSION_INVALID')
+        R.save_json(directory/'mission.json',objective)
+        R.gate_preflight(root,head,1,45,independent_gate=gate)
+        reason,worker=R.run(root,vault,'opencode',max_runs=1,max_minutes=45,model=S.MODEL,mission=objective)
+        summary,result,sid=S.terminal(root,worker)
+        R.require(reason in ('run_budget_reached','agent_complete_claim','agent_no_safe_work_claim'),
+                  'TEST_PLAN_STOP_UNCLASSIFIED')
+        after=R.checkout_head(root,vault)
+        changes=R.git(root,'diff','--name-only',head,after).splitlines()
+        R.require(after!=head and all(p.startswith('docs/design/') or p in
+            ('tools/local_experiment/flux_test_plan.py','tests/test_flux_test_plan.py',
+             'tools/local_experiment/AUTONOMOUS_RUNNER.md') for p in changes),'TEST_PLAN_SCOPE_DRIFT')
+        R.require(retained(root)==before and F.stopped(root)==profiles,'RESTART_RETENTION_DRIFT')
+        value=R.private_json(directory/'test-plan.json','TEST_PLAN_INVALID')
+        R.require(set(value)=={'schema_version','decision','notes'} and type(value['schema_version']) is int and
+            value['schema_version']==1 and value['decision'] in ('ready_for_parent_review','hold') and
+            isinstance(value['notes'],str) and 30<=len(value['notes'])<=350 and
+            not any(ord(c)<32 for c in value['notes']),'TEST_PLAN_INVALID')
+        completed=subprocess.run([sys.executable,'-m','unittest','discover','-s','tests',
+            '-p','test_flux_test_plan.py','-q'],cwd=root,capture_output=True,timeout=120)
+        R.private_file(directory/'parent-planner-tests.stdout',completed.stdout)
+        R.private_file(directory/'parent-planner-tests.stderr',completed.stderr)
+        R.require(completed.returncode==0 and re.search(rb'Ran [1-9][0-9]* tests?\b',completed.stderr),
+                  'TEST_PLAN_PARENT_TESTS_FAILED')
+        R.save_json(directory/'summary.json',dict(classification='TEST_PLAN_PARENT_REVIEW_PENDING',
+            worker=worker.name,session=sid,head=after,proposal=value,focused_tests_passed=True,
+            test_execution_authorized=False,automatic_successor=False,gate_acceptance=False))
+        print(json.dumps({'evidence':str(directory),'test_execution':False,'parent_review_pending':True}))
+    except Exception as error:
+        if directory is not None and not (directory/'summary.json').exists():
+            R.save_json(directory/'summary.json',dict(classification='HELD',operation_replay=False,
+                reason=str(error) if isinstance(error,R.RunnerError) else type(error).__name__))
+        raise
+    finally:fcntl.flock(fd,fcntl.LOCK_UN);os.close(fd)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--execute',action='store_true');p.add_argument('--use-pro-weekly-limit',action='store_true')
     p.add_argument('--resume-series',type=Path,help='review a completed repository repair without re-launching it')
+    p.add_argument('--test-plan',action='store_true',help='one repo-only small-unit test planning worker')
     args=p.parse_args()
     if not args.execute:
         print(json.dumps({'mode':'plan-only','active_calls':0,
             'first_session_minutes':0 if args.resume_series is not None else 45,'pilot_minutes':60}));return 0
     try:
         R.require(args.use_pro_weekly_limit,'BUDGET_REQUIRED')
-        if args.resume_series is None:run(R.ROOT,R.VAULT)
+        R.require(not (args.test_plan and args.resume_series is not None),'RESTART_MODE_INVALID')
+        if args.test_plan:test_planning(R.ROOT,R.VAULT)
+        elif args.resume_series is None:run(R.ROOT,R.VAULT)
         else:resume_review(R.ROOT,R.VAULT,args.resume_series)
         return 0
     except (R.RunnerError,OSError,ValueError,KeyError,RuntimeError,ImportError) as error:

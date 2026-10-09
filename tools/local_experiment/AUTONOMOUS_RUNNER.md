@@ -4,6 +4,18 @@
 
 ### 2026-10-09 owner-selected safe restart
 
+`--execute --use-pro-weekly-limit --test-plan` selects one45minute repository-only
+Sol planning session (L0_FLUX_TEST_CAPACITY_PLAN), not another API pilot or binary
+build. Parent independently reviews six exact known terminal no-safe runs and
+binds completed capacity/API receipts by hash using separate test-plan-review
+records. Old scopes remain held. At most two persistent plan reservations.
+Worker may implement flux_test_plan.py/matching tests/design notes and write
+owned0600 test-plan.json (schema_version=1, decision=ready_for_parent_review|hold,
+notes30–350 single-line chars). No shell commands accepted from that proposal,
+Go invocation/download/retained writes/runtime or execution successor. Parent
+checks terminal state/diff/retained hashes/stopped profiles and nonempty focused
+test discovery; final plan review and separate test capability are still required.
+
 `--execute --use-pro-weekly-limit --resume-series <absolute restart scope>`
 reviews an already terminal repository repair with the exact original
 SUPERVISOR_PROBE_FAILED hold, without a new worker or rewritten failure. Parent

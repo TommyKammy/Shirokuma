@@ -331,6 +331,18 @@ class AutonomousRunnerTests(unittest.TestCase):
             ledger_sha256=R.hashlib.sha256(ledger.read_bytes()).hexdigest())
         self.write_private_json(self.root/'tmp/local-experiment/gate-batches/restart-review-gate-ayqdekwa.json',review)
         self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,gate))
+        planning='L0_FLUX_TEST_CAPACITY_PLAN'
+        evidence=self.root/'tmp/local-experiment/safe-restart-review/review-mv27dels'
+        self.write_private_json(evidence/'summary.json',dict(classification='RESTART_RESUME_REVIEW_COMPLETED',
+            capacity_review=True,worker_replayed=False))
+        self.write_private_json(evidence/'pilot-review.json',dict(classification='API_PACKAGE_TESTS_PASSED',exit_code=0))
+        planned=dict(review,allowed_gate=planning,decision='old_scope_held_test_capacity_planning_no_execution',
+            completed_review_sha256=R.hashlib.sha256((evidence/'summary.json').read_bytes()).hexdigest(),
+            pilot_review_sha256=R.hashlib.sha256((evidence/'pilot-review.json').read_bytes()).hexdigest())
+        self.write_private_json(self.root/'tmp/local-experiment/gate-batches/test-plan-review-gate-ayqdekwa.json',planned)
+        self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,planning))
+        self.write_private_json(evidence/'pilot-review.json',dict(classification='API_PACKAGE_TESTS_FAILED',exit_code=1))
+        with self.assertRaises(R.RunnerError):R.reviewed_restart_stop(self.root,prior,summary,head,planning)
         ledger.write_text('{"changed":true}')
         with self.assertRaises(R.RunnerError):R.reviewed_restart_stop(self.root,prior,summary,head,gate)
 
