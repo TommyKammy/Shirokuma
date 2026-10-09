@@ -5,12 +5,25 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-09
-version: "1.32"
+version: "1.33"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-09; re-observe before acting)
+
+**Parent-reviewed safe restart completed (2026-10-09T09:10:16Z):** separate
+`tmp/local-experiment/safe-restart-review/review-mv27dels/` verifies terminal
+worker, unchanged19 retained hashes/stopped profiles and capacity17 tests.
+Both retained builds remain hard_limit_exceeded=false/bulk_writes_allowed=false
+(8137981952/8127361024 bytes). Original restart HELD and old build failures remain
+immutable; read-only hard-limit review is resolved, not authorization for more
+writes to those scopes. Fixed isolated Go1.26.6 API pilot `tmp/rv/api-w8dk1t4k`
+passed12 tests/subtests and1 package, exit0, owned process terminal receipt and
+stdout hash recorded. No worker replay/new model call/counter reset/runtime
+successor. Usage517/600, remaining83, original deadline unchanged. This completes
+the repository repair and narrow API pilot only; interrupted root/signature tests,
+full upstream suite, publisher/admission and L0 acceptance remain unresolved.
 
 **Parent interpreter hold and separate review recovery (2026-10-09):** original
 restart `restart-hr2zj9uf/summary.json` remains HELD/SUPERVISOR_PROBE_FAILED.

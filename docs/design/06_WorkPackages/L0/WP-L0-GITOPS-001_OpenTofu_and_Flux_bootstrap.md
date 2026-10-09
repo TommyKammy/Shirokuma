@@ -44,6 +44,18 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+Parent outcome: separate `tmp/local-experiment/safe-restart-review/review-mv27dels/`
+completed terminal/retention/stopped-profile/capacity review and fixed Go1.26.6
+API pilot. `tmp/rv/api-w8dk1t4k` passed12 tests/subtests and1 package, exit0;
+terminal receipt2026-10-09T09:10:16Z records output SHA256. Old restart
+SUPERVISOR_PROBE_FAILED remains immutable (systemPython3.9 annotation failure,
+fixed by deferred annotations and launch-interpreter tests). Original build
+capacity failures remain retained; both builds now independently observed below
+hard8GiB but above bulk7GiB, so old additional writes still inhibited. No new
+model call/worker replay, cumulative517/600 with83 remaining/original deadline.
+API-only evidence does not complete interrupted root/signature tests, full
+upstream suite, publisher/admission or L0 acceptance. VM/pins/data unchanged.
+
 Owner asked to execute recommended safe restart. Select one45minute repo-only
 capacity/supervision mission, not a third source binary rebuild. Introduce typed
 read-only logical/allocated usage observation separating conservative7GiB bulk
