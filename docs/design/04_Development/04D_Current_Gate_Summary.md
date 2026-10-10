@@ -5,12 +5,30 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.47"
+version: "1.48"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Parent OS-prefix patch review and separate complete-archive capability:**
+gate-z31_2ik6 ended atfafffc8c; parent reran43 layer tests and independently
+rederived exact931840byte patch tar/provenance. All63 unrelated DB records remain,
+two stale library whiteouts are bound; two OS gzip blobs/config/child/diff IDs,
+APK/signature/ELF/musl/full64package inventory match prior evidence. Separate
+plan-engfkhdo/parent-layer-review.json retains original config-fetch hold; reused
+retained config bytes are exact digest-bound, not a retry or invented receipt.
+19 retained hashes/profiles Stopped verified; source group stays unknown/no replay.
+
+Parent selects nonactivating OS-only complete archive assembly: one fixed third
+controller blob48,171,604bytes public anonymous pull, hash/diff-ID/static tar/ARM64
+ELF validation (no invocation), preserve all3 original compressed layers and
+append verified pcre2 patch; unsigned local OS-only labels, unchanged Go binary.
+New192MiB scope/128MiB archive bound under combined16GiB/free17GiB. No image
+load/import/run/registry writes/compiler/tests/runtime/pin changes. Full archive
+and future fresh scan are separate outcomes. Starts522/600/remaining78; no extra
+model calls for parent assembly; deadline2026-10-11T01:30Z unchanged.
 
 **OS-layer worker result, parent review pending:** `gate-z31_2ik6` produces only
 an immutable pcre2 OS-prefix patch,931840 bytes/SHA256feaab060, under
