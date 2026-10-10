@@ -204,6 +204,22 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+Parent OS input review `kustomize-os-parent-review/review-m9iihc2r` verifies
+pcre2 10.49-r0/index RSA signatures against digest-bound retained keys and2
+ARM64 ELF payloads. Candidate musl1.2.5-r23/Q1/provided libc ABI/file exactly
+matches signed index and successful retained Syft/Trivy receipts for fixed child
+039165f7; new candidate-closure code/tests34 pass. Not current runtime or
+independent publisher/admission acceptance. Old worker hold and unknown source
+group evidence retained; parent verified content/19 hashes/profiles Stopped.
+
+Separately select one45min L0_KUSTOMIZE_OS_LAYER for nonactivating pcre2-only
+tar layer + tested installed-db/payload/whiteout builder. Read fixed manifest/
+config and at most2 bound OS blobs16MiB/30s each, fresh64MiB within combined16GiB/
+free17GiB. No full image/compiler/tests/install/scripts/VM/runtime/pin changes.
+Parent source-layer/config/unrelated DB safety review before next capability,
+no owner-per-attempt wait. Preserve all old/new evidence; repository-only rollback.
+Starts521/600 before launch, remaining79/deadline2026-10-11T01:30Z unchanged.
+
 Next owner-requested safe continuation selects L0_KUSTOMIZE_OS_REPAIR, one45min
 Sol repo repair of safe ARM64 pcre2 APK/index dependency/version/hash/provenance/
 signature validation. Two bounded public Alpine3.23/main/aarch64 reads (index4MiB,

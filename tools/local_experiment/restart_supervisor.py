@@ -354,9 +354,9 @@ def unknown_content(root):
     return digest.hexdigest()
 
 
-def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
+def test_planning(root,vault,minimal=False,independent=False,os_repair=False,os_layer=False):
     """One repo-only planning session; no Go test/build or execution successor."""
-    parent=root/'tmp/local-experiment'/('kustomize-os-repair' if os_repair else 'kustomize-source-repair' if independent else
+    parent=root/'tmp/local-experiment'/('kustomize-os-layer' if os_layer else 'kustomize-os-repair' if os_repair else 'kustomize-source-repair' if independent else
                                          'minimal-test-repair' if minimal else 'test-capacity-plan')
     parent.mkdir(mode=0o700,exist_ok=True)
     state=parent.lstat()
@@ -379,6 +379,10 @@ def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
                 for path in ('tmp/local-experiment/kustomize-graph','tmp/local-experiment/kustomize-source-repair'):
                     measured=Planner.measure(root,path)
                     total+=max(measured['charged_bytes'],measured['copy_bytes'])
+                if os_layer:
+                    for path in ('tmp/local-experiment/kustomize-os-repair','tmp/local-experiment/kustomize-os-parent-review'):
+                        measured=Planner.measure(root,path)
+                        total+=max(measured['charged_bytes'],measured['copy_bytes'])
             fs=os.statvfs(root)
             R.require(total+max(unknown_scope['charged_bytes'],unknown_scope['copy_bytes'])+
                 64*Planner.MIB<16*Planner.GIB and fs.f_bavail*fs.f_frsize>=17*Planner.GIB,
@@ -387,9 +391,9 @@ def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
         R.require(before==baseline['retained'] and profiles==baseline['profiles'],'RESTART_RETENTION_DRIFT')
         directory=Path(tempfile.mkdtemp(prefix='plan-',dir=parent))
         R.save_json(directory/'before.json',dict(head=head,retained=before,profiles=profiles))
-        gate='L0_KUSTOMIZE_OS_REPAIR' if os_repair else 'L0_KUSTOMIZE_SOURCE_REPAIR' if independent else 'L0_FLUX_MINIMAL_TEST_REPAIR' if minimal else 'L0_FLUX_TEST_CAPACITY_PLAN'
+        gate='L0_KUSTOMIZE_OS_LAYER' if os_layer else 'L0_KUSTOMIZE_OS_REPAIR' if os_repair else 'L0_KUSTOMIZE_SOURCE_REPAIR' if independent else 'L0_FLUX_MINIMAL_TEST_REPAIR' if minimal else 'L0_FLUX_TEST_CAPACITY_PLAN'
         evidence=root/'tmp/local-experiment/safe-restart-review/review-mv27dels'
-        for name in PRIOR+('gate-_g0u5c6u',)+(('gate-vpbadha7',) if minimal or independent else ())+(('gate-ysazsqh6',) if independent else ())+(('gate-d1i5mq08',) if os_repair else ()):
+        for name in PRIOR+('gate-_g0u5c6u',)+(('gate-vpbadha7',) if minimal or independent else ())+(('gate-ysazsqh6',) if independent else ())+(('gate-d1i5mq08',) if os_repair else ())+(('gate-_zvi8tes',) if os_layer else ()):
             worker=root/'tmp/local-experiment/autonomous-runner'/name
             summary,result,sid=S.terminal(root,worker)
             receipt=dict(schema_version=1,source_run=name,original_summary=summary,original_result=result,
@@ -398,7 +402,8 @@ def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
                 allowed_gate=gate,ledger_sha256=before['security/resident-images.json'],
                 completed_review_sha256=hashlib.sha256((evidence/'summary.json').read_bytes()).hexdigest(),
                 pilot_review_sha256=hashlib.sha256((evidence/'pilot-review.json').read_bytes()).hexdigest(),
-                decision='source_unknown_held_verified_graph_independent_pcre2_repair' if os_repair else
+                decision='verified_local_package_inputs_nonactivating_os_layer' if os_layer else
+                         'source_unknown_held_verified_graph_independent_pcre2_repair' if os_repair else
                          'source_unknown_held_independent_kustomize_source_repair' if independent else
                          'old_scope_held_minimum_seed_executor_repair_no_replay' if minimal else
                          'old_scope_held_test_capacity_planning_no_execution')
@@ -408,7 +413,9 @@ def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
                 receipt['source_operation_hold_sha256']=hashlib.sha256((root/'tmp/local-experiment/minimal-test-execution/review-6bapyn7_/parent-failure-review.json').read_bytes()).hexdigest()
             if os_repair:
                 receipt['graph_review_sha256']=hashlib.sha256((root/'tmp/local-experiment/kustomize-graph/graph-5arqvixh/parent-result-review.json').read_bytes()).hexdigest()
-            prefix='kustomize-os-review' if os_repair else 'kustomize-review' if independent else 'minimal-test-review' if minimal else 'test-plan-review'
+            if os_layer:
+                receipt['os_package_review_sha256']=hashlib.sha256((root/'tmp/local-experiment/kustomize-os-parent-review/review-m9iihc2r/summary.json').read_bytes()).hexdigest()
+            prefix='kustomize-os-layer-review' if os_layer else 'kustomize-os-review' if os_repair else 'kustomize-review' if independent else 'minimal-test-review' if minimal else 'test-plan-review'
             path=root/'tmp/local-experiment/gate-batches'/f'{prefix}-{name}.json'
             if not path.exists():R.save_json(path,receipt)
             R.require(R.reviewed_restart_stop(root,worker,summary,head,gate),'TEST_PLAN_PRIOR_INVALID')
@@ -438,6 +445,13 @@ def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
                 allowed_scope='Repo-only kustomize_os_repair.py, tests/test_kustomize_os_repair.py, matching design/WP/runner notes and new immutable index/APK/manifests in this scope, max64MiB/combined16GiB/free17GiB. Public HTTPS GET only dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/APKINDEX.tar.gz and one exact index-selected pcre2 APK. Read retained digest-bound source image archive keys streaming only; no retained writes. Fixed local openssl signature verification permitted, no package code execution.',
                 stop_conditions='No source mis access/replay/reconciliation, Go/compiler/upstream tests, image assembly/load/import/execution, APK install/scripts, runtime/VM changes, registries/publication/pin/ledger/approval/admission changes, retained deletion/threshold increase/counter reset/nested runners/new spending. Never follow archive links/traversal or execute contents. No unknown fetch retry. Unsigned/index-only hash evidence is not verified publisher authenticity.',
                 recovery='Commit coherent OS package validator plus Python regressions and immutable selected-package evidence. Parent independently reviews signatures/checksums/versions/dependency closure/archive safety, terminal/retention/capacity before selecting any image-layer capability; continue safe independent work without owner restart when reviewed. Hold dependent operation on unsupported signature/unknowns; preserve failures. Package evidence does not mitigate installed HIGHs or establish build/image scan/publisher/admission/L0.')
+        if os_layer:
+            objective.update(
+                baseline='Parent independently verified pcre2 10.49-r0 ARM64 APK/index RSA signatures under digest-bound retained keys,2ELFpayloads and musl1.2.5-r23 candidate closure; upstream publisher unverified. Kustomize Go module graph fixed, binary unbuilt. Original source group unknown/no replay. Select nonactivating OS patch layer only; no image/runtime acceptance.',
+                target_evidence='Implement tools/local_experiment/kustomize_os_layer.py and negative tests for checksum-bound layer parsing, APK installed-db replacement preserving unrelated packages, safe payload/link handling and stale library whiteouts. Produce immutable pcre2-only patch layer.tar+provenance if bounded candidate inputs verify. Write '+str((directory/'test-plan.json').relative_to(root))+': schema_version=1, decision=ready_for_parent_review|hold, notes30-350. Do not claim patched Go binary or full image.',
+                allowed_scope='Repo-only kustomize_os_layer.py, tests/test_kustomize_os_layer.py, matching design/WP/runner notes and immutable diagnostics/patch layer in this64MiB scope. Reuse verified retained APK/keys/candidate inventories read-only. Public read-only fixed ARM64 child039165f7ee401c107cdd2e1a5d16fa73bafc7dfe9143c2d61b10193a14190443 manifest/config plus at most2 digest-selected OS blobs <=16MiB each/30s; verified existing crane or anonymous HTTPS only. All data hash-bound, no mutable tags/retries.',
+                stop_conditions='No source mis access/replay/reconciliation, Go/compiler/upstream tests, full image assembly/load/import/run, APK install/scripts, VM/runtime/registry writes, pin/ledger/approval/admission changes, retained deletion/threshold increase/counter reset/nested runner/spending. Never follow archive links or execute package/image contents. Reject unbound/oversize/incomplete OS layers or installed-db closure. Local retained-key signature proof is not independent publisher proof.',
+                recovery='Commit functional isolated OS patch-layer builder/validator and Python regressions. Preserve all source/OS/fetch failures and unknown operations. Parent independently checks exact candidate config/layer identities, unchanged other DB records, payload/whiteouts/hashes/capacity/terminal state before any full-image capability. New layer alone is not installed mitigation or patched Go binary/scan/freshness/publisher/admission/L0 acceptance. Hold only unsafe dependent operations.')
         for key in ('baseline','target_evidence','allowed_scope','stop_conditions','recovery'):
             R.require(30<=len(objective[key])<=650,'MISSION_INVALID')
         R.save_json(directory/'mission.json',objective)
@@ -454,6 +468,7 @@ def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
              ('tools/local_experiment/flux_minimal_tests.py','tests/test_flux_minimal_tests.py')
              or independent and p in ('tools/local_experiment/kustomize_source_repair.py','tests/test_kustomize_source_repair.py')
              or os_repair and p in ('tools/local_experiment/kustomize_os_repair.py','tests/test_kustomize_os_repair.py')
+             or os_layer and p in ('tools/local_experiment/kustomize_os_layer.py','tests/test_kustomize_os_layer.py')
              for p in changes),'TEST_PLAN_SCOPE_DRIFT')
         R.require(retained(root)==before and F.stopped(root)==profiles,'RESTART_RETENTION_DRIFT')
         if independent:
@@ -464,6 +479,10 @@ def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
                 for path in ('tmp/local-experiment/kustomize-graph','tmp/local-experiment/kustomize-source-repair'):
                     measured=Planner.measure(root,path)
                     total+=max(measured['charged_bytes'],measured['copy_bytes'])
+                if os_layer:
+                    for path in ('tmp/local-experiment/kustomize-os-repair','tmp/local-experiment/kustomize-os-parent-review'):
+                        measured=Planner.measure(root,path)
+                        total+=max(measured['charged_bytes'],measured['copy_bytes'])
             R.require(max(new['charged_bytes'],new['copy_bytes'])<64*Planner.MIB and
                 total+max(unknown_scope['charged_bytes'],unknown_scope['copy_bytes'])+
                 max(new['charged_bytes'],new['copy_bytes'])<16*Planner.GIB,'INDEPENDENT_SCOPE_CAPACITY')
@@ -473,7 +492,7 @@ def test_planning(root,vault,minimal=False,independent=False,os_repair=False):
             isinstance(value['notes'],str) and 30<=len(value['notes'])<=350 and
             not any(ord(c)<32 for c in value['notes']),'TEST_PLAN_INVALID')
         completed=subprocess.run([sys.executable,'-m','unittest','discover','-s','tests',
-            '-p','test_kustomize_os_repair.py' if os_repair else 'test_kustomize_source_repair.py' if independent else 'test_flux_minimal_tests.py' if minimal else 'test_flux_test_plan.py','-q'],cwd=root,capture_output=True,timeout=120)
+            '-p','test_kustomize_os_layer.py' if os_layer else 'test_kustomize_os_repair.py' if os_repair else 'test_kustomize_source_repair.py' if independent else 'test_flux_minimal_tests.py' if minimal else 'test_flux_test_plan.py','-q'],cwd=root,capture_output=True,timeout=120)
         R.private_file(directory/'parent-planner-tests.stdout',completed.stdout)
         R.private_file(directory/'parent-planner-tests.stderr',completed.stderr)
         R.require(completed.returncode==0 and re.search(rb'Ran [1-9][0-9]* tests?\b',completed.stderr),
@@ -498,14 +517,16 @@ def main():
     p.add_argument('--minimal-tests',action='store_true',help='minimum offline seed and bounded executor repair')
     p.add_argument('--kustomize-repair',action='store_true',help='independent pinned kustomize source repair; source unknown stays held')
     p.add_argument('--kustomize-os-repair',action='store_true',help='independent bounded ARM64 pcre2 APK repair; no installation')
+    p.add_argument('--kustomize-os-layer',action='store_true',help='nonactivating pcre2-only OS patch layer after independent input review')
     args=p.parse_args()
     if not args.execute:
         print(json.dumps({'mode':'plan-only','active_calls':0,
             'first_session_minutes':0 if args.resume_series is not None else 45,'pilot_minutes':60}));return 0
     try:
         R.require(args.use_pro_weekly_limit,'BUDGET_REQUIRED')
-        R.require(sum((args.test_plan,args.minimal_tests,args.kustomize_repair,args.kustomize_os_repair,args.resume_series is not None))<=1,'RESTART_MODE_INVALID')
-        if args.kustomize_os_repair:test_planning(R.ROOT,R.VAULT,independent=True,os_repair=True)
+        R.require(sum((args.test_plan,args.minimal_tests,args.kustomize_repair,args.kustomize_os_repair,args.kustomize_os_layer,args.resume_series is not None))<=1,'RESTART_MODE_INVALID')
+        if args.kustomize_os_layer:test_planning(R.ROOT,R.VAULT,independent=True,os_repair=True,os_layer=True)
+        elif args.kustomize_os_repair:test_planning(R.ROOT,R.VAULT,independent=True,os_repair=True)
         elif args.kustomize_repair:test_planning(R.ROOT,R.VAULT,independent=True)
         elif args.minimal_tests:test_planning(R.ROOT,R.VAULT,minimal=True)
         elif args.test_plan:test_planning(R.ROOT,R.VAULT)

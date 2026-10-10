@@ -365,6 +365,17 @@ class AutonomousRunnerTests(unittest.TestCase):
             graph_review_sha256=R.hashlib.sha256(graph.read_bytes()).hexdigest())
         self.write_private_json(self.root/'tmp/local-experiment/gate-batches/kustomize-os-review-gate-ayqdekwa.json',os_review)
         self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_OS_REPAIR'))
+        package=self.root/'tmp/local-experiment/kustomize-os-parent-review/review-m9iihc2r/summary.json'
+        self.write_private_json(package,dict(classification='PCRE2_ARM64_PACKAGE_AND_CANDIDATE_CLOSURE_VERIFIED',
+            version='10.49-r0',image_assembled=False))
+        layer=dict(os_review,allowed_gate='L0_KUSTOMIZE_OS_LAYER',
+            decision='verified_local_package_inputs_nonactivating_os_layer',
+            os_package_review_sha256=R.hashlib.sha256(package.read_bytes()).hexdigest())
+        self.write_private_json(self.root/'tmp/local-experiment/gate-batches/kustomize-os-layer-review-gate-ayqdekwa.json',layer)
+        self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_OS_LAYER'))
+        self.write_private_json(package,dict(classification='SIGNATURE_HOLD'))
+        with self.assertRaises(R.RunnerError):
+            R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_OS_LAYER')
         self.write_private_json(graph,dict(classification='GRAPH_FAILED'))
         with self.assertRaises(R.RunnerError):
             R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_OS_REPAIR')

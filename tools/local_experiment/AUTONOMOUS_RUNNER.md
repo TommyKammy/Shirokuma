@@ -4,6 +4,20 @@
 
 ### 2026-10-09 owner-selected safe restart
 
+`--execute --use-pro-weekly-limit --kustomize-os-layer` selects one45minute
+L0_KUSTOMIZE_OS_LAYER after separate retained-key signature/ARM64 payload/candidate
+musl closure review. Ten exact terminal no-safe runs and parent OS/graph/unknown
+hold hashes bound by separate kustomize-os-layer-review receipts. This accepts
+local experimental input evidence, not independent publisher proof or admission.
+Worker implements safe APK installed-db replacement/whiteout/payload layer builder
+with Python regressions; may read exact immutable ARM64 child manifest/config and
+at most2 digest-selected OS blobs <=16MiB/30s, fresh64MiB under unchanged16GiB/
+free17GiB including retained kustomize evidence. Produces isolated layer.tar only;
+no full image/load/import/run, APK installation/scripts, Go/compiler/upstream
+test, runtime/pin change or unknown replay. Parent independently verifies source
+config/layer identity, unchanged other installed-db records and archive safety
+before any full-image successor. Default zero-call/two approach reservations.
+
 `--execute --use-pro-weekly-limit --kustomize-os-repair` selects one45minute
 L0_KUSTOMIZE_OS_REPAIR. Nine exact terminal no-safe sessions independently
 reconciled; kustomize-os-review receipts additionally bind the completed graph

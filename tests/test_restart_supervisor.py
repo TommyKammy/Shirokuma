@@ -7,6 +7,10 @@ from tools.local_experiment import restart_supervisor as S
 
 
 class RestartTests(unittest.TestCase):
+    def test_kustomize_os_layer_default_never_launches(self):
+        with mock.patch('sys.argv',['restart','--kustomize-os-layer']),mock.patch.object(S,'test_planning') as run:
+            self.assertEqual(S.main(),0);run.assert_not_called()
+
     def test_kustomize_os_default_never_launches(self):
         with mock.patch('sys.argv',['restart','--kustomize-os-repair']),mock.patch.object(S,'test_planning') as run:
             self.assertEqual(S.main(),0);run.assert_not_called()

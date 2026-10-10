@@ -5,12 +5,33 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.45"
+version: "1.46"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Parent OS-input milestone and reviewed successor:** separate
+`kustomize-os-parent-review/review-m9iihc2r` independently reverified index/APK RSA
+signatures under digest-bound retained key, exact bytes/identity and2 ARM64 ELF
+payloads. New tested candidate closure binds retained Syft/Trivy successful
+receipt hashes to exact child039165f7 and musl1.2.5-r23 version/Q1/provided ABI/
+installed file; this matches signed-index provider checksum.34 Python regressions
+pass. Old worker hold preserved; installed-inventory gap resolved only for this
+retained candidate, not current runtime. Publisher remains independently
+unverified; local input trust is verified-retained-key only, no admission.
+Parent terminal/19 hashes/unknown current content/stopped profiles verified.
+
+Continue without another owner restart to one45minute L0_KUSTOMIZE_OS_LAYER:
+functional safe installed-db/payload/whiteout patch-layer builder and immutable
+tar only. Exact fixed child manifest/config and at most2 digest-selected OS blob
+reads <=16MiB/30s each, fresh64MiB/combined16GiB/free17GiB. No full image assembly,
+load/import/run, APK install/scripts, compiler/Go/upstream tests or runtime/pin
+changes. Ten known terminal no-safe receipts additionally bind parent OS proof;
+two reservations per approach. Parent verifies candidate config/layer identities,
+unrelated DB bytes/payload/archive safety before any full-image capability.
+Starts521/600/remaining79 before launch; deadline2026-10-11T01:30Z unchanged.
 
 **OS repair worker result (parent review pending):** `gate-_zvi8tes` implements
 safe APKINDEX/APK parser and32 negative/positive Python regressions. Single bounded
