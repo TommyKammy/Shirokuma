@@ -19,6 +19,30 @@ APK installation/Go/compiler/layer/image/VM/runtime operation. Unsupported
 signature/unknown fetch holds dependent work; no retry, cleanup, capacity
 relaxation or admission. Parent independently reviews before successor capability.
 
+OS worker implementation: `kustomize_os_repair.py` exposes no CLI/automatic calls.
+Exclusive0600 start reservations inhibit unknown fetch replay; no redirects,
+environment proxies or credentials, whole-call30s deadline, index4MiB/APK8MiB.
+Bounded gzip CRC/member parsing and raw tar envelope checks precede semantic
+reads; unknown PAX/GNU/global/sparse extensions, unsafe paths, duplicate/special
+members and scripts reject. Payload relative links are metadata only, never
+followed/extracted. Stable numeric pcre2 versions only (not generic apk vercmp).
+Q1 SHA1 covers compressed control, not whole APK; .PKGINFO datahash verifies
+compressed payload SHA256. Exact ARM64 identity/origin commit/dependencies bind
+index to package; missing/ambiguous/version-constrained provider proof holds.
+Digest-bound retained archive/base layer keys are streamed without retained writes.
+Fixed `/usr/bin/openssl dgst -sha1 -verify` checks compressed control signatures;
+missing/failed/unsupported proof is a typed hold, not publisher acceptance.
+
+Actual worker retrieved pcre2-10.49-r0 once and verified both signatures against
+retained keyd11f6b21 (archive0bdac040).32 Python fixture regressions plus actual
+artifact rederivation pass. Schema1 plan in
+`tmp/local-experiment/kustomize-os-repair/plan-uv0ivv6h/` remains **hold** because
+installed musl closure, independent upstream key trust and parent terminal/
+retention/capacity review are outstanding. Local verifier reports are inputs for
+independent rechecking, not attestations granting image execution or admission.
+Keep parser/fixture failures and fetch originals; no replay, installation/image/
+runtime successor, installed HIGH mitigation/current freshness/L0 claim.
+
 `--execute --use-pro-weekly-limit --kustomize-repair` selects one45minute
 L0_KUSTOMIZE_SOURCE_REPAIR independently of the unknown source index operation.
 Eight exact no-safe terminal sessions are parent-reconciled; separate

@@ -5,12 +5,27 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.44"
+version: "1.45"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**OS repair worker result (parent review pending):** `gate-_zvi8tes` implements
+safe APKINDEX/APK parser and32 negative/positive Python regressions. Single bounded
+GETs retrieved index524414/APK320292 bytes: ARM64 pcre2 **10.49-r0**, origin commit,
+Q1 control checksum, signed payload hash and archive safety validate. Both RSA-SHA1
+signatures verify against digest-bound retained image APK keyd11f6b21; archive
+0bdac040/base-layer hash rechecked streaming, not independent upstream trust.
+Private `kustomize-os-repair/plan-uv0ivv6h/test-plan.json` is **hold**: installed
+musl closure, publisher trust and parent terminal/retention/capacity review remain.
+No fetch retry, unknown source access/replay, Go/compiler/install/image/VM changes,
+pin/ledger/approval/admission changes. Parent-dated retained accounting plus full
+source/two-graph/new64MiB reservations fits16GiB/free17GiB; parent reobserves before
+successor. Package evidence is not installed mitigation/fresh advisory/build/image/
+admission/L0 acceptance. Vault untouched/sync pending; preserve all failure/data.
+This worker does not authorize a later batch or image-layer capability.
 
 **Next independent gate selected for owner-requested restart:** one45minute Sol
 L0_KUSTOMIZE_OS_REPAIR after independently verified source patch/checksums/graph.

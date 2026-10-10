@@ -12,6 +12,46 @@ tags: [shirokuma, workpackage, l0, gitops, flux]
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
 
+## 2026-10-10: ARM64 pcre2 package evidence; installed closure held
+
+`gate-_zvi8tes` / L0_KUSTOMIZE_OS_REPAIR implements
+`tools/local_experiment/kustomize_os_repair.py` with32 offline Python regressions.
+Exactly one Alpine v3.23/main/aarch64 index GET (524414 bytes, SHA2565c520955)
+and one index-selected pcre2-10.49-r0.apk GET (320292 bytes, SHA256a0af38fe)
+completed within30seconds each; neither was retried. Immutable0600 artifacts,
+receipts, selected record, signature reports and package evidence are under
+`tmp/local-experiment/kustomize-os-repair/plan-uv0ivv6h/` (ignored, not in Git).
+
+Reader separates gzip members, checks CRC/expanded bounds, raw tar headers,
+padding/hidden trailing data, PAX whitelist, duplicates, traversal/links/special
+files and scripts. No extraction or content execution. Numeric stable version
+is at least10.49-r0; ARM64/origin commit match; Q1 SHA1 binds compressed control
+only, and signed .PKGINFO datahash binds the complete compressed payload. Both
+RSA-SHA1 signatures verify over compressed control streams with fixed local
+openssl, using key SHA256d11f6b21 streamed from retained source image archive
+SHA2560bdac040. Archive hash and base-layer digest were rechecked read-only.
+This proves signatures relative to retained keys, not independent upstream trust.
+
+Index provider for sole dependency `so:libc.musl-aarch64.so.1` is musl1.2.5-r23;
+installed image inventory/ABI closure is not bound in this keys-only scope.
+Schema1 test-plan decision **hold**, not image-layer execution authority. Parent
+must independently review signatures, trust, installed closure, terminal/retention
+and fresh capacity. Scope observed1454080 charged bytes before final receipts,
+free2416789532672; conservative parent-dated builds/unknown plus three64MiB
+source/graph reservations and new64MiB remains below16GiB/free17GiB. Unknown
+source scope was never accessed/reconciled; no fresh VM observation or change.
+Initial metadata-parser holds and fixture failures are preserved in private
+development-diagnostics.json; fetched bytes unchanged. Full local verifier was
+not run because its Go/runtime targets exceed this mission. Installed HIGHs,
+current advisory freshness, build/image scan, publisher/admission/L0 remain open.
+Rollback repository code only; retain all evidence/data. Vault untouched, sync
+pending; no later batch, counter/pin/approval/admission changes authorized.
+
+Final recorded scope1470464 charged bytes/free2416786505728; immutable
+evidence-manifest.json binds artifacts and code/test hashes. Focused56 tests,
+design-context14 tests/validator and `git diff --check` pass. No broader verifier
+or runtime smoke was attempted outside this mission.
+
 ## 2026-10-10: independent kustomize source/module patch; parent review pending
 
 `gate-d1i5mq08` / `L0_KUSTOMIZE_SOURCE_REPAIR` implements

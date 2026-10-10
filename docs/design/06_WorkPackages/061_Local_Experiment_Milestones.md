@@ -5,12 +5,39 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-10
-version: "5.557"
+version: "5.558"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-10: kustomize OS package proof, not installed mitigation
+
+WP-L0-GITOPS-001 / `gate-_zvi8tes`:32 Python OS-validator regressions plus24
+source-validator regressions. One bounded index and one exact ARM64 pcre2
+10.49-r0 APK retrieval completed once. Index SHA2565c520955/packagea0af38fe;
+version/architecture/origin, control Q1 SHA1, payload SHA256 and archive safety
+rederive. Fixed openssl verifies both RSA-SHA1 signatures with retained key
+d11f6b21 from archive0bdac040 (hash and base-layer digest rechecked streaming).
+Evidence: `tmp/local-experiment/kustomize-os-repair/plan-uv0ivv6h/`.
+
+Schema1 plan **hold**: musl index provider identified but installed dependency
+inventory/ABI closure and independent upstream key trust are not established.
+Parent must review terminal/retention/capacity before any new image capability.
+New scope ~1.4MiB before final receipts; three full source/graph64MiB reservations
+plus parent-dated retained charges/new64MiB fit unchanged16GiB/free17GiB.
+No unknown source access/replay, retained writes/deletion, Go/compiler/tests,
+install/scripts/image/VM operations, pin/ledger/approval/admission changes.
+Parent's stopped-lab baseline is dated, not a new worker runtime observation.
+Initial parser/fixture failures retained in diagnostic summary, no fetch retry.
+Broad local verifier omitted due prohibited Go/runtime targets; original Vault
+untouched/sync pending. Installed HIGHs/freshness/build/image/publisher/admission/
+L0 remain open; no acceptance checkboxes or later batch scheduled. Repository-only
+rollback, preserve generated evidence and original failure/counter state.
+Final artifact/code/test manifest and captured56-test results are retained;
+scope1470464 charged bytes/free2416786505728. Design-context14 tests/validator
+and diff whitespace checks pass; no broader/runtime acceptance inferred.
 
 ## 2026-10-10: exact pinned kustomize module patch, not mitigation/admission
 
