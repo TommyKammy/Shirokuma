@@ -5,12 +5,30 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.38"
+version: "1.39"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Fixed-unit execution capacity hold (parent observed):** first index-state
+scope `tmp/rv/mis` stopped at cache/temp ceiling during compilation, stdout and
+stderr empty; no test passes observed. Second index-digest scope unreserved.
+Original `minimal-test-execution/review-6bapyn7_/summary.json` HELD and mis
+held/reservation/data preserved. Read-only parent measured scope305778688,
+cache141996032/temp137588736 copy-or-allocated bytes, exceeding prospective
+128MiB sublimits. Old19 hashes unchanged/all profiles freshly Stopped; no
+matching toolchain/scope processes observed, but original process/group/exit
+receipt is missing, so original operation stays unknown/no replay. Separate
+parent-failure-review.json records this limitation, not reconstructed success.
+
+Executor repository repair now records created child PID/group plus separate
+stopped receipt with actual returncode, original guard error, termination error,
+stdout/stderr hashes and group absence result. Failed group verification is
+explicitly unknown; original missing receipt is not synthesized. This does not
+reopen original or second-unit execution, loosen bounds or delete retained data.
+Usage519/600/remaining81, deadline2026-10-11T01:30Z; no active model worker.
 
 **Minimum-seed worker result (parent review pending):** `gate-ysazsqh6` implements
 read-only verified40-package/six-module offline seed and zero-call-default fixed

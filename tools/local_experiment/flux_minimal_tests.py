@@ -423,6 +423,9 @@ def execute(root, plan, *, review=None, unit_id=None, execute=False):
             os.fchmod(err.fileno(), 0o600)
             process = subprocess.Popen(argv, cwd=directory/'s', env=env, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE, start_new_session=True)
+            exclusive_json(root, scope+'/process.json', dict(pid=process.pid,
+                           process_group=process.pid, observed_at=time.time(),
+                           start_new_session=True))
             deadline = min(time.monotonic()+600, time.monotonic()+review['deadline_epoch']-time.time())
             pipes = {process.stdout: out, process.stderr: err}
             recorded = 0
@@ -451,9 +454,27 @@ def execute(root, plan, *, review=None, unit_id=None, execute=False):
                        stdout_sha256=sha(data), stderr_sha256=sha(P.read_bytes(root, scope+'/stderr', RECEIPTS)),
                        owned_group_terminal=True, finished_at=time.time(), outcome=outcome))
         return outcome
-    except BaseException:
-        if process is not None:
-            terminate_owned(process)
-        # Reservation and started receipt survive every failure. No fallback/retry.
-        exclusive_json(root, scope+'/held.json', dict(decision='hold_no_replay'))
+    except BaseException as error:
+        termination_error = None
+        terminal = False
+        try:
+            if process is not None:
+                terminate_owned(process)
+                terminal_group(process)
+                terminal = True
+        except BaseException as stopped_error:
+            termination_error = type(stopped_error).__name__ + ': ' + str(stopped_error)[:180]
+            raise
+        finally:
+            # Separate failure receipt, never a fabricated success/result. A
+            # missing/failed group observation is explicitly unknown, no replay.
+            exclusive_json(root, scope+'/held.json', dict(decision='hold_no_replay'))
+            exclusive_json(root, scope+'/stopped.json', dict(
+                disposition='known_terminated' if terminal else 'unknown' if process is not None else 'not_launched',
+                returncode=None if process is None else process.returncode,
+                owned_group_terminal=terminal, termination_error=termination_error,
+                observation_error=type(error).__name__ + ': ' + str(error)[:180],
+                finished_at=time.time(),
+                stdout_sha256=sha(P.read_bytes(root, scope+'/stdout', RECEIPTS)) if (directory/'stdout').exists() else None,
+                stderr_sha256=sha(P.read_bytes(root, scope+'/stderr', RECEIPTS)) if (directory/'stderr').exists() else None))
         raise

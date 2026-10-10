@@ -4,6 +4,14 @@
 
 ### 2026-10-09 owner-selected safe restart
 
+Minimum-test executor now persists process.json for its created PID/group and
+stopped.json on a guard/error path (observed exit, owned-group absence, output
+hashes and termination errors). A failed/missing observation remains unknown;
+held/reserved scopes never replay. Original index-state capacity stop predates
+these receipts and stays an immutable unknown-operation hold; observing no
+matching processes later does not fabricate the missing original group outcome.
+No disjoint-unit continuation without the required prior verified outcome.
+
 Owner on2026-10-10 explicitly extended execution deadline only to
 2026-10-11T01:30Z / 10:30JST. `execution_deadline(root)` applies the fixed endpoint
 only to exact retained original series, otherwise original week. Cumulative600,

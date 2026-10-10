@@ -214,7 +214,7 @@ import (
         with self.assertRaises(FileExistsError): self.run_mock(self.plan())
 
     def test_running_guard_failure_stops_only_owned_process_and_holds(self):
-        process = mock.Mock(pid=12345)
+        process = mock.Mock(pid=12345, returncode=-15)
         process.poll.return_value = None
         readers = []
         for _ in range(2):
@@ -229,9 +229,13 @@ import (
         self.assertTrue((directory/'started.json').exists())
         self.assertTrue((directory/'held.json').exists())
         self.assertFalse((directory/'finished.json').exists())
+        receipt=json.loads((directory/'stopped.json').read_text())
+        self.assertEqual(receipt['disposition'],'known_terminated')
+        self.assertEqual(receipt['returncode'],-15)
+        self.assertTrue(receipt['owned_group_terminal'])
 
     def test_wall_deadline_terminates_owned_child_without_replay(self):
-        process = mock.Mock(pid=12345); process.poll.return_value = None
+        process = mock.Mock(pid=12345, returncode=-15); process.poll.return_value = None
         readers = []
         for _ in range(2):
             reader, writer = os.pipe(); os.close(writer)
@@ -243,8 +247,23 @@ import (
         stop.assert_called_once_with(process)
         self.assertFalse((self.root/M.SCOPES['index-state']/'finished.json').exists())
 
+    def test_failed_termination_is_recorded_unknown_not_terminal(self):
+        process=mock.Mock(pid=12345,returncode=None);process.poll.return_value=None
+        readers=[]
+        for _ in range(2):
+            reader,writer=os.pipe();os.close(writer);readers.append(os.fdopen(reader,'rb'))
+        process.stdout,process.stderr=readers
+        with mock.patch.object(M,'terminate_owned',side_effect=M.P.PlanError('ownership unknown')):
+            with self.assertRaisesRegex(M.P.PlanError,'ownership unknown'):
+                self.run_mock(self.plan(),process=process,
+                              bound_error=[None,M.P.PlanError('running ceiling')])
+        receipt=json.loads((self.root/M.SCOPES['index-state']/'stopped.json').read_text())
+        self.assertEqual(receipt['disposition'],'unknown')
+        self.assertFalse(receipt['owned_group_terminal'])
+        self.assertIn('ownership unknown',receipt['termination_error'])
+
     def test_receipt_limit_is_checked_before_writing_pipe_bytes(self):
-        process = mock.Mock(pid=12345); process.poll.return_value = None
+        process = mock.Mock(pid=12345, returncode=-15); process.poll.return_value = None
         readers = []
         for payload in (b'oversize', b''):
             reader, writer = os.pipe(); os.write(writer, payload); os.close(writer)
