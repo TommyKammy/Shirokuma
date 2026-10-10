@@ -18,6 +18,20 @@ test, runtime/pin change or unknown replay. Parent independently verifies source
 config/layer identity, unchanged other installed-db records and archive safety
 before any full-image successor. Default zero-call/two approach reservations.
 
+OS-layer implementation: `kustomize_os_layer.py` is a no-CLI, no-fetch pure
+builder/validator. It binds the fixed child manifest/config, exactly two complete
+OS blobs and diff IDs, parent retained-key/ELF proof receipt and retained candidate
+scan inventory. Raw tar/PAX path/link checks never extract or follow links;
+hardlinks/special files/input whiteouts or incomplete closure hold. Deterministic
+USTAR output replaces only pcre2's installed-db record, retains unrelated records
+byte-for-byte and includes only two libraries/two symlinks/two stale whiteouts.
+`build_candidate` reports the uninspected third layer explicitly: config COPY
+history is selection context, not proof of full-image OS neutrality. Parent must
+review this dependency before any full-image capability. Provenance preserves all
+mitigation/build/full-image/publisher/freshness/admission/L0 gaps. Repository-only
+rollback; never delete receipts or replay failed config/blob requests. Worker
+evidence is `kustomize-os-layer/plan-engfkhdo`, with schema1 parent-review plan.
+
 `--execute --use-pro-weekly-limit --kustomize-os-repair` selects one45minute
 L0_KUSTOMIZE_OS_REPAIR. Nine exact terminal no-safe sessions independently
 reconciled; kustomize-os-review receipts additionally bind the completed graph

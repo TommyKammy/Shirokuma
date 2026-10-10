@@ -5,12 +5,38 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-10
-version: "5.558"
+version: "5.559"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-10: isolated kustomize pcre2 OS-prefix layer, not full image acceptance
+
+WP-L0-GITOPS-001 / `gate-z31_2ik6`: functional checksum-bound layer parser,
+installed-db replacement/payload/whiteout builder and43 offline Python regressions.
+Fixed child039165f7/configf9770801 and two OS blobs ace1621b/7bfd830a bind complete
+bytes/diff IDs. Config retrieval redirect failure retained/no replay; exact-hash
+retained config used instead. No third blob, image assembly/install/runtime/Go work.
+OS-prefix64 packages match retained candidate inventory; musl ABI/checksum/files
+verify. Immutable931840-byte layer SHA256feaab060 preserves all63 unrelated DB
+records, changes pcre2 to10.49-r0, supplies two ELF libraries/two symlinks and two
+stale-version whiteouts. Inputs and saved artifacts rederive; parent signature/ELF
+receipt bound, not independent publisher proof. Evidence:
+`tmp/local-experiment/kustomize-os-layer/plan-engfkhdo/`.
+
+Ready-for-parent-review plan is not full-image capability or L0 pass. Uninspected
+controller layer may not be assumed OS-neutral from history alone. Parent must
+review that separate dependency, terminal/retention/capacity and exact artifact
+safety before any successor. Fresh64MiB reservation fits parent-dated combined
+16GiB/free17GiB accounting; unknown source scope untouched/no replay. No VM/live
+observations, pin/ledger/approval/admission/counter changes or retained deletion.
+Go binary unbuilt; installed mitigation/full scan/freshness/publisher/admission/L0
+remain unresolved. Repository-only rollback, retain all failures/data; Vault sync
+pending. Broad verifier excluded due prohibited Go/runtime targets. No later batch.
+Final101 focused tests, design-context14 tests/validator and diff check pass;
+manifest-bound evidence scope19984384 charged bytes before manifest/free2416806981632.
 
 ## 2026-10-10: kustomize OS package proof, not installed mitigation
 

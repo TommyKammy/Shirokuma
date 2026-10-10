@@ -5,12 +5,65 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-10
-version: "0.194"
+version: "0.195"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-10: nonactivating pcre2 OS-prefix patch; parent review pending
+
+`gate-z31_2ik6` / L0_KUSTOMIZE_OS_LAYER implements
+`tools/local_experiment/kustomize_os_layer.py` and43 synthetic Python regressions.
+Fixed child `039165f7` manifest is SHA256-bound; config `f9770801` is bound by
+its manifest descriptor. The config GET stopped on a prohibited redirect;
+its original start/held receipts remain and it was not retried. Exact-digest
+retained candidate config supplied the bytes instead. Two newly selected OS
+blobs, `ace1621b` (4186056 bytes) and `7bfd830a` (14748509 bytes), were each
+retrieved once within a30second whole-call guard. Anonymous HTTPS redirects
+were restricted to the public blob host, without forwarding authorization.
+No mutable tag, third blob or full image was retrieved/assembled/executed.
+
+Compressed hashes and config diff IDs bind complete gzip/tar bytes. Raw header,
+padding/end markers, PAX path/link metadata, duplicates, traversal, hardlinks,
+special files, whiteouts and symlink-parent hazards are fail-closed. Links remain
+metadata only. Two OS layers contain64 installed packages matching the hash-bound
+retained candidate Trivy inventory (name/version/architecture/Q1 checksum).
+Installed musl1.2.5-r23 checksum/provided ABI/files and old pcre2 files verify.
+Parent receipt binds prior RSA proofs and both new ARM64 ELF payload hashes;
+receipt validation does not independently establish upstream publisher trust.
+
+Immutable0600 `layer.tar` and `provenance.json` are under
+`tmp/local-experiment/kustomize-os-layer/plan-engfkhdo/`. Layer931840 bytes,
+SHA256 `feaab06085a1c0be14a1a1e8f79970ae7fb76582c892f66c0746ff7bafd0341a`:
+only installed-db replacement, two libraries, two symlinks and two empty regular
+stale-library whiteouts. All63 unrelated package records remain byte-identical,
+including record order/metadata. Saved artifacts rederive exactly from inputs.
+Package contents were never installed, extracted to host paths or executed.
+
+This is **two verified OS layers only**, not a verified complete candidate image.
+The48MB controller blob remains uninspected; config history identifies its intended
+COPY but is not byte-level proof that it cannot alter the OS. Parent must separately
+review that dependency before full-image capability, plus exact artifact/input
+hashes, terminal state, capacity, DB preservation and payload/whiteout safety.
+Schema1 test-plan is ready_for_parent_review, not successor authority or gate pass.
+Conservative parent-dated charges plus four prior64MiB reservations/new64MiB fit
+unchanged16GiB/free17GiB; current unknown-scope inspection belongs to the parent.
+No unknown-source access/reconciliation/replay, Go/compiler/upstream tests, VM/
+runtime/registry/pin/ledger/approval/admission changes, deletion or counter reset.
+Lab state remains dated parent baseline, not fresh worker observation. Full local
+verifier is excluded because it invokes prohibited Go/runtime targets. Preserve
+initial parser/fixture/config-fetch failures in private diagnostics. Repository-only
+rollback; retain all inputs/artifacts/failures. Vault untouched, sync pending.
+Installed mitigation, patched Go binary, full image/scan/freshness/publisher/admission/
+L0 acceptance remain false/unverified; no checkbox or later batch authorization.
+
+Final focused suite101 passes (43 layer +34 APK +24 source), design-context14
+tests/validator and `git diff --check` pass. Private manifest binds artifact/code/
+test hashes; measured scope19984384 charged bytes before final manifest, free
+2416806981632 bytes. This measurement excludes any fresh unknown-source inspection
+or runtime observation and does not replace independent parent retention review.
 
 ## 2026-10-10: ARM64 pcre2 package evidence; installed closure held
 

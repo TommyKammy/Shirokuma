@@ -5,12 +5,26 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.46"
+version: "1.47"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**OS-layer worker result, parent review pending:** `gate-z31_2ik6` produces only
+an immutable pcre2 OS-prefix patch,931840 bytes/SHA256feaab060, under
+`kustomize-os-layer/plan-engfkhdo`.43 synthetic Python regressions; complete
+checksum/diff-ID-bound two OS blobs match64 installed candidate packages; all63
+unrelated DB records remain byte-identical. Two new ELF libraries/two symlinks/
+two stale whiteouts, no install/execution. Config GET redirect failure preserved
+without retry; retained config hash exactly matches fixed manifest descriptor.
+Ready-for-parent-review is not full image/Go binary/installed mitigation/scan/
+freshness/publisher/admission/L0 acceptance. Third controller layer uninspected;
+history is not byte-level OS-neutrality proof. Parent must review that dependency
+and exact artifacts, terminal/retention/capacity before a distinct successor.
+No source unknown access/replay, runtime/pin/approval/counter/data change. Vault
+sync pending; no later batch authorized. Earlier stopped profiles remain dated.
 
 **Parent OS-input milestone and reviewed successor:** separate
 `kustomize-os-parent-review/review-m9iihc2r` independently reverified index/APK RSA
