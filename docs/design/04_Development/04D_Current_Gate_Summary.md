@@ -5,12 +5,33 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.41"
+version: "1.42"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Kustomize parent review and independent graph continuation:** worker
+gate-d1i5mq08 ended no_safe_work at1fe0f347; parent terminal/24 tests/19 hashes/
+stopped profiles and exact two-line patch/source-revision/fetch receipts verified.
+`kustomize-source-repair/plan-xagjdb5n/parent-source-review.json` records source
+patch acceptance only. Unknown source mis files/logical/copy charges match prior;
+allocated charge decreased49152bytes, so old allocation manifest is not claimed
+identical. Current content snapshot recorded, original unknown hold unresolved.
+
+Parent selected separate bounded offline graph capability, not another model
+session: fresh64MiB scope, exact pinned API go.mod/go.sum reads with30s/2MiB bounds,
+verified retained Go1.26.6 read-only, checksum-verified cached .mod seeds and two
+new dependency ZIP checksums. Fixed `go mod graph`, network/toolchain auto-download
+off, no compiler/test invocation,120s wall/owned process receipts. Preserve all
+fetch/graph failures and unknown source scope; no replay. First graph
+`kustomize-graph/graph-7kralryc` known exit1: missing longrunning1.1.0 metadata
+with GOPROXY=off. Seed866 checksum-verified .mod files, four verified new checksum
+lines, pinned API fetches completed. Changed second/final approach may retrieve
+168 missing .mod files only, checksums anchored in pinned go.sum; bounded HTTPS,
+no credentials/retries, fresh64MiB and combined16GiB/free17GiB. No third unchanged
+graph attempt. Starts520/600, remaining80; deadline2026-10-11T01:30Z unchanged.
 
 **Pinned kustomize source repair worker (parent review pending):** `gate-d1i5mq08`
 implements exact pinned-source/two-line module patch/provenance validation. The
