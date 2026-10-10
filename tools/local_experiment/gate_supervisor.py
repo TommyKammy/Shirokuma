@@ -319,8 +319,7 @@ def mission(head, stage):
 
 def check_resume_budget(root, max_sessions, minutes):
     base = root/'tmp/local-experiment/autonomous-runner'
-    birth = (base/R.FIRST_RUN).stat().st_birthtime
-    R.require(time.time()+minutes*60 < birth+R.ORIGINAL_WEEK_MINUTES*60,
+    R.require(time.time()+minutes*60 < R.execution_deadline(root),
               'ORIGINAL_WEEK_EXPIRED')
     started = 500
     for run in base.glob('gate-*'):

@@ -4,13 +4,33 @@ doc_id: "DEV-04C"
 title: "Gate-driven local continuation after the 500-session series"
 status: accepted
 created: 2026-10-06
-updated: 2026-10-09
-version: "1.7"
+updated: 2026-10-10
+version: "1.8"
 area: development
 tags: [shirokuma, local, gates, development]
 ---
 
 # Gate-driven local continuation
+
+## 2026-10-10: deadline-only owner extension and minimum-seed repair
+
+After expiration of the original2026-10-09T23:31:54Z week, owner explicitly
+approved deadline-only extension to2026-10-11T01:30:00Z / 10:30JST. Cumulative600,
+original100 restart allocation, starts518/remaining82, failures/unknowns and
+all unchanged approach counters remain. No renewed Pro entitlement/allowance,
+metered fallback/spending or rolling extension is authorized. The fixed endpoint
+is bound to the exact original series across runner/supervisor/continuation.
+
+Resume with one45minute minimum offline package seed + bounded executor repair,
+distinct from held whole-cache planning. Worker inspects retained inputs and
+implements/regression-tests code only, no Go invocation. Parent independently
+reviews source/module integrity, measured fitting budgets, owned process/no-replay
+guards and terminal/retention state before executing at most two fixed disjoint
+index units. Parent review may progress without another owner restart; if actual
+proof/capacity/unknown-state checks fail, dependent test execution stays held.
+No threshold/data deletion, old cache writes, third binary build or runtime
+successor. Default remains zero-call; two reservations per unchanged approach,
+six-session/120minute batch bound. Small-unit success is not full upstream/L0.
 
 ## 2026-10-09: owner-selected reviewed safe restart
 

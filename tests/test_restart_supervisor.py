@@ -7,6 +7,22 @@ from tools.local_experiment import restart_supervisor as S
 
 
 class RestartTests(unittest.TestCase):
+    def test_deadline_extension_only_exact_original_series(self):
+        old=1791588714.0429842
+        with mock.patch.object(Path,'stat',return_value=mock.Mock(st_birthtime=old-S.R.ORIGINAL_WEEK_MINUTES*60)):
+            self.assertEqual(S.R.execution_deadline(Path('/fixture')),1791682200.0)
+        with mock.patch.object(Path,'stat',return_value=mock.Mock(st_birthtime=100)):
+            self.assertEqual(S.R.execution_deadline(Path('/fixture')),100+S.R.ORIGINAL_WEEK_MINUTES*60)
+        with mock.patch.object(S.R,'execution_deadline',return_value=1791682200.0), \
+             mock.patch.object(S.S.time,'time',return_value=1791682200.0):
+            with self.assertRaisesRegex(S.R.RunnerError,'ORIGINAL_WEEK_EXPIRED'):
+                S.S.check_resume_budget(Path('/fixture'),1,1)
+        self.assertEqual(S.R.SERIES_LIMIT,600)
+
+    def test_minimal_repair_default_never_launches(self):
+        with mock.patch('sys.argv',['restart','--minimal-tests']),mock.patch.object(S,'test_planning') as run:
+            self.assertEqual(S.main(),0);run.assert_not_called()
+
     def test_test_planning_default_is_zero_calls(self):
         with mock.patch('sys.argv',['restart','--test-plan']),mock.patch.object(S,'test_planning') as run:
             self.assertEqual(S.main(),0);run.assert_not_called()

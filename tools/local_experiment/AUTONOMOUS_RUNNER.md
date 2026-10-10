@@ -4,6 +4,24 @@
 
 ### 2026-10-09 owner-selected safe restart
 
+Owner on2026-10-10 explicitly extended execution deadline only to
+2026-10-11T01:30Z / 10:30JST. `execution_deadline(root)` applies the fixed endpoint
+only to exact retained original series, otherwise original week. Cumulative600,
+100 restart allocation, OAuth-only/no-spending and all attempt counters stay.
+No automatically renewed week/allowance. Stop when batch cannot fit deadline.
+
+`--execute --use-pro-weekly-limit --minimal-tests`: one45minute repo-only
+L0_FLUX_MINIMAL_TEST_REPAIR, two persistent approach reservations. Seven known
+terminal no-safe scopes are separately reviewed and bound to completed API/
+capacity and independent planning-hold receipts. Worker implements typed
+minimum-package offline seed inspection and bounded fixed-unit executor with
+Python regression tests, no Go invocation/download/retained writes/execution.
+Parent terminal/hash/profile/focused-tests checks precede substantive code/
+closure/integrity/budget review. At most two disjoint fixed index units are
+eligible under separate explicit parent execution; ready JSON cannot supply
+shell or override capacity. No owner-per-attempt restart needed within verified
+scope, no third binary build/runtime successor or full upstream/L0 claim.
+
 `--execute --use-pro-weekly-limit --test-plan` selects one45minute repository-only
 Sol planning session (L0_FLUX_TEST_CAPACITY_PLAN), not another API pilot or binary
 build. Parent independently reviews six exact known terminal no-safe runs and

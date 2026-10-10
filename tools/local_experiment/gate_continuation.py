@@ -232,7 +232,7 @@ def run(root, vault, max_sessions, max_minutes, resume_series=None, held_series=
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         directory = Path(tempfile.mkdtemp(prefix='series-', dir=parent))
-        original = (root/'tmp/local-experiment/autonomous-runner'/R.FIRST_RUN).stat().st_birthtime+R.ORIGINAL_WEEK_MINUTES*60
+        original = R.execution_deadline(root)
         deadline = min(time.time()+max_minutes*60, original)
         topic, approach = 'doctor', 'diagnose'
         target = 'Reproduce degraded doctor against inhibited live lab; distinguish incomplete MCP/protocol responses from intentional app/Flux suspension and identify one reproducible gate-linked repair.'

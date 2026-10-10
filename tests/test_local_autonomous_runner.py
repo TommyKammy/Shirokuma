@@ -341,6 +341,17 @@ class AutonomousRunnerTests(unittest.TestCase):
             pilot_review_sha256=R.hashlib.sha256((evidence/'pilot-review.json').read_bytes()).hexdigest())
         self.write_private_json(self.root/'tmp/local-experiment/gate-batches/test-plan-review-gate-ayqdekwa.json',planned)
         self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,planning))
+        hold=self.root/'tmp/local-experiment/test-capacity-plan/plan-nu7t5m6c/parent-independent-review.json'
+        self.write_private_json(hold,dict(decision='hold_test_execution_combined_retention_budget',
+            retained_hashes_match=True,profiles_stopped=True))
+        minimal=dict(planned,allowed_gate='L0_FLUX_MINIMAL_TEST_REPAIR',
+            decision='old_scope_held_minimum_seed_executor_repair_no_replay',
+            planning_review_sha256=R.hashlib.sha256(hold.read_bytes()).hexdigest())
+        self.write_private_json(self.root/'tmp/local-experiment/gate-batches/minimal-test-review-gate-ayqdekwa.json',minimal)
+        self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_FLUX_MINIMAL_TEST_REPAIR'))
+        self.write_private_json(hold,dict(decision='unknown'))
+        with self.assertRaises(R.RunnerError):
+            R.reviewed_restart_stop(self.root,prior,summary,head,'L0_FLUX_MINIMAL_TEST_REPAIR')
         self.write_private_json(evidence/'pilot-review.json',dict(classification='API_PACKAGE_TESTS_FAILED',exit_code=1))
         with self.assertRaises(R.RunnerError):R.reviewed_restart_stop(self.root,prior,summary,head,planning)
         ledger.write_text('{"changed":true}')

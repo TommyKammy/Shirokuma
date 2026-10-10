@@ -45,6 +45,16 @@ SOURCE_RUN = 'run-qjiwuw2k'
 FIRST_RUN = 'run-3au9fp_4'
 
 
+def execution_deadline(root: Path) -> float:
+    """Owner's Oct10 deadline-only extension, bound to the exact original series.
+
+    No fresh week/allowance or cumulative-limit renewal; unrelated series retain
+    their original deadline. Approved endpoint: Oct11 10:30 JST / 01:30 UTC.
+    """
+    original = (root/'tmp/local-experiment/autonomous-runner'/FIRST_RUN).stat().st_birthtime + ORIGINAL_WEEK_MINUTES*60
+    return 1791682200.0 if abs(original - 1791588714.0429842) < 0.001 else original
+
+
 class RunnerError(RuntimeError):
     """A fixed, non-sensitive stop reason; never include model output."""
 
@@ -377,7 +387,7 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
                 stat.S_IMODE(first.st_mode) == 0o700 and
                 type(getattr(first, 'st_birthtime', None)) is float,
                 'ORIGINAL_WEEK_UNVERIFIED')
-        require(time.time() + max_minutes * 60 < first.st_birthtime + ORIGINAL_WEEK_MINUTES * 60,
+        require(time.time() + max_minutes * 60 < execution_deadline(root),
                 'ORIGINAL_WEEK_EXPIRED')
         hold = private_json(base / 'cap-1000-bridge/bridge-stop.json', 'REVIEW_HOLD_UNVERIFIED')
         require(hold.get('source_run') == SOURCE_RUN and hold.get('reason') == 'POLICY_REVIEW_HOLD',
@@ -436,17 +446,20 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
 def reviewed_restart_stop(root, prior, summary, head, gate):
     """Owner-selected repo-only restart repair; never reopens old build scopes."""
     known = {'gate-azr7paf4', 'gate-5d3ur67c', 'gate-3f5odnk2', 'gate-xezx_z6k', 'gate-ayqdekwa'}
-    planning = gate == 'L0_FLUX_TEST_CAPACITY_PLAN'
+    minimal = gate == 'L0_FLUX_MINIMAL_TEST_REPAIR'
+    planning = gate in ('L0_FLUX_TEST_CAPACITY_PLAN', 'L0_FLUX_MINIMAL_TEST_REPAIR')
     if planning:
         known.add('gate-_g0u5c6u')
-    if gate not in ('L0_SUPERVISION_CAPACITY_REPAIR', 'L0_FLUX_TEST_CAPACITY_PLAN') or prior.name not in known:
+    if minimal:
+        known.add('gate-vpbadha7')
+    if gate not in ('L0_SUPERVISION_CAPACITY_REPAIR', 'L0_FLUX_TEST_CAPACITY_PLAN', 'L0_FLUX_MINIMAL_TEST_REPAIR') or prior.name not in known:
         return False
     require(summary.get('reason') == 'agent_no_safe_work_claim' and summary.get('attempts') == 1,
             'RESTART_REVIEW_INVALID')
     last = prior/'attempt-001'
     result = private_json(last/'result.json', 'RESTART_REVIEW_INVALID')
     cp = private_json(last/'checkpoint.json', 'RESTART_REVIEW_INVALID')
-    prefix = 'test-plan-review' if planning else 'restart-review'
+    prefix = 'minimal-test-review' if minimal else 'test-plan-review' if planning else 'restart-review'
     review = private_json(root/'tmp/local-experiment/gate-batches'/f'{prefix}-{prior.name}.json',
                           'RESTART_REVIEW_REQUIRED')
     if planning:
@@ -459,11 +472,19 @@ def reviewed_restart_stop(root, prior, summary, head, gate):
                 review.get('completed_review_sha256') == hashlib.sha256((evidence/'summary.json').read_bytes()).hexdigest() and
                 review.get('pilot_review_sha256') == hashlib.sha256((evidence/'pilot-review.json').read_bytes()).hexdigest(),
                 'RESTART_REVIEW_INVALID')
+    if minimal:
+        path = root/'tmp/local-experiment/test-capacity-plan/plan-nu7t5m6c/parent-independent-review.json'
+        prior_review = private_json(path, 'RESTART_REVIEW_INVALID')
+        require(prior_review.get('decision') == 'hold_test_execution_combined_retention_budget' and
+                prior_review.get('retained_hashes_match') is True and prior_review.get('profiles_stopped') is True and
+                review.get('planning_review_sha256') == hashlib.sha256(path.read_bytes()).hexdigest(),
+                'RESTART_REVIEW_INVALID')
     reviewed_head = review.get('reviewed_head')
     require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
             review.get('original_summary') == summary and review.get('original_result') == result and
             review.get('checkpoint') == cp and review.get('allowed_gate') == gate and
-            review.get('decision') == ('old_scope_held_test_capacity_planning_no_execution' if planning else
+            review.get('decision') == ('old_scope_held_minimum_seed_executor_repair_no_replay' if minimal else
+                                       'old_scope_held_test_capacity_planning_no_execution' if planning else
                                        'old_scope_held_repository_capacity_repair_no_replay') and
             review.get('server_outcome') == 'succeeded_idle_nonactive' and
             type(review.get('last_session_id')) is str and re.fullmatch(r'ses_[A-Za-z0-9]+',review['last_session_id']) and
@@ -696,7 +717,7 @@ def run(root: Path, vault: Path, binary: str, *, max_runs: int, max_minutes: int
                        repair_only=mission['gate_id'] == 'L0_OWNER_CHAIN_REPAIR',
                        independent_gate=mission['gate_id'])
         parent = root / 'tmp/local-experiment/autonomous-runner'
-        original_deadline = (parent / FIRST_RUN).stat().st_birthtime + ORIGINAL_WEEK_MINUTES * 60
+        original_deadline = execution_deadline(root)
         directory = Path(tempfile.mkdtemp(prefix='gate-', dir=parent))
         os.chmod(directory, 0o700)
         nonce = uuid.uuid4().hex

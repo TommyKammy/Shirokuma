@@ -4,8 +4,8 @@ doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
-updated: 2026-10-08
-version: "0.7.3"
+updated: 2026-10-10
+version: "0.7.4"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -85,6 +85,14 @@ The GitHub supervisor path is inactive for this loop. Run
 authorized supervisor path; it is not a prerequisite for local work.
 
 ## Opt-in OpenCode continuation
+
+On2026-10-10 the owner explicitly extended **only the execution deadline** to
+2026-10-11 10:30 JST / 01:30 UTC after the original week expired. This supersedes
+the original-deadline launch prohibition for the exact existing series only,
+not OAuth/no-spending limits, cumulative600/100 restart allocation or attempt
+counters. Usage518/600, remaining82 at extension; no fresh week/allowance.
+Runner and supervisors share the fixed, original-series-bound deadline; reject
+launches that cannot fit before it. No relative/automatic renewal.
 
 On 2026-10-03 the owner explicitly allowed consuming the entire ChatGPT Pro
 weekly allowance to accelerate Shirokuma's local experiments. This is **not**

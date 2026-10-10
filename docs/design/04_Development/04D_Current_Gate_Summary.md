@@ -4,13 +4,26 @@ doc_id: "DEV-04D"
 title: "Current local gate summary"
 status: active
 created: 2026-10-06
-updated: 2026-10-09
-version: "1.36"
+updated: 2026-10-10
+version: "1.37"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
-# Current gate summary (dated 2026-10-09; re-observe before acting)
+# Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Owner deadline-only extension (2026-10-10):** original deadline expired; no
+new starts occurred after expiration before approval. Owner now authorizes
+execution through2026-10-11T01:30Z / 10:30JST only. Starts518/600, remaining82,
+original100 restart allocation unchanged. Fixed original-series-bound deadline
+shared by runner/supervisors; no reset or fresh Pro allowance claim.
+New gate L0_FLUX_MINIMAL_TEST_REPAIR selects one45minute Sol repo repair of
+minimum package-specific offline seed and bounded executor (not whole-cache
+copy). Parent reviews actual integrity/closure/budgets/owned process guards
+before at most two disjoint index units. No Go call in worker, unknown replay,
+retained deletion, capacity relaxation, third binary build or runtime successor.
+Launch/terminal outcomes are separate receipts; current test execution remains
+held until that parent review succeeds.
 
 **Independent parent planning review completed (2026-10-09):** worker
 `gate-vpbadha7` terminal succeeded/idle, clean descendant6a9a0c4. Parent separately
