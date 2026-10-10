@@ -4,6 +4,19 @@
 
 ### 2026-10-09 owner-selected safe restart
 
+`python -m tools.local_experiment.policy_repair_supervisor --execute
+--use-pro-weekly-limit` selects one45minute L0_POLICY_SNAPSHOT_REPAIR; default
+is zero-call. The parent reproduces policy166/11failure/2error baseline and
+reviews eleven exact terminal sessions. New policy-snapshot-review receipts bind
+original source unknown hold, dated OS scan and fresh baseline hashes; they do
+not reopen any old source/OS operation. Two32MiB approach reservations under
+combined16GiB/free17GiB, counting all retained kustomize OS/scan/image evidence.
+Worker investigates snapshot failures, preserving no-follow/race/bound checks
+and negative tests, no runtime/API/policy activation or network/compiler/image
+operation. Parent repeats full policy suite and reviews actual diff/retention/
+terminal/capacity. Known baseline failures preserved; success is narrow policy
+verification, not full L0/admission/runtime or freshness acceptance.
+
 `--execute --use-pro-weekly-limit --kustomize-os-layer` selects one45minute
 L0_KUSTOMIZE_OS_LAYER after separate retained-key signature/ARM64 payload/candidate
 musl closure review. Ten exact terminal no-safe runs and parent OS/graph/unknown

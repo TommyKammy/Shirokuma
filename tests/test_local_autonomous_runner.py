@@ -365,6 +365,21 @@ class AutonomousRunnerTests(unittest.TestCase):
             graph_review_sha256=R.hashlib.sha256(graph.read_bytes()).hexdigest())
         self.write_private_json(self.root/'tmp/local-experiment/gate-batches/kustomize-os-review-gate-ayqdekwa.json',os_review)
         self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_OS_REPAIR'))
+        scan=self.root/'tmp/local-experiment/kustomize-os-scan/scan-k3vg47w7/summary.json'
+        self.write_private_json(scan,dict(classification='OS_ONLY_ARCHIVE_SBOM_AND_DATED_DB_SCAN_VERIFIED',
+            db_freshness='dated_not_current',image_execution=False))
+        failure=self.root/'tmp/local-experiment/policy-snapshot-repair/repair-fixture/baseline-tests.json'
+        self.write_private_json(failure,dict(returncode=1,tests=166,failures=11,errors=2))
+        policy=dict(other,allowed_gate='L0_POLICY_SNAPSHOT_REPAIR',
+            decision='independent_policy_snapshot_repair_no_runtime_or_replay',
+            os_scan_review_sha256=R.hashlib.sha256(scan.read_bytes()).hexdigest(),
+            policy_failure_path=str(failure.relative_to(self.root)),
+            policy_failure_sha256=R.hashlib.sha256(failure.read_bytes()).hexdigest())
+        self.write_private_json(self.root/'tmp/local-experiment/gate-batches/policy-snapshot-review-gate-ayqdekwa.json',policy)
+        self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_POLICY_SNAPSHOT_REPAIR'))
+        self.write_private_json(failure,dict(returncode=0,tests=166,failures=0,errors=0))
+        with self.assertRaises(R.RunnerError):
+            R.reviewed_restart_stop(self.root,prior,summary,head,'L0_POLICY_SNAPSHOT_REPAIR')
         package=self.root/'tmp/local-experiment/kustomize-os-parent-review/review-m9iihc2r/summary.json'
         self.write_private_json(package,dict(classification='PCRE2_ARM64_PACKAGE_AND_CANDIDATE_CLOSURE_VERIFIED',
             version='10.49-r0',image_assembled=False))

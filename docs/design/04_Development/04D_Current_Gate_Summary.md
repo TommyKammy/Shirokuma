@@ -5,12 +5,32 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.50"
+version: "1.51"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Owner-requested independent restart selected:** at2026-10-10T12:31Z parent
+reobserved HEAD7ff5abd, no active worker, OAuth-only Sol route, starts522/600 and
+stopped Shirokuma profile. Select one45minute L0_POLICY_SNAPSHOT_REPAIR to repair
+the reproduced166-test/11failure/2error snapshot fixture gap rather than launch a
+capacity-heavy compiler. New supervisor defaults zero calls, two32MiB repair
+reservations, combined16GiB/free17GiB including all retained kustomize OS/scan
+evidence. Eleven exact terminal no-safe sessions separately reviewed; receipts
+bind unchanged source unknown hold, dated OS scan and freshly reproduced policy
+failure before launching. No broad hold waiver or replay.
+
+Worker must investigate actual cause; if canonical macOS temp root is needed,
+fix fixtures without resolving away adversarial links in production. Preserve
+O_NOFOLLOW, identity/race/size checks and negative coverage; no assertion removal
+or runtime/security-control relaxation. Allowed tests/test_local_policy.py,
+policy/manage.py only for demonstrated production defect, matching notes and
+private diagnostics. No network/image/Go/compiler/VM/API mutation/admission/
+retained writes. Parent reruns full policy suite and verifies terminal/diff/
+retention/unknown content/capacity before selecting a successor. Launch/terminal
+results recorded separately. Deadline2026-10-11T01:30Z and600/100 unchanged.
 
 **OS-only archive SBOM/dated-DB milestone completed:** separate
 `kustomize-os-scan/scan-k3vg47w7` has successful SBOM/version/scan receipts and

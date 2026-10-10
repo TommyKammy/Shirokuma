@@ -257,6 +257,17 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+Owner-requested next restart selects one45minute L0_POLICY_SNAPSHOT_REPAIR:
+repair demonstrated snapshot fixture failures (166tests/11failures/2errors) with
+full negative link/race coverage intact. Separate parent reproduction and eleven
+terminal receipts bind source unknown hold and dated OS scan; no replay or old
+counter reset. Fresh32MiB scope under combined16GiB/free17GiB, all OS/image/scan
+evidence included. Parent reruns policy suite and verifies diff/terminal/retention
+before successor. No VM/API mutation/policy activation/network/Go/compiler/image
+operation. Fixture canonical root repair must not weaken production no-follow
+checks. Starts522/600 before launch, remain78; fixed deadline2026-10-11T01:30Z.
+Rollback is repo-only reversal of this increment, never retained-evidence removal.
+
 Completed OS-only archive milestone: parent rederived931840byte PCRE2 patch,
 preserving63 unrelated APK records and binding two stale-library whiteouts. Third
 controller layer was independently checked by compressed hash/diff ID/static

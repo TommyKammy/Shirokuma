@@ -446,6 +446,10 @@ def gate_preflight(root: Path, head: str, max_runs: int, max_minutes: int,
 def reviewed_restart_stop(root, prior, summary, head, gate):
     """Owner-selected repo-only restart repair; never reopens old build scopes."""
     known = {'gate-azr7paf4', 'gate-5d3ur67c', 'gate-3f5odnk2', 'gate-xezx_z6k', 'gate-ayqdekwa'}
+    policy_repair = gate == 'L0_POLICY_SNAPSHOT_REPAIR'
+    if policy_repair:
+        known.update(('gate-_g0u5c6u', 'gate-vpbadha7', 'gate-ysazsqh6',
+                      'gate-d1i5mq08', 'gate-_zvi8tes', 'gate-z31_2ik6'))
     minimal = gate == 'L0_FLUX_MINIMAL_TEST_REPAIR'
     os_layer = gate == 'L0_KUSTOMIZE_OS_LAYER'
     os_repair = gate in ('L0_KUSTOMIZE_OS_REPAIR', 'L0_KUSTOMIZE_OS_LAYER')
@@ -461,16 +465,38 @@ def reviewed_restart_stop(root, prior, summary, head, gate):
         known.add('gate-d1i5mq08')
     if os_layer:
         known.add('gate-_zvi8tes')
-    if gate not in ('L0_SUPERVISION_CAPACITY_REPAIR', 'L0_FLUX_TEST_CAPACITY_PLAN', 'L0_FLUX_MINIMAL_TEST_REPAIR', 'L0_KUSTOMIZE_SOURCE_REPAIR', 'L0_KUSTOMIZE_OS_REPAIR', 'L0_KUSTOMIZE_OS_LAYER') or prior.name not in known:
+    if gate not in ('L0_POLICY_SNAPSHOT_REPAIR', 'L0_SUPERVISION_CAPACITY_REPAIR', 'L0_FLUX_TEST_CAPACITY_PLAN', 'L0_FLUX_MINIMAL_TEST_REPAIR', 'L0_KUSTOMIZE_SOURCE_REPAIR', 'L0_KUSTOMIZE_OS_REPAIR', 'L0_KUSTOMIZE_OS_LAYER') or prior.name not in known:
         return False
     require(summary.get('reason') == 'agent_no_safe_work_claim' and summary.get('attempts') == 1,
             'RESTART_REVIEW_INVALID')
     last = prior/'attempt-001'
     result = private_json(last/'result.json', 'RESTART_REVIEW_INVALID')
     cp = private_json(last/'checkpoint.json', 'RESTART_REVIEW_INVALID')
-    prefix = 'kustomize-os-layer-review' if os_layer else 'kustomize-os-review' if os_repair else 'kustomize-review' if independent else 'minimal-test-review' if minimal else 'test-plan-review' if planning else 'restart-review'
+    prefix = 'policy-snapshot-review' if policy_repair else 'kustomize-os-layer-review' if os_layer else 'kustomize-os-review' if os_repair else 'kustomize-review' if independent else 'minimal-test-review' if minimal else 'test-plan-review' if planning else 'restart-review'
     review = private_json(root/'tmp/local-experiment/gate-batches'/f'{prefix}-{prior.name}.json',
                           'RESTART_REVIEW_REQUIRED')
+    if policy_repair:
+        path = root/'tmp/local-experiment/minimal-test-execution/review-6bapyn7_/parent-failure-review.json'
+        held = private_json(path, 'RESTART_REVIEW_INVALID')
+        require(held.get('operation_outcome') == 'unknown_original_group_receipt_missing' and
+                held.get('replay_authorized') is False and held.get('original_hold_preserved') is True and
+                review.get('source_operation_hold_sha256') == hashlib.sha256(path.read_bytes()).hexdigest(),
+                'RESTART_REVIEW_INVALID')
+        path = root/'tmp/local-experiment/kustomize-os-scan/scan-k3vg47w7/summary.json'
+        scan = private_json(path, 'RESTART_REVIEW_INVALID')
+        require(scan.get('classification') == 'OS_ONLY_ARCHIVE_SBOM_AND_DATED_DB_SCAN_VERIFIED' and
+                scan.get('db_freshness') == 'dated_not_current' and scan.get('image_execution') is False and
+                review.get('os_scan_review_sha256') == hashlib.sha256(path.read_bytes()).hexdigest(),
+                'RESTART_REVIEW_INVALID')
+        failure_path = review.get('policy_failure_path', '')
+        require(type(failure_path) is str and re.fullmatch(
+                r'tmp/local-experiment/policy-snapshot-repair/repair-[A-Za-z0-9_-]+/baseline-tests.json', failure_path),
+                'RESTART_REVIEW_INVALID')
+        failure = private_json(root/failure_path, 'RESTART_REVIEW_INVALID')
+        require(failure.get('returncode') == 1 and failure.get('failures') == 11 and failure.get('errors') == 2 and
+                failure.get('tests') == 166 and
+                review.get('policy_failure_sha256') == hashlib.sha256((root/failure_path).read_bytes()).hexdigest(),
+                'RESTART_REVIEW_INVALID')
     if planning:
         evidence = root/'tmp/local-experiment/safe-restart-review/review-mv27dels'
         completed = private_json(evidence/'summary.json', 'RESTART_REVIEW_INVALID')
@@ -514,7 +540,8 @@ def reviewed_restart_stop(root, prior, summary, head, gate):
     require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
             review.get('original_summary') == summary and review.get('original_result') == result and
             review.get('checkpoint') == cp and review.get('allowed_gate') == gate and
-            review.get('decision') == ('verified_local_package_inputs_nonactivating_os_layer' if os_layer else
+            review.get('decision') == ('independent_policy_snapshot_repair_no_runtime_or_replay' if policy_repair else
+                                       'verified_local_package_inputs_nonactivating_os_layer' if os_layer else
                                        'source_unknown_held_verified_graph_independent_pcre2_repair' if os_repair else
                                        'source_unknown_held_independent_kustomize_source_repair' if independent else
                                        'old_scope_held_minimum_seed_executor_repair_no_replay' if minimal else
