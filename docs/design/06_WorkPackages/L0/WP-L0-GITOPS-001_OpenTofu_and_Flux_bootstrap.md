@@ -5,12 +5,57 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-10
-version: "0.193"
+version: "0.194"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-10: independent kustomize source/module patch; parent review pending
+
+`gate-d1i5mq08` / `L0_KUSTOMIZE_SOURCE_REPAIR` implements
+`tools/local_experiment/kustomize_source_repair.py` and24 Python regressions.
+Exactly two public pinned-revision HTTPS GETs succeeded once, no retries:
+revision `060e0d8dbc257a11cf49b9e626b63284dc385870`, root go.mod14403 bytes
+SHA256 `14864acbf087dedecc12c143cece6599fd4c10f34e2e1528e5c26002d210deb5`,
+go.sum71029 bytes SHA256
+`6bb93c10a466b034c0be459dc01130f38a3590c831461973fecb98f0bbe9cf7f`.
+HTTPS-observed identity is not signed tree/publisher verification. Fetch reservations
+and outcome receipts are exclusive0600; unknown/failed fetches cannot replay.
+Fixed URLs/no redirects/no proxy credentials,2MiB response ceiling and30second
+whole-call timeout guard; no source archives, clone or dependency retrieval.
+
+Actual retrieved-byte validation produces only two exact indirect require-line
+edits: x/crypto0.53.0→0.55.0 and grpc1.81.1→1.83.2. Original go.sum remains
+byte-identical; no new sums or module-graph resolution. Patch SHA256
+`2897a87b12ad275cceb83e17b7dd35a9bd50ae697c0df6f7369b96ddbbfe5fad`.
+Exclusive patch/patched module/provenance plus start/finish receipts are under
+`tmp/local-experiment/kustomize-source-repair/plan-xagjdb5n/`. Validator rederives
+exact patch, source hashes, receipt bindings and all unresolved statuses; it rejects
+extra edits, fabricated success, claim inflation, missing provenance and unsafe files.
+Python tests cover malformed/duplicate lines, wrong identity/hash, truncation,
+oversize/timeouts/redirects, unknown no-replay, symlinks/hardlinks/permissions,
+budgets and immutable writes. Initial fixture path/newline failures were corrected,
+not interpreted as source/test success; private verification preserves their summary.
+
+Only this new scope was measured:156224 charged bytes including final receipts,
+free2416820051968 bytes. Parent-dated retained builds+unknown scope16571121664
+plus full64MiB new reserve fits unchanged16GiB; free17GiB remains required.
+No access to `tmp/rv/mis`, retained build mutation/deletion, threshold/counter reset,
+Go/compiler/module download/test operation, image/runtime/VM/registry/publication,
+pin/security-ledger/approval/admission change or nested runner. Lab state is only
+the dated parent snapshot, not a fresh worker live observation. The unknown original
+source operation remains held/no replay; independent patch repair does not reopen it.
+
+Schema1 test-plan is `ready_for_parent_review`, not execution authority. Parent must
+independently check worker terminal state/HEAD, retained hashes/unknown identity,
+both fetch outcomes and measured budgets/patch before selecting a distinct graph/
+sum/build capability. pcre2 HIGH1, installed HIGHs, missing replacement sums/graph,
+upstream tests, binary/image tests, advisory freshness, publisher/admission/full L0
+remain unresolved; no checkbox changed. Repository-only rollback; retain original
+unknown operation/all failures/private evidence. Vault untouched/outside approved
+access, sync pending. No later batch or runtime successor authorized by this result.
 
 ## 2026-10-10: minimum offline index seed/executor; parent execution review pending
 

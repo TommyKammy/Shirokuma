@@ -5,12 +5,29 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.40"
+version: "1.41"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Pinned kustomize source repair worker (parent review pending):** `gate-d1i5mq08`
+implements exact pinned-source/two-line module patch/provenance validation. The
+two authorized revision060e0d8 HTTPS module-file GETs succeeded once (14403/71029
+bytes); SHA256-bound originals/unchanged go.sum, patch and exclusive0600 receipts
+are in `tmp/local-experiment/kustomize-source-repair/plan-xagjdb5n/`.
+24 offline Python tests pass; actual retrieved-byte patch also validates.
+Patch selects x/crypto0.55.0/grpc1.83.2 only, no resolved graph/sum/build claim.
+New scope observed156224 charged bytes including final review receipts; conservative
+parent-dated builds+unknown scope16571121664 plus full64MiB reserve fits16GiB,
+free2416820051968 bytes at that observation. Unknown scope was **not accessed**;
+fresh retained identity/accounting and terminal/budget review are the parent's job.
+Original source operation remains unknown/no replay; no Go/runtime/VM observation
+or execution, old writes/deletion/counter/pin/approval/admission change. pcre2,
+installed HIGHs, current freshness, upstream/image/publisher/admission/L0 remain
+unresolved. Ready-for-parent-review is not gate acceptance or successor authority.
+Vault untouched/sync pending; repository-only rollback, retain all receipts.
 
 **Safe independent restart selected (2026-10-10):** owner again requested
 development resumption. Source mis operation remains unknown/no replay; do not

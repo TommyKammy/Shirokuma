@@ -18,6 +18,27 @@ admission. Patch provenance/graph/sums/tests/pcre2/current advisory freshness
 remain separate claims. Parent verifies unknown scope unchanged before/after;
 no arbitrary supplied shell or automatic runtime successor.
 
+Worker implementation: `kustomize_source_repair.py` has no CLI or automatic calls.
+`fetch(scope, filename)` permits only root go.mod/go.sum at the fixed060e0d8
+revision, uses an exclusive started reservation before the single GET, and preserves
+failed/unknown outcomes without retry. Unix whole-call30second alarm plus remaining
+socket timeouts covers trickled headers/body; redirects and environment proxies are
+disabled. The first two observed successful fetches predated the whole-call alarm
+hardening, completed in0.266/0.239seconds, and were not refetched.2MiB per response.
+`materialize(scope)` performs no network: exact frozen HTTPS-observed hashes,
+module identity and single indirect require-line edits produce only x/crypto0.55.0/
+grpc1.83.2. `validate_scope(scope)` rederives original/patch/receipt/provenance
+bindings, rejects changes or inflated statuses, and leaves original go.sum unchanged.
+FD-relative no-follow scope/file opens,0600 exclusive writes and bounded reads
+prevent retained overwrite/symlink use; generated files are private/ignored, not Git.
+Scope capacity observations never access the unknown test scope; combined accounting
+uses explicitly parent-dated charges, requiring fresh independent parent review.
+24 Python fixtures test positive/tampered/no-replay/budget/timeout/file-safety paths.
+Actual patch SHA2562897a87b is evidence-only. Missing sums/graph, pcre2, tests/build/
+image scans/freshness/publisher/admission/installed mitigation/L0 stay separate and
+unresolved. Ready schema1 test-plan is a parent-review proposal, not a successor
+execution instruction; keep original unknown operation/counters/receipts immutable.
+
 Minimum-test executor now persists process.json for its created PID/group and
 stopped.json on a guard/error path (observed exit, owned-group absence, output
 hashes and termination errors). A failed/missing observation remains unknown;

@@ -5,12 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-10
-version: "5.556"
+version: "5.557"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-10: exact pinned kustomize module patch, not mitigation/admission
+
+WP-L0-GITOPS-001 / `gate-d1i5mq08` / `L0_KUSTOMIZE_SOURCE_REPAIR`: two exact
+revision060e0d8 HTTPS GETs retrieved root go.mod14403/go.sum71029 bytes once;
+no replay/archive/clone/module download. Source SHA256 and exact two-line patch
+are validated; x/crypto0.55.0/grpc1.83.2 selected, original go.sum unchanged.
+Exclusive0600 originals/receipts/patch/provenance and schema1 parent-review plan:
+`tmp/local-experiment/kustomize-source-repair/plan-xagjdb5n/`.24 offline Python
+regressions pass plus actual fetched-byte patch validation. Initial Python fixture
+failures preserved as a private summary; no Go/upstream tests invoked.
+
+Scope156224 charged bytes including final receipts, free2416820051968 at observation;
+parent-dated builds+unknown16571121664 plus64MiB reserve fits unchanged16GiB.
+Unknown scope untouched/not freshly measured. Parent independently verifies terminal
+HEAD/retained hashes/unknown identity/both fetches/budgets/patch before any separate
+graph/sum/build capability. Source operation unknown/no replay remains held; no old
+write/deletion, capacity/counter/pin/approval/admission change or runtime/VM operation.
+pcre2, installed HIGHs, graph/replacement sums, builds/upstream/image tests, freshness,
+publisher/admission/full L0 unresolved. No checkbox/gate pass/later batch; repository
+rollback only, preserve evidence. Original Vault untouched, sync pending.
 
 ## 2026-10-10: L0 package-specific offline seed and parent-bound fixed executor
 
