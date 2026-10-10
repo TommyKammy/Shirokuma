@@ -119,6 +119,19 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+2026-10-10 safe restart changes controller rather than replaying unknown source
+index operation: one45minute L0_KUSTOMIZE_SOURCE_REPAIR for candidatev1.9.6 exact
+source revision060e0d8dbc257a11cf49b9e626b63284dc385870. Retained Oct8 HIGH5:
+pcre2 one, x/crypto one, grpc three. Source module patch targets0.55.0/1.83.2
+with functional provenance/patch validation and Python regressions. Two pinned
+go.mod/go.sum public reads only, private64MiB new scope within combined16GiB;
+no Go/test/compiler/module downloads/archives/image/runtime changes. Unknown mis
+hold/records/identity stay unchanged, no cleanup or counter reset. Source patch
+does not complete graph/go.sum/build/advisory freshness, pcre2 repair or installed
+mitigation; parent review needed for new graph/build capability. Repository-only
+rollback; preserve all fetched receipts/source/patch evidence. Starts519/600,
+remaining81 before launch, approved deadline2026-10-11T01:30Z unchanged.
+
 Subsequent planning worker `gate-vpbadha7` at6a9a0c4 produced typed fixed
 index-state/index-digest proposals and25 passing Python regressions. Parent
 independently confirmed server succeeded/idle, remeasured validated v3 plan,

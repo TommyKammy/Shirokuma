@@ -7,6 +7,10 @@ from tools.local_experiment import restart_supervisor as S
 
 
 class RestartTests(unittest.TestCase):
+    def test_independent_kustomize_default_never_launches(self):
+        with mock.patch('sys.argv',['restart','--kustomize-repair']),mock.patch.object(S,'test_planning') as run:
+            self.assertEqual(S.main(),0);run.assert_not_called()
+
     def test_deadline_extension_only_exact_original_series(self):
         old=1791588714.0429842
         with mock.patch.object(Path,'stat',return_value=mock.Mock(st_birthtime=old-S.R.ORIGINAL_WEEK_MINUTES*60)):

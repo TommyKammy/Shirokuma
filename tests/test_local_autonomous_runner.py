@@ -349,6 +349,17 @@ class AutonomousRunnerTests(unittest.TestCase):
             planning_review_sha256=R.hashlib.sha256(hold.read_bytes()).hexdigest())
         self.write_private_json(self.root/'tmp/local-experiment/gate-batches/minimal-test-review-gate-ayqdekwa.json',minimal)
         self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_FLUX_MINIMAL_TEST_REPAIR'))
+        unknown=self.root/'tmp/local-experiment/minimal-test-execution/review-6bapyn7_/parent-failure-review.json'
+        self.write_private_json(unknown,dict(operation_outcome='unknown_original_group_receipt_missing',
+            replay_authorized=False,original_hold_preserved=True,retained_hashes_match=True,profiles_stopped=True))
+        other=dict(planned,allowed_gate='L0_KUSTOMIZE_SOURCE_REPAIR',
+            decision='source_unknown_held_independent_kustomize_source_repair',
+            source_operation_hold_sha256=R.hashlib.sha256(unknown.read_bytes()).hexdigest())
+        self.write_private_json(self.root/'tmp/local-experiment/gate-batches/kustomize-review-gate-ayqdekwa.json',other)
+        self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_SOURCE_REPAIR'))
+        self.write_private_json(unknown,dict(replay_authorized=True))
+        with self.assertRaises(R.RunnerError):
+            R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_SOURCE_REPAIR')
         self.write_private_json(hold,dict(decision='unknown'))
         with self.assertRaises(R.RunnerError):
             R.reviewed_restart_stop(self.root,prior,summary,head,'L0_FLUX_MINIMAL_TEST_REPAIR')

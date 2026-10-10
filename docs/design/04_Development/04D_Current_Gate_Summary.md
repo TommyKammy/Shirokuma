@@ -5,12 +5,29 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.39"
+version: "1.40"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Safe independent restart selected (2026-10-10):** owner again requested
+development resumption. Source mis operation remains unknown/no replay; do not
+turn that dependent hold into a global development stop. Select one45minute Sol
+L0_KUSTOMIZE_SOURCE_REPAIR: exact candidate1.9.6 source revision
+060e0d8dbc257a11cf49b9e626b63284dc385870, source-module repair for x/crypto0.55.0
+and grpc1.83.2. Oct8 candidate HIGH5 consists of pcre2 HIGH1, x/crypto HIGH1,
+grpc HIGH3; dated evidence, not a fresh advisory claim. Produce functional pinned
+source/module-patch/provenance validator and immutable patch, meaningful Python
+regressions, without claiming completed graph/go.sum/build or pcre2 mitigation.
+Only two exact public revision go.mod/go.sum HTTPS reads (2MiB/30s each), fresh
+scope64MiB maximum within unchanged combined16GiB/free17GiB. No Go/downloaded
+dependencies/archives/clones/build/image/VM operations. Eight known terminal
+no-safe scopes separately reconciled, current unknown-operation failure receipt
+bound as a preserved hold, not a resolution. Parent remeasures unknown scope
+identity; all old data/counters/pins remain. Starts519/600 before launch,
+remaining81; deadline2026-10-11T01:30Z unchanged. Two reservations per approach.
 
 **Fixed-unit execution capacity hold (parent observed):** first index-state
 scope `tmp/rv/mis` stopped at cache/temp ceiling during compilation, stdout and

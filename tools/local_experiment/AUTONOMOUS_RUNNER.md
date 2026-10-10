@@ -4,6 +4,20 @@
 
 ### 2026-10-09 owner-selected safe restart
 
+`--execute --use-pro-weekly-limit --kustomize-repair` selects one45minute
+L0_KUSTOMIZE_SOURCE_REPAIR independently of the unknown source index operation.
+Eight exact no-safe terminal sessions are parent-reconciled; separate
+kustomize-review receipts bind existing capacity/API receipts and original
+unknown-operation failure review. That hold remains unresolved/no replay.
+Fresh64MiB source/patch scope, combined builds+unknown mis+new scope<16GiB and
+free17GiB, two persistent approach reservations. Worker implements pinned-source
+patch/provenance validator with Python tests, permits only two exact revision
+module-file public HTTPS reads (2MiB/30s each). No Go invocation/module downloads,
+source archive/clone, old cache writes, binary/image/VM/runtime execution or
+admission. Patch provenance/graph/sums/tests/pcre2/current advisory freshness
+remain separate claims. Parent verifies unknown scope unchanged before/after;
+no arbitrary supplied shell or automatic runtime successor.
+
 Minimum-test executor now persists process.json for its created PID/group and
 stopped.json on a guard/error path (observed exit, owned-group absence, output
 hashes and termination errors). A failed/missing observation remains unknown;
