@@ -4,13 +4,42 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-09
-version: "5.555"
+updated: 2026-10-10
+version: "5.556"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-10: L0 package-specific offline seed and parent-bound fixed executor
+
+WP-L0-GITOPS-001 / `gate-ysazsqh6`: read-only minimum-seed inspector verifies
+source/module/toolchain contents, derives40-package conservative platform-union
+closure across six modules, and proposes two disjoint index groups (eight/seven
+top-level tests; corrected `Test_writeLine` selector). No whole-cache copy.
+Seed25886720/source200704 charged bytes;128MiB compile/128MiB temp/4MiB receipts/
+32MiB inspection reserve per unit =332271616; both664543232 fit914526208 remaining
+under unchanged combined16GiB. Stop ceilings are not observed Go resource peaks;
+sampled filesystem guards are not quotas and need independent parent risk review.
+
+Executor defaults zero-call, accepts no shell/model argv, requires HEAD/plan/unit/
+fixed-deadline-bound explicit parent checks and fresh inspection. Exclusive private
+short scopes prohibit replay; unknown/failed reservations inhibit dependent units.
+Bounded pipe recording, owned process-group termination and terminal-group checks
+preserve failures.55 focused Python regressions pass using fixtures/mocked launches,
+never Go;19 retained hashes match baseline. Earlier one-test directory-charge
+diagnostic retained in private verification, corrected accounting includes directories.
+Design-context and diff checks also pass; broad local verification was not run
+because its Go/runtime work is prohibited in this worker.
+
+Evidence: `tmp/local-experiment/minimal-test-repair/plan-1hw1_hi3/`, detailed manifests,
+verification and schema1 `ready_for_parent_review` receipt. Parent terminal/code/
+closure/integrity/retention/profile/routing/counter review and all Go execution remain
+pending. No Go/build/download/source refetch/runtime/VM/image/registry/pin/ledger/
+approval/admission/runner/successor changes; profiles are dated parent observations.
+No full upstream/publisher/admission/L0 acceptance. Repository-only rollback, preserve
+originals/counters/private receipts; Vault untouched, sync pending. No later batch.
 
 ## 2026-10-09: L0 typed small-unit plan; unchanged retention capacity holds execution
 

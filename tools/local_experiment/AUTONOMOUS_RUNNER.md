@@ -22,6 +22,43 @@ eligible under separate explicit parent execution; ready JSON cannot supply
 shell or override capacity. No owner-per-attempt restart needed within verified
 scope, no third binary build/runtime successor or full upstream/L0 claim.
 
+Minimum-seed implementation: `flux_minimal_tests.inspect(root)` returns manifests
+for source skeleton, Go1.26.6 toolchain (full archived file comparison/no extras),
+module archives/Go h1, package import closure, offline graph metadata and charged
+fixed units. Current retained inspection:40 conservative platform-union packages,
+six modules,25886720-byte seed; unsupported embed/cgo or missing/tampered inputs
+hold. It retains original root go.mod/go.sum and only selected dependency package
+payloads, not the2GiB whole cache. Metadata is conservatively seeded from retained
+go.sum, not claimed as a mathematical minimum across platform build constraints.
+
+`execute(root, plan)` defaults zero calls. Only a separate parent may pass
+`execute=True`, a fixed `unit_id`, and a review with exact keys `head`,
+`plan_sha256` (canonical `binding(plan)`), `unit_id`, `deadline_epoch`, and
+`independent_checks`. The latter must contain true checks for code/closure/integrity,
+terminal idle session, known operations, retention, stopped profiles, OAuth-only/
+no-spending and budget/approach counters; see `PARENT_CHECKS`. This form does not
+prove those observations: parent independently reviews them before invoking.
+Fresh inspection rejects scope/argv/input/outcome drift; free-space is rechecked
+rather than requiring identical fluctuating free-byte observations. No shell,
+inherited environment or replacement toolchain executable is accepted.
+
+Exclusive0700 `tmp/rv/mis` / `tmp/rv/mid` and0600 immutable reservation/launch/
+terminal/hold receipts prohibit replay. Existing unknown/failed unit inhibits the
+other.600s wall/120s Go timeout, bounded output pipes, sampled directory-aware
+cache/temp/aggregate/free-space checks and owned process-group termination retain
+failure evidence. Compile/temp128MiB each, receipts4MiB/reserve32MiB:332271616
+bytes per unit,664543232 both,249982976 margin below combined16GiB with old builds.
+These are proposed stop ceilings, not demonstrated cold-test peaks or filesystem
+quotas; parent reviews sampled overshoot and absolute short-path headroom before
+execution. Failure holds; do not increase limits, delete old/new receipts or rename
+scopes to retry. Only completed selected nonempty test/package events are success.
+The corrected selectors cover all15 top-level index tests, including Test_writeLine.
+
+Worker evidence: `tmp/local-experiment/minimal-test-repair/plan-1hw1_hi3/`;
+schema1 `test-plan.json` says ready_for_parent_review.55 focused Python tests and19
+unchanged retained hashes are repository evidence only. Worker has invoked no Go;
+parent substantive review/execution and full upstream/admission/L0 remain pending.
+
 `--execute --use-pro-weekly-limit --test-plan` selects one45minute repository-only
 Sol planning session (L0_FLUX_TEST_CAPACITY_PLAN), not another API pilot or binary
 build. Parent independently reviews six exact known terminal no-safe runs and

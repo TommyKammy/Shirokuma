@@ -20,7 +20,7 @@ BUILDS = ('tmp/local-experiment/flux-local-build/build-aoa39q7w',
           'tmp/local-experiment/flux-local-build/build-don5ufj3')
 SELECTORS = {
     'index-state': '^Test(WithIndex|NewDigester|Digester_(Add|Delete|Get|Has|Index|Len))$',
-    'index-digest': '^Test(Digester_(String|WriteTo|Digest|Verify|sortedKeys|reset)|writeLine)$',
+    'index-digest': '^Test(Digester_(String|WriteTo|Digest|Verify|sortedKeys|reset)|_writeLine)$',
 }
 INPUTS = ('go.mod', 'go.sum', 'api/go.mod',
           'internal/index/digest.go', 'internal/index/digest_test.go')
@@ -172,7 +172,8 @@ def classify(finished, stdout):
                     and not finished.get('observation_error') and not finished.get('termination_error')
                     and not any(e.get('Action') == 'fail' for e in events)):
                 disposition = 'successful'
-            elif rc < 0 and finished.get('disposition') == 'terminated_hold_no_replay':
+            elif (rc < 0 and finished.get('disposition') == 'terminated_hold_no_replay'
+                  and not finished.get('termination_error')):
                 disposition = 'known_terminated'
         return Outcome(disposition=disposition, tests_passed=tests, packages_passed=packages,
                        packages_started=started)

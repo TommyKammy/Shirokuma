@@ -4,13 +4,53 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-10-09
-version: "0.192"
+updated: 2026-10-10
+version: "0.193"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-10: minimum offline index seed/executor; parent execution review pending
+
+`gate-ysazsqh6` / `L0_FLUX_MINIMAL_TEST_REPAIR`: implemented
+`tools/local_experiment/flux_minimal_tests.py`, with zero-call default and no CLI.
+Read-only inspection verifies pinned source archive/patched module hashes, Go1.26.6
+archive and all15034 installed toolchain files (rejecting extras), selected module
+zip Go h1 checksums/ziphash and retained go.sum-bound graph metadata. Conservative
+platform-union import closure:40 packages/six modules; only selected package payloads,
+verified archive/ziphash and offline graph .mod files enter the new seed. Unsupported
+embed/cgo, missing input, checksum mismatch or unknown prior outcome holds.
+
+Fresh charges: old builds16265342976, remaining914526208 under unchanged16GiB.
+Seed25886720/source200704 bytes per unit; compile128MiB/temp128MiB/receipts4MiB/
+inspection reserve32MiB give332271616 per unit,664543232 for both,249982976 margin.
+These are prospective ceilings, not measured Go peaks. Cache/temp/aggregate guards
+are sampled accounting, not filesystem quotas; parent must review overshoot risk
+and resource sufficiency, and retain any capacity failure without replay/deletion.
+Pipe output is bounded before writing. Existing sources/caches/failures stay immutable.
+
+Two exclusive short private scopes `tmp/rv/mis` and `tmp/rv/mid`, fixed offline argv,
+120s Go timeout/600s wall, independent HEAD/plan/unit/deadline-bound parent checks,
+fresh inspection, no inherited environment, owned process-group termination and
+terminal-group observation precede receipts. Any existing reservation prevents
+replay; unknown/failed prior unit inhibits the other. Selector review also fixed
+the prior `Test_writeLine` omission; eight/seven disjoint top-level tests now cover15.
+
+55 focused Python tests and design-context/diff checks pass, including mocked
+executor calls (no Go process),
+closure cycles, integrity/argv/budget tampering, unknown/no-replay, bounds, wall,
+output limits and owned termination. All19 parent baseline retained hashes match.
+Private evidence and schema1 `ready_for_parent_review` navigation receipt:
+`tmp/local-experiment/minimal-test-repair/plan-1hw1_hi3/`. Parent independently
+reviews actual code/closure/integrity/session/retention/routing/counters before
+at most two explicitly selected disjoint units; readiness is not execution authority.
+No Go invocation/test/build/download/refetch/VM/image/runtime/registry/pin/ledger/
+approval/admission/runner/successor operation. Stopped profiles remain parent-dated,
+not freshly observed here. Full upstream/signature/publisher/admission/L0 unresolved.
+Rollback repository changes only; retain all private/original evidence and counters.
+Vault untouched/outside approved access; sync pending. No later batch authorized.
 
 ## 2026-10-09: small-unit planner implemented; capacity hold, no test execution
 

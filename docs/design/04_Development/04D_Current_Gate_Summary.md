@@ -5,12 +5,25 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.37"
+version: "1.38"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Minimum-seed worker result (parent review pending):** `gate-ysazsqh6` implements
+read-only verified40-package/six-module offline seed and zero-call-default fixed
+executor. Seed25886720 bytes; both disjoint index units664543232 fit914526208
+remaining under unchanged16GiB, with128MiB compile/128MiB temp/4MiB receipt/32MiB
+reserve per unit.55 Python fixture/mock tests pass,19 baseline retained hashes match;
+no Go call. Fixed selectors now include `Test_writeLine` (eight/seven tests).
+`tmp/local-experiment/minimal-test-repair/plan-1hw1_hi3/test-plan.json` is
+`ready_for_parent_review`, not execution authority. Parent must review actual
+code/closure/source/module/toolchain integrity, sampled write-guard overshoot risk,
+terminal/session/retention/routing/counters before at most two explicit units.
+No replay, old writes/deletion, third binary/runtime successor or L0 acceptance.
+Profile state remains dated parent baseline; Vault sync pending.
 
 **Owner deadline-only extension (2026-10-10):** original deadline expired; no
 new starts occurred after expiration before approval. Owner now authorizes
