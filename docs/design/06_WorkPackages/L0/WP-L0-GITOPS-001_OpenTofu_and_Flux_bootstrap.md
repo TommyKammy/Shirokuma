@@ -5,12 +5,58 @@ title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-10-10
-version: "0.195"
+version: "0.196"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
 
 # WP-L0-GITOPS-001 OpenTofu and Flux bootstrap
+
+## 2026-10-10: local-policy snapshot fixture repair; parent review pending
+
+`gate-4vag12_f` / `L0_POLICY_SNAPSHOT_REPAIR` identifies a fixture-only root
+cause: macOS TemporaryDirectory returns a path beneath the `/var` symlink.
+The production checked directory chain correctly rejects that ancestor with
+O_NOFOLLOW (observed errno20), before JSON/projection/race hooks are reached.
+The same fresh root's canonical chain opens successfully. No production defect
+was demonstrated; `tools/local_experiment/policy/manage.py` is unchanged.
+
+`tests/test_local_policy.py` canonicalizes only newly allocated trusted fixture
+roots, before constructing test input paths or adversarial links. It never
+resolves SOURCE/MANIFEST paths. All original166 tests then pass. Three added
+regressions reproduce an aliased temp base on any platform and separately prove
+source/manifest final and ancestor links reach their actual descriptor-relative
+O_NOFOLLOW opens, without reading bytes or invoking the decoder. Existing race
+tests retain hook/count assertions; source decode replacement tests now assert
+the decoder received the original checked bytes. Duplicate keys, non-JSON numbers,
+FIFO/size rejection and post-read relink assertions identify the intended checks,
+not an unrelated fixture-path error. Rename can alter inode ctime, so the manifest
+relink test accepts either the bounded-read identity rejection or path rejection
+and still requires the malicious hook to have executed.
+
+Verification: full `python3 -B -m unittest discover -s tests -p
+'test_local_policy.py' -v` passes169 tests; the same command with
+`-k ManifestTests` passes38 focused tests. Exclusive0600 diagnostics and schema1
+ready-for-parent-review plan are under
+`tmp/local-experiment/policy-snapshot-repair/repair-fc6y7wxp/`. Original parent
+166-test/11failure/2error baseline remains intact; an initial stricter relink
+expectation failure is also retained, not overwritten. Full local verification
+and runtime smoke are not run because their Go/runtime targets exceed this gate.
+Design-context14 tests/validator pass. Private scope charged86016 bytes before
+final plan/capacity receipts, free2423338377216 bytes; unknown-source/combined
+retention accounting remains the parent's independent review, not freshly proved
+by this worker. The32MiB scope and17GiB free floor are unchanged.
+
+Parent must independently rerun the full policy suite and review diff, terminal
+session/HEAD, retained hashes, unknown content, stopped profiles and capacity
+before selecting a successor. Lab state is the dated parent baseline, not a
+fresh worker observation; unknown source scope was not accessed/replayed. No
+runtime/API/network/compiler/image operation, policy activation/rollback,
+pin/ledger/approval/counter change or retained write/deletion. Dated OS-only HIGH4
+and original unknown/fetch/build holds remain. Narrow suite success is not broad
+verification, admission, runtime or L0 acceptance. Vault untouched; sync pending.
+Recovery is repository-only reversal of this fixture repair; retain all evidence.
+This worker does not schedule a later batch or relax checked-read security.
 
 ## 2026-10-10: nonactivating pcre2 OS-prefix patch; parent review pending
 

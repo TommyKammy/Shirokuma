@@ -5,12 +5,27 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.51"
+version: "1.52"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Policy snapshot worker repair; parent review pending:** `gate-4vag12_f`
+demonstrates macOS's linked `/var` fixture ancestor caused early checked-read
+rejection. Test-only trusted temp-root canonicalization fixes all166 baseline
+tests; production manage.py unchanged, adversarial paths never resolved. Three
+new regressions prove aliased-temp handling and final/ancestor no-follow opens;
+stronger race/decoder/JSON/FIFO/size assertions reach their intended checks.
+Full policy169 and focused ManifestTests38 pass. Private original11failure/2error
+baseline and initial ctime-sensitive relink expectation failure remain retained
+under `policy-snapshot-repair/repair-fc6y7wxp/`. Ready-for-parent-review is not
+broad/runtime/admission/L0 acceptance or later-batch authority. Parent must review
+terminal/diff/full suite/retention/unknown content/stopped profiles/capacity before
+successor. No fresh worker live observation, runtime/policy/network/Go/image/pin
+change or unknown-source access/replay; dated HIGH4 and all old holds remain.
+Vault untouched, sync pending; repository-only rollback, retain evidence.
 
 **Owner-requested independent restart selected:** at2026-10-10T12:31Z parent
 reobserved HEAD7ff5abd, no active worker, OAuth-only Sol route, starts522/600 and

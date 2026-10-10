@@ -17,6 +17,16 @@ operation. Parent repeats full policy suite and reviews actual diff/retention/
 terminal/capacity. Known baseline failures preserved; success is narrow policy
 verification, not full L0/admission/runtime or freshness acceptance.
 
+Snapshot worker repair (`gate-4vag12_f`, parent review pending): canonicalize only
+trusted fresh test roots before constructing input/adversarial paths; macOS's
+`/var` symlink otherwise rejects before checked-read hooks. Production manage.py
+remains unchanged. Full169/focused38 tests pass with actual no-follow-open/race
+reachability assertions. Preserve original166/11failure/2error and development
+diagnostics in `policy-snapshot-repair/repair-fc6y7wxp/`; schema1 ready plan is
+not successor authority. Parent independently repeats full suite and checks
+terminal/diff/retention/unknown content/stopped profiles/capacity. No runner
+relaunch, runtime/policy activation, compiler/network/image operation or hold waiver.
+
 `--execute --use-pro-weekly-limit --kustomize-os-layer` selects one45minute
 L0_KUSTOMIZE_OS_LAYER after separate retained-key signature/ARM64 payload/candidate
 musl closure review. Ten exact terminal no-safe runs and parent OS/graph/unknown

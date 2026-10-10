@@ -5,12 +5,39 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-10
-version: "5.559"
+version: "5.560"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-10-10: policy snapshot fixture root cause repaired, not L0 acceptance
+
+WP-L0-GITOPS-001 / `gate-4vag12_f` / `L0_POLICY_SNAPSHOT_REPAIR`: macOS's
+linked `/var` temp ancestor caused checked reads to reject before intended test
+hooks. Raw fresh-root checked traversal rejects with errno20; canonical fresh-root
+traversal succeeds. Test-only canonical fixture-root helper restores all166
+original tests without changing production `policy/manage.py` or resolving
+adversarial input paths. Three regressions cover a synthetic aliased temp base
+and actual source/manifest final/ancestor no-follow opens; strengthened race,
+decoder-byte, duplicate/number and FIFO/size assertions prevent false positives.
+
+Full policy suite169 passes; ManifestTests38 passes. Private exclusive0600 logs,
+initial relink-expectation failure and ready-for-parent-review plan:
+`tmp/local-experiment/policy-snapshot-repair/repair-fc6y7wxp/`. The original
+166/11failure/2error baseline is retained unchanged. Broad verifier/runtime smoke
+excluded under this gate's no-Go/no-runtime scope; narrow green is not broad,
+runtime, admission or L0 acceptance. Parent must separately verify full suite,
+diff/terminal/HEAD, retained hashes/unknown content/stopped profiles and capacity
+before any successor. Worker does not access the unknown source operation or
+observe live lab state. Dated HIGH4, unknown/fetch/build holds, original counters
+and deadline remain unchanged; no runtime/policy/network/compiler/image/pin
+changes or retained writes/deletion. Vault sync pending. Repository-only rollback;
+retain diagnostics and original failures. No later batch scheduled by this worker.
+Design-context14 tests/validator pass; private scope86016 charged bytes before
+final plan/capacity receipts, free2423338377216 bytes. Combined/unknown-scope
+accounting is not reobserved by this worker and remains a parent-review dependency.
 
 ## 2026-10-10: isolated kustomize pcre2 OS-prefix layer, not full image acceptance
 

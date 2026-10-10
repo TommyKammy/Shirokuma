@@ -1,5 +1,6 @@
 """Scoped native admission bridge tests; no cluster requests or mutations."""
 import copy
+from contextlib import contextmanager
 import hashlib
 import importlib.util
 import json
@@ -16,6 +17,15 @@ SPEC = importlib.util.spec_from_file_location('local_policy', ROOT / 'tools/loca
 policy = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(policy)
 IMAGE = 'shirokuma.local/trino@sha256:' + 'a' * 64
+
+
+@contextmanager
+def canonical_temp_directory():
+    # macOS may allocate under /var -> /private/var. Canonicalize only this
+    # trusted, newly allocated root, before constructing adversarial links.
+    # Never resolve the SOURCE/MANIFEST paths being tested.
+    with tempfile.TemporaryDirectory() as directory:
+        yield str(Path(directory).resolve(strict=True))
 
 
 def items():
@@ -103,10 +113,75 @@ class Clock:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_fixture_root_canonicalizes_aliased_temp_base(self):
+        # Reproduce macOS's linked temp base on any platform, without changing
+        # host paths. Only the fixture root is resolved, before links are added.
+        with canonical_temp_directory() as directory:
+            root = Path(directory)
+            real = root / 'real'
+            real.mkdir()
+            alias = root / 'alias'
+            alias.symlink_to(real, target_is_directory=True)
+            with mock.patch.object(tempfile, 'tempdir', str(alias)):
+                with canonical_temp_directory() as nested:
+                    self.assertEqual(Path(nested).parent, real)
+                    self.assertEqual(Path(nested), Path(nested).resolve(strict=True))
+            self.assertTrue(alias.is_symlink())
+
+    def test_snapshot_final_links_reach_nofollow_open_without_read(self):
+        for field, reader in (('SOURCE', policy.source_snapshot),
+                              ('MANIFEST', policy.load_manifest_snapshot)):
+            with self.subTest(field=field), canonical_temp_directory() as directory:
+                root = Path(directory)
+                target = root / 'target'
+                target.write_bytes(getattr(policy, field).read_bytes())
+                link = root / 'linked'
+                link.symlink_to(target)
+                with mock.patch.object(policy, field, link), \
+                     mock.patch.object(policy.os, 'open', wraps=os.open) as opened, \
+                     mock.patch.object(policy.os, 'read', side_effect=AssertionError('linked bytes read')) as read, \
+                     mock.patch.object(policy, 'source_policies', side_effect=AssertionError('decoder reached')) as decode:
+                    with self.assertRaises(policy.PolicyError):
+                        reader()
+                final_opens = [call for call in opened.call_args_list if call.args[0] == link.name]
+                self.assertEqual(len(final_opens), 1)
+                self.assertTrue(final_opens[0].args[1] & os.O_NOFOLLOW)
+                self.assertTrue(final_opens[0].args[1] & os.O_NONBLOCK)
+                self.assertIn('dir_fd', final_opens[0].kwargs)
+                read.assert_not_called()
+                decode.assert_not_called()
+                self.assertTrue(link.is_symlink())
+
+    def test_snapshot_ancestor_links_reach_directory_nofollow_open(self):
+        for field, reader in (('SOURCE', policy.source_snapshot),
+                              ('MANIFEST', policy.load_manifest_snapshot)):
+            with self.subTest(field=field), canonical_temp_directory() as directory:
+                root = Path(directory)
+                parent = root / 'real' / 'parent'
+                parent.mkdir(parents=True)
+                (parent / 'input').write_bytes(getattr(policy, field).read_bytes())
+                link = root / 'linked'
+                link.symlink_to(parent.parent, target_is_directory=True)
+                with mock.patch.object(policy, field, link / 'parent' / 'input'), \
+                     mock.patch.object(policy.os, 'open', wraps=os.open) as opened, \
+                     mock.patch.object(policy.os, 'read', side_effect=AssertionError('linked bytes read')) as read, \
+                     mock.patch.object(policy, 'source_policies', side_effect=AssertionError('decoder reached')) as decode:
+                    with self.assertRaises(policy.PolicyError):
+                        reader()
+                link_opens = [call for call in opened.call_args_list if call.args[0] == link.name]
+                self.assertEqual(len(link_opens), 1)
+                self.assertTrue(link_opens[0].args[1] & os.O_DIRECTORY)
+                self.assertTrue(link_opens[0].args[1] & os.O_NOFOLLOW)
+                self.assertIn('dir_fd', link_opens[0].kwargs)
+                self.assertFalse(any(call.args[0] == 'input' for call in opened.call_args_list))
+                read.assert_not_called()
+                decode.assert_not_called()
+                self.assertTrue(link.is_symlink())
+
     def test_cli_uses_certified_items_for_digest_and_kubernetes_allowlist(self):
         certified = items()
         digest = certified[0]['metadata']['annotations']['shirokuma.dev/source-sha256']
-        with tempfile.TemporaryDirectory() as directory, \
+        with canonical_temp_directory() as directory, \
                 mock.patch.object(policy, 'STATE', Path(directory)), \
                 mock.patch.object(policy, 'load_manifest_snapshot', return_value=(certified, 'b' * 64)) as load, \
                 mock.patch.object(policy, 'Kubernetes') as kube, \
@@ -379,7 +454,7 @@ class ManifestTests(unittest.TestCase):
         source = policy.source_policies()
         mutated = policy.render_native(source, hashlib.sha256(policy.source_snapshot()[0]).hexdigest())
         mutated['items'][0]['spec']['matchConstraints']['namespaceSelector'] = {}
-        with tempfile.TemporaryDirectory() as directory, \
+        with canonical_temp_directory() as directory, \
              mock.patch.object(policy, 'source_policies', return_value=source):
             manifest = Path(directory) / 'manifest.json'
             manifest.write_text(json.dumps(mutated))
@@ -409,13 +484,13 @@ class ManifestTests(unittest.TestCase):
             with self.subTest(altered=altered[:100]):
                 self.assertNotEqual(altered, original)
                 self.assertEqual(json.loads(altered), json.loads(original))
-                with tempfile.TemporaryDirectory() as directory:
+                with canonical_temp_directory() as directory:
                     manifest = Path(directory) / 'manifest.json'
                     manifest.write_text(altered)
                     with mock.patch.object(policy, 'MANIFEST', manifest), \
                          mock.patch.object(policy, 'source_policies', return_value=source):
-                         with self.assertRaises(policy.PolicyError):
-                              policy.load_manifest()
+                        with self.assertRaisesRegex(policy.PolicyError, 'duplicate keys'):
+                            policy.load_manifest()
 
     def test_manifest_refuses_boolean_number_alias_in_projection(self):
         original = policy.render_native
@@ -425,7 +500,7 @@ class ManifestTests(unittest.TestCase):
         expected = original(source, digest)
         expected['items'][0]['spec']['syntheticBoundary'] = {'enabled': False, 'count': 1}
         for field, replacement in (('enabled', 0), ('count', True)):
-            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(field=field), canonical_temp_directory() as directory:
                 altered = copy.deepcopy(expected)
                 altered['items'][0]['spec']['syntheticBoundary'][field] = replacement
                 self.assertEqual(altered, expected)  # Python equality aliases bool and number.
@@ -442,18 +517,18 @@ class ManifestTests(unittest.TestCase):
                         original.replace('"kind": "List"', '"kind": Infinity', 1),
                         original.replace('"kind": "List"', '"kind": 1e9999', 1),
                         original.replace('"kind": "List"', '"kind": 1e-9999', 1)):
-            with self.subTest(value=altered[0:70]), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(value=altered[0:70]), canonical_temp_directory() as directory:
                 manifest = Path(directory) / 'manifest.json'
                 manifest.write_text(altered)
                 with mock.patch.object(policy, 'MANIFEST', manifest), \
                      mock.patch.object(policy, 'source_policies', side_effect=AssertionError('source reached')):
-                    with self.assertRaises(policy.PolicyError):
+                    with self.assertRaisesRegex(policy.PolicyError, 'non-JSON number|non-representable JSON number'):
                         policy.load_manifest()
 
     def test_manifest_digest_tracks_validated_bytes_not_later_path(self):
         source = policy.source_policies()
         original = policy.MANIFEST.read_bytes()
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             manifest = Path(directory) / 'manifest.json'
             manifest.write_bytes(original)
 
@@ -470,21 +545,22 @@ class ManifestTests(unittest.TestCase):
 
     def test_manifest_refuses_source_changed_during_local_decode(self):
         original = policy.SOURCE.read_bytes()
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             source = Path(directory) / 'source.yaml'
             source.write_bytes(original)
 
             decoded = policy.source_policies()
             with mock.patch.object(policy, 'SOURCE', source), \
-                  mock.patch.object(policy, 'source_policies', side_effect=lambda _source_bytes: (
-                     source.write_bytes(b'different source'), decoded)[1]):
+                 mock.patch.object(policy, 'source_policies', side_effect=lambda _source_bytes: (
+                     source.write_bytes(b'different source'), decoded)[1]) as decode:
                 with self.assertRaisesRegex(policy.PolicyError, 'changed during projection'):
                     policy.load_manifest_snapshot()
+            decode.assert_called_once_with(original)
 
     def test_local_decoder_receives_checked_source_bytes_not_a_path(self):
         original = policy.SOURCE.read_bytes()
         decoded = policy.source_policies()
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             source = Path(directory) / 'source.yaml'
             source.write_bytes(original)
             seen = []
@@ -508,7 +584,7 @@ class ManifestTests(unittest.TestCase):
     def test_manifest_refuses_same_bytes_source_replacement_during_decode(self):
         original = policy.SOURCE.read_bytes()
         decoded = policy.source_policies()
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             root = Path(directory)
             source, replacement = root / 'source.yaml', root / 'replacement.yaml'
             source.write_bytes(original)
@@ -519,13 +595,14 @@ class ManifestTests(unittest.TestCase):
                 return decoded
 
             with mock.patch.object(policy, 'SOURCE', source), \
-                 mock.patch.object(policy, 'source_policies', side_effect=replace_after_first_read):
+                 mock.patch.object(policy, 'source_policies', side_effect=replace_after_first_read) as decode:
                 with self.assertRaisesRegex(policy.PolicyError, 'changed during projection'):
                     policy.load_manifest_snapshot()
+            decode.assert_called_once_with(original)
 
     def test_manifest_refuses_unbounded_or_linked_source_before_decode(self):
         original = policy.SOURCE.read_bytes()
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             root = Path(directory)
             source = root / 'source.yaml'
             target = root / 'target.yaml'
@@ -541,7 +618,8 @@ class ManifestTests(unittest.TestCase):
                             source.write_bytes(b'x' * (256 * 1024 + 1))
                     with mock.patch.object(policy, 'SOURCE', source), \
                          mock.patch.object(policy, 'source_policies', side_effect=AssertionError('decoder reached')):
-                        with self.assertRaises(policy.PolicyError):
+                        message = 'could not be read' if replacement == 'symlink' else 'bounded regular file'
+                        with self.assertRaisesRegex(policy.PolicyError, message):
                             policy.load_manifest_snapshot()
             source.write_bytes(original)
             with mock.patch.object(policy, 'SOURCE', source):
@@ -549,7 +627,7 @@ class ManifestTests(unittest.TestCase):
 
     def test_source_refuses_linked_ancestor_and_post_read_relink(self):
         original = policy.SOURCE.read_bytes()
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             root = Path(directory)
             real = root / 'real'
             real.mkdir()
@@ -565,8 +643,11 @@ class ManifestTests(unittest.TestCase):
             (parent / 'source.yaml').write_bytes(original)
             moved = root / 'moved'
             read = policy.os.read
+            read_calls = 0
 
             def relink(fd, size):
+                nonlocal read_calls
+                read_calls += 1
                 raw = read(fd, size)
                 parent.rename(moved)
                 parent.symlink_to(moved, target_is_directory=True)
@@ -576,9 +657,11 @@ class ManifestTests(unittest.TestCase):
                  mock.patch.object(policy.os, 'read', side_effect=relink):
                 with self.assertRaisesRegex(policy.PolicyError, 'ancestor changed'):
                     policy.source_snapshot()
+            self.assertEqual(read_calls, 1)
+            self.assertTrue(parent.is_symlink())
 
     def test_source_refuses_in_place_change_after_descriptor_check(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             source = Path(directory) / 'source.yaml'
             source.write_bytes(policy.SOURCE.read_bytes())
             real_fstat = os.fstat
@@ -601,7 +684,7 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(file_checks, 2)
 
     def test_manifest_refuses_symlink_and_oversize_before_projection(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             root = Path(directory)
             target = root / 'target.json'
             target.write_bytes(policy.MANIFEST.read_bytes())
@@ -615,20 +698,20 @@ class ManifestTests(unittest.TestCase):
             link.write_bytes(b' ' * (256 * 1024 + 1))
             with mock.patch.object(policy, 'MANIFEST', link), \
                  mock.patch.object(policy, 'source_policies', side_effect=AssertionError('unexpected source read')):
-                with self.assertRaises(policy.PolicyError):
+                with self.assertRaisesRegex(policy.PolicyError, 'bounded regular file'):
                     policy.load_manifest()
 
     def test_manifest_refuses_fifo_without_waiting_for_writer(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             manifest = Path(directory) / 'manifest.json'
             os.mkfifo(manifest)
             with mock.patch.object(policy, 'MANIFEST', manifest), \
                  mock.patch.object(policy, 'source_policies', side_effect=AssertionError('unexpected source read')):
-                with self.assertRaises(policy.PolicyError):
+                with self.assertRaisesRegex(policy.PolicyError, 'bounded regular file'):
                     policy.load_manifest()
 
     def test_manifest_refuses_post_read_symlink_to_same_inode(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             root = Path(directory)
             manifest = root / 'manifest.json'
             moved = root / 'original.json'
@@ -648,12 +731,14 @@ class ManifestTests(unittest.TestCase):
             with mock.patch.object(policy, 'MANIFEST', manifest), \
                  mock.patch.object(policy.os, 'read', side_effect=relink_after_open), \
                  mock.patch.object(policy, 'source_policies', side_effect=AssertionError('source reached')):
-                with self.assertRaises(policy.PolicyError):
+                # Rename may also change ctime, reaching the descriptor check
+                # before the pathname check. Both must reject after the hook.
+                with self.assertRaisesRegex(policy.PolicyError, 'path changed|changed during bounded read'):
                     policy.load_manifest()
             self.assertTrue(changed)
 
     def test_manifest_refuses_in_place_change_after_descriptor_check(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             manifest = Path(directory) / 'manifest.json'
             manifest.write_bytes(policy.MANIFEST.read_bytes())
             real_fstat = os.fstat
@@ -677,7 +762,7 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(file_checks, 2)
 
     def test_manifest_refuses_symlink_parent_before_projection(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             root = Path(directory)
             real = root / 'real'
             real.mkdir()
@@ -689,7 +774,7 @@ class ManifestTests(unittest.TestCase):
                     policy.load_manifest()
 
     def test_manifest_refuses_symlink_ancestor_before_projection(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             root = Path(directory)
             real = root / 'real' / 'parent'
             real.mkdir(parents=True)
@@ -701,7 +786,7 @@ class ManifestTests(unittest.TestCase):
                     policy.load_manifest()
 
     def test_manifest_refuses_ancestor_relinked_during_read(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with canonical_temp_directory() as directory:
             root = Path(directory)
             slot = root / 'slot'
             parent = slot / 'parent'
@@ -724,7 +809,7 @@ class ManifestTests(unittest.TestCase):
             with mock.patch.object(policy, 'MANIFEST', parent / 'manifest.json'), \
                  mock.patch.object(policy.os, 'read', side_effect=relink_after_open), \
                  mock.patch.object(policy, 'source_policies', side_effect=AssertionError('source reached')):
-                with self.assertRaises(policy.PolicyError):
+                with self.assertRaisesRegex(policy.PolicyError, 'ancestor changed'):
                     policy.load_manifest()
             self.assertTrue(changed)
 
