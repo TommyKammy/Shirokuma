@@ -303,6 +303,22 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+Parent review `policy-snapshot-review/review-43bvjc0p` independently verifies
+gate-4vag12_f server terminal success, exact checkpoint/model/location/history,
+actual test-only repair and169 passing policy tests. Preserve original transport
+OPENCODE_RUN_FAILED/code1000, supervisor HELD and missing runner result rather
+than replaying or synthesizing success. Retention/current unknown content/stopped
+profiles/capacity matched, production policy code unchanged.
+
+Independent parent continuation canonicalizes only lineage credential fixture
+root and adds linked-state pre-login refusal regression:105 tests pass; production
+credential/login semantics unchanged. Broad verification progresses past policy
+and lineage; now warehouse lifecycle115 tests/one UNSAFE_PATH after_handler
+termination fixture error remains. Original broad failures retained; no runtime
+or full L0 acceptance. Starts523/600/restart23/100/remain77, no new parent model
+calls, no active worker, deadline2026-10-11T01:30Z unchanged. Rollback test changes
+only; preserve all failed/unknown/session/data evidence and inactive runtime pins.
+
 Owner-requested next restart selects one45minute L0_POLICY_SNAPSHOT_REPAIR:
 repair demonstrated snapshot fixture failures (166tests/11failures/2errors) with
 full negative link/race coverage intact. Separate parent reproduction and eleven

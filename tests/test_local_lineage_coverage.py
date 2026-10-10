@@ -1263,7 +1263,9 @@ class ReadOnlyClientTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.state = Path(self.tmp.name)
+        # Canonicalize the trusted fixture root before adding adversarial links.
+        # Production credential paths must still reject linked ancestors.
+        self.state = Path(self.tmp.name).resolve(strict=True)
         self.state.chmod(0o700)
         self.env = self.state / '.env'
         self.env.write_text('OM_STATE=' + str(self.state) + '\nOM_DB_PASSWORD=db\nOM_POSTGRES_PASSWORD=pg\n'
@@ -1287,6 +1289,15 @@ class ReadOnlyClientTests(unittest.TestCase):
         self.assertTrue(all(0 < timeout <= 10 for _, timeout in self.calls))
         self.assertEqual(self.env.stat().st_mtime_ns, before.st_mtime_ns)
         self.assertEqual([p.name for p in self.state.iterdir()], ['.env'])
+
+    def test_linked_state_ancestor_is_rejected_before_login_request(self):
+        alias = self.state / 'alias'
+        alias.symlink_to(self.state, target_is_directory=True)
+        client = C.ReadOnlyClient(opener=self.client.opener, state=alias)
+        with self.assertRaises(C.CoverageError):
+            client.request('GET', next(iter(C.ANCHORS)))
+        self.assertEqual(self.calls, [])
+        self.assertTrue(alias.is_symlink())
 
     def test_login_refuses_credential_metadata_change_with_identical_bytes(self):
         original = self.client.opener.open

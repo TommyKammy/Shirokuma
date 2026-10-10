@@ -5,12 +5,31 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.52"
+version: "1.53"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Parent reconciled transport failure without replay:** worker gate-4vag12_f
+retains OPENCODE_RUN_FAILED/provider.transport WebSocket code1000, original
+supervisor HELD and missing runner result.json unchanged. Separate
+`policy-snapshot-review/review-43bvjc0p` verifies server succeeded/idle/nonactive,
+exact Sol/location/checkpoint/descendant HEADe61c7e5 and narrow actual diff.
+Parent independently reran169 policy tests: all passed; production unchanged,
+retained hashes/unknown current content/profiles and capacity matched. This is
+server-reconciled terminal evidence, not a rewritten successful runner result.
+
+Parent then repaired one independent lineage credential-test fixture root using
+the same canonical trusted-root approach, plus a negative linked-state test:
+105 lineage tests pass, production coverage/login code unchanged. Original
+broad147-test4failure/1error result retained. Subsequent broad verification now
+passes policy and lineage but stops in warehouse lifecycle115 tests with one
+UNSAFE_PATH error at isolated termination boundary after_handler. No full-green
+claim; this is a separate fixture/operation boundary for investigation, not
+permission to relax production path or unknown-operation guards. No active
+worker; starts523/600/restart23/100/remain77, fixed deadline unchanged.
 
 **Policy snapshot worker repair; parent review pending:** `gate-4vag12_f`
 demonstrates macOS's linked `/var` fixture ancestor caused early checked-read
