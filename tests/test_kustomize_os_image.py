@@ -33,7 +33,7 @@ class ImageTests(unittest.TestCase):
         with self.assertRaises(I.L.Error):I.controller(blob,desc,'sha256:'+'0'*64)
 
     def test_metadata_preserves_runtime_config_but_never_claims_go_or_publisher(self):
-        original={'architecture':'arm64','os':'linux','config':{'Entrypoint':['kustomize-controller'],
+        original={'architecture':'arm64','os':'linux','config':{'Entrypoint':['/sbin/tini','--','kustomize-controller'],
             'User':'65534:65534','Env':['SAME=1']},'rootfs':{'type':'layers','diff_ids':['sha256:'+'a'*64]*3}}
         result=json.loads(I.metadata(json.dumps(original).encode(),b'patch'))
         self.assertEqual(result['config']['Env'],original['config']['Env'])
@@ -43,7 +43,9 @@ class ImageTests(unittest.TestCase):
 
     def test_wrong_user_or_entrypoint_rejected(self):
         for config in ({'Entrypoint':['sh'],'User':'65534:65534'},
-                       {'Entrypoint':['kustomize-controller'],'User':'0'}):
+                       {'Entrypoint':['kustomize-controller'],'User':'65534:65534'},
+                       {'Entrypoint':['/sbin/tini','--','kustomize-controller'],'User':'0'},
+                       {'Entrypoint':['/sbin/tini','--','kustomize-controller'],'User':'65534:65534','Cmd':['sh']}):
             with self.assertRaises(I.L.Error):
                 I.metadata(json.dumps({'architecture':'arm64','os':'linux','config':config}).encode(),b'p')
 
@@ -58,7 +60,7 @@ class ImageTests(unittest.TestCase):
     def test_successful_archive_is_unsigned_os_only_and_exclusive(self):
         blob,desc,diff=self.blob()
         config={'architecture':'arm64','os':'linux','config':{
-            'Entrypoint':['kustomize-controller'],'User':'65534:65534'},
+            'Entrypoint':['/sbin/tini','--','kustomize-controller'],'User':'65534:65534'},
             'rootfs':{'type':'layers','diff_ids':['sha256:'+'a'*64,'sha256:'+'b'*64,diff]}}
         manifest=json.dumps({'layers':[{}, {}, desc]}).encode()
         inputs=(manifest,json.dumps(config).encode(),[b'os1',b'os2',blob],b'patch',{},

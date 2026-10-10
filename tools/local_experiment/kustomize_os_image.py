@@ -73,8 +73,9 @@ def controller(blob, descriptor, diff_id):
 def metadata(config, patch):
     settings=copy.deepcopy(json.loads(config))
     L.require(settings.get('architecture')=='arm64' and settings.get('os')=='linux' and
-              settings['config'].get('Entrypoint')==['kustomize-controller'] and
-              settings['config'].get('User')=='65534:65534','LOCAL_IMAGE_CONFIG')
+              settings['config'].get('Entrypoint')==['/sbin/tini','--','kustomize-controller'] and
+              settings['config'].get('User')=='65534:65534' and
+              settings['config'].get('Cmd') is None,'LOCAL_IMAGE_CONFIG')
     settings['rootfs']['diff_ids'].append('sha256:'+L.apk.digest(patch))
     settings.setdefault('history',[]).append({'created_by':'Shirokuma offline pcre2-only patch; Go binary unchanged'})
     settings['config'].setdefault('Labels',{}).update({
