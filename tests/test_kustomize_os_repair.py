@@ -5,6 +5,8 @@ import base64
 import gzip
 import hashlib
 import io
+import json
+import copy
 from pathlib import Path
 import tarfile
 import tempfile
@@ -63,6 +65,45 @@ def fixtures(info_change=None, payload=None, control_extra=None):
 
 
 class Tests(unittest.TestCase):
+    def inventory(self):
+        reference='ghcr.io/fluxcd/kustomize-controller@sha256:'+'a'*64
+        sbom={'metadata':{'component':{'name':'ghcr.io/fluxcd/kustomize-controller',
+                                     'version':'sha256:'+'a'*64}},'components':[{
+            'name':'musl','version':'1.2.5-r23','purl':'pkg:apk/alpine/musl?arch=aarch64',
+            'properties':[{'name':'syft:metadata:pullChecksum','value':self.selected['C']},
+                          {'name':'syft:metadata:provides:0','value':'so:libc.musl-aarch64.so.1=1'}]}]}
+        scan={'Metadata':{'Reference':reference,'RepoDigests':[reference],'ImageConfig':{
+            'architecture':'arm64','os':'linux','config':{'Labels':{
+                'org.opencontainers.image.revision':r.common.REVISION}}}},'Results':[{
+            'Class':'os-pkgs','Packages':[{'Name':'musl','Version':'1.2.5-r23','Arch':'aarch64',
+                'Digest':'sha1:'+r.checksum_bytes(self.selected['C']).hex(),
+                'InstalledFiles':['lib/libc.musl-aarch64.so.1']}]}]}
+        return reference,sbom,scan
+
+    def test_candidate_inventory_closure_is_not_runtime_or_publisher_acceptance(self):
+        ref,sbom,scan=self.inventory()
+        result=r.candidate_dependency_closure(self.index,self.apk,json.dumps(sbom).encode(),
+                                            json.dumps(scan).encode(),ref)
+        self.assertEqual(result['status'],'matched_retained_candidate_inventory')
+        self.assertFalse(result['current_runtime_verified'])
+        self.assertFalse(result['publisher_verified'])
+        self.assertFalse(result['installed_highs_mitigated'])
+
+    def test_candidate_inventory_rejects_digest_arch_version_checksum_and_abi_drift(self):
+        ref,sbom,scan=self.inventory()
+        cases=[]
+        changed=copy.deepcopy(sbom);changed['metadata']['component']['version']='sha256:'+'b'*64
+        cases.append((changed,scan))
+        for field,value in (('Version','1.2.5-r22'),('Arch','x86_64'),('Digest','sha1:'+'0'*40),
+                            ('InstalledFiles',[])):
+            changed=copy.deepcopy(scan);changed['Results'][0]['Packages'][0][field]=value
+            cases.append((sbom,changed))
+        changed=copy.deepcopy(sbom);changed['components'].append(changed['components'][0]);cases.append((changed,scan))
+        for a,b in cases:
+            with self.assertRaises(r.RepairError):
+                r.candidate_dependency_closure(self.index,self.apk,json.dumps(a).encode(),
+                                             json.dumps(b).encode(),ref)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
         self.addCleanup(self.temp.cleanup)

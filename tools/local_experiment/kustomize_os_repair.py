@@ -364,6 +364,60 @@ def dependency_candidates(records: list[dict], dependencies: list[str]) -> dict:
     return result
 
 
+def candidate_dependency_closure(index: bytes, apk: bytes, sbom: bytes,
+                                 scan: bytes, reference: str) -> dict:
+    """Bind providers to retained candidate inventory, never current runtime.
+
+    Parent must additionally bind raw inventory bytes to successful scanner
+    receipts and independently verify signatures. This performs no fetching,
+    extraction, package execution or installation.
+    """
+    require(re.fullmatch(r'ghcr\.io/fluxcd/kustomize-controller@sha256:[0-9a-f]{64}',
+                         reference) is not None, 'CANDIDATE_REFERENCE')
+    records = parse_index(index)
+    package = validate_apk(apk, select_pcre2(records))
+    providers = dependency_candidates(records, package['dependencies'])
+    inventory, observation = json.loads(sbom), json.loads(scan)
+    component = inventory.get('metadata', {}).get('component', {})
+    metadata = observation.get('Metadata', {})
+    config = metadata.get('ImageConfig', {})
+    require(component.get('name') == 'ghcr.io/fluxcd/kustomize-controller' and
+            component.get('version') == reference.split('@')[1] and
+            metadata.get('Reference') == reference and reference in metadata.get('RepoDigests', []) and
+            config.get('architecture') == 'arm64' and config.get('os') == 'linux' and
+            config.get('config', {}).get('Labels', {}).get('org.opencontainers.image.revision') == common.REVISION,
+            'CANDIDATE_INVENTORY_IDENTITY')
+    resolved = []
+    for dependency, provider in providers.items():
+        # Deliberately narrow: no generic ABI/version-constraint inference.
+        require(dependency == 'so:libc.musl-aarch64.so.1' and provider['package'] == 'musl',
+                'DEPENDENCY_CLOSURE_UNSUPPORTED')
+        components = [c for c in inventory.get('components', []) if c.get('name') == 'musl']
+        packages = [p for result in observation.get('Results', []) if result.get('Class') == 'os-pkgs'
+                    for p in result.get('Packages', []) if p.get('Name') == 'musl']
+        require(len(components) == len(packages) == 1, 'INSTALLED_PROVIDER_AMBIGUOUS')
+        installed, scanned = components[0], packages[0]
+        properties = installed.get('properties', [])
+        checksums = [p.get('value') for p in properties if p.get('name') == 'syft:metadata:pullChecksum']
+        provided = [p.get('value', '').split('=', 1)[0] for p in properties
+                    if p.get('name', '').startswith('syft:metadata:provides:')]
+        require(installed.get('version') == scanned.get('Version') == provider['version'] and
+                'arch=aarch64' in installed.get('purl', '') and scanned.get('Arch') == 'aarch64' and
+                checksums == [provider['checksum']] and dependency in provided and
+                scanned.get('Digest') == 'sha1:' + checksum_bytes(provider['checksum']).hex() and
+                'lib/libc.musl-aarch64.so.1' in scanned.get('InstalledFiles', []),
+                'INSTALLED_PROVIDER_VERSION_CHECKSUM_ABI')
+        resolved.append({'dependency': dependency, 'package': 'musl', 'version': provider['version'],
+                         'control_sha1': checksum_bytes(provider['checksum']).hex()})
+    return {'schema_version': 1, 'candidate_reference': reference,
+            'status': 'matched_retained_candidate_inventory', 'providers': resolved,
+            'index_sha256': digest(index), 'apk_sha256': digest(apk),
+            'sbom_sha256': digest(sbom), 'scan_sha256': digest(scan),
+            'signatures_parent_recheck_required': True, 'current_runtime_verified': False,
+            'installed_highs_mitigated': False, 'publisher_verified': False,
+            'advisory_freshness': 'not_claimed', 'admission': False, 'l0': False}
+
+
 def read_private(scope: Path, name: str, limit: int = APK_LIMIT) -> bytes:
     require(re.fullmatch(r'[A-Za-z0-9_.-]+', name) is not None, 'INVALID_FILENAME')
     directory = common.private_directory(scope)
