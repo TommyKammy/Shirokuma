@@ -257,6 +257,29 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+Completed OS-only archive milestone: parent rederived931840byte PCRE2 patch,
+preserving63 unrelated APK records and binding two stale-library whiteouts. Third
+controller layer was independently checked by compressed hash/diff ID/static
+COPY tar/ARM64 ELF without invocation. Nonexecuted archive
+`kustomize-os-image/image-kusz42xz` is67461120bytes,
+SHA256af5a00bb2ec6b239c5dcdf8e8b8a9f2f47d3208053dec81a35e5f7b591546328.
+All3 original layers plus pcre2 patch; unchanged Go binary and exact tini/nonroot
+runtime settings, unsigned local experimental labels. Original first assembly
+LOCAL_IMAGE_CONFIG hold retained; corrected exact fixed config and reused
+completed blob with zero network calls, not unknown replay.
+
+Separate `kustomize-os-scan/scan-k3vg47w7` SBOM/version/scan succeeded with owned
+groups terminal. Syft/Trivy identify pcre2 10.49-r0; dated2026-10-07 read-only DB
+reports HIGH4/CRITICAL0/MEDIUM5/LOW1/UNKNOWN1, HIGHs x/crypto1/grpc3 unchanged Go
+dependencies. No PCRE2 vulnerability reported by that DB, not fresh acceptance.
+Sandbox denied network/protected writes; DB/hash/metadata, retained19 inputs,
+unknown current content and stopped profiles unchanged. No load/import/run or
+installed mitigation/publisher/admission/L0 claims. Rollback is leave archive
+inactive; preserve failed/unknown evidence and runtime pins. All finite workers
+and parent operations ended; no active worker. Next dependent work requires
+separate source/package/sum/build capacity review, not third unchanged OS archive
+attempt. Starts522/600/restart22/100/remain78/deadline2026-10-11T01:30Z unchanged.
+
 Parent OS input review `kustomize-os-parent-review/review-m9iihc2r` verifies
 pcre2 10.49-r0/index RSA signatures against digest-bound retained keys and2
 ARM64 ELF payloads. Candidate musl1.2.5-r23/Q1/provided libc ABI/file exactly

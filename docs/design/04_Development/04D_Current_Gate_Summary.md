@@ -5,12 +5,58 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.48"
+version: "1.50"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**OS-only archive SBOM/dated-DB milestone completed:** separate
+`kustomize-os-scan/scan-k3vg47w7` has successful SBOM/version/scan receipts and
+terminal owned groups. Syft and Trivy both identify pcre2 **10.49-r0**. Under the
+retained2026-10-07 DB, HIGH4/CRITICAL0/MEDIUM5/LOW1/UNKNOWN1; remaining HIGHs are
+x/crypto0.53.0 one and grpc1.81.1 three in the unchanged upstream Go binary.
+No pcre2 vulnerability was reported by this dated database. This is not a fresh
+advisory assessment or deployed mitigation; do not treat HIGH5→4 as a current
+same-date comparison. Sandbox denied network/protected writes; retained DB hash
+5f4b978a55284b1997dc31e9f2fc3f4f1abae80829f51451ade221d5675a69b9/metadata,
+19 retained inputs, unknown current content and stopped profiles matched after
+scan. Original image config failure and config-fetch hold remain immutable.
+
+All selected OS workers/parent assembly/scans are terminal; **no active worker**.
+Milestone `make verify-local-experiment` remains **not green**: local-policy
+suite166 tests reported11 failures/2 errors in checked source/manifest snapshot
+fixtures. Preserve this result separately; passing OS-focused tests/scan do not
+resolve those policy regressions or establish broad verification. Cause was not
+determined in this OS increment; no policy/runtime controls were relaxed.
+Next useful dependent increment is separately capacity-reviewed kustomize
+package/sum/source validation and patched Go binary/tests, not another unchanged
+OS archive assembly or fresh DB copy. Original source unknown operation and its
+exhausted build/test approaches remain held; never reuse their reservations.
+Remaining capacity, source completeness and owned-operation receipts must be
+reviewed before any new compiler operation. VM/pins remain unchanged, no image
+load/import/run/publication/admission/full L0. Starts522/600/restart22/100,
+remaining78; deadline2026-10-11T01:30Z unchanged, no model calls for parent scan.
+
+**Nonexecuted OS-only complete archive assembled:** image-kusz42xz,
+67461120bytes/SHA256af5a00bb2ec6b239c5dcdf8e8b8a9f2f47d3208053dec81a35e5f7b591546328.
+All3 original compressed layers preserved and third COPY layer/diff-ID/static
+ARM64 ELF closed; append verified pcre2-only patch. Go binary remains unchanged,
+unsigned local fork, exact nonroot tini entrypoint preserved. Original
+image-c53xuezz LOCAL_IMAGE_CONFIG remains HELD; wrong controller-only entrypoint
+assumption fixed to exact candidate tini/nonroot/no-Cmd contract (6 tests).
+Completed controller blob separately reobserved, no refetch/unknown replay.
+
+Parent selected SBOM + bounded dated-DB scan: fresh256MiB scope under unchanged
+combined16GiB/free17GiB. Retained Trivy DB1,437,515,776bytes cannot be copied/freshly
+replaced in remaining447143936bytes; UpdatedAt2026-10-07T07:38:55Z is stale.
+Reference it read-only with memory cache/skip updates, sandbox denies network and
+protected input/DB writes; hash/metadata checked before/after. No fallback on
+permission rejection. This is a dated-database match, not fresh vulnerability
+acceptance. Scan outcome pending separately; image not loaded/imported/run,
+source unknown holds/pins/19 retained inputs remain. Starts522/600/remaining78,
+deadline2026-10-11T01:30Z unchanged; parent work adds no model call.
 
 **Parent OS-prefix patch review and separate complete-archive capability:**
 gate-z31_2ik6 ended atfafffc8c; parent reran43 layer tests and independently
