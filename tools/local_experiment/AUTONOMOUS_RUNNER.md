@@ -4,6 +4,21 @@
 
 ### 2026-10-09 owner-selected safe restart
 
+`--execute --use-pro-weekly-limit --kustomize-os-repair` selects one45minute
+L0_KUSTOMIZE_OS_REPAIR. Nine exact terminal no-safe sessions independently
+reconciled; kustomize-os-review receipts additionally bind the completed graph
+parent-result review. Original source unknown operation is held, not replayed.
+New64MiB scope reserves retained builds/mis/kustomize graph/source evidence under
+combined16GiB/free17GiB. Parent unknown-scope comparison hashes actual content,
+not allocated blocks (prior49152byte allocation decrease was not content proof).
+Worker implements tested APKINDEX/APK version/arch/dependency/hash/signature
+validator; permits only one bounded Alpine3.23/main/aarch64 index and one exact
+selected pcre2 APK public fetch, digest-bound retained image keys streamed
+read-only and fixed local openssl signature verification. No contents executed,
+APK installation/Go/compiler/layer/image/VM/runtime operation. Unsupported
+signature/unknown fetch holds dependent work; no retry, cleanup, capacity
+relaxation or admission. Parent independently reviews before successor capability.
+
 `--execute --use-pro-weekly-limit --kustomize-repair` selects one45minute
 L0_KUSTOMIZE_SOURCE_REPAIR independently of the unknown source index operation.
 Eight exact no-safe terminal sessions are parent-reconciled; separate

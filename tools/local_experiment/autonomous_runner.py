@@ -447,22 +447,25 @@ def reviewed_restart_stop(root, prior, summary, head, gate):
     """Owner-selected repo-only restart repair; never reopens old build scopes."""
     known = {'gate-azr7paf4', 'gate-5d3ur67c', 'gate-3f5odnk2', 'gate-xezx_z6k', 'gate-ayqdekwa'}
     minimal = gate == 'L0_FLUX_MINIMAL_TEST_REPAIR'
-    independent = gate == 'L0_KUSTOMIZE_SOURCE_REPAIR'
-    planning = gate in ('L0_FLUX_TEST_CAPACITY_PLAN', 'L0_FLUX_MINIMAL_TEST_REPAIR', 'L0_KUSTOMIZE_SOURCE_REPAIR')
+    os_repair = gate == 'L0_KUSTOMIZE_OS_REPAIR'
+    independent = gate in ('L0_KUSTOMIZE_SOURCE_REPAIR', 'L0_KUSTOMIZE_OS_REPAIR')
+    planning = gate in ('L0_FLUX_TEST_CAPACITY_PLAN', 'L0_FLUX_MINIMAL_TEST_REPAIR', 'L0_KUSTOMIZE_SOURCE_REPAIR', 'L0_KUSTOMIZE_OS_REPAIR')
     if planning:
         known.add('gate-_g0u5c6u')
     if minimal or independent:
         known.add('gate-vpbadha7')
     if independent:
         known.add('gate-ysazsqh6')
-    if gate not in ('L0_SUPERVISION_CAPACITY_REPAIR', 'L0_FLUX_TEST_CAPACITY_PLAN', 'L0_FLUX_MINIMAL_TEST_REPAIR', 'L0_KUSTOMIZE_SOURCE_REPAIR') or prior.name not in known:
+    if os_repair:
+        known.add('gate-d1i5mq08')
+    if gate not in ('L0_SUPERVISION_CAPACITY_REPAIR', 'L0_FLUX_TEST_CAPACITY_PLAN', 'L0_FLUX_MINIMAL_TEST_REPAIR', 'L0_KUSTOMIZE_SOURCE_REPAIR', 'L0_KUSTOMIZE_OS_REPAIR') or prior.name not in known:
         return False
     require(summary.get('reason') == 'agent_no_safe_work_claim' and summary.get('attempts') == 1,
             'RESTART_REVIEW_INVALID')
     last = prior/'attempt-001'
     result = private_json(last/'result.json', 'RESTART_REVIEW_INVALID')
     cp = private_json(last/'checkpoint.json', 'RESTART_REVIEW_INVALID')
-    prefix = 'kustomize-review' if independent else 'minimal-test-review' if minimal else 'test-plan-review' if planning else 'restart-review'
+    prefix = 'kustomize-os-review' if os_repair else 'kustomize-review' if independent else 'minimal-test-review' if minimal else 'test-plan-review' if planning else 'restart-review'
     review = private_json(root/'tmp/local-experiment/gate-batches'/f'{prefix}-{prior.name}.json',
                           'RESTART_REVIEW_REQUIRED')
     if planning:
@@ -490,11 +493,19 @@ def reviewed_restart_stop(root, prior, summary, head, gate):
                 held.get('retained_hashes_match') is True and held.get('profiles_stopped') is True and
                 review.get('source_operation_hold_sha256') == hashlib.sha256(path.read_bytes()).hexdigest(),
                 'RESTART_REVIEW_INVALID')
+    if os_repair:
+        path = root/'tmp/local-experiment/kustomize-graph/graph-5arqvixh/parent-result-review.json'
+        graph = private_json(path, 'RESTART_REVIEW_INVALID')
+        require(graph.get('classification') == 'PINNED_PATCH_CHECKSUMS_OFFLINE_GRAPH_VERIFIED' and
+                graph.get('metadata_checksums_verified') == 168 and graph.get('unknown_content_snapshot_matches') is True and
+                review.get('graph_review_sha256') == hashlib.sha256(path.read_bytes()).hexdigest(),
+                'RESTART_REVIEW_INVALID')
     reviewed_head = review.get('reviewed_head')
     require(review.get('schema_version') == 1 and review.get('source_run') == prior.name and
             review.get('original_summary') == summary and review.get('original_result') == result and
             review.get('checkpoint') == cp and review.get('allowed_gate') == gate and
-            review.get('decision') == ('source_unknown_held_independent_kustomize_source_repair' if independent else
+            review.get('decision') == ('source_unknown_held_verified_graph_independent_pcre2_repair' if os_repair else
+                                       'source_unknown_held_independent_kustomize_source_repair' if independent else
                                        'old_scope_held_minimum_seed_executor_repair_no_replay' if minimal else
                                        'old_scope_held_test_capacity_planning_no_execution' if planning else
                                        'old_scope_held_repository_capacity_repair_no_replay') and

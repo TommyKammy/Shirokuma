@@ -7,6 +7,20 @@ from tools.local_experiment import restart_supervisor as S
 
 
 class RestartTests(unittest.TestCase):
+    def test_kustomize_os_default_never_launches(self):
+        with mock.patch('sys.argv',['restart','--kustomize-os-repair']),mock.patch.object(S,'test_planning') as run:
+            self.assertEqual(S.main(),0);run.assert_not_called()
+
+    def test_unknown_content_binds_bytes_not_allocated_block_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);scope=root/'tmp/rv/mis';scope.mkdir(parents=True)
+            (scope/'data').write_bytes(b'held content')
+            first=S.unknown_content(root)
+            (scope/'data').write_bytes(b'other content')
+            self.assertNotEqual(S.unknown_content(root),first)
+            (scope/'link').symlink_to(scope/'data')
+            with self.assertRaises(S.R.RunnerError):S.unknown_content(root)
+
     def test_independent_kustomize_default_never_launches(self):
         with mock.patch('sys.argv',['restart','--kustomize-repair']),mock.patch.object(S,'test_planning') as run:
             self.assertEqual(S.main(),0);run.assert_not_called()

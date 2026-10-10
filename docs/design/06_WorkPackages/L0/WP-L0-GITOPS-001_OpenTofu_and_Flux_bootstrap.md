@@ -164,6 +164,18 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+Next owner-requested safe continuation selects L0_KUSTOMIZE_OS_REPAIR, one45min
+Sol repo repair of safe ARM64 pcre2 APK/index dependency/version/hash/provenance/
+signature validation. Two bounded public Alpine3.23/main/aarch64 reads (index4MiB,
+exact selected APK8MiB/30s each), new64MiB within combined retained16GiB/free17GiB.
+Read retained image APK keys only as digest-bound local trust anchors; unsupported
+signature proof holds. Python regressions, no install/scripts/Go/compiler/layer/
+image/VM/runtime operations; parent signature/closure/input/terminal/capacity
+review before successor. Preserve unknown mis group hold and all data/counters;
+compare current content hashes, not changing filesystem allocation. Source graph
+verified remains distinct from OS mitigation/publisher/admission/full L0. Starts
+520/600 before launch/remaining80, deadline2026-10-11T01:30Z unchanged.
+
 2026-10-10 independent kustomize milestone: gate-d1i5mq08 completed pinned two-
 line source patch/provenance validator (24 Python tests). Parent verified two
 HTTPS module fetches against exact candidate revision and separately fetched

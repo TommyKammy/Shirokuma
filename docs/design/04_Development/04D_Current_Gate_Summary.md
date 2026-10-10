@@ -5,12 +5,28 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.43"
+version: "1.44"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Next independent gate selected for owner-requested restart:** one45minute Sol
+L0_KUSTOMIZE_OS_REPAIR after independently verified source patch/checksums/graph.
+Implement functional safe APKINDEX/APK parser and ARM64 pcre2 fixed-version,
+dependency/checksum/provenance/signature validation with Python negative tests.
+One v3.23/main/aarch64 index <=4MiB and one exact index-selected pcre2 APK<=8MiB,
+each30s, immutable receipts/no unknown retries/new64MiB scope. Trust-anchor inputs
+may be streamed only from digest-bound retained image APK keys; unsupported
+signature proof stays a typed hold, not publisher acceptance. No APK install/
+scripts, layer assembly/image/VM/Go/compiler/upstream-test execution. Combined
+builds+unknown mis+existing kustomize graph/source evidence+new scope<16GiB,
+free17GiB. Parent hashes unknown content rather than volatile allocated-block
+manifest; original group outcome remains unknown/no replay. Nine known terminal
+no-safe runs separately reviewed and bound to completed graph and original hold.
+Two reservations per approach; starts520/600 before launch/remaining80,
+deadline2026-10-11T01:30Z unchanged. Worker/parent results recorded separately.
 
 **Independent kustomize functional milestone verified:** second/final graph
 `tmp/local-experiment/kustomize-graph/graph-5arqvixh` completed exit0 with owned

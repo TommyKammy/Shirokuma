@@ -357,6 +357,17 @@ class AutonomousRunnerTests(unittest.TestCase):
             source_operation_hold_sha256=R.hashlib.sha256(unknown.read_bytes()).hexdigest())
         self.write_private_json(self.root/'tmp/local-experiment/gate-batches/kustomize-review-gate-ayqdekwa.json',other)
         self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_SOURCE_REPAIR'))
+        graph=self.root/'tmp/local-experiment/kustomize-graph/graph-5arqvixh/parent-result-review.json'
+        self.write_private_json(graph,dict(classification='PINNED_PATCH_CHECKSUMS_OFFLINE_GRAPH_VERIFIED',
+            metadata_checksums_verified=168,unknown_content_snapshot_matches=True))
+        os_review=dict(other,allowed_gate='L0_KUSTOMIZE_OS_REPAIR',
+            decision='source_unknown_held_verified_graph_independent_pcre2_repair',
+            graph_review_sha256=R.hashlib.sha256(graph.read_bytes()).hexdigest())
+        self.write_private_json(self.root/'tmp/local-experiment/gate-batches/kustomize-os-review-gate-ayqdekwa.json',os_review)
+        self.assertTrue(R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_OS_REPAIR'))
+        self.write_private_json(graph,dict(classification='GRAPH_FAILED'))
+        with self.assertRaises(R.RunnerError):
+            R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_OS_REPAIR')
         self.write_private_json(unknown,dict(replay_authorized=True))
         with self.assertRaises(R.RunnerError):
             R.reviewed_restart_stop(self.root,prior,summary,head,'L0_KUSTOMIZE_SOURCE_REPAIR')
