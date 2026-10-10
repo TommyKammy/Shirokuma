@@ -112,7 +112,7 @@ def archive_files(data, module, version, sums):
 
 def closure(initial, versions, load):
     """Package import fixed point; module tests excluded, target tests included."""
-    pending = list(initial)
+    pending = sorted(initial)
     seen = set()
     modules = {}
     edges = {}

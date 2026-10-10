@@ -80,6 +80,17 @@ import (
             M.closure(['a.example/m'], {'a.example/m': 'v1'},
                       lambda m, v: {'p.go': b'package p\nimport "missing.example/x"'})
 
+    def test_closure_initial_iteration_order_cannot_change_bindings(self):
+        versions={'a.example/m':'v1','b.example/m':'v1'}
+        def inspect(order):
+            loaded=[]
+            def load(module,version):
+                loaded.append(module)
+                return {'p.go':b'package p'}
+            M.closure(order,versions,load)
+            return loaded
+        self.assertEqual(inspect(list(versions)),inspect(list(reversed(versions))))
+
     def zip_fixture(self, member='a.example/m@v1.0.0/p.go', data=b'package p'):
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, 'w') as z: z.writestr(member, data)
