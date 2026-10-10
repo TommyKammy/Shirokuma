@@ -164,6 +164,22 @@ Vault left untouched/outside approved access; sync pending. No later batch sched
 
 ## 2026-10-09: owner-selected safe repository repair and conditional API pilot
 
+2026-10-10 independent kustomize milestone: gate-d1i5mq08 completed pinned two-
+line source patch/provenance validator (24 Python tests). Parent verified two
+HTTPS module fetches against exact candidate revision and separately fetched
+pinned API module files. Checksum-verified x/crypto0.55.0/grpc1.83.2 ZIP/.mod
+inputs add four go.sum lines; first offline graph known exit1 remains retained
+(missing longrunning metadata). Changed second/final attempt retrieved168 .mod
+files only with existing go.sum h1 anchors, bounded public HTTPS/no credentials/
+retries; graph-5arqvixh exit0. Parent-result-review independently verifies3503
+edges/168 hashes/root fixed versions,19 retained hashes/stopped profiles and
+current unknown mis content snapshot unchanged. Original source operation stays
+unknown/no replay; no fabricated group receipt, cleanup, compiler/upstream tests,
+binary/image scan or runtime pin changes. Not complete go.sum tidy/build/advisory
+freshness/pcre2/publisher/admission/L0 acceptance. All original failures retained;
+repository-only rollback, preserve evidence/data. Starts520/600, remaining80,
+deadline2026-10-11T01:30Z unchanged, no new model calls during graph repair.
+
 2026-10-10 safe restart changes controller rather than replaying unknown source
 index operation: one45minute L0_KUSTOMIZE_SOURCE_REPAIR for candidatev1.9.6 exact
 source revision060e0d8dbc257a11cf49b9e626b63284dc385870. Retained Oct8 HIGH5:

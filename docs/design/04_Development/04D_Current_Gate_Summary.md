@@ -5,12 +5,26 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-10
-version: "1.42"
+version: "1.43"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current gate summary (dated 2026-10-10; re-observe before acting)
+
+**Independent kustomize functional milestone verified:** second/final graph
+`tmp/local-experiment/kustomize-graph/graph-5arqvixh` completed exit0 with owned
+terminal/output hashes. Parent independently rechecked168 .mod checksums,
+3503 nonempty graph edges and root x/crypto0.55.0/grpc1.83.2 dependencies.
+Separate parent-result-review.json records source patch + four new dependency
+checksum lines + offline graph evidence, not complete go.sum tidy/MVS package
+test/build acceptance.19 retained hashes match/all profiles freshly Stopped;
+unknown source mis current content snapshot unchanged, original missing group
+receipt unresolved/no replay. First graph known failure remains intact.
+No compiler/tests/image/runtime changes/new model calls during graph repair.
+Starts520/600, remaining80; deadline2026-10-11T01:30Z. Next source validation/
+OS pcre2 repair/build/image capability requires separate evidence-backed capacity
+and operation review; installed HIGHs, freshness, publisher/admission/L0 open.
 
 **Kustomize parent review and independent graph continuation:** worker
 gate-d1i5mq08 ended no_safe_work at1fe0f347; parent terminal/24 tests/19 hashes/
