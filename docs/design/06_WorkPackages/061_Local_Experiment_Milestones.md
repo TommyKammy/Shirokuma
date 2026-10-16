@@ -40,6 +40,12 @@ tags: [shirokuma, local, milestones]
 - Removed the fixed 25-row `tpch.tiny.nation` fixture restriction for resident queries, supporting arbitrary SQL (`--sql` or positional argument), `--catalog` / `--schema`, pagination over `/v1/statement`, automatic cold wake (`auto_woken: true`), and AgentHouse Pawprint recording (`agenthouse.pawprints`).
 - Verified live on `mac-studio-solo`: `status`, Iceberg query (`iceberg.smoke.fixture_v1`), TPC-H join/aggregation (`tpch.tiny.nation JOIN tpch.tiny.region`), `chill` (`replicas=0`), and auto-wake SQL query (`tpch.tiny.customer`, `auto_woken: true`, `telemetry: recorded`).
 
+### 2026-10-17 — WP-P2-001a: Commander Review Fixes & Corrections (Completed)
+- Fixed bare `make` running `lab-up` / `warehouse-status` (regression since WP-P1-002) via `.DEFAULT_GOAL := verify`.
+- Correction: XS/S/LOCAL share the single `trino-local` backend (now default `LOCAL`, reports include `backend: trino-local`); Gateway-based XS/S separation is not implemented.
+- Added `--max-rows` (default 1000, server-side cancel, `truncated` flag) and `status=failed` Pawprints for failed queries (no SQL/error text). Verified live.
+- Correction to WP-P1-001: the root `Kustomization/flux-system` remains intentionally suspended because its source tracks GitHub `main` while this branch is local-only; child Kustomizations are active. `trino-local` is not Flux-managed.
+
 ---
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)

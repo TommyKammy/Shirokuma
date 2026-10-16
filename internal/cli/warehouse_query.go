@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -49,10 +50,14 @@ func newWarehouseQueryCommand(client warehouseQueryClient, runners ...residentWa
 	group := &cobra.Command{Use: "warehouse", Short: "Control and query a local warehouse"}
 	var sessionID, requestID, profile, sql, catalog, schema, repoRoot string
 	var noAutoWake bool
+	var maxRows int
 	command := &cobra.Command{
-		Use: "query <XS|S|LOCAL> [SQL]", Short: "Execute SQL or use a bounded session",
+		Use: "query <XS|S|LOCAL> [SQL]", Short: "Query the resident Trino warehouse (XS/S/LOCAL share one backend)",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if maxRows < 1 || (sessionID != "" && cmd.Flags().Changed("max-rows")) {
+				return errors.New("--max-rows must be >= 1 and cannot be used with --session")
+			}
 			if sessionID == "" {
 				if profile != localExperimentProfile || requestID != "" || !validResidentWarehouse(args[0]) ||
 					(len(args) == 2 && cmd.Flags().Changed("sql")) {
@@ -64,7 +69,7 @@ func newWarehouseQueryCommand(client warehouseQueryClient, runners ...residentWa
 				if strings.TrimSpace(sql) == "" {
 					return errors.New("resident warehouse query requires SQL")
 				}
-				childArgs := []string{"query", "--warehouse", args[0], "--sql=" + sql}
+				childArgs := []string{"query", "--warehouse", args[0], "--sql=" + sql, "--max-rows", strconv.Itoa(maxRows)}
 				for _, option := range []struct{ name, value string }{{"catalog", catalog}, {"schema", schema}} {
 					if option.value != "" {
 						childArgs = append(childArgs, "--"+option.name, option.value)
@@ -116,6 +121,7 @@ func newWarehouseQueryCommand(client warehouseQueryClient, runners ...residentWa
 	command.Flags().StringVar(&schema, "schema", "", "Trino schema")
 	command.Flags().StringVar(&repoRoot, "repo-root", "", "repository root")
 	command.Flags().BoolVar(&noAutoWake, "no-auto-wake", false, "fail if the resident warehouse is chilled")
+	command.Flags().IntVar(&maxRows, "max-rows", 1000, "maximum resident query result rows")
 	group.AddCommand(command)
 	for _, action := range []string{"status", "chill", "wake"} {
 		group.AddCommand(newResidentWarehouseCommand(action, resident))

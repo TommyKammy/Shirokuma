@@ -22,7 +22,7 @@ func (f *fakeResidentWarehouse) Run(_ context.Context, root string, args []strin
 	if f.data != nil || f.err != nil {
 		return f.data, f.err
 	}
-	return json.Marshal(map[string]string{"warehouse": args[2], "action": args[0], "result": "verified", "state": "active"})
+	return json.Marshal(map[string]string{"warehouse": args[2], "backend": "trino-local", "action": args[0], "result": "verified", "state": "active"})
 }
 
 func residentCommand(f *fakeResidentWarehouse, args ...string) (string, error) {
@@ -43,12 +43,12 @@ func TestResidentLifecycleCommands(t *testing.T) {
 			if size != "" {
 				args = append(args, size)
 			} else {
-				size = "XS"
+				size = "LOCAL"
 			}
 			args = append(args, "--repo-root", "/tmp/repo")
 			f := &fakeResidentWarehouse{}
 			out, err := residentCommand(f, args...)
-			if err != nil || !json.Valid([]byte(out)) || f.root != "/tmp/repo" ||
+			if err != nil || !json.Valid([]byte(out)) || !strings.Contains(out, `"backend":"trino-local"`) || f.root != "/tmp/repo" ||
 				!reflect.DeepEqual(f.args, []string{action, "--warehouse", size}) {
 				t.Fatalf("resident command: %v %s %+v", err, out, f)
 			}
@@ -59,7 +59,7 @@ func TestResidentLifecycleCommands(t *testing.T) {
 func TestResidentGeneralSQL(t *testing.T) {
 	for _, args := range [][]string{
 		{"query", "S", "SELECT * FROM any_table", "--catalog", "iceberg", "--schema", "public", "--no-auto-wake"},
-		{"query", "LOCAL", "--sql", "CREATE TABLE other AS SELECT 42"},
+		{"query", "LOCAL", "--sql", "CREATE TABLE other AS SELECT 42", "--max-rows", "7"},
 	} {
 		f := &fakeResidentWarehouse{}
 		if _, err := residentCommand(f, args...); err != nil {
@@ -68,7 +68,10 @@ func TestResidentGeneralSQL(t *testing.T) {
 		if len(f.args) < 4 || f.args[0] != "query" || f.args[2] != args[1] || !strings.HasPrefix(f.args[3], "--sql=") {
 			t.Fatalf("SQL not forwarded: %v", f.args)
 		}
-		if args[1] == "S" && !reflect.DeepEqual(f.args[3:], []string{"--sql=SELECT * FROM any_table", "--catalog", "iceberg", "--schema", "public", "--no-auto-wake"}) {
+		if args[1] == "LOCAL" && !reflect.DeepEqual(f.args[4:], []string{"--max-rows", "7"}) {
+			t.Fatal(f.args)
+		}
+		if args[1] == "S" && !reflect.DeepEqual(f.args[3:], []string{"--sql=SELECT * FROM any_table", "--max-rows", "1000", "--catalog", "iceberg", "--schema", "public", "--no-auto-wake"}) {
 			t.Fatal(f.args)
 		}
 	}
@@ -84,6 +87,9 @@ func TestResidentInvalidArgumentsNeverRun(t *testing.T) {
 		{"query", "XS", "--sql", "SELECT 1", "--profile", "production"},
 		{"query", "XS", "--session", testWarehouseSession, "--catalog", "iceberg"},
 		{"query", "XS", "--session", testWarehouseSession, "--schema", "public"},
+		{"query", "LOCAL", "SELECT 1", "--max-rows", "0"},
+		{"query", "LOCAL", "SELECT 1", "--max-rows", "-1"},
+		{"query", "XS", "--session", testWarehouseSession, "--max-rows", "1000"},
 	} {
 		f := &fakeResidentWarehouse{}
 		if _, err := residentCommand(f, args...); err == nil || f.args != nil {

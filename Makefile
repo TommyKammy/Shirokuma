@@ -1,7 +1,8 @@
 SHELL := /bin/bash
 PYTHON ?= python3
 
-WAREHOUSE ?= XS
+WAREHOUSE ?= LOCAL
+.DEFAULT_GOAL := verify
 .PHONY: warehouse-status warehouse-chill warehouse-wake
 warehouse-status warehouse-chill warehouse-wake:
 	@$(PYTHON) tools/local_experiment/warehouse_resident.py $(patsubst warehouse-%,%,$@) --warehouse $(WAREHOUSE)

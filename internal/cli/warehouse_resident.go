@@ -67,10 +67,10 @@ func runResidentWarehouse(cmd *cobra.Command, runner residentWarehouseRunner, ro
 func newResidentWarehouseCommand(action string, runner residentWarehouseRunner) *cobra.Command {
 	var profile, root string
 	command := &cobra.Command{
-		Use: action + " [XS|S|LOCAL]", Short: action + " the resident warehouse",
+		Use: action + " [XS|S|LOCAL]", Short: action + " the resident Trino warehouse (XS/S/LOCAL share one backend)",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			size := "XS"
+			size := "LOCAL"
 			if len(args) == 1 {
 				size = args[0]
 			}
