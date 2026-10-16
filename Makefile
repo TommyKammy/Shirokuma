@@ -1,5 +1,16 @@
 SHELL := /bin/bash
 PYTHON ?= python3
+
+.PHONY: lab-up lab-down lab-status test-lab-lifecycle
+lab-up:
+	@$(PYTHON) tools/local_experiment/lab_lifecycle.py up
+lab-down:
+	@$(PYTHON) tools/local_experiment/lab_lifecycle.py down
+lab-status:
+	@$(PYTHON) tools/local_experiment/lab_lifecycle.py status
+test-lab-lifecycle:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lab_lifecycle.py'
+verify-local-experiment: test-lab-lifecycle
 PREFLIGHT_REF ?= origin/main
 TOFU ?= tofu
 TOFU_DIR ?= opentofu/dev

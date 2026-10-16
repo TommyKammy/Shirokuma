@@ -351,7 +351,7 @@ class Client:
                          ([value for key, value in response.headers.items()
                            if key.lower() == 'content-type']))
                 if types and (len(types) != 1 or not isinstance(types[0], str) or
-                               re.fullmatch(r'(?:text/plain|text/tab-separated-values|application/json)'
+                               re.fullmatch(r'(?:text/plain|text/tab-separated-values|application/json|application/x-ndjson)'
                                             r'(?:; charset=(?:UTF-8|utf-8))?', types[0]) is None):
                     raise AgentHouseError('local AgentHouse response media type is unsupported')
                 # A successful query has no alternate resource or client-side
@@ -392,7 +392,8 @@ class Client:
                                  if hasattr(response.headers, 'get_all') else
                                  ([response.headers['Transfer-Encoding']]
                                   if 'Transfer-Encoding' in response.headers else []))
-                if len(all_lengths or []) > 1 or all_encodings:
+                if (len(all_lengths or []) > 1 or (all_lengths and all_encodings) or
+                        [v.strip().lower() for v in (all_encodings or [])] not in ([], ['chunked'])):
                     raise AgentHouseError('local AgentHouse response framing is ambiguous')
                 declared = response.headers.get('Content-Length')
                 if declared is not None:
@@ -445,13 +446,11 @@ def ensure_runtime() -> Client:
         raise AgentHouseError('existing AgentHouse inspection is malformed; refusing startup')
     if existing:
         state = existing.get('State')
-        # `docker start` can be a no-op for an already running container. Do
-        # not mistake that for a scoped startup or write schema into a runtime
-        # that was active before this operation.
-        if (type(state) is not dict or state.get('Status') not in ('created', 'exited') or
-                any(state.get(flag) is not False for flag in
-                    ('Running', 'Paused', 'Restarting', 'Dead'))):
-            raise AgentHouseError('existing AgentHouse is not unambiguously stopped; refusing startup')
+        if (type(state) is not dict or
+                not ((state.get('Status') in ('created', 'exited') and state.get('Running') is False) or
+                     (state.get('Status') == 'running' and state.get('Running') is True)) or
+                any(state.get(flag) is not False for flag in ('Paused', 'Restarting', 'Dead'))):
+            raise AgentHouseError('existing AgentHouse is not cleanly stopped or running; refusing startup')
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     with private_state_fd() as state:
         if existing:
@@ -525,7 +524,8 @@ def ensure_runtime() -> Client:
                 'Binds' not in host_config or host_config['Binds'] not in (None, [])):
             raise AgentHouseError('existing AgentHouse isolation differs; refusing startup')
     client = Client()
-    docker("start", NAME)
+    if not existing or not existing['State'].get('Running'):
+        docker("start", NAME)
     deadline = time.monotonic() + 90
     while True:
         try:

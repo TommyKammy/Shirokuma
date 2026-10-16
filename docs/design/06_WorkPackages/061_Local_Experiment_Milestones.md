@@ -25,6 +25,16 @@ tags: [shirokuma, local, milestones]
 - Retired the unattended 500-session runner and blocking upstream CVE source-build rules in favor of digest-pinned official ARM64 images and audit-only vulnerability scanning.
 - Archived the 1MB+ historical milestone log into `archive/061_Local_Experiment_Milestones_Archive_2026-09_to_10.md` and slimmed the active WBS and Milestone documents.
 
+### 2026-10-16 — WP-P0-002: Warehouse Lifecycle Test Normalization (Completed)
+- Fixed the macOS `/var` → `/private/var` temp symlink path resolution in `tests/test_local_warehouse_session_rpc.py` (`test_isolated_termination_boundaries_leave_unknown_saved_intent`, `boundary='after_handler'`) via `codex-cli` (`gpt-6.1-sol` Medium).
+- Confirmed all 268 tests in `make test-local-warehouse-lifecycle` pass (`OK`).
+
+### 2026-10-16 — WP-P1-001 & WP-P1-002: Resident L0/L1 Core Revival & 1-Command Lab Lifecycle (Completed)
+- Booted `mac-studio-solo` Colima VM (without affecting other profiles) and repaired the stale DHCP Node IP in k3s `state.db` (`192.168.5.1` → `192.168.5.3`).
+- Restored and unsuspended all 4 Flux v2 controllers, `GitRepository/flux-system`, 6 child Kustomizations, `seaweedfs`, `polaris-postgresql`, `polaris`, `trino-local`, `agenthouse` (ClickHouse), and `loki`.
+- Fixed `tools/local_experiment/agenthouse/manage.py` to accept standard ClickHouse `Transfer-Encoding: chunked` and `application/x-ndjson` responses as well as already-running containers.
+- Added `tools/local_experiment/lab_lifecycle.py` (`make lab-up`, `make lab-down`, `make lab-status`) and verified live `make local-doctor` (`Status: healthy`), `make local-lakehouse-smoke` (`result: passed`), `make local-agenthouse-smoke` (`result: passed`), and `make lab-status` (`ready: true`).
+
 ---
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)

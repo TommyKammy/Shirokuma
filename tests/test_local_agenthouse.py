@@ -1234,7 +1234,9 @@ class AgentHouseTests(unittest.TestCase):
         client.opener.open = Mock(return_value=response)
         for fields in ((('Content-Length', '2'), ('Content-Length', '2')),
                        (('Content-Length', '2'), ('Transfer-Encoding', 'chunked')),
-                       (('Transfer-Encoding', 'chunked'),)):
+                       (('Transfer-Encoding', 'gzip'),),
+                       (('Transfer-Encoding', 'chunked'), ('Transfer-Encoding', 'chunked')),
+                       (('Transfer-Encoding', 'gzip, chunked'),)):
             with self.subTest(fields=fields):
                 headers = Message()
                 for name, value in fields:
@@ -1242,8 +1244,14 @@ class AgentHouseTests(unittest.TestCase):
                 response.headers = headers
                 with self.assertRaisesRegex(M.AgentHouseError, 'framing'):
                     client.query('INSERT INTO agenthouse.pawprints FORMAT JSONEachRow\n{}')
-        self.assertEqual(client.opener.open.call_count, 3)
+        self.assertEqual(client.opener.open.call_count, 5)
         response.read.assert_not_called()
+
+        for headers in ({}, {'Transfer-Encoding': ' ChUnKeD '}, Message()):
+            if isinstance(headers, Message):
+                headers.add_header('Transfer-Encoding', 'chunked')
+            response.headers = headers
+            self.assertEqual(client.query('SELECT 1'), '1\n')
 
     def test_query_refuses_clickhouse_exception_header_on_200_without_retry(self):
         client = M.Client(credential_bytes=b'{"password":"fixture-only"}')
@@ -1289,7 +1297,7 @@ class AgentHouseTests(unittest.TestCase):
         response.read.assert_not_called()
         for content_type in ('text/plain', 'text/plain; charset=UTF-8',
                              'text/tab-separated-values; charset=UTF-8',
-                             'application/json'):
+                             'application/json', 'application/x-ndjson; charset=UTF-8'):
             response.headers = {'Content-Type': content_type}
             response.read.return_value = b'1\n'
             self.assertEqual(client.query('SELECT 1'), '1\n')
@@ -1564,7 +1572,10 @@ class AgentHouseTests(unittest.TestCase):
                     client.assert_not_called()
                     self.assertFalse((state / 'container.env').exists())
                     raise
-                docker.assert_called_once_with("start", M.NAME)
+                if existing['State']['Running']:
+                    docker.assert_not_called()
+                else:
+                    docker.assert_called_once_with("start", M.NAME)
                 self.assertIs(result, client.return_value)
                 self.assertFalse((state / 'container.env').exists())
 
@@ -1587,6 +1598,14 @@ class AgentHouseTests(unittest.TestCase):
         created = self.existing_runtime()
         created['State']['Status'] = 'created'
         self.ensure_existing(created)
+        running = self.existing_runtime()
+        running['State'].update(Status='running', Running=True)
+        self.ensure_existing(running)
+        for field in ('Paused', 'Restarting', 'Dead'):
+            invalid = copy.deepcopy(running)
+            invalid['State'][field] = True
+            with self.subTest(running_flag=field), self.assertRaises(M.AgentHouseError):
+                self.ensure_existing(invalid)
         for field, value in (('Status', 'running'), ('Status', 'paused'),
                              ('Status', 'restarting'), ('Status', 'dead'),
                              ('Status', 'unknown'), ('Running', True),

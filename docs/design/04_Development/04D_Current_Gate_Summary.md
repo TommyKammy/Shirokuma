@@ -23,10 +23,10 @@ tags: [shirokuma, local, handoff, gates]
 | Phase / WP | Gate Objective | Current Status |
 |---|---|---|
 | **WP-P0-001** | Adopt ADR-0036 & DEV-04F; archive bloated logs and slim WBS/Milestones | **Completed (2026-10-16)** |
-| **WP-P0-002** | Fix the single remaining `UNSAFE_PATH` test error in `warehouse_lifecycle` (`after_handler` fixture on macOS `/var` symlink) so `make verify-local-experiment` is 100% green | **Next Up (Ready for `codex-cli` worker)** |
-| **WP-P1-001** | Start Colima (`mac-studio-solo`) and unsuspend Flux v2, SeaweedFS, PostgreSQL, Polaris, Trino, and ClickHouse AgentHouse using digest-pinned official ARM64 images | Planned |
-| **WP-P1-002** | Verify `shirokuma doctor` reports all components Healthy on the live cluster; provide clean `make lab-up / lab-down / lab-status` entrypoints | Planned |
-| **WP-P2-001** | Graduate Virtual Warehouse (`shirokuma warehouse chill / wake / query`) from fixed 25-row fixture to general SQL execution | Planned |
+| **WP-P0-002** | Fix the single remaining `UNSAFE_PATH` test error in `warehouse_lifecycle` (`after_handler` fixture on macOS `/var` symlink) so `make verify-local-experiment` is 100% green | **Completed (2026-10-16)** |
+| **WP-P1-001** | Start Colima (`mac-studio-solo`) and unsuspend Flux v2, SeaweedFS, PostgreSQL, Polaris, Trino, and ClickHouse AgentHouse using digest-pinned official ARM64 images | **Completed (2026-10-16)** |
+| **WP-P1-002** | Verify `shirokuma doctor` reports all components Healthy on the live cluster; provide clean `make lab-up / lab-down / lab-status` entrypoints | **Completed (2026-10-16)** |
+| **WP-P2-001** | Graduate Virtual Warehouse (`shirokuma warehouse chill / wake / query`) from fixed 25-row fixture to general SQL execution | **Next Up (Ready for Phase 2)** |
 | **WP-P2-002** | Establish persistent Iceberg sample Lakehouse with Dagster/dbt, OpenMetadata lineage, and Superset dashboards | Planned |
 | **WP-P2-003** | Graduate the 5 Core Bears (`SRE`, `Query Doctor`, `Data Engineer`, `Catalog Curator`, `Policy Gatekeeper`) from fixture-only inputs to general CLI/MCP workflows | Planned |
 | **WP-P3-001/002** | Defer peripheral engines to Optional Track and build the unified **Shirokuma Workbench** local Web UI | Planned |
