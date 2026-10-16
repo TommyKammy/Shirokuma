@@ -1,0 +1,11 @@
+version: 2
+sources:
+  - name: tpch_tiny
+    database: iceberg
+    schema: tpch_tiny
+    tables:
+      - name: orders
+      - name: customer
+      - name: lineitem
+      - name: nation
+      - name: region

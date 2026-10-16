@@ -51,6 +51,11 @@ tags: [shirokuma, local, milestones]
 - Seeds 8 persistent TPC-H tables (`region`, `nation`, `part`, `supplier`, `partsupp`, `customer`, `orders`, `lineitem`) into `iceberg.tpch_tiny` via a single Trino session without any DROP/destructive operations.
 - Verified live on `mac-studio-solo`: initial `lake-status` exits 1 (missing), initial `lake-seed` creates all 8 tables and matches row counts (total 86,805 rows), second `lake-seed` verifies idempotency (`present` with 0 recreation), and multi-table 4-way JOIN revenue query against Iceberg executes cleanly.
 
+### 2026-10-17 — WP-P2-002b: Persistent Iceberg dbt Analytics Pipeline (Completed)
+- Created persistent dbt project at `tools/local_experiment/dataops/dbt_persistent/` with staging views (`stg_tpch_orders`, `stg_tpch_customers`, `stg_tpch_lineitem`) and dimensional/fact marts (`dim_customers`, `fct_orders`) backed by Iceberg Parquet storage.
+- Implemented `tools/local_experiment/lake_pipeline.py` and `tests/test_lake_pipeline.py` (6 unit tests passed), adding `make lake-build` and `make lake-test`.
+- Verified live on `mac-studio-solo`: `make lake-build` builds all 5 models and passes 7 schema assertions in 9.9s; `make lake-test` passes all 7 assertions in 3.5s; marts aggregate query joins `fct_orders` and `dim_customers` to produce correct nation-level revenue stats; Pawprints recorded to ClickHouse (`lake.pipeline.build`, `lake.pipeline.test`).
+
 ---
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)

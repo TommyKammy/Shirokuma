@@ -1,0 +1,22 @@
+version: 2
+models:
+  - name: dim_customers
+    columns:
+      - name: custkey
+        data_tests: [unique, not_null]
+  - name: fct_orders
+    columns:
+      - name: orderkey
+        data_tests: [unique, not_null]
+      - name: custkey
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: custkey
+      - name: orderstatus
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['O', 'F', 'P']

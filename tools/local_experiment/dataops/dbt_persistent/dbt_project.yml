@@ -1,0 +1,15 @@
+name: 'shirokuma_lake_marts'
+version: '1.0.0'
+config-version: 2
+profile: 'shirokuma_lake_marts'
+model-paths: ['models']
+models:
+  shirokuma_lake_marts:
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: marts
+      +properties:
+        format: "'PARQUET'"
