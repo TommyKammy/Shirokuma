@@ -104,7 +104,7 @@ L0〜L6 に分散していた「局所的な実験スクリプト群」を整理
 
 | WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
 |---|---|---|---|
-| **WP-P2-001** | Virtual Warehouse (`shirokuma warehouse`) の汎用SQL・常駐制御対応 | 固定の `nation` 25行クエリ限定を解除し、`shirokuma warehouse status / chill / wake / query <size> "<任意のSQL>"` が常駐 Trino に対して汎用的に動作する。**注記 (2026-10-17 レビュー訂正)**: XS/S/LOCAL は単一の `trino-local` を共有するラベルであり、Gateway 経由の XS/S 実サイズ分離は未実装（Optional Track 候補・Owner 判断待ち）。 | **Completed (2026-10-16, 訂正 2026-10-17)** |
+| **WP-P2-001** | Virtual Warehouse (`shirokuma warehouse`) の汎用SQL・常駐制御対応 | 固定の `nation` 25行クエリ限定を解除し、`shirokuma warehouse status / chill / wake / query <size> "<任意のSQL>"` が常駐 Trino に対して汎用的に動作する。**注記 (2026-10-17 Owner合意)**: リソース効率最優先のため XS/S/LOCAL は単一の常駐 `trino-local` を共有する仕様とし、Gateway 経由の物理的複数クラスタ分割は Optional Track へ移行。 | **Completed (2026-10-16, 確定 2026-10-17)** |
 | **WP-P2-002** | 常設 Iceberg データレイク & Dagster/dbt/OpenMetadata パイプライン | テスト後に即 `DROP` するのではなく、Polaris + Iceberg 上にサンプルデータセット（TPC-H 等）と dbt staging/mart モデルを常設し、OpenMetadata と Superset から常時探索・可視化できるようにする。 | **Next Up** |
 | **WP-P2-003** | 5 Core Bears の汎用 CLI / MCP ワークフロー化 | `SRE Bear`、`Query Doctor Bear`、`Data Engineer Bear`、`Catalog Curator Bear`、`Policy Gatekeeper Bear` から Fixture 制限を外し、任意のクエリID診断・自然言語からの dbt モデル提案・実クラスタ診断が AgentHouse (ClickHouse/OTel) 記録付きで動く。 | Planned |
 

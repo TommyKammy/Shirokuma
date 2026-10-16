@@ -83,10 +83,10 @@ def trino():
             process.wait()
 
 
-def telemetry(action, duration, status="success"):
+def telemetry(action, duration, status="success", prefix="warehouse."):
     try:
         from agenthouse.manage import Client, event, insert
-        insert(Client(), event(action="warehouse." + action, target="trino-warehouse",
+        insert(Client(), event(action=prefix + action, target="trino-warehouse",
                                status=status, agent_id="shirokuma-warehouse",
                                task_id=str(uuid.uuid4()), trace_id=uuid.uuid4().hex,
                                duration_ms=duration))
@@ -127,6 +127,33 @@ def transition(action, size):
                        state="chilled" if chilled else "active"), started)
 
 
+def execute(url, sql, headers, max_rows=1000):
+    rows, columns, query_id, truncated = [], [], None, False
+    page = http_json(url + "/v1/statement", sql.encode("utf-8"), headers)
+    while True:
+        if page.get("error"):
+            raise RuntimeError("Trino query failed: " + page["error"].get("message", "unknown error"))
+        query_id = page.get("id", query_id)
+        columns = page.get("columns", columns)
+        data, next_uri = page.get("data", []), page.get("nextUri")
+        remaining = max_rows - len(rows)
+        rows.extend(data[:remaining])
+        truncated = len(data) > remaining or (len(rows) == max_rows and bool(next_uri))
+        if truncated:
+            if next_uri:
+                try:
+                    request = urllib.request.Request(next_uri, headers=headers, method="DELETE")
+                    with urllib.request.urlopen(request, timeout=30):
+                        pass
+                except Exception:
+                    pass
+            break
+        if not next_uri:
+            break
+        page = http_json(next_uri, headers=headers)
+    return dict(query_id=query_id, columns=columns, rows=rows, truncated=truncated)
+
+
 def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000):
     size = warehouse(size)
     if not sql or not sql.strip():
@@ -145,36 +172,13 @@ def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=100
             headers["X-Trino-Catalog"] = catalog
         if schema:
             headers["X-Trino-Schema"] = schema
-        rows, columns, query_id, truncated = [], [], None, False
         with trino() as url:
-            page = http_json(url + "/v1/statement", sql.encode("utf-8"), headers)
-            while True:
-                if page.get("error"):
-                    raise RuntimeError("Trino query failed: " + page["error"].get("message", "unknown error"))
-                query_id = page.get("id", query_id)
-                columns = page.get("columns", columns)
-                data, next_uri = page.get("data", []), page.get("nextUri")
-                remaining = max_rows - len(rows)
-                rows.extend(data[:remaining])
-                truncated = len(data) > remaining or (len(rows) == max_rows and bool(next_uri))
-                if truncated:
-                    if next_uri:
-                        try:
-                            request = urllib.request.Request(next_uri, headers=headers, method="DELETE")
-                            with urllib.request.urlopen(request, timeout=30):
-                                pass
-                        except Exception:
-                            pass
-                    break
-                if not next_uri:
-                    break
-                page = http_json(next_uri, headers=headers)
+            result = execute(url, sql, headers, max_rows)
     except Exception:
         telemetry("query", int((time.monotonic() - started) * 1000), status="failed")
         raise
     return finish(dict(warehouse=size, action="query", result="verified", auto_woken=auto_woken,
-                       query_id=query_id, columns=columns, rows=rows, row_count=len(rows),
-                       truncated=truncated), started)
+                       **result, row_count=len(result["rows"])), started)
 
 
 def main():

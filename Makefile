@@ -7,6 +7,11 @@ WAREHOUSE ?= LOCAL
 warehouse-status warehouse-chill warehouse-wake:
 	@$(PYTHON) tools/local_experiment/warehouse_resident.py $(patsubst warehouse-%,%,$@) --warehouse $(WAREHOUSE)
 
+LAKE_SCALE ?= tiny
+.PHONY: lake-seed lake-status
+lake-seed lake-status:
+	@$(PYTHON) tools/local_experiment/lake_seed.py $(patsubst lake-%,%,$@) --scale $(LAKE_SCALE)
+
 .PHONY: lab-up lab-down lab-status test-lab-lifecycle
 lab-up:
 	@$(PYTHON) tools/local_experiment/lab_lifecycle.py up

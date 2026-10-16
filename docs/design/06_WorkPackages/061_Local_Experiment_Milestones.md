@@ -42,9 +42,14 @@ tags: [shirokuma, local, milestones]
 
 ### 2026-10-17 — WP-P2-001a: Commander Review Fixes & Corrections (Completed)
 - Fixed bare `make` running `lab-up` / `warehouse-status` (regression since WP-P1-002) via `.DEFAULT_GOAL := verify`.
-- Correction: XS/S/LOCAL share the single `trino-local` backend (now default `LOCAL`, reports include `backend: trino-local`); Gateway-based XS/S separation is not implemented.
+- Correction: XS/S/LOCAL share the single `trino-local` backend (now default `LOCAL`, reports include `backend: trino-local`); Gateway-based XS/S separation is deferred to Optional Track per Owner decision.
 - Added `--max-rows` (default 1000, server-side cancel, `truncated` flag) and `status=failed` Pawprints for failed queries (no SQL/error text). Verified live.
 - Correction to WP-P1-001: the root `Kustomization/flux-system` remains intentionally suspended because its source tracks GitHub `main` while this branch is local-only; child Kustomizations are active. `trino-local` is not Flux-managed.
+
+### 2026-10-17 — WP-P2-002a: Persistent Iceberg TPC-H Dataset Seeding (Completed)
+- Implemented `tools/local_experiment/lake_seed.py` and `tests/test_lake_seed.py` (13 unit tests passed), providing `make lake-seed` and `make lake-status`.
+- Seeds 8 persistent TPC-H tables (`region`, `nation`, `part`, `supplier`, `partsupp`, `customer`, `orders`, `lineitem`) into `iceberg.tpch_tiny` via a single Trino session without any DROP/destructive operations.
+- Verified live on `mac-studio-solo`: initial `lake-status` exits 1 (missing), initial `lake-seed` creates all 8 tables and matches row counts (total 86,805 rows), second `lake-seed` verifies idempotency (`present` with 0 recreation), and multi-table 4-way JOIN revenue query against Iceberg executes cleanly.
 
 ---
 
