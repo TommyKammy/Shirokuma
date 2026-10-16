@@ -49,9 +49,9 @@ def wait_for(check):
     raise TimeoutError("resident warehouse readiness timed out")
 
 
-def http_json(url, data=None, headers=None):
+def http_json(url, data=None, headers=None, timeout=30):
     request = urllib.request.Request(url, data=data, headers=headers or {})
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.load(response)
 
 

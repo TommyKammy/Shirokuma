@@ -56,6 +56,15 @@ tags: [shirokuma, local, milestones]
 - Implemented `tools/local_experiment/lake_pipeline.py` and `tests/test_lake_pipeline.py` (6 unit tests passed), adding `make lake-build` and `make lake-test`.
 - Verified live on `mac-studio-solo`: `make lake-build` builds all 5 models and passes 7 schema assertions in 9.9s; `make lake-test` passes all 7 assertions in 3.5s; marts aggregate query joins `fct_orders` and `dim_customers` to produce correct nation-level revenue stats; Pawprints recorded to ClickHouse (`lake.pipeline.build`, `lake.pipeline.test`).
 
+### 2026-10-17 — WP-P2-003: 5 Core Bears Resident Integration (Completed)
+- Removed mock-only restrictions across the 5 Core Bears, implementing `tools/local_experiment/bears_resident.py`, `tests/test_bears_resident.py` (10 unit tests), and Go CLI bindings `internal/cli/bear.go` (`shirokuma bear sre`, `query`, `data`, `catalog`, `policy`). Added `make bears-smoke` and `make bear-*`.
+- **SRE Bear**: Gathers live readiness across 6 core components, pod CPU/memory container metrics, and recent failed ClickHouse Pawprints.
+- **Query Doctor Bear**: Fetches runtime query history and distributed EXPLAIN execution plans from resident Trino, providing automated cost, fragment, and join/scan skew recommendations.
+- **Data Engineer Bear**: Queries live Iceberg catalog column metadata, prompts local LLM (`qwen3.8-flash-next` via `127.0.0.1:8001/v1`) with `enable_thinking: false`, strips markdown fences, and verifies generated SQL plan validity via Trino `EXPLAIN`.
+- **Catalog Curator Bear**: Discovers live schemas/tables across `iceberg` (`tpch_tiny`, `staging`, `marts`), resolves dbt model lineage (`fct_orders` -> `orders`, `lineitem`), and inspects Kustomize-labeled ConfigMaps (`app.kubernetes.io/name=trino-local`).
+- **Policy Gatekeeper Bear**: Audits live pod security standards, drop capabilities, root filesystem, and resource limits against resident manifests.
+- Verified live on `mac-studio-solo`: all 5 bears execute end-to-end and pass in `make bears-smoke`, recording Pawprint telemetry (`bear.sre_bear`, `bear.query_doctor`, `bear.data_engineer`, `bear.catalog_curator`, `bear.policy_gatekeeper`) to ClickHouse.
+
 ---
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)

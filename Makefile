@@ -2,6 +2,25 @@ SHELL := /bin/bash
 PYTHON ?= python3
 
 WAREHOUSE ?= LOCAL
+BEAR_QUERY ?= SELECT * FROM iceberg.marts.fct_orders LIMIT 10
+BEAR_REQUEST ?= aggregate total sales and quantity by customer and nation
+.PHONY: bears-smoke bear-sre bear-query bear-data bear-catalog bear-policy
+bears-smoke:
+	@$(MAKE) bear-sre
+	@$(MAKE) bear-query
+	@$(MAKE) bear-data
+	@$(MAKE) bear-catalog
+	@$(MAKE) bear-policy
+bear-sre:
+	@$(PYTHON) tools/local_experiment/bears_resident.py sre inspect
+bear-query:
+	@$(PYTHON) tools/local_experiment/bears_resident.py query --sql "$(BEAR_QUERY)"
+bear-data:
+	@$(PYTHON) tools/local_experiment/bears_resident.py data "$(BEAR_REQUEST)"
+bear-catalog:
+	@$(PYTHON) tools/local_experiment/bears_resident.py catalog search
+bear-policy:
+	@$(PYTHON) tools/local_experiment/bears_resident.py policy baseline
 .DEFAULT_GOAL := verify
 .PHONY: warehouse-status warehouse-chill warehouse-wake
 warehouse-status warehouse-chill warehouse-wake:
