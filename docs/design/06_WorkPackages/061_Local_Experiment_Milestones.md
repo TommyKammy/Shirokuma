@@ -70,6 +70,16 @@ tags: [shirokuma, local, milestones]
 - Decoupled secondary engines (Trino Gateway multi-cluster routing, StarRocks, Apache Doris, Apache Gravitino, Apache XTable, Apache Amoro, RustFS, Cube.js, Ray) from the mainline lifecycle to prevent resource bloat and keep the local macOS/Colima lab fast, clean, and reliable.
 - Defined four strict plugin guardrails: zero core degradation, Kustomize overlay isolation under `deploy/gitops/plugins/`, strict memory/CPU limits within `solo-core`, and official digest-pinned arm64 images.
 
+### 2026-10-17 — WP-P3-002: Shirokuma Workbench Unified Local Web UI (Completed)
+- Implemented `tools/local_experiment/workbench_server.py`, `tools/local_experiment/workbench/index.html`, and Go CLI bindings `internal/cli/workbench.go` (`shirokuma workbench [--port <port>] [--open]`) with `make workbench`.
+- Zero-dependency local web architecture using Python standard library `http.server`, serving a high-performance single-page web UI designed with a clean Snowflake/Databricks B2B SaaS aesthetic (dark/light mode, responsive, accessible).
+- Features 4 fully integrated operational surfaces:
+  1. **Warehouse & SQL Workspace**: Live warehouse state (Active/Chilled/Replicas), 1-click Chill/Wake/Refresh, SQL editor with sample query shortcuts, tabular query results with execution latency.
+  2. **Lakehouse Catalog & Lineage Explorer**: Interactive Iceberg schema/table tree (`tpch_tiny`, `staging`, `marts`), column details, and visual dbt model lineage (`dim_customers`, `fct_orders`).
+  3. **Autonomous Bears Cockpit**: Interactive controls for all 5 Core Bears (`SRE`, `Query Doctor`, `Data Engineer`, `Catalog Curator`, `Policy Gatekeeper`) with instant formatted finding/recommendation display.
+  4. **AgentHouse Pawprints Telemetry**: Real-time ClickHouse telemetry viewer with automatic background polling.
+- Unit testing: 14 tests in `tests/test_workbench.py` and 7 tests in `internal/cli/workbench_test.go` (100% green). Live cluster verification passed across all HTTP REST API endpoints and SQL execution.
+
 ---
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)

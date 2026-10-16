@@ -91,6 +91,10 @@ verify-policy:
 	@$(KYVERNO) test tests/policy --require-tests
 	@$(KYVERNO) apply policies/ --resource tests/policy/allowed.yaml.fixture
 
+.PHONY: workbench
+workbench:
+	@python3 tools/local_experiment/workbench_server.py --port 8888
+
 verify-design-context:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_arm64_compatibility_matrix.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_rustfs_desk_review.py'

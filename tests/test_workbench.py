@@ -1,0 +1,171 @@
+"""Workbench HTTP contracts, with no resident lab required."""
+import http.client
+from http.server import HTTPServer
+import json
+from pathlib import Path
+import sys
+import threading
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools/local_experiment"))
+import workbench_server as wb
+
+
+class WorkbenchTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = HTTPServer(("127.0.0.1", 0), wb.WorkbenchHandler)
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.thread.join()
+
+    def request(self, path, body=None, method=None, headers=None):
+        conn = http.client.HTTPConnection(*self.server.server_address, timeout=3)
+        payload = json.dumps(body) if body is not None else None
+        conn.request(method or ("POST" if body is not None else "GET"), path, payload,
+                     headers or {"Content-Type": "application/json"})
+        response = conn.getresponse()
+        raw = response.read()
+        result = (response.status, dict(response.getheaders()), raw)
+        conn.close()
+        return result
+
+    def json_request(self, path, body=None, method=None):
+        status, headers, raw = self.request(path, body, method)
+        self.assertTrue(headers["Content-Type"].startswith("application/json"))
+        return status, json.loads(raw)
+
+    def test_static(self):
+        for path in ("/", "/index.html"):
+            with self.subTest(path=path):
+                status, headers, body = self.request(path)
+                self.assertEqual(status, 200)
+                self.assertIn("text/html", headers["Content-Type"])
+                self.assertIn(b"Warehouse &amp; SQL", body)
+                self.assertIn(b"AgentHouse Pawprints", body)
+
+    @patch.object(wb.warehouse_resident, "kubectl")
+    @patch.object(wb.warehouse_resident, "status")
+    def test_status(self, status, kubectl):
+        status.return_value = {"state": "chilled", "replicas": 0, "ready_replicas": 0}
+        kubectl.return_value = json.dumps({"items": [{"metadata": {"name": "polaris"},
+            "spec": {"replicas": 1}, "status": {"readyReplicas": 1}}]})
+        code, result = self.json_request("/api/status")
+        self.assertEqual(code, 200)
+        self.assertEqual(result["status"], "healthy")
+        self.assertEqual(result["warehouse"]["state"], "chilled")
+        self.assertEqual(result["components"]["polaris"]["ready_replicas"], 1)
+        status.assert_called_once_with("LOCAL")
+
+    @patch.object(wb, "components", side_effect=OSError("cluster unavailable"))
+    @patch.object(wb.warehouse_resident, "status", side_effect=OSError("no cluster"))
+    def test_status_unavailable(self, *_):
+        code, result = self.json_request("/api/status")
+        self.assertEqual(code, 200)
+        self.assertEqual(result["status"], "degraded")
+        self.assertIn("error", result["warehouse"])
+
+    @patch.object(wb.warehouse_resident, "transition")
+    def test_chill_wake(self, transition):
+        for action in ("chill", "wake"):
+            transition.return_value = {"action": action, "result": "verified"}
+            code, result = self.json_request("/api/warehouse/" + action, {})
+            self.assertEqual(code, 200)
+            self.assertEqual(result["action"], action)
+            transition.assert_called_with(action, "LOCAL")
+
+    @patch.object(wb.warehouse_resident, "query")
+    def test_query(self, query):
+        report = dict(columns=[{"name": "x", "type": "bigint"}], rows=[[42]], truncated=True,
+                      query_id="query-42", telemetry="recorded", duration_ms=12)
+        query.return_value = report
+        code, result = self.json_request("/api/warehouse/query", {"sql": "SELECT 42", "warehouse": "xs", "max_rows": 1})
+        self.assertEqual((code, result), (200, report))
+        query.assert_called_once_with("XS", "SELECT 42", catalog="iceberg", schema="marts", max_rows=1)
+
+    @patch.object(wb.bears_resident, "catalog")
+    def test_catalog_lineage_and_columns(self, catalog):
+        catalog.return_value = {"metadata": {"marts": [["fct_orders"]]}}
+        for path, action, table in [("/api/catalog", "search", None), ("/api/lineage", "lineage", None),
+                                    ("/api/catalog?table=marts.fct_orders", "describe", "marts.fct_orders")]:
+            with self.subTest(path=path):
+                code, result = self.json_request(path)
+                self.assertEqual((code, result), (200, catalog.return_value))
+                args = catalog.call_args.args[0]
+                self.assertEqual((args.bear, args.action, args.table), ("catalog", action, table))
+
+    def test_lineage_from_actual_models(self):
+        code, result = self.json_request("/api/lineage")
+        self.assertEqual(code, 200)
+        self.assertIn("stg_tpch_orders", result["metadata"]["lineage"]["fct_orders"])
+        self.assertIn("stg_tpch_customers", result["metadata"]["lineage"]["dim_customers"])
+
+    @patch.object(wb.bears_resident, "run")
+    def test_all_bears(self, run):
+        for bear in ("sre", "query", "data", "catalog", "policy"):
+            with self.subTest(bear=bear):
+                run.return_value = {"bear": bear, "telemetry": "recorded"}
+                payload = dict(bear=bear, sql="SELECT 1", request="Count customers", manifest="example.yaml", target="latest")
+                code, result = self.json_request("/api/bears/run", payload)
+                self.assertEqual((code, result), (200, run.return_value))
+                args = run.call_args.args[0]
+                for key, value in payload.items():
+                    self.assertEqual(getattr(args, key), value)
+                self.assertEqual(args.table, "latest" if bear == "catalog" else None)
+
+    @patch.object(wb.manage, "Client")
+    def test_pawprints(self, client):
+        rows = [{"timestamp": "2026-10-17", "action_type": "warehouse.query", "duration_ms": 3, "status": "success"}]
+        client.return_value.query.return_value = json.dumps({"data": rows})
+        self.assertEqual(self.json_request("/api/pawprints"), (200, rows))
+        statement = client.return_value.query.call_args.args[0]
+        self.assertIn("agenthouse.pawprints", statement)
+        self.assertIn("ORDER BY timestamp DESC LIMIT 100", statement)
+
+    @patch.object(wb.warehouse_resident, "query")
+    @patch.object(wb.bears_resident, "run")
+    def test_invalid_requests_never_call_backends(self, run, query):
+        cases = [("/api/warehouse/query", {}), ("/api/warehouse/query", {"sql": "SELECT 1", "max_rows": True}),
+                 ("/api/warehouse/query", {"sql": "SELECT 1", "warehouse": "XL"}),
+                 ("/api/bears/run", {"bear": "__builtins__"}), ("/api/bears/run", {"bear": "data"}),
+                 ("/api/bears/run", {"bear": "policy", "action": "apply"}),
+                 ("/api/bears/run", {"bear": "query", "sql": []}), ("/api/warehouse/query", [])]
+        for path, body in cases:
+            with self.subTest(body=body):
+                self.assertEqual(self.json_request(path, body)[0], 400)
+        run.assert_not_called()
+        query.assert_not_called()
+
+    @patch.object(wb.manage, "Client", side_effect=RuntimeError("ClickHouse unavailable"))
+    def test_backend_errors(self, _):
+        self.assertEqual(self.json_request("/api/pawprints"), (502, {"error": "ClickHouse unavailable"}))
+
+    def test_unknown_routes(self):
+        self.assertEqual(self.json_request("/missing")[0], 404)
+        self.assertEqual(self.json_request("/missing", {})[0], 404)
+
+    @patch.object(wb.warehouse_resident, "transition")
+    def test_cors(self, transition):
+        origin = "http://%s:%s" % self.server.server_address
+        code, headers, _ = self.request("/api/status", method="OPTIONS", headers={"Origin": origin})
+        self.assertEqual(code, 204)
+        self.assertEqual(headers["Access-Control-Allow-Origin"], origin)
+        self.assertEqual(self.request("/api/warehouse/wake", {}, headers={"Origin": "https://example.com"})[0], 403)
+        transition.assert_not_called()
+
+    def test_malformed_json_and_content_type(self):
+        conn = http.client.HTTPConnection(*self.server.server_address, timeout=3)
+        conn.request("POST", "/api/warehouse/query", "{", {"Content-Type": "application/json"})
+        self.assertEqual(conn.getresponse().status, 400)
+        conn.close()
+        self.assertEqual(self.request("/api/warehouse/query", {}, headers={"Content-Type": "text/plain"})[0], 400)
+
+
+if __name__ == "__main__":
+    unittest.main()

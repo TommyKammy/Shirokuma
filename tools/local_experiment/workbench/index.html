@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Shirokuma · Workbench</title>
+<style>
+:root{color-scheme:light;--bg:oklch(0.978 .005 255);--surface:oklch(1 0 0);--ink:oklch(.23 .035 258);--muted:oklch(.46 .025 258);--line:oklch(.86 .015 255);--soft:oklch(.95 .01 255);--accent:oklch(.43 .12 255);--good:oklch(.36 .08 160);--bad:oklch(.43 .16 25);--badge:oklch(.93 .025 160)}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:oklch(.17 .025 258);--surface:oklch(.21 .028 258);--ink:oklch(.96 .008 255);--muted:oklch(.77 .022 255);--line:oklch(.37 .025 255);--soft:oklch(.26 .03 255);--accent:oklch(.83 .08 250);--good:oklch(.85 .09 160);--bad:oklch(.84 .1 25);--badge:oklch(.28 .035 160)}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:7px 13px;font-weight:600}button:hover{background:var(--soft)}button:active{transform:translateY(1px)}button:disabled{cursor:wait;opacity:.65}button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}button.primary:hover{opacity:.88}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}input,select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:9px;width:100%}textarea{resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.7}input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}label{display:block;font-weight:600;margin:12px 0 5px}.app-header{background:var(--surface);border-bottom:1px solid var(--line);padding:17px 30px;display:flex;align-items:center;gap:16px}.brand{font-size:18px;font-weight:750;letter-spacing:-.025em}.divider{height:22px;border-left:1px solid var(--line)}.muted,small{color:var(--muted)}.environment{margin-left:auto;font:12px ui-monospace,monospace}.layout{display:grid;grid-template-columns:224px minmax(0,1fr);min-height:calc(100vh - 64px)}nav{padding:26px 14px;border-right:1px solid var(--line);background:var(--surface)}nav button{display:block;text-align:left;border:0;width:100%;margin-bottom:6px;padding:12px;font-weight:500}nav button[aria-selected=true]{background:var(--soft);color:var(--accent);font-weight:700}.nav-note{margin:30px 12px;color:var(--muted);font-size:12px}main{max-width:1450px;width:100%;padding:32px 38px 60px}h1{font-size:27px;letter-spacing:-.025em;line-height:1.25;margin:0 0 8px}h2{font-size:16px;margin:0;font-weight:650}h3{font-size:15px;margin:0}p{max-width:72ch;margin:0 0 20px}.page-title{margin-bottom:26px}.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;margin-bottom:20px;overflow:hidden}.panel-head{padding:15px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.panel-body{padding:20px}.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.status-strip{display:flex;align-items:center;gap:24px;flex-wrap:wrap}.status-strip .toolbar{margin-left:auto}.badge{display:inline-flex;align-items:center;gap:7px;border-radius:100px;background:var(--soft);padding:3px 10px;font-size:12px;font-weight:650}.badge.good{color:var(--good);background:var(--badge)}.badge.bad{color:var(--bad)}.error{color:var(--bad);white-space:pre-wrap;margin-top:10px}.samples{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.samples button{font-size:12px;font-weight:500}.editor{min-height:190px;border:0;border-radius:0;background:var(--surface);padding:20px;display:block;tab-size:2}.query-footer{padding:12px 20px;background:var(--soft);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.query-footer select,.query-footer input{width:90px;padding:5px}.query-footer label{display:inline;margin:0;font-weight:500}.table-wrap{overflow:auto;max-height:520px}table{border-collapse:collapse;width:100%;text-align:left;white-space:nowrap;font-size:13px}th,td{padding:11px 17px;border-bottom:1px solid var(--line);vertical-align:top}th{position:sticky;top:0;background:var(--soft);font-size:12px;color:var(--muted);font-weight:600}td{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}.empty{padding:35px 20px;color:var(--muted);text-align:center}.catalog-grid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px}.catalog-grid .panel{margin-bottom:0}details{border-bottom:1px solid var(--line);padding:12px 16px}summary{cursor:pointer;font-weight:600}.table-link{display:block;margin-top:7px;width:100%;text-align:left;font-family:ui-monospace,monospace;font-size:12px;font-weight:400}.lineage{display:grid;gap:14px}.lineage-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.node{padding:9px 13px;background:var(--soft);border:1px solid var(--line);border-radius:5px;font-family:ui-monospace,monospace;font-size:12px}.arrow{color:var(--muted)}.bear-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.bear-grid .panel{margin:0}.bear-grid p{font-size:13px;margin:8px 0;color:var(--muted)}.bear-grid textarea{min-height:90px}.bear-footer{display:flex;align-items:center;gap:12px;margin-top:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);padding:15px;border-radius:5px;max-height:360px;overflow:auto;font:12px/1.65 ui-monospace,monospace}.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}[hidden]{display:none!important}.components{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}.details-cell{white-space:normal;min-width:240px;max-width:440px;overflow-wrap:anywhere}
+@media(max-width:1000px){main{padding:26px 22px}.layout{grid-template-columns:195px minmax(0,1fr)}.bear-grid{grid-template-columns:1fr}.catalog-grid{grid-template-columns:1fr}}
+@media(max-width:700px){.app-header{padding:14px 16px;flex-wrap:wrap}.environment{font-size:10px}.layout{display:block}nav{display:flex;overflow-x:auto;padding:8px;border-right:0;border-bottom:1px solid var(--line)}nav button{width:auto;white-space:nowrap;margin:0}.nav-note{display:none}main{padding:24px 14px}.panel-head,.panel-body{padding:15px}.status-strip{gap:12px}.status-strip .toolbar{margin-left:0}.query-footer{padding:12px}.app-header .divider{display:none}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="app-header"><span class="brand">Shirokuma</span><span class="divider"></span><span class="muted">Workbench</span><span class="environment">Local lab · mac-studio-solo</span></header>
+<div class="layout">
+<nav aria-label="Workbench sections" role="tablist" aria-orientation="vertical">
+<button id="tab-warehouse" role="tab" aria-controls="warehouse" aria-selected="true" data-tab="warehouse">Warehouse &amp; SQL</button>
+<button id="tab-catalog" role="tab" aria-controls="catalog" aria-selected="false" tabindex="-1" data-tab="catalog">Catalog &amp; Lineage</button>
+<button id="tab-bears" role="tab" aria-controls="bears" aria-selected="false" tabindex="-1" data-tab="bears">Autonomous Bears</button>
+<button id="tab-pawprints" role="tab" aria-controls="pawprints" aria-selected="false" tabindex="-1" data-tab="pawprints">AgentHouse Pawprints</button>
+<div class="nav-note">One workspace for your resident lakehouse.<br><br>Warehouse controls change the local lab. Bears provide observations and advice.</div>
+</nav>
+<main>
+<section id="warehouse" role="tabpanel" aria-labelledby="tab-warehouse">
+<div class="page-title"><h1>Warehouse &amp; SQL</h1><p class="muted">Explore your Iceberg data with the resident Trino warehouse.</p></div>
+<div class="panel"><div class="panel-body"><div class="status-strip"><strong>Trino / LOCAL</strong><span id="warehouse-state" class="badge">Loading…</span><span id="replicas" class="muted">Replicas —</span><div class="toolbar"><button id="chill">Chill</button><button id="wake">Wake</button><button id="refresh-status">Refresh</button></div></div><div id="components" class="components"></div><div id="status-error" class="error" role="status"></div></div></div>
+<div class="panel"><div class="panel-head"><h2>SQL workspace</h2><small>Catalog: iceberg · Schema: marts</small></div><div class="panel-body" style="padding-bottom:0"><div class="samples"><button data-sample="orders">Recent orders</button><button data-sample="revenue">TPC-H Revenue by Nation</button><button data-sample="customers">Customers</button></div><label for="sql" class="muted">SQL statement</label></div><textarea id="sql" class="editor" spellcheck="false">SELECT * FROM marts.fct_orders LIMIT 10</textarea><div class="query-footer"><div class="toolbar"><label for="query-warehouse">Warehouse</label><select id="query-warehouse"><option>LOCAL</option><option>XS</option><option>S</option></select><label for="max-rows">Max rows</label><input id="max-rows" type="number" min="1" value="1000"></div><button id="run-query" class="primary">Run Query</button></div></div>
+<div class="panel"><div class="panel-head"><h2>Results</h2><span id="query-meta" class="muted" role="status">Ready · ⌘/Ctrl + Enter to run</span></div><div id="query-error" class="panel-body error" role="alert" hidden></div><div id="query-results" class="table-wrap"><div class="empty">Run a query to inspect rows and column types. Chilled warehouses wake automatically.</div></div></div>
+</section>
+<section id="catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
+<div class="page-title"><h1>Catalog &amp; Lineage</h1><p class="muted">Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.</p><button id="refresh-catalog">Refresh catalog</button></div>
+<div id="catalog-error" class="error" role="alert"></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table columns</h2></div><div id="table-columns" class="table-wrap"><div class="empty">Choose a table to see its columns and types.</div></div></div></div>
+<div class="panel" style="margin-top:20px"><div class="panel-head"><h2>dbt model lineage</h2><small>Local model definitions</small></div><div id="lineage" class="panel-body lineage">Loading dependencies…</div></div>
+</section>
+<section id="bears" role="tabpanel" aria-labelledby="tab-bears" hidden><div class="page-title"><h1>Autonomous Bears Cockpit</h1><p class="muted">Run the five resident specialists. Inspect their findings, recommendations, and telemetry.</p></div><div id="bear-cards" class="bear-grid"></div></section>
+<section id="pawprints" role="tabpanel" aria-labelledby="tab-pawprints" hidden><div class="page-title"><h1>AgentHouse Pawprints</h1><p class="muted">Recent warehouse and Bear activity, recorded in ClickHouse.</p></div><div class="panel"><div class="panel-head"><h2>Recent telemetry</h2><div class="toolbar"><small id="pawprint-meta" role="status">Latest 100 events</small><button id="refresh-pawprints">Refresh</button></div></div><div id="pawprint-error" class="panel-body error" role="alert" hidden></div><div id="pawprint-results" class="table-wrap"><div class="empty">Refresh to load recent Pawprints.</div></div></div></section>
+</main></div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const samples = {
+ orders:'SELECT * FROM marts.fct_orders LIMIT 10',
+ customers:'SELECT * FROM marts.dim_customers LIMIT 10',
+ revenue:`SELECT n.n_name AS nation,\n       SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue\nFROM tpch_tiny.customer c\nJOIN tpch_tiny.orders o ON c.c_custkey = o.o_custkey\nJOIN tpch_tiny.lineitem l ON o.o_orderkey = l.l_orderkey\nJOIN tpch_tiny.supplier s ON l.l_suppkey = s.s_suppkey\nJOIN tpch_tiny.nation n ON s.s_nationkey = n.n_nationkey\nWHERE c.c_nationkey = s.s_nationkey\nGROUP BY n.n_name\nORDER BY revenue DESC`
+};
+async function api(path, body) {
+ const response = await fetch(path, body === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const data = await response.json();
+ if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
+ return data;
+}
+function message(id, text) { $(id).textContent=text; $(id).hidden=!text; }
+async function busy(button, task) {
+ if(button.disabled) return;
+ const label=button.textContent; button.disabled=true; button.setAttribute('aria-busy','true');
+ button.replaceChildren(Object.assign(document.createElement('span'),{className:'spinner'}),document.createTextNode(' Working…'));
+ try {await task();} finally {button.textContent=label;button.disabled=false;button.removeAttribute('aria-busy');}
+}
+function table(container, columns, rows) {
+ container.replaceChildren();
+ if(!rows.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='No rows returned.';container.append(empty);return;}
+ const element=document.createElement('table'),head=element.createTHead().insertRow(),body=element.createTBody();
+ columns.forEach(c=>{const th=document.createElement('th');th.scope='col';th.textContent=typeof c==='string'?c:c.name; if(c.type)th.title=c.type;head.append(th);});
+ rows.forEach(row=>{const tr=body.insertRow();row.forEach(value=>{const td=tr.insertCell();td.textContent=value===null?'NULL':typeof value==='object'?JSON.stringify(value):String(value);});});
+ container.append(element);
+}
+async function refreshStatus(){
+ message('status-error','');
+ try{
+  const data=await api('/api/status'),w=data.warehouse;
+  const state=w.error?'Unavailable':({active:'Running',chilled:'Chilled',starting:'Starting'}[w.state]||w.state);
+  $('warehouse-state').textContent=state;$('warehouse-state').className='badge '+(w.state==='active'?'good':w.error?'bad':'');
+  $('replicas').textContent=`Replicas ${w.ready_replicas??'—'} / ${w.replicas??'—'}`;
+  $('components').replaceChildren();
+  Object.entries(data.components).forEach(([name,c])=>{const pill=document.createElement('span');pill.className='badge';pill.textContent=name==='error'?`Readiness unavailable: ${c}`:`${name}: ${c.ready_replicas}/${c.replicas}`;$('components').append(pill);});
+  if(w.error)message('status-error',w.error);
+ }catch(error){$('warehouse-state').textContent='Unavailable';message('status-error',error.message);}
+}
+$('refresh-status').onclick=()=>busy($('refresh-status'),refreshStatus);
+for(const action of ['chill','wake'])$(action).onclick=()=>busy($(action),async()=>{try{await api('/api/warehouse/'+action,{});await refreshStatus();}catch(e){message('status-error',e.message);}});
+document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{$('sql').value=samples[b.dataset.sample];$('sql').focus();});
+$('run-query').onclick=()=>busy($('run-query'),async()=>{
+ message('query-error','');$('query-meta').textContent='Executing…';
+ try{const data=await api('/api/warehouse/query',{sql:$('sql').value,warehouse:$('query-warehouse').value,max_rows:Number($('max-rows').value)});
+ table($('query-results'),data.columns,data.rows);$('query-meta').textContent=`${data.rows.length} rows${data.truncated?' · truncated':''} · ${data.duration_ms??'—'} ms · ${data.query_id??''}`;
+ }catch(e){message('query-error',e.message);$('query-meta').textContent='Query failed';$('query-results').replaceChildren();}
+});
+$('sql').onkeydown=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();$('run-query').click();}};
+let columnRequest=0;
+async function describeTable(schema,name){
+ const request=++columnRequest;$('table-title').textContent=schema+'.'+name;$('table-columns').textContent='Loading columns…';
+ try{const data=await api('/api/catalog?table='+encodeURIComponent(schema+'.'+name));if(request===columnRequest)table($('table-columns'),['Column','Type','Extra','Comment'],data.metadata.columns);}catch(e){if(request===columnRequest)$('table-columns').textContent=e.message;}
+}
+async function loadCatalog(){
+ message('catalog-error','');$('catalog-tree').textContent='Loading tables…';
+ try{const data=await api('/api/catalog');$('catalog-tree').replaceChildren();$('catalog-tree').className='';
+ Object.entries(data.metadata).filter(([,v])=>Array.isArray(v)).forEach(([schema,rows])=>{const group=document.createElement('details');group.open=true;const title=document.createElement('summary');title.textContent=`${schema} (${rows.length})`;group.append(title);rows.forEach(row=>{const b=document.createElement('button');b.className='table-link';b.textContent=row[0];b.onclick=()=>describeTable(schema,row[0]);group.append(b);});$('catalog-tree').append(group);});
+ }catch(e){message('catalog-error',e.message);$('catalog-tree').textContent='Catalog unavailable. Check warehouse readiness and refresh.';}
+ try{const data=await api('/api/lineage');$('lineage').replaceChildren();Object.entries(data.metadata.lineage).forEach(([model,parents])=>{if(!parents.length)return;const row=document.createElement('div');row.className='lineage-row';for(const name of [parents.join(' + '),'→',model]){const node=document.createElement('span');node.className=name==='→'?'arrow':'node';node.textContent=name;row.append(node);}$('lineage').append(row);});if(!$('lineage').childElementCount)$('lineage').textContent='No model dependencies recorded.';}catch(e){$('lineage').textContent=e.message;}
+}
+$('refresh-catalog').onclick=()=>busy($('refresh-catalog'),loadCatalog);
+const bears=[
+ {key:'sre',name:'SRE Bear',description:'Inspect workload readiness, recent errors, and runtime metrics.',fields:[]},
+ {key:'query',name:'Query Doctor Bear',description:'Explain SQL or inspect a recent query for performance advice.',fields:[['target','Query target','latest'],['sql','SQL to explain (optional)','',true]]},
+ {key:'data',name:'Data Engineer Bear',description:'Generate a SELECT statement from your intent and validate its plan.',fields:[['request','Describe the data you need','',true]]},
+ {key:'catalog',name:'Catalog Curator Bear',description:'Search tables or inspect a table’s columns and dependencies.',fields:[['action','Action',['search','describe','lineage']],['table','Table (for describe or lineage)','']]},
+ {key:'policy',name:'Policy Gatekeeper Bear',description:'Review the resident workload baseline or check a local manifest.',fields:[['action','Action',['baseline','check']],['manifest','Local manifest path (for check)','']]}
+];
+for(const bear of bears){
+ const card=document.createElement('article');card.className='panel';const content=document.createElement('div');content.className='panel-body';const title=document.createElement('h2');title.textContent=bear.name;const description=document.createElement('p');description.textContent=bear.description;content.append(title,description);
+ for(const [key,label,value,multiline] of bear.fields){const id=`bear-${bear.key}-${key}`,l=document.createElement('label');l.htmlFor=id;l.textContent=label;const input=document.createElement(Array.isArray(value)?'select':multiline?'textarea':'input');input.id=id;if(Array.isArray(value))value.forEach(v=>input.add(new Option(v,v)));else input.value=value;content.append(l,input);}
+ const footer=document.createElement('div');footer.className='bear-footer';const button=document.createElement('button');button.textContent='Run Bear';const state=document.createElement('span');state.className='badge';state.textContent='Ready';state.setAttribute('role','status');const output=document.createElement('pre');output.hidden=true;output.setAttribute('aria-label',bear.name+' response');footer.append(button,state);content.append(footer,output);card.append(content);$('bear-cards').append(card);
+ button.onclick=()=>busy(button,async()=>{state.textContent='Running';state.className='badge';output.hidden=true;const payload={bear:bear.key};bear.fields.forEach(([key])=>{const v=$(`bear-${bear.key}-${key}`).value;if(v)payload[key]=v;});try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';state.textContent=warning?'Findings to review':'Complete';state.className='badge '+(warning?'bad':'good');}catch(e){state.textContent='Failed';state.className='badge bad';output.textContent=e.message;}output.hidden=false;});
+}
+async function loadPawprints(){
+ message('pawprint-error','');
+ try{const rows=await api('/api/pawprints');table($('pawprint-results'),['Timestamp (UTC)','Action / Bear','Latency (ms)','Status','Details'],rows.map(r=>[r.timestamp,r.action_type||r.agent_id,r.duration_ms,r.status,`${r.target_system} · trace ${r.trace_id}`]));$('pawprint-results').querySelectorAll('td:last-child').forEach(c=>c.className='details-cell');$('pawprint-meta').textContent=`${rows.length} events · Updated ${new Date().toLocaleTimeString()}`;}catch(e){message('pawprint-error',e.message);$('pawprint-meta').textContent='Refresh failed';}
+}
+$('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
+let activeTab='warehouse';
+function activate(button){document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints')$('refresh-pawprints').click();}
+const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach((button,i)=>{button.onclick=()=>activate(button);button.onkeydown=e=>{let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%tabs.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=tabs.length-1;if(n!==undefined){e.preventDefault();tabs[n].focus();activate(tabs[n]);}};});
+setInterval(()=>{if(activeTab==='pawprints'&&!document.hidden)$('refresh-pawprints').click();},15000);
+refreshStatus();
+</script>
+</body>
+</html>

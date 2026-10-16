@@ -114,6 +114,12 @@ def data(args):
 
 def catalog(args):
     metadata = {}
+    if args.action == "lineage" and not args.table:
+        models = Path(__file__).parent / "dataops" / "dbt_persistent" / "models"
+        lineage = {p.stem: sorted(set(re.findall(r"ref\(\s*['\"]([\w]+)['\"]\s*\)", p.read_text())))
+                   for p in sorted(models.rglob("*.sql"))}
+        return dict(action="lineage", catalog="iceberg", metadata={"lineage": lineage,
+                    "lineage_note": "Dependencies from local dbt model definitions"})
     with wr.trino() as url:
         if args.action == "search":
             for schema in ("tpch_tiny", "staging", "marts", "smoke"):
