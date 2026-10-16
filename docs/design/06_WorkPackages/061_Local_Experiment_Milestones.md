@@ -35,6 +35,11 @@ tags: [shirokuma, local, milestones]
 - Fixed `tools/local_experiment/agenthouse/manage.py` to accept standard ClickHouse `Transfer-Encoding: chunked` and `application/x-ndjson` responses as well as already-running containers.
 - Added `tools/local_experiment/lab_lifecycle.py` (`make lab-up`, `make lab-down`, `make lab-status`) and verified live `make local-doctor` (`Status: healthy`), `make local-lakehouse-smoke` (`result: passed`), `make local-agenthouse-smoke` (`result: passed`), and `make lab-status` (`ready: true`).
 
+### 2026-10-16 — WP-P2-001: Resident Virtual Warehouse & General SQL Execution (Completed)
+- Implemented `tools/local_experiment/warehouse_resident.py` and `internal/cli/warehouse_resident.go` via `codex-cli` (`gpt-6.1-sol` Medium), adding `shirokuma warehouse status / chill / wake / query` against the resident `Deployment/trino-local` in `shirokuma-dev` while keeping 100% of legacy `--session` unit tests green.
+- Removed the fixed 25-row `tpch.tiny.nation` fixture restriction for resident queries, supporting arbitrary SQL (`--sql` or positional argument), `--catalog` / `--schema`, pagination over `/v1/statement`, automatic cold wake (`auto_woken: true`), and AgentHouse Pawprint recording (`agenthouse.pawprints`).
+- Verified live on `mac-studio-solo`: `status`, Iceberg query (`iceberg.smoke.fixture_v1`), TPC-H join/aggregation (`tpch.tiny.nation JOIN tpch.tiny.region`), `chill` (`replicas=0`), and auto-wake SQL query (`tpch.tiny.customer`, `auto_woken: true`, `telemetry: recorded`).
+
 ---
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)

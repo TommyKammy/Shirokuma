@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,14 +41,41 @@ type warehouseQueryClient interface {
 }
 
 // This group is separate from the Query Doctor's existing query run/status CLI.
-func newWarehouseQueryCommand(client warehouseQueryClient) *cobra.Command {
-	group := &cobra.Command{Use: "warehouse", Short: "Use a bounded local warehouse session"}
-	var sessionID, requestID, profile string
+func newWarehouseQueryCommand(client warehouseQueryClient, runners ...residentWarehouseRunner) *cobra.Command {
+	resident := residentWarehouseRunner(execResidentWarehouse{})
+	if len(runners) > 0 {
+		resident = runners[0]
+	}
+	group := &cobra.Command{Use: "warehouse", Short: "Control and query a local warehouse"}
+	var sessionID, requestID, profile, sql, catalog, schema, repoRoot string
+	var noAutoWake bool
 	command := &cobra.Command{
-		Use: "query XS", Short: "Wake stopped XS and execute its fixed nation query once",
-		Args: cobra.ExactArgs(1),
+		Use: "query <XS|S|LOCAL> [SQL]", Short: "Execute SQL or use a bounded session",
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if args[0] != "XS" || profile != localExperimentProfile || !warehouseSessionPattern.MatchString(sessionID) {
+			if sessionID == "" {
+				if profile != localExperimentProfile || requestID != "" || !validResidentWarehouse(args[0]) ||
+					(len(args) == 2 && cmd.Flags().Changed("sql")) {
+					return errors.New("invalid resident warehouse query arguments")
+				}
+				if len(args) == 2 {
+					sql = args[1]
+				}
+				if strings.TrimSpace(sql) == "" {
+					return errors.New("resident warehouse query requires SQL")
+				}
+				childArgs := []string{"query", "--warehouse", args[0], "--sql=" + sql}
+				for _, option := range []struct{ name, value string }{{"catalog", catalog}, {"schema", schema}} {
+					if option.value != "" {
+						childArgs = append(childArgs, "--"+option.name, option.value)
+					}
+				}
+				if noAutoWake {
+					childArgs = append(childArgs, "--no-auto-wake")
+				}
+				return runResidentWarehouse(cmd, resident, repoRoot, childArgs)
+			}
+			if len(args) != 1 || sql != "" || catalog != "" || schema != "" || noAutoWake || args[0] != "XS" || profile != localExperimentProfile || !warehouseSessionPattern.MatchString(sessionID) {
 				return errors.New("warehouse query requires XS, --profile local-experiment, and a 32-character lowercase hexadecimal --session")
 			}
 			if requestID == "" {
@@ -83,7 +111,15 @@ func newWarehouseQueryCommand(client warehouseQueryClient) *cobra.Command {
 	command.Flags().StringVar(&sessionID, "session", "", "existing query-mode session ID (32 lowercase hexadecimal characters)")
 	command.Flags().StringVar(&requestID, "request-id", "", "request UUID; reuse only with the same live owner (inspect saved-request after loss)")
 	command.Flags().StringVar(&profile, "profile", localExperimentProfile, "warehouse profile: local-experiment")
+	command.Flags().StringVar(&sql, "sql", "", "SQL to execute against resident Trino")
+	command.Flags().StringVar(&catalog, "catalog", "", "Trino catalog")
+	command.Flags().StringVar(&schema, "schema", "", "Trino schema")
+	command.Flags().StringVar(&repoRoot, "repo-root", "", "repository root")
+	command.Flags().BoolVar(&noAutoWake, "no-auto-wake", false, "fail if the resident warehouse is chilled")
 	group.AddCommand(command)
+	for _, action := range []string{"status", "chill", "wake"} {
+		group.AddCommand(newResidentWarehouseCommand(action, resident))
+	}
 	return group
 }
 
