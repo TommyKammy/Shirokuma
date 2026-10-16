@@ -112,5 +112,5 @@ L0〜L6 に分散していた「局所的な実験スクリプト群」を整理
 
 | WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
 |---|---|---|---|
-| **WP-P3-001** | 周辺エンジンの Optional Plugin トラック分離 | コア構成（SeaweedFS + Polaris + Iceberg + Trino + Spark + ClickHouse + Dagster/dbt + OpenMetadata + Superset）に集中し、StarRocks / Doris / Gravitino / XTable / RustFS / Cube / Ray / Amoro を Optional Track として整理する。 | Planned |
-| **WP-P3-002** | Shirokuma Workbench（統合ローカルWeb UI）の構築 | バラバラの静的HTMLレポートを統合し、Virtual Warehouse の稼働/Chill/Wake操作、Iceberg カタログ＆リネージ、Bear の提案・承認キュー、Pawprints (OTel トレース) を1つのクリーンなローカルWeb画面で操作可能にする。 | Planned |
+| **WP-P3-001** | 周辺エンジンの Optional Plugin トラック分離 | コア構成（SeaweedFS + Polaris + Iceberg + Trino + Spark + ClickHouse + Dagster/dbt + OpenMetadata + Superset）に集中し、Trino Gateway複数クラスタ分割、StarRocks / Doris / Gravitino / XTable / RustFS / Cube / Ray / Amoro を Optional Plugin Track（`02D_Optional_Plugin_Tracks.md`）として分離・境界策定。 | **Completed (2026-10-17)** |
+| **WP-P3-002** | Shirokuma Workbench（統合ローカルWeb UI）の構築 | バラバラの静的HTMLレポートを統合し、Virtual Warehouse の稼働/Chill/Wake操作、Iceberg カタログ＆リネージ、Bear の提案・承認キュー、Pawprints (OTel トレース) を1つのクリーンなローカルWeb画面で操作可能にする。 | **Next Up** |

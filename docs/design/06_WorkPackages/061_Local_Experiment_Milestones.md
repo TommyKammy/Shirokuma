@@ -65,6 +65,11 @@ tags: [shirokuma, local, milestones]
 - **Policy Gatekeeper Bear**: Audits live pod security standards, drop capabilities, root filesystem, and resource limits against resident manifests.
 - Verified live on `mac-studio-solo`: all 5 bears execute end-to-end and pass in `make bears-smoke`, recording Pawprint telemetry (`bear.sre_bear`, `bear.query_doctor`, `bear.data_engineer`, `bear.catalog_curator`, `bear.policy_gatekeeper`) to ClickHouse.
 
+### 2026-10-17 — WP-P3-001: Peripheral Engine Optional Plugin Track Formalization (Completed)
+- Authored [`docs/design/02_Architecture/02D_Optional_Plugin_Tracks.md`](../02_Architecture/02D_Optional_Plugin_Tracks.md), formalizing the architectural boundaries between the **Resident Core Mainline** (SeaweedFS, PostgreSQL, Polaris, Iceberg, Trino, ClickHouse AgentHouse, dbt, OpenMetadata, Superset, 5 Core Bears) and the **Optional Plugin Tracks**.
+- Decoupled secondary engines (Trino Gateway multi-cluster routing, StarRocks, Apache Doris, Apache Gravitino, Apache XTable, Apache Amoro, RustFS, Cube.js, Ray) from the mainline lifecycle to prevent resource bloat and keep the local macOS/Colima lab fast, clean, and reliable.
+- Defined four strict plugin guardrails: zero core degradation, Kustomize overlay isolation under `deploy/gitops/plugins/`, strict memory/CPU limits within `solo-core`, and official digest-pinned arm64 images.
+
 ---
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)

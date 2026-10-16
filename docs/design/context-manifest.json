@@ -4,6 +4,7 @@
   "documents": [
     {"source": "01_Product/010_Project_Charter.md", "target": "docs/design/01_Product/010_Project_Charter.md"},
     {"source": "02_Architecture/02C_Deployment_Topologies.md", "target": "docs/design/02_Architecture/02C_Deployment_Topologies.md"},
+    {"source": "02_Architecture/02D_Optional_Plugin_Tracks.md", "target": "docs/design/02_Architecture/02D_Optional_Plugin_Tracks.md"},
     {"source": "02_Architecture/024_GitOps_Reconciliation_Model.md", "target": "docs/design/02_Architecture/024_GitOps_Reconciliation_Model.md"},
     {"source": "03_Requirements/030_Functional_Requirements.md", "target": "docs/design/03_Requirements/030_Functional_Requirements.md"},
     {"source": "03_Requirements/033_Agent_Requirements.md", "target": "docs/design/03_Requirements/033_Agent_Requirements.md"},

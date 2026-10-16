@@ -28,5 +28,5 @@ tags: [shirokuma, local, handoff, gates]
 | **WP-P1-002** | Verify `shirokuma doctor` reports all components Healthy on the live cluster; provide clean `make lab-up / lab-down / lab-status` entrypoints | **Completed (2026-10-16)** |
 | **WP-P2-001** | Graduate Virtual Warehouse (`shirokuma warehouse chill / wake / query`) from fixed 25-row fixture to general SQL execution | **Completed (2026-10-16)** |
 | **WP-P2-002** | Establish persistent Iceberg sample Lakehouse with Dagster/dbt, OpenMetadata lineage, and Superset dashboards | **Completed (2026-10-17)** |
-| **WP-P2-003** | Graduate the 5 Core Bears (`SRE`, `Query Doctor`, `Data Engineer`, `Catalog Curator`, `Policy Gatekeeper`) from fixture-only inputs to general CLI/MCP workflows | **Completed (2026-10-17)** |
-| **WP-P3-001/002** | Defer peripheral engines to Optional Track and build the unified **Shirokuma Workbench** local Web UI | **Next Up** |
+| **WP-P3-001** | Formalize Peripheral Engine Optional Plugin Tracks (`02D_Optional_Plugin_Tracks.md`) to guard core lakehouse simplicity | **Completed (2026-10-17)** |
+| **WP-P3-002** | Build unified **Shirokuma Workbench** local Web UI (`shirokuma workbench`, `make workbench`) for warehouse, catalog, bears, and Pawprints | **Next Up** |
