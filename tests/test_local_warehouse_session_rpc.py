@@ -72,7 +72,7 @@ class SessionRPCTest(unittest.TestCase):
                 # New disposable identity for the next boundary, never replay
                 # the interrupted request or reuse its journal directory.
                 self.token = uuid.uuid4().hex
-                self.output = Path(self.temp.name) / self.token
+                self.output = Path(self.temp.name).resolve() / self.token
                 self.output.mkdir(mode=0o700)
                 self.calls.clear()
 
