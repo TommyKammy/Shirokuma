@@ -90,6 +90,8 @@
     {"source": "06_WorkPackages/L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md"},
     {"source": "06_WorkPackages/L4/WP-L4-BENCH-001_Spark_benchmark_suite.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-BENCH-001_Spark_benchmark_suite.md"},
     {"source": "06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md"},
-    {"source": "06_WorkPackages/L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md"}
+    {"source": "06_WorkPackages/L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md"},
+    {"source": "07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md", "target": "docs/design/07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md"},
+    {"source": "04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md", "target": "docs/design/04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md"}
   ]
 }

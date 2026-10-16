@@ -1,0 +1,116 @@
+---
+project: Shirokuma
+doc_id: "DEV-04F"
+title: "Commander-Worker Governance & Pragmatic Core Roadmap"
+status: accepted
+created: 2026-10-16
+updated: 2026-10-16
+version: "1.0"
+area: development
+tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
+---
+
+# DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+本ドキュメントは [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) に基づき、2026年10月16日以降の Shirokuma の開発体制（**Antigravity 司令塔 × `codex-cli` GPT-6.1 Sol Medium 実装ワーカー**）および **Phase 0〜Phase 3 再起動ロードマップ** を定義する。
+
+---
+
+## 1. 開発体制：Commander–Worker 分担モデル
+
+従来の無人500セッション連続実行ループ（`autonomous_runner.py` および各種 `*_supervisor.py`）は廃止し、設計・判断と実装を明確に分離した **2階層体制** で開発を進める。
+
+```mermaid
+flowchart LR
+  USER["Owner (人間)"]
+  AGY["Commander: Antigravity\n・設計 / スコープ定義\n・オーバーエンジニアリング抑止\n・指示書作成 & コードレビュー"]
+  CDX["Worker: codex-cli\n(gpt-6.1-sol / medium)\n・Go / Python / SQL / Manifest実装\n・単体 / 結合テスト実行"]
+  LAB["Shirokuma Local Lab\n(Colima k3s / Iceberg / Trino / Bears)"]
+
+  USER <-->|"方針決定・マイルストーン確認"| AGY
+  AGY -->|"明確な境界付きタスク指示"| CDX
+  CDX -->|"差分・テスト結果報告"| AGY
+  AGY -->|"実機検証・コミット判断"| LAB
+```
+
+### 1.1 役割定義
+
+| 役割 | 担当 | 責務と権限 |
+|---|---|---|
+| **司令塔 (Commander / Architect / Reviewer)** | **Antigravity** | 1. ロードマップ管理と Work Package（WP）のスコープ定義<br>2. `codex-cli` への具体的・有界なプロンプト指示の作成<br>3. **オーバーエンジニアリングの厳格な阻止**（過剰な防御コード、Fixture専用ハック、不要な監査ラッパーの却下）<br>4. 実装差分のコードレビュー・実機検証・Vault/設計書の同期 |
+| **実装ワーカー (Implementation Worker)** | **`codex-cli`**<br>(`gpt-6.1-sol` / `medium`) | 1. Antigravity が指定したファイル・モジュールに対するコード実装とテスト作成<br>2. 指定されたテストコマンドの実行と結果報告<br>3. スコープ外のファイル変更・独自のポリシー解釈・過剰な自己防衛コードの禁止 |
+
+### 1.2 `codex-cli` 呼び出し標準テンプレート
+
+Antigravity が `codex-cli` に実装を委譲する際は、以下のコマンド体系を使用する（`rtk proxy` 経由で実行）。
+
+```bash
+rtk proxy /Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex exec \
+  -m gpt-6.1-sol \
+  -c model_reasoning_effort="medium" \
+  -s workspace-write \
+  -C /Users/jp.infra/Dev/Shirokuma/worktree/local-autonomous \
+  "<Antigravityが作成した構造化タスク指示>"
+```
+
+### 1.3 Antigravity から `codex-cli` へのタスク指示フォーマット
+
+各タスク指示には必ず以下の5項目を含め、ワーカーが迷走しないように境界を固定する。
+
+1. **Goal（達成すべき機能成果）**: 何が動くようにするか（1〜3文）。
+2. **Target Files（変更対象ファイル）**: 触ってよいファイル・ディレクトリの明示。
+3. **Anti-Over-Engineering Rules（禁止事項）**: 今回のタスクで絶対にやってはいけない過剰実装。
+4. **Verification（検証コマンド）**: 完了判定に使う具体的な `pytest` / `unittest` / `go test` コマンド。
+5. **Scope Stop（完了条件）**: テストが通ったら余計なドキュメント追記や周辺リファクタをせず即座に終了すること。
+
+---
+
+## 2. オーバーエンジニアリング防止の「5つの鉄則（Anti-Bloat Rules）」
+
+過去の520セッションで発生した停滞を二度と繰り返さないため、Antigravity は以下の5原則で `codex-cli` の設計・実装をコントロールする。
+
+1. **No Fixture-Only Features（ハリボテFixture実装の禁止）**
+   - `--case retained-fixture` や固定2行・固定48行のデータしか通らないハードコード実装を禁止する。最初から任意の有効なSQL・任意のテーブル名・任意のパラメータを受け付ける実装にする。
+2. **No Symlink / FD Paranoia in Local Tooling（過剰なシステムコール防衛の禁止）**
+   - シングルユーザーのローカル実験環境において、一時ディレクトリや内部ソケットに対する過剰な `openat2(NO_XDEV)`、多段の fd 相対 `unlink`/`chmod`、Mach 時計ドリフト監視などを増殖させない。標準ライブラリの安全なパス操作とシンプルなバリデーションで十分とする。
+3. **No Supervisors of Supervisors（監視スクリプトの自己増殖禁止）**
+   - AIセッションを監視・再試行・ハッシュ監査するための親スクリプト（`*_supervisor.py`）や数千行のJSONレシート検証器をこれ以上作らない。
+4. **No Upstream Binary Surgery（上流OSSコンテナの自前パッチ・再ビルド禁止）**
+   - Flux、Trino、Polaris 等の公式イメージに対するCVE消込み目的のソースビルドやAPKレイヤー差し替えは一切行わない。公式の ARM64 Digest Pinning をそのまま利用する。
+5. **Human-Readable Documentation Only（人間が読める簡潔な記録）**
+   - WBS やマイルストーン記録に SHA256 ハッシュの羅列や「何が未完か」の免責ポエムを書かない。1つのタスク完了記録は「何を実現したか・どう動かすか」を3〜5行で簡潔に記す。
+
+---
+
+## 3. 実用コア再起動ロードマップ（Phase 0 〜 Phase 3）
+
+L0〜L6 に分散していた「局所的な実験スクリプト群」を整理し、**実際に毎日触って動かせる OSS Data Cloud (Snowflake / Databricks / Fabric のコア体験)** を最短距離で完成させる。
+
+### Phase 0: ルール・証跡の大掃除とテスト正常化【即時】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P0-001** | ADR-0036・新ロードマップ策定と旧肥大化ログのアーカイブ | ADR-0036 と DEV-04F を作成し、12,463行の旧マイルストーンと2,794行の旧WBSを `archive/` に退避してスリム化する。 | **Completed (2026-10-16)** |
+| **WP-P0-002** | `warehouse_lifecycle` の `UNSAFE_PATH` テストエラー1件の修正 | `codex-cli` (GPT-6.1 Sol Medium) に指示し、macOS `/var` シンボリックリンク起因のテストFixtureエラーを修正して `make verify-local-experiment` のテスト群をオールグリーンにする。 | **Next Up** |
+
+### Phase 1: L0/L1 常駐コアの「普通に動く化」【1〜2日】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P1-001** | Colima (`mac-studio-solo`) 起動と L0/L1 コアのアンサスペンド | 停止・サスペンドされていた Flux v2、SeaweedFS、PostgreSQL、Polaris、Trino、ClickHouse (AgentHouse) を公式 ARM64 Digest イメージで通常稼働（`Ready=True`）させる。 | Planned |
+| **WP-P1-002** | `shirokuma doctor` 完全Green化と1コマンド運用 (`make lab-up / down / status`) | 「サスペンド中のためDegraded」ではなく、実稼働クラスタに対して `shirokuma doctor` が全項目 Healthy を返し、1コマンドで起動・停止できる。 | Planned |
+
+### Phase 2: 「脱Fixture化」— 本物の Lakehouse & AI Bear 体験への昇格【1〜2週間】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P2-001** | Virtual Warehouse (`shirokuma warehouse`) の汎用SQL・常駐制御対応 | 固定の `nation` 25行クエリ限定を解除し、`shirokuma warehouse chill / wake / query <size> "<任意のSQL>"` が Trino Gateway + XS/S クラスタに対して汎用的に動作する。 | Planned |
+| **WP-P2-002** | 常設 Iceberg データレイク & Dagster/dbt/OpenMetadata パイプライン | テスト後に即 `DROP` するのではなく、Polaris + Iceberg 上にサンプルデータセット（TPC-H 等）と dbt staging/mart モデルを常設し、OpenMetadata と Superset から常時探索・可視化できるようにする。 | Planned |
+| **WP-P2-003** | 5 Core Bears の汎用 CLI / MCP ワークフロー化 | `SRE Bear`、`Query Doctor Bear`、`Data Engineer Bear`、`Catalog Curator Bear`、`Policy Gatekeeper Bear` から Fixture 制限を外し、任意のクエリID診断・自然言語からの dbt モデル提案・実クラスタ診断が AgentHouse (ClickHouse/OTel) 記録付きで動く。 | Planned |
+
+### Phase 3: スコープ集中と統合オペレータUI（Shirokuma Workbench）【2〜3週間〜】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P3-001** | 周辺エンジンの Optional Plugin トラック分離 | コア構成（SeaweedFS + Polaris + Iceberg + Trino + Spark + ClickHouse + Dagster/dbt + OpenMetadata + Superset）に集中し、StarRocks / Doris / Gravitino / XTable / RustFS / Cube / Ray / Amoro を Optional Track として整理する。 | Planned |
+| **WP-P3-002** | Shirokuma Workbench（統合ローカルWeb UI）の構築 | バラバラの静的HTMLレポートを統合し、Virtual Warehouse の稼働/Chill/Wake操作、Iceberg カタログ＆リネージ、Bear の提案・承認キュー、Pawprints (OTel トレース) を1つのクリーンなローカルWeb画面で操作可能にする。 | Planned |

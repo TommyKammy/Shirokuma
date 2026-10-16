@@ -4,172 +4,91 @@ doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
-updated: 2026-10-10
-version: "0.7.4"
+updated: 2026-10-16
+version: "0.8.0"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
 
 # AGENTS.md
 
-## Mission and current mode
+## Mission and Current Operating Model (2026-10-16 — ADR-0036 / DEV-04F)
 
-Shirokuma is an experimental OSS data cloud lab on a single Mac Studio through
-Colima, with no current production-use objective. The owner approved autonomous
-local development on 2026-09-16. Follow
+Shirokuma is an experimental OSS data cloud lab on a single Mac Studio M3 Ultra
+through Colima (`mac-studio-solo`), with no current production-use objective.
+Follow
+`docs/design/07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md`
+and
+`docs/design/04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md`
+(which build upon and supersede the scheduling and CVE source-build rules in
 `docs/design/07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md`
-and `docs/design/04_Development/04B_Autonomous_Local_Development.md`.
+and `docs/design/04_Development/04B_Autonomous_Local_Development.md`).
 
-- Select and order useful work from WP dependencies and acceptance criteria;
-  implement, change dependencies, repair, retry, commit locally and advance to
-  the next WP without per-attempt approval.
-- Use a dedicated local branch/worktree and preserve existing user work. Update
-  matching planning notes and repository snapshots with decisions and evidence.
-- Host execution and changes to the dedicated Shirokuma Colima/k3s lab are
-  authorized: local build/import/registry, manifests, configuration, local RBAC,
-  policy, services, restarts and newly generated disposable experiment data.
-- Dedicated Flux reconciliation may be suspended or redirected for local work;
-  record prior state, scope and recovery. Bounded local admission may use
-  recorded source/image identity without GitHub publication identity.
-- These local permissions supersede conflicting legacy PR/CI/review, host-shell,
-  GitHub admission and per-attempt owner gates in scoped instructions and notes.
-  Preserve actual failures and historical evidence; do not claim publication
-  or production acceptance from a local result.
+### Commander–Worker Division of Labor
+
+- **Commander / Architect / Reviewer (`Antigravity`)**:
+  - Owns architecture, roadmap prioritization, Work Package scoping, and
+    repository/Vault documentation alignment.
+  - Crafts bounded task prompts for the worker with explicit anti-over-engineering
+    guardrails.
+  - Reviews worker diffs, test outcomes, and runtime behavior; rejects
+    fixture-only hacks, defensive symlink/fd paranoia, or scope drift.
+- **Implementation Worker (`codex-cli` with `gpt-6.1-sol` Medium)**:
+  - Invoked via `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s workspace-write -C /Users/jp.infra/Dev/Shirokuma/worktree/local-autonomous "<task>"`.
+  - Executes scoped code edits and focused unit/integration tests in the target
+    files specified by the Commander.
+- **Retirement of Unattended 500-Session Autonomous Loop**:
+  - The historical `autonomous_runner.py` / `gate_supervisor.py` /
+    `restart_supervisor.py` loop is retired.
+
+### Anti-Over-Engineering Rules (Mandatory for All Agents)
+
+1. **No Fixture-Only Features**: Do not hardcode features to only accept a single
+   `--case retained-fixture`, 2-row table, or 48-row dataset. Build general
+   functions that accept arbitrary valid SQL, tables, and parameters.
+2. **No Symlink / FD Paranoia in Local Tooling**: Do not add multi-layer
+   `openat2(NO_XDEV)`, fd-relative `unlink`/`chmod` state machines, or Mach
+   clock-drift guards to local developer/experiment scripts. Use clean standard
+   library path handling. (When fixing macOS temp directory tests, canonicalize
+   the test temp root with `Path.resolve()` rather than rewriting production path
+   guards.)
+3. **No Supervisors of Supervisors**: Do not create new wrapper scripts to
+   supervise or audit AI sessions.
+4. **No Upstream Binary Surgery for CVEs**: Use official upstream ARM64 images
+   pinned by SHA256 digest. Do not custom-compile or patch upstream OSS binaries
+   or APK layers (Flux, Trino, Polaris) to silence upstream CVE scanners.
+5. **Concise, Human-Readable Records**: Keep milestone and WBS updates to 3–5
+   concise lines per milestone. Do not dump raw SHA256 lists or lengthy negative
+   disclaimers into planning documents.
 
 ## Boundaries
 
-- Do not create Issues/PRs, write to GitHub, push or publish to external registries.
-- Additional spending, public exposure, unrelated projects, global host settings,
-  retained data/backup deletion, whole-Colima destruction and project-purpose
-  changes require separate authorization. Pause only the dependent action.
-- Keep secrets, generated data and workstation-local paths out of Git. Do not
-  inspect unrelated host credentials or bypass authenticated scope checks.
-- If external delivery is later authorized, its protected-branch, CI, policy,
-  security and CODEOWNERS rules apply; this local mode does not waive them.
+- Host execution and changes to the dedicated Shirokuma Colima/k3s lab are
+  authorized: local build/import/registry, manifests, configuration, local RBAC,
+  policy, services, restarts, and disposable experiment data.
+- Do not create Issues/PRs, write to GitHub, push, or publish to external registries.
+- Additional paid spending, public exposure, unrelated projects, global host
+  settings, and project-purpose changes require separate owner authorization.
+- Keep secrets, generated data, and workstation-local paths out of Git.
 
-## Architecture constraints
+## Architecture Constraints
 
-- Primary profile is `mac-studio-solo`, Linux/arm64 in Colima built-in k3s.
-  kind is CI/reset-only; no physical multi-node assumptions.
-- Prefer SeaweedFS. Do not add Ceph to the mainline path. MinIO is a pinned
-  compatibility fallback with digest, risk and replacement notes.
-- Use OPA and native RBAC for L3; no Apache Ranger without an ADR.
-- Doris is benchmark-only, not resident.
-- Keep pinned Flux v2; no Argo CD, Flux Operator or runtime `latest`.
-- L0 Flux installs source-controller, kustomize-controller, helm-controller and
-  notification-controller in `flux-system`.
+- Primary profile is `mac-studio-solo`, Linux/arm64 in Colima built-in k3s (`--vm-type vz`).
+  `kind` is CI/reset-only; no physical multi-node assumptions.
+- Primary Core Stack:
+  - **Object Storage & Catalog**: SeaweedFS + Apache Iceberg + Apache Polaris (+ PostgreSQL)
+  - **Compute & Virtual Warehouse**: Trino + Trino Gateway (XS/S auto-suspend & wake) + Spark/Comet
+  - **DataOps & Governance**: Dagster + dbt + OpenMetadata + OPA / native admission policies
+  - **Agent Control Plane**: `shirokuma` CLI + MCP Gateway + 5 Core Bears (SRE, Query Doctor, Data Engineer, Catalog Curator, Policy Gatekeeper) + ClickHouse AgentHouse + OTel Pawprints
+  - **Operator Surface**: Shirokuma Workbench UI + Superset + Grafana
+- Peripheral engines (StarRocks, Doris, Gravitino, XTable, RustFS, Cube, Ray, Amoro)
+  are deferred to the Optional Plugin Track until Phase 1–3 core milestones are complete.
+- Keep pinned Flux v2 (`source-controller`, `kustomize-controller`, `helm-controller`,
+  `notification-controller` in `flux-system`).
 
-## Verification and records
+## Verification
 
-Read the relevant WP, dependency/design records and scoped instructions before
-implementation. Ordinary missing detail is an assumption to document and test;
-missing authority outside the standing scope remains a blocker for that action.
-Run focused checks first, then relevant integration/runtime checks and broader
-verification at milestones. Use local review for substantive defects, without
-an external review wait loop.
-
-The local-mode entrypoint is `make verify-local-experiment`, plus focused checks
-for the changed component and actual runtime smoke tests. The historical
-`make verify` includes expired authorizations and strict unpublished-runtime
-gates; run its relevant parts for regressions, not as an approval prerequisite
-on every local iteration. Preserve those failures until external delivery work
-is separately authorized; do not renew old evidence to make the local loop green.
-
-Record test results, remaining criteria and rollback steps. Storage changes
-include disk and backup/export impact; new resident components include ARM64
-evidence. Update ADRs for architectural decisions and related WP/WBS notes for
-scope or acceptance changes. Keep durable references repository-relative.
-
-The GitHub supervisor path is inactive for this loop. Run
-`make supervisor-preflight` only before deliberately starting that separately
-authorized supervisor path; it is not a prerequisite for local work.
-
-## Opt-in OpenCode continuation
-
-On2026-10-10 the owner explicitly extended **only the execution deadline** to
-2026-10-11 10:30 JST / 01:30 UTC after the original week expired. This supersedes
-the original-deadline launch prohibition for the exact existing series only,
-not OAuth/no-spending limits, cumulative600/100 restart allocation or attempt
-counters. Usage518/600, remaining82 at extension; no fresh week/allowance.
-Runner and supervisors share the fixed, original-series-bound deadline; reject
-launches that cannot fit before it. No relative/automatic renewal.
-
-On 2026-10-03 the owner explicitly allowed consuming the entire ChatGPT Pro
-weekly allowance to accelerate Shirokuma's local experiments. This is **not**
-permission to use metered API-key accounts, other providers or paid services.
-The conversation's account does not authenticate the local CLI automatically.
-`tools/local_experiment/autonomous_runner.py` may start a bounded series of
-fresh `opencode run` sessions only with explicit execution, weekly-limit,
-OpenAI-model and run/time flags; it checks for an unambiguous OpenAI OAuth
-account label before every attempt. This label is not proof of billing or
-entitlement. Without the matching connection, stop before a model request.
-The owner subsequently asked to start the runner despite the lack of an
-independent billing ledger. For this local experiment, the owner's Pro account
-attestation plus exactly one OpenAI OAuth connection, an explicit OpenAI model
-and no API-key routing are sufficient to proceed. Do not assert that charges
-were independently excluded; stop on actual evidence of metered API use, an
-account/provider change or any new spending. Project OpenCode policy restricts
-normal model selection to OpenAI. The noninteractive CLI cannot approve reads
-outside this checkout: use the runner's private handoff snapshot and repository
-instructions, and never bypass a rejected permission.
-Merely reading these instructions or running its default plan must never start
-a model request. The runner is not the GitHub supervisor and does not authorize
-new spending, GitHub writes or publication. See
-`tools/local_experiment/AUTONOMOUS_RUNNER.md` for limits and recovery.
-
-On 2026-10-06 the owner raised the *cumulative* local series ceiling from 500
-to 1000 started sessions. Do not change the currently running invocation or
-its 500-total boundary. On review of repeated offline micro-fixes, the owner
-asked to change the development environment and future policy: the prepared
-automatic 500-to-1000 extension was **unloaded and put on hold**. The 1000
-ceiling is a maximum, not a target or permission to auto-start 500 more. At
-the 500 boundary first reconcile the original run and its final server session,
-result, checkpoint and clean descendant HEAD. Then use the gate-driven,
-gate-focused short-batch policy in
-`docs/design/04_Development/04C_Gate_Driven_Local_Continuation.md` with its
-short current-gate index. Prioritize L0 GitOps live evidence; never turn a
-commit, `more_work`, offline tests or checkbox edits into gate acceptance.
-Keep the original seven-day deadline, OAuth-only route, stop-on-error and
-no-new-spending boundaries. Count failures and unknown starts; never replay
-one to fill the budget. Do not erase retained evidence or worktrees.
-
-On 2026-10-08 the owner adopted DEV-04C's reviewed autonomous remediation loop:
-stop unsafe actions, not automatically all development. A parent supervision
-phase may select bounded in-scope repair and successor missions after separate
-terminal-session, operation, runtime and budget review, without repeated owner
-restart instructions. Never replay unknown operations or bypass denied access.
-Keep GPT-6.1 Sol, 600 cumulative/100 restart starts (98 remaining at adoption),
-the original week, six-session/120-minute batches and immutable failure records.
-Limit unchanged blocker/approach repairs to two execution sessions, then change
-the evidence-backed approach or hold that gate. Ask the owner only for missing
-authority or irreducible safety uncertainty. Policy adoption does not itself
-implement/start a supervisor or loosen the runner's fail-closed checks.
-
-The owner also requested a **conditional GPT-6 Astra consultation** when a
-coding session meets a genuine difficult blocker. In sessions with the updated
-runner prompt, the primary model stays pinned; after focused investigation,
-consult only the project-local `astra-advisor` subagent (`openai/gpt-6-astra`,
-no tools) if
-`rtk proxy tools/local_experiment/llm/.venv/bin/python -m tools.local_experiment.astra_preflight` returns
-`ASTRA_CONSULT_PREFLIGHT_OK` immediately before each call. Check the
-same single OpenAI OAuth connection and no API-key route. Limit consultation
-to two Astra calls total per parent session (one initial call and at most one
-follow-up on its blocker); do not open another consultation for a second blocker;
-routine work needs no consultation. Send only a sanitized problem statement,
-relevant code/test excerpts and explicit uncertainties, never raw private logs,
-credentials, Vault contents or retained data. The parent must independently
-verify any advice and retain responsibility for the checkpoint and safety
-boundary. A subagent call uses additional model requests, not extra runner
-session slots; model listing and OAuth label do not prove Pro billing. If the
-route/model is unavailable, quota is exhausted or spending is indicated, do
-not use an API-key/other-provider fallback or retry an unknown operation.
-
-Only when a continuation prompt supplies `CONTROL_JSON`: read the current WP,
-Milestones and private handoff snapshot; complete a coherent local increment and
-continue to the next independent task instead of treating a commit or passing
-tests as the end of the turn. Do not invoke the runner again from inside a
-session. Before finishing, write the requested private checkpoint with the
-current full HEAD and an honest `continue` or `stop` decision. It is a control
-signal, **not** evidence of production acceptance or completion. If scope,
-permissions, retained data safety or execution state is uncertain, stop the
-dependent action and preserve the evidence rather than fabricating a checkpoint.
+- Run focused unit/integration tests for changed components first.
+- At milestones, run `make verify-local-experiment` and `make verify-design-context`.
+- When working on live cluster capabilities (Phase 1+), verify with `shirokuma doctor`
+  and targeted runtime smoke checks.
