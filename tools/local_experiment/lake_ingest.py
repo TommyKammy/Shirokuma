@@ -12,7 +12,7 @@ import time
 import bears_resident as bears
 import warehouse_resident as wr
 
-SCHEMAS = {'raw', 'sandbox', 'staging', 'marts'}
+SCHEMAS = set(wr.WRITABLE_SCHEMAS)
 FORMATS = {'.csv': 'csv', '.tsv': 'csv', '.jsonl': 'jsonl',
            '.ndjson': 'jsonl', '.json': 'jsonl', '.parquet': 'parquet'}
 
@@ -135,7 +135,7 @@ def literal(value, sql_type):
     if sql_type == 'DOUBLE':
         return f'CAST({float(value)!r} AS DOUBLE)'
     text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    quoted = "'" + text.replace("'", "''") + "'"
+    quoted = wr.literal(text)
     return 'DATE ' + quoted if sql_type == 'DATE' else quoted
 
 
@@ -148,7 +148,7 @@ def ingest(file, table=None, mode='replace', format='auto', batch_size=500, key=
             raise ValueError('batch-size must be >= 1')
         path = Path(file)
         target = target_table(table, path)
-        sql_target = bears.identifier(target)
+        sql_target = wr.identifier(target)
         detected, schema, rows = read_file(path, format)
         if mode == 'upsert':
             key_cols = [sanitize(k) for k in (key or '').split(',') if k.strip()]

@@ -14,6 +14,15 @@ import uuid
 KUBECTL = ["kubectl", "--context", "colima-mac-studio-solo", "-n", "shirokuma-dev"]
 TIMEOUT = 180
 _PERSISTENT_TRINO = None
+WRITABLE_SCHEMAS = ('raw', 'sandbox', 'staging', 'marts')
+
+
+def identifier(value: str) -> str:
+    return '.'.join('"' + part.replace('"', '""') + '"' for part in value.split('.'))
+
+
+def literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 def warehouse(value):
@@ -255,7 +264,7 @@ def check_sql_policy(sql: str, mode: str = 'read-only') -> str:
         return rf'(?:{value}|"{value}")'
     dot = r'\s*\.\s*'
     catalog = name('iceberg') + dot
-    writable = ('sandbox', 'raw') if mode == 'sandbox-write' else ('sandbox', 'raw', 'staging', 'marts')
+    writable = ('sandbox', 'raw') if mode == 'sandbox-write' else WRITABLE_SCHEMAS
     schemas = '(?:' + '|'.join(name(s) for s in writable) + ')'
     target = catalog + schemas + dot + ident
     schema = schemas if mode == 'sandbox-write' else ident
