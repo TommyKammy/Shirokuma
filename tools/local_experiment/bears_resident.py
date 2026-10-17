@@ -138,8 +138,86 @@ def _complete_data_sql(context, llm_usage=None):
     return json.loads(content)["generated_sql"].strip()
 
 
+def models_inventory():
+    models = Path(__file__).parent / 'dataops' / 'dbt_persistent' / 'models'
+    dbt_models, wap_models = [], []
+    for path in sorted(models.rglob('*.sql')):
+        definition = path.read_text()
+        layer = 'staging' if 'staging' in path.relative_to(models).parts else 'marts'
+        refs = re.findall(r"ref\(\s*['\"]([\w]+)['\"]\s*\)", definition)
+        sources = ['.'.join(parts) for parts in re.findall(
+            r"source\(\s*['\"]([\w]+)['\"]\s*,\s*['\"]([\w]+)['\"]\s*\)", definition)]
+        dbt_models.append(dict(name=path.stem, layer=layer,
+                               table=f'iceberg.{layer}.{path.stem}', sql=definition,
+                               sources=sorted(set(refs + sources))))
+    for name, entry in sorted(load_wap_registry().items()):
+        wap_models.append(dict(name=name, layer='wap',
+                               table=entry.get('table') or entry.get('staged_table') or f'iceberg.sandbox.{name}',
+                               sql=entry.get('sql', ''), sources=entry.get('sources', [])))
+    all_models = dbt_models + wap_models
+    def depends_on(source, model):
+        return (source == model['name'] or
+                source.removeprefix('iceberg.') == model['table'].removeprefix('iceberg.'))
+    for model in all_models:
+        model['downstream'] = sorted({other['table'] for other in all_models
+                                      if any(depends_on(source, model) for source in other['sources'])})
+    return dict(dbt_models=dbt_models, wap_models=wap_models,
+                lineage={model['name']: model['sources'] for model in all_models})
+
+
+def _table_lineage(table):
+    inventory = models_inventory()
+    models = inventory['dbt_models'] + inventory['wap_models']
+    model = next((m for m in models if m['table'] == table), None)
+    result = dict(upstream=model['sources'] if model else [],
+                  downstream=sorted({m['table'] for m in models if any(
+                      source.removeprefix('iceberg.') == table.removeprefix('iceberg.') or
+                      source == table.split('.')[-1] for source in m['sources'])}))
+    if model:
+        result['layer'] = model['layer']
+        if model['layer'] == 'wap':
+            result['wap_sql'] = model['sql']
+    return result
+
+
+def drop_table(table):
+    message = 'drop is only allowed in raw, sandbox, staging, or scratch schemas'
+    if not isinstance(table, str) or not re.fullmatch(
+            r'(?:iceberg\.)?(?:raw|sandbox|staging|scratch)\.[A-Za-z_][A-Za-z_0-9]*', table):
+        raise ValueError(message)
+    full_table = table if table.startswith('iceberg.') else 'iceberg.' + table
+    started, status = time.monotonic(), 'success'
+    try:
+        with wr.trino() as url:
+            sql(url, 'DROP TABLE IF EXISTS ' + identifier(full_table))
+    except Exception:
+        status = 'failed'
+        raise
+    finally:
+        telemetry = wr.telemetry('catalog.drop', int((time.monotonic() - started) * 1000),
+                                 status, prefix='', target=full_table)
+    return dict(action='drop', table=full_table, dropped=True, telemetry=telemetry)
+
+
 def catalog(args):
     metadata = {}
+    if getattr(args, 'snapshot_id', None) is not None:
+        if not getattr(args, 'table', None):
+            raise ValueError('table is required for snapshot_id')
+        if not re.fullmatch(r'[0-9]+', str(args.snapshot_id)):
+            raise ValueError('snapshot_id must be digits-only')
+        table = args.table
+        if not table.startswith('iceberg.'):
+            table = 'iceberg.' + table if '.' in table else 'iceberg.marts.' + table
+        quoted = identifier(table)
+        with wr.trino() as url:
+            preview = sql(url, f'SELECT * FROM {quoted} FOR VERSION AS OF {int(args.snapshot_id)} LIMIT 50')
+            count = sql(url, f'SELECT COUNT(*) FROM {quoted} FOR VERSION AS OF {int(args.snapshot_id)}')['rows'][0][0]
+            current_count = attempt(lambda: sql(url, f'SELECT COUNT(*) FROM {quoted}')['rows'][0][0])
+        return dict(action='snapshot_preview', catalog='iceberg', table=table,
+                    snapshot_id=str(args.snapshot_id), row_count=count,
+                    current_row_count=None if isinstance(current_count, dict) else current_count,
+                    preview=preview)
     if args.action == "lineage" and not args.table:
         models = Path(__file__).parent / "dataops" / "dbt_persistent" / "models"
         lineage = {p.stem: sorted(set(re.findall(r"ref\(\s*['\"]([\w]+)['\"]\s*\)", p.read_text())))
@@ -181,9 +259,14 @@ def catalog(args):
             if not table.startswith("iceberg."):
                 table = "iceberg." + table if "." in table else "iceberg.marts." + table
             metadata["columns"] = sql(url, "SHOW COLUMNS FROM " + identifier(table))["rows"]
-            if include_config:
+            if include_config and getattr(args, 'detail', None) != 'full':
                 metadata["definition"] = sql(url, "SHOW CREATE TABLE " + identifier(table))["rows"]
             metadata["snapshots"] = attempt(lambda: sql(url, "SELECT snapshot_id, parent_id, committed_at FROM " + identifier(table + "$snapshots") + " ORDER BY committed_at DESC"))
+            if getattr(args, 'detail', None) == 'full':
+                metadata['preview'] = attempt(lambda: sql(url, 'SELECT * FROM ' + identifier(table) + ' LIMIT 50'))
+                metadata['profile'] = attempt(lambda: audit_table(url, table))
+                metadata['definition'] = attempt(lambda: sql(url, 'SHOW CREATE TABLE ' + identifier(table))['rows'])
+                metadata['lineage_detail'] = _table_lineage(table)
             if args.action == "lineage":
                 models = Path(__file__).parent / "dataops" / "dbt_persistent" / "models"
                 definitions = [p.read_text() for p in models.rglob("*.sql") if p.stem == table.split(".")[-1]]

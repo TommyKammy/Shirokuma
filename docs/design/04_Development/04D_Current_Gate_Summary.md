@@ -44,3 +44,6 @@ tags: [shirokuma, local, handoff, gates]
 | **WP-P6-004** | Remove retired CVE source-build scripts, evidence, and tests; align `make verify` with the retained core | **Completed (2026-10-17)** |
 | **WP-P6-005** | Simplify Doctor implementation and tests while preserving resident health checks | **Completed (2026-10-17)** |
 | **WP-P6-006** | Slim AgentHouse management, preserve credentials and resident APIs, verify standard HTTP responses, and synchronize Phase 6 documentation | **Completed (2026-10-17)** |
+| **WP-P7-001** | Add rich Table Inspector, Iceberg Time Travel preview, browser file upload & pre-ingest schema preview, and unified dbt/WAP transformation models APIs | **Completed (2026-10-17)** |
+| **WP-P7-002** | Upgrade Shirokuma Workbench with Snowsight-style 3-category navigation, multi-tab SQL worksheets, inline Bear Copilot, result export, D&D upload preview, and 6-tab Table Inspector | **Completed (2026-10-17)** |
+

@@ -164,6 +164,20 @@ tags: [shirokuma, local, milestones]
 - Preserved saved credentials, resident telemetry APIs, and all five CLI commands; covered chunked and NDJSON responses.
 - Synchronized Phase 6 roadmap, gate summary, and milestones with core, full, and live runtime verification.
 
+---
+
+### 2026-10-17 — WP-P7-001: Rich Table Inspector, Time Travel Preview, Upload Preview, & Models Registry APIs (Completed)
+
+- Extended `GET /api/catalog` with `detail=full` (50-row data preview, single-scan row/NULL profile, DDL, upstream/downstream lineage) and `snapshot_id=<id>` for non-destructive Iceberg Time Travel preview (`FOR VERSION AS OF`).
+- Added `POST /api/lake/preview` and browser content upload support (`filename` + `content`/`content_base64`) to `lake_ingest.py`, plus `GET /api/models`, `POST /api/models/build`, and restricted `POST /api/catalog/drop`.
+- Verified HTTP/1.1 Keep-Alive connection reuse and single-query catalog discovery (`~58ms` catalog load, `~256ms` full table inspector).
+
+### 2026-10-17 — WP-P7-002: Snowsight-Style Navigation & Multi-Feature Workbench Web UI (Completed)
+
+- Redesigned `tools/local_experiment/workbench/index.html` around Snowsight-style grouped navigation (`Work with Data`, `Catalog`, `Manage & Monitor`) across 7 sections with a global header warehouse status bar.
+- Upgraded SQL Worksheets with an inline Database Object Explorer, persistent multi-tab worksheets and query history, inline AI Bear Copilot (`Generate SQL`, `Explain Plan`, `Stage & Audit`, `Publish`), client-side sorting/filtering, and CSV/JSON/TSV export.
+- Added browser drag-and-drop file upload with schema/row preview, a unified Transformation (`dbt` + `WAP`) view, and a 6-tab Table Inspector with Time Travel snapshot preview and rollback.
+
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)
 
 The following capabilities were functionally demonstrated on `mac-studio-solo` during the initial local experiment wave and serve as the foundation for Phase 1–3 graduation:

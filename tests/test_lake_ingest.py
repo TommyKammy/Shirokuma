@@ -35,6 +35,54 @@ class LakeIngestTests(unittest.TestCase):
     def statements(self):
         return [call.args[1] for call in self.execute.call_args_list]
 
+    def test_preview_local_and_uploaded_content(self):
+        content = 'Order ID,Active\n1,true\n2,false\n3,true\n'
+        path = self.file('orders.csv', content)
+        expected = dict(action='preview', file=str(path), format='csv',
+                        columns=[dict(name='order_id', type='BIGINT'), dict(name='active', type='BOOLEAN')],
+                        row_count=3, sample_rows=[['1', 'true'], ['2', 'false']])
+        self.assertEqual(lake.preview(path, limit=2), expected)
+        for value in (content, content.encode()):
+            report = lake.preview(filename='../orders.csv', content=value, limit=2)
+            self.assertEqual(report, dict(expected, file='orders.csv'))
+        self.assertEqual(len(lake.preview(path, limit=0)['sample_rows']), 1)
+        self.trino.assert_not_called()
+
+    def test_upload_ingestion_preserves_modes_and_cleans_up(self):
+        original = lake.read_file
+        paths = []
+        def read(path, fmt):
+            paths.append(path)
+            self.assertTrue(path.exists())
+            return original(path, fmt)
+        with patch.object(lake, 'read_file', side_effect=read):
+            report = lake.ingest(filename='../../orders.csv', content=b'id\n1\n2\n',
+                                 table='raw.uploaded', mode='upsert', key='id', batch_size=1)
+        self.assertEqual((report['file'], report['table'], report['key'], report['batches']),
+                         ('orders.csv', 'iceberg.raw.uploaded', ['id'], 2))
+        self.assertFalse(paths[0].parent.exists())
+        with patch.object(lake, 'read_file', side_effect=RuntimeError('broken')) as read:
+            with self.assertRaisesRegex(RuntimeError, 'broken'):
+                lake.ingest(filename='orders.csv', content='id\n1')
+        self.assertFalse(read.call_args.args[0].parent.exists())
+
+    def test_upload_validation_and_preview_formats(self):
+        for kwargs in ({}, {'filename': 'x.csv'}, {'content': 'id\n1'},
+                       {'filename': '..', 'content': ''}, {'filename': '', 'content': ''},
+                       {'filename': 'x.csv', 'content': 1},
+                       {'file': 'x.csv', 'filename': 'x.csv', 'content': ''}):
+            for function in (lake.preview, lake.ingest):
+                with self.subTest(kwargs=kwargs, function=function.__name__), self.assertRaises((ValueError, TypeError)):
+                    function(**kwargs)
+        report = lake.preview(filename='data.txt', content='{"a": 1}\n{"b": "x"}', format='jsonl')
+        self.assertEqual(report['sample_rows'], [[1, None], [None, 'x']])
+        self.assertEqual(lake.preview(filename='empty.csv', content='id\n')['row_count'], 0)
+        with self.assertRaises(ValueError):
+            lake.preview(filename='bad.csv', content='a\n1,2')
+        with patch.dict(sys.modules, {'pyarrow': None, 'pyarrow.parquet': None}):
+            with self.assertRaisesRegex(ValueError, 'requires pyarrow'):
+                lake.preview(filename='data.parquet', content=b'parquet')
+
     def test_csv_replace_batches_types_and_escaping(self):
         path = self.file('Sales-2026.csv', 'ID,Active,Price,Day,Customer,Empty\n1,TRUE,1.2,2026-10-01,O\'Brien,\n2,false,2,2026-10-02,A,\n3,true,3.5,2026-10-03,B,\n')
         result = lake.ingest(path, batch_size=2)

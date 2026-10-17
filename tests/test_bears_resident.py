@@ -17,6 +17,79 @@ SPEC.loader.exec_module(b)
 
 
 class BearsResidentTests(unittest.TestCase):
+    def test_snapshot_preview_and_validation(self):
+        preview = {'rows': [[1, 'old']]}
+        for current in ({'rows': [[5]]}, RuntimeError('current missing')):
+            with patch.object(b, 'sql', side_effect=[preview, {'rows': [[2]]}, current]) as sql:
+                report = b.catalog(Args(action='search', table='raw.orders', snapshot_id='9007199254740993'))
+            self.assertEqual(report, dict(action='snapshot_preview', catalog='iceberg', table='iceberg.raw.orders',
+                snapshot_id='9007199254740993', row_count=2,
+                current_row_count=None if isinstance(current, Exception) else 5, preview=preview))
+            self.assertEqual(sql.call_args_list[0].args[1],
+                'SELECT * FROM "iceberg"."raw"."orders" FOR VERSION AS OF 9007199254740993 LIMIT 50')
+            self.assertIn('FOR VERSION AS OF 9007199254740993', sql.call_args_list[1].args[1])
+        for value in ('1; DROP', '-1', '1.0', '', '１２'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'snapshot_id must be digits-only'):
+                b.catalog(Args(action='describe', table='orders', snapshot_id=value))
+        with self.assertRaisesRegex(ValueError, 'table is required'):
+            b.catalog(Args(action='describe', table=None, snapshot_id='1'))
+
+    def test_full_catalog_detail_and_best_effort_failures(self):
+        for failed in (False, True):
+            def execute(url, statement):
+                if failed and statement.startswith(('SELECT *', 'SHOW CREATE')):
+                    raise RuntimeError('unavailable')
+                return {'rows': [['value']]}
+            with patch.object(b, 'sql', side_effect=execute), \
+                 patch.object(b, 'audit_table', side_effect=RuntimeError('audit unavailable') if failed else None,
+                              return_value={'row_count': 3}), \
+                 patch.object(b, '_table_lineage', return_value={'upstream': [], 'downstream': []}):
+                metadata = b.catalog(Args(action='describe', table='orders', detail='full', include_config=False))['metadata']
+            self.assertEqual(set(metadata), {'columns', 'snapshots', 'preview', 'profile', 'definition', 'lineage_detail'})
+            if failed:
+                for field in ('preview', 'profile', 'definition'):
+                    self.assertIn('error', metadata[field])
+            else:
+                self.assertEqual(metadata['profile']['row_count'], 3)
+                self.assertEqual(metadata['definition'], [['value']])
+
+    def test_drop_restrictions_and_telemetry(self):
+        for schema in ('raw', 'sandbox', 'staging', 'scratch'):
+            with patch.object(b, 'sql') as sql, patch.object(b.wr, 'telemetry', return_value='recorded') as telemetry:
+                report = b.drop_table(schema + '.orders')
+            self.assertEqual(report, dict(action='drop', table=f'iceberg.{schema}.orders', dropped=True, telemetry='recorded'))
+            self.assertEqual(sql.call_args.args[1], f'DROP TABLE IF EXISTS "iceberg"."{schema}"."orders"')
+            self.assertEqual(telemetry.call_args.args[0], 'catalog.drop')
+            self.assertEqual(telemetry.call_args.args[2], 'success')
+            self.assertEqual(telemetry.call_args.kwargs['target'], report['table'])
+        for table in ('marts.x', 'tpch_tiny.x', 'smoke.x', 'raw.bad-name', 'raw.x; DROP', 'x', None, 'other.raw.x'):
+            with patch.object(b, 'sql') as sql, self.assertRaisesRegex(ValueError, 'drop is only allowed'):
+                b.drop_table(table)
+            sql.assert_not_called()
+        with patch.object(b, 'sql', side_effect=RuntimeError('failed')), patch.object(b.wr, 'telemetry') as telemetry:
+            with self.assertRaises(RuntimeError):
+                b.drop_table('iceberg.raw.x')
+            self.assertEqual(telemetry.call_args.args[2], 'failed')
+
+    def test_models_inventory_and_table_lineage(self):
+        registry = {'derived': dict(table='iceberg.marts.derived', sql='SELECT * FROM marts.fct_orders',
+                                    sources=['marts.fct_orders']),
+                    'dependent': dict(staged_table='iceberg.sandbox.dependent', sql='SELECT * FROM marts.derived',
+                                      sources=['iceberg.marts.derived'])}
+        with patch.object(b, 'load_wap_registry', return_value=registry):
+            inventory = b.models_inventory()
+            models = {model['name']: model for model in inventory['dbt_models']}
+            self.assertEqual(models['stg_tpch_orders']['layer'], 'staging')
+            self.assertEqual(models['stg_tpch_orders']['sources'], ['tpch_tiny.orders'])
+            self.assertIn('iceberg.marts.fct_orders', models['stg_tpch_orders']['downstream'])
+            self.assertIn('iceberg.marts.derived', models['fct_orders']['downstream'])
+            self.assertIn('select', models['fct_orders']['sql'])
+            self.assertEqual(inventory['lineage']['derived'], ['marts.fct_orders'])
+            self.assertEqual(b._table_lineage('iceberg.marts.derived'), dict(
+                upstream=['marts.fct_orders'], downstream=['iceberg.sandbox.dependent'],
+                layer='wap', wap_sql=registry['derived']['sql']))
+            self.assertEqual(b._table_lineage('iceberg.raw.unknown'), dict(upstream=[], downstream=[]))
+
     def test_extract_source_tables(self):
         cases = [
             ('SELECT * FROM iceberg.raw.syn_orders JOIN raw.customers USING (id) JOIN products ON true',

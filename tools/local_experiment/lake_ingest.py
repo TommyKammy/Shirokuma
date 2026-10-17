@@ -1,6 +1,7 @@
 """Ingest local CSV, JSONL, and Parquet files into the resident Iceberg lake."""
 import argparse
 import csv
+from contextlib import contextmanager
 from datetime import date
 import json
 import math
@@ -8,6 +9,7 @@ from pathlib import Path
 import re
 import sys
 import time
+import tempfile
 
 import bears_resident as bears
 import warehouse_resident as wr
@@ -139,7 +141,41 @@ def literal(value, sql_type):
     return 'DATE ' + quoted if sql_type == 'DATE' else quoted
 
 
-def ingest(file, table=None, mode='replace', format='auto', batch_size=500, key=None):
+@contextmanager
+def input_file(file=None, *, filename=None, content=None):
+    """Keep uploaded bytes alive for the duration of a preview or ingestion."""
+    if filename is None and content is None:
+        if file is None:
+            raise ValueError('file or filename and content are required')
+        yield Path(file)
+        return
+    if file is not None:
+        raise ValueError('file and uploaded content are mutually exclusive')
+    if (not isinstance(filename, str) or not filename.strip()
+            or Path(filename).name in {'', '.', '..'}
+            or not isinstance(content, (str, bytes))):
+        raise ValueError('filename and content (str or bytes) are required')
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / Path(filename).name
+        path.write_bytes(content.encode('utf-8') if isinstance(content, str) else content)
+        yield path
+
+
+def preview(file=None, *, filename=None, content=None, format='auto', limit=10):
+    with input_file(file, filename=filename, content=content) as path:
+        detected, schema, rows = read_file(path, format)
+    return dict(action='preview', file=str(Path(filename).name if filename else file),
+                format=detected, columns=[dict(name=c, type=t) for c, t in schema],
+                row_count=len(rows), sample_rows=rows[:max(1, int(limit))])
+
+
+def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500, key=None,
+           *, filename=None, content=None):
+    if filename is not None or content is not None:
+        with input_file(file, filename=filename, content=content) as path:
+            result = ingest(path, table, mode, format, batch_size, key)
+        result['file'] = Path(filename).name
+        return result
     started = time.monotonic()
     try:
         if mode not in {'replace', 'append', 'upsert'}:

@@ -74,7 +74,7 @@ flowchart TB
 | **3. 1-Command Iceberg Snapshot Rollback** | Every Iceberg table snapshot is tracked. If a bad publish occurs, `shirokuma bear data --table marts.<name> --rollback --snapshot-id <id>` instantaneously restores the table via `iceberg.system.rollback_to_snapshot`. |
 | **4. Zero-Friction File Ingestion & Idempotent Upsert** | `shirokuma lake ingest` loads local **CSV, TSV, JSONL, and Parquet** files into Iceberg with automatic schema inference (`BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, `VARCHAR`) and supports `replace`, `append`, and keyed idempotent `upsert` (`--mode upsert --key <cols>`). |
 | **5. 5 Core Autonomous Bears** | **SRE Bear** (cluster health & metrics), **Query Doctor Bear** (Trino `EXPLAIN` & skew analysis), **Data Engineer Bear** (LLM SQL generation with `QUALIFY` rewrite, 1-retry `EXPLAIN` self-correction, WAP, & `--refresh`), **Catalog Curator Bear** (Iceberg metadata & dbt + WAP lineage), and **Policy Gatekeeper Bear** (Kubernetes pod security audit). |
-| **6. Shirokuma Workbench & Pawprints Audit Trail** | `shirokuma workbench` launches a zero-dependency local Web UI (`http://127.0.0.1:8888`) uniting SQL execution, Catalog & Lineage browsing, File Ingestion, Bear & WAP controls, and live ClickHouse `agenthouse.pawprints` telemetry (tracking snapshot IDs, duration, and LLM token counts). |
+| **6. Shirokuma Workbench & Pawprints Audit Trail** | `shirokuma workbench` launches a fast, zero-dependency Snowsight-style local Web UI (`http://127.0.0.1:8888`) featuring multi-tab SQL worksheets with an inline Object Explorer & AI Bear Copilot, CSV/JSON/TSV export, drag-and-drop browser file upload with pre-ingest schema preview, a 6-tab Table Inspector (Columns, 50-row Data Preview, NULL Profile, DDL, Iceberg Time Travel Snapshot Preview & Rollback, Lineage), a unified `dbt` + `WAP` Transformation hub, and live ClickHouse `agenthouse.pawprints` telemetry. |
 
 ---
 
@@ -170,7 +170,7 @@ Snowflake や Databricks の巨大機能をすべて模倣するのではなく�
 | **3. Iceberg スナップショット Rollback** | 万一誤ったデータを公開しても、`shirokuma bear data --table marts.<name> --rollback --snapshot-id <id>` 1コマンドで過去のスナップショットへ即座に無停止ロールバックできます。 |
 | **4. 自動スキーマ推論 Ingest & 冪等 Upsert** | `shirokuma lake ingest` により、ローカルの **CSV / TSV / JSONL / Parquet** ファイルから型（`BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, `VARCHAR`）を自動推論して Iceberg テーブルへロードします。`replace`（全置換）・`append`（追記）に加え、複合キー対応の冪等 `upsert`（`--mode upsert --key <cols>`）に対応しています。 |
 | **5. 5頭の自律 AI Bear と SQL 自己修復** | **SRE Bear**（稼働・リソース監視）、**Query Doctor Bear**（Trino 実行計画・Skew 診断）、**Data Engineer Bear**（自然言語からの SQL 生成、`QUALIFY` 句自動書き換え、`EXPLAIN` 失敗時の自動再試行、WAP 公開、`--refresh` 再実行）、**Catalog Curator Bear**（カタログ探索・dbt + WAP 統合リネージ）、**Policy Gatekeeper Bear**（Kubernetes セキュリティ監査）を提供します。 |
-| **6. Shirokuma Workbench & Pawprints 監査台帳** | `shirokuma workbench`（`http://127.0.0.1:8888`）により、Warehouse 操作・SQL 実行・カタログ＆リネージ閲覧・ファイル Ingest・5 Bears＆WAP/Rollback 操作・ClickHouse `agenthouse.pawprints` 監査ログ（対象スナップショット ID や LLM トークン消費量を含む）を単一のローカル Web UI で完結できます。 |
+| **6. Snowsight 風 Shirokuma Workbench & Pawprints 監査台帳** | `shirokuma workbench`（`http://127.0.0.1:8888`）により、Snowsight 風の3カテゴリ7メニュー構成で、オブジェクトツリー＆AI Copilot 付きマルチタブ SQL ワークシート、結果の CSV/JSON/TSV エクスポート、ブラウザ D&D アップロード＆事前スキーマプレビュー、6タブ Table Inspector（Columns / 50行プレビュー / NULL統計プロファイル / DDL / Iceberg Time Travel スナップショット比較＆Rollback / リネージ）、`dbt` + `WAP` 変換管理、ClickHouse `agenthouse.pawprints` 監査ログを単一画面で軽快に操作できます。 |
 
 ---
 

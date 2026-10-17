@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Serve the local Shirokuma Workbench with standard-library HTTP tooling."""
 import argparse
+import base64
 import contextlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 import json
@@ -23,6 +24,28 @@ def components():
         "replicas": item.get("spec", {}).get("replicas", 1),
         "ready_replicas": item.get("status", {}).get("readyReplicas", 0),
     } for item in items}
+
+
+def lake_input(body):
+    """Validate the two supported input forms without changing local-file calls."""
+    if not any(key in body for key in ('filename', 'content', 'content_base64')):
+        file = body.get('file')
+        if not isinstance(file, str) or not file.strip():
+            raise ValueError('file must be a non-empty string')
+        return file, {}
+    if 'file' in body:
+        raise ValueError('file and uploaded content are mutually exclusive')
+    filename = body.get('filename')
+    if not isinstance(filename, str) or not filename.strip():
+        raise ValueError('filename must be a non-empty string')
+    if ('content' in body) == ('content_base64' in body):
+        raise ValueError('provide exactly one of content or content_base64')
+    content = body.get('content_base64') if 'content_base64' in body else body.get('content')
+    if not isinstance(content, str):
+        raise ValueError('content and content_base64 must be strings')
+    if 'content_base64' in body:
+        content = base64.b64decode(content, validate=True)
+    return None, dict(filename=filename, content=content)
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
@@ -75,10 +98,14 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     report.update(status="degraded", components={"error": str(exc)})
                 self.respond(report)
             elif url.path in ("/api/catalog", "/api/lineage"):
-                table = parse_qs(url.query).get("table", [None])[0]
+                params = parse_qs(url.query, keep_blank_values=True)
+                table = params.get('table', [None])[0]
+                options = {key: params[key][0] for key in ('detail', 'snapshot_id') if key in params}
+                if 'snapshot_id' in options and not table:
+                    raise ValueError('table is required for snapshot_id')
                 action = "lineage" if url.path.endswith("lineage") else "describe" if table else "search"
                 result = bears_resident.catalog(SimpleNamespace(
-                    bear="catalog", action=action, table=table, include_config=False))
+                    bear="catalog", action=action, table=table, include_config=False, **options))
                 # Iceberg IDs exceed JavaScript's safe integer range. Preserve
                 # their exact digits for snapshot display and rollback requests.
                 snapshots = result.get('metadata', {}).get('snapshots')
@@ -86,13 +113,20 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     snapshots['rows'] = [
                         [str(value) if i < 2 and value is not None else value for i, value in enumerate(row)]
                         for row in snapshots['rows']]
+                profile = result.get('metadata', {}).get('profile')
+                if isinstance(profile, dict) and type(profile.get('snapshot_id')) is int:
+                    profile['snapshot_id'] = str(profile['snapshot_id'])
                 self.respond(result)
+            elif url.path == '/api/models':
+                self.respond(bears_resident.models_inventory())
             elif url.path == "/api/pawprints":
                 result = manage.Client().query(
                     "SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON")
                 self.respond(json.loads(result)["data"])
             else:
                 self.respond({"error": "route not found"}, 404)
+        except (ValueError, UnicodeError) as exc:
+            self.respond({'error': str(exc)}, 400)
         except Exception as exc:
             self.respond({"error": str(exc)}, 502)
 
@@ -100,8 +134,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         if self.headers.get_content_type() != "application/json":
             raise ValueError("Content-Type must be application/json")
         length = int(self.headers.get("Content-Length", "0"))
-        if not 0 < length <= 1024 * 1024:
-            raise ValueError("JSON body must be between 1 byte and 1 MiB")
+        if not 0 < length <= 10 * 1024 * 1024:
+            raise ValueError("JSON body must be between 1 byte and 10 MiB")
         value = json.loads(self.rfile.read(length))
         if not isinstance(value, dict):
             raise ValueError("JSON body must be an object")
@@ -113,7 +147,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.respond({"error": "cross-origin control requests are not allowed"}, 403)
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/warehouse/chill", "/api/warehouse/wake", "/api/warehouse/query", "/api/bears/run", "/api/lake/ingest"):
+        if path not in ("/api/warehouse/chill", "/api/warehouse/wake", "/api/warehouse/query", "/api/bears/run", "/api/lake/ingest", '/api/lake/preview', '/api/catalog/drop', '/api/models/build'):
             self.respond({"error": "route not found"}, 404)
             return
         try:
@@ -135,17 +169,33 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                             raise ValueError('invalid query mode')
                         options['mode'] = mode
                     result = warehouse_resident.query(size, statement, catalog="iceberg", schema="marts", max_rows=limit, **options)
-                elif path == '/api/lake/ingest':
-                    file = body.get('file')
+                elif path == '/api/catalog/drop':
+                    table = body.get('table')
+                    if not isinstance(table, str) or not table.strip():
+                        raise ValueError('table must be a non-empty string')
+                    result = bears_resident.drop_table(table)
+                elif path == '/api/models/build':
+                    action = body.get('action', 'build')
+                    if not isinstance(action, str) or action not in {'build', 'test', 'status'}:
+                        raise ValueError('invalid model action')
+                    import lake_pipeline
+                    result = lake_pipeline.run(action)
+                elif path in ('/api/lake/ingest', '/api/lake/preview'):
+                    file, options = lake_input(body)
                     table, mode, fmt = body.get('table'), body.get('mode', 'replace'), body.get('format', 'auto')
+                    if not isinstance(fmt, str) or fmt not in {'auto', 'csv', 'jsonl', 'parquet'}:
+                        raise ValueError('invalid file format')
+                    if path == '/api/lake/preview':
+                        limit = body.get('limit', 10)
+                        if type(limit) is not int or limit < 1:
+                            raise ValueError('limit must be a positive integer')
+                        self.respond(lake_ingest.preview(file, format=fmt, limit=limit, **options))
+                        return
                     batch_size = body.get('batch_size', 500)
-                    if not isinstance(file, str) or not file.strip():
-                        raise ValueError('file must be a non-empty string')
                     if ('table' in body and not isinstance(table, str)) or not all(isinstance(v, str) for v in (mode, fmt)):
                         raise ValueError('table, mode, and format must be strings')
                     if type(batch_size) is not int or batch_size < 1:
                         raise ValueError('batch_size must be a positive integer')
-                    options = {}
                     if 'key' in body:
                         if not isinstance(body['key'], str):
                             raise ValueError('key must be a string')
