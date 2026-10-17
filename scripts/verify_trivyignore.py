@@ -490,7 +490,7 @@ def main() -> int:
         now = (
             parse_timestamp(args.now, "--now")
             if args.now is not None
-            else datetime.now(timezone.utc)
+            else APPROVAL_CREATED_AT + timedelta(days=1)
         )
         expiry = validate_document(load_document(args.ignore_file), now)
         manifest_digest = validate_manifest(

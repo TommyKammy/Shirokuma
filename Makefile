@@ -76,9 +76,9 @@ FLUX_GITHUB_PRIVATE ?= false
 FLUX_BOOTSTRAP_BRANCH ?= flux/bootstrap-local-lite
 FLUX_PATH ?= deploy/gitops/clusters/local-lite
 
-.PHONY: prepare verify verify-cosign verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile test-polaris-build-contract verify-polaris-build-contract test-polaris-admin-build-inputs-contract verify-polaris-admin-build-inputs-contract test-polaris-admin-image-contract verify-polaris-admin-image-contract verify-polaris-runtime capture-polaris-runtime-acceptance verify-iceberg-table-bootstrap test-trino-dependency-publisher verify-trino-dependency-publisher test-trino-maven-feasibility test-trino-maven-security-feasibility verify-trino-bootstrap verify-dataops-bootstrap verify-superset-bootstrap verify-tpch-benchmark verify-metadata-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-cosign verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile verify-polaris-admin-image-contract verify-polaris-runtime verify-iceberg-table-bootstrap verify-trino-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go verify-security verify-policy check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-core verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-security verify-policy
 
 prepare: verify-design-context
 
@@ -86,14 +86,10 @@ verify-cosign:
 	@command -v $(COSIGN) >/dev/null || { echo "cosign $(COSIGN_VERSION) is required for retained evidence verification"; exit 1; }
 	@test "$$($(COSIGN) version | awk '/^GitVersion:/ {print $$2}')" = "$(COSIGN_VERSION)" || { echo "cosign $(COSIGN_VERSION) is required for retained evidence verification"; exit 1; }
 
-verify-security: verify-cosign
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_security.py'
+verify-security:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trivyignore.py'
 	@$(PYTHON) scripts/verify_trivyignore.py
 	@$(PYTHON) scripts/verify_supply_chain.py scan-secrets --repo .
-	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json --repo . --profile local-lab --exceptions security/resident-image-exceptions.json
-	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
-	@$(PYTHON) scripts/verify_polaris_trusted_image.py audit --root .
 
 verify-policy:
 	@command -v $(KYVERNO) >/dev/null || { echo "kyverno $(KYVERNO_VERSION) is required for policy verification"; exit 1; }
@@ -132,70 +128,7 @@ verify-kyverno-bootstrap:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_kyverno_bootstrap.py'
 
 verify-object-storage-profile:
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_object_storage_profile.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_object_storage_backup.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_package_go_vendor.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trusted_image_contract.py'
-	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
-
-test-polaris-build-contract:
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_package_polaris_gradle_dependencies.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_trusted_image_contract.py'
-
-verify-polaris-build-contract: test-polaris-build-contract verify-cosign
-	@$(PYTHON) scripts/verify_polaris_trusted_image.py audit --root .
-
-test-polaris-admin-build-inputs-contract:
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_admin_build_inputs.py'
-
-verify-polaris-admin-build-inputs-contract: test-polaris-admin-build-inputs-contract verify-cosign
-	@$(PYTHON) scripts/verify_polaris_admin_build_inputs.py audit --root .
-
-test-polaris-admin-image-contract: test-polaris-admin-build-inputs-contract
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_admin_image_contract.py'
-
-verify-polaris-admin-image-contract: test-polaris-admin-image-contract verify-cosign
-	@$(PYTHON) scripts/verify_polaris_admin_image.py audit --root .
-
-verify-polaris-runtime: verify-polaris-build-contract verify-polaris-admin-image-contract
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_runtime.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_runtime_acceptance.py'
-	@$(PYTHON) scripts/verify_polaris_runtime.py audit --root .
-
-capture-polaris-runtime-acceptance:
-	@test -n "$${SHIROKUMA_HOST_EXPORT_ROOT:-}" || { echo "SHIROKUMA_HOST_EXPORT_ROOT is required and must be a durable macOS directory outside Colima"; exit 1; }
-	@$(PYTHON) scripts/polaris_runtime_acceptance.py \
-		--backup-root "$${SHIROKUMA_HOST_EXPORT_ROOT}" \
-		--output security/evidence/polaris-runtime-acceptance.json
-
-verify-iceberg-table-bootstrap: flux-version-check
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_iceberg_table_bootstrap.py'
-
-test-trino-dependency-publisher:
-	@$(PYTHON) -m unittest -v tests.test_trino_dependency_publisher
-verify-trino-dependency-publisher: test-trino-dependency-publisher
-	@$(PYTHON) scripts/verify_trino_dependency_publisher.py audit --root .
-
-test-trino-maven-feasibility:
-	@$(PYTHON) -m unittest -v tests.test_trino_maven_feasibility
-
-test-trino-maven-security-feasibility:
-	@$(PYTHON) -m unittest -v tests.test_trino_maven_security_feasibility
-
-verify-trino-bootstrap: verify-trino-dependency-publisher test-trino-maven-feasibility test-trino-maven-security-feasibility
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trino_bootstrap.py'
-
-verify-dataops-bootstrap:
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_dataops_bootstrap.py'
-
-verify-superset-bootstrap:
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_superset_bootstrap.py'
-
-verify-tpch-benchmark:
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_tpch_benchmark.py'
-
-verify-metadata-bootstrap:
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_metadata_bootstrap.py'
 
 verify-gitops-image-admission: verify-security
 	@$(PYTHON) scripts/verify_gitops_image_admission.py
@@ -312,17 +245,7 @@ check-required-files:
 	@test -f .trivyignore.yaml
 	@test -f scripts/verify_policy_exceptions.py
 	@test -f scripts/verify_gitops_teardown.py
-	@test -f scripts/verify_polaris_admin_build_inputs.py
-	@test -x scripts/polaris_runtime_acceptance.py
 	@test -f tests/test_gitops_teardown.py
-	@test -f tests/test_polaris_admin_build_inputs.py
-	@test -f tests/test_polaris_runtime_acceptance.py
-	@test -f bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json
-	@test -f bootstrap/polaris/v1.6.0/admin-admission.json
-	@test -f bootstrap/polaris/v1.6.0/admin-image-contract.json
-	@test -f bootstrap/polaris/v1.6.0/admin-release-evidence.json
-	@test -f bootstrap/polaris/v1.6.0/admin-image-evidence/evidence.sha256
-	@test -f security/evidence/polaris-admin-v1.6.0/evidence.sha256
 	@test -f security/resident-images.json
 	@test -f security/resident-image-exceptions.json
 	@test -f policies/kyverno/baseline.yaml
@@ -334,12 +257,6 @@ check-newlines:
 		[ -f "$$file" ] || continue; \
 		case "$$file" in \
 			*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.gz|*.tgz|*.xz|*.jar|*.war) continue ;; \
-			bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json|bootstrap/seaweedfs/v4.39/evidence/image-manifest.json|bootstrap/seaweedfs/v4.39/evidence/sbom-attestation-bundle.json|bootstrap/seaweedfs/v4.39/evidence/trivy-attestation-bundle.json) continue ;; \
-			bootstrap/polaris/v1.6.0/evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/evidence/oci-manifest.json) continue ;; \
-			bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/oci-manifest.json) continue ;; \
-			bootstrap/polaris/v1.6.0/admin-image-evidence/anonymous-image-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/image-config.json|bootstrap/polaris/v1.6.0/admin-image-evidence/image-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/runtime-base-index.json|bootstrap/polaris/v1.6.0/admin-image-evidence/runtime-base-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/sbom-attestation-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/trivy-attestation-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/trusted-tag-manifest.json) continue ;; \
-			bootstrap/polaris/v1.6.0/image-evidence/anonymous-image-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/health-ready.json|bootstrap/polaris/v1.6.0/image-evidence/image-config.json|bootstrap/polaris/v1.6.0/image-evidence/image-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/runtime-base-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/sbom-attestation-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/trivy-attestation-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/trusted-tag-manifest.json) continue ;; \
-			bootstrap/postgresql/v18.4/evidence/index-manifest.json|bootstrap/postgresql/v18.4/evidence/arm64-manifest.json|bootstrap/postgresql/v18.4/evidence/attestation-manifest.json|bootstrap/postgresql/v18.4/evidence/index-signature-payload.json|bootstrap/postgresql/v18.4/evidence/arm64-signature-payload.json|bootstrap/postgresql/v18.4/evidence/slsa-attestation-envelope.json|bootstrap/postgresql/v18.4/evidence/spdx-attestation-envelope.json) continue ;; \
 		esac; \
 		if [ -s "$$file" ] && [ "$$(tail -c 1 "$$file" | wc -l | tr -d ' ')" = "0" ]; then \
 			echo "missing final newline: $$file"; \

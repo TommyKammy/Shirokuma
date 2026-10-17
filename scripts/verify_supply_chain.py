@@ -395,6 +395,9 @@ def read_tracked_text(repository: Path, relative: str) -> str | None:
             ).stdout.decode("utf-8")
         else:
             content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        # Unstaged deletions remain in git ls-files until they are staged.
+        return None
     except UnicodeDecodeError:
         return None
     except (OSError, subprocess.CalledProcessError) as error:

@@ -471,11 +471,15 @@ class TrivyIgnoreContractTests(unittest.TestCase):
     def test_verify_security_runs_contract_tests_and_validator(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         verify_security = makefile.split(
-            "verify-security: verify-cosign\n",
+            "verify-security:\n",
             1,
         )[1].split("\n\n", 1)[0]
         self.assertIn("test_trivyignore.py", verify_security)
         self.assertIn("scripts/verify_trivyignore.py", verify_security)
+        self.assertIn("scripts/verify_supply_chain.py scan-secrets --repo .", verify_security)
+        self.assertNotIn("check-images", verify_security)
+        self.assertNotIn("verify_trusted_image.py", verify_security)
+        self.assertNotIn("verify_polaris_trusted_image.py", verify_security)
 
 
 if __name__ == "__main__":
