@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -28,33 +27,19 @@ var localLakehouseWorkloads = []localWorkload{
 	{name: "postgresql", namespace: "shirokuma-dev", kind: "StatefulSet", resource: "polaris-postgresql"},
 	{name: "polaris", namespace: "shirokuma-dev", kind: "Deployment", resource: "polaris"},
 	{name: "trino", namespace: "shirokuma-dev", kind: "Deployment", resource: "trino-local"},
+	{name: "polaris-bootstrap", namespace: "shirokuma-dev", kind: "Job", resource: "polaris-bootstrap"},
+	{name: "iceberg-table-bootstrap", namespace: "shirokuma-dev", kind: "Job", resource: "iceberg-table-bootstrap"},
 }
 
 func runLocalExperimentDoctor(ctx context.Context, runner commandRunner, kubeContext string, now time.Time) doctorReport {
 	scope := checkLocalExperimentScope(ctx, runner, kubeContext)
 	checks := []doctorCheck{scope}
 	if scope.Status == "healthy" {
-		checks = append(checks, checkClusterForProfile(ctx, runner, kubeContext, true), checkFluxForProfile(ctx, runner, kubeContext, true))
+		checks = append(checks, checkCluster(ctx, runner, kubeContext), checkFluxForProfile(ctx, runner, kubeContext, true))
 		checks = append(checks, checkLocalLakehouse(ctx, runner, kubeContext)...)
 	}
-	checks = append(checks,
-		doctorCheck{Name: "sql", Status: "informational", Summary: "SQL not evaluated; workload readiness does not prove query, write, or persistence success. Run the local Trino smoke separately"},
-		doctorCheck{Name: "publication", Status: "informational", Summary: "Publication and historical supply-chain authorization gates not evaluated by local-experiment; this report is not production acceptance"},
-	)
-	status := "healthy"
-	for _, check := range checks {
-		if check.Status != "healthy" && check.Status != "informational" {
-			status = "degraded"
-		}
-	}
-	return doctorReport{
-		SchemaVersion: doctorSchemaVersion,
-		GeneratedAt:   now.Format(time.RFC3339),
-		Profile:       localExperimentProfile,
-		Context:       kubeContext,
-		Status:        status,
-		Checks:        checks,
-	}
+	checks = append(checks, doctorCheck{Name: "sql", Status: "informational", Summary: "Workload readiness only; run the local Trino smoke separately to check SQL and persistence"})
+	return newDoctorReport(localExperimentProfile, kubeContext, now, checks)
 }
 
 func checkLocalExperimentScope(ctx context.Context, runner commandRunner, kubeContext string) doctorCheck {
@@ -67,155 +52,55 @@ func checkLocalExperimentScope(ctx context.Context, runner commandRunner, kubeCo
 	if err != nil {
 		return failedCheck("local-scope", err)
 	}
-	rawEndpoint := string(output)
-	endpoint, err := url.Parse(rawEndpoint)
-	if err != nil || endpoint.Scheme != "https" || endpoint.User != nil || endpoint.Host == "" || endpoint.Path != "" || endpoint.RawQuery != "" || endpoint.ForceQuery || strings.Contains(rawEndpoint, "#") || endpoint.Opaque != "" {
-		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
+	endpoint, err := url.Parse(strings.TrimSpace(string(output)))
+	if err == nil && endpoint.Scheme == "https" && endpoint.User == nil &&
+		endpoint.Path == "" && endpoint.RawQuery == "" && endpoint.Fragment == "" {
+		ip := net.ParseIP(endpoint.Hostname())
+		port, portErr := strconv.Atoi(endpoint.Port())
+		if ip != nil && ip.IsLoopback() && portErr == nil && port > 0 && port <= 65535 {
+			return doctorCheck{Name: "local-scope", Status: "healthy", Summary: "Dedicated context uses a loopback HTTPS Kubernetes API endpoint"}
+		}
 	}
-	port, portErr := strconv.Atoi(endpoint.Port())
-	if portErr != nil || port < 1 || port > 65535 {
-		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
-	}
-	ip := net.ParseIP(endpoint.Hostname())
-	// A DNS name, even localhost, cannot establish where this context will
-	// connect without trusting a mutable resolver/hosts mapping. Mapped IPv4
-	// forms are not literal addresses in the dedicated endpoint forms either.
-	if ip == nil || !ip.IsLoopback() ||
-		(strings.Contains(endpoint.Hostname(), ":") && ip.To4() != nil) {
-		return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
-	}
-	return doctorCheck{Name: "local-scope", Status: "healthy", Summary: "Dedicated context uses a loopback HTTPS Kubernetes API endpoint; diagnostics are read-only"}
+	return doctorCheck{Name: "local-scope", Status: "degraded", Summary: "local-experiment requires a loopback HTTPS Kubernetes API endpoint"}
 }
 
 func checkLocalLakehouse(ctx context.Context, runner commandRunner, kubeContext string) []doctorCheck {
 	checkContext, cancel := context.WithTimeout(ctx, kubernetesCheckTimeout)
 	defer cancel()
-	// Two namespace-scoped reads avoid relying on labels that may drift during experiments.
 	resources := make(map[string]kubernetesResourceList)
-	errors := make(map[string]doctorCheck)
+	readErrors := make(map[string]error)
 	for _, namespace := range []string{"shirokuma-storage", "shirokuma-dev"} {
-		output, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "-n", namespace, "get", "deployments.apps,statefulsets.apps", "-o", "json")
-		if err != nil {
-			errors[namespace] = failedCheck("", err)
-			continue
-		}
-		var list kubernetesResourceList
-		if err := json.Unmarshal(output, &list); err != nil {
-			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response was not valid JSON"}
-			continue
-		}
-		if localInventoryIncomplete(list, output) {
-			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response was incomplete"}
-			continue
-		}
-		// A scoped kubectl list must not silently mix in other resource types or namespaces.
-		invalid := false
-		seen := make(map[string]bool, len(list.Items))
-		for _, resource := range list.Items {
-			identity := resource.Kind + "/" + resource.Metadata.Name
-			if (resource.Kind != "Deployment" && resource.Kind != "StatefulSet") || resource.APIVersion != "apps/v1" || resource.Metadata.Namespace != namespace || !localFluxValidName(resource.Metadata.Name, 253, true) || seen[identity] {
-				invalid = true
+		resources[namespace], readErrors[namespace] = readKubernetesResources(checkContext, runner, kubeContext,
+			"-n", namespace, "get", "deployments.apps,statefulsets.apps,jobs.batch", "-o", "json")
+	}
+	var checks []doctorCheck
+	for _, workload := range localLakehouseWorkloads {
+		id := fmt.Sprintf("%s/%s/%s", workload.kind, workload.namespace, workload.resource)
+		check := doctorCheck{Name: workload.name, Status: "degraded", Summary: id + " is missing"}
+		if err := readErrors[workload.namespace]; err != nil {
+			check = failedCheck(workload.name, err)
+		} else {
+			for _, resource := range resources[workload.namespace].Items {
+				if resource.Kind != workload.kind || resource.Metadata.Namespace != workload.namespace || resource.Metadata.Name != workload.resource {
+					continue
+				}
+				ready := resource.workloadReady()
+				if workload.kind == "Job" {
+					ready = resource.conditionTrue("Complete", false) && !resource.conditionTrue("Failed", false) && resource.Metadata.DeletionTimestamp == ""
+				}
+				if ready {
+					check.Status, check.Summary = "healthy", id+" is Ready"
+					if workload.kind == "Job" {
+						check.Summary = id + " is Complete"
+					}
+				} else {
+					check.Summary = id + " is not Ready"
+					if workload.kind == "Job" {
+						check.Summary = id + " is not Complete"
+					}
+				}
 				break
 			}
-			seen[identity] = true
-		}
-		if invalid {
-			errors[namespace] = doctorCheck{Status: "degraded", Summary: "workload response contained an out-of-scope or duplicated resource"}
-			continue
-		}
-		resources[namespace] = list
-	}
-	// The two namespace reads are not atomic, but a reported UID cannot name
-	// different objects in either snapshot. Refuse both scopes rather than
-	// presenting their expected workloads as independently healthy.
-	uidNamespace := make(map[string]string)
-	for _, namespace := range []string{"shirokuma-storage", "shirokuma-dev"} {
-		if _, failed := errors[namespace]; failed {
-			continue
-		}
-		for _, resource := range resources[namespace].Items {
-			if uid := resource.Metadata.UID; uid != "" {
-				if prior, ok := uidNamespace[uid]; ok && prior != namespace {
-					for _, affected := range []string{prior, namespace} {
-						errors[affected] = doctorCheck{Status: "degraded", Summary: "workload response reused a resource UID across namespace reads"}
-					}
-				}
-				uidNamespace[uid] = namespace
-			}
-		}
-	}
-	checks := make([]doctorCheck, 0, len(localLakehouseWorkloads))
-	for _, workload := range localLakehouseWorkloads {
-		resourceID := fmt.Sprintf("%s/%s/%s", workload.kind, workload.namespace, workload.resource)
-		check := doctorCheck{Name: workload.name, Status: "degraded", Summary: resourceID + " is missing"}
-		if namespaceError, ok := errors[workload.namespace]; ok {
-			namespaceError.Name = workload.name
-			namespaceError.Summary = resourceID + ": " + namespaceError.Summary
-			checks = append(checks, namespaceError)
-			continue
-		}
-		matches := 0
-		for _, resource := range resources[workload.namespace].Items {
-			if resource.Kind != workload.kind || resource.Metadata.Name != workload.resource || resource.Metadata.Namespace != workload.namespace {
-				continue
-			}
-			matches++
-			desired := resource.Spec.Replicas
-			switch {
-			case resource.Metadata.DeletionTimestamp != "":
-				check.Summary = resourceID + " is terminating"
-			case workload.kind == "Deployment" && resource.Spec.Paused:
-				check.Summary = resourceID + " rollout is paused"
-			case resource.Metadata.Generation < 1 || resource.Status.ObservedGeneration == nil || *resource.Status.ObservedGeneration != resource.Metadata.Generation:
-				check.Summary = resourceID + " controller has not observed the current generation"
-			case desired == nil || *desired < 1:
-				check.Summary = resourceID + " has no positive desired replica count"
-			case resource.Status.Replicas != *desired || resource.Status.ReadyReplicas != *desired || resource.Status.UpdatedReplicas != *desired || resource.Status.AvailableReplicas != *desired:
-				check.Summary = fmt.Sprintf("%s rollout incomplete: desired=%d total=%d ready=%d updated=%d available=%d", resourceID, *desired, resource.Status.Replicas, resource.Status.ReadyReplicas, resource.Status.UpdatedReplicas, resource.Status.AvailableReplicas)
-			case resource.Status.UnavailableReplicas != nil && *resource.Status.UnavailableReplicas != 0:
-				check.Summary = resourceID + " reports unavailable replicas despite complete rollout counters"
-			default:
-				check.Status = "healthy"
-				check.Summary = fmt.Sprintf("%s current generation %d is ready (%d/%d replicas); Kubernetes readiness only", resourceID, resource.Metadata.Generation, resource.Status.ReadyReplicas, *desired)
-				available := workload.kind != "Deployment"
-				progressing := workload.kind != "Deployment"
-				conditionTypes := make(map[string]bool)
-				for _, condition := range resource.Status.Conditions {
-					if condition.Type == "" || (condition.Status != "True" && condition.Status != "False" && condition.Status != "Unknown") {
-						check.Status = "degraded"
-						check.Summary = resourceID + " reports an incomplete rollout condition"
-					}
-					if conditionTypes[condition.Type] {
-						check.Status = "degraded"
-						check.Summary = resourceID + " reports duplicated rollout conditions"
-					}
-					conditionTypes[condition.Type] = true
-					if condition.Type == "Available" && condition.Status == "True" {
-						available = true
-					}
-					if condition.Type == "Progressing" && condition.Status == "True" {
-						progressing = true
-					}
-					if (condition.Type == "ReplicaFailure" && condition.Status != "False") ||
-						(condition.Type == "Progressing" && condition.Status != "True") ||
-						(condition.Type == "Available" && condition.Status != "True") {
-						check.Status = "degraded"
-						check.Summary = resourceID + " reports a failed rollout condition"
-					}
-				}
-				if !available {
-					check.Status = "degraded"
-					check.Summary = resourceID + " has no Available=True condition"
-				}
-				if !progressing {
-					check.Status = "degraded"
-					check.Summary = resourceID + " has no Progressing=True condition"
-				}
-			}
-		}
-		if matches > 1 {
-			check.Status = "degraded"
-			check.Summary = resourceID + " is duplicated in workload response"
 		}
 		checks = append(checks, check)
 	}

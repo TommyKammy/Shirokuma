@@ -7,18 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 )
@@ -32,26 +27,6 @@ const (
 	maxReportedResources   = 10
 	maxDoctorCommandOutput = 1 << 20
 )
-
-var localFluxGitRevision = regexp.MustCompile(`^main@sha1:[0-9a-f]{40}$`)
-var localFluxDNSLabel = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
-var localDeletionTimestamp = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$`)
-
-func localFluxValidName(name string, maxLength int, subdomain bool) bool {
-	if len(name) == 0 || len(name) > maxLength {
-		return false
-	}
-	labels := strings.Split(name, ".")
-	if !subdomain && len(labels) != 1 {
-		return false
-	}
-	for _, label := range labels {
-		if len(label) > 63 || !localFluxDNSLabel.MatchString(label) {
-			return false
-		}
-	}
-	return true
-}
 
 type commandRunner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
@@ -119,666 +94,63 @@ type doctorReport struct {
 	Checks        []doctorCheck `json:"checks"`
 }
 
-type kubernetesResourceList struct {
-	Kind       string `json:"kind"`
-	APIVersion string `json:"apiVersion"`
-	Metadata   struct {
-		Continue           string  `json:"continue"`
-		RemainingItemCount *int64  `json:"remainingItemCount"`
-		ResourceVersion    *string `json:"resourceVersion"`
+// Decode only the Kubernetes fields needed for health diagnostics.
+type kubernetesResource struct {
+	Kind     string `json:"kind"`
+	Metadata struct {
+		Name              string `json:"name"`
+		Namespace         string `json:"namespace"`
+		Generation        int64  `json:"generation"`
+		DeletionTimestamp string `json:"deletionTimestamp"`
 	} `json:"metadata"`
-	Items []struct {
-		Kind       string `json:"kind"`
-		APIVersion string `json:"apiVersion"`
-		Metadata   struct {
-			Name              string `json:"name"`
-			Namespace         string `json:"namespace"`
-			UID               string `json:"uid"`
-			Generation        int64  `json:"generation"`
-			DeletionTimestamp string `json:"deletionTimestamp"`
-		} `json:"metadata"`
-		Spec struct {
-			Suspend bool   `json:"suspend"`
-			Paused  bool   `json:"paused"`
-			Path    string `json:"path"`
-			Prune   bool   `json:"prune"`
-			Wait    bool   `json:"wait"`
-			Ref     struct {
-				Branch string `json:"branch"`
-				Tag    string `json:"tag"`
-				SemVer string `json:"semver"`
-				Commit string `json:"commit"`
-				Name   string `json:"name"`
-			} `json:"ref"`
-			URL       string `json:"url"`
-			SecretRef struct {
-				Name string `json:"name"`
-			} `json:"secretRef"`
-			Replicas  *int `json:"replicas"`
-			SourceRef struct {
-				Kind      string `json:"kind"`
-				Name      string `json:"name"`
-				Namespace string `json:"namespace"`
-			} `json:"sourceRef"`
-		} `json:"spec"`
-		Status struct {
-			Replicas            int    `json:"replicas"`
-			AvailableReplicas   int    `json:"availableReplicas"`
-			UnavailableReplicas *int   `json:"unavailableReplicas"`
-			ReadyReplicas       int    `json:"readyReplicas"`
-			UpdatedReplicas     int    `json:"updatedReplicas"`
-			ObservedGeneration  *int64 `json:"observedGeneration"`
-			LastAppliedRevision string `json:"lastAppliedRevision"`
-			Artifact            struct {
-				Revision string `json:"revision"`
-			} `json:"artifact"`
-			Conditions []struct {
-				Type               string `json:"type"`
-				Status             string `json:"status"`
-				ObservedGeneration int64  `json:"observedGeneration"`
-			} `json:"conditions"`
-		} `json:"status"`
-	} `json:"items"`
+	Spec struct {
+		Suspend  bool `json:"suspend"`
+		Paused   bool `json:"paused"`
+		Replicas *int `json:"replicas"`
+	} `json:"spec"`
+	Status struct {
+		Replicas           int   `json:"replicas"`
+		AvailableReplicas  int   `json:"availableReplicas"`
+		ReadyReplicas      int   `json:"readyReplicas"`
+		UpdatedReplicas    int   `json:"updatedReplicas"`
+		ObservedGeneration int64 `json:"observedGeneration"`
+		Conditions         []struct {
+			Type               string `json:"type"`
+			Status             string `json:"status"`
+			ObservedGeneration int64  `json:"observedGeneration"`
+		} `json:"conditions"`
+	} `json:"status"`
 }
 
-// A local read is a single, complete Kubernetes v1 List, not an arbitrary
-// projection that happens to include the expected objects.
-func localInventoryIncomplete(list kubernetesResourceList, raw []byte) bool {
-	// encoding/json silently replaces malformed UTF-8. Do not turn a corrupt
-	// Kubernetes response into an apparently complete fixed-profile inventory.
-	if !utf8.Valid(raw) {
-		return true
-	}
-	// Keep omitted metadata compatible with projected fixtures, but an explicit
-	// null envelope cannot establish a complete Kubernetes list.
-	var envelope struct {
-		Metadata   json.RawMessage `json:"metadata"`
-		Kind       json.RawMessage `json:"kind"`
-		APIVersion json.RawMessage `json:"apiVersion"`
-	}
-	if err := json.Unmarshal(raw, &envelope); err != nil || string(envelope.Metadata) == "null" ||
-		string(envelope.Kind) == "null" || string(envelope.APIVersion) == "null" || !localInventoryUniqueFields(raw) {
-		return true
-	}
-	// encoding/json matches struct field names case-insensitively. A Kubernetes
-	// List's canonical envelope must not be satisfied by aliases such as Items.
-	var topLevel map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &topLevel); err != nil {
-		return true
-	}
-	if _, ok := topLevel["items"]; !ok {
-		return true
-	}
-	// Omission is permitted for projected fixtures; a reported empty GVK is
-	// not an omitted field and cannot identify a Kubernetes v1 List.
-	if (topLevel["kind"] != nil && list.Kind == "") ||
-		(topLevel["apiVersion"] != nil && list.APIVersion == "") {
-		return true
-	}
-	for key := range topLevel {
-		for _, canonical := range []string{"items", "metadata", "kind", "apiVersion"} {
-			if key != canonical && strings.EqualFold(key, canonical) {
-				return true
-			}
-		}
-	}
-	if len(envelope.Metadata) != 0 {
-		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(envelope.Metadata, &fields); err != nil {
-			return true
-		}
-		// A differently cased pagination/version field is not an omitted field:
-		// encoding/json would still populate the corresponding struct member.
-		for field := range fields {
-			for _, canonical := range []string{"resourceVersion", "remainingItemCount", "continue"} {
-				if field != canonical && strings.EqualFold(field, canonical) {
-					return true
-				}
-			}
-		}
-		for _, key := range []string{"resourceVersion", "remainingItemCount", "continue"} {
-			if string(fields[key]) == "null" {
-				return true
-			}
-		}
-	}
-	// The same decoder also accepts aliases in item identities. A fixed-profile
-	// inventory must not treat Name/Generation as canonical Kubernetes metadata.
-	var items struct {
-		Items []map[string]json.RawMessage `json:"items"`
-	}
-	if err := json.Unmarshal(raw, &items); err != nil {
-		return true
-	}
-	seenUIDs := make(map[string]struct{})
-	seenNames := make(map[[4]string]struct{})
-	for _, item := range items.Items {
-		if item == nil {
-			return true // A null member is not a Kubernetes resource.
-		}
-		// An escaped unpaired surrogate can become U+FFFD even when the raw
-		// response is valid UTF-8. Do not accept lossy object identities.
-		if localInventoryInvisibleLocations(item, []string{"kind", "apiVersion"}) {
-			return true
-		}
-		// A reported but empty member type is not the same as an omitted
-		// projection; it cannot identify an object in a complete inventory.
-		for _, key := range []string{"kind", "apiVersion"} {
-			if string(item[key]) == `""` {
-				return true
-			}
-		}
-		// Explicit null is not an omitted field in a Kubernetes object. In
-		// particular, a null spec/status on an unrelated item must not be
-		// mistaken for a valid member of a complete namespace inventory.
-		for _, key := range []string{"kind", "apiVersion", "metadata", "spec", "status"} {
-			if string(item[key]) == "null" {
-				return true
-			}
-		}
-		for field := range item {
-			for _, canonical := range []string{"kind", "apiVersion", "metadata", "spec", "status"} {
-				if field != canonical && strings.EqualFold(field, canonical) {
-					return true
-				}
-			}
-		}
-		var metadata map[string]json.RawMessage
-		if err := json.Unmarshal(item["metadata"], &metadata); err != nil && len(item["metadata"]) != 0 {
-			return true
-		}
-		// Distinct Kubernetes objects cannot share a UID in one complete list.
-		// Older projected fixtures omit UIDs, so only bind reported values.
-		if rawUID, ok := metadata["uid"]; ok {
-			var uid string
-			if err := json.Unmarshal(rawUID, &uid); err != nil || uid == "" || len(uid) > 1024 ||
-				strings.IndexFunc(uid, func(r rune) bool { return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r) }) >= 0 {
-				return true
-			}
-			if _, exists := seenUIDs[uid]; exists {
-				return true
-			}
-			seenUIDs[uid] = struct{}{}
-		}
-		for field := range metadata {
-			for _, canonical := range []string{"name", "namespace", "generation", "creationTimestamp", "deletionTimestamp", "uid", "resourceVersion"} {
-				if field != canonical && strings.EqualFold(field, canonical) {
-					return true
-				}
-			}
-		}
-		if localInventoryNullFields(metadata, []string{"name", "namespace", "generation", "creationTimestamp", "deletionTimestamp", "resourceVersion"}) {
-			return true
-		}
-		// A reported per-object version must remain a usable opaque identity,
-		// even when the resource is unrelated to the expected controller.
-		if rawVersion, ok := metadata["resourceVersion"]; ok {
-			var version string
-			if err := json.Unmarshal(rawVersion, &version); err != nil || version == "" || len(version) > 1024 ||
-				strings.IndexFunc(version, func(r rune) bool {
-					return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r)
-				}) >= 0 {
-				return true
-			}
-		}
-		// Whitespace and format characters also obscure a reported resource
-		// identity, even when JSON decoding did not lose any bytes.
-		if localInventoryInvisibleLocations(metadata, []string{"name", "namespace"}) {
-			return true
-		}
-		// Reported Kubernetes names are bounded DNS identities. An unrelated
-		// member with an impossible name cannot establish a complete list.
-		for _, bounded := range []struct {
-			key       string
-			limit     int
-			subdomain bool
-		}{{"name", 253, true}, {"namespace", 63, false}} {
-			if rawName, ok := metadata[bounded.key]; ok {
-				var name string
-				if err := json.Unmarshal(rawName, &name); err != nil ||
-					!localFluxValidName(name, bounded.limit, bounded.subdomain) {
-					return true
-				}
-			}
-		}
-		// Mixed-kind Flux lists can share a name across kinds. Only bind a
-		// fully reported GVK and object identity; fixtures may omit projections.
-		if rawName, named := metadata["name"]; named && item["kind"] != nil && item["apiVersion"] != nil {
-			if rawNamespace, scoped := metadata["namespace"]; scoped {
-				var name, namespace string
-				if err := json.Unmarshal(rawName, &name); err != nil {
-					return true
-				}
-				if err := json.Unmarshal(rawNamespace, &namespace); err != nil {
-					return true
-				}
-				var kind, apiVersion string
-				if err := json.Unmarshal(item["kind"], &kind); err != nil {
-					return true
-				}
-				if err := json.Unmarshal(item["apiVersion"], &apiVersion); err != nil {
-					return true
-				}
-				identity := [4]string{apiVersion, kind, namespace, name}
-				if _, exists := seenNames[identity]; exists {
-					return true
-				}
-				seenNames[identity] = struct{}{}
-			}
-		}
-		var identity struct {
-			Generation int64 `json:"generation"`
-		}
-		if err := json.Unmarshal(item["metadata"], &identity); err != nil && len(item["metadata"]) != 0 {
-			return true
-		}
-		// Even an unrelated list member cannot have a negative Kubernetes
-		// generation. Zero remains compatible with projected fixture members.
-		if identity.Generation < 0 {
-			return true
-		}
-		// Reported creation/deletion times on even unrelated members must be
-		// usable Kubernetes timestamps, not malformed claims hidden by a
-		// projected list. Omission remains compatible with older fixtures.
-		var creation, deletion time.Time
-		_, hasCreation := metadata["creationTimestamp"]
-		_, hasDeletion := metadata["deletionTimestamp"]
-		for _, key := range []string{"creationTimestamp", "deletionTimestamp"} {
-			if rawTimestamp, ok := metadata[key]; ok {
-				var timestamp string
-				if err := json.Unmarshal(rawTimestamp, &timestamp); err != nil ||
-					!localDeletionTimestamp.MatchString(timestamp) {
-					return true
-				}
-				parsed, err := time.Parse(time.RFC3339Nano, timestamp)
-				if err != nil {
-					return true
-				}
-				if key == "creationTimestamp" {
-					creation = parsed
-				} else {
-					deletion = parsed
-				}
-			}
-		}
-		if hasCreation && hasDeletion && deletion.Before(creation) {
-			return true
-		}
-		// Nested declared fields must also be canonical: encoding/json accepts
-		// Spec.Ref.Branch or Status.Conditions as if they were Kubernetes keys.
-		for _, nested := range []struct {
-			parent string
-			keys   []string
-		}{
-			{"spec", []string{"suspend", "paused", "path", "prune", "wait", "ref", "url", "secretRef", "replicas", "sourceRef"}},
-			{"status", []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas", "observedGeneration", "lastAppliedRevision", "artifact", "conditions"}},
-		} {
-			if !localInventoryCanonicalFields(item[nested.parent], nested.keys) {
-				return true
-			}
-		}
-		var spec, status map[string]json.RawMessage
-		_ = json.Unmarshal(item["spec"], &spec)
-		_ = json.Unmarshal(item["status"], &status)
-		// Replica counts cannot be negative even on unrelated list members.
-		// Without this check a complete inventory can contain contradictory
-		// workloads while the expected objects alone appear healthy.
-		for _, fields := range []struct {
-			object map[string]json.RawMessage
-			keys   []string
-		}{
-			{spec, []string{"replicas"}},
-			{status, []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas"}},
-		} {
-			for _, key := range fields.keys {
-				if rawCount, ok := fields.object[key]; ok && string(rawCount) != "null" {
-					var count int64
-					if err := json.Unmarshal(rawCount, &count); err != nil || count < 0 {
-						return true
-					}
-				}
-			}
-		}
-		// Rolling updates may temporarily exceed desired replicas, but a
-		// reported ready/updated/available count cannot exceed the reported
-		// total. Omitted counters in older projected fixtures stay optional.
-		if rawTotal, ok := status["replicas"]; ok {
-			var total int64
-			if err := json.Unmarshal(rawTotal, &total); err != nil {
-				return true
-			}
-			for _, key := range []string{"readyReplicas", "updatedReplicas", "availableReplicas"} {
-				if rawCount, present := status[key]; present {
-					var count int64
-					if err := json.Unmarshal(rawCount, &count); err != nil || count > total {
-						return true
-					}
-				}
-			}
-		}
-		// Available pods are a subset of ready pods in one reported status.
-		// Only compare explicitly reported fields; omitted fixture counters are
-		// not equivalent to an observed zero.
-		if rawAvailable, ok := status["availableReplicas"]; ok {
-			if rawReady, present := status["readyReplicas"]; present {
-				var available, ready int64
-				if err := json.Unmarshal(rawAvailable, &available); err != nil {
-					return true
-				}
-				if err := json.Unmarshal(rawReady, &ready); err != nil || available > ready {
-					return true
-				}
-			}
-		}
-		// Unavailable replicas are the pods still required to reach the
-		// declared capacity; rolling updates can add total pods but cannot
-		// require more unavailable pods than the desired count.
-		if rawDesired, ok := spec["replicas"]; ok {
-			if rawUnavailable, present := status["unavailableReplicas"]; present {
-				var desired, unavailable int64
-				if err := json.Unmarshal(rawDesired, &desired); err != nil {
-					return true
-				}
-				if err := json.Unmarshal(rawUnavailable, &unavailable); err != nil || unavailable > desired {
-					return true
-				}
-				// Kubernetes counts unavailable against desired, not the rolling
-				// total. Available pods and unavailable desired capacity cannot
-				// overlap, even while a rollout has surplus ready pods.
-				if rawAvailable, present := status["availableReplicas"]; present {
-					var available int64
-					if err := json.Unmarshal(rawAvailable, &available); err != nil ||
-						(available >= desired && unavailable != 0) ||
-						(available < desired && unavailable > desired-available) {
-						return true
-					}
-				}
-			}
-		}
-		var observed struct {
-			Generation *int64 `json:"observedGeneration"`
-		}
-		if len(item["status"]) != 0 {
-			if err := json.Unmarshal(item["status"], &observed); err != nil {
-				return true
-			}
-		}
-		_, generationReported := metadata["generation"]
-		if observed.Generation != nil && (*observed.Generation < 0 ||
-			(generationReported && *observed.Generation > identity.Generation)) {
-			return true
-		}
-		if localInventoryNullFields(spec, []string{"suspend", "paused", "path", "prune", "wait", "url", "replicas"}) ||
-			localInventoryNullFields(status, []string{"replicas", "availableReplicas", "unavailableReplicas", "readyReplicas", "updatedReplicas", "observedGeneration", "lastAppliedRevision", "conditions"}) {
-			return true
-		}
-		if localInventoryInvisibleLocations(status, []string{"lastAppliedRevision"}) {
-			return true
-		}
-		// A decoded replacement rune in the reported Git URL or Kustomization
-		// path loses the identity of the source being diagnosed.
-		if localInventoryInvisibleLocations(spec, []string{"url", "path"}) {
-			return true
-		}
-		for _, nested := range []struct {
-			raw  json.RawMessage
-			keys []string
-		}{
-			{spec["ref"], []string{"branch", "tag", "semver", "commit", "name"}},
-			{spec["secretRef"], []string{"name"}},
-			{spec["sourceRef"], []string{"kind", "name", "namespace"}},
-			{status["artifact"], []string{"revision", "url"}},
-		} {
-			// An explicitly null nested object decodes like an omitted struct in
-			// encoding/json. Only omission is compatible with projected fixtures.
-			if string(nested.raw) == "null" || !localInventoryCanonicalFields(nested.raw, nested.keys) {
-				return true
-			}
-			var fields map[string]json.RawMessage
-			if len(nested.raw) != 0 {
-				if err := json.Unmarshal(nested.raw, &fields); err != nil || localInventoryNullFields(fields, nested.keys) {
-					return true
-				}
-			}
-		}
-		// References on unrelated members are still part of the claimed
-		// complete list. Invisible revision characters can obscure which Git
-		// ref or artifact was actually reported.
-		for _, reference := range []struct {
-			raw  json.RawMessage
-			keys []string
-		}{
-			{spec["ref"], []string{"branch", "tag", "semver", "commit", "name"}},
-			{spec["secretRef"], []string{"name"}},
-			{spec["sourceRef"], []string{"kind", "name", "namespace"}},
-			{status["artifact"], []string{"revision", "url"}},
-		} {
-			if len(reference.raw) == 0 {
-				continue
-			}
-			var fields map[string]json.RawMessage
-			if err := json.Unmarshal(reference.raw, &fields); err != nil || localInventoryInvisibleLocations(fields, reference.keys) {
-				return true
-			}
-		}
-		if len(status["artifact"]) != 0 {
-			var artifact map[string]json.RawMessage
-			if err := json.Unmarshal(status["artifact"], &artifact); err != nil ||
-				localInventoryInvisibleLocations(artifact, []string{"url"}) {
-				return true
-			}
-		}
-		var conditions []json.RawMessage
-		_ = json.Unmarshal(status["conditions"], &conditions)
-		conditionTypes := make(map[string]struct{}, len(conditions))
-		for _, condition := range conditions {
-			if string(condition) == "null" {
-				return true // A null entry cannot describe a condition.
-			}
-			if !localInventoryCanonicalFields(condition, []string{"type", "status", "observedGeneration", "lastTransitionTime"}) {
-				return true
-			}
-			var fields map[string]json.RawMessage
-			if err := json.Unmarshal(condition, &fields); err != nil ||
-				localInventoryNullFields(fields, []string{"type", "status", "observedGeneration", "lastTransitionTime"}) {
-				return true
-			}
-			// Even an unrelated condition's reported transition is a lifecycle
-			// claim. Do not mistake malformed or null times for an omitted projection.
-			if rawTime, present := fields["lastTransitionTime"]; present {
-				var timestamp string
-				if err := json.Unmarshal(rawTime, &timestamp); err != nil ||
-					!localDeletionTimestamp.MatchString(timestamp) {
-					return true
-				}
-				transition, err := time.Parse(time.RFC3339Nano, timestamp)
-				if err != nil {
-					return true
-				}
-				if hasCreation && transition.Before(creation) {
-					return true
-				}
-			}
-			var shape struct {
-				Type   string `json:"type"`
-				Status string `json:"status"`
-			}
-			if err := json.Unmarshal(condition, &shape); err != nil || shape.Type == "" ||
-				(shape.Status != "True" && shape.Status != "False" && shape.Status != "Unknown") {
-				return true
-			}
-			if _, duplicate := conditionTypes[shape.Type]; duplicate {
-				return true // An unrelated member also belongs to this complete inventory.
-			}
-			conditionTypes[shape.Type] = struct{}{}
-			// A condition on an unrelated item still belongs to this claimed
-			// complete inventory. Do not accept invisible or unbounded types, or
-			// a generation that could not yet belong to its resource.
-			if len(shape.Type) > 316 || strings.IndexFunc(shape.Type, func(r rune) bool {
-				return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r)
-			}) >= 0 {
-				return true
-			}
-			var generation struct {
-				ObservedGeneration *int64 `json:"observedGeneration"`
-			}
-			if err := json.Unmarshal(condition, &generation); err != nil ||
-				(generation.ObservedGeneration != nil && (*generation.ObservedGeneration < 0 ||
-					(generationReported && *generation.ObservedGeneration > identity.Generation) ||
-					(observed.Generation != nil && *generation.ObservedGeneration > *observed.Generation))) {
-				return true
-			}
-		}
-	}
-	// kubectl's JSON printer creates an aggregate List/v1 with an empty
-	// list-level resourceVersion. It is not an atomic API snapshot, but this
-	// alone is not truncation. Keep pagination and per-object version checks;
-	// do not infer a shared revision from this client-produced envelope.
-	kubectlAggregate := list.Kind == "List" && list.APIVersion == "v1"
-	return list.Items == nil || list.Metadata.Continue != "" ||
-		(list.Metadata.RemainingItemCount != nil && *list.Metadata.RemainingItemCount != 0) ||
-		(list.Metadata.ResourceVersion != nil && ((!kubectlAggregate && len(*list.Metadata.ResourceVersion) == 0) ||
-			len(*list.Metadata.ResourceVersion) > 1024 || strings.IndexFunc(*list.Metadata.ResourceVersion, func(r rune) bool {
-			return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r)
-		}) >= 0)) ||
-		(list.Kind != "" && list.Kind != "List") ||
-		(list.APIVersion != "" && list.APIVersion != "v1")
+type kubernetesResourceList struct {
+	Items []kubernetesResource `json:"items"`
 }
 
-func localInventoryNullFields(fields map[string]json.RawMessage, keys []string) bool {
-	for _, key := range keys {
-		if string(fields[key]) == "null" {
-			return true
+func (resource kubernetesResource) conditionTrue(kind string, currentGeneration bool) bool {
+	for _, condition := range resource.Status.Conditions {
+		if condition.Type == kind {
+			return condition.Status == "True" && (!currentGeneration ||
+				(resource.Metadata.Generation > 0 && condition.ObservedGeneration == resource.Metadata.Generation))
 		}
 	}
 	return false
 }
 
-func localInventoryInvisibleLocations(fields map[string]json.RawMessage, keys []string) bool {
-	for _, key := range keys {
-		if raw, ok := fields[key]; ok {
-			var value string
-			if err := json.Unmarshal(raw, &value); err != nil || strings.IndexFunc(value, func(r rune) bool {
-				return r == utf8.RuneError || unicode.IsSpace(r) || unicode.Is(unicode.C, r)
-			}) >= 0 {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func localInventoryCanonicalFields(raw json.RawMessage, keys []string) bool {
-	if len(raw) == 0 || string(raw) == "null" {
-		return true // Existing optional-field and null handling remains with the caller.
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return false
-	}
-	for field := range fields {
-		for _, key := range keys {
-			if field != key && strings.EqualFold(field, key) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-// encoding/json accepts duplicate object members and keeps the later value.
-// A diagnostic inventory must not interpret two conflicting versions of an
-// identity, condition, or pagination field as a complete observation.
-func localInventoryUniqueFields(raw []byte) bool {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	// Unknown extensions are inspected too. Bound nesting before recursing so
-	// a malformed remote response cannot exhaust the doctor's stack.
-	const maxInventoryDepth = 64
-	var value func(int) bool
-	value = func(depth int) bool {
-		token, err := decoder.Token()
-		if err != nil {
-			return false
-		}
-		delim, ok := token.(json.Delim)
-		if !ok {
-			if number, ok := token.(json.Number); ok {
-				parsed, err := strconv.ParseFloat(string(number), 64)
-				mantissa := strings.SplitN(strings.ToLower(string(number)), "e", 2)[0]
-				if err != nil || math.IsInf(parsed, 0) || math.IsNaN(parsed) ||
-					(parsed == 0 && strings.ContainsAny(mantissa, "123456789")) {
-					return false
-				}
-			}
-			// Go also replaces malformed escaped surrogates in values. An
-			// ignored extension must not silently make a lossy list complete.
-			if text, ok := token.(string); ok && strings.ContainsRune(text, utf8.RuneError) {
-				return false
-			}
-			return true
-		}
-		if depth >= maxInventoryDepth {
-			return false
-		}
-		switch delim {
-		case '{':
-			seen := make(map[string]struct{})
-			for decoder.More() {
-				key, err := decoder.Token()
-				if err != nil {
-					return false
-				}
-				name, ok := key.(string)
-				if !ok {
-					return false
-				}
-				// encoding/json replaces escaped lone surrogates in keys with
-				// U+FFFD. Even an ignored extension key must not make a lossy
-				// inventory look complete.
-				if strings.ContainsRune(name, utf8.RuneError) {
-					return false
-				}
-				if _, exists := seen[name]; exists {
-					return false
-				}
-				seen[name] = struct{}{}
-				if !value(depth + 1) {
-					return false
-				}
-			}
-		case '[':
-			for decoder.More() {
-				if !value(depth + 1) {
-					return false
-				}
-			}
-		default:
-			return false
-		}
-		end, err := decoder.Token()
-		closing := json.Delim('}')
-		if delim == '[' {
-			closing = ']'
-		}
-		return err == nil && end == closing
-	}
-	if !value(0) {
-		return false
-	}
-	_, err := decoder.Token()
-	return err == io.EOF
+func (resource kubernetesResource) workloadReady() bool {
+	desired := resource.Spec.Replicas
+	return desired != nil && *desired > 0 && !resource.Spec.Paused &&
+		resource.Metadata.DeletionTimestamp == "" && resource.Metadata.Generation > 0 &&
+		resource.Status.ObservedGeneration == resource.Metadata.Generation &&
+		resource.Status.Replicas == *desired && resource.Status.ReadyReplicas == *desired &&
+		resource.Status.UpdatedReplicas == *desired &&
+		(resource.Kind != "Deployment" || resource.Status.AvailableReplicas == *desired)
 }
 
 func newDoctorCommand(runner commandRunner) *cobra.Command {
-	var outputFormat string
-	var profile string
-	var kubeContext string
-	var repositoryRoot string
-
+	var outputFormat, profile, kubeContext, repositoryRoot string
 	command := &cobra.Command{
 		Use:   "doctor",
-		Short: "Report bounded cluster, Flux, and policy diagnostics",
+		Short: "Report cluster, Flux, and policy diagnostics",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if outputFormat != "json" && outputFormat != "markdown" {
@@ -806,7 +178,7 @@ func newDoctorCommand(runner commandRunner) *cobra.Command {
 	}
 	command.Flags().StringVar(&outputFormat, "output", "markdown", "output format: json or markdown")
 	command.Flags().StringVar(&profile, "profile", "local-lite", "diagnostic profile: local-lite or local-experiment")
-	command.Flags().StringVar(&kubeContext, "context", "colima-mac-studio-solo", "Kubernetes context")
+	command.Flags().StringVar(&kubeContext, "context", localExperimentContext, "Kubernetes context")
 	command.Flags().StringVar(&repositoryRoot, "repo-root", "", "repository root (auto-detected from the current directory)")
 	return command
 }
@@ -846,44 +218,59 @@ func runDoctor(ctx context.Context, runner commandRunner, profile, kubeContext, 
 	if profile == localExperimentProfile {
 		return runLocalExperimentDoctor(ctx, runner, kubeContext, now)
 	}
-	checks := []doctorCheck{
+	return newDoctorReport(profile, kubeContext, now, []doctorCheck{
 		checkCluster(ctx, runner, kubeContext),
 		checkFlux(ctx, runner, kubeContext),
 		checkPolicy(ctx, runner, repositoryRoot),
+	})
+}
+
+func newDoctorReport(profile, kubeContext string, now time.Time, checks []doctorCheck) doctorReport {
+	report := doctorReport{
+		SchemaVersion: doctorSchemaVersion, GeneratedAt: now.Format(time.RFC3339),
+		Profile: profile, Context: kubeContext, Status: "healthy", Checks: checks,
 	}
-	status := "healthy"
 	for _, check := range checks {
-		if check.Status != "healthy" {
-			status = "degraded"
-			break
+		if check.Status == "degraded" {
+			report.Status = "degraded"
 		}
 	}
-	return doctorReport{
-		SchemaVersion: doctorSchemaVersion,
-		GeneratedAt:   now.Format(time.RFC3339),
-		Profile:       profile,
-		Context:       kubeContext,
-		Status:        status,
-		Checks:        checks,
+	return report
+}
+
+func readKubernetesResources(ctx context.Context, runner commandRunner, kubeContext string, args ...string) (kubernetesResourceList, error) {
+	var list kubernetesResourceList
+	output, err := runner.Run(ctx, "kubectl", append([]string{"--context", kubeContext}, args...)...)
+	if err != nil {
+		return list, err
 	}
+	err = json.Unmarshal(output, &list)
+	return list, err
 }
 
 func checkCluster(ctx context.Context, runner commandRunner, kubeContext string) doctorCheck {
-	return checkClusterForProfile(ctx, runner, kubeContext, false)
-}
-
-func checkClusterForProfile(ctx context.Context, runner commandRunner, kubeContext string, localExperiment bool) doctorCheck {
 	checkContext, cancel := context.WithTimeout(ctx, kubernetesCheckTimeout)
 	defer cancel()
 	output, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "get", "--raw=/readyz")
 	if err != nil {
 		return failedCheck("cluster", err)
 	}
-	if (localExperiment && string(output) != "ok" && string(output) != "ok\n") ||
-		(!localExperiment && strings.TrimSpace(string(output)) != "ok") {
+	if strings.TrimSpace(string(output)) != "ok" {
 		return doctorCheck{Name: "cluster", Status: "degraded", Summary: "readiness endpoint did not return ok"}
 	}
-	return doctorCheck{Name: "cluster", Status: "healthy", Summary: "Kubernetes readiness endpoint returned ok"}
+	nodes, err := readKubernetesResources(checkContext, runner, kubeContext, "get", "nodes", "-o", "json")
+	if err != nil {
+		return failedCheck("cluster", err)
+	}
+	if len(nodes.Items) == 0 {
+		return doctorCheck{Name: "cluster", Status: "degraded", Summary: "no Kubernetes nodes found"}
+	}
+	for _, node := range nodes.Items {
+		if !node.conditionTrue("Ready", false) || node.Metadata.DeletionTimestamp != "" {
+			return doctorCheck{Name: "cluster", Status: "degraded", Summary: "Kubernetes node " + node.Metadata.Name + " is not Ready"}
+		}
+	}
+	return doctorCheck{Name: "cluster", Status: "healthy", Summary: fmt.Sprintf("Kubernetes API and %d node(s) are Ready", len(nodes.Items))}
 }
 
 func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) doctorCheck {
@@ -893,289 +280,88 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext string, localExperiment bool) doctorCheck {
 	checkContext, cancel := context.WithTimeout(ctx, kubernetesCheckTimeout)
 	defer cancel()
-	controllerOutput, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "-n", "flux-system", "get", "deployments.apps", "-l", "app.kubernetes.io/part-of=flux", "-o", "json")
+	controllers, err := readKubernetesResources(checkContext, runner, kubeContext,
+		"-n", "flux-system", "get", "deployments.apps", "-l", "app.kubernetes.io/part-of=flux", "-o", "json")
 	if err != nil {
 		return failedCheck("flux", err)
 	}
-	var controllers kubernetesResourceList
-	if err := json.Unmarshal(controllerOutput, &controllers); err != nil {
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was not valid JSON"}
-	}
-	if localExperiment && localInventoryIncomplete(controllers, controllerOutput) {
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was incomplete"}
-	}
-	if len(controllers.Items) != 4 {
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("expected 4 Flux controllers, found %d", len(controllers.Items))}
-	}
-	requiredControllers := []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"}
-	foundControllers := make(map[string]bool, len(controllers.Items))
-	for _, controller := range controllers.Items {
-		foundControllers[controller.Metadata.Name] = true
-	}
-	var missingControllers []string
-	for _, name := range requiredControllers {
-		if !foundControllers[name] {
-			missingControllers = append(missingControllers, name)
-		}
-	}
-	if len(missingControllers) > 0 {
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("missing required Flux controllers: %s", strings.Join(missingControllers, ", "))}
+	required := map[string]bool{
+		"source-controller": false, "kustomize-controller": false,
+		"helm-controller": false, "notification-controller": false,
 	}
 	var unhealthy []string
 	for _, controller := range controllers.Items {
-		unready := controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas
-		if localExperiment {
-			unready = unready || controller.APIVersion != "apps/v1" ||
-				controller.Kind != "Deployment" || controller.Metadata.Namespace != "flux-system" ||
-				controller.Spec.Paused ||
-				controller.Metadata.DeletionTimestamp != "" ||
-				controller.Metadata.Generation < 1 || controller.Status.ObservedGeneration == nil || *controller.Status.ObservedGeneration != controller.Metadata.Generation ||
-				controller.Spec.Replicas == nil || *controller.Spec.Replicas < 1 ||
-				controller.Status.Replicas != *controller.Spec.Replicas ||
-				controller.Status.AvailableReplicas != *controller.Spec.Replicas ||
-				controller.Status.ReadyReplicas != *controller.Spec.Replicas ||
-				controller.Status.UpdatedReplicas != *controller.Spec.Replicas
-			if controller.Status.UnavailableReplicas != nil && *controller.Status.UnavailableReplicas != 0 {
-				unready = true
-			}
-			available := false
-			progressing := false
-			conditionTypes := make(map[string]bool)
-			for _, condition := range controller.Status.Conditions {
-				if condition.Type == "" || (condition.Status != "True" && condition.Status != "False" && condition.Status != "Unknown") {
-					unready = true
-				}
-				if conditionTypes[condition.Type] {
-					unready = true
-				}
-				conditionTypes[condition.Type] = true
-				if condition.Type == "Available" && condition.Status == "True" {
-					available = true
-				}
-				if condition.Type == "Progressing" && condition.Status == "True" {
-					progressing = true
-				}
-				if (condition.Type == "ReplicaFailure" && (condition.Status == "True" || (localExperiment && condition.Status != "False"))) ||
-					(condition.Type == "Progressing" && condition.Status != "True") ||
-					(condition.Type == "Available" && condition.Status != "True") {
-					unready = true
-				}
-			}
-			unready = unready || !available || !progressing
+		if _, ok := required[controller.Metadata.Name]; ok {
+			required[controller.Metadata.Name] = true
 		}
-		if unready {
+		ready := controller.Status.Replicas > 0 && controller.Status.AvailableReplicas >= controller.Status.Replicas
+		if localExperiment {
+			ready = controller.workloadReady()
+		}
+		if !ready {
 			unhealthy = append(unhealthy, "Deployment/"+controller.Metadata.Name)
 		}
 	}
-
-	resourceOutput, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "get", "gitrepositories.source.toolkit.fluxcd.io,ocirepositories.source.toolkit.fluxcd.io,buckets.source.toolkit.fluxcd.io,helmrepositories.source.toolkit.fluxcd.io,helmcharts.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io,helmreleases.helm.toolkit.fluxcd.io", "-A", "-o", "json")
+	for name, found := range required {
+		if !found {
+			unhealthy = append(unhealthy, "missing Deployment/"+name)
+		}
+	}
+	if len(unhealthy) > 0 {
+		return unhealthyFlux(unhealthy)
+	}
+	resources, err := readKubernetesResources(checkContext, runner, kubeContext, "get",
+		"gitrepositories.source.toolkit.fluxcd.io,ocirepositories.source.toolkit.fluxcd.io,buckets.source.toolkit.fluxcd.io,helmrepositories.source.toolkit.fluxcd.io,helmcharts.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io,helmreleases.helm.toolkit.fluxcd.io",
+		"-A", "-o", "json")
 	if err != nil {
 		return failedCheck("flux", err)
 	}
-	var resources kubernetesResourceList
-	if err := json.Unmarshal(resourceOutput, &resources); err != nil {
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was not valid JSON"}
-	}
-	if localExperiment && localInventoryIncomplete(resources, resourceOutput) {
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was incomplete"}
-	}
-	if localExperiment {
-		controllerUIDs := make(map[string]bool)
-		for _, controller := range controllers.Items {
-			if controller.Metadata.UID != "" {
-				controllerUIDs[controller.Metadata.UID] = true
-			}
-		}
-		for _, resource := range resources.Items {
-			if resource.Metadata.UID != "" && controllerUIDs[resource.Metadata.UID] {
-				return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller and resource responses reused a resource UID"}
-			}
-		}
-	}
 	kinds := map[string]int{}
-	seenResources := map[string]bool{}
-	rootCount, rootSourceCount, devCount := 0, 0, 0
+	found := map[string]bool{}
 	rootSuspended := false
-	sourceRevision, devRevision, rootRevision := "", "", ""
-	rootActive := false
 	for _, resource := range resources.Items {
 		kinds[resource.Kind]++
-		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
-		if localExperiment {
-			// Do not echo arbitrary API fields in a human-facing diagnostic.
-			// Even malformed resource names may contain credentials or controls.
-			validIdentity := localFluxValidName(resource.Metadata.Name, 253, true) &&
-				localFluxValidName(resource.Metadata.Namespace, 63, false)
-			switch resource.Kind {
-			case "GitRepository", "OCIRepository", "Bucket", "HelmRepository", "HelmChart", "Kustomization", "HelmRelease":
-			default:
-				unhealthy = append(unhealthy, "Flux resource (unexpected kind)")
-				validIdentity = false
-			}
-			if !validIdentity {
-				unhealthy = append(unhealthy, "Flux resource (identity unverified)")
-				resourceID = "Flux resource (identity unverified)"
-			} else if seenResources[resourceID] {
-				unhealthy = append(unhealthy, resourceID+" (duplicated)")
-			}
-			// The queried CRDs are pinned to v1, except HelmRelease (v2).
-			// A scoped API list must declare the version of every returned member.
-			expectedVersion := "source.toolkit.fluxcd.io/v1"
-			switch resource.Kind {
-			case "Kustomization":
-				expectedVersion = "kustomize.toolkit.fluxcd.io/v1"
-			case "HelmRelease":
-				expectedVersion = "helm.toolkit.fluxcd.io/v2"
-			}
-			if validIdentity && resource.APIVersion != expectedVersion {
-				unhealthy = append(unhealthy, resourceID+" (declared API version mismatch)")
-			}
-			seenResources[resourceID] = true
-			if resource.Metadata.Generation < 1 {
-				unhealthy = append(unhealthy, resourceID+" (generation unverified)")
-			}
-			if resource.Status.ObservedGeneration != nil && *resource.Status.ObservedGeneration != resource.Metadata.Generation {
-				unhealthy = append(unhealthy, resourceID+" (status generation mismatch)")
-			}
-		}
-		isRoot := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
-		isRootSource := resource.Kind == "GitRepository" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
-		isDev := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "shirokuma-dev"
-		if isRoot {
-			rootCount++
-			rootRevision = resource.Status.LastAppliedRevision
-			rootActive = !resource.Spec.Suspend
-			if localExperiment && !resource.Spec.Prune {
-				unhealthy = append(unhealthy, resourceID+" (prune disabled)")
-			}
-			if localExperiment && resource.Spec.Path != "./deploy/gitops/clusters/local-lite" {
-				unhealthy = append(unhealthy, resourceID+" (path mismatch)")
-			}
-			if localExperiment && (resource.Spec.SourceRef.Kind != "GitRepository" || resource.Spec.SourceRef.Name != "flux-system" ||
-				(resource.Spec.SourceRef.Namespace != "" && resource.Spec.SourceRef.Namespace != "flux-system")) {
-				unhealthy = append(unhealthy, resourceID+" (source reference mismatch)")
-			}
-		}
-		if isRootSource {
-			rootSourceCount++
-			sourceRevision = resource.Status.Artifact.Revision
-			if localExperiment && resource.Spec.Suspend {
-				unhealthy = append(unhealthy, resourceID+" (declared source suspended)")
-			}
-			if localExperiment && resource.Spec.Ref.Branch != "main" {
-				unhealthy = append(unhealthy, resourceID+" (declared branch mismatch)")
-			}
-			if localExperiment && (resource.Spec.Ref.Tag != "" || resource.Spec.Ref.SemVer != "" || resource.Spec.Ref.Commit != "" || resource.Spec.Ref.Name != "") {
-				unhealthy = append(unhealthy, resourceID+" (competing source revision selector)")
-			}
-			if localExperiment && resource.Spec.URL != "ssh://git@github.com/TommyKammy/Shirokuma" {
-				unhealthy = append(unhealthy, resourceID+" (declared origin mismatch)")
-			}
-			if localExperiment && resource.Spec.SecretRef.Name != "flux-system" {
-				unhealthy = append(unhealthy, resourceID+" (declared credentials reference mismatch)")
-			}
-			if localExperiment && !localFluxGitRevision.MatchString(resource.Status.Artifact.Revision) {
-				unhealthy = append(unhealthy, resourceID+" (revision unverified)")
-			}
-		}
-		if localExperiment && isDev {
-			devCount++
-			devRevision = resource.Status.LastAppliedRevision
-			if !resource.Spec.Wait {
-				unhealthy = append(unhealthy, resourceID+" (wait disabled)")
-			}
-			if !resource.Spec.Prune {
-				unhealthy = append(unhealthy, resourceID+" (prune disabled)")
-			}
-			if resource.Spec.Path != "./deploy/gitops/dev" {
-				unhealthy = append(unhealthy, resourceID+" (path mismatch)")
-			}
-			if resource.Spec.SourceRef.Kind != "GitRepository" || resource.Spec.SourceRef.Name != "flux-system" ||
-				(resource.Spec.SourceRef.Namespace != "" && resource.Spec.SourceRef.Namespace != "flux-system") {
-				unhealthy = append(unhealthy, resourceID+" (source reference mismatch)")
-			}
-		}
-		if localExperiment && resource.Metadata.DeletionTimestamp != "" {
-			unhealthy = append(unhealthy, resourceID+" (terminating)")
-		}
-		// Suspension relaxes Ready freshness, not a current-generation failure.
-		if localExperiment {
-			conditionTypes := make(map[string]bool)
-			for _, condition := range resource.Status.Conditions {
-				if condition.Type == "" || (condition.Status != "True" && condition.Status != "False" && condition.Status != "Unknown") {
-					unhealthy = append(unhealthy, resourceID+" (incomplete condition)")
-				}
-				// Kubernetes conditions are keyed by type. A duplicated type is
-				// ambiguous even when the reported statuses happen to agree.
-				if conditionTypes[condition.Type] {
-					unhealthy = append(unhealthy, resourceID+" (duplicated condition type)")
-				}
-				conditionTypes[condition.Type] = true
-				if condition.ObservedGeneration == resource.Metadata.Generation &&
-					(condition.Type == "Stalled" || condition.Type == "Reconciling") && condition.Status != "False" {
-					unhealthy = append(unhealthy, resourceID+" (unresolved reconciliation condition)")
-				}
-			}
-		}
-		if localExperiment && isRoot && resource.Spec.Suspend && resource.Metadata.DeletionTimestamp == "" {
-			// A stale Ready condition is expected while suspended, but an
-			// explicitly failed current generation is not healthy history.
-			for _, condition := range resource.Status.Conditions {
-				if condition.Type == "Ready" && condition.ObservedGeneration == resource.Metadata.Generation && condition.Status != "True" {
-					unhealthy = append(unhealthy, resourceID+" (conflicting Ready condition)")
-				}
-			}
+		id := resource.Kind + "/" + resource.Metadata.Namespace + "/" + resource.Metadata.Name
+		found[id] = true
+		if localExperiment && id == "Kustomization/flux-system/flux-system" &&
+			resource.Spec.Suspend && resource.Metadata.DeletionTimestamp == "" {
 			rootSuspended = true
 			continue
 		}
-		if resource.Spec.Suspend {
-			unhealthy = append(unhealthy, resourceID+" (suspended)")
-			continue
-		}
-		ready := false
-		for _, condition := range resource.Status.Conditions {
-			if condition.Type == "Ready" && condition.ObservedGeneration == resource.Metadata.Generation {
-				if condition.Status == "True" {
-					ready = true
-				} else if localExperiment {
-					unhealthy = append(unhealthy, resourceID+" (conflicting Ready condition)")
-				}
-			}
-		}
-		if !ready {
-			unhealthy = append(unhealthy, resourceID)
+		switch {
+		case resource.Spec.Suspend:
+			unhealthy = append(unhealthy, id+" (suspended)")
+		case resource.Metadata.DeletionTimestamp != "" || !resource.conditionTrue("Ready", true):
+			unhealthy = append(unhealthy, id)
 		}
 	}
 	if kinds["GitRepository"] == 0 || kinds["Kustomization"] == 0 {
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: "Flux GitRepository and Kustomization resources are required"}
+		unhealthy = append(unhealthy, "Flux GitRepository and Kustomization resources are required")
 	}
-	if localExperiment && rootCount != 1 {
-		unhealthy = append(unhealthy, "Kustomization/flux-system/flux-system (missing or duplicated)")
-	}
-	if localExperiment && rootSourceCount != 1 {
-		unhealthy = append(unhealthy, "GitRepository/flux-system/flux-system (missing or duplicated)")
-	}
-	if localExperiment && devCount != 1 {
-		unhealthy = append(unhealthy, "Kustomization/flux-system/shirokuma-dev (missing or duplicated)")
-	}
-	if localExperiment && devCount == 1 && rootSourceCount == 1 && (devRevision == "" || devRevision != sourceRevision) {
-		unhealthy = append(unhealthy, "Kustomization/flux-system/shirokuma-dev (applied revision differs from source)")
-	}
-	if localExperiment && rootActive && rootCount == 1 && rootSourceCount == 1 && (rootRevision == "" || rootRevision != sourceRevision) {
-		unhealthy = append(unhealthy, "Kustomization/flux-system/flux-system (applied revision differs from source)")
+	if localExperiment {
+		for _, id := range []string{"GitRepository/flux-system/flux-system", "Kustomization/flux-system/flux-system", "Kustomization/flux-system/shirokuma-dev"} {
+			if !found[id] {
+				unhealthy = append(unhealthy, "missing "+id)
+			}
+		}
 	}
 	if len(unhealthy) > 0 {
-		sort.Strings(unhealthy)
-		reported := unhealthy
-		if len(reported) > maxReportedResources {
-			reported = reported[:maxReportedResources]
-		}
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("%d Flux resource(s) failed readiness or fixed-source checks; first %d: %s", len(unhealthy), len(reported), strings.Join(reported, ", "))}
+		return unhealthyFlux(unhealthy)
 	}
+	summary := fmt.Sprintf("4 controllers and %d reconciled resource(s) are Ready", len(resources.Items))
 	if rootSuspended {
-		return doctorCheck{Name: "flux", Status: "informational", Summary: fmt.Sprintf("4 controllers and %d other reconciled resource(s) are Ready; root Kustomization/flux-system/flux-system is suspended in local-experiment (intent and source revision provenance not independently verified)", len(resources.Items)-1)}
+		summary = fmt.Sprintf("4 controllers and %d active resource(s) are Ready; root Kustomization/flux-system/flux-system is suspended in local-experiment", len(resources.Items)-1)
 	}
-	return doctorCheck{Name: "flux", Status: "healthy", Summary: fmt.Sprintf("4 controllers and %d reconciled resource(s) are Ready", len(resources.Items))}
+	return doctorCheck{Name: "flux", Status: "healthy", Summary: summary}
+}
+
+func unhealthyFlux(resources []string) doctorCheck {
+	sort.Strings(resources)
+	total := len(resources)
+	if len(resources) > maxReportedResources {
+		resources = resources[:maxReportedResources]
+	}
+	return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("%d Flux resource(s) failed readiness: %s", total, strings.Join(resources, ", "))}
 }
 
 func checkPolicy(ctx context.Context, runner commandRunner, repositoryRoot string) doctorCheck {
@@ -1189,7 +375,11 @@ func checkPolicy(ctx context.Context, runner commandRunner, repositoryRoot strin
 
 func failedCheck(name string, err error) doctorCheck {
 	summary := "command could not be executed"
-	if exitError, ok := err.(*exec.ExitError); ok {
+	var syntaxError *json.SyntaxError
+	var typeError *json.UnmarshalTypeError
+	if errors.As(err, &syntaxError) || errors.As(err, &typeError) {
+		summary = "Kubernetes response was not valid JSON"
+	} else if exitError, ok := err.(*exec.ExitError); ok {
 		summary = fmt.Sprintf("command exited with status %d", exitError.ExitCode())
 	}
 	return doctorCheck{Name: name, Status: "degraded", Summary: summary}

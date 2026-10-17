@@ -31,6 +31,7 @@ func (runner *fakeRunner) Run(_ context.Context, name string, args ...string) ([
 func TestDoctorJSONHealthy(t *testing.T) {
 	runner := &fakeRunner{responses: []fakeResponse{
 		{output: "ok\n"},
+		{output: `{"items":[{"kind":"Node","metadata":{"name":"colima"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}`},
 		{output: `{"items":[{"metadata":{"name":"source-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"kustomize-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"helm-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"notification-controller"},"status":{"replicas":1,"availableReplicas":1}}]}`},
 		{output: `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`},
 		{output: "policy ok"},
@@ -49,7 +50,7 @@ func TestDoctorJSONHealthy(t *testing.T) {
 	if report.Status != "healthy" || len(report.Checks) != 3 {
 		t.Fatalf("report = %#v", report)
 	}
-	wantCommands := []string{"kubectl", "kubectl", "kubectl", "make"}
+	wantCommands := []string{"kubectl", "kubectl", "kubectl", "kubectl", "make"}
 	var gotCommands []string
 	for _, call := range runner.calls {
 		gotCommands = append(gotCommands, call[0])
@@ -57,11 +58,11 @@ func TestDoctorJSONHealthy(t *testing.T) {
 	if !reflect.DeepEqual(gotCommands, wantCommands) {
 		t.Fatalf("commands = %v, want %v", gotCommands, wantCommands)
 	}
-	policyCall := runner.calls[3]
+	policyCall := runner.calls[4]
 	if len(policyCall) != 4 || policyCall[1] != "-C" || policyCall[3] != "verify-security" {
 		t.Fatalf("policy call = %v", policyCall)
 	}
-	resourceCall := strings.Join(runner.calls[2], " ")
+	resourceCall := strings.Join(runner.calls[3], " ")
 	for _, source := range []string{
 		"gitrepositories.source.toolkit.fluxcd.io",
 		"ocirepositories.source.toolkit.fluxcd.io",
