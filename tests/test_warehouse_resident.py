@@ -4,6 +4,9 @@ import json
 import http.client
 import http.server
 import threading
+import subprocess
+import sys
+import tempfile
 from contextlib import nullcontext
 from pathlib import Path
 import unittest
@@ -16,6 +19,17 @@ SPEC.loader.exec_module(w)
 
 
 class ResidentWarehouseTests(unittest.TestCase):
+    def setUp(self):
+        state = tempfile.TemporaryDirectory()
+        self.addCleanup(state.cleanup)
+        environment = patch.dict(w.os.environ, {'SHIROKUMA_STATE_DIR': state.name})
+        environment.start()
+        self.addCleanup(environment.stop)
+        advertised = patch.dict(w.os.environ)
+        advertised.start()
+        w.os.environ.pop('TRINO_ADVERTISED_URL', None)
+        self.addCleanup(advertised.stop)
+
     def test_three_tier_role_resolution(self):
         for user in ('bi_reader', 'powerbi', 'bi_team', 'POWERBI'):
             for role in (None, ''):
@@ -128,8 +142,8 @@ class ResidentWarehouseTests(unittest.TestCase):
             self.assertEqual(w.check_sql_policy(sql, role='bi_viewer'), sql)
 
     def endpoint_request(self, method, path, sql=None, headers=None, replicas=1,
-                         backend_status=200, payload=None, failure=None):
-        server = http.server.HTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
+                         backend_status=200, payload=None, failure=None, location=None):
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
         client = http.client.HTTPConnection(*server.server_address, timeout=5)
         backend = Mock()
         response = backend.getresponse.return_value
@@ -137,6 +151,8 @@ class ResidentWarehouseTests(unittest.TestCase):
         response.read.return_value = json.dumps(payload or {'data': [[42]]}).encode()
         response.getheaders.return_value = [('Content-Type', 'application/json'),
                                             ('X-Trino-Set-Catalog', 'iceberg')]
+        if location:
+            response.getheaders.return_value.append(('Location', location))
         response.getheader.return_value = ''
         backend.request.side_effect = failure
         # Keep a real listening server, while allowing serve_endpoint to install
@@ -144,7 +160,7 @@ class ResidentWarehouseTests(unittest.TestCase):
         def factory(address, handler):
             server.RequestHandlerClass = handler
             return server
-        with patch.object(w.http.server, 'HTTPServer', side_effect=factory), \
+        with patch.object(w.http.server, 'ThreadingHTTPServer', side_effect=factory) as factory_mock, \
              patch.object(w.http.client, 'HTTPConnection', return_value=backend), \
              patch.object(w, 'trino', return_value=nullcontext('http://127.0.0.1:1234')) as trino, \
              patch.object(w, 'status', return_value={'replicas': replicas}) as status, \
@@ -159,7 +175,93 @@ class ResidentWarehouseTests(unittest.TestCase):
                 client.close()
                 thread.join(timeout=5)
             self.assertFalse(thread.is_alive(), 'once=True did not stop')
+            factory_mock.assert_called_once()
             return code, result_headers, json.loads(data), backend, wake, status, trino, w._LAST_ACTIVITY
+
+    def test_endpoint_host_and_advertised_url_rewriting(self):
+        uri = 'http://backend:8080/v1/statement/q/1?token=abc#fragment'
+        payload = dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), uri)
+        cases = [({'Host': 'localhost:18080'}, '', 'http://localhost:18080'),
+                 ({'Host': 'internal:8080', 'X-Forwarded-Host': 'proxy.example:443',
+                   'X-Forwarded-Proto': 'https'}, '', 'https://proxy.example:443'),
+                 ({'Host': 'localhost:18080', 'X-Forwarded-Host': 'proxy.example'},
+                  'https://trino.example/trino/', 'https://trino.example/trino')]
+        for headers, advertised, base in cases:
+            with self.subTest(base=base), patch.dict(w.os.environ, {'TRINO_ADVERTISED_URL': advertised}):
+                code, response_headers, page, *_ = self.endpoint_request(
+                    'POST', '/v1/statement', 'SELECT 1', headers, payload=payload, location=uri)
+                self.assertEqual(code, 200)
+                expected = base + '/v1/statement/q/1?token=abc#fragment'
+                self.assertEqual(page, dict.fromkeys(payload, expected))
+                self.assertEqual(response_headers['Location'], expected)
+
+    def test_endpoint_uses_threading_http_server(self):
+        with patch.object(w.http.server, 'ThreadingHTTPServer') as server:
+            w.serve_endpoint(port=18080, once=True)
+        self.assertEqual(server.call_args.args[0], ('127.0.0.1', 18080))
+        server.return_value.__enter__.return_value.handle_request.assert_called_once_with()
+
+    def test_endpoint_polls_and_cancels_while_statement_is_blocked(self):
+        real_server = http.server.ThreadingHTTPServer
+        real_client = http.client.HTTPConnection
+        ready, running, release = threading.Event(), threading.Event(), threading.Event()
+        servers, outcomes = [], []
+
+        def factory(address, handler):
+            server = real_server(address, handler)
+            servers.append(server)
+            ready.set()
+            return server
+
+        def connection(*args, **kwargs):
+            backend = Mock()
+            def request(method, *args, **kwargs):
+                if method == 'POST':
+                    running.set()
+                    if not release.wait(5):
+                        raise TimeoutError('test statement was not released')
+            backend.request.side_effect = request
+            backend.getresponse.return_value.status = 200
+            backend.getresponse.return_value.read.return_value = b'{}'
+            backend.getresponse.return_value.getheaders.return_value = []
+            backend.getresponse.return_value.getheader.return_value = ''
+            return backend
+
+        def send(method, path):
+            client = real_client(*servers[0].server_address, timeout=2)
+            try:
+                client.request(method, path, body='SELECT 1' if method == 'POST' else None)
+                response = client.getresponse()
+                response.read()
+                outcomes.append((method, response.status))
+            finally:
+                client.close()
+
+        with patch.object(w.http.server, 'ThreadingHTTPServer', side_effect=factory), \
+             patch.object(w.http.client, 'HTTPConnection', side_effect=connection), \
+             patch.object(w, 'trino', return_value=nullcontext('http://localhost:1234')), \
+             patch.object(w, 'status', return_value={'replicas': 1}):
+            endpoint = threading.Thread(target=w.serve_endpoint, kwargs={'port': 0})
+            endpoint.start()
+            statement = None
+            try:
+                self.assertTrue(ready.wait(2))
+                statement = threading.Thread(target=send, args=('POST', '/v1/statement'))
+                statement.start()
+                self.assertTrue(running.wait(2))
+                send('GET', '/v1/statement/q/1')
+                send('DELETE', '/v1/statement/q/1')
+                self.assertEqual(outcomes, [('GET', 200), ('DELETE', 200)])
+                self.assertTrue(statement.is_alive())
+            finally:
+                release.set()
+                if statement:
+                    statement.join(5)
+                if servers:
+                    servers[0].shutdown()
+                endpoint.join(5)
+            self.assertFalse(endpoint.is_alive())
+            self.assertIn(('POST', 200), outcomes)
 
     def test_endpoint_statement_wake_headers_and_continuation_urls(self):
         code, headers, page, backend, wake, _, _, activity = self.endpoint_request(
@@ -284,7 +386,7 @@ class ResidentWarehouseTests(unittest.TestCase):
 
     def test_auto_chill_configuration_and_threshold(self):
         with patch.object(w, '_AUTO_CHILL_MINUTES', 0), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'monotonic', return_value=100) as clock, \
+             patch.object(w.time, 'time', return_value=100) as clock, \
              patch.object(w, 'status', return_value={'replicas': 1}) as status, \
              patch.object(w, 'start_auto_chill_daemon') as start, \
              patch.object(w, 'stop_auto_chill_daemon') as stop, \
@@ -314,8 +416,9 @@ class ResidentWarehouseTests(unittest.TestCase):
 
     def test_auto_chill_active_queries_postpone_chill(self):
         for count in (1, 7):
+            w.activity_path().unlink(missing_ok=True)
             with self.subTest(count=count), patch.object(w, '_AUTO_CHILL_MINUTES', 1), \
-                 patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'monotonic', return_value=100), \
+                 patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100), \
                  patch.object(w, 'status', return_value={'replicas': 1}), \
                  patch.object(w, 'trino', return_value=nullcontext('url')), \
                  patch.object(w, 'execute', return_value={'rows': [[count]]}) as execute, \
@@ -325,12 +428,63 @@ class ResidentWarehouseTests(unittest.TestCase):
                 self.assertEqual(w._LAST_ACTIVITY, 100)
                 transition.assert_not_called()
                 self.assertEqual(execute.call_args.args[1],
-                    "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('RUNNING', 'QUEUED') "
+                    "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
                     "AND query NOT LIKE '%system.runtime.queries%'")
+
+    def test_auto_chill_protects_all_active_states(self):
+        for state in ('QUEUED', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING'):
+            w.activity_path().unlink(missing_ok=True)
+            def active_count(url, sql, headers):
+                # Emulate a runtime table containing one query in this state.
+                states = sql.split('state IN (', 1)[1].split(')', 1)[0]
+                return {'rows': [[int(repr(state) in states)]]}
+            with self.subTest(state=state), patch.object(w, '_AUTO_CHILL_MINUTES', 1), \
+                 patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100), \
+                 patch.object(w, 'status', return_value={'replicas': 1}), \
+                 patch.object(w, 'trino', return_value=nullcontext('url')), \
+                 patch.object(w, 'execute', side_effect=active_count), \
+                 patch.object(w, 'transition') as transition:
+                self.assertEqual(w.check_auto_chill()['active_queries'], 1)
+                transition.assert_not_called()
+
+    def test_cross_process_activity_and_idle_seconds(self):
+        with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100):
+            w.touch_activity()
+            self.assertEqual(json.loads(w.activity_path().read_text()), {'last_activity': 100})
+        script = (
+            "import importlib.util; "
+            f"spec = importlib.util.spec_from_file_location('resident', {str(Path(w.__file__).resolve())!r}); "
+            "module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+            "module.time.time = lambda: 190; module.touch_activity()"
+        )
+        subprocess.run([sys.executable, '-c', script], check=True, timeout=10)
+        with patch.object(w, '_LAST_ACTIVITY', 100), patch.object(w.time, 'time', return_value=200), \
+             patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, 'status') as status:
+            self.assertEqual(w.read_last_activity(), 190)
+            self.assertEqual(w.auto_chill_status()['idle_seconds'], 10)
+            self.assertFalse(w.check_auto_chill()['chilled'])
+            status.assert_not_called()
+            w._LAST_ACTIVITY = 195
+            self.assertEqual(w.auto_chill_status()['idle_seconds'], 5)
+            w.activity_path().write_text('incomplete JSON')
+            self.assertEqual(w.read_last_activity(), 195)
+            w.activity_path().unlink()
+            self.assertEqual(w.read_last_activity(), 195)
+
+    def test_query_and_endpoint_update_shared_activity(self):
+        with patch.object(w, 'status', return_value={'replicas': 1}), \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', return_value={'rows': []}), \
+             patch.object(w, 'telemetry'), patch.object(w.time, 'time', return_value=100):
+            w.query('LOCAL', 'SELECT 1')
+        self.assertEqual(json.loads(w.activity_path().read_text())['last_activity'], 100)
+        with patch.object(w.time, 'time', return_value=200):
+            self.endpoint_request('GET', '/v1/statement/q/1')
+        self.assertEqual(json.loads(w.activity_path().read_text())['last_activity'], 200)
 
     def test_auto_chill_query_failure_does_not_chill(self):
         with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'monotonic', return_value=100), \
+             patch.object(w.time, 'time', return_value=100), \
              patch.object(w, 'status', return_value={'replicas': 1}), \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
              patch.object(w, 'execute', side_effect=RuntimeError('Trino unavailable')), \
@@ -375,7 +529,7 @@ class ResidentWarehouseTests(unittest.TestCase):
             thread.return_value.join.assert_called_once_with()
 
     def test_activity_updated_only_for_successful_query_or_wake(self):
-        with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'monotonic', return_value=50), \
+        with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=50), \
              patch.object(w, 'status', return_value={'replicas': 1, 'state': 'active'}), \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
              patch.object(w, 'execute', return_value={'rows': []}) as execute, \

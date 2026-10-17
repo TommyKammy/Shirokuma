@@ -6,6 +6,7 @@ import http.server
 import json
 import logging
 import os
+from pathlib import Path
 import re
 import socket
 import subprocess
@@ -28,7 +29,8 @@ _HTTP_POOL = threading.local()
 _DEFAULT_URLOPEN = urllib.request.urlopen
 WRITABLE_SCHEMAS = ('raw', 'sandbox', 'staging', 'marts')
 _AUTO_CHILL_MINUTES = 0
-_LAST_ACTIVITY = time.monotonic()
+_LAST_ACTIVITY = time.time()
+_ACTIVITY_LOCK = threading.Lock()
 _AUTO_CHILL_THREAD = None
 _AUTO_CHILL_STOP = threading.Event()
 _AUTO_CHILL_LOCK = threading.Lock()
@@ -65,17 +67,48 @@ def stop_auto_chill_daemon():
             _AUTO_CHILL_THREAD = None
 
 
+def activity_path():
+    root = Path(__file__).resolve().parents[2]
+    return Path(os.environ.get('SHIROKUMA_STATE_DIR', root / 'var/shirokuma')) / 'runtime' / 'last_activity.json'
+
+
+def touch_activity():
+    """Record activity for CLI, endpoint and Workbench processes atomically."""
+    global _LAST_ACTIVITY
+    with _ACTIVITY_LOCK:
+        _LAST_ACTIVITY = time.time()
+        path = activity_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
+        try:
+            temporary.write_text(json.dumps({'last_activity': _LAST_ACTIVITY}), encoding='utf-8')
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def read_last_activity():
+    """Return the latest in-memory or shared Unix timestamp."""
+    try:
+        shared = json.loads(activity_path().read_text(encoding='utf-8'))['last_activity']
+        if type(shared) not in (int, float):
+            return _LAST_ACTIVITY
+        return max(_LAST_ACTIVITY, shared)
+    except (OSError, ValueError, KeyError, TypeError):
+        return _LAST_ACTIVITY
+
+
 def auto_chill_status():
     return dict(auto_chill_minutes=_AUTO_CHILL_MINUTES,
-                idle_seconds=max(0, int(time.monotonic() - _LAST_ACTIVITY)))
+                idle_seconds=max(0, int(time.time() - read_last_activity())))
 
 
 def configure_auto_chill(minutes: int):
-    global _AUTO_CHILL_MINUTES, _LAST_ACTIVITY
+    global _AUTO_CHILL_MINUTES
     if type(minutes) is not int or not 0 <= minutes <= 1440:
         raise ValueError('minutes must be an integer between 0 and 1440')
     _AUTO_CHILL_MINUTES = minutes
-    _LAST_ACTIVITY = time.monotonic()
+    touch_activity()
     if minutes > 0:
         start_auto_chill_daemon()
     else:
@@ -84,18 +117,17 @@ def configure_auto_chill(minutes: int):
 
 
 def check_auto_chill(size='LOCAL'):
-    global _LAST_ACTIVITY
     chilled = False
     if (_AUTO_CHILL_MINUTES > 0 and
-            time.monotonic() - _LAST_ACTIVITY >= _AUTO_CHILL_MINUTES * 60 and
+            time.time() - read_last_activity() >= _AUTO_CHILL_MINUTES * 60 and
             status(size)['replicas'] > 0):
         with trino() as url:
             count = execute(url,
-                "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('RUNNING', 'QUEUED') "
+                "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
                 "AND query NOT LIKE '%system.runtime.queries%'",
                 {'X-Trino-User': 'shirokuma-warehouse'})['rows'][0][0]
         if count > 0:
-            _LAST_ACTIVITY = time.monotonic()
+            touch_activity()
             return dict(chilled=False, active_queries=count, **auto_chill_status())
         transition('chill', size)
         chilled = True
@@ -256,7 +288,6 @@ def finish(report, started):
 
 
 def transition(action, size):
-    global _LAST_ACTIVITY
     started = time.monotonic()
     before = status(size)
     chilled = action == "chill"
@@ -276,7 +307,7 @@ def transition(action, size):
             with trino():
                 pass
     if action == 'wake':
-        _LAST_ACTIVITY = time.monotonic()
+        touch_activity()
     return finish(dict(warehouse=warehouse(size), action=action,
                        result="noop" if noop else "verified", before_replicas=before["replicas"],
                        after_replicas=0 if chilled else 1,
@@ -529,7 +560,6 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             self.wfile.write(data)
 
         def proxy(self):
-            global _LAST_ACTIVITY
             path = urllib.parse.urlsplit(self.path).path
             statement = self.command == 'POST' and path == '/v1/statement'
             if not (statement or path.startswith('/v1/statement/') or path == '/v1/info'):
@@ -579,9 +609,14 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                     finally:
                         conn.close()
                 if response.status < 400:
-                    _LAST_ACTIVITY = time.monotonic()
+                    touch_activity()
                 host, actual_port = self.server.server_address[:2]
-                endpoint = f'http://{host}:{actual_port}'
+                endpoint = os.environ.get('TRINO_ADVERTISED_URL')
+                if not endpoint:
+                    authority = self.headers.get('X-Forwarded-Host') or self.headers.get('Host')
+                    proto = self.headers.get('X-Forwarded-Proto', 'http')
+                    endpoint = f'{proto}://{authority}' if authority else f'http://{host}:{actual_port}'
+                endpoint = endpoint.rstrip('/')
 
                 def local_uri(value):
                     parsed = urllib.parse.urlsplit(value)
@@ -614,7 +649,7 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
         do_GET = proxy
         do_DELETE = proxy
 
-    with http.server.HTTPServer((bind, port), Handler) as server:
+    with http.server.ThreadingHTTPServer((bind, port), Handler) as server:
         if once:
             server.handle_request()
         else:
@@ -623,7 +658,6 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
 
 
 def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000, mode='read-only'):
-    global _LAST_ACTIVITY
     size = warehouse(size)
     if not sql or not sql.strip():
         raise ValueError("query requires non-empty SQL")
@@ -647,7 +681,7 @@ def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=100
     except Exception:
         telemetry("query", int((time.monotonic() - started) * 1000), status="failed")
         raise
-    _LAST_ACTIVITY = time.monotonic()
+    touch_activity()
     return finish(dict(warehouse=size, action="query", result="verified", auto_woken=auto_woken,
                        **result, row_count=len(result["rows"]), mode=mode), started)
 
