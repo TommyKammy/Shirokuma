@@ -16,10 +16,6 @@ func NewRootCommand(output io.Writer) *cobra.Command {
 }
 
 func newRootCommand(output io.Writer, runner commandRunner) *cobra.Command {
-	return newRootCommandWithWarehouse(output, runner, unixWarehouseClient{})
-}
-
-func newRootCommandWithWarehouse(output io.Writer, runner commandRunner, warehouses warehouseTransitionClient) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "shirokuma",
 		Short:         "Operate the Shirokuma data cloud lab",
@@ -41,17 +37,9 @@ func newRootCommandWithWarehouse(output io.Writer, runner commandRunner, warehou
 	})
 	root.AddCommand(newDoctorCommand(runner))
 	root.AddCommand(newWorkbenchCommand(runner))
-	root.AddCommand(newWarehouseCommand("chill", warehouses), newWarehouseCommand("wake", warehouses))
-	root.AddCommand(newDataCommand(execDataChild{}))
-	root.AddCommand(newQueryCommand(execQueryChild{}))
-	root.AddCommand(newCatalogCommand(execCatalogChild{}))
-	root.AddCommand(newSRECommand(execSREChild{}))
-	root.AddCommand(newPolicyCommand(execPolicyChild{}))
 	root.AddCommand(newBearCommand(execResidentWarehouse{}))
 	root.AddCommand(newLakeCommand(execResidentWarehouse{}))
-	warehouse := newWarehouseQueryCommand(unixWarehouseClient{})
-	warehouse.AddCommand(newWarehouseSavedRequestCommand(execWarehouseSavedRequestChild{}))
-	root.AddCommand(warehouse)
+	root.AddCommand(newWarehouseQueryCommand(execResidentWarehouse{}))
 
 	return root
 }

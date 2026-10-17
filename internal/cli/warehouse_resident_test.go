@@ -10,6 +10,9 @@ import (
 	"testing"
 )
 
+const testWarehouseSession = "11111111111111111111111111111111"
+const testWarehouseRequest = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
 type fakeResidentWarehouse struct {
 	args []string
 	root string
@@ -26,7 +29,7 @@ func (f *fakeResidentWarehouse) Run(_ context.Context, root string, args []strin
 }
 
 func residentCommand(f *fakeResidentWarehouse, args ...string) (string, error) {
-	cmd := newWarehouseQueryCommand(&fakeWarehouseQueryClient{}, f)
+	cmd := newWarehouseQueryCommand(f)
 	cmd.SilenceErrors, cmd.SilenceUsage = true, true
 	var out bytes.Buffer
 	cmd.SetOut(&out)

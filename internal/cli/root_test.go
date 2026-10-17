@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -24,6 +25,33 @@ func TestHelp(t *testing.T) {
 		if !strings.Contains(output, expected) {
 			t.Errorf("help output %q does not contain %q", output, expected)
 		}
+	}
+}
+
+func TestRootCommandGroups(t *testing.T) {
+	root := NewRootCommand(nil)
+	var names []string
+	for _, command := range root.Commands() {
+		names = append(names, command.Name())
+	}
+	if want := []string{"bear", "doctor", "lake", "version", "warehouse", "workbench"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("root commands = %v, want %v", names, want)
+	}
+	warehouse, _, err := root.Find([]string{"warehouse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names = nil
+	for _, command := range warehouse.Commands() {
+		names = append(names, command.Name())
+		for _, flag := range []string{"session", "request-id"} {
+			if command.Flags().Lookup(flag) != nil {
+				t.Errorf("warehouse %s still exposes --%s", command.Name(), flag)
+			}
+		}
+	}
+	if want := []string{"chill", "query", "status", "wake"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("warehouse commands = %v, want %v", names, want)
 	}
 }
 
