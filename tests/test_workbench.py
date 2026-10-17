@@ -51,6 +51,114 @@ class WorkbenchHTML(HTMLParser):
 
 
 class WorkbenchTests(unittest.TestCase):
+    @patch.object(wb.bears_resident, 'load_ai_config')
+    def test_get_ai_config_masks_key_without_mutating_source(self, load):
+        config = dict(provider='openai', model='test', api_key='private-key', timeout=30)
+        load.return_value = config
+        code, data = self.json_request('/api/ai/config')
+        self.assertEqual(code, 200)
+        self.assertEqual(data, {**config, 'api_key': '********'})
+        self.assertEqual(config['api_key'], 'private-key')
+        load.return_value = {**config, 'api_key': ''}
+        self.assertEqual(self.json_request('/api/ai/config')[1]['api_key'], '')
+
+    @patch.object(wb.bears_resident, 'save_ai_config')
+    def test_save_ai_config_and_preserve_masked_credentials(self, save):
+        config = dict(provider='custom', model='test', api_url='http://localhost:8001/v1',
+                      api_key='private-key', timeout=45)
+        save.return_value = config
+        code, data = self.json_request('/api/ai/config', config)
+        self.assertEqual(code, 200)
+        save.assert_called_once_with(config)
+        self.assertEqual(data['api_key'], '********')
+        self.json_request('/api/ai/config', {**config, 'api_key': '********'})
+        save.assert_called_with({key: value for key, value in config.items() if key != 'api_key'})
+        self.json_request('/api/ai/config', {'model': 'new-model'})
+        save.assert_called_with({'model': 'new-model'})
+
+    @patch.object(wb.bears_resident, 'test_ai_connection')
+    def test_ai_connection_status_and_latency(self, connection):
+        for report in (dict(status='connected', latency_ms=32),
+                       dict(status='failed', latency_ms=5, error='unavailable')):
+            connection.return_value = report
+            body = dict(provider='local-openai', model='test', timeout=20)
+            self.assertEqual(self.json_request('/api/ai/test', body), (200, report))
+            connection.assert_called_with(body)
+
+    def test_ai_config_invalid_inputs_and_origin(self):
+        with patch.object(wb.bears_resident, 'save_ai_config') as save, \
+                patch.object(wb.bears_resident, 'test_ai_connection') as connection:
+            for route in ('/api/ai/config', '/api/ai/test'):
+                for body in ({'provider': 'unknown'}, {'model': ''}, {'api_url': 'file:///tmp/key'},
+                             {'api_key': 123}, {'timeout': True}, {'timeout': 0},
+                             {'timeout': 601}, {'timeout': 1.5}):
+                    with self.subTest(route=route, body=body):
+                        self.assertEqual(self.json_request(route, body)[0], 400)
+                code, _, _ = self.request(route, {}, headers={
+                    'Content-Type': 'application/json', 'Origin': 'https://other.example'})
+                self.assertEqual(code, 403)
+            save.assert_not_called()
+            connection.assert_not_called()
+
+    def test_ai_settings_form_and_translations(self):
+        doc = self.workbench_document()
+        dialog = doc.by_id('ai-settings')
+        self.assertEqual(dialog['tag'], 'dialog')
+        self.assertEqual(dialog['aria-labelledby'], 'ai-settings-title')
+        for identifier in ('ai-provider', 'ai-model', 'ai-url', 'ai-key', 'ai-timeout'):
+            self.assertIn(dialog, doc.by_id(identifier)['ancestors'])
+            self.assertTrue(any(n.get('for') == identifier for n in doc.nodes))
+        self.assertEqual(doc.by_id('ai-key')['type'], 'password')
+        select = doc.by_id('ai-provider')
+        self.assertEqual([n['value'] for n in doc.nodes if n['tag'] == 'option' and select in n['ancestors']],
+                         ['local-openai', 'openai', 'bedrock', 'custom'])
+        script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
+        dictionary = script.split('const i18n = {ja: {', 1)[1].split('}};', 1)[0]
+        translations = dict(re.findall(r"'([^']+)':'([^']+)'", dictionary))
+        for label in ('AI Model Settings', 'Provider', 'Model Name', 'API URL', 'API Key',
+                      'Timeout (seconds)', 'Test Connection', 'Save Settings', 'Close',
+                      'Connected {latency}ms', 'Connection failed: {error}', 'Settings saved',
+                      'Settings failed: {error}', 'Settings changed; test again.',
+                      'Leave blank to keep the saved key or environment credential.'):
+            self.assertRegex(translations[label], r'[ぁ-んァ-ヶ一-龯]')
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_ai_settings_javascript_handlers(self):
+        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        handlers = script.split('function aiStatus(', 1)[1].split('function table(', 1)[0]
+        harness = r"""
+const assert=require('node:assert/strict');
+new Function(SCRIPT);
+const nodes={};const $=id=>nodes[id]??=( {value:'',disabled:false,
+ addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},reportValidity(){return true;}} );
+const ui=(node,key,values)=>{node.label=key;node.values=values;};
+const busy=async(button,task)=>{await task();};
+const calls=[];
+const api=async(path,body)=>{calls.push([path,body]);
+ if(path==='/api/ai/config'&&!body)return {provider:'custom',model:'test-model',api_url:'http://localhost/v1',timeout:30,api_key:'********'};
+ if(path==='/api/ai/test')return {status:'connected',latency_ms:32};
+ return {api_key:'********'};
+};
+eval('function aiStatus('+HANDLERS);
+(async()=>{
+ await $('ai-settings-button').onclick();
+ assert.equal($('ai-settings').open,true);assert.equal($('ai-model').value,'test-model');
+ assert.equal($('ai-key').value,'');
+ await $('ai-test').onclick();
+ assert.equal($('ai-config-status').label,'Connected {latency}ms');
+ assert.equal($('ai-config-status').values.latency,32);
+ assert.equal(calls.at(-1)[1].api_key,undefined);
+ $('ai-key').value='new-key';
+ await $('ai-settings-form').onsubmit({preventDefault(){}});
+ assert.equal(calls.at(-1)[0],'/api/ai/config');assert.equal(calls.at(-1)[1].api_key,'new-key');
+ assert.equal($('ai-key').value,'');assert.equal($('ai-config-status').label,'Settings saved');
+ $('ai-close').onclick();assert.equal($('ai-settings').open,false);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+        harness = 'const SCRIPT=' + json.dumps(script) + ';const HANDLERS=' + json.dumps(handlers) + ';' + harness
+        completed = subprocess.run(['node', '-e', harness], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_phase8_controls_and_defaults(self):
         doc = self.workbench_document()
         controls = {

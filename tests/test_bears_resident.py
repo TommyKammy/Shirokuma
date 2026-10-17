@@ -529,12 +529,173 @@ class BearsResidentTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
+        self.ai_config_path = Path(temporary.name) / 'ai_config.json'
+        for target, name, value in ((b, 'AI_CONFIG_PATH', self.ai_config_path),
+                                    (b, '_ai_config', {})):
+            config_patch = patch.object(target, name, value)
+            config_patch.start()
+            self.addCleanup(config_patch.stop)
+        environment = patch.dict(b.os.environ, {}, clear=True)
+        environment.start()
+        self.addCleanup(environment.stop)
         registry = patch.object(b, 'WAP_REGISTRY', Path(temporary.name) / 'wap_models.json')
         registry.start()
         self.addCleanup(registry.stop)
         self.connection = patch.object(b.wr, "trino", return_value=contextlib.nullcontext("http://trino"))
         self.connection.start()
         self.addCleanup(self.connection.stop)
+
+    def test_ai_config_defaults_environment_and_persistence(self):
+        config = b.load_ai_config()
+        self.assertEqual(config, dict(provider='local-openai', model='qwen3.8-flash-next',
+            api_url='http://127.0.0.1:8001/v1', api_key_env='OPENAI_API_KEY', api_key='',
+            timeout=30, max_tokens=1024, temperature=0.0))
+        with patch.dict(b.os.environ, {'BEAR_MODEL': 'env-model', 'BEAR_MODEL_URL': 'http://env/v1',
+                                       'BEAR_API_KEY': 'env-secret'}):
+            active = b.load_ai_config()
+            self.assertEqual((active['model'], active['api_url'], active['api_key_env']),
+                             ('env-model', 'http://env/v1', 'BEAR_API_KEY'))
+        settings = dict(provider='custom', model='saved-model', api_url='https://example.test/v1',
+                        api_key_env='CUSTOM_KEY', api_key='direct-secret', timeout=12,
+                        max_tokens=77, temperature=0.5)
+        self.assertEqual(b.save_ai_config(settings), settings)
+        self.assertEqual(json.loads(self.ai_config_path.read_text()), settings)
+        self.assertEqual(self.ai_config_path.stat().st_mode & 0o777, 0o600)
+        with patch.object(b, '_ai_config', {}):
+            self.assertEqual(b.load_ai_config(), settings)
+
+    def test_ai_config_missing_invalid_and_unwritable_storage(self):
+        for content in ('{bad json', '[]', 'null'):
+            self.ai_config_path.write_text(content)
+            self.assertEqual(b.load_ai_config()['timeout'], 30)
+        self.ai_config_path.unlink()
+        with patch.object(b, 'AI_CONFIG_PATH', self.ai_config_path.parent / 'missing' / 'config.json'):
+            b.save_ai_config({'model': 'memory-model'})
+            self.assertEqual(b.load_ai_config()['model'], 'memory-model')
+            self.assertFalse(b.AI_CONFIG_PATH.parent.exists())
+        with patch.object(Path, 'write_text', side_effect=OSError('read-only')):
+            b.save_ai_config({'model': 'still-active'})
+        self.assertEqual(b.load_ai_config()['model'], 'still-active')
+
+    def test_resolve_api_key_precedence(self):
+        with patch.dict(b.os.environ, {'CUSTOM_KEY': 'env-secret', 'OPENAI_API_KEY': 'openai-secret'}):
+            self.assertEqual(b.resolve_api_key(dict(api_key='direct', api_key_env='CUSTOM_KEY')), 'direct')
+            self.assertEqual(b.resolve_api_key(dict(api_key='', api_key_env='CUSTOM_KEY')), 'env-secret')
+            self.assertEqual(b.resolve_api_key(b.load_ai_config()), 'openai-secret')
+            self.assertIsNone(b.resolve_api_key(dict(api_key_env='MISSING')))
+
+    def test_extract_sql_formats(self):
+        for content in (' {"generated_sql": " SELECT 1; "} ',
+                        '```json\n{"generated_sql":"SELECT 1;"}\n```',
+                        '```sql\nSELECT 1;\n```', 'SELECT 1;',
+                        'Here is the query:\n```SQL\nSELECT 1;\n```\nDone.'):
+            with self.subTest(content=content):
+                self.assertEqual(b._extract_sql(content), 'SELECT 1')
+        self.assertEqual(b._extract_sql('WITH t AS (SELECT 1) SELECT * FROM t;'),
+                         'WITH t AS (SELECT 1) SELECT * FROM t')
+        for content in ('{}', '{"generated_sql": null}'):
+            with self.assertRaises(ValueError):
+                b._extract_sql(content)
+
+    def test_ai_provider_config_and_auth_headers(self):
+        completion = dict(model='served', usage=dict(prompt_tokens=3, completion_tokens=2),
+                          choices=[dict(message=dict(content='SELECT 1;'))])
+        for provider in ('local-openai', 'openai', 'bedrock', 'custom'):
+            for key in (None, 'direct-secret', 'env-secret'):
+                with self.subTest(provider=provider, key=key), \
+                     patch.dict(b.os.environ, {'CUSTOM_KEY': 'env-secret'}), \
+                     patch.object(b.wr, 'http_json', return_value=completion) as http:
+                    config = dict(provider=provider, model='requested', api_url='https://ai.test/v1/',
+                                  timeout=9, max_tokens=83, temperature=0.4,
+                                  api_key='direct-secret' if key == 'direct-secret' else '',
+                                  api_key_env='CUSTOM_KEY' if key == 'env-secret' else 'MISSING')
+                    usage = {}
+                    self.assertEqual(b._complete_data_sql({'request': 'one'}, usage, config), 'SELECT 1')
+                    self.assertEqual(http.call_args.args[0], 'https://ai.test/v1/chat/completions')
+                    self.assertEqual(http.call_args.kwargs['timeout'], 9)
+                    headers = http.call_args.args[2]
+                    self.assertEqual(headers.get('Authorization'), 'Bearer ' + key if key else None)
+                    body = json.loads(http.call_args.args[1])
+                    self.assertEqual((body['model'], body['max_tokens'], body['temperature']),
+                                     ('requested', 83, 0.4))
+                    self.assertEqual('enable_thinking' in body, provider == 'local-openai')
+                    self.assertEqual(usage['model_provider'], provider)
+
+    def test_ai_connection_success_and_failure(self):
+        completion = dict(choices=[dict(message=dict(content='2'))], usage=dict(prompt_tokens=4))
+        with patch.object(b.wr, 'http_json', return_value=completion) as http, \
+             patch.object(b.time, 'monotonic', side_effect=[10, 10.125]):
+            result = b.test_ai_connection(dict(provider='custom', model='ping-model', api_key='secret'))
+        self.assertEqual(result, dict(status='connected', provider='custom', model='ping-model',
+                                     latency_ms=125, usage={'prompt_tokens': 4}))
+        self.assertEqual(http.call_args.args[2]['Authorization'], 'Bearer secret')
+        for response in (RuntimeError('offline'), {}):
+            with patch.object(b.wr, 'http_json', side_effect=response if isinstance(response, Exception) else None,
+                              return_value=response), \
+                 patch.object(b.time, 'monotonic', side_effect=[10, 10.25]):
+                result = b.test_ai_connection()
+            self.assertEqual((result['status'], result['latency_ms']), ('failed', 250))
+            self.assertTrue(result['error'])
+
+    def test_metadata_limit_and_business_semantics(self):
+        rows = [['marts', 'orders', 'column_' + str(i), 'double'] for i in range(1500)]
+        completion = dict(choices=[dict(message=dict(content='SELECT 1'))])
+        sources = []
+        with patch.object(b.wr, 'execute', return_value={'rows': rows}) as execute, \
+             patch.object(b.wr, 'http_json', return_value=completion) as http:
+            b.generate_data_sql('url', 'monthly revenue', sources_rows=sources, config={'model': 'custom'})
+        self.assertEqual(execute.call_args.kwargs['max_rows'], 10000)
+        self.assertIn('information_schema.columns', execute.call_args.args[1])
+        self.assertEqual(sources, rows)
+        body = json.loads(http.call_args.args[1])
+        self.assertEqual(len(json.loads(body['messages'][1]['content'])['sources']), 1500)
+        self.assertEqual(body['model'], 'custom')
+        prompt = body['messages'][0]['content']
+        for term in ("status = 'COMPLETED'", 'CANCELLED', 'REFUNDED', 'total_amount',
+                     'quantity * extended_price * (1 - discount)', "date_trunc('month', order_date)",
+                     'duplicate row multiplication', 'orders', 'order_items', 'customers'):
+            self.assertIn(term, prompt)
+
+    def test_retry_tokens_reach_pawprints(self):
+        completions = [dict(model='served', usage=dict(prompt_tokens=p, completion_tokens=c),
+                            choices=[dict(message=dict(content=statement))])
+                       for p, c, statement in ((10, 3, 'SELECT missing'), (20, 5, 'SELECT 1'))]
+        with patch.object(b.wr, 'http_json', side_effect=completions), \
+             patch.object(b, 'sql', side_effect=[{'rows': []}, RuntimeError('missing column'), {'rows': []}]), \
+             patch.object(b.wr, 'telemetry', return_value='recorded') as telemetry:
+            result = b.run(Args(bear='data', request='one'))
+        self.assertTrue(result['self_corrected'])
+        self.assertEqual((result['llm_usage']['prompt_tokens'], result['llm_usage']['completion_tokens']), (30, 8))
+        self.assertEqual((telemetry.call_args.kwargs['prompt_tokens'], telemetry.call_args.kwargs['completion_tokens']), (30, 8))
+        usage = {}
+        with patch.object(b.wr, 'http_json', side_effect=[completions[0], dict(completions[1], usage={})]):
+            b._complete_data_sql({}, usage)
+            b._complete_data_sql({}, usage)
+        self.assertEqual((usage['prompt_tokens'], usage['completion_tokens']), (10, 3))
+
+    def test_ai_cli_config_and_test(self):
+        out = io.StringIO()
+        with patch.object(sys, 'argv', ['bears', 'ai', 'config', '--provider', 'openai',
+                                      '--model', 'remote', '--url', 'https://ai.test/v1', '--key-env', 'TOKEN']), \
+             contextlib.redirect_stdout(out):
+            self.assertEqual(b.main(), 0)
+        config = json.loads(out.getvalue())
+        self.assertEqual((config['provider'], config['model'], config['api_url'], config['api_key_env']),
+                         ('openai', 'remote', 'https://ai.test/v1', 'TOKEN'))
+        b.save_ai_config({'api_key': 'hidden-secret'})
+        out = io.StringIO()
+        with patch.object(sys, 'argv', ['bears', 'ai', 'config']), contextlib.redirect_stdout(out):
+            self.assertEqual(b.main(), 0)
+        self.assertNotIn('hidden-secret', out.getvalue())
+        for status in ('connected', 'failed'):
+            result = dict(status=status)
+            if status == 'failed':
+                result['error'] = 'offline'
+            out = io.StringIO()
+            with patch.object(sys, 'argv', ['bears', 'ai', 'test']), \
+                 patch.object(b, 'test_ai_connection', return_value=result), contextlib.redirect_stdout(out):
+                self.assertEqual(b.main(), int(status == 'failed'))
+            self.assertEqual(json.loads(out.getvalue()), result)
 
     def test_general_sql_and_plan_analysis(self):
         plan = {"rows": [["Fragment 0 TableScan REPLICATED PARTITIONED"]], "query_id": "new"}

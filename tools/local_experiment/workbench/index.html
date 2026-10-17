@@ -22,10 +22,11 @@
 #lang-switcher button{border:0;background:transparent;color:var(--muted);padding:5px 10px;font-size:12px;border-radius:5px}
 #lang-switcher button:hover{color:var(--ink)}
 #lang-switcher button[aria-pressed="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px #0002}
+dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px;width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#0007}dialog h2{font-size:18px}dialog .toolbar{margin-top:20px}dialog .badge{white-space:normal;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
-<header class="app-header"><span class="brand">Shirokuma</span><span class="divider"></span><span class="muted">Workbench</span><div class="toolbar" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status"></span></div><span class="environment">Local lab · mac-studio-solo</span><div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div></header>
+<header class="app-header"><span class="brand">Shirokuma</span><span class="divider"></span><span class="muted">Workbench</span><div class="toolbar" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status"></span></div><span class="environment">Local lab · mac-studio-solo</span><button id="ai-settings-button" aria-haspopup="dialog" aria-controls="ai-settings">AI Model Settings</button><div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div></header>
 <div class="layout">
 <nav aria-label="Workbench sections" role="tablist" aria-orientation="vertical">
 <h2 class="nav-category">Work with Data</h2>
@@ -86,12 +87,27 @@
 <section id="pawprints" role="tabpanel" aria-labelledby="tab-pawprints" hidden><div class="page-title"><h1>AgentHouse Pawprints</h1><p class="muted">Recent warehouse and Bear activity, recorded in ClickHouse.</p></div><div class="panel"><div class="panel-head"><h2>Recent telemetry</h2><div class="toolbar"><small id="pawprint-meta" role="status">Latest 100 events</small><button id="refresh-pawprints">Refresh</button></div></div><div class="toolbar panel-body"><label for="pawprint-filter">Search Pawprints</label><input id="pawprint-filter" type="search" placeholder="Action, Bear, trace, or model"><label for="pawprint-status-filter">Status</label><select id="pawprint-status-filter"><option value="">All statuses</option><option>success</option><option>failed</option><option>degraded</option><option>denied</option></select></div><div id="pawprint-error" class="panel-body error" role="alert" hidden></div><div id="pawprint-results" class="table-wrap"><div class="empty">Refresh to load recent Pawprints.</div></div></div><div class="panel"><div class="panel-head"><h2>Query &amp; Load History</h2><button id="refresh-history">Refresh History</button></div><div id="history-error" class="panel-body error" role="alert" hidden></div><h3 class="panel-body">Trino Query History</h3><div id="runtime-queries-results" class="table-wrap"></div><h3 class="panel-body">Copy &amp; Data Load History</h3><div id="load-history-results" class="table-wrap"></div></div></section>
 <section id="compute" role="tabpanel" aria-labelledby="tab-compute" hidden><div class="page-title"><h1>Compute &amp; Governance</h1><p class="muted">Virtual warehouse readiness and resident cluster checks.</p><div class="toolbar"><button id="compute-refresh">Refresh status</button><button id="compute-sre-check">SRE Cluster Health Check</button><button id="compute-policy-check">Policy Gatekeeper Audit</button></div></div><div class="panel"><div class="panel-head"><h2>Virtual warehouse status</h2></div><pre id="compute-warehouse" role="status">Loading…</pre><h2 class="panel-body">Component readiness</h2><div id="compute-components" class="table-wrap"></div></div><div class="panel panel-body toolbar"><label for="auto-chill-minutes">Auto-Chill (idle minutes)</label><select id="auto-chill-minutes"><option value="0">Off</option><option value="5">5m</option><option value="15">15m</option><option value="30">30m</option><option value="60">60m</option></select><button id="save-auto-chill">Apply Auto-Chill</button><span id="auto-chill-state" role="status">Auto-Chill: Off</span></div><pre id="compute-check-result" role="status" hidden></pre></section>
 </main></div>
+<dialog id="ai-settings" aria-labelledby="ai-settings-title">
+<form id="ai-settings-form">
+<h2 id="ai-settings-title">AI Model Settings</h2>
+<label for="ai-provider">Provider</label><select id="ai-provider"><option value="local-openai">local-openai</option><option value="openai">openai</option><option value="bedrock">bedrock</option><option value="custom">custom</option></select>
+<label for="ai-model">Model Name</label><input id="ai-model" required>
+<label for="ai-url">API URL</label><input id="ai-url" type="url" required>
+<label for="ai-key">API Key</label><input id="ai-key" type="password" autocomplete="new-password" aria-describedby="ai-key-help"><small id="ai-key-help">Leave blank to keep the saved key or environment credential.</small>
+<label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" type="number" min="1" max="600" step="1" required>
+<div class="toolbar"><button id="ai-test" type="button">Test Connection</button><button id="ai-save" type="submit" class="primary">Save Settings</button><button id="ai-close" type="button">Close</button></div>
+<p id="ai-config-status" class="badge" role="status" aria-live="polite" hidden></p>
+</form>
+</dialog>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+ 'AI Model Settings':'AI モデル設定', 'Provider':'プロバイダー', 'Model Name':'モデル名', 'API URL':'API の URL', 'API Key':'API キー', 'Timeout (seconds)':'タイムアウト（秒）',
+ 'Leave blank to keep the saved key or environment credential.':'空欄の場合は保存済みキーまたは環境変数の認証情報を使用します。', 'Test Connection':'接続をテスト', 'Save Settings':'設定を保存', 'Close':'閉じる',
+ 'Connected {latency}ms':'接続済み {latency}ミリ秒', 'Connection failed: {error}':'接続に失敗しました: {error}', 'Settings saved':'設定を保存しました', 'Settings failed: {error}':'設定の操作に失敗しました: {error}', 'Settings changed; test again.':'設定が変更されました。再度テストしてください。',
  'Schema':'スキーマ', 'Table View':'テーブル表示', 'Chart View':'グラフ表示', 'Chart type':'グラフの種類', 'Bar Chart':'棒グラフ', 'Line Chart':'折れ線グラフ', 'X column':'X 軸のカラム', 'Y column':'Y 軸のカラム',
  'Choose a numeric Y column to chart visible rows.':'表示中の行をグラフにする数値カラムを Y 軸に選択してください。', 'Result chart':'結果グラフ',
  'Clone to Sandbox':'サンドボックスに複製', 'Clone Snapshot':'スナップショットを複製', 'Cloned {source} to {table}.':'{source} を {table} に複製しました。', 'Clone audit needs review':'複製の監査結果を確認してください', 'Clone failed: {error}':'複製に失敗しました: {error}',
@@ -221,6 +237,47 @@ async function busy(button, task) {
  // The busy label must survive a language change without losing the spinner.
  try {await task();} finally {if(textBinding)ui(button,textBinding.key,textBinding.values);else button.textContent=label;button.disabled=false;button.removeAttribute('aria-busy');pruneUIBindings();}
 }
+function aiStatus(key, values={}, state='') {
+ const node=$('ai-config-status');node.hidden=false;node.className='badge '+state;ui(node,key,values);
+}
+function aiPayload() {
+ const body={provider:$('ai-provider').value,model:$('ai-model').value.trim(),api_url:$('ai-url').value.trim(),timeout:Number($('ai-timeout').value)};
+ if($('ai-key').value)body.api_key=$('ai-key').value;
+ return body;
+}
+const aiFields=['ai-provider','ai-model','ai-url','ai-key','ai-timeout'];
+let aiRevision=0;
+$('ai-settings-form').oninput=()=>{aiRevision++;aiStatus('Settings changed; test again.');};
+$('ai-settings-button').onclick=()=>busy($('ai-settings-button'),async()=>{
+ $('ai-config-status').hidden=true;$('ai-key').value='';$('ai-settings').showModal();
+ for(const id of [...aiFields,'ai-test','ai-save'])$(id).disabled=true;
+ try {
+  const config=await api('/api/ai/config');
+  for(const [id,key] of [['ai-provider','provider'],['ai-model','model'],['ai-url','api_url'],['ai-timeout','timeout']])$(id).value=config[key];
+  for(const id of [...aiFields,'ai-test','ai-save'])$(id).disabled=false;
+ }catch(error){aiStatus('Settings failed: {error}',{error:error.message},'bad');}
+});
+$('ai-close').onclick=()=>{$('ai-settings').close();$('ai-key').value='';};
+$('ai-settings').addEventListener('close',()=>{$('ai-key').value='';aiRevision++;});
+$('ai-test').onclick=()=>{
+ if(!$('ai-settings-form').reportValidity())return;
+ const revision=aiRevision;
+ return busy($('ai-test'),async()=>{
+  try {
+   const result=await api('/api/ai/test',aiPayload());
+   if(revision!==aiRevision)return;
+   if(result.status==='connected')aiStatus('Connected {latency}ms',{latency:result.latency_ms},'good');
+   else aiStatus('Connection failed: {error}',{error:result.error||result.status},'bad');
+  }catch(error){if(revision===aiRevision)aiStatus('Connection failed: {error}',{error:error.message},'bad');}
+ });
+};
+$('ai-settings-form').onsubmit=event=>{
+ event.preventDefault();
+ return busy($('ai-save'),async()=>{
+  try {await api('/api/ai/config',aiPayload());$('ai-key').value='';aiStatus('Settings saved',{},'good');}
+  catch(error){aiStatus('Settings failed: {error}',{error:error.message},'bad');}
+ });
+};
 function table(container, columns, rows, localizeHeaders=true) {
  container.replaceChildren();
  if(!rows.length){const empty=document.createElement('div');empty.className='empty';ui(empty,'No rows returned.');container.append(empty);return;}

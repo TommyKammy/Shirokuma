@@ -217,7 +217,8 @@ def data(b, args):
         validation = b.attempt(validate)
         if not explicit_sql and 'error' in validation:
             retry = b.attempt(lambda: dict(sql=b.generate_data_sql_retry(
-                url, request, sources_rows, failed_sql=statement, error_message=validation['error'])))
+                url, request, sources_rows, failed_sql=statement, error_message=validation['error'],
+                llm_usage=llm_usage)))
             retry_sql = retry.get('sql')
             if isinstance(retry_sql, str) and retry_sql.strip() and retry_sql.strip() != statement:
                 statement = retry_sql.strip()

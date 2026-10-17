@@ -72,6 +72,26 @@ func TestRootContainsBearGroup(t *testing.T) {
 	}
 }
 
+func TestBearAIForwardsConfigAndTest(t *testing.T) {
+	for _, args := range [][]string{
+		{"ai", "test"},
+		{"ai", "config"},
+		{"ai", "config", "--provider", "custom", "--model", "model", "--url", "https://ai.test/v1", "--key-env", "TOKEN"},
+	} {
+		f := &fakeBear{data: []byte(`{"status":"connected"}`)}
+		out, err := executeBear(f, args...)
+		if err != nil || !strings.Contains(out, "connected") || !reflect.DeepEqual(f.args, args) {
+			t.Fatalf("AI forward %v: %s %v %+v", args, out, err, f)
+		}
+	}
+	if _, err := executeBear(&fakeBear{err: errors.New("offline")}, "ai", "test"); err == nil {
+		t.Fatal("lost AI connection error")
+	}
+	if _, err := executeBear(&fakeBear{data: []byte(`null`)}, "ai", "config"); err == nil {
+		t.Fatal("accepted invalid AI response")
+	}
+}
+
 func TestDataBearWAPFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"data", "--sql", "SELECT 42", "--stage-table", "custom"},

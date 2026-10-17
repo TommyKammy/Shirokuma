@@ -20,6 +20,44 @@ literal = wr.literal
 extract_source_tables = wap.extract_source_tables
 check_quality_assertions = wap.check_quality_assertions
 data_table = wap.data_table
+AI_CONFIG_PATH = Path(__file__).resolve().parents[2] / 'tmp' / 'local-experiment' / 'ai_config.json'
+_ai_config = {}
+
+
+def load_ai_config():
+    config = dict(provider='local-openai',
+                  model=os.environ.get('BEAR_MODEL', 'qwen3.8-flash-next'),
+                  api_url=os.environ.get('BEAR_MODEL_URL', 'http://127.0.0.1:8001/v1'),
+                  api_key_env='BEAR_API_KEY' if os.environ.get('BEAR_API_KEY') else 'OPENAI_API_KEY',
+                  api_key='', timeout=30, max_tokens=1024, temperature=0.0)
+    config.update(_ai_config)
+    try:
+        saved = json.loads(AI_CONFIG_PATH.read_text())
+        if isinstance(saved, dict):
+            config.update(saved)
+    except (OSError, ValueError):
+        pass
+    return config
+
+
+def save_ai_config(config):
+    """Keep active settings in memory if the local state directory is unavailable."""
+    active = load_ai_config()
+    active.update(config)
+    _ai_config.update(active)
+    try:
+        if AI_CONFIG_PATH.parent.is_dir():
+            # Set permissions before writing a potentially supplied direct key.
+            AI_CONFIG_PATH.touch(mode=0o600, exist_ok=True)
+            AI_CONFIG_PATH.chmod(0o600)
+            AI_CONFIG_PATH.write_text(json.dumps(active, indent=2) + '\n')
+    except OSError:
+        pass
+    return active
+
+
+def resolve_api_key(config):
+    return config.get('api_key') or os.environ.get(config.get('api_key_env') or 'BEAR_API_KEY')
 
 
 class _BearsRuntime:
@@ -37,9 +75,11 @@ audit_table = partial(wap.audit_table, _runtime)
 data = partial(wap.data, _runtime)
 
 
-def sql(url, statement):
+def sql(url, statement, max_rows=None):
     headers = {"X-Trino-User": "shirokuma-bears", "X-Trino-Source": "shirokuma-bears",
                "X-Trino-Catalog": "iceberg", "X-Trino-Schema": "marts"}
+    if max_rows is not None:
+        return wr.execute(url, statement, headers, max_rows=max_rows)
     # Honor explicit larger limits used by exports while keeping ordinary calls
     # and their default result cap unchanged.
     limit = re.search(r'\bLIMIT ([0-9]+)\s*$', statement)
@@ -115,33 +155,79 @@ def query(args):
                 "recommendations": recommendations})
 
 
-def generate_data_sql(url, request, llm_usage=None, sources_rows=None):
-    sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny', 'raw', 'sandbox')")
+def generate_data_sql(url, request, llm_usage=None, sources_rows=None, config=None):
+    sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny', 'raw', 'sandbox')", max_rows=10000)
     if sources_rows is not None:
         sources_rows.extend(sources['rows'])
-    return _complete_data_sql(dict(request=request, sources=sources['rows']), llm_usage)
+    return _complete_data_sql(dict(request=request, sources=sources['rows']), llm_usage, config)
 
 
-def generate_data_sql_retry(url, request, sources_rows, failed_sql, error_message):
+def generate_data_sql_retry(url, request, sources_rows, failed_sql, error_message, llm_usage=None, config=None):
     return _complete_data_sql(dict(request=request, sources=sources_rows,
-                                  failed_sql=failed_sql, error_message=error_message))
+                                  failed_sql=failed_sql, error_message=error_message), llm_usage, config)
 
 
-def _complete_data_sql(context, llm_usage=None):
-    body = {"model": os.environ.get("BEAR_MODEL", "qwen3.8-flash-next"), "temperature": 0,
-            "max_tokens": 512, "enable_thinking": False,
-            "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML. Use Trino ANSI SQL only (no QUALIFY; wrap window functions in a CTE and filter with WHERE). Correct failed_sql using error_message when supplied."},
+def _extract_sql(content: str) -> str:
+    content = content.strip()
+    fence = re.search(r'```(?:sql|json)?\s*\n?(.*?)```', content, re.I | re.S)
+    if fence:
+        content = fence[1].strip()
+    try:
+        parsed = json.loads(content)
+    except ValueError:
+        statement = content
+    else:
+        if not isinstance(parsed, dict) or not isinstance(parsed.get('generated_sql'), str):
+            raise ValueError('completion must contain generated_sql')
+        statement = parsed['generated_sql']
+    return statement.strip().removesuffix(';').rstrip()
+
+
+def _ai_completion(config, body):
+    headers = {'Content-Type': 'application/json'}
+    key = resolve_api_key(config)
+    if key:
+        headers['Authorization'] = 'Bearer ' + key
+    return wr.http_json(config['api_url'].rstrip('/') + '/chat/completions',
+                        json.dumps(body).encode(), headers, timeout=config['timeout'])
+
+
+def _complete_data_sql(context, llm_usage=None, config=None):
+    active = load_ai_config()
+    active.update(config or {})
+    body = {"model": active['model'], "temperature": active['temperature'],
+            "max_tokens": active['max_tokens'],
+            "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML. Use Trino ANSI SQL only (no QUALIFY; wrap window functions in a CTE and filter with WHERE). Correct failed_sql using error_message when supplied. Business semantic definitions (apply only to supplied columns): Completed sales require status = 'COMPLETED'; exclude 'CANCELLED' and 'REFUNDED'. Revenue uses total_amount at order grain, or quantity * extended_price * (1 - discount) at item grain. Time-grain aggregations use date_trunc('month', order_date), or the requested day/year grain. Grain-safe joins: avoid duplicate row multiplication when joining orders, order_items, or customers; aggregate items to order grain before summing order totals and use unique customer keys."},
                          {"role": "user", "content": json.dumps(context)}]}
-    completion = wr.http_json(os.environ.get("BEAR_MODEL_URL", "http://127.0.0.1:8001/v1") +
-                              "/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"}, timeout=30)
+    if active['provider'] == 'local-openai':
+        body['enable_thinking'] = False
+    completion = _ai_completion(active, body)
     if llm_usage is not None and (completion.get('model') or completion.get('usage')):
         usage = completion.get('usage') or {}
-        llm_usage.update(model_provider='local-openai', model_name=completion.get('model') or body['model'],
-                         prompt_tokens=usage.get('prompt_tokens'), completion_tokens=usage.get('completion_tokens'))
-    content = completion["choices"][0]["message"]["content"].strip()
-    if content.startswith("```"):
-        content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.MULTILINE).strip()
-    return json.loads(content)["generated_sql"].strip()
+        llm_usage.update(model_provider=active['provider'], model_name=completion.get('model') or body['model'])
+        for key in ('prompt_tokens', 'completion_tokens'):
+            count = usage.get(key)
+            if type(count) is int and count >= 0:
+                llm_usage[key] = (llm_usage.get(key) or 0) + count
+            else:
+                llm_usage.setdefault(key, None)
+    return _extract_sql(completion["choices"][0]["message"]["content"])
+
+
+def test_ai_connection(config=None) -> dict:
+    started = time.monotonic()
+    try:
+        active = load_ai_config()
+        active.update(config or {})
+        completion = _ai_completion(active, dict(model=active['model'],
+            temperature=active['temperature'], max_tokens=active['max_tokens'],
+            messages=[dict(role='user', content='What is 1+1?')]))
+        if not completion['choices'][0]['message']['content']:
+            raise ValueError('empty completion')
+        return dict(status='connected', provider=active['provider'], model=active['model'],
+                    latency_ms=int((time.monotonic() - started) * 1000), usage=completion.get('usage') or {})
+    except Exception as exc:
+        return dict(status='failed', error=str(exc), latency_ms=int((time.monotonic() - started) * 1000))
 
 
 def models_inventory():
@@ -418,6 +504,14 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="bear", required=True)
+    command = sub.add_parser('ai')
+    actions = command.add_subparsers(dest='action', required=True)
+    actions.add_parser('test')
+    config_command = actions.add_parser('config')
+    config_command.add_argument('--provider', choices=['local-openai', 'openai', 'bedrock', 'custom'])
+    config_command.add_argument('--model')
+    config_command.add_argument('--url', dest='api_url')
+    config_command.add_argument('--key-env', dest='api_key_env')
     sub.add_parser("sre").add_argument("action", nargs="?", choices=["inspect"], default="inspect")
     command = sub.add_parser("query")
     command.add_argument("target", nargs="?", default="latest")
@@ -435,7 +529,18 @@ def main():
     command = sub.add_parser("policy")
     command.add_argument("action", nargs="?", choices=["check", "baseline"], default="baseline")
     command.add_argument("manifest", nargs="?")
-    result = run(parser.parse_args())
+    args = parser.parse_args()
+    if args.bear == 'ai':
+        if args.action == 'test':
+            result = test_ai_connection()
+        else:
+            changes = {key: value for key, value in vars(args).items()
+                       if key not in ('bear', 'action') and value is not None}
+            result = (save_ai_config(changes) if changes else load_ai_config()).copy()
+            if result.get('api_key'):
+                result['api_key'] = '***'
+    else:
+        result = run(args)
     print(json.dumps(result))
     return int("error" in result)
 

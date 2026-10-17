@@ -38,6 +38,23 @@ func (execResidentWarehouse) RunBear(ctx context.Context, explicit string, args 
 
 func newBearCommand(runner bearRunner) *cobra.Command {
 	group := &cobra.Command{Use: "bear", Short: "Inspect and advise on the resident lakehouse"}
+	group.AddCommand(&cobra.Command{
+		Use: "ai [test|config] [flags]", Short: "Configure and test the Bear AI provider",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			data, err := runner.RunBear(ctx, "", append([]string{"ai"}, args...))
+			if err != nil {
+				return err
+			}
+			var report map[string]json.RawMessage
+			if json.Unmarshal(data, &report) != nil || report == nil {
+				return errors.New("resident AI command returned invalid JSON")
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(report)
+		},
+	})
 	for _, name := range []string{"sre", "query", "data", "catalog", "policy"} {
 		name := name
 		var root, sql string

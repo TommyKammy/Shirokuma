@@ -17,6 +17,33 @@ from agenthouse import manage
 INDEX = Path(__file__).parent / "workbench" / "index.html"
 
 
+def masked_ai_config(config):
+    return {**config, 'api_key': '********' if config.get('api_key') else ''}
+
+
+def ai_config_input(body):
+    config = {key: value for key, value in body.items()
+              if key in {'provider', 'model', 'api_url', 'api_key', 'timeout'}}
+    if 'provider' in config and config['provider'] not in ('local-openai', 'openai', 'bedrock', 'custom'):
+        raise ValueError('invalid AI provider')
+    for key in ('model', 'api_url', 'api_key'):
+        if key in config and not isinstance(config[key], str):
+            raise ValueError(key + ' must be a string')
+    for key in ('model', 'api_url'):
+        if key in config and not config[key].strip():
+            raise ValueError(key + ' must not be empty')
+    if 'api_url' in config:
+        url = urlsplit(config['api_url'])
+        if url.scheme not in ('http', 'https') or not url.netloc:
+            raise ValueError('api_url must be an HTTP(S) URL')
+    if 'timeout' in config and (type(config['timeout']) is not int or not 1 <= config['timeout'] <= 600):
+        raise ValueError('timeout must be an integer between 1 and 600 seconds')
+    # A masked value must never replace the stored credential.
+    if config.get('api_key') == '********':
+        del config['api_key']
+    return config
+
+
 def components():
     """One inventory request, without log collection or waking the warehouse."""
     items = json.loads(warehouse_resident.kubectl("get", "deploy,sts", "-o", "json"))["items"]
@@ -118,6 +145,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 if isinstance(profile, dict) and type(profile.get('snapshot_id')) is int:
                     profile['snapshot_id'] = str(profile['snapshot_id'])
                 self.respond(result)
+            elif url.path == '/api/ai/config':
+                self.respond(masked_ai_config(bears_resident.load_ai_config()))
             elif url.path == '/api/history':
                 self.respond(bears_resident.activity_history())
             elif url.path == '/api/models':
@@ -150,7 +179,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.respond({"error": "cross-origin control requests are not allowed"}, 403)
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/warehouse/chill", "/api/warehouse/wake", "/api/warehouse/query", "/api/bears/run", "/api/lake/ingest", '/api/lake/preview', '/api/catalog/drop', '/api/models/build', '/api/catalog/clone', '/api/lake/export', '/api/warehouse/autochill'):
+        if path not in ("/api/warehouse/chill", "/api/warehouse/wake", "/api/warehouse/query", "/api/bears/run", "/api/lake/ingest", '/api/lake/preview', '/api/catalog/drop', '/api/models/build', '/api/catalog/clone', '/api/lake/export', '/api/warehouse/autochill', '/api/ai/config', '/api/ai/test'):
             self.respond({"error": "route not found"}, 404)
             return
         try:
@@ -158,7 +187,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 result = warehouse_resident.transition(path.rsplit("/", 1)[1], "LOCAL")
             else:
                 body = self.body()
-                if path == "/api/warehouse/query":
+                if path == '/api/ai/config':
+                    result = masked_ai_config(bears_resident.save_ai_config(ai_config_input(body)))
+                elif path == '/api/ai/test':
+                    result = bears_resident.test_ai_connection(ai_config_input(body))
+                elif path == "/api/warehouse/query":
                     statement, size, limit = body.get("sql"), body.get("warehouse", "LOCAL"), body.get("max_rows", 1000)
                     if not isinstance(statement, str) or not statement.strip():
                         raise ValueError("sql must be a non-empty string")
