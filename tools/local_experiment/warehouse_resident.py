@@ -166,7 +166,7 @@ def execute(url, sql, headers, max_rows=1000):
         columns = page.get("columns", columns)
         data, next_uri = page.get("data", []), page.get("nextUri")
         remaining = max_rows - len(rows)
-        rows.extend(data[:remaining])
+        rows.extend(data if len(data) <= remaining else data[:remaining])
         truncated = len(data) > remaining or (len(rows) == max_rows and bool(next_uri))
         if truncated:
             if next_uri:
@@ -183,6 +183,40 @@ def execute(url, sql, headers, max_rows=1000):
     return dict(query_id=query_id, columns=columns, rows=rows, truncated=truncated)
 
 
+def normalize_trino_sql(sql: str) -> str:
+    """Wrap a top-level QUALIFY filter, leaving other SQL byte-for-byte intact."""
+    pattern = r"--[^\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|[A-Za-z_][A-Za-z_0-9]*|[^\s]"
+    top, depth = [], 0
+    for match in re.finditer(pattern, sql):
+        token = match.group()
+        if token.startswith(('--', '/*', "'", '"')):
+            continue
+        if token == '(':
+            depth += 1
+        elif token == ')':
+            depth -= 1
+        elif depth == 0:
+            top.append((token.upper(), match.start()))
+    if not top or top[0][0] not in {'SELECT', 'WITH'}:
+        return sql
+    for i, (token, start) in enumerate(top):
+        if token != 'QUALIFY':
+            continue
+        end = len(sql)
+        for j in range(i + 1, len(top)):
+            if top[j][0] == 'LIMIT' or (top[j][0] == 'ORDER' and
+                    j + 1 < len(top) and top[j + 1][0] == 'BY'):
+                end = top[j][1]
+                break
+        # Keep a newline before the closing parenthesis if the body ends in a
+        # line comment, so that the wrapper cannot become part of that comment.
+        body = sql[:start].rstrip(' \t')
+        condition = sql[start + len('QUALIFY'):end].strip(' \t')
+        tail = ' ' + sql[end:] if end < len(sql) else ''
+        return f'SELECT * FROM ({body}) AS _qualify_sub WHERE {condition}{tail}'
+    return sql
+
+
 def check_sql_policy(sql: str, mode: str = 'read-only') -> str:
     """Check a single statement before any warehouse access and return clean SQL."""
     if mode not in {'read-only', 'sandbox-write', 'admin-write'}:
@@ -192,6 +226,7 @@ def check_sql_policy(sql: str, mode: str = 'read-only') -> str:
         raise ValueError(f"SQL policy violation ({mode}): {reason}")
 
     statement = sql.rstrip().rstrip('; \t\r\n')
+    statement = normalize_trino_sql(statement)
     # Preserve quoted identifiers, mask literals, and ignore SQL comments. Doubled
     # quotes are SQL escapes; semicolons inside either quote type are harmless.
     tokens = []

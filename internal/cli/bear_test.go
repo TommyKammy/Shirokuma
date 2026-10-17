@@ -79,6 +79,8 @@ func TestDataBearWAPFlags(t *testing.T) {
 		{"data", "--rollback", "marts.custom", "--snapshot-id", "123"},
 		{"data", "intent", "--snapshot-id", "456", "--rollback", "t", "--publish", "t", "--stage-table", "t", "--sql", "SELECT 1"},
 		{"data", "--sql", ""},
+		{"data", "--publish", "custom", "--allow-shrink", "--min-rows", "20", "--not-null", "region,segment"},
+		{"data", "--min-rows", "1", "--not-null", ""},
 	} {
 		f := &fakeBear{data: []byte(`{"bear":"data_engineer"}`)}
 		if _, err := executeBear(f, args...); err != nil {
@@ -91,5 +93,15 @@ func TestDataBearWAPFlags(t *testing.T) {
 		if !reflect.DeepEqual(f.args, want) {
 			t.Fatalf("WAP flags: got %v want %v", f.args, want)
 		}
+	}
+}
+
+func TestDataBearFalseAllowShrinkIsNotForwarded(t *testing.T) {
+	f := &fakeBear{data: []byte(`{"bear":"data_engineer"}`)}
+	if _, err := executeBear(f, "data", "--publish", "t", "--allow-shrink=false"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(f.args, []string{"data", "--publish", "t"}) {
+		t.Fatalf("unexpected flags: %v", f.args)
 	}
 }

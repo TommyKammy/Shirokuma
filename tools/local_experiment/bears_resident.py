@@ -103,19 +103,33 @@ def latest_snapshot(url, table):
 
 def audit_table(url, full_table_name):
     table = identifier(full_table_name)
-    row_count = sql(url, 'SELECT COUNT(*) FROM ' + table)['rows'][0][0]
     columns = [dict(name=row[0], type=row[1]) for row in
                sql(url, 'SHOW COLUMNS FROM ' + table)['rows']]
-    null_counts = {}
-    if columns:
-        counts = sql(url, 'SELECT ' + ', '.join(
-            'COUNT(*) - COUNT("' + c['name'].replace('"', '""') + '")' for c in columns) +
-            ' FROM ' + table)['rows'][0]
-        null_counts = dict(zip([c['name'] for c in columns], counts))
+    aggregates = ['COUNT(*)'] + [
+        'COUNT(*) - COUNT("' + c['name'].replace('"', '""') + '")' for c in columns]
+    counts = sql(url, 'SELECT ' + ', '.join(aggregates) + ' FROM ' + table)['rows'][0]
+    row_count = counts[0]
+    null_counts = dict(zip([c['name'] for c in columns], counts[1:]))
     sample_rows = sql(url, 'SELECT * FROM ' + table + ' LIMIT 5')['rows']
     return dict(table=full_table_name, row_count=row_count, column_count=len(columns),
                 columns=columns, null_counts=null_counts, sample_rows=sample_rows,
                 snapshot_id=latest_snapshot(url, full_table_name), quality_passed=row_count > 0)
+
+
+def check_quality_assertions(audit, min_rows=1, not_null=''):
+    minimum = max(1, int(min_rows or 1))
+    errors = []
+    if audit['row_count'] < minimum:
+        errors.append(f'row_count must be > 0 and >= {minimum} (got {audit["row_count"]})')
+    for column in (c.strip() for c in not_null.split(',') if c.strip()):
+        if column not in audit['null_counts']:
+            errors.append('not-null column missing: ' + column)
+        elif audit['null_counts'][column] != 0:
+            errors.append('not-null assertion failed: ' + column)
+    audit['quality_passed'] = not errors
+    audit.pop('assertion_error', None)
+    if errors:
+        audit['assertion_error'] = '; '.join(errors)
 
 
 def data_table(value, rollback=False):
@@ -152,10 +166,28 @@ def data(args):
         source, target = 'iceberg.sandbox.' + name, 'iceberg.marts.' + name
         with wr.trino() as url:
             source_audit = audit_table(url, source)
+            check_quality_assertions(source_audit, getattr(args, 'min_rows', 1), getattr(args, 'not_null', ''))
             if not source_audit['quality_passed']:
                 return dict(wap_action='publish', table=target, source_table=source, valid=False,
-                            audit=source_audit, error='sandbox table failed quality audit (row_count must be > 0)')
+                            audit=source_audit, error=source_audit.get('assertion_error') or
+                            'sandbox table failed quality audit (row_count must be > 0)')
             previous = attempt(lambda: dict(snapshot_id=latest_snapshot(url, target))).get('snapshot_id')
+            if previous is not None and not getattr(args, 'allow_shrink', False) and 'row_count' in source_audit:
+                baseline = attempt(lambda: dict(
+                    row_count=sql(url, 'SELECT COUNT(*) FROM ' + identifier(target))['rows'][0][0],
+                    columns=[r[0] for r in sql(url, 'SHOW COLUMNS FROM ' + identifier(target))['rows']]))
+                target_count, target_cols = baseline.get('row_count'), baseline.get('columns', [])
+                source_cols = {col['name'] for col in source_audit.get('columns', [])}
+                missing = [c for c in target_cols if c not in source_cols]
+                error = None
+                if missing:
+                    error = 'publish blocked by regression guard: missing columns ' + ', '.join(missing)
+                elif isinstance(target_count, int) and target_count > 0 and source_audit['row_count'] < target_count * 0.5:
+                    error = (f'publish blocked by regression guard: row_count dropped from {target_count} to '
+                             f'{source_audit["row_count"]} (>50% shrink; pass --allow-shrink to override)')
+                if error:
+                    return dict(wap_action='publish', table=target, source_table=source,
+                                previous_snapshot_id=previous, valid=False, audit=source_audit, error=error)
             statement = wr.check_sql_policy('CREATE OR REPLACE TABLE ' + identifier(target) +
                 ' AS SELECT * FROM ' + identifier(source), mode='admin-write')
             sql(url, statement)
@@ -168,13 +200,22 @@ def data(args):
     stage = getattr(args, 'stage_table', None)
     staged_table = 'iceberg.sandbox.' + data_table(stage) if stage else None
     llm_usage = {}
+    sources_rows, self_corrected = [], False
     with wr.trino() as url:
-        statement = explicit_sql.strip() if explicit_sql else generate_data_sql(url, request, llm_usage)
+        statement = explicit_sql.strip() if explicit_sql else generate_data_sql(url, request, llm_usage, sources_rows)
         def validate():
             if not re.match(r'(?i)^(SELECT|WITH)\b', statement):
                 raise ValueError('SELECT model required')
             return sql(url, 'EXPLAIN ' + wr.check_sql_policy(statement, mode='read-only'))
         validation = attempt(validate)
+        if not explicit_sql and 'error' in validation:
+            retry = attempt(lambda: dict(sql=generate_data_sql_retry(
+                url, request, sources_rows, failed_sql=statement, error_message=validation['error'])))
+            retry_sql = retry.get('sql')
+            if isinstance(retry_sql, str) and retry_sql.strip() and retry_sql.strip() != statement:
+                statement = retry_sql.strip()
+                validation = attempt(validate)
+                self_corrected = 'error' not in validation
         if staged_table and 'error' not in validation:
             sql(url, wr.check_sql_policy('CREATE SCHEMA IF NOT EXISTS iceberg.sandbox', mode='sandbox-write'))
             sql(url, wr.check_sql_policy('CREATE OR REPLACE TABLE ' + identifier(staged_table) +
@@ -182,17 +223,30 @@ def data(args):
             audit = audit_table(url, staged_table)
             return dict(wap_action='stage', intent=request, generated_sql=statement,
                         valid=audit['quality_passed'], validation=validation, staged_table=staged_table, audit=audit,
+                        **({'self_corrected': True} if self_corrected else {}),
                         **({'llm_usage': llm_usage} if llm_usage else {}))
     return dict(intent=request, generated_sql=statement, valid='error' not in validation, validation=validation,
+                **({'self_corrected': True} if self_corrected else {}),
                 **({'llm_usage': llm_usage} if llm_usage else {}))
 
 
-def generate_data_sql(url, request, llm_usage=None):
+def generate_data_sql(url, request, llm_usage=None, sources_rows=None):
     sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny', 'raw', 'sandbox')")
+    if sources_rows is not None:
+        sources_rows.extend(sources['rows'])
+    return _complete_data_sql(dict(request=request, sources=sources['rows']), llm_usage)
+
+
+def generate_data_sql_retry(url, request, sources_rows, failed_sql, error_message):
+    return _complete_data_sql(dict(request=request, sources=sources_rows,
+                                  failed_sql=failed_sql, error_message=error_message))
+
+
+def _complete_data_sql(context, llm_usage=None):
     body = {"model": os.environ.get("BEAR_MODEL", "qwen3.8-flash-next"), "temperature": 0,
             "max_tokens": 512, "enable_thinking": False,
-            "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML."},
-                         {"role": "user", "content": json.dumps({"request": request, "sources": sources["rows"]})}]}
+            "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML. Use Trino ANSI SQL only (no QUALIFY; wrap window functions in a CTE and filter with WHERE). Correct failed_sql using error_message when supplied."},
+                         {"role": "user", "content": json.dumps(context)}]}
     completion = wr.http_json(os.environ.get("BEAR_MODEL_URL", "http://127.0.0.1:8001/v1") +
                               "/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"}, timeout=30)
     if llm_usage is not None and (completion.get('model') or completion.get('usage')):
@@ -309,6 +363,9 @@ def main():
     command.add_argument("request", nargs="?", default="")
     for flag in ('sql', 'stage-table', 'publish', 'rollback', 'snapshot-id'):
         command.add_argument('--' + flag)
+    command.add_argument('--allow-shrink', action='store_true')
+    command.add_argument('--min-rows', type=int, default=1)
+    command.add_argument('--not-null', default='')
     command = sub.add_parser("catalog")
     command.add_argument("action", nargs="?", choices=["search", "lineage", "describe"], default="search")
     command.add_argument("table", nargs="?")

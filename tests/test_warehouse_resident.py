@@ -12,6 +12,33 @@ SPEC.loader.exec_module(w)
 
 
 class ResidentWarehouseTests(unittest.TestCase):
+    def test_qualify_rewrite(self):
+        body = 'SELECT id, row_number() OVER (PARTITION BY id ORDER BY ts DESC) AS rn FROM events'
+        for suffix in ('', ' ORDER BY id', ' LIMIT 5', ' ORDER BY id LIMIT 5'):
+            with self.subTest(suffix=suffix):
+                statement = body + ' QUALIFY rn = 1' + suffix
+                expected = 'SELECT * FROM (' + body + ') AS _qualify_sub WHERE rn = 1' + suffix
+                self.assertEqual(w.normalize_trino_sql(statement), expected)
+                self.assertEqual(w.check_sql_policy(statement + '; '), expected)
+        body = 'WITH ranked AS (' + body + ') SELECT * FROM ranked'
+        self.assertEqual(w.normalize_trino_sql(body + ' qualify rn = 1'),
+                         'SELECT * FROM (' + body + ') AS _qualify_sub WHERE rn = 1')
+
+    def test_qualify_ignores_quotes_comments_and_nested_clauses(self):
+        for statement in ("SELECT 'QUALIFY it''s ORDER BY LIMIT' AS s", 'SELECT "QUALIFY" FROM t',
+                          'SELECT * FROM (SELECT * FROM t QUALIFY rn = 1)',
+                          'WITH t AS (SELECT * FROM x QUALIFY rn = 1) SELECT * FROM t',
+                          'SELECT 1 -- QUALIFY rn = 1\n', 'SELECT 1 /* QUALIFY rn = 1 */',
+                          'CREATE TABLE t AS SELECT * FROM x QUALIFY rn = 1'):
+            self.assertEqual(w.normalize_trino_sql(statement), statement)
+        statement = "SELECT rn FROM t QUALIFY rn IN (SELECT rn FROM x ORDER BY rn LIMIT 1) AND 'LIMIT' <> '' ORDER BY rn LIMIT 3"
+        self.assertEqual(w.normalize_trino_sql(statement),
+                         "SELECT * FROM (SELECT rn FROM t) AS _qualify_sub WHERE rn IN (SELECT rn FROM x ORDER BY rn LIMIT 1) AND 'LIMIT' <> '' ORDER BY rn LIMIT 3")
+        self.assertEqual(w.normalize_trino_sql('SELECT rn FROM t -- comment\nQUALIFY rn = 1'),
+                         'SELECT * FROM (SELECT rn FROM t -- comment\n) AS _qualify_sub WHERE rn = 1')
+        with self.assertRaisesRegex(ValueError, 'multiple statements'):
+            w.check_sql_policy('SELECT rn FROM t QUALIFY rn = 1; SELECT 2')
+
     def test_sql_policy_read_only_and_quoting(self):
         for statement in ["SELECT 1", "WITH x AS (SELECT 1) SELECT * FROM x", "invalid SQL",
                           "SELECT 'DROP; it''s fine', \"DELETE;\"", "-- INSERT ignored\nSELECT 1"]:

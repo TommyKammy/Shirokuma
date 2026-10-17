@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -40,6 +41,8 @@ func newBearCommand(runner bearRunner) *cobra.Command {
 	for _, name := range []string{"sre", "query", "data", "catalog", "policy"} {
 		name := name
 		var root, sql string
+		var allowShrink bool
+		var minRows int
 		wapFlags := []string{"stage-table", "publish", "rollback", "snapshot-id"}
 		command := &cobra.Command{
 			Use: name + " [arguments]", Short: "Run the resident " + name + " Bear",
@@ -52,6 +55,18 @@ func newBearCommand(runner bearRunner) *cobra.Command {
 					if cmd.Flags().Changed(flag) {
 						value, _ := cmd.Flags().GetString(flag)
 						forward = append(forward, "--"+flag, value)
+					}
+				}
+				if name == "data" {
+					if allowShrink {
+						forward = append(forward, "--allow-shrink")
+					}
+					if cmd.Flags().Changed("min-rows") {
+						forward = append(forward, "--min-rows", strconv.Itoa(minRows))
+					}
+					if cmd.Flags().Changed("not-null") {
+						value, _ := cmd.Flags().GetString("not-null")
+						forward = append(forward, "--not-null", value)
 					}
 				}
 				ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
@@ -78,6 +93,9 @@ func newBearCommand(runner bearRunner) *cobra.Command {
 			command.Flags().StringVar(&sql, "sql", "", "SQL to explain")
 		}
 		if name == "data" {
+			command.Flags().BoolVar(&allowShrink, "allow-shrink", false, "Allow publish to shrink rows or columns")
+			command.Flags().IntVar(&minRows, "min-rows", 1, "Minimum source rows required to publish")
+			command.Flags().String("not-null", "", "Comma-separated columns required to have no nulls")
 			for _, flag := range wapFlags {
 				command.Flags().String(flag, "", "Data Bear "+flag)
 			}
