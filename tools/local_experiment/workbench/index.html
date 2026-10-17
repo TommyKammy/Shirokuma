@@ -24,9 +24,13 @@
 #lang-switcher button[aria-pressed="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px #0002}
 dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px;width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#0007}dialog h2{font-size:18px}dialog .toolbar{margin-top:20px}dialog .badge{white-space:normal;overflow-wrap:anywhere}
 </style>
+<style>
+#role-controls{display:inline-flex;align-items:center;gap:8px}#role-controls label{margin:0}#role-selector{width:auto}
+html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#run-ingest,#ai-settings-button,#clone-table-btn,#copilot-stage,#copilot-publish,#refresh-wap-model,[data-role-write="admin"],[data-role-write="engineer"]),html[data-role="data_engineer"] :is(#ai-settings-button,#copilot-publish,#refresh-wap-model,[data-role-write="admin"]){display:none!important}
+</style>
 </head>
 <body>
-<header class="app-header"><span class="brand">Shirokuma</span><span class="divider"></span><span class="muted">Workbench</span><div class="toolbar" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status"></span></div><span class="environment">Local lab · mac-studio-solo</span><button id="ai-settings-button" aria-haspopup="dialog" aria-controls="ai-settings">AI Model Settings</button><div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div></header>
+<header class="app-header"><span class="brand">Shirokuma</span><span class="divider"></span><span class="muted">Workbench</span><div class="toolbar" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status"></span></div><span class="environment">Local lab · mac-studio-solo</span><button id="ai-settings-button" aria-haspopup="dialog" aria-controls="ai-settings">AI Model Settings</button><div id="role-controls"><label for="role-selector">Role</label><select id="role-selector"><option value="admin">Admin</option><option value="data_engineer">Data Engineer</option><option value="bi_viewer">BI Viewer</option></select><span id="role-indicator" class="badge" role="status" hidden>Read-only role</span></div><div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div></header>
 <div class="layout">
 <nav aria-label="Workbench sections" role="tablist" aria-orientation="vertical">
 <h2 class="nav-category">Work with Data</h2>
@@ -105,6 +109,7 @@ const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+ 'Role':'ロール', 'Admin':'管理者', 'Data Engineer':'データ作成者', 'BI Viewer':'閲覧者', 'Read-only role':'閲覧専用ロール',
  'AI Model Settings':'AI モデル設定', 'Provider':'プロバイダー', 'Model Name':'モデル名', 'API URL':'API の URL', 'API Key':'API キー', 'Timeout (seconds)':'タイムアウト（秒）',
  'Leave blank to keep the saved key or environment credential.':'空欄の場合は保存済みキーまたは環境変数の認証情報を使用します。', 'Test Connection':'接続をテスト', 'Save Settings':'設定を保存', 'Close':'閉じる',
  'Connected {latency}ms':'接続済み {latency}ミリ秒', 'Connection failed: {error}':'接続に失敗しました: {error}', 'Settings saved':'設定を保存しました', 'Settings failed: {error}':'設定の操作に失敗しました: {error}', 'Settings changed; test again.':'設定が変更されました。再度テストしてください。',
@@ -216,8 +221,26 @@ const samples = {
  customers:'SELECT * FROM marts.dim_customers LIMIT 10',
  revenue:`SELECT n.n_name AS nation,\n       SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue\nFROM tpch_tiny.customer c\nJOIN tpch_tiny.orders o ON c.c_custkey = o.o_custkey\nJOIN tpch_tiny.lineitem l ON o.o_orderkey = l.l_orderkey\nJOIN tpch_tiny.supplier s ON l.l_suppkey = s.s_suppkey\nJOIN tpch_tiny.nation n ON s.s_nationkey = n.n_nationkey\nWHERE c.c_nationkey = s.s_nationkey\nGROUP BY n.n_name\nORDER BY revenue DESC`
 };
+let currentRole = 'admin';
+function applyRole() {
+ document.documentElement.dataset.role=currentRole;
+ const viewer=currentRole==='bi_viewer', engineer=currentRole==='data_engineer';
+ $('role-indicator').hidden=!viewer;
+ for(const id of ['run-dbt-build','run-dbt-test','drop-table-btn','run-ingest','clone-table-btn','copilot-stage'])$(id).disabled=viewer||(['drop-table-btn','clone-table-btn'].includes(id)&&!selectedTable);
+ for(const id of ['ai-settings-button','ai-save','copilot-publish','refresh-wap-model'])$(id).disabled=viewer||engineer;
+ if(currentRole!=='admin'&&$('ai-settings').open)$('ai-settings').close();
+ const mode=$('query-mode');
+ for(const option of mode.options)option.disabled=viewer?option.value!=='read-only':engineer&&option.value==='admin-write';
+ if(viewer||(engineer&&mode.value==='admin-write'))mode.value='read-only';
+ mode.disabled=viewer;
+ $('query-schema').disabled=viewer;if(viewer)$('query-schema').value='marts';
+ for(const option of $('bear-data-action').options){option.disabled=viewer?option.value!=='generate':engineer&&['publish','refresh','rollback'].includes(option.value);}
+ const action=$('bear-data-action');if(action.selectedOptions[0]?.disabled)action.value='generate';
+}
+$('role-selector').onchange=()=>{currentRole=$('role-selector').value;applyRole();};
 async function api(path, body) {
- const response = await fetch(path, body === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const headers={'X-Shirokuma-Role':currentRole};
+ const response = await fetch(path, body === undefined ? {headers} : {method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(body)});
  const data = await response.json();
  if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
  return data;
@@ -383,7 +406,7 @@ function activate(button){document.querySelectorAll('[data-tab]').forEach(b=>{co
 const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach((button,i)=>{button.onclick=()=>activate(button);button.onkeydown=e=>{let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%tabs.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=tabs.length-1;if(n!==undefined){e.preventDefault();tabs[n].focus();activate(tabs[n]);}};});
 setInterval(async()=>{if(document.hidden)return;await refreshStatus();if(auto_chill_minutes>0){try{updateAutoChill(await api('/api/warehouse/autochill',{check:true}));}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}}if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
-function actionButton(label,task){const b=document.createElement('button');ui(b,label);b.onclick=()=>busy(b,task);return b;}
+function actionButton(label,task){const b=document.createElement('button');ui(b,label);if(label==='Rollback')b.dataset.roleWrite='admin';if(label==='Clone Snapshot')b.dataset.roleWrite='engineer';b.onclick=()=>busy(b,task);return b;}
 function renderData(container,data){if(data?.error){container.textContent=data.error;return;}table(container,data?.columns||[],(data?.rows||[]).slice(0,50),false);}
 function renderLineage(container,upstream,name,downstream=[]){container.replaceChildren();for(const [label,names] of [['Upstream sources',upstream],['Model',[name]],['Downstream models',downstream]]){const row=document.createElement('div');row.className='lineage-row';const title=document.createElement('strong');ui(title,label);row.append(title);for(const text of names.length?names:['None recorded']){const node=document.createElement('span');node.className='node';if(names.length)node.textContent=text;else ui(node,text);row.append(node);}container.append(row);}}
 let catalogMetadata={},selectedTable=null;

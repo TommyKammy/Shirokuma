@@ -5,6 +5,7 @@ import http.client
 import http.server
 import json
 import logging
+import os
 import re
 import socket
 import subprocess
@@ -16,7 +17,11 @@ import urllib.parse
 import urllib.request
 import uuid
 
-KUBECTL = ["kubectl", "--context", "colima-mac-studio-solo", "-n", "shirokuma-dev"]
+KUBE_CONTEXT = os.environ.get('KUBE_CONTEXT', 'colima-mac-studio-solo')
+KUBECTL = ['kubectl']
+if KUBE_CONTEXT not in ('', 'none', 'default'):
+    KUBECTL += ['--context', KUBE_CONTEXT]
+KUBECTL += ['-n', os.environ.get('KUBE_NAMESPACE', 'shirokuma-dev')]
 TIMEOUT = 180
 _PERSISTENT_TRINO = None
 _HTTP_POOL = threading.local()
@@ -339,10 +344,25 @@ def normalize_trino_sql(sql: str) -> str:
     return sql
 
 
-def check_sql_policy(sql: str, mode: str = 'read-only') -> str:
+def resolve_role(user: str, role: str = None) -> str:
+    user, role = (user or '').lower(), (role or '').lower()
+    if user in ('bi_reader', 'powerbi') or user.startswith('bi_') or role in ('bi_viewer', 'viewer', 'bi_reader'):
+        return 'bi_viewer'
+    if role in ('data_engineer', 'editor'):
+        return 'data_engineer'
+    return 'admin'
+
+
+def check_sql_policy(sql: str, mode: str = 'read-only', role: str = 'admin') -> str:
     """Check a single statement before any warehouse access and return clean SQL."""
     if mode not in {'read-only', 'sandbox-write', 'admin-write'}:
         raise ValueError(f"unknown SQL guardrail mode: {mode}")
+    if role == 'bi_viewer':
+        if mode != 'read-only':
+            raise ValueError('BI Viewer requires read-only mode')
+        return check_bi_policy(sql, 'bi_reader')
+    if role == 'data_engineer' and mode == 'admin-write':
+        raise ValueError('Data Engineer cannot use admin-write mode')
 
     def reject(reason):
         raise ValueError(f"SQL policy violation ({mode}): {reason}")

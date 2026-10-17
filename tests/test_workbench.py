@@ -51,6 +51,113 @@ class WorkbenchHTML(HTMLParser):
 
 
 class WorkbenchTests(unittest.TestCase):
+    def test_role_endpoint_permissions_before_dispatch(self):
+        routes = ['/api/catalog/drop', '/api/models/build', '/api/lake/ingest',
+                  '/api/catalog/clone', '/api/ai/config']
+        with patch.object(wb.bears_resident, 'save_ai_config') as save, \
+             patch.object(wb.bears_resident, 'drop_table') as drop, \
+             patch.object(wb.lake_ingest, 'ingest') as ingest:
+            for route in routes:
+                for selector in ('?role=bi_viewer', '?role=viewer'):
+                    with self.subTest(route=route, selector=selector):
+                        self.assertEqual(self.json_request(route + selector, {})[0], 403)
+            self.assertEqual(self.request('/api/ai/config?role=admin', {}, headers={
+                'Content-Type': 'application/json', 'X-Shirokuma-Role': 'data_engineer'})[0], 403)
+            save.assert_not_called()
+            drop.assert_not_called()
+            ingest.assert_not_called()
+
+    @patch.object(wb.warehouse_resident, 'query', return_value={'rows': []})
+    def test_role_query_enforcement(self, query):
+        code, _ = self.json_request('/api/warehouse/query?role=bi_viewer',
+                                    {'sql': 'SELECT * FROM marts.t', 'mode': 'admin-write'})
+        self.assertEqual(code, 200)
+        self.assertEqual(query.call_args.kwargs['mode'], 'read-only')
+        query.reset_mock()
+        for body in ({'sql': 'SELECT * FROM raw.t'}, {'sql': 'SELECT * FROM iceberg.sandbox.t'},
+                     {'sql': 'SELECT * FROM tpch_tiny.orders'},
+                     {'sql': 'SELECT 1', 'schema': 'raw'},
+                     {'sql': 'INSERT INTO iceberg.marts.t VALUES (1)'},
+                     {'sql': 'SELECT 1; SELECT 2'}):
+            with self.subTest(body=body):
+                self.assertEqual(self.json_request('/api/warehouse/query?role=bi_viewer', body)[0], 403)
+        for body in ({'sql': 'SELECT 1', 'mode': 'admin-write'},
+                     {'sql': 'CREATE TABLE iceberg.marts.t AS SELECT 1', 'mode': 'sandbox-write'}):
+            self.assertEqual(self.json_request('/api/warehouse/query?role=data_engineer', body)[0], 403)
+        query.assert_not_called()
+        for schema in ('raw', 'sandbox'):
+            body = {'sql': f'CREATE TABLE iceberg.{schema}.t AS SELECT 1', 'mode': 'sandbox-write'}
+            self.assertEqual(self.json_request('/api/warehouse/query?role=editor', body)[0], 200)
+
+    @patch.object(wb.bears_resident, 'run')
+    def test_role_bear_write_bypasses_blocked(self, run):
+        for role, actions in [('bi_viewer', ['stage', 'publish', 'refresh', 'rollback']),
+                              ('data_engineer', ['publish', 'refresh', 'rollback'])]:
+            for action in actions:
+                self.assertEqual(self.json_request('/api/bears/run?role=' + role,
+                    {'bear': 'data', 'action': action, 'table': 't'})[0], 403)
+            self.assertEqual(self.json_request('/api/bears/run?role=' + role,
+                {'bear': 'data', 'action': 'generate', 'publish': 't'})[0], 403)
+        self.assertEqual(self.json_request('/api/bears/run?role=bi_viewer',
+            {'bear': 'data', 'action': 'generate', 'stage_table': 't', 'sql': 'SELECT 1'})[0], 403)
+        run.assert_not_called()
+
+    @patch.object(wb.bears_resident, 'save_ai_config', side_effect=RuntimeError('failed to persist AI config: denied'))
+    def test_failed_persistence_is_not_http_success(self, save):
+        code, data = self.json_request('/api/ai/config', {'model': 'new'})
+        self.assertEqual(code, 502)
+        self.assertIn('failed to persist AI config', data['error'])
+
+    def test_role_selector_markup_and_translations(self):
+        doc = self.workbench_document()
+        selector = doc.by_id('role-selector')
+        self.assertTrue(any(n.get('for') == 'role-selector' for n in doc.nodes))
+        self.assertEqual([n['value'] for n in doc.nodes if n['tag'] == 'option' and selector in n['ancestors']],
+                         ['admin', 'data_engineer', 'bi_viewer'])
+        self.assertEqual(doc.by_id('role-indicator')['role'], 'status')
+        script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
+        for en, ja in [('Admin', '管理者'), ('Data Engineer', 'データ作成者'), ('BI Viewer', '閲覧者')]:
+            self.assertIn(f"'{en}':'{ja}'", script)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_role_switch_and_api_headers(self):
+        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        handlers = script.split("let currentRole = 'admin';", 1)[1].split('function message(', 1)[0]
+        harness = r"""
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={value:'',disabled:false,hidden:false,options:[]};
+const document={documentElement:{dataset:{}}};let selectedTable=null;
+$('ai-settings').open=true;$('ai-settings').close=()=>{$('ai-settings').open=false;};
+$('query-mode').options=['read-only','sandbox-write','admin-write'].map(value=>({value}));
+$('bear-data-action').options=['generate','stage','publish','refresh','rollback'].map(value=>({value}));
+$('bear-data-action').selectedOptions=[$('bear-data-action').options[2]];
+const calls=[];const fetch=async(path,options)=>{calls.push({path,...options});return {ok:true,json:async()=>({})};};
+let currentRole='admin';
+eval(HANDLERS+`
+(async()=>{
+ await api('/api/status');assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'admin');
+ $('role-selector').value='bi_viewer';$('role-selector').onchange();
+ assert.equal(document.documentElement.dataset.role,'bi_viewer');
+ assert.equal($('query-mode').value,'read-only');assert.equal($('query-mode').disabled,true);
+ assert.equal($('query-schema').value,'marts');assert.equal($('role-indicator').hidden,false);
+ assert.equal($('ai-settings').open,false);
+ for(const id of ['run-dbt-build','drop-table-btn','run-ingest','ai-settings-button'])assert.equal($(id).disabled,true);
+ await api('/api/warehouse/query',{sql:'SELECT 1'});
+ assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'bi_viewer');
+ assert.equal(calls.at(-1).headers['Content-Type'],'application/json');
+ $('role-selector').value='data_engineer';$('role-selector').onchange();
+ assert.equal($('run-ingest').disabled,false);assert.equal($('ai-settings-button').disabled,true);
+ assert.equal($('query-mode').options[2].disabled,true);
+ $('role-selector').value='admin';$('role-selector').onchange();
+ assert.equal($('ai-settings-button').disabled,false);assert.equal($('role-indicator').hidden,true);
+ assert.equal($('query-mode').options[2].disabled,false);
+ assert.equal($('clone-table-btn').disabled,true);
+})().catch(error=>{console.error(error);process.exitCode=1;});`);
+"""
+        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     @patch.object(wb.bears_resident, 'load_ai_config')
     def test_get_ai_config_masks_key_without_mutating_source(self, load):
         config = dict(provider='openai', model='test', api_key='private-key', timeout=30)

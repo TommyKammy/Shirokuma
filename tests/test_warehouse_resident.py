@@ -16,6 +16,34 @@ SPEC.loader.exec_module(w)
 
 
 class ResidentWarehouseTests(unittest.TestCase):
+    def test_three_tier_role_resolution(self):
+        for user in ('bi_reader', 'powerbi', 'bi_team', 'POWERBI'):
+            for role in (None, 'admin', 'editor'):
+                self.assertEqual(w.resolve_role(user, role), 'bi_viewer')
+        for role in ('bi_viewer', 'viewer', 'bi_reader'):
+            self.assertEqual(w.resolve_role('person', role), 'bi_viewer')
+        for role in ('data_engineer', 'editor'):
+            self.assertEqual(w.resolve_role('person', role), 'data_engineer')
+        for role in (None, 'admin', 'unknown'):
+            self.assertEqual(w.resolve_role('person', role), 'admin')
+
+    def test_role_sql_permissions(self):
+        self.assertEqual(w.check_sql_policy('SELECT * FROM marts.t', role='bi_viewer'), 'SELECT * FROM marts.t')
+        for mode in ('sandbox-write', 'admin-write'):
+            with self.assertRaises(ValueError):
+                w.check_sql_policy('SELECT 1', mode=mode, role='bi_viewer')
+        for sql in ('SELECT * FROM iceberg.raw.t', 'INSERT INTO iceberg.sandbox.t VALUES (1)'):
+            with self.assertRaises(ValueError):
+                w.check_sql_policy(sql, role='bi_viewer')
+        for schema in ('raw', 'sandbox'):
+            sql = f'CREATE TABLE iceberg.{schema}.t AS SELECT 1'
+            self.assertEqual(w.check_sql_policy(sql, mode='sandbox-write', role='data_engineer'), sql)
+        for mode, sql in [('admin-write', 'SELECT 1'),
+                          ('sandbox-write', 'CREATE TABLE iceberg.marts.t AS SELECT 1'),
+                          ('sandbox-write', 'CREATE TABLE iceberg.staging.t AS SELECT 1')]:
+            with self.assertRaises(ValueError):
+                w.check_sql_policy(sql, mode=mode, role='data_engineer')
+
     def test_bi_policy(self):
         allowed = ['SELECT 1', 'SELECT count(*) FROM iceberg.marts.revenue',
                    'SELECT * FROM tpch_tiny.orders', 'SELECT * FROM information_schema.tables',

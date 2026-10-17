@@ -51,8 +51,8 @@ def host_export_root(environ: dict[str, str] | None = None) -> Path:
     configured = env.get("SHIROKUMA_HOST_EXPORT_ROOT")
     if not configured:
         raise BackupError("SHIROKUMA_HOST_EXPORT_ROOT is required")
-    if platform.system() != "Darwin":
-        raise BackupError("backup files must be handled on the macOS host, outside Colima")
+    if platform.system() not in ("Darwin", "Linux"):
+        raise BackupError("backup files require a Darwin or Linux host")
     candidate = Path(configured).expanduser()
     unchecked = candidate.resolve(strict=False)
     temporary_roots = {Path("/tmp").resolve(), Path("/private/tmp").resolve()}

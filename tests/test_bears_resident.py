@@ -194,7 +194,7 @@ class BearsResidentTests(unittest.TestCase):
             with self.subTest(statement=statement):
                 self.assertEqual(b.extract_source_tables(statement), expected)
 
-    def test_registry_best_effort_and_merge(self):
+    def test_registry_fail_closed_and_merge(self):
         self.assertEqual(b.load_wap_registry(), {})
         b.save_wap_entry('orders', sql='SELECT 1', sources=['raw.orders'])
         b.save_wap_entry('another', sql='SELECT 2')
@@ -207,7 +207,8 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(b.load_wap_registry(), {})
         with patch.object(Path, 'read_text', side_effect=OSError('unreadable')), \
              patch.object(Path, 'write_text', side_effect=OSError('unwritable')):
-            self.assertEqual(b.save_wap_entry('orders', sql='SELECT 1'), {'sql': 'SELECT 1'})
+            with self.assertRaisesRegex(RuntimeError, 'failed to persist WAP registry: unwritable'):
+                b.save_wap_entry('orders', sql='SELECT 1')
 
     def test_stage_publish_and_catalog_wap_lineage(self):
         statement = 'SELECT * FROM iceberg.raw.orders JOIN raw.items USING (id)'
@@ -572,10 +573,45 @@ class BearsResidentTests(unittest.TestCase):
         with patch.object(b, 'AI_CONFIG_PATH', self.ai_config_path.parent / 'missing' / 'config.json'):
             b.save_ai_config({'model': 'memory-model'})
             self.assertEqual(b.load_ai_config()['model'], 'memory-model')
-            self.assertFalse(b.AI_CONFIG_PATH.parent.exists())
+            self.assertTrue(b.AI_CONFIG_PATH.exists())
         with patch.object(Path, 'write_text', side_effect=OSError('read-only')):
-            b.save_ai_config({'model': 'still-active'})
-        self.assertEqual(b.load_ai_config()['model'], 'still-active')
+            with self.assertRaisesRegex(RuntimeError, 'failed to persist AI config: read-only'):
+                b.save_ai_config({'model': 'still-active'})
+        self.assertEqual(b.load_ai_config()['model'], 'memory-model')
+
+    def test_failed_config_save_preserves_disk_and_memory(self):
+        b.save_ai_config({'model': 'original'})
+        original = self.ai_config_path.read_text()
+        for operation in ('mkdir', 'write_text', 'replace'):
+            with self.subTest(operation=operation), patch.object(Path, operation, side_effect=OSError('denied')):
+                with self.assertRaisesRegex(RuntimeError, 'failed to persist AI config: denied'):
+                    b.save_ai_config({'model': 'lost'})
+            self.assertEqual(self.ai_config_path.read_text(), original)
+            self.assertEqual(b._ai_config['model'], 'original')
+            self.assertEqual(b.load_ai_config()['model'], 'original')
+
+    def test_wap_save_fail_closed_and_restart(self):
+        b.save_wap_entry('model_a', sql='SELECT 1')
+        b.save_wap_entry('model_b', sql='SELECT 2')
+        before = b.WAP_REGISTRY.read_text()
+        for operation in ('mkdir', 'write_text', 'replace'):
+            with self.subTest(operation=operation), patch.object(Path, operation, side_effect=OSError('denied')):
+                with self.assertRaisesRegex(RuntimeError, 'failed to persist WAP registry: denied'):
+                    b.save_wap_entry('model_a', sql='SELECT 3')
+            self.assertEqual(b.WAP_REGISTRY.read_text(), before)
+        self.assertEqual(b.load_wap_registry()['model_b']['sql'], 'SELECT 2')
+
+    def test_state_path_durable_override_and_fallback(self):
+        root = TOOLS.parents[1]
+        with patch.object(Path, 'mkdir'), patch.object(b.wap.os, 'access', return_value=True):
+            for name in ('ai_config.json', 'wap_models.json'):
+                self.assertEqual(b.wap.state_path(name), root / 'var/shirokuma' / name)
+        with patch.object(Path, 'mkdir', side_effect=OSError('read-only')):
+            self.assertEqual(b.wap.state_path('wap_models.json'), root / 'tmp/local-experiment/wap_models.json')
+        with patch.object(Path, 'mkdir'), patch.object(b.wap.os, 'access', return_value=False):
+            self.assertEqual(b.wap.state_path('ai_config.json'), root / 'tmp/local-experiment/ai_config.json')
+        with patch.dict(b.os.environ, {'SHIROKUMA_STATE_DIR': str(self.ai_config_path.parent / 'state')}):
+            self.assertEqual(b.wap.state_path('ai_config.json'), self.ai_config_path.parent / 'state/ai_config.json')
 
     def test_resolve_api_key_precedence(self):
         with patch.dict(b.os.environ, {'CUSTOM_KEY': 'env-secret', 'OPENAI_API_KEY': 'openai-secret'}):

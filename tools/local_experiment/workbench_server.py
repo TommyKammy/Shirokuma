@@ -83,7 +83,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Shirokuma-Role")
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
@@ -99,6 +99,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def request_role(self):
+        params = parse_qs(urlsplit(self.path).query)
+        return warehouse_resident.resolve_role(
+            self.headers.get('X-Trino-User', ''),
+            self.headers.get('X-Shirokuma-Role') or params.get('role', ['admin'])[0])
 
     def do_GET(self):
         try:
@@ -183,6 +189,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.respond({"error": "route not found"}, 404)
             return
         try:
+            role = self.request_role()
+            if ((role == 'bi_viewer' and path in {
+                    '/api/catalog/drop', '/api/models/build', '/api/lake/ingest', '/api/catalog/clone'})
+                    or (role != 'admin' and path == '/api/ai/config')):
+                raise PermissionError('Forbidden for role: ' + role)
             if path.endswith(("/chill", "/wake")):
                 result = warehouse_resident.transition(path.rsplit("/", 1)[1], "LOCAL")
             else:
@@ -207,6 +218,21 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         if not isinstance(mode, str) or mode not in {'read-only', 'sandbox-write', 'admin-write'}:
                             raise ValueError('invalid query mode')
                         options['mode'] = mode
+                    if role == 'bi_viewer':
+                        options['mode'] = 'read-only'
+                        if schema != 'marts':
+                            raise PermissionError('BI Viewer queries require marts schema')
+                    if role != 'admin':
+                        try:
+                            statement = warehouse_resident.check_sql_policy(
+                                statement, mode=options.get('mode', 'read-only'), role=role)
+                            if role == 'bi_viewer':
+                                warehouse_resident._check_bi_schemas(statement, 'iceberg')
+                                if any('.' in table and table.split('.')[0].lower() != 'marts'
+                                       for table in bears_resident.extract_source_tables(statement)):
+                                    raise ValueError('BI Viewer queries are restricted to marts')
+                        except ValueError as exc:
+                            raise PermissionError(str(exc)) from exc
                     result = warehouse_resident.query(size, statement, catalog="iceberg", schema=schema, max_rows=limit, **options)
                 elif path == '/api/warehouse/autochill':
                     if 'minutes' not in body and 'check' not in body:
@@ -286,6 +312,13 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     action = body.get("action", actions[bear][0])
                     if not isinstance(action, str) or action not in actions[bear]:
                         raise ValueError("invalid bear action")
+                    if bear == 'data' and ((role == 'bi_viewer' and action != 'generate') or
+                            (role == 'data_engineer' and action in {'publish', 'refresh', 'rollback'})):
+                        raise PermissionError('Forbidden Bear action for role: ' + role)
+                    if bear == 'data' and role != 'admin' and any(body.get(key) for key in ('publish', 'refresh', 'rollback')):
+                        raise PermissionError('Forbidden Bear write for role: ' + role)
+                    if bear == 'data' and role == 'bi_viewer' and body.get('stage_table'):
+                        raise PermissionError('BI Viewer cannot stage data')
                     fields = {key: body.get(key) for key in ("sql", "request", "manifest", "target", "table")}
                     if any(value is not None and not isinstance(value, str) for value in fields.values()):
                         raise ValueError("bear inputs must be strings")
@@ -310,6 +343,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     fields["target"] = fields["target"] or "latest"
                     result = bears_resident.run(SimpleNamespace(bear=bear, action=action, **fields))
             self.respond(result)
+        except PermissionError as exc:
+            self.respond({'error': str(exc)}, 403)
         except (ValueError, UnicodeError) as exc:
             self.respond({"error": str(exc)}, 400)
         except Exception as exc:

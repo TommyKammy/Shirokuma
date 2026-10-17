@@ -1,11 +1,40 @@
 """Write-audit-publish engine using the calling Bears module for runtime hooks."""
 import json
+import os
 from pathlib import Path
 import re
+import tempfile
 
 import warehouse_resident as wr
 
-WAP_REGISTRY = Path(__file__).resolve().parents[2] / 'tmp' / 'local-experiment' / 'wap_models.json'
+def state_path(filename):
+    """Prefer durable lab state; an explicit state directory must be honored."""
+    root = Path(__file__).resolve().parents[2]
+    if os.environ.get('SHIROKUMA_STATE_DIR'):
+        return Path(os.environ['SHIROKUMA_STATE_DIR']) / filename
+    durable = root / 'var' / 'shirokuma'
+    try:
+        durable.mkdir(parents=True, exist_ok=True)
+        if os.access(durable, os.W_OK):
+            return durable / filename
+    except OSError:
+        pass
+    return root / 'tmp' / 'local-experiment' / filename
+
+
+def persist_json(path, value):
+    """Replace state atomically, keeping credentials private and old state intact."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+    try:
+        temporary.write_text(json.dumps(value, indent=2) + '\n')
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+WAP_REGISTRY = state_path('wap_models.json')
 
 
 def extract_source_tables(statement: str) -> list[str]:
@@ -65,10 +94,9 @@ def save_wap_entry(b, name: str, **fields) -> dict:
     entry = dict(registry.get(name) or {}, **fields)
     registry[name] = entry
     try:
-        b.WAP_REGISTRY.parent.mkdir(parents=True, exist_ok=True)
-        b.WAP_REGISTRY.write_text(json.dumps(registry, indent=2) + '\n')
-    except OSError:
-        pass
+        persist_json(b.WAP_REGISTRY, registry)
+    except OSError as err:
+        raise RuntimeError('failed to persist WAP registry: ' + str(err)) from err
     return entry
 
 

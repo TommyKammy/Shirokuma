@@ -20,7 +20,7 @@ literal = wr.literal
 extract_source_tables = wap.extract_source_tables
 check_quality_assertions = wap.check_quality_assertions
 data_table = wap.data_table
-AI_CONFIG_PATH = Path(__file__).resolve().parents[2] / 'tmp' / 'local-experiment' / 'ai_config.json'
+AI_CONFIG_PATH = wap.state_path('ai_config.json')
 _ai_config = {}
 
 
@@ -41,18 +41,14 @@ def load_ai_config():
 
 
 def save_ai_config(config):
-    """Keep active settings in memory if the local state directory is unavailable."""
+    """Activate settings only after they have been persisted successfully."""
     active = load_ai_config()
     active.update(config)
-    _ai_config.update(active)
     try:
-        if AI_CONFIG_PATH.parent.is_dir():
-            # Set permissions before writing a potentially supplied direct key.
-            AI_CONFIG_PATH.touch(mode=0o600, exist_ok=True)
-            AI_CONFIG_PATH.chmod(0o600)
-            AI_CONFIG_PATH.write_text(json.dumps(active, indent=2) + '\n')
-    except OSError:
-        pass
+        wap.persist_json(AI_CONFIG_PATH, active)
+    except OSError as err:
+        raise RuntimeError('failed to persist AI config: ' + str(err)) from err
+    _ai_config.update(active)
     return active
 
 

@@ -32,6 +32,7 @@ Icon
 *.log
 logs/
 tmp/
+var/shirokuma/
 temp/
 *.pid
 *.seed
