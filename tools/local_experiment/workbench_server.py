@@ -147,7 +147,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     result = lake_ingest.ingest(file, table=table, mode=mode, format=fmt, batch_size=batch_size)
                 else:
                     bear = body.get("bear")
-                    actions = {"sre": ("inspect",), "query": ("explain",), "data": ("generate", "stage", "publish", "rollback"),
+                    actions = {"sre": ("inspect",), "query": ("explain",), "data": ("generate", "stage", "publish", "rollback", "refresh"),
                                "catalog": ("search", "describe", "lineage"), "policy": ("baseline", "check")}
                     if not isinstance(bear, str) or bear not in actions:
                         raise ValueError("unknown bear")
@@ -157,7 +157,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     fields = {key: body.get(key) for key in ("sql", "request", "manifest", "target", "table")}
                     if any(value is not None and not isinstance(value, str) for value in fields.values()):
                         raise ValueError("bear inputs must be strings")
-                    for key in ('stage_table', 'publish', 'rollback', 'snapshot_id'):
+                    for key in ('stage_table', 'publish', 'rollback', 'snapshot_id', 'refresh'):
                         if key in body:
                             if not isinstance(body[key], str):
                                 raise ValueError('bear inputs must be strings')
@@ -171,8 +171,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                             fields['publish'] = fields.get('publish') or fields['table'] or fields.get('stage_table')
                         elif action == 'rollback':
                             fields['rollback'] = fields.get('rollback') or fields['table'] or fields['target']
-                        if not any((fields.get(key) or '').strip() for key in ('request', 'sql', 'publish', 'rollback')):
-                            raise ValueError('data bear requires a request, sql, publish, or rollback')
+                        elif action == 'refresh':
+                            fields['refresh'] = fields.get('refresh') or fields['table'] or fields.get('stage_table')
+                        if not any((fields.get(key) or '').strip() for key in ('request', 'sql', 'publish', 'rollback', 'refresh')):
+                            raise ValueError('data bear requires a request, sql, publish, rollback, or refresh')
                     fields["target"] = fields["target"] or "latest"
                     result = bears_resident.run(SimpleNamespace(bear=bear, action=action, **fields))
             self.respond(result)

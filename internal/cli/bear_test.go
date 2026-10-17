@@ -76,6 +76,9 @@ func TestDataBearWAPFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"data", "--sql", "SELECT 42", "--stage-table", "custom"},
 		{"data", "--publish", "iceberg.sandbox.custom"},
+		{"data", "--refresh", "iceberg.marts.custom"},
+		{"data", "--sql", "SELECT * FROM raw.orders", "--refresh", "custom"},
+		{"data", "--refresh", ""},
 		{"data", "--rollback", "marts.custom", "--snapshot-id", "123"},
 		{"data", "intent", "--snapshot-id", "456", "--rollback", "t", "--publish", "t", "--stage-table", "t", "--sql", "SELECT 1"},
 		{"data", "--sql", ""},

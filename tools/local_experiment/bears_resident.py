@@ -13,6 +13,71 @@ import warehouse_resident as wr
 
 NAMES = dict(sre="sre", query="query_doctor", data="data_engineer",
              catalog="catalog_curator", policy="policy_gatekeeper")
+WAP_REGISTRY = Path(__file__).resolve().parents[2] / 'tmp' / 'local-experiment' / 'wap_models.json'
+
+
+def extract_source_tables(statement: str) -> list[str]:
+    """Collect FROM/JOIN identifiers while ignoring SQL strings and comments."""
+    tokens = re.findall(r'--[^\n]*|/\*.*?\*/|\'(?:\'\'|[^\'])*\'|"(?:""|[^"])*"|[A-Za-z_][\w$]*|[^\s]',
+                        statement, re.DOTALL)
+    tokens = [t for t in tokens if not t.startswith(("'", '--', '/*'))]
+
+    def is_identifier(token):
+        return token.startswith('"') or re.fullmatch(r'[A-Za-z_][\w$]*', token) is not None
+
+    def normalize(token):
+        return token[1:-1].replace('""', '"') if token.startswith('"') else token.lower()
+
+    ctes = set()
+    for i, token in enumerate(tokens):
+        if token.lower() not in ('with', ','):
+            continue
+        j = i + 1
+        if j < len(tokens) and tokens[j].lower() == 'recursive':
+            j += 1
+        if (j + 2 < len(tokens) and is_identifier(tokens[j]) and
+                tokens[j + 1].lower() == 'as' and tokens[j + 2] == '('):
+            ctes.add(normalize(tokens[j]).lower())
+    sources = set()
+    for i, token in enumerate(tokens):
+        if token.lower() not in ('from', 'join'):
+            continue
+        j = i + 1
+        if j >= len(tokens) or not is_identifier(tokens[j]):
+            continue
+        parts = [normalize(tokens[j])]
+        j += 1
+        while j + 1 < len(tokens) and tokens[j] == '.' and is_identifier(tokens[j + 1]):
+            parts.append(normalize(tokens[j + 1]))
+            j += 2
+        if j < len(tokens) and tokens[j] == '(':
+            continue  # Table functions are not source tables.
+        if len(parts) == 1 and parts[0].lower() in ctes:
+            continue
+        if len(parts) > 1 and parts[0].lower() == 'iceberg':
+            parts = parts[1:]
+        sources.add('.'.join(parts))
+    return sorted(sources)
+
+
+def load_wap_registry() -> dict:
+    try:
+        registry = json.loads(WAP_REGISTRY.read_text())
+        return {name: entry for name, entry in registry.items() if isinstance(entry, dict)} if isinstance(registry, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_wap_entry(name: str, **fields) -> dict:
+    registry = load_wap_registry()
+    entry = dict(registry.get(name) or {}, **fields)
+    registry[name] = entry
+    try:
+        WAP_REGISTRY.parent.mkdir(parents=True, exist_ok=True)
+        WAP_REGISTRY.write_text(json.dumps(registry, indent=2) + '\n')
+    except OSError:
+        pass
+    return entry
 
 
 def sql(url, statement):
@@ -150,6 +215,7 @@ def data(args):
     request = getattr(args, 'request', '')
     rollback = getattr(args, 'rollback', None)
     publish = getattr(args, 'publish', None)
+    refresh = getattr(args, 'refresh', None)
     if rollback:
         snapshot = str(getattr(args, 'snapshot_id', ''))
         if not re.fullmatch(r'[0-9]+', snapshot):
@@ -161,14 +227,28 @@ def data(args):
             sql(url, statement)
             audit = audit_table(url, target)
         return dict(wap_action='rollback', table=target, restored_snapshot_id=int(snapshot), audit=audit, valid=True)
-    if publish:
-        name = data_table(publish)
+    if publish or refresh:
+        action = 'refresh' if refresh else 'publish'
+        name = data_table(refresh or publish)
         source, target = 'iceberg.sandbox.' + name, 'iceberg.marts.' + name
+        saved_sql = None
+        if refresh:
+            entry = load_wap_registry().get(name) or {}
+            saved_sql = getattr(args, 'sql', None) or entry.get('sql')
+            if not saved_sql:
+                raise ValueError(f'no recorded WAP model SQL for {name}')
+            saved_sql = wr.check_sql_policy(saved_sql, mode='read-only')
+            if not re.match(r'(?i)^(SELECT|WITH)\b', saved_sql):
+                raise ValueError('SELECT model required')
         with wr.trino() as url:
+            if refresh:
+                sql(url, wr.check_sql_policy('CREATE SCHEMA IF NOT EXISTS iceberg.sandbox', mode='sandbox-write'))
+                sql(url, wr.check_sql_policy('CREATE OR REPLACE TABLE ' + identifier(source) +
+                    ' AS ' + saved_sql, mode='sandbox-write'))
             source_audit = audit_table(url, source)
             check_quality_assertions(source_audit, getattr(args, 'min_rows', 1), getattr(args, 'not_null', ''))
             if not source_audit['quality_passed']:
-                return dict(wap_action='publish', table=target, source_table=source, valid=False,
+                return dict(wap_action=action, table=target, source_table=source, valid=False,
                             audit=source_audit, error=source_audit.get('assertion_error') or
                             'sandbox table failed quality audit (row_count must be > 0)')
             previous = attempt(lambda: dict(snapshot_id=latest_snapshot(url, target))).get('snapshot_id')
@@ -186,17 +266,25 @@ def data(args):
                     error = (f'publish blocked by regression guard: row_count dropped from {target_count} to '
                              f'{source_audit["row_count"]} (>50% shrink; pass --allow-shrink to override)')
                 if error:
-                    return dict(wap_action='publish', table=target, source_table=source,
+                    return dict(wap_action=action, table=target, source_table=source,
                                 previous_snapshot_id=previous, valid=False, audit=source_audit, error=error)
             statement = wr.check_sql_policy('CREATE OR REPLACE TABLE ' + identifier(target) +
                 ' AS SELECT * FROM ' + identifier(source), mode='admin-write')
             sql(url, statement)
             audit = audit_table(url, target)
-        return dict(wap_action='publish', source_table=source, table=target, previous_snapshot_id=previous,
-                    published_snapshot_id=audit['snapshot_id'], audit=audit, valid=True)
+        fields = dict(table=target, source_table=source, published=True,
+                      published_snapshot_id=audit.get('snapshot_id'), previous_snapshot_id=previous)
+        extra = {}
+        if refresh:
+            extra = dict(generated_sql=saved_sql, sources=extract_source_tables(saved_sql))
+            fields.update(sql=saved_sql, sources=extra['sources'], staged_table=source,
+                          staged_snapshot_id=source_audit.get('snapshot_id'))
+        save_wap_entry(name, **fields)
+        return dict(wap_action=action, source_table=source, table=target, previous_snapshot_id=previous,
+                    published_snapshot_id=audit['snapshot_id'], audit=audit, valid=True, **extra)
     explicit_sql = getattr(args, 'sql', None)
     if not explicit_sql and not request:
-        raise ValueError('data bear requires request, --sql, --publish, or --rollback')
+        raise ValueError('data bear requires request, --sql, --publish, --rollback, or --refresh')
     stage = getattr(args, 'stage_table', None)
     staged_table = 'iceberg.sandbox.' + data_table(stage) if stage else None
     llm_usage = {}
@@ -221,6 +309,10 @@ def data(args):
             sql(url, wr.check_sql_policy('CREATE OR REPLACE TABLE ' + identifier(staged_table) +
                 ' AS ' + wr.check_sql_policy(statement), mode='sandbox-write'))
             audit = audit_table(url, staged_table)
+            if audit['quality_passed']:
+                save_wap_entry(data_table(stage), staged_table=staged_table,
+                               table='iceberg.marts.' + data_table(stage), sql=statement, intent=request,
+                               sources=extract_source_tables(statement), staged_snapshot_id=audit.get('snapshot_id'))
             return dict(wap_action='stage', intent=request, generated_sql=statement,
                         valid=audit['quality_passed'], validation=validation, staged_table=staged_table, audit=audit,
                         **({'self_corrected': True} if self_corrected else {}),
@@ -265,8 +357,11 @@ def catalog(args):
         models = Path(__file__).parent / "dataops" / "dbt_persistent" / "models"
         lineage = {p.stem: sorted(set(re.findall(r"ref\(\s*['\"]([\w]+)['\"]\s*\)", p.read_text())))
                    for p in sorted(models.rglob("*.sql"))}
+        for name, entry in load_wap_registry().items():
+            if entry.get('sources'):
+                lineage.setdefault(name, entry['sources'])
         return dict(action="lineage", catalog="iceberg", metadata={"lineage": lineage,
-                    "lineage_note": "Dependencies from local dbt model definitions"})
+                    "lineage_note": "Dependencies from local dbt models and recorded WAP models"})
     with wr.trino() as url:
         if args.action == "search":
             for schema in ("tpch_tiny", "raw", "sandbox", "staging", "marts", "smoke"):
@@ -286,6 +381,11 @@ def catalog(args):
                 definitions = [p.read_text() for p in models.rglob("*.sql") if p.stem == table.split(".")[-1]]
                 metadata["lineage"] = sorted(set(ref for definition in definitions for ref in re.findall(r"(?:ref|source)\([^)]*?['\"]([\w]+)['\"]\s*\)", definition)))
                 metadata["lineage_note"] = "Dependencies from local dbt model definitions; empty means no recorded model"
+                if not metadata['lineage']:
+                    entry = load_wap_registry().get(table.split('.')[-1]) or {}
+                    metadata['lineage'] = entry.get('sources', [])
+                    if 'sql' in entry:
+                        metadata['wap_sql'] = entry['sql']
         metadata["catalog_config"] = attempt(lambda: wr.kubectl("get", "configmap", "-l", "app.kubernetes.io/name=trino-local", "-o", "json"))
     return dict(action=args.action, catalog="iceberg", metadata=metadata)
 
@@ -361,7 +461,7 @@ def main():
     command.add_argument("--sql")
     command = sub.add_parser("data")
     command.add_argument("request", nargs="?", default="")
-    for flag in ('sql', 'stage-table', 'publish', 'rollback', 'snapshot-id'):
+    for flag in ('sql', 'stage-table', 'publish', 'rollback', 'snapshot-id', 'refresh'):
         command.add_argument('--' + flag)
     command.add_argument('--allow-shrink', action='store_true')
     command.add_argument('--min-rows', type=int, default=1)

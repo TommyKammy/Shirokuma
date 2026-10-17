@@ -43,7 +43,7 @@ func newBearCommand(runner bearRunner) *cobra.Command {
 		var root, sql string
 		var allowShrink bool
 		var minRows int
-		wapFlags := []string{"stage-table", "publish", "rollback", "snapshot-id"}
+		wapFlags := []string{"stage-table", "publish", "rollback", "snapshot-id", "refresh"}
 		command := &cobra.Command{
 			Use: name + " [arguments]", Short: "Run the resident " + name + " Bear",
 			RunE: func(cmd *cobra.Command, args []string) error {

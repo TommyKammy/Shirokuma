@@ -4,6 +4,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace as Args
 import unittest
 from unittest.mock import patch
@@ -16,6 +17,130 @@ SPEC.loader.exec_module(b)
 
 
 class BearsResidentTests(unittest.TestCase):
+    def test_extract_source_tables(self):
+        cases = [
+            ('SELECT * FROM iceberg.raw.syn_orders JOIN raw.customers USING (id) JOIN products ON true',
+             ['products', 'raw.customers', 'raw.syn_orders']),
+            ('WITH RECURSIVE orders AS (SELECT * FROM iceberg.raw.orders), '
+             'totals AS (SELECT * FROM orders JOIN raw.items ON true) '
+             'SELECT * FROM totals JOIN orders ON true JOIN raw.orders ON true',
+             ['raw.items', 'raw.orders']),
+            ('WITH "my cte" AS (SELECT * FROM "iceberg" . "raw" . "order items") '
+             'SELECT * FROM "my cte" JOIN "local table" ON true', ['local table', 'raw.order items']),
+            ("SELECT 'FROM fake JOIN bogus', 'it''s FROM missing' FROM raw.real "
+             '-- JOIN ignored\n/* FROM ignored.too */ JOIN raw.other ON true', ['raw.other', 'raw.real']),
+            ('SELECT "FROM fake" FROM (SELECT * FROM RAW.Orders) q '
+             'JOIN raw.orders ON true JOIN UNNEST(ARRAY[1]) ON true', ['raw.orders']),
+            ('SELECT 1', []),
+        ]
+        for statement, expected in cases:
+            with self.subTest(statement=statement):
+                self.assertEqual(b.extract_source_tables(statement), expected)
+
+    def test_registry_best_effort_and_merge(self):
+        self.assertEqual(b.load_wap_registry(), {})
+        b.save_wap_entry('orders', sql='SELECT 1', sources=['raw.orders'])
+        b.save_wap_entry('another', sql='SELECT 2')
+        entry = b.save_wap_entry('orders', published=True)
+        self.assertEqual(entry['sql'], 'SELECT 1')
+        self.assertTrue(b.load_wap_registry()['orders']['published'])
+        self.assertIn('another', b.load_wap_registry())
+        for invalid in ('{', '[]', '{"bad": 1}'):
+            b.WAP_REGISTRY.write_text(invalid)
+            self.assertEqual(b.load_wap_registry(), {})
+        with patch.object(Path, 'read_text', side_effect=OSError('unreadable')), \
+             patch.object(Path, 'write_text', side_effect=OSError('unwritable')):
+            self.assertEqual(b.save_wap_entry('orders', sql='SELECT 1'), {'sql': 'SELECT 1'})
+
+    def test_stage_publish_and_catalog_wap_lineage(self):
+        statement = 'SELECT * FROM iceberg.raw.orders JOIN raw.items USING (id)'
+        with patch.object(b, 'sql', return_value={'rows': []}), \
+             patch.object(b, 'audit_table', return_value={'quality_passed': True, 'snapshot_id': 12}):
+            self.assertTrue(b.data(Args(sql=statement, request='order items', stage_table='dynamic_orders'))['valid'])
+        with patch.object(b, 'sql', return_value={'rows': []}), \
+             patch.object(b, 'latest_snapshot', return_value=None), \
+             patch.object(b, 'audit_table', side_effect=[dict(row_count=10, null_counts={}), dict(snapshot_id=34)]):
+            self.assertTrue(b.data(Args(publish='dynamic_orders'))['valid'])
+        entry = b.load_wap_registry()['dynamic_orders']
+        self.assertEqual(entry['sql'], statement)
+        self.assertEqual(entry['intent'], 'order items')
+        self.assertEqual(entry['sources'], ['raw.items', 'raw.orders'])
+        self.assertEqual(entry['staged_snapshot_id'], 12)
+        self.assertEqual(entry['published_snapshot_id'], 34)
+        self.assertTrue(entry['published'])
+        lineage = b.catalog(Args(action='lineage', table=None))['metadata']['lineage']
+        self.assertEqual(lineage['dynamic_orders'], entry['sources'])
+        self.assertIn('stg_tpch_orders', lineage['fct_orders'])
+        b.save_wap_entry('fct_orders', sources=['raw.unrelated'])
+        self.assertEqual(b.catalog(Args(action='lineage', table=None))['metadata']['lineage']['fct_orders'],
+                         lineage['fct_orders'])
+        with patch.object(b, 'sql', return_value={'rows': []}), patch.object(b.wr, 'kubectl', return_value='{}'):
+            metadata = b.catalog(Args(action='lineage', table='dynamic_orders'))['metadata']
+            self.assertEqual(metadata['lineage'], entry['sources'])
+            self.assertEqual(metadata['wap_sql'], statement)
+
+    def test_refresh_saved_sql_and_override(self):
+        for override in (None, 'SELECT * FROM raw.updated'):
+            saved = 'SELECT * FROM raw.orders'
+            b.save_wap_entry('dynamic_orders', sql=saved, intent='count orders')
+            with patch.object(b, 'sql', return_value={'rows': []}) as execute, \
+                 patch.object(b, 'latest_snapshot', return_value=12), \
+                 patch.object(b, 'audit_table', side_effect=[dict(row_count=10, null_counts={}, snapshot_id=23),
+                                                           dict(snapshot_id=34)]):
+                result = b.data(Args(refresh='iceberg.marts.dynamic_orders', sql=override, allow_shrink=True))
+            self.assertEqual(result['wap_action'], 'refresh')
+            self.assertTrue(result['valid'])
+            self.assertEqual(result['generated_sql'], override or saved)
+            self.assertEqual(result['sources'], ['raw.updated' if override else 'raw.orders'])
+            self.assertEqual(result['previous_snapshot_id'], 12)
+            self.assertEqual(result['published_snapshot_id'], 34)
+            self.assertEqual(execute.call_args_list[0].args[1], 'CREATE SCHEMA IF NOT EXISTS iceberg.sandbox')
+            self.assertEqual(execute.call_args_list[1].args[1],
+                             'CREATE OR REPLACE TABLE "iceberg"."sandbox"."dynamic_orders" AS ' + (override or saved))
+            self.assertEqual(execute.call_args_list[2].args[1],
+                             'CREATE OR REPLACE TABLE "iceberg"."marts"."dynamic_orders" AS SELECT * FROM "iceberg"."sandbox"."dynamic_orders"')
+            entry = b.load_wap_registry()['dynamic_orders']
+            self.assertEqual(entry['intent'], 'count orders')
+            self.assertEqual(entry['sql'], override or saved)
+            self.assertEqual(entry['sources'], result['sources'])
+            self.assertEqual(entry['staged_snapshot_id'], 23)
+            self.assertEqual(entry['published_snapshot_id'], 34)
+        with self.assertRaisesRegex(ValueError, 'no recorded WAP model SQL for unknown'):
+            b.data(Args(refresh='unknown'))
+
+    def test_refresh_checks_quality_regression_and_sql_policy(self):
+        b.save_wap_entry('orders', sql='SELECT * FROM raw.orders')
+        for count, nulls, minimum, allow_shrink, valid in (
+                (0, 0, 1, False, False), (10, 1, 1, False, False),
+                (10, 0, 20, False, False), (49, 0, 1, False, False),
+                (49, 0, 1, True, True), (50, 0, 1, False, True)):
+            def execute(_url, statement):
+                return {'rows': [[100]] if statement.startswith('SELECT COUNT') else
+                        [['id']] if statement.startswith('SHOW COLUMNS') else []}
+            with self.subTest(count=count, nulls=nulls, minimum=minimum, allow_shrink=allow_shrink), \
+                 patch.object(b, 'sql', side_effect=execute) as sql, \
+                 patch.object(b, 'latest_snapshot', return_value=12), \
+                 patch.object(b, 'audit_table', side_effect=[dict(row_count=count, null_counts={'id': nulls},
+                     columns=[{'name': 'id'}]), dict(snapshot_id=34)]):
+                before = b.load_wap_registry()
+                result = b.data(Args(refresh='orders', min_rows=minimum, not_null='id', allow_shrink=allow_shrink))
+                self.assertEqual(result['valid'], valid)
+                writes = [c.args[1] for c in sql.call_args_list if c.args[1].startswith('CREATE OR REPLACE TABLE "iceberg"."marts"')]
+                self.assertEqual(len(writes), int(valid))
+                if not valid:
+                    self.assertEqual(b.load_wap_registry(), before)
+        for statement in ('DELETE FROM raw.orders', 'SELECT 1; DROP TABLE raw.orders'):
+            with patch.object(b, 'sql') as execute, self.assertRaises(ValueError):
+                b.data(Args(refresh='orders', sql=statement))
+            execute.assert_not_called()
+
+    def test_main_refresh_flag(self):
+        with patch.object(sys, 'argv', ['bears', 'data', '--refresh', 'orders']), \
+             patch.object(b, 'data', return_value={}) as data, \
+             patch.object(b.wr, 'telemetry', return_value='recorded'), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(b.main(), 0)
+        self.assertEqual(data.call_args.args[0].refresh, 'orders')
+
     def test_audit_table(self):
         for columns in ([['a', 'bigint'], ['dotted.col', 'varchar']], []):
             responses = [{'rows': columns}, {'rows': [[3, 0, 2] if columns else [3]]}]
@@ -211,6 +336,11 @@ class BearsResidentTests(unittest.TestCase):
         model.assert_not_called()
 
     def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        registry = patch.object(b, 'WAP_REGISTRY', Path(temporary.name) / 'wap_models.json')
+        registry.start()
+        self.addCleanup(registry.stop)
         self.connection = patch.object(b.wr, "trino", return_value=contextlib.nullcontext("http://trino"))
         self.connection.start()
         self.addCleanup(self.connection.stop)

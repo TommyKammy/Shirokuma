@@ -141,6 +141,9 @@ class WorkbenchTests(unittest.TestCase):
                  ({'action': 'publish', 'table': 'summary'}, 'publish', 'summary'),
                  ({'action': 'publish', 'stage_table': 'summary'}, 'publish', 'summary'),
                  ({'action': 'publish', 'publish': 'custom', 'table': 'other'}, 'publish', 'custom'),
+                 ({'action': 'refresh', 'table': 'summary'}, 'refresh', 'summary'),
+                 ({'action': 'refresh', 'stage_table': 'summary'}, 'refresh', 'summary'),
+                 ({'action': 'refresh', 'refresh': 'custom', 'table': 'other'}, 'refresh', 'custom'),
                  ({'action': 'rollback', 'target': 'marts.summary', 'snapshot_id': '9007199254740993'}, 'rollback', 'marts.summary'),
                  ({'action': 'rollback', 'table': 'marts.summary'}, 'rollback', 'marts.summary'),
                  ({'action': 'rollback', 'rollback': 'marts.custom', 'table': 'other'}, 'rollback', 'marts.custom')]
@@ -152,13 +155,13 @@ class WorkbenchTests(unittest.TestCase):
                 if 'snapshot_id' in fields:
                     self.assertEqual(args.snapshot_id, fields['snapshot_id'])
         run.reset_mock()
-        for fields in ({'action': 'publish'}, {'action': 'rollback'}, {'request': ' ', 'sql': '\n'},
+        for fields in ({'action': 'publish'}, {'action': 'rollback'}, {'action': 'refresh'}, {'refresh': 42}, {'request': ' ', 'sql': '\n'},
                        {'sql': 'SELECT 1', 'stage_table': []}, {'publish': 3}, {'rollback': None}, {'snapshot_id': 42}):
             with self.subTest(fields=fields):
                 code, result = self.json_request('/api/bears/run', dict(bear='data', **fields))
                 self.assertEqual(code, 400)
-                if fields.get('action') in ('publish', 'rollback'):
-                    self.assertEqual(result['error'], 'data bear requires a request, sql, publish, or rollback')
+                if fields.get('action') in ('publish', 'rollback', 'refresh'):
+                    self.assertEqual(result['error'], 'data bear requires a request, sql, publish, rollback, or refresh')
         run.assert_not_called()
 
     @patch.object(wb.bears_resident, 'catalog')
