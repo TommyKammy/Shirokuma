@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-17
-version: "6.0.0"
+version: "7.0.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -18,7 +18,7 @@ tags: [shirokuma, local, milestones]
 
 ---
 
-## Active Roadmap Milestones (Phase 0 – Phase 5)
+## Active Roadmap Milestones (Phase 0 – Phase 6)
 
 ### 2026-10-16 — WP-P0-001: Governance Reset & Documentation Slimming (Completed)
 - Adopted [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) and [DEV-04F](../04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md), establishing the **Commander (`Antigravity`) + Implementation Worker (`codex-cli` GPT-6.1 Sol Medium)** operating model.
@@ -125,6 +125,26 @@ tags: [shirokuma, local, milestones]
 - Added `shirokuma lake ingest --mode upsert --key order_id` with comma-separated composite keys.
 - Keeps the last input row per key before batching; atomically merges each batch with existing Iceberg rows.
 - Added Workbench upsert mode and key input, and synchronized Phase 5 roadmap, gates, and milestones.
+
+---
+
+### 2026-10-17 — WP-P6-001: Resident WAP Module & Shared SQL Helpers (Completed)
+
+- Extracted resident WAP execution into `tools/local_experiment/wap_resident.py`.
+- Reused shared SQL helpers across resident Bears, Warehouse, and Ingest workflows.
+- Removed duplicated WAP orchestration from the resident Bears module.
+
+### 2026-10-17 — WP-P6-002: Legacy Fixture CLI Removal (Completed)
+
+- Removed retired fixture CLI subcommands and their Go tests.
+- Consolidated Warehouse commands around the resident execution path.
+- Updated CLI registration and resident command tests for the reduced surface.
+
+### 2026-10-17 — WP-P6-003: Legacy Scripts, Tests, Virtual Environments & Makefile Cleanup (Completed)
+
+- Retained resident core scripts, AgentHouse, Loki, Workbench, and persistent dbt while removing retired fixture trees and over 1.2 GB of unused virtual environments.
+- Removed 261 legacy fixture test files and ~910 lines of retired `local-*` Make targets while preserving all 42 CI and resident core test suites.
+- Verified `make verify-core` (all 114 resident Python tests and Go CLI tests passing) and synchronized Phase 6 roadmap, gates, and milestones.
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)
 

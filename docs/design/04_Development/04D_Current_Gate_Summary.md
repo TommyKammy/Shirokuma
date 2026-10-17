@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-17
-version: "2.0.0"
+version: "2.1.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -38,3 +38,6 @@ tags: [shirokuma, local, handoff, gates]
 | **WP-P5-001** | Add single-scan WAP audit, QUALIFY rewriting, regression guards, and AI SQL self-correction | **Completed (2026-10-17)** |
 | **WP-P5-002** | Register dynamic WAP models and lineage; rerun registered models with one-command `--refresh` | **Completed (2026-10-17)** |
 | **WP-P5-003** | Add idempotent keyed upsert ingestion, Workbench upsert controls, and Phase 5 documentation sync | **Completed (2026-10-17)** |
+| **WP-P6-001** | Extract the resident WAP module and deduplicate shared SQL helpers | **Completed (2026-10-17)** |
+| **WP-P6-002** | Remove legacy fixture CLI subcommands and consolidate the resident Warehouse CLI | **Completed (2026-10-17)** |
+| **WP-P6-003** | Remove retired fixture scripts, tests, virtual environments, and Make targets; verify the retained core and synchronize Phase 6 documentation | **Completed (2026-10-17)** |
