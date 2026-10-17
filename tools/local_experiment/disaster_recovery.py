@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Bundle warehouse definitions, logical data, dbt models and application state.
 
-Restore validates the whole bundle before writing state/models. Catalog SQL and
-data are retained in the archive for operator-controlled warehouse recovery.
+Restore validates the whole bundle before writing state/models. Opt-in warehouse
+recovery also recreates catalog objects and restores logical table data.
 """
 import argparse
 from datetime import datetime, timezone
@@ -11,6 +11,7 @@ import gzip
 import io
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import sys
 import subprocess
@@ -149,9 +150,62 @@ def _validated_files(archive_path):
         raise BackupError('Invalid backup archive or manifest') from exc
 
 
-def restore(archive_path, target_state_dir=None, dry_run=False):
-    """Validate all payloads before restoring state and models (never execute SQL)."""
+def _warehouse_plan(files, manifest):
+    """Prepare SQL before any writes, using manifest names rather than filenames."""
+    schemas, tables, data, statements = [], [], [], []
+    for name in sorted(files):
+        path = PurePosixPath(name)
+        if len(path.parts) == 3 and path.parts[0] == 'catalog' and path.name == 'schema.sql':
+            schemas.append(path.parts[1])
+            ddl = files[name].decode().strip().rstrip(';')
+            statements.append(re.sub(r'^CREATE\s+SCHEMA\s+(?:IF\s+NOT\s+EXISTS\s+)?',
+                                     'CREATE SCHEMA IF NOT EXISTS ', ddl, count=1, flags=re.I))
+    # Base tables must exist before views that reference them.
+    for entry in sorted(manifest['tables'], key=lambda t: t['type'] == 'VIEW'):
+        table = _identifier(entry['catalog'], entry['schema'], entry['table'])
+        tables.append('.'.join((entry['catalog'], entry['schema'], entry['table'])))
+        statements.append(files[entry['ddl']].decode().strip().rstrip(';'))
+    for entry in manifest['tables']:
+        if not entry.get('data'):
+            continue
+        payload = json.loads(files[entry['data']])
+        columns, rows = payload['columns'], payload['rows']
+        table = _identifier(entry['catalog'], entry['schema'], entry['table'])
+        data.append(dict(table='.'.join((entry['catalog'], entry['schema'], entry['table'])),
+                         file=entry['data'], rows=len(rows)))
+        column_sql = ', '.join(_identifier(c['name']) for c in columns)
+        for offset in range(0, len(rows), 500):
+            values = []
+            for row in rows[offset:offset + 500]:
+                if len(row) != len(columns):
+                    raise BackupError('Data column count mismatch: ' + entry['data'])
+                cells = []
+                for value, column in zip(row, columns):
+                    if value is None:
+                        cell = 'NULL'
+                    elif isinstance(value, bool):
+                        cell = 'TRUE' if value else 'FALSE'
+                    elif isinstance(value, (int, float)):
+                        cell = str(value)
+                    elif isinstance(value, str):
+                        cell = 'CAST(' + warehouse.literal(value) + ' AS ' + column['type'] + ')'
+                    else:
+                        raise BackupError('Unsupported data value: ' + entry['data'])
+                    cells.append(cell)
+                values.append('(' + ', '.join(cells) + ')')
+            statements.append('INSERT INTO ' + table + ' (' + column_sql + ') VALUES ' + ', '.join(values))
+    return schemas, tables, data, statements
+
+
+def restore(archive_path, target_state_dir=None, dry_run=False, restore_warehouse=False):
+    """Validate the bundle and optionally recover warehouse DDL and logical rows."""
     files, manifest = _validated_files(archive_path)
+    schemas, tables, warehouse_data, statements = [], [], [], []
+    if restore_warehouse:
+        try:
+            schemas, tables, warehouse_data, statements = _warehouse_plan(files, manifest)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise BackupError('Invalid warehouse recovery payload') from exc
     target = Path(target_state_dir) if target_state_dir is not None else state_dir()
     restored = []
     for name, data in files.items():
@@ -168,6 +222,10 @@ def restore(archive_path, target_state_dir=None, dry_run=False):
             raise BackupError('Restore destination escapes target: ' + name)
         restored.append((destination, data))
     if not dry_run:
+        if restore_warehouse:
+            with warehouse.trino() as url:
+                for statement in statements:
+                    warehouse.execute(url, statement, {'X-Trino-User': 'shirokuma-restore'})
         for destination, data in restored:
             destination.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
@@ -178,7 +236,9 @@ def restore(archive_path, target_state_dir=None, dry_run=False):
             finally:
                 temporary.unlink(missing_ok=True)
     return dict(status='success', restored_files=[str(path) for path, _ in restored],
-                manifest=manifest, dry_run=dry_run)
+                manifest=manifest, dry_run=dry_run, restored_schemas=schemas,
+                restored_tables=tables, rows_restored=sum(item['rows'] for item in warehouse_data),
+                restored_data=warehouse_data)
 
 
 def main(argv=None):
@@ -191,12 +251,13 @@ def main(argv=None):
     command.add_argument('--input', required=True)
     command.add_argument('--target-dir')
     command.add_argument('--dry-run', action='store_true')
+    command.add_argument('--restore-warehouse', action='store_true')
     args = parser.parse_args(argv)
     try:
         if args.command == 'backup':
             result = backup(args.output, include_tables=not args.no_tables)
         else:
-            result = restore(args.input, args.target_dir, args.dry_run)
+            result = restore(args.input, args.target_dir, args.dry_run, args.restore_warehouse)
         print(json.dumps(result))
         return 0
     except (RuntimeError, OSError, EOFError, subprocess.SubprocessError) as exc:

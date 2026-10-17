@@ -42,7 +42,7 @@ class DisasterRecoveryTests(unittest.TestCase):
         self.execute = self.enterContext(patch.object(dr.warehouse, 'execute', side_effect=self.query))
         self.archive = self.root / 'backup.tar.gz'
 
-    def query(self, url, sql, headers, max_rows):
+    def query(self, url, sql, headers, max_rows=sys.maxsize):
         self.assertGreater(max_rows, 1000)
         if sql == 'SHOW SCHEMAS FROM iceberg':
             rows = [[s] for s in ('marts', 'raw', 'sandbox', 'staging', 'information_schema')]
@@ -51,14 +51,18 @@ class DisasterRecoveryTests(unittest.TestCase):
         elif sql.startswith('SELECT table_name'):
             rows = [['orders/"2026', 'BASE TABLE'], ['summary', 'VIEW']]
         elif sql.startswith('SHOW CREATE TABLE'):
-            rows = [['CREATE TABLE ' + sql.removeprefix('SHOW CREATE TABLE ') + ' (id bigint)']]
+            rows = [['CREATE TABLE ' + sql.removeprefix('SHOW CREATE TABLE ') +
+                     ' (id bigint, missing varchar, label varchar)']]
         elif sql.startswith('SHOW CREATE VIEW'):
             rows = [['CREATE VIEW ' + sql.removeprefix('SHOW CREATE VIEW ') + ' AS SELECT 1']]
         elif sql.startswith('SELECT *'):
-            rows = [[n, None, '日本語'] for n in range(1205)]
+            rows = [[n, None, "日本語's"] for n in range(1205)]
+        elif sql.startswith(('CREATE ', 'INSERT INTO ')):
+            rows = []
         else:
             self.fail('Unexpected SQL: ' + sql)
-        return dict(rows=rows, columns=[dict(name='id', type='bigint')], truncated=False)
+        return dict(rows=rows, columns=[dict(name='id', type='bigint'),
+                    dict(name='missing', type='varchar'), dict(name='label', type='varchar')], truncated=False)
 
     def create(self, include_tables=True):
         return dr.backup(self.archive, include_tables=include_tables)
@@ -108,6 +112,52 @@ class DisasterRecoveryTests(unittest.TestCase):
         self.assertFalse(any(name.startswith('data/') for name in result['files']))
         self.assertNotIn('state/ai_config.json', result['files'])
         self.assertFalse(any(c.args[1].startswith('SELECT *') for c in self.execute.call_args_list))
+
+    def test_restore_warehouse_ddl_and_data(self):
+        self.create()
+        self.execute.reset_mock()
+        result = dr.restore(self.archive, self.root / 'restored', restore_warehouse=True)
+        statements = [call.args[1] for call in self.execute.call_args_list]
+        self.assertEqual(result['restored_schemas'], ['marts', 'raw', 'sandbox', 'staging'])
+        self.assertEqual(len(result['restored_tables']), 8)
+        self.assertEqual(result['rows_restored'], 4 * 1205)
+        self.assertEqual(sum(item['rows'] for item in result['restored_data']), 4 * 1205)
+        self.assertEqual(statements[:4], ['CREATE SCHEMA IF NOT EXISTS "iceberg"."' + s + '"'
+                                         for s in result['restored_schemas']])
+        self.assertEqual(sum(s.startswith('CREATE TABLE ') for s in statements), 4)
+        self.assertEqual(sum(s.startswith('CREATE VIEW ') for s in statements), 4)
+        inserts = [s for s in statements if s.startswith('INSERT INTO ')]
+        self.assertEqual(len(inserts), 12)
+        self.assertIn('"iceberg"."marts"."orders/""2026" ("id", "missing", "label")', inserts[0])
+        self.assertIn("(0, NULL, CAST('日本語''s' AS varchar))", inserts[0])
+        self.assertIn("(1204, NULL, CAST('日本語''s' AS varchar))", inserts[2])
+
+    def test_restore_warehouse_dry_run_and_ddl_only(self):
+        for include_tables in (True, False):
+            self.create(include_tables=include_tables)
+            self.execute.reset_mock()
+            target = self.root / 'planned'
+            with patch.object(dr.warehouse, 'trino') as trino:
+                result = dr.restore(self.archive, target, dry_run=True, restore_warehouse=True)
+            trino.assert_not_called()
+            self.execute.assert_not_called()
+            self.assertFalse(target.exists())
+            self.assertEqual(len(result['restored_schemas']), 4)
+            self.assertEqual(len(result['restored_tables']), 8)
+            self.assertEqual(result['rows_restored'], 4820 if include_tables else 0)
+        dr.restore(self.archive, target, restore_warehouse=True)
+        self.assertFalse(any(c.args[1].startswith('INSERT INTO ') for c in self.execute.call_args_list))
+
+    def test_cli_restore_warehouse(self):
+        self.create()
+        self.execute.reset_mock()
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = dr.main(['restore', '--input', str(self.archive), '--restore-warehouse',
+                            '--target-dir', str(self.root / 'cli-restored')])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())['rows_restored'], 4820)
+        self.assertTrue(any(c.args[1].startswith('INSERT INTO ') for c in self.execute.call_args_list))
 
     def test_corrupted_archive(self):
         self.create()

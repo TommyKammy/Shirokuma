@@ -608,15 +608,17 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(b.WAP_REGISTRY.read_text(), before)
         self.assertEqual(b.load_wap_registry()['model_b']['sql'], 'SELECT 2')
 
-    def test_state_path_durable_override_and_fallback(self):
+    def test_state_path_durable_override_and_fail_closed(self):
         root = TOOLS.parents[1]
         with patch.object(Path, 'mkdir'), patch.object(b.wap.os, 'access', return_value=True):
             for name in ('ai_config.json', 'wap_models.json'):
                 self.assertEqual(b.wap.state_path(name), root / 'var/shirokuma' / name)
         with patch.object(Path, 'mkdir', side_effect=OSError('read-only')):
-            self.assertEqual(b.wap.state_path('wap_models.json'), root / 'tmp/local-experiment/wap_models.json')
+            with self.assertRaisesRegex(RuntimeError, 'State directory is not writable:'):
+                b.wap.state_path('wap_models.json')
         with patch.object(Path, 'mkdir'), patch.object(b.wap.os, 'access', return_value=False):
-            self.assertEqual(b.wap.state_path('ai_config.json'), root / 'tmp/local-experiment/ai_config.json')
+            with self.assertRaisesRegex(RuntimeError, 'State directory is not writable:'):
+                b.wap.state_path('ai_config.json')
         with patch.dict(b.os.environ, {'SHIROKUMA_STATE_DIR': str(self.ai_config_path.parent / 'state')}):
             self.assertEqual(b.wap.state_path('ai_config.json'), self.ai_config_path.parent / 'state/ai_config.json')
 

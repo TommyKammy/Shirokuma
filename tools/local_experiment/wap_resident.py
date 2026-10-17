@@ -1,4 +1,5 @@
 """Write-audit-publish engine using the calling Bears module for runtime hooks."""
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -8,18 +9,16 @@ import tempfile
 import warehouse_resident as wr
 
 def state_path(filename):
-    """Prefer durable lab state; an explicit state directory must be honored."""
+    """Require writable durable storage, including explicit overrides."""
     root = Path(__file__).resolve().parents[2]
-    if os.environ.get('SHIROKUMA_STATE_DIR'):
-        return Path(os.environ['SHIROKUMA_STATE_DIR']) / filename
-    durable = root / 'var' / 'shirokuma'
+    durable = Path(os.environ.get('SHIROKUMA_STATE_DIR') or root / 'var' / 'shirokuma')
     try:
         durable.mkdir(parents=True, exist_ok=True)
         if os.access(durable, os.W_OK):
             return durable / filename
-    except OSError:
-        pass
-    return root / 'tmp' / 'local-experiment' / filename
+    except OSError as err:
+        raise RuntimeError(f'State directory is not writable: {durable}') from err
+    raise RuntimeError(f'State directory is not writable: {durable}')
 
 
 def persist_json(path, value):
@@ -90,11 +89,14 @@ def load_wap_registry(b) -> dict:
 
 
 def save_wap_entry(b, name: str, **fields) -> dict:
-    registry = b.load_wap_registry()
-    entry = dict(registry.get(name) or {}, **fields)
-    registry[name] = entry
     try:
-        persist_json(b.WAP_REGISTRY, registry)
+        b.WAP_REGISTRY.parent.mkdir(parents=True, exist_ok=True)
+        with b.WAP_REGISTRY.with_suffix('.lock').open('a') as lock_fd:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            registry = b.load_wap_registry()
+            entry = dict(registry.get(name) or {}, **fields)
+            registry[name] = entry
+            persist_json(b.WAP_REGISTRY, registry)
     except OSError as err:
         raise RuntimeError('failed to persist WAP registry: ' + str(err)) from err
     return entry

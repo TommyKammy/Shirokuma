@@ -1,6 +1,12 @@
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
+import fcntl
+import json
+import os
 from pathlib import Path
 import sys
+import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -10,6 +16,55 @@ import bears_resident as b
 
 
 class WapResidentTests(unittest.TestCase):
+    def test_state_path_requires_writable_durable_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            durable = Path(temporary).resolve() / 'state'
+            with patch.dict(os.environ, SHIROKUMA_STATE_DIR=str(durable)):
+                self.assertEqual(b.wap.state_path('test.json'), durable / 'test.json')
+                self.assertTrue(durable.is_dir())
+                for operation in ('mkdir', 'access'):
+                    manager = (patch.object(Path, 'mkdir', side_effect=OSError('read-only'))
+                               if operation == 'mkdir' else patch.object(os, 'access', return_value=False))
+                    with manager, self.assertRaisesRegex(RuntimeError,
+                            'State directory is not writable: ' + str(durable)):
+                        b.wap.state_path('test.json')
+
+    def test_save_serializes_entire_read_modify_write(self):
+        for second_name in ('orders', 'another'):
+            with self.subTest(second_name=second_name), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary).resolve() / 'nested/wap_models.json'
+                first_read, second_attempt, release = (threading.Event() for _ in range(3))
+                real_flock = fcntl.flock
+                loads = []
+                def load():
+                    loads.append(True)
+                    if len(loads) == 1:
+                        first_read.set()
+                        if not release.wait(5):
+                            raise RuntimeError('test writer was not released')
+                    return b.wap.load_wap_registry(module)
+                def flock(fd, operation):
+                    if first_read.is_set():
+                        second_attempt.set()
+                    return real_flock(fd, operation)
+                module = SimpleNamespace(WAP_REGISTRY=path, load_wap_registry=load)
+                with patch.object(b.wap.fcntl, 'flock', side_effect=flock), ThreadPoolExecutor(2) as pool:
+                    first = pool.submit(b.wap.save_wap_entry, module, 'orders', sql='SELECT 1')
+                    try:
+                        self.assertTrue(first_read.wait(5))
+                        second = pool.submit(b.wap.save_wap_entry, module, second_name, published=True)
+                        self.assertTrue(second_attempt.wait(5))
+                        self.assertEqual(len(loads), 1)
+                        self.assertFalse(path.exists())
+                    finally:
+                        release.set()
+                    first.result(timeout=5)
+                    second.result(timeout=5)
+                registry = json.loads(path.read_text())
+                self.assertEqual(registry['orders']['sql'], 'SELECT 1')
+                self.assertTrue(registry[second_name]['published'])
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
     def test_history_resolves_rollback_before_newest_commit(self):
         with patch.object(b, 'sql', return_value={'rows': [[11]]}) as sql:
             self.assertEqual(b.latest_snapshot('url', 'iceberg.marts.t'), 11)
