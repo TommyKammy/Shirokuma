@@ -73,6 +73,50 @@ class LakeIngestTests(unittest.TestCase):
         result = lake.ingest(self.file('data.input', json.dumps(rows)), format='jsonl')
         self.assertEqual(result['format'], 'jsonl')
 
+    def test_upsert_last_rows_in_file_order_before_batching(self):
+        path = self.file('orders.csv', 'id,name\n1,old\n2,second\n3,third\n1,last\n4,fourth\n2,latest\n')
+        report = lake.ingest(path, mode='upsert', key='id', batch_size=2)
+        self.assertEqual(report['key'], ['id'])
+        self.assertEqual((report['rows_ingested'], report['batches']), (4, 2))
+        statements = self.statements()
+        target = '"iceberg"."raw"."orders"'
+        self.assertEqual(statements[0], 'CREATE SCHEMA IF NOT EXISTS iceberg.raw')
+        self.assertEqual(statements[1], f'CREATE TABLE IF NOT EXISTS {target} ("id" BIGINT, "name" VARCHAR)')
+        for statement, values in zip(statements[2:], [
+                "(CAST(3 AS BIGINT), 'third'), (CAST(1 AS BIGINT), 'last')",
+                "(CAST(4 AS BIGINT), 'fourth'), (CAST(2 AS BIGINT), 'latest')"]):
+            self.assertEqual(statement,
+                f'CREATE OR REPLACE TABLE {target} AS SELECT "id", "name" FROM ('
+                'SELECT "id", "name", ROW_NUMBER() OVER (PARTITION BY "id" ORDER BY _src) AS _rn FROM ('
+                f'SELECT "id", "name", 1 AS _src FROM (VALUES {values}) AS t("id", "name") '
+                f'UNION ALL SELECT "id", "name", 2 AS _src FROM {target})) WHERE _rn = 1')
+        self.assertEqual(len(statements), 4)
+
+    def test_upsert_composite_sanitized_keys_and_typed_values(self):
+        path = self.file('keys.csv', 'Order-ID,Region,Name\n01,west,old\n1,east,other\n1,west,new\n,south,old-null\n,south,new-null\n')
+        report = lake.ingest(path, mode='upsert', key='Order-ID,Region,')
+        self.assertEqual(report['key'], ['order_id', 'region'])
+        self.assertEqual(report['rows_ingested'], 3)
+        sql = self.statements()[2]
+        self.assertIn('PARTITION BY "order_id", "region" ORDER BY _src', sql)
+        self.assertNotIn("'old'", sql)
+        self.assertNotIn("'old-null'", sql)
+        self.assertIn("(CAST(NULL AS BIGINT), 'south', 'new-null')", sql)
+
+    def test_upsert_rejects_missing_or_unknown_keys_before_access(self):
+        path = self.file('orders.csv', 'id,name\n1,first\n')
+        for key in (None, '', '  ', ', ,', 'unknown', 'id,unknown'):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'upsert requires --key matching input columns'):
+                lake.ingest(path, mode='upsert', key=key)
+        self.trino.assert_not_called()
+        self.execute.assert_not_called()
+
+    def test_empty_upsert_creates_table_without_replacing_it(self):
+        report = lake.ingest(self.file('empty.csv', 'id,name\n'), mode='upsert', key='id')
+        self.assertEqual((report['rows_ingested'], report['batches'], report['key']), (0, 0, ['id']))
+        self.assertEqual(len(self.statements()), 2)
+        self.assertTrue(self.statements()[1].startswith('CREATE TABLE IF NOT EXISTS'))
+
     def test_duplicate_csv_headers_preserve_values_and_reserved_names(self):
         path = self.file('drop.csv', 'select,select,select_2\n1,2,3\n')
         report = lake.ingest(path)
@@ -160,6 +204,10 @@ class LakeIngestTests(unittest.TestCase):
         with patch.object(sys, 'argv', ['ingest', str(path)]), contextlib.redirect_stdout(output):
             self.assertEqual(lake.main(), 0)
         self.assertEqual(json.loads(output.getvalue())['action'], 'ingest')
+        output = io.StringIO()
+        with patch.object(sys, 'argv', ['ingest', str(path), '--mode', 'upsert', '--key', 'a']), contextlib.redirect_stdout(output):
+            self.assertEqual(lake.main(), 0)
+        self.assertEqual(json.loads(output.getvalue())['key'], ['a'])
         with patch.object(sys, 'argv', ['ingest', str(path), '--batch-size', '0']), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(lake.main(), 1)
 

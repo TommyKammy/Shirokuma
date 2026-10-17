@@ -41,6 +41,10 @@ func TestLakeIngestFlags(t *testing.T) {
 		{[]string{"ingest", "my data.json", "--table", "sandbox.custom", "--mode", "append", "--format", "jsonl", "--batch-size", "2", "--repo-root", "/tmp/repo"},
 			[]string{"--mode", "append", "--format", "jsonl", "--batch-size", "2", "--table", "sandbox.custom", "--", "my data.json"}, "/tmp/repo"},
 		{[]string{"ingest", "--", "--filename.csv"}, []string{"--mode", "replace", "--format", "auto", "--batch-size", "500", "--", "--filename.csv"}, ""},
+		{[]string{"ingest", "data.csv", "--mode", "upsert", "--key", "id"},
+			[]string{"--mode", "upsert", "--format", "auto", "--batch-size", "500", "--key", "id", "--", "data.csv"}, ""},
+		{[]string{"ingest", "data.csv", "--key", ""},
+			[]string{"--mode", "replace", "--format", "auto", "--batch-size", "500", "--key", "", "--", "data.csv"}, ""},
 	} {
 		f := &fakeLake{data: []byte(`{"action":"ingest","rows_ingested":7}`)}
 		out, err := executeLake(f, tc.args...)
@@ -52,7 +56,9 @@ func TestLakeIngestFlags(t *testing.T) {
 
 func TestLakeRejectsInvalidArgumentsBeforeRunner(t *testing.T) {
 	for _, args := range [][]string{{"ingest"}, {"ingest", "a", "b"}, {"ingest", "a", "--mode", "bad"},
-		{"ingest", "a", "--format", "bad"}, {"ingest", "a", "--batch-size", "0"}, {"ingest", "a", "--batch-size", "-1"}} {
+		{"ingest", "a", "--format", "bad"}, {"ingest", "a", "--batch-size", "0"}, {"ingest", "a", "--batch-size", "-1"},
+		{"ingest", "a", "--mode", "upsert"}, {"ingest", "a", "--mode", "upsert", "--key", ""},
+		{"ingest", "a", "--mode", "upsert", "--key", " \t "}} {
 		f := &fakeLake{}
 		if _, err := executeLake(f, args...); err == nil || f.args != nil {
 			t.Fatalf("accepted %v: %v", args, err)

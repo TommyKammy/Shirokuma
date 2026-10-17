@@ -122,11 +122,19 @@ class WorkbenchTests(unittest.TestCase):
             'mode': 'append', 'format': 'jsonl', 'batch_size': 1})[0], 200)
         ingest.assert_called_with('data/events.jsonl', table='raw.events', mode='append', format='jsonl', batch_size=1)
 
+    @patch.object(wb.lake_ingest, 'ingest', return_value={'key': ['order_id'], 'rows_ingested': 2})
+    def test_lake_ingest_upsert(self, ingest):
+        self.assertEqual(self.json_request('/api/lake/ingest', {
+            'file': 'data/orders.csv', 'mode': 'upsert', 'key': 'order_id'}), (200, ingest.return_value))
+        ingest.assert_called_once_with('data/orders.csv', table=None, mode='upsert', format='auto',
+                                       batch_size=500, key='order_id')
+
     @patch.object(wb.lake_ingest, 'ingest')
     def test_lake_ingest_rejects_invalid_fields(self, ingest):
         cases = [{}, {'file': ''}, {'file': '   '}, {'file': 42}]
         cases += [dict(file='data.csv', **{key: value}) for key, values in (
             ('table', [None, [], 3]), ('mode', [None, {}, 3]), ('format', [None, True]),
+            ('key', [None, [], 3, True]),
             ('batch_size', [None, 0, -1, True, '500', 1.5])) for value in values]
         for body in cases:
             with self.subTest(body=body):

@@ -18,7 +18,7 @@ tags: [shirokuma, local, milestones]
 
 ---
 
-## Active Roadmap Milestones (Phase 0 – Phase 4)
+## Active Roadmap Milestones (Phase 0 – Phase 5)
 
 ### 2026-10-16 — WP-P0-001: Governance Reset & Documentation Slimming (Completed)
 - Adopted [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) and [DEV-04F](../04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md), establishing the **Commander (`Antigravity`) + Implementation Worker (`codex-cli` GPT-6.1 Sol Medium)** operating model.
@@ -107,6 +107,24 @@ tags: [shirokuma, local, milestones]
 - Synchronized Phase 4 completion records across DEV-04F, DEV-04D, and this milestone ledger.
 
 ---
+
+### 2026-10-17 — WP-P5-001: WAP Audit & SQL Self-Correction (Completed)
+
+- Added single-scan WAP quality auditing and regression guards.
+- Rewrites QUALIFY queries for resident Trino execution.
+- Added AI SQL self-correction for generated queries.
+
+### 2026-10-17 — WP-P5-002: Dynamic WAP Models, Lineage & Refresh (Completed)
+
+- Registers WAP model definitions and their lineage dynamically.
+- Provides one-command `--refresh` to rerun registered models.
+- Exposes model refresh through the resident Data Bear and Workbench.
+
+### 2026-10-17 — WP-P5-003: Idempotent Upsert Ingestion & Phase 5 Sync (Completed)
+
+- Added `shirokuma lake ingest --mode upsert --key order_id` with comma-separated composite keys.
+- Keeps the last input row per key before batching; atomically merges each batch with existing Iceberg rows.
+- Added Workbench upsert mode and key input, and synchronized Phase 5 roadmap, gates, and milestones.
 
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)
 

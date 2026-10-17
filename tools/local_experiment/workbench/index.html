@@ -31,10 +31,12 @@
 <div class="panel"><div class="panel-head"><h2>SQL workspace</h2><small>Catalog: iceberg · Schema: marts</small></div><div class="panel-body" style="padding-bottom:0"><div class="samples"><button data-sample="orders">Recent orders</button><button data-sample="revenue">TPC-H Revenue by Nation</button><button data-sample="customers">Customers</button></div><label for="sql" class="muted">SQL statement</label></div><textarea id="sql" class="editor" spellcheck="false">SELECT * FROM marts.fct_orders LIMIT 10</textarea><div class="query-footer"><div class="toolbar"><label for="query-warehouse">Warehouse</label><select id="query-warehouse"><option>LOCAL</option><option>XS</option><option>S</option></select><label for="query-mode">Mode</label><select id="query-mode" style="width:auto"><option>read-only</option><option>sandbox-write</option><option>admin-write</option></select><label for="max-rows">Max rows</label><input id="max-rows" type="number" min="1" value="1000"></div><button id="run-query" class="primary">Run Query</button></div></div>
 <div class="panel"><div class="panel-head"><h2>Results</h2><span id="query-meta" class="muted" role="status">Ready · ⌘/Ctrl + Enter to run</span></div><div id="query-error" class="panel-body error" role="alert" hidden></div><div id="query-results" class="table-wrap"><div class="empty">Run a query to inspect rows and column types. Chilled warehouses wake automatically.</div></div></div>
 <div class="panel"><div class="panel-head"><h2>Local File Ingestion (CSV / JSONL / Parquet)</h2></div><div class="panel-body">
-<p class="muted">Import a file from the Workbench server into the local lake. Replace overwrites the target table; append adds rows.</p>
+<p class="muted">Import a file from the Workbench server into the local lake. Replace overwrites the target table; append adds rows; upsert updates matching keys and adds new rows. For repeated keys, the last row in the file wins.</p>
 <form id="ingest-form"><label for="ingest-file">Local file path</label><input id="ingest-file" required placeholder="data/sales_events.csv">
 <label for="ingest-table">Target table (optional)</label><input id="ingest-table" placeholder="raw.sales_events">
-<label for="ingest-mode">Mode</label><select id="ingest-mode"><option value="replace">replace</option><option value="append">append</option></select>
+<label for="ingest-mode">Mode</label><select id="ingest-mode"><option value="replace">replace</option><option value="append">append</option><option value="upsert">upsert</option></select>
+<label for="ingest-key">Upsert key columns (required for upsert)</label><input id="ingest-key" placeholder="Upsert key columns, e.g. order_id" aria-describedby="ingest-key-help">
+<small id="ingest-key-help">Use input column names, separated by commas for a composite key.</small>
 <div class="bear-footer"><button id="run-ingest" type="submit">Ingest File</button><span id="ingest-state" role="status">Ready</span></div></form>
 <div id="ingest-error" class="error" role="alert" hidden></div><pre id="ingest-result" aria-label="Ingestion audit summary" hidden></pre>
 </div></div>
@@ -100,7 +102,7 @@ $('run-query').onclick=()=>busy($('run-query'),async()=>{
 $('sql').onkeydown=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();$('run-query').click();}};
 $('ingest-form').onsubmit=e=>{e.preventDefault();busy($('run-ingest'),async()=>{
  message('ingest-error','');$('ingest-result').hidden=true;$('ingest-state').textContent='Ingesting…';
- try{const payload={file:$('ingest-file').value,mode:$('ingest-mode').value};if($('ingest-table').value.trim())payload.table=$('ingest-table').value.trim();const result=await api('/api/lake/ingest',payload);$('ingest-result').textContent=JSON.stringify(result,null,2);$('ingest-result').hidden=false;$('ingest-state').textContent=result.audit?.quality_passed===false?'Audit needs review':'Ingestion complete';}
+ try{const payload={file:$('ingest-file').value,mode:$('ingest-mode').value};if($('ingest-table').value.trim())payload.table=$('ingest-table').value.trim();if($('ingest-key').value.trim())payload.key=$('ingest-key').value.trim();const result=await api('/api/lake/ingest',payload);$('ingest-result').textContent=JSON.stringify(result,null,2);$('ingest-result').hidden=false;$('ingest-state').textContent=result.audit?.quality_passed===false?'Audit needs review':'Ingestion complete';}
  catch(error){message('ingest-error',error.message);$('ingest-state').textContent='Ingestion failed';}
  });};
 let columnRequest=0;

@@ -35,3 +35,6 @@ tags: [shirokuma, local, handoff, gates]
 | **WP-P4-002** | Ingest local CSV / TSV / JSONL / Parquet files into Iceberg with automatic schema inference (`shirokuma lake ingest`) | **Completed (2026-10-17)** |
 | **WP-P4-003** | Enrich Pawprints audit trails, reuse the resident Trino tunnel, and integrate Workbench WAP / Ingest UI | **Completed (2026-10-17)** |
 | **WP-P4-004** | Add fast resident core verification (`make verify-core`) and synchronize Phase 4 roadmap, gates, and milestones | **Completed (2026-10-17)** |
+| **WP-P5-001** | Add single-scan WAP audit, QUALIFY rewriting, regression guards, and AI SQL self-correction | **Completed (2026-10-17)** |
+| **WP-P5-002** | Register dynamic WAP models and lineage; rerun registered models with one-command `--refresh` | **Completed (2026-10-17)** |
+| **WP-P5-003** | Add idempotent keyed upsert ingestion, Workbench upsert controls, and Phase 5 documentation sync | **Completed (2026-10-17)** |

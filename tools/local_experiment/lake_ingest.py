@@ -139,17 +139,32 @@ def literal(value, sql_type):
     return 'DATE ' + quoted if sql_type == 'DATE' else quoted
 
 
-def ingest(file, table=None, mode='replace', format='auto', batch_size=500):
+def ingest(file, table=None, mode='replace', format='auto', batch_size=500, key=None):
     started = time.monotonic()
     try:
-        if mode not in {'replace', 'append'}:
-            raise ValueError('mode must be replace or append')
+        if mode not in {'replace', 'append', 'upsert'}:
+            raise ValueError('mode must be replace, append, or upsert')
         if batch_size < 1:
             raise ValueError('batch-size must be >= 1')
         path = Path(file)
         target = target_table(table, path)
         sql_target = bears.identifier(target)
         detected, schema, rows = read_file(path, format)
+        if mode == 'upsert':
+            key_cols = [sanitize(k) for k in (key or '').split(',') if k.strip()]
+            names = [c for c, _ in schema]
+            if not key_cols or any(c not in names for c in key_cols):
+                raise ValueError('upsert requires --key matching input columns')
+            key_indices = [names.index(c) for c in key_cols]
+            # Compare typed SQL values so e.g. CSV integer keys 01 and 1 match.
+            # Reverse traversal retains the last occurrences in their file order.
+            unique = {}
+            for row in reversed(rows):
+                row_key = tuple(literal(row[i], schema[i][1]) for i in key_indices)
+                if row_key not in unique:
+                    unique[row_key] = row
+            rows = list(reversed(unique.values()))
+            key_columns = ', '.join(f'"{c}"' for c in key_cols)
         guardrail = 'sandbox-write' if target.split('.')[1] in {'raw', 'sandbox'} else 'admin-write'
         columns = ', '.join('"' + c + '"' for c, _ in schema)
         batches = 0
@@ -157,7 +172,7 @@ def ingest(file, table=None, mode='replace', format='auto', batch_size=500):
             def execute(statement):
                 return bears.sql(url, wr.check_sql_policy(statement, mode=guardrail))
             execute('CREATE SCHEMA IF NOT EXISTS ' + '.'.join(target.split('.')[:2]))
-            if mode == 'append':
+            if mode in {'append', 'upsert'}:
                 execute('CREATE TABLE IF NOT EXISTS ' + sql_target + ' (' +
                         ', '.join(f'"{c}" {t}' for c, t in schema) + ')')
             elif not rows:
@@ -166,7 +181,12 @@ def ingest(file, table=None, mode='replace', format='auto', batch_size=500):
             for offset in range(0, len(rows), batch_size):
                 values = ', '.join('(' + ', '.join(literal(v, t) for v, (_, t) in zip(row, schema)) + ')'
                                    for row in rows[offset:offset + batch_size])
-                if mode == 'replace' and offset == 0:
+                if mode == 'upsert':
+                    execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT {columns} FROM ('
+                            f'SELECT {columns}, ROW_NUMBER() OVER (PARTITION BY {key_columns} ORDER BY _src) AS _rn FROM ('
+                            f'SELECT {columns}, 1 AS _src FROM (VALUES {values}) AS t({columns}) '
+                            f'UNION ALL SELECT {columns}, 2 AS _src FROM {sql_target})) WHERE _rn = 1')
+                elif mode == 'replace' and offset == 0:
                     execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM (VALUES {values}) AS t({columns})')
                 else:
                     # A column list also supports append into an existing table
@@ -179,16 +199,20 @@ def ingest(file, table=None, mode='replace', format='auto', batch_size=500):
         raise
     duration = int((time.monotonic() - started) * 1000)
     telemetry = wr.telemetry('ingest', duration, status='success', prefix='lake.')
-    return dict(action='ingest', file=str(path), format=detected, mode=mode, table=target,
+    result = dict(action='ingest', file=str(path), format=detected, mode=mode, table=target,
                 columns=[dict(name=c, type=t) for c, t in schema], rows_ingested=len(rows),
                 batches=batches, audit=audit, duration_ms=duration, telemetry=telemetry)
+    if mode == 'upsert':
+        result['key'] = key_cols
+    return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('file')
     parser.add_argument('--table')
-    parser.add_argument('--mode', choices=['replace', 'append'], default='replace')
+    parser.add_argument('--mode', choices=['replace', 'append', 'upsert'], default='replace')
+    parser.add_argument('--key', default=None)
     parser.add_argument('--format', choices=['auto', 'csv', 'jsonl', 'parquet'], default='auto')
     parser.add_argument('--batch-size', type=int, default=500)
     args = parser.parse_args()

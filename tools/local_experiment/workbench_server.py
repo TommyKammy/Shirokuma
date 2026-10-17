@@ -144,7 +144,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         raise ValueError('table, mode, and format must be strings')
                     if type(batch_size) is not int or batch_size < 1:
                         raise ValueError('batch_size must be a positive integer')
-                    result = lake_ingest.ingest(file, table=table, mode=mode, format=fmt, batch_size=batch_size)
+                    options = {}
+                    if 'key' in body:
+                        if not isinstance(body['key'], str):
+                            raise ValueError('key must be a string')
+                        options['key'] = body['key']
+                    result = lake_ingest.ingest(file, table=table, mode=mode, format=fmt, batch_size=batch_size, **options)
                 else:
                     bear = body.get("bear")
                     actions = {"sre": ("inspect",), "query": ("explain",), "data": ("generate", "stage", "publish", "rollback", "refresh"),

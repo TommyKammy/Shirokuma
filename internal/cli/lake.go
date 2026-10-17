@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -38,18 +39,24 @@ func (execResidentWarehouse) RunLake(ctx context.Context, explicit string, args 
 
 func newLakeCommand(runner lakeRunner) *cobra.Command {
 	group := &cobra.Command{Use: "lake", Short: "Load local files into the resident Iceberg lake"}
-	var root, table, mode, format string
+	var root, table, mode, format, key string
 	var batchSize int
 	command := &cobra.Command{
 		Use: "ingest <file>", Short: "Ingest CSV, JSONL, or Parquet into Iceberg", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if (mode != "replace" && mode != "append") ||
+			if (mode != "replace" && mode != "append" && mode != "upsert") ||
 				(format != "auto" && format != "csv" && format != "jsonl" && format != "parquet") || batchSize < 1 {
 				return errors.New("invalid ingestion mode, format, or batch-size (must be >= 1)")
+			}
+			if mode == "upsert" && strings.TrimSpace(key) == "" {
+				return errors.New("upsert requires --key matching input columns")
 			}
 			forward := []string{"--mode", mode, "--format", format, "--batch-size", strconv.Itoa(batchSize)}
 			if table != "" {
 				forward = append(forward, "--table", table)
+			}
+			if key != "" || cmd.Flags().Changed("key") {
+				forward = append(forward, "--key", key)
 			}
 			forward = append(forward, "--", args[0])
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
@@ -70,7 +77,8 @@ func newLakeCommand(runner lakeRunner) *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&table, "table", "", "target table (default: iceberg.raw.<file stem>)")
-	command.Flags().StringVar(&mode, "mode", "replace", "replace or append")
+	command.Flags().StringVar(&mode, "mode", "replace", "replace, append, or upsert")
+	command.Flags().StringVar(&key, "key", "", "comma-separated input key columns (required for upsert)")
 	command.Flags().StringVar(&format, "format", "auto", "auto, csv, jsonl, or parquet")
 	command.Flags().IntVar(&batchSize, "batch-size", 500, "rows per write batch")
 	command.Flags().StringVar(&root, "repo-root", "", "repository root")
