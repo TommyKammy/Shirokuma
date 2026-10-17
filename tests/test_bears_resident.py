@@ -138,7 +138,7 @@ class BearsResidentTests(unittest.TestCase):
                 self.assertEqual(metadata['definition'], [['value']])
 
     def test_drop_restrictions_and_telemetry(self):
-        for schema in ('raw', 'sandbox', 'staging', 'scratch'):
+        for schema in ('raw', 'sandbox', 'staging', 'marts', 'scratch'):
             with patch.object(b, 'sql') as sql, patch.object(b.wr, 'telemetry', return_value='recorded') as telemetry:
                 report = b.drop_table(schema + '.orders')
             self.assertEqual(report, dict(action='drop', table=f'iceberg.{schema}.orders', dropped=True, telemetry='recorded'))
@@ -146,7 +146,7 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(telemetry.call_args.args[0], 'catalog.drop')
             self.assertEqual(telemetry.call_args.args[2], 'success')
             self.assertEqual(telemetry.call_args.kwargs['target'], report['table'])
-        for table in ('marts.x', 'tpch_tiny.x', 'smoke.x', 'raw.bad-name', 'raw.x; DROP', 'x', None, 'other.raw.x'):
+        for table in ('tpch_tiny.x', 'smoke.x', 'raw.bad-name', 'raw.x; DROP', 'x', None, 'other.raw.x'):
             with patch.object(b, 'sql') as sql, self.assertRaisesRegex(ValueError, 'drop is only allowed'):
                 b.drop_table(table)
             sql.assert_not_called()

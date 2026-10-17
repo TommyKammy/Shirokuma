@@ -18,14 +18,27 @@ SPEC.loader.exec_module(w)
 class ResidentWarehouseTests(unittest.TestCase):
     def test_three_tier_role_resolution(self):
         for user in ('bi_reader', 'powerbi', 'bi_team', 'POWERBI'):
-            for role in (None, 'admin', 'editor'):
+            for role in (None, ''):
                 self.assertEqual(w.resolve_role(user, role), 'bi_viewer')
+            self.assertEqual(w.resolve_role(user, 'admin'), 'admin')
+            self.assertEqual(w.resolve_role(user, 'editor'), 'data_engineer')
         for role in ('bi_viewer', 'viewer', 'bi_reader'):
             self.assertEqual(w.resolve_role('person', role), 'bi_viewer')
         for role in ('data_engineer', 'editor'):
             self.assertEqual(w.resolve_role('person', role), 'data_engineer')
-        for role in (None, 'admin', 'unknown'):
+        for role in (None, 'admin'):
             self.assertEqual(w.resolve_role('person', role), 'admin')
+        for role in ('unknown', 'admn', ' ', 'administrator'):
+            with self.assertRaisesRegex(ValueError, 'Invalid role:'):
+                w.resolve_role('admin', role)
+        with patch.dict(w.os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'viewer'}):
+            for user in ('', 'person'):
+                self.assertEqual(w.resolve_role(user), 'bi_viewer')
+            for user in ('admin', 'root'):
+                self.assertEqual(w.resolve_role(user), 'admin')
+        with patch.dict(w.os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'admn'}):
+            with self.assertRaisesRegex(ValueError, 'Invalid role:'):
+                w.resolve_role('person')
 
     def test_role_sql_permissions(self):
         self.assertEqual(w.check_sql_policy('SELECT * FROM marts.t', role='bi_viewer'), 'SELECT * FROM marts.t')
@@ -46,7 +59,7 @@ class ResidentWarehouseTests(unittest.TestCase):
 
     def test_bi_policy(self):
         allowed = ['SELECT 1', 'SELECT count(*) FROM iceberg.marts.revenue',
-                   'SELECT * FROM tpch_tiny.orders', 'SELECT * FROM information_schema.tables',
+                   'SELECT * FROM information_schema.tables', 'SELECT * FROM sys.tables',
                    'SELECT * FROM system.runtime.nodes', 'SHOW CATALOGS',
                    'SHOW TABLES FROM iceberg.marts', 'DESCRIBE iceberg.marts.revenue',
                    "SELECT 'iceberg.raw.t' /* iceberg.sandbox.t */ -- iceberg.staging.t\n",
@@ -55,7 +68,7 @@ class ResidentWarehouseTests(unittest.TestCase):
             for sql in allowed:
                 with self.subTest(user=user, sql=sql):
                     self.assertEqual(w.check_bi_policy(sql, user), w.check_sql_policy(sql))
-            for schema in ('raw', 'sandbox', 'staging'):
+            for schema in ('raw', 'sandbox', 'staging', 'tpch', 'tpch_tiny', 'other'):
                 for target in (f'iceberg.{schema}.t', f'"ICEBERG" . "{schema.upper()}" . "t"',
                                f'iceberg /* ignored */ . {schema}.t'):
                     for sql in (f'SELECT * FROM {target}',
@@ -72,6 +85,47 @@ class ResidentWarehouseTests(unittest.TestCase):
         sql = 'INSERT INTO iceberg.raw.t VALUES (1)'
         self.assertEqual(w.check_bi_policy(sql, 'engineer'), sql)
         self.assertEqual(w.check_bi_policy('SELECT 1;  ', 'powerbi'), 'SELECT 1')
+
+    def test_dynamic_and_prepared_sql_rejected_in_every_mode(self):
+        statements = ("EXECUTE IMMEDIATE 'SELECT 1'", 'PREPARE p FROM SELECT 1',
+                      'DEALLOCATE PREPARE p', 'EXECUTE p', 'SELECT 1; EXECUTE p',
+                      "/* prefix */ EXECUTE /* comment */ IMMEDIATE 'DELETE FROM marts.t'")
+        for sql in statements:
+            for mode in ('read-only', 'sandbox-write', 'admin-write'):
+                with self.subTest(sql=sql, mode=mode), self.assertRaises(ValueError):
+                    w.check_sql_policy(sql, mode=mode)
+            with self.assertRaises(ValueError):
+                w.check_bi_policy(sql, 'bi_reader')
+            with self.assertRaises(ValueError):
+                w.check_bi_policy(sql, 'engineer')
+        sql = 'ALTER TABLE iceberg.marts.t EXECUTE rollback_to_snapshot(123)'
+        self.assertEqual(w.check_sql_policy(sql, mode='admin-write'), sql)
+        self.assertEqual(w.check_sql_policy("SELECT 'EXECUTE IMMEDIATE' AS value"),
+                         "SELECT 'EXECUTE IMMEDIATE' AS value")
+
+    def test_bi_statement_and_schema_whitelists(self):
+        blocked = ('USE marts', 'SET SESSION x = true', 'RESET SESSION x', 'START TRANSACTION',
+                   'COMMIT', 'ROLLBACK', 'ANALYZE iceberg.marts.t', 'VALUES (1)',
+                   'SELECT * FROM tpch_tiny.orders',
+                   'SELECT * FROM marts.t, raw.secret',
+                   'SELECT * FROM "other-schema".secret',
+                   'SELECT * FROM (raw.secret)',
+                   'SELECT * FROM (SELECT * FROM staging.t) x',
+                   'SHOW TABLES FROM raw', 'SHOW COLUMNS FROM iceberg.sandbox.t',
+                   'SHOW TABLES IN raw', 'SHOW STATS FOR tpch.t',
+                   "SELECT * FROM TABLE(tpch.system.query(query => 'SELECT 1'))",
+                   'EXPLAIN SELECT * FROM other.marts.t',
+                   'DESCRIBE "iceberg" /* comment */ . "tpch" . "t"')
+        for sql in blocked:
+            for check in (lambda s: w.check_sql_policy(s, role='bi_viewer'),
+                          lambda s: w.check_bi_policy(s, 'bi_reader')):
+                with self.subTest(sql=sql), self.assertRaises(ValueError):
+                    check(sql)
+        for sql in ('/* prefix */ SELECT 1', 'EXPLAIN SELECT * FROM iceberg.marts.t',
+                    'SELECT t.id FROM marts.t t JOIN iceberg.marts.u u ON t.id = u.id',
+                    'SHOW TABLES FROM iceberg.marts', 'DESCRIBE marts.t',
+                    'SELECT * FROM iceberg.information_schema.tables'):
+            self.assertEqual(w.check_sql_policy(sql, role='bi_viewer'), sql)
 
     def endpoint_request(self, method, path, sql=None, headers=None, replicas=1,
                          backend_status=200, payload=None, failure=None):
@@ -184,7 +238,10 @@ class ResidentWarehouseTests(unittest.TestCase):
                 ('SELECT * FROM "iceberg"."raw".t', {'X-Trino-User': 'BI_tool'}),
                 ('SELECT * FROM staging.t', {'X-Trino-User': 'powerbi', 'X-Trino-Catalog': 'iceberg'}),
                 ('SELECT * FROM t', {'X-Trino-User': 'bi_reader', 'X-Trino-Catalog': 'iceberg',
-                                     'X-Trino-Schema': 'sandbox'})):
+                                     'X-Trino-Schema': 'sandbox'}),
+                ('SELECT * FROM t', {'X-Trino-User': 'bi_reader', 'X-Trino-Catalog': 'tpch',
+                                     'X-Trino-Schema': 'tiny'}),
+                ('SELECT * FROM t', {'X-Trino-User': 'bi_reader', 'X-Trino-Schema': 'raw'})):
             with self.subTest(sql=sql):
                 code, _, page, backend, wake, status, trino, activity = self.endpoint_request(
                     'POST', '/v1/statement', sql, headers, replicas=0)

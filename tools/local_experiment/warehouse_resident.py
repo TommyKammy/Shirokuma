@@ -345,18 +345,38 @@ def normalize_trino_sql(sql: str) -> str:
 
 
 def resolve_role(user: str, role: str = None) -> str:
-    user, role = (user or '').lower(), (role or '').lower()
-    if user in ('bi_reader', 'powerbi') or user.startswith('bi_') or role in ('bi_viewer', 'viewer', 'bi_reader'):
+    aliases = {'admin': 'admin', 'data_engineer': 'data_engineer', 'editor': 'data_engineer',
+               'bi_viewer': 'bi_viewer', 'viewer': 'bi_viewer', 'bi_reader': 'bi_viewer'}
+    if role:
+        if role.strip().lower() not in aliases:
+            raise ValueError(f'Invalid role: {role}')
+        return aliases[role.strip().lower()]
+    user = (user or '').strip().lower()
+    if user in ('admin', 'root'):
+        return 'admin'
+    if user in ('bi_reader', 'powerbi') or user.startswith('bi_'):
         return 'bi_viewer'
-    if role in ('data_engineer', 'editor'):
-        return 'data_engineer'
-    return 'admin'
+    default = os.environ.get('SHIROKUMA_DEFAULT_ROLE', 'admin')
+    if default.strip().lower() not in aliases:
+        raise ValueError(f'Invalid role: {default}')
+    return aliases[default.strip().lower()]
+
+
+def _check_dynamic_sql(sql):
+    pattern = r"--[^\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|[A-Za-z_][A-Za-z_0-9]*|[^\s]"
+    tokens = [t.upper() for t in re.findall(pattern, sql) if not t.startswith(('--', '/*'))]
+    if (set(tokens) & {'PREPARE', 'DEALLOCATE'} or
+            any(t == 'EXECUTE' and (i == 0 or tokens[i - 1] == ';')
+                for i, t in enumerate(tokens)) or
+            any(a == 'EXECUTE' and b == 'IMMEDIATE' for a, b in zip(tokens, tokens[1:]))):
+        raise ValueError('SQL policy violation: dynamic SQL and prepared statements are not allowed')
 
 
 def check_sql_policy(sql: str, mode: str = 'read-only', role: str = 'admin') -> str:
     """Check a single statement before any warehouse access and return clean SQL."""
     if mode not in {'read-only', 'sandbox-write', 'admin-write'}:
         raise ValueError(f"unknown SQL guardrail mode: {mode}")
+    _check_dynamic_sql(sql)
     if role == 'bi_viewer':
         if mode != 'read-only':
             raise ValueError('BI Viewer requires read-only mode')
@@ -417,25 +437,74 @@ def _is_bi_user(user):
     return user.lower() == 'powerbi' or user.lower().startswith('bi_')
 
 
-def _check_bi_schemas(sql, catalog=''):
+def _check_bi_schemas(sql):
     # Tokenize so comments, strings, whitespace and quoted names cannot hide a
     # restricted schema. String literals and quoted names remain distinct.
     pattern = r"--[^\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|[A-Za-z_][A-Za-z_0-9]*|[^\s]"
-    tokens = [t.strip('"').lower() for t in re.findall(pattern, sql)
-              if not t.startswith(('--', '/*'))]
+    raw_tokens = [t for t in re.findall(pattern, sql) if not t.startswith(('--', '/*'))]
+    tokens = [t[1:-1].replace('""', '"').lower() if t.startswith('"') else t.lower()
+              for t in raw_tokens]
+    def reject():
+        raise ValueError('SQL policy violation (bi_reader): query restricted to iceberg.marts and metadata')
+
+    def allowed(parts):
+        if len(parts) == 1:
+            return True  # Unqualified tables use the enforced marts session schema.
+        if len(parts) == 2:
+            return parts[0] in {'marts', 'information_schema', 'sys'}
+        return (len(parts) == 3 and
+                ((parts[0] == 'iceberg' and parts[1] == 'marts') or
+                 parts[1] in {'information_schema', 'sys'} or
+                 (parts[0] == 'system' and parts[1] in {'runtime', 'metadata', 'jdbc'})))
+
+    # Inspect relation names, including comma joins and nested FROM clauses,
+    # while leaving column aliases (t.column) and literals alone.
+    depth, from_depths = 0, set()
     for i, token in enumerate(tokens):
-        qualified = tokens[i:i + 2] == ['iceberg', '.']
-        schema = i + 2 if qualified else i
-        contextual = catalog.lower() == 'iceberg' and tokens[i + 1:i + 2] == ['.']
-        if (qualified or contextual) and schema < len(tokens):
-            if tokens[schema] in {'raw', 'sandbox', 'staging'}:
-                raise ValueError('SQL policy violation (bi_reader): query restricted to iceberg.marts and metadata')
+        if token == '(':
+            depth += 1
+        elif token == ')':
+            from_depths.discard(depth)
+            depth -= 1
+        elif token in {'where', 'group', 'order', 'having', 'limit', 'union', 'except', 'intersect'}:
+            from_depths.discard(depth)
+        if token == 'from':
+            from_depths.add(depth)
+        show_context = tokens[:1] == ['show'] and token in {'in', 'for'}
+        reference = token in {'from', 'join', 'describe', 'table'} or show_context or (token == ',' and depth in from_depths)
+        if not reference:
+            continue
+        j = i + 1
+        # Parenthesized relations and TABLE(catalog.schema.function(...))
+        # must obey the same schema policy as ordinary table references.
+        while tokens[j:j + 1] == ['(']:
+            j += 1
+        if j >= len(tokens) or not (raw_tokens[j].startswith('"') or
+                                    re.fullmatch(r'[a-z_][a-z_0-9$]*', tokens[j])):
+            continue
+        parts = [tokens[j]]
+        while j + 2 < len(tokens) and tokens[j + 1] == '.':
+            parts.append(tokens[j + 2])
+            j += 2
+        # SHOW TABLES FROM takes a schema, SHOW SCHEMAS FROM takes a catalog.
+        if tokens[:2] == ['show', 'tables'] and token in {'from', 'in'}:
+            if not allowed(parts + ['_table']):
+                reject()
+        elif tokens[:2] == ['show', 'schemas'] and token in {'from', 'in'}:
+            if parts not in (['iceberg'], ['system']):
+                reject()
+        elif not allowed(parts):
+            reject()
 
 
 def check_bi_policy(sql: str, user: str) -> str:
+    _check_dynamic_sql(sql)
     if not _is_bi_user(user):
         return normalize_trino_sql(sql.rstrip().rstrip('; \t\r\n'))
     statement = check_sql_policy(sql, mode='read-only')
+    clean = re.sub(r'--[^\n]*|/\*[\s\S]*?\*/', ' ', statement).lstrip()
+    if not re.match(r'(SELECT|WITH|DESCRIBE|EXPLAIN|SHOW)\b', clean, re.I):
+        raise ValueError('SQL policy violation (bi_reader): statement must be SELECT, WITH, DESCRIBE, EXPLAIN, or SHOW')
     _check_bi_schemas(statement)
     return statement
 
@@ -480,9 +549,13 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                         sql = check_bi_policy((body or b'').decode('utf-8'), user)
                         if _is_bi_user(user):
                             catalog = self.headers.get('X-Trino-Catalog', '')
-                            _check_bi_schemas(sql, catalog)
+                            _check_bi_schemas(sql)
                             schema = self.headers.get('X-Trino-Schema', '')
-                            _check_bi_schemas(identifier(catalog) + '.' + identifier(schema))
+                            if schema:
+                                _check_bi_schemas('SHOW TABLES FROM ' +
+                                                  (identifier(catalog) + '.' if catalog else '') + identifier(schema))
+                            elif catalog and catalog.lower() not in {'iceberg', 'system'}:
+                                raise ValueError('SQL policy violation (bi_reader): query restricted to iceberg.marts and metadata')
                     except ValueError as exc:
                         self.error_json(403, str(exc))
                         return

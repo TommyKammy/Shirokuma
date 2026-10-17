@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from http.server import HTTPServer
 from html.parser import HTMLParser
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -51,12 +52,103 @@ class WorkbenchHTML(HTMLParser):
 
 
 class WorkbenchTests(unittest.TestCase):
+    def test_invalid_roles_rejected_on_get_and_post(self):
+        with patch.object(wb.bears_resident, 'load_ai_config') as load, \
+             patch.object(wb.warehouse_resident, 'transition') as transition:
+            for role in ('unknown', 'admn', '', 'administrator'):
+                for route, body in (('/api/ai/config', None), ('/api/warehouse/wake', {})):
+                    with self.subTest(role=role, route=route):
+                        self.assertEqual(self.json_request(route + '?role=' + role, body)[0], 403)
+                        self.assertEqual(self.request(route, body, headers={
+                            'Content-Type': 'application/json', 'X-Shirokuma-Role': role})[0], 403)
+            self.assertEqual(self.request('/api/ai/config?role=admn', headers={
+                'X-Shirokuma-Role': 'admin'})[0], 403)
+            load.assert_not_called()
+            transition.assert_not_called()
+
+    def test_role_fallback_and_explicit_precedence(self):
+        with patch.object(wb.bears_resident, 'load_ai_config', return_value={}), \
+             patch.dict(os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'bi_viewer'}):
+            self.assertEqual(self.json_request('/api/ai/config')[0], 403)
+            for user, expected in (('admin', 200), ('root', 200), ('powerbi', 403), ('bi_reader', 403)):
+                self.assertEqual(self.request('/api/ai/config', headers={'X-Trino-User': user})[0], expected)
+            self.assertEqual(self.request('/api/ai/config', headers={
+                'X-Trino-User': 'bi_reader', 'X-Shirokuma-Role': 'admin'})[0], 200)
+            self.assertEqual(self.json_request('/api/ai/config?role=admin')[0], 200)
+
+    def test_ai_routes_are_admin_only(self):
+        with patch.object(wb.bears_resident, 'load_ai_config', return_value={}) as load, \
+             patch.object(wb.bears_resident, 'save_ai_config', return_value={}) as save, \
+             patch.object(wb.bears_resident, 'test_ai_connection', return_value={}) as connection:
+            for role in ('data_engineer', 'editor', 'bi_viewer', 'viewer', 'bi_reader'):
+                for route, body in (('/api/ai/config', None), ('/api/ai/config', {}), ('/api/ai/test', {})):
+                    with self.subTest(role=role, route=route, body=body):
+                        self.assertEqual(self.json_request(route + '?role=' + role, body)[0], 403)
+            for mock in (load, save, connection):
+                mock.assert_not_called()
+            for route, body in (('/api/ai/config', None), ('/api/ai/config', {}), ('/api/ai/test', {})):
+                self.assertEqual(self.json_request(route + '?role=admin', body)[0], 200)
+
+    def test_drop_schema_permissions(self):
+        with patch.object(wb.bears_resident, 'drop_table', return_value={'dropped': True}) as drop:
+            for role in ('data_engineer', 'editor'):
+                for table in ('marts.summary', 'iceberg.marts.summary', 'scratch.t', 'other.t', 'summary'):
+                    self.assertEqual(self.json_request('/api/catalog/drop?role=' + role, {'table': table})[0], 403)
+            drop.assert_not_called()
+            for role in ('admin', 'data_engineer'):
+                for schema in ('sandbox', 'staging', 'raw'):
+                    for prefix in ('', 'iceberg.'):
+                        table = prefix + schema + '.arbitrary_table'
+                        self.assertEqual(self.json_request('/api/catalog/drop?role=' + role, {'table': table})[0], 200)
+                        drop.assert_called_with(table)
+            for table in ('marts.summary', 'iceberg.marts.summary'):
+                self.assertEqual(self.json_request('/api/catalog/drop?role=admin', {'table': table})[0], 200)
+
+    def test_autochill_configuration_requires_admin(self):
+        with patch.object(wb.warehouse_resident, 'configure_auto_chill', return_value={}) as configure, \
+             patch.object(wb.warehouse_resident, 'auto_chill_status', return_value={}) as status, \
+             patch.object(wb.warehouse_resident, 'check_auto_chill', return_value={}) as check:
+            for role in ('data_engineer', 'bi_viewer'):
+                for body in ({'minutes': 10}, {'minutes': 10, 'check': True}):
+                    self.assertEqual(self.json_request('/api/warehouse/autochill?role=' + role, body)[0], 403)
+            configure.assert_not_called()
+            for role, expected in (('admin', 200), ('data_engineer', 200), ('bi_viewer', 403)):
+                self.assertEqual(self.json_request('/api/warehouse/autochill?role=' + role, {'check': False})[0], expected)
+                self.assertEqual(self.json_request('/api/warehouse/autochill?role=' + role, {'check': True})[0], expected)
+            self.assertEqual(status.call_count, 4)
+            self.assertEqual(check.call_count, 2)
+            self.assertEqual(self.json_request('/api/warehouse/autochill?role=admin', {'minutes': 10})[0], 200)
+            configure.assert_called_once_with(10)
+
+    def test_ai_key_isolation_when_endpoint_changes(self):
+        active = dict(provider='openai', api_url='https://old.example/v1', api_key='old-secret')
+        for change in ({'provider': 'custom'}, {'api_url': 'https://new.example/v1'},
+                       {'provider': 'custom', 'api_url': 'https://new.example/v1'}):
+            for key in (None, '********', '', 'new-secret'):
+                supplied = {**change, **({'api_key': key} if key is not None else {})}
+                with self.subTest(change=change, key=key), \
+                     patch.object(wb.bears_resident, 'load_ai_config', return_value=dict(active)), \
+                     patch.dict(wb.bears_resident._ai_config, {}, clear=True), \
+                     patch.object(wb.bears_resident.wap, 'persist_json') as persist:
+                    result = wb.bears_resident.save_ai_config(supplied)
+                    self.assertEqual(result['api_key'], 'new-secret' if key == 'new-secret' else '')
+                    self.assertEqual(persist.call_args.args[1]['api_key'], result['api_key'])
+        for change in ({'model': 'new'}, {'api_url': active['api_url']}, {'api_key': '********'}):
+            with patch.object(wb.bears_resident, 'load_ai_config', return_value=dict(active)), \
+                 patch.dict(wb.bears_resident._ai_config, {}, clear=True), \
+                 patch.object(wb.bears_resident.wap, 'persist_json'):
+                self.assertEqual(wb.bears_resident.save_ai_config(change)['api_key'], 'old-secret')
+
     def test_role_endpoint_permissions_before_dispatch(self):
         routes = ['/api/catalog/drop', '/api/models/build', '/api/lake/ingest',
-                  '/api/catalog/clone', '/api/ai/config']
+                  '/api/catalog/clone', '/api/ai/config', '/api/ai/test',
+                  '/api/lake/preview', '/api/lake/export', '/api/warehouse/chill']
         with patch.object(wb.bears_resident, 'save_ai_config') as save, \
              patch.object(wb.bears_resident, 'drop_table') as drop, \
-             patch.object(wb.lake_ingest, 'ingest') as ingest:
+             patch.object(wb.lake_ingest, 'ingest') as ingest, \
+             patch.object(wb.lake_ingest, 'preview') as preview, \
+             patch.object(wb.lake_ingest, 'export_table') as export, \
+             patch.object(wb.warehouse_resident, 'transition') as transition:
             for route in routes:
                 for selector in ('?role=bi_viewer', '?role=viewer'):
                     with self.subTest(route=route, selector=selector):
@@ -66,6 +158,9 @@ class WorkbenchTests(unittest.TestCase):
             save.assert_not_called()
             drop.assert_not_called()
             ingest.assert_not_called()
+            preview.assert_not_called()
+            export.assert_not_called()
+            transition.assert_not_called()
 
     @patch.object(wb.warehouse_resident, 'query', return_value={'rows': []})
     def test_role_query_enforcement(self, query):

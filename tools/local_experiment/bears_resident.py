@@ -43,6 +43,12 @@ def load_ai_config():
 def save_ai_config(config):
     """Activate settings only after they have been persisted successfully."""
     active = load_ai_config()
+    config = dict(config)
+    if config.get('api_key') == '********':
+        del config['api_key']
+    if any(key in config and config[key] != active.get(key) for key in ('api_url', 'provider')):
+        if not config.get('api_key'):
+            active['api_key'] = ''
     active.update(config)
     try:
         wap.persist_json(AI_CONFIG_PATH, active)
@@ -334,9 +340,9 @@ def activity_history(limit=50):
 
 
 def drop_table(table):
-    message = 'drop is only allowed in raw, sandbox, staging, or scratch schemas'
+    message = 'drop is only allowed in raw, sandbox, staging, marts, or scratch schemas'
     if not isinstance(table, str) or not re.fullmatch(
-            r'(?:iceberg\.)?(?:raw|sandbox|staging|scratch)\.[A-Za-z_][A-Za-z_0-9]*', table):
+            r'(?:iceberg\.)?(?:raw|sandbox|staging|marts|scratch)\.[A-Za-z_][A-Za-z_0-9]*', table):
         raise ValueError(message)
     full_table = table if table.startswith('iceberg.') else 'iceberg.' + table
     started, status = time.monotonic(), 'success'

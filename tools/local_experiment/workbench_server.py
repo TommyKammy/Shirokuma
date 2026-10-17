@@ -6,6 +6,7 @@ import contextlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 import json
 from pathlib import Path
+import re
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,6 +16,19 @@ import warehouse_resident
 from agenthouse import manage
 
 INDEX = Path(__file__).parent / "workbench" / "index.html"
+ALL_ROLES = {'admin', 'data_engineer', 'bi_viewer'}
+EDIT_ROLES = {'admin', 'data_engineer'}
+GET_ROUTES = {path: ALL_ROLES for path in (
+    '/', '/index.html', '/api/status', '/api/catalog', '/api/lineage',
+    '/api/history', '/api/models', '/api/pawprints')}
+GET_ROUTES['/api/ai/config'] = {'admin'}
+POST_ROUTES = {path: EDIT_ROLES for path in (
+    '/api/warehouse/chill', '/api/warehouse/autochill', '/api/lake/ingest',
+    '/api/lake/preview', '/api/lake/export', '/api/catalog/drop',
+    '/api/catalog/clone', '/api/models/build')}
+POST_ROUTES.update({path: ALL_ROLES for path in (
+    '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
+POST_ROUTES.update({path: {'admin'} for path in ('/api/ai/config', '/api/ai/test')})
 
 
 def masked_ai_config(config):
@@ -101,14 +115,33 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def request_role(self):
-        params = parse_qs(urlsplit(self.path).query)
-        return warehouse_resident.resolve_role(
-            self.headers.get('X-Trino-User', ''),
-            self.headers.get('X-Shirokuma-Role') or params.get('role', ['admin'])[0])
+        params = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+        roles = self.headers.get_all('X-Shirokuma-Role', []) + params.get('role', [])
+        try:
+            # Validate every supplied selector, even one shadowed by a header.
+            for role in roles:
+                if not role.strip():
+                    raise ValueError('Invalid role: ' + role)
+                warehouse_resident.resolve_role('', role)
+            return warehouse_resident.resolve_role(
+                self.headers.get('X-Trino-User', ''), roles[0] if roles else None)
+        except ValueError as exc:
+            raise PermissionError(str(exc)) from exc
+
+    def authorize(self, routes, path):
+        if path not in routes:
+            self.respond({'error': 'route not found'}, 404)
+            return None
+        role = self.request_role()
+        if role not in routes[path]:
+            raise PermissionError('Forbidden for role: ' + role)
+        return role
 
     def do_GET(self):
         try:
             url = urlsplit(self.path)
+            if self.authorize(GET_ROUTES, url.path) is None:
+                return
             if url.path in ("/", "/index.html"):
                 data = INDEX.read_bytes()
                 self.send_response(200)
@@ -163,6 +196,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.respond(json.loads(result)["data"])
             else:
                 self.respond({"error": "route not found"}, 404)
+        except PermissionError as exc:
+            self.respond({'error': str(exc)}, 403)
         except (ValueError, UnicodeError) as exc:
             self.respond({'error': str(exc)}, 400)
         except Exception as exc:
@@ -185,15 +220,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.respond({"error": "cross-origin control requests are not allowed"}, 403)
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/warehouse/chill", "/api/warehouse/wake", "/api/warehouse/query", "/api/bears/run", "/api/lake/ingest", '/api/lake/preview', '/api/catalog/drop', '/api/models/build', '/api/catalog/clone', '/api/lake/export', '/api/warehouse/autochill', '/api/ai/config', '/api/ai/test'):
-            self.respond({"error": "route not found"}, 404)
-            return
         try:
-            role = self.request_role()
-            if ((role == 'bi_viewer' and path in {
-                    '/api/catalog/drop', '/api/models/build', '/api/lake/ingest', '/api/catalog/clone'})
-                    or (role != 'admin' and path == '/api/ai/config')):
-                raise PermissionError('Forbidden for role: ' + role)
+            role = self.authorize(POST_ROUTES, path)
+            if role is None:
+                return
             if path.endswith(("/chill", "/wake")):
                 result = warehouse_resident.transition(path.rsplit("/", 1)[1], "LOCAL")
             else:
@@ -226,15 +256,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         try:
                             statement = warehouse_resident.check_sql_policy(
                                 statement, mode=options.get('mode', 'read-only'), role=role)
-                            if role == 'bi_viewer':
-                                warehouse_resident._check_bi_schemas(statement, 'iceberg')
-                                if any('.' in table and table.split('.')[0].lower() != 'marts'
-                                       for table in bears_resident.extract_source_tables(statement)):
-                                    raise ValueError('BI Viewer queries are restricted to marts')
                         except ValueError as exc:
                             raise PermissionError(str(exc)) from exc
                     result = warehouse_resident.query(size, statement, catalog="iceberg", schema=schema, max_rows=limit, **options)
                 elif path == '/api/warehouse/autochill':
+                    if 'minutes' in body and role != 'admin':
+                        raise PermissionError('Only admin can configure auto-chill')
                     if 'minutes' not in body and 'check' not in body:
                         raise ValueError('minutes or check is required')
                     if 'minutes' in body and (type(body['minutes']) is not int or not 0 <= body['minutes'] <= 1440):
@@ -275,6 +302,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     table = body.get('table')
                     if not isinstance(table, str) or not table.strip():
                         raise ValueError('table must be a non-empty string')
+                    if role == 'data_engineer':
+                        if not re.fullmatch(r'(?:iceberg\.)?(?:sandbox|staging|raw)\.[A-Za-z_][A-Za-z_0-9]*', table):
+                            raise PermissionError('Data Engineer can drop only sandbox, staging, or raw tables')
                     result = bears_resident.drop_table(table)
                 elif path == '/api/models/build':
                     action = body.get('action', 'build')
