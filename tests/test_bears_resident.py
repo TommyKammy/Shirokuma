@@ -180,6 +180,46 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(result["telemetry"], "skipped")
             self.assertEqual(telemetry.call_args.args[2], "failed")
 
+    def test_llm_usage_flows_into_generated_and_staged_results(self):
+        for stage in (None, 'orders_summary'):
+            for metadata in ({}, {'model': 'served-model'}, {'usage': {'prompt_tokens': 0, 'completion_tokens': 12}},
+                             {'model': 'served-model', 'usage': {'prompt_tokens': 25, 'completion_tokens': 8}}):
+                with self.subTest(stage=stage, metadata=metadata):
+                    completion = dict(metadata, choices=[{'message': {'content': '{"generated_sql":"SELECT 42"}'}}])
+                    with patch.object(b.wr, 'http_json', return_value=completion), \
+                         patch.object(b, 'sql', return_value={'rows': []}), \
+                         patch.object(b, 'audit_table', return_value={'quality_passed': True, 'snapshot_id': 9}):
+                        result = b.data(Args(request='count orders', stage_table=stage))
+                    if metadata:
+                        usage = result['llm_usage']
+                        self.assertEqual(usage['model_provider'], 'local-openai')
+                        if metadata.get('model'):
+                            self.assertEqual(usage['model_name'], metadata['model'])
+                        else:
+                            self.assertTrue(usage['model_name'])
+                        self.assertEqual(usage['prompt_tokens'], metadata.get('usage', {}).get('prompt_tokens'))
+                        self.assertEqual(usage['completion_tokens'], metadata.get('usage', {}).get('completion_tokens'))
+                    else:
+                        self.assertNotIn('llm_usage', result)
+
+    def test_rich_wap_telemetry(self):
+        cases = [({'staged_table': 'iceberg.sandbox.t', 'audit': {'snapshot_id': 0}, 'wap_action': 'stage'},
+                  {'target': 'iceberg.sandbox.t@0'}),
+                 ({'table': 'iceberg.marts.t', 'published_snapshot_id': 42, 'audit': {'snapshot_id': 1}, 'wap_action': 'publish'},
+                  {'target': 'iceberg.marts.t@42', 'risk_level': 'normal'}),
+                 ({'table': 'iceberg.marts.t', 'restored_snapshot_id': 7, 'wap_action': 'rollback'},
+                  {'target': 'iceberg.marts.t@7', 'risk_level': 'normal'}),
+                 ({'table': 'x' * 300, 'audit': None}, {'target': 'x' * 256}),
+                 ({'llm_usage': {'model_provider': 'local-openai', 'model_name': 'test', 'prompt_tokens': 0, 'completion_tokens': 8}},
+                  {'model_provider': 'local-openai', 'model_name': 'test', 'prompt_tokens': 0, 'completion_tokens': 8}),
+                 ({'llm_usage': {'model_name': '', 'prompt_tokens': True, 'completion_tokens': -1}}, {}),
+                 ({'llm_usage': {'prompt_tokens': 1.5, 'completion_tokens': None}}, {})]
+        for report, expected in cases:
+            with self.subTest(report=report), patch.object(b, 'data', return_value=dict(report)), \
+                 patch.object(b.wr, 'telemetry', return_value='recorded') as telemetry:
+                b.run(Args(bear='data'))
+                self.assertEqual(telemetry.call_args.kwargs, dict(prefix='', **expected))
+
     def test_main_clean_json(self):
         out = io.StringIO()
         with patch.object(sys, "argv", ["bears", "query", "--sql", "SELECT 42"]), patch.object(b, "query", return_value={}), patch.object(b.wr, "telemetry", return_value="recorded"), contextlib.redirect_stdout(out):

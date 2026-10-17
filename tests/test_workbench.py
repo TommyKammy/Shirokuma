@@ -1,5 +1,6 @@
 """Workbench HTTP contracts, with no resident lab required."""
 import http.client
+from contextlib import contextmanager
 from http.server import HTTPServer
 import json
 from pathlib import Path
@@ -100,6 +101,73 @@ class WorkbenchTests(unittest.TestCase):
                 args = catalog.call_args.args[0]
                 self.assertEqual((args.bear, args.action, args.table), ("catalog", action, table))
 
+    @patch.object(wb.warehouse_resident, 'query', return_value={'rows': []})
+    def test_query_modes(self, query):
+        for mode in ('read-only', 'sandbox-write', 'admin-write'):
+            with self.subTest(mode=mode):
+                self.assertEqual(self.json_request('/api/warehouse/query', {'sql': 'SELECT 1', 'mode': mode})[0], 200)
+                query.assert_called_with('LOCAL', 'SELECT 1', catalog='iceberg', schema='marts', max_rows=1000, mode=mode)
+        query.reset_mock()
+        for mode in ('unknown', '', None, [], True):
+            with self.subTest(mode=mode):
+                self.assertEqual(self.json_request('/api/warehouse/query', {'sql': 'SELECT 1', 'mode': mode})[0], 400)
+        query.assert_not_called()
+
+    @patch.object(wb.lake_ingest, 'ingest', return_value={'audit': {'row_count': 12}})
+    def test_lake_ingest(self, ingest):
+        self.assertEqual(self.json_request('/api/lake/ingest', {'file': 'data/orders.csv'}),
+                         (200, ingest.return_value))
+        ingest.assert_called_once_with('data/orders.csv', table=None, mode='replace', format='auto', batch_size=500)
+        self.assertEqual(self.json_request('/api/lake/ingest', {'file': 'data/events.jsonl', 'table': 'raw.events',
+            'mode': 'append', 'format': 'jsonl', 'batch_size': 1})[0], 200)
+        ingest.assert_called_with('data/events.jsonl', table='raw.events', mode='append', format='jsonl', batch_size=1)
+
+    @patch.object(wb.lake_ingest, 'ingest')
+    def test_lake_ingest_rejects_invalid_fields(self, ingest):
+        cases = [{}, {'file': ''}, {'file': '   '}, {'file': 42}]
+        cases += [dict(file='data.csv', **{key: value}) for key, values in (
+            ('table', [None, [], 3]), ('mode', [None, {}, 3]), ('format', [None, True]),
+            ('batch_size', [None, 0, -1, True, '500', 1.5])) for value in values]
+        for body in cases:
+            with self.subTest(body=body):
+                self.assertEqual(self.json_request('/api/lake/ingest', body)[0], 400)
+        ingest.assert_not_called()
+
+    @patch.object(wb.bears_resident, 'run', return_value={'valid': True})
+    def test_data_wap_actions(self, run):
+        cases = [({'action': 'generate', 'sql': 'SELECT 1'}, 'sql', 'SELECT 1'),
+                 ({'action': 'stage', 'sql': 'SELECT 1', 'table': 'summary'}, 'stage_table', 'summary'),
+                 ({'action': 'stage', 'request': 'Count orders', 'stage_table': 'custom', 'table': 'other'}, 'stage_table', 'custom'),
+                 ({'action': 'publish', 'table': 'summary'}, 'publish', 'summary'),
+                 ({'action': 'publish', 'stage_table': 'summary'}, 'publish', 'summary'),
+                 ({'action': 'publish', 'publish': 'custom', 'table': 'other'}, 'publish', 'custom'),
+                 ({'action': 'rollback', 'target': 'marts.summary', 'snapshot_id': '9007199254740993'}, 'rollback', 'marts.summary'),
+                 ({'action': 'rollback', 'table': 'marts.summary'}, 'rollback', 'marts.summary'),
+                 ({'action': 'rollback', 'rollback': 'marts.custom', 'table': 'other'}, 'rollback', 'marts.custom')]
+        for fields, key, expected in cases:
+            with self.subTest(fields=fields):
+                self.assertEqual(self.json_request('/api/bears/run', dict(bear='data', **fields))[0], 200)
+                args = run.call_args.args[0]
+                self.assertEqual(getattr(args, key), expected)
+                if 'snapshot_id' in fields:
+                    self.assertEqual(args.snapshot_id, fields['snapshot_id'])
+        run.reset_mock()
+        for fields in ({'action': 'publish'}, {'action': 'rollback'}, {'request': ' ', 'sql': '\n'},
+                       {'sql': 'SELECT 1', 'stage_table': []}, {'publish': 3}, {'rollback': None}, {'snapshot_id': 42}):
+            with self.subTest(fields=fields):
+                code, result = self.json_request('/api/bears/run', dict(bear='data', **fields))
+                self.assertEqual(code, 400)
+                if fields.get('action') in ('publish', 'rollback'):
+                    self.assertEqual(result['error'], 'data bear requires a request, sql, publish, or rollback')
+        run.assert_not_called()
+
+    @patch.object(wb.bears_resident, 'catalog')
+    def test_snapshot_ids_preserve_digits_for_browser_rollback(self, catalog):
+        catalog.return_value = {'metadata': {'snapshots': {'rows': [[9007199254740993, None, '2026-10-17']]}}}
+        code, result = self.json_request('/api/catalog?table=marts.summary')
+        self.assertEqual(code, 200)
+        self.assertEqual(result['metadata']['snapshots']['rows'], [['9007199254740993', None, '2026-10-17']])
+
     def test_lineage_from_actual_models(self):
         code, result = self.json_request("/api/lineage")
         self.assertEqual(code, 200)
@@ -165,6 +233,28 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(conn.getresponse().status, 400)
         conn.close()
         self.assertEqual(self.request("/api/warehouse/query", {}, headers={"Content-Type": "text/plain"})[0], 400)
+
+    @patch.object(wb, 'HTTPServer')
+    def test_server_owns_persistent_tunnel_and_serves_when_unavailable(self, server):
+        for unavailable in (False, True):
+            events = []
+            @contextmanager
+            def tunnel():
+                if unavailable:
+                    raise OSError('Trino offline')
+                events.append('open')
+                try:
+                    yield 'http://trino'
+                finally:
+                    events.append('close')
+            def serve():
+                self.assertEqual(events, [] if unavailable else ['open'])
+                raise KeyboardInterrupt()
+            server.return_value.__enter__.return_value.serve_forever.side_effect = serve
+            with self.subTest(unavailable=unavailable), patch.object(wb.warehouse_resident, 'persistent_trino', tunnel), \
+                 patch('builtins.print'):
+                wb.main(['--port', '0'])
+            self.assertEqual(events, [] if unavailable else ['open', 'close'])
 
 
 if __name__ == "__main__":

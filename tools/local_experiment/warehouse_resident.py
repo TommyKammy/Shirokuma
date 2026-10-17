@@ -13,6 +13,7 @@ import uuid
 
 KUBECTL = ["kubectl", "--context", "colima-mac-studio-solo", "-n", "shirokuma-dev"]
 TIMEOUT = 180
+_PERSISTENT_TRINO = None
 
 
 def warehouse(value):
@@ -57,7 +58,7 @@ def http_json(url, data=None, headers=None, timeout=30):
 
 
 @contextmanager
-def trino():
+def _trino_connection():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -74,7 +75,7 @@ def trino():
             except (OSError, urllib.error.URLError):
                 return False
         wait_for(ready)
-        yield url
+        yield dict(process=process, url=url)
     finally:
         process.terminate()
         try:
@@ -84,13 +85,40 @@ def trino():
             process.wait()
 
 
-def telemetry(action, duration, status="success", prefix="warehouse."):
+@contextmanager
+def persistent_trino():
+    """Own a reusable tunnel for a server's lifetime; nested callers borrow it."""
+    global _PERSISTENT_TRINO
+    if _PERSISTENT_TRINO and _PERSISTENT_TRINO['process'].poll() is None:
+        yield _PERSISTENT_TRINO['url']
+        return
+    previous = _PERSISTENT_TRINO
+    with _trino_connection() as connection:
+        _PERSISTENT_TRINO = connection
+        try:
+            yield connection['url']
+        finally:
+            _PERSISTENT_TRINO = previous
+
+
+@contextmanager
+def trino():
+    if _PERSISTENT_TRINO and _PERSISTENT_TRINO['process'].poll() is None:
+        yield _PERSISTENT_TRINO['url']
+        return
+    with _trino_connection() as connection:
+        yield connection['url']
+
+
+def telemetry(action, duration, status="success", prefix="warehouse.", **extra):
     try:
         from agenthouse.manage import Client, event, insert
-        insert(Client(), event(action=prefix + action, target="trino-warehouse",
-                               status=status, agent_id="shirokuma-warehouse",
-                               task_id=str(uuid.uuid4()), trace_id=uuid.uuid4().hex,
-                               duration_ms=duration))
+        fields = dict(action=prefix + action, target="trino-warehouse",
+                      status=status, agent_id="shirokuma-warehouse",
+                      task_id=str(uuid.uuid4()), trace_id=uuid.uuid4().hex,
+                      duration_ms=duration)
+        fields.update({key: value for key, value in extra.items() if value is not None})
+        insert(Client(), event(**fields))
         return "recorded"
     except Exception:
         return "skipped"

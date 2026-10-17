@@ -205,6 +205,60 @@ class ResidentWarehouseTests(unittest.TestCase):
         with patch.dict("sys.modules", {"agenthouse.manage": None}):
             self.assertEqual(w.telemetry("query", 12), "skipped")
 
+    def test_persistent_trino_reuses_and_owns_tunnel(self):
+        for failure in (False, True):
+            with self.subTest(failure=failure), patch.object(w.subprocess, 'Popen') as popen, \
+                 patch.object(w, 'http_json', return_value={'starting': False}):
+                process = popen.return_value
+                process.poll.return_value = None
+                with self.assertRaisesRegex(RuntimeError, 'caller failed') if failure else nullcontext():
+                    with w.persistent_trino() as persistent_url:
+                        for _ in range(2):
+                            with w.trino() as url:
+                                self.assertEqual(url, persistent_url)
+                        with w.persistent_trino() as nested_url:
+                            self.assertEqual(nested_url, persistent_url)
+                        process.terminate.assert_not_called()
+                        popen.assert_called_once()
+                        if failure:
+                            raise RuntimeError('caller failed')
+                self.assertIsNone(w._PERSISTENT_TRINO)
+                process.terminate.assert_called_once()
+                process.wait.assert_called_once()
+
+    def test_dead_persistent_tunnel_falls_back_and_failed_start_cleans_up(self):
+        dead = Mock()
+        dead.poll.return_value = 1
+        with patch.object(w, '_PERSISTENT_TRINO', {'process': dead, 'url': 'dead'}), \
+             patch.object(w.subprocess, 'Popen') as popen, \
+             patch.object(w, 'http_json', return_value={'starting': False}):
+            popen.return_value.poll.return_value = None
+            with w.trino() as url:
+                self.assertNotEqual(url, 'dead')
+            popen.return_value.terminate.assert_called_once()
+            dead.terminate.assert_not_called()
+        with patch.object(w.subprocess, 'Popen') as popen:
+            popen.return_value.poll.return_value = 1
+            with self.assertRaisesRegex(RuntimeError, 'port-forward exited'):
+                with w.persistent_trino():
+                    self.fail('failed startup must not yield')
+            self.assertIsNone(w._PERSISTENT_TRINO)
+            popen.return_value.terminate.assert_called_once()
+
+    def test_rich_telemetry_omits_none_and_passes_event_fields(self):
+        manage = Mock()
+        with patch.dict('sys.modules', {'agenthouse.manage': manage}):
+            self.assertEqual(w.telemetry('bear.data_engineer', 7, prefix='', target='iceberg.marts.t@42',
+                risk_level='normal', model_name='local-model', prompt_tokens=0,
+                completion_tokens=None, blocked_by_policy=False), 'recorded')
+        fields = manage.event.call_args.kwargs
+        self.assertEqual(fields['target'], 'iceberg.marts.t@42')
+        self.assertEqual(fields['action'], 'bear.data_engineer')
+        self.assertEqual(fields['risk_level'], 'normal')
+        self.assertEqual(fields['prompt_tokens'], 0)
+        self.assertFalse(fields['blocked_by_policy'])
+        self.assertNotIn('completion_tokens', fields)
+
     def test_failed_pawprint_has_only_action_and_timing(self):
         manage = Mock()
         with patch.dict("sys.modules", {"agenthouse.manage": manage}):

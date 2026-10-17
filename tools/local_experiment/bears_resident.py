@@ -167,8 +167,9 @@ def data(args):
         raise ValueError('data bear requires request, --sql, --publish, or --rollback')
     stage = getattr(args, 'stage_table', None)
     staged_table = 'iceberg.sandbox.' + data_table(stage) if stage else None
+    llm_usage = {}
     with wr.trino() as url:
-        statement = explicit_sql.strip() if explicit_sql else generate_data_sql(url, request)
+        statement = explicit_sql.strip() if explicit_sql else generate_data_sql(url, request, llm_usage)
         def validate():
             if not re.match(r'(?i)^(SELECT|WITH)\b', statement):
                 raise ValueError('SELECT model required')
@@ -180,11 +181,13 @@ def data(args):
                 ' AS ' + wr.check_sql_policy(statement), mode='sandbox-write'))
             audit = audit_table(url, staged_table)
             return dict(wap_action='stage', intent=request, generated_sql=statement,
-                        valid=audit['quality_passed'], validation=validation, staged_table=staged_table, audit=audit)
-    return dict(intent=request, generated_sql=statement, valid='error' not in validation, validation=validation)
+                        valid=audit['quality_passed'], validation=validation, staged_table=staged_table, audit=audit,
+                        **({'llm_usage': llm_usage} if llm_usage else {}))
+    return dict(intent=request, generated_sql=statement, valid='error' not in validation, validation=validation,
+                **({'llm_usage': llm_usage} if llm_usage else {}))
 
 
-def generate_data_sql(url, request):
+def generate_data_sql(url, request, llm_usage=None):
     sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny', 'raw', 'sandbox')")
     body = {"model": os.environ.get("BEAR_MODEL", "qwen3.8-flash-next"), "temperature": 0,
             "max_tokens": 512, "enable_thinking": False,
@@ -192,6 +195,10 @@ def generate_data_sql(url, request):
                          {"role": "user", "content": json.dumps({"request": request, "sources": sources["rows"]})}]}
     completion = wr.http_json(os.environ.get("BEAR_MODEL_URL", "http://127.0.0.1:8001/v1") +
                               "/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"}, timeout=30)
+    if llm_usage is not None and (completion.get('model') or completion.get('usage')):
+        usage = completion.get('usage') or {}
+        llm_usage.update(model_provider='local-openai', model_name=completion.get('model') or body['model'],
+                         prompt_tokens=usage.get('prompt_tokens'), completion_tokens=usage.get('completion_tokens'))
     content = completion["choices"][0]["message"]["content"].strip()
     if content.startswith("```"):
         content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.MULTILINE).strip()
@@ -264,7 +271,30 @@ def run(args):
     except Exception as exc:
         status, result = "failed", {"error": str(exc)}
     result["bear"] = NAMES[args.bear]
-    result["telemetry"] = wr.telemetry("bear." + NAMES[args.bear], int((time.monotonic() - started) * 1000), status, prefix="")
+    extra = {}
+    target = result.get('table') or result.get('staged_table')
+    if target:
+        target = str(target)
+        audit = result.get('audit')
+        snapshot = result.get('published_snapshot_id')
+        if snapshot is None:
+            snapshot = result.get('restored_snapshot_id')
+        if snapshot is None and isinstance(audit, dict):
+            snapshot = audit.get('snapshot_id')
+        if snapshot is not None:
+            target += f'@{snapshot}'
+        extra['target'] = target[:256]
+    if result.get('wap_action') in ('publish', 'rollback'):
+        extra['risk_level'] = 'normal'
+    usage = result.get('llm_usage')
+    if isinstance(usage, dict):
+        for key in ('model_provider', 'model_name'):
+            if isinstance(usage.get(key), str) and usage[key]:
+                extra[key] = usage[key]
+        for key in ('prompt_tokens', 'completion_tokens'):
+            if type(usage.get(key)) is int and usage[key] >= 0:
+                extra[key] = usage[key]
+    result["telemetry"] = wr.telemetry("bear." + NAMES[args.bear], int((time.monotonic() - started) * 1000), status, prefix="", **extra)
     return result
 
 
