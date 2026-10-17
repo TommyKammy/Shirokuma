@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from http.server import HTTPServer
 from html.parser import HTMLParser
 import json
+import re
 from pathlib import Path
 import sys
 import threading
@@ -131,6 +132,61 @@ class WorkbenchTests(unittest.TestCase):
             self.assertEqual(panel['aria-labelledby'], tab['id'])
             self.assertEqual('hidden' in panel, name != 'columns')
         self.assertIn('hidden', doc.by_id('drop-table-btn'))
+
+    def test_bilingual_language_switcher_contract(self):
+        doc = self.workbench_document()
+        switcher = doc.by_id('lang-switcher')
+        self.assertEqual((switcher['role'], switcher['aria-label']), ('group', 'Language'))
+        header = next(n for n in switcher['ancestors'] if n['tag'] == 'header')
+        environment = next(n for n in doc.nodes if n.get('class') == 'environment')
+        self.assertIn(header, environment['ancestors'])
+        self.assertLess(doc.nodes.index(environment), doc.nodes.index(switcher))
+        for lang, label, pressed in [('en', 'EN', 'true'), ('ja', '日本語', 'false')]:
+            button = doc.by_id('lang-' + lang)
+            self.assertIn(switcher, button['ancestors'])
+            self.assertIn(header, button['ancestors'])
+            self.assertEqual((button['tag'], button['data-lang'], button['aria-pressed'], button['text']),
+                             ('button', lang, pressed, label))
+        self.assertEqual(next(n for n in doc.nodes if n['tag'] == 'html')['lang'], 'en')
+
+        script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
+        dictionary = script.split('const i18n = {ja: {', 1)[1].split('}};', 1)[0]
+        translations = dict(re.findall(r"'([^']+)':'([^']+)'", dictionary))
+        expected = {
+            'Work with Data': 'データを扱う', 'Catalog': 'カタログ',
+            'Manage & Monitor': '監視・管理',
+            'SQL Worksheets · Warehouse & SQL': 'SQL ワークシート · Warehouse & SQL',
+            'Ingestion · File Upload': 'データ取り込み · ファイルアップロード',
+            'Transformation · dbt & WAP': 'データ変換 · dbt & WAP',
+            'Autonomous Bears': '自律 AI Bears',
+            'Database Explorer · Catalog': 'データベース探索 · カタログ',
+            'AgentHouse Pawprints': 'AgentHouse 監査ログ (Pawprints)',
+            'Compute & Governance': 'コンピュート & ガバナンス',
+            'Columns': 'カラム定義', 'Data Preview': 'データプレビュー',
+            'Profile & NULL Stats': 'プロファイル & NULL統計', 'DDL': 'DDL 定義',
+            'Snapshots & Time Travel': 'スナップショット & Time Travel',
+            'Table Lineage': 'テーブルリネージ',
+        }
+        for english, japanese in expected.items():
+            with self.subTest(translation=english):
+                self.assertEqual(translations[english], japanese)
+        # Every section's title and description, plus all specialist copy, is covered.
+        for node in doc.nodes:
+            if node.get('class') == 'page-title':
+                for child in doc.nodes:
+                    if node in child['ancestors'] and child['tag'] in {'h1', 'p'}:
+                        self.assertRegex(translations[child['text']], r'[ぁ-んァ-ヶ一-龯]')
+        for title, description in re.findall(r"name:'([^']+)',description:'([^']+)'", script):
+            self.assertIn(title, translations)
+            self.assertIn(description, translations)
+        self.assertEqual(len(re.findall(r"key:'(?:sre|query|data|catalog|policy)',name:", script)), 5)
+        self.assertIn("languageKey = 'shirokuma.lang.v1'", script)
+        self.assertIn('localStorage.getItem(languageKey)', script)
+        self.assertIn('localStorage.setItem(languageKey, lang)', script)
+        self.assertIn("navigator.language?.toLowerCase().startsWith('ja')", script)
+        self.assertIn('document.documentElement.lang = lang', script)
+        for lang in ('en', 'ja'):
+            self.assertIn(f"$('lang-{lang}').onclick = () => setLanguage('{lang}')", script)
 
     @patch.object(wb.bears_resident, 'catalog')
     def test_catalog_full_detail_and_snapshot_preview(self, catalog):

@@ -16,9 +16,15 @@
 @media(max-width:1150px){.worksheet-workspace{flex-direction:column}#worksheet-explorer{width:100%;flex-basis:auto}.layout{grid-template-columns:220px minmax(0,1fr)}}
 @media(max-width:700px){.layout{display:block}nav{display:block;max-height:240px;overflow:auto}nav button{display:block;width:100%;white-space:normal}.nav-category{margin-top:12px}.app-header .toolbar{margin-left:0}.environment{width:100%}}
 </style>
+<style>
+#lang-switcher{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-shrink:0}
+#lang-switcher button{border:0;background:transparent;color:var(--muted);padding:5px 10px;font-size:12px;border-radius:5px}
+#lang-switcher button:hover{color:var(--ink)}
+#lang-switcher button[aria-pressed="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px #0002}
+</style>
 </head>
 <body>
-<header class="app-header"><span class="brand">Shirokuma</span><span class="divider"></span><span class="muted">Workbench</span><div class="toolbar" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status"></span></div><span class="environment">Local lab · mac-studio-solo</span></header>
+<header class="app-header"><span class="brand">Shirokuma</span><span class="divider"></span><span class="muted">Workbench</span><div class="toolbar" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status"></span></div><span class="environment">Local lab · mac-studio-solo</span><div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div></header>
 <div class="layout">
 <nav aria-label="Workbench sections" role="tablist" aria-orientation="vertical">
 <h2 class="nav-category">Work with Data</h2>
@@ -82,6 +88,104 @@
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
+// English source strings are stable translation keys. SQL, identifiers and backend
+// payloads remain data; only explicitly registered UI text is translated.
+const i18n = {ja: {
+ 'Work with Data':'データを扱う', 'Catalog':'カタログ', 'Manage & Monitor':'監視・管理',
+ 'SQL Worksheets · Warehouse & SQL':'SQL ワークシート · Warehouse & SQL',
+ 'Ingestion · File Upload':'データ取り込み · ファイルアップロード',
+ 'Transformation · dbt & WAP':'データ変換 · dbt & WAP',
+ 'Autonomous Bears':'自律 AI Bears', 'Database Explorer · Catalog':'データベース探索 · カタログ',
+ 'AgentHouse Pawprints':'AgentHouse 監査ログ (Pawprints)', 'Compute & Governance':'コンピュート & ガバナンス',
+ 'Columns':'カラム定義', 'Data Preview':'データプレビュー', 'Profile & NULL Stats':'プロファイル & NULL統計',
+ 'DDL':'DDL 定義', 'Snapshots & Time Travel':'スナップショット & Time Travel', 'Table Lineage':'テーブルリネージ',
+ 'One workspace for your resident lakehouse.':'常駐レイクハウスの操作をひとつのワークスペースで。',
+ 'Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.':'ウェアハウス操作と Data Bear の実行はローカルラボを変更します。書き込み後は監査結果を確認してください。',
+ 'Workbench':'ワークベンチ', 'Local lab · mac-studio-solo':'ローカルラボ · mac-studio-solo',
+ 'Global warehouse controls':'ウェアハウスの共通操作', 'Workbench sections':'ワークベンチのセクション',
+ 'Warehouse & SQL':'ウェアハウス & SQL', 'Explore your Iceberg data with the resident Trino warehouse.':'常駐 Trino ウェアハウスで Iceberg データを探索します。',
+ 'Wake':'起動', 'Chill':'休止', 'Refresh':'更新', 'Loading…':'読み込み中…', 'Warehouse: Loading…':'ウェアハウス: 読み込み中…', 'Replicas —':'レプリカ —',
+ 'Database Object Explorer':'データベースオブジェクト探索', 'Find schema or table':'スキーマやテーブルを検索', 'Search objects':'オブジェクトを検索', 'Loading catalog…':'カタログを読み込み中…',
+ 'SQL workspace':'SQL ワークスペース', 'Catalog: iceberg · Schema: marts':'カタログ: iceberg · スキーマ: marts', 'SQL worksheets':'SQL ワークシート', 'Add SQL worksheet':'SQL ワークシートを追加', '+ Worksheet':'+ ワークシート',
+ 'Recent Query History':'最近のクエリ履歴', 'Restore a past query…':'過去のクエリを復元…', 'AI Bear Copilot':'AI Bear コパイロット',
+ 'Describe the SQL you need':'作成したい SQL を説明', 'Revenue by nation':'国別の売上', 'Generate SQL':'SQL を生成', 'Explain Plan':'実行計画を確認', 'WAP table':'WAP テーブル', 'Stage & Audit':'ステージングと監査', 'Publish':'公開',
+ 'Recent orders':'最近の注文', 'TPC-H Revenue by Nation':'TPC-H 国別売上', 'Customers':'顧客', 'SQL statement':'SQL 文', 'Warehouse':'ウェアハウス', 'Mode':'モード', 'Max rows':'最大行数', 'Run Query':'クエリを実行',
+ 'read-only':'読み取り専用', 'sandbox-write':'サンドボックス書き込み', 'admin-write':'管理者書き込み',
+ 'Results':'実行結果', 'Ready · ⌘/Ctrl + Enter to run':'準備完了 · ⌘/Ctrl + Enter で実行', 'Filter rows':'行を絞り込み', 'Search returned rows':'結果の行を検索', 'Download CSV':'CSV をダウンロード', 'Download JSON':'JSON をダウンロード', 'Copy TSV':'TSV をコピー',
+ 'Run a query to inspect rows and column types. Chilled warehouses wake automatically.':'クエリを実行して行とカラム型を確認できます。休止中のウェアハウスは自動で起動します。',
+ 'Preview file columns and sample rows before loading an Iceberg table.':'Iceberg テーブルに取り込む前に、ファイルのカラムとサンプル行を確認します。',
+ 'Local File Ingestion (CSV / JSONL / Parquet)':'ローカルファイルの取り込み (CSV / JSONL / Parquet)',
+ 'Import a file from the Workbench server into the local lake. Replace overwrites the target table; append adds rows; upsert updates matching keys and adds new rows. For repeated keys, the last row in the file wins.':'ワークベンチサーバーのファイルをローカルレイクに取り込みます。「置換」はテーブルを上書きし、「追加」は行を追加します。「更新・追加」はキーが一致する行を更新し、新しい行を追加します。同じキーが複数ある場合はファイルの最後の行を採用します。',
+ 'Choose a browser file or drop it here':'ファイルを選択するか、ここにドロップ', 'No browser file selected. Use a server path below.':'ファイルが選択されていません。下のサーバーパスも使用できます。', 'Use server path':'サーバーパスを使用', 'Local file path':'ローカルファイルパス', 'Target table (optional)':'取り込み先テーブル（任意）',
+ 'replace':'置換', 'append':'追加', 'upsert':'更新・追加', 'Upsert key columns (required for upsert)':'更新キーのカラム（更新・追加では必須）', 'Upsert key columns, e.g. order_id':'更新キーのカラム（例: order_id）', 'Use input column names, separated by commas for a composite key.':'入力ファイルのカラム名を指定します。複合キーはカンマで区切ってください。',
+ 'Preview Schema & Sample Rows':'スキーマとサンプル行を確認', 'Ingest File':'ファイルを取り込む', 'Ready':'準備完了', 'Ingestion audit summary':'取り込み監査の概要',
+ 'Inspect model definitions and dependencies, then build or refresh.':'モデル定義と依存関係を確認し、ビルドや更新を実行します。', 'Refresh Models':'モデル一覧を更新', 'Run dbt Build':'dbt ビルドを実行', 'Run dbt Test':'dbt テストを実行', 'Persistent dbt Models':'永続 dbt モデル', 'Registered Dynamic WAP Models':'登録済み動的 WAP モデル', 'Choose a model':'モデルを選択', 'Open SQL in Worksheet':'SQL をワークシートで開く', 'Refresh WAP Model':'WAP モデルを更新', 'Choose a model to inspect its SQL.':'モデルを選択して SQL を確認してください。',
+ 'Catalog & Lineage':'カタログ & リネージ', 'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Iceberg スキーマやカラムを確認し、dbt モデルの依存関係をたどります。', 'Refresh catalog':'カタログを更新', 'Iceberg tables':'Iceberg テーブル', 'Search catalog':'カタログを検索', 'Load the catalog to browse tables.':'カタログを読み込んでテーブルを探索してください。', 'Table Inspector':'テーブルインスペクター', 'Open in Worksheet':'ワークシートで開く', 'Drop Table':'テーブルを削除', 'Choose a table to see its columns and types.':'テーブルを選択してカラムと型を確認してください。', 'Iceberg snapshots':'Iceberg スナップショット', 'dbt model lineage':'dbt モデルのリネージ', 'Local model definitions':'ローカルのモデル定義', 'Loading dependencies…':'依存関係を読み込み中…',
+ 'Autonomous Bears Cockpit':'自律 AI Bears コックピット', 'Run the five resident specialists. Inspect their findings, recommendations, and telemetry.':'5 体の常駐スペシャリストを実行し、検出結果、推奨事項、実行記録を確認します。',
+ 'Recent warehouse and Bear activity, recorded in ClickHouse.':'ClickHouse に記録された最近のウェアハウスと Bear の操作履歴です。', 'Recent telemetry':'最近の実行記録', 'Latest 100 events':'最新 100 件のイベント', 'Search Pawprints':'監査ログを検索', 'Action, Bear, trace, or model':'操作、Bear、トレース、モデルを検索', 'Status':'状態', 'All statuses':'すべての状態', 'Refresh to load recent Pawprints.':'更新して最近の監査ログを読み込んでください。',
+ 'Virtual warehouse readiness and resident cluster checks.':'仮想ウェアハウスの稼働状態と常駐クラスターを確認します。', 'Refresh status':'状態を更新', 'SRE Cluster Health Check':'SRE クラスター稼働チェック', 'Policy Gatekeeper Audit':'Policy Gatekeeper 監査', 'Virtual warehouse status':'仮想ウェアハウスの状態', 'Component readiness':'コンポーネントの稼働状態',
+ 'SRE Bear':'SRE Bear（運用担当）', 'Query Doctor Bear':'Query Doctor Bear（クエリ診断）', 'Data Engineer Bear':'Data Engineer Bear（データエンジニア）', 'Catalog Curator Bear':'Catalog Curator Bear（カタログ管理）', 'Policy Gatekeeper Bear':'Policy Gatekeeper Bear（ポリシー監査）',
+ 'Inspect workload readiness, recent errors, and runtime metrics.':'ワークロードの稼働状態、最近のエラー、実行時メトリクスを確認します。',
+ 'Explain SQL or inspect a recent query for performance advice.':'SQL の実行計画や最近のクエリを分析し、性能改善を提案します。',
+ 'Generate SQL, stage and audit a sandbox table, publish to marts, refresh a saved model, or restore a snapshot. Publish, refresh, and rollback change table data.':'SQL の生成、サンドボックステーブルのステージングと監査、marts への公開、保存済みモデルの更新、スナップショットの復元を実行します。公開・更新・ロールバックはテーブルのデータを変更します。',
+ 'Search tables or inspect a table’s columns and dependencies.':'テーブルを検索し、カラムや依存関係を確認します。', 'Review the resident workload baseline or check a local manifest.':'常駐ワークロードの基準設定やローカルマニフェストを検証します。',
+ 'Query target':'診断対象のクエリ', 'SQL to explain (optional)':'実行計画を確認する SQL（任意）', 'WAP Action':'WAP 操作', 'Describe the data you need (for generate/stage)':'必要なデータの説明（生成・ステージング用）', 'Explicit SELECT SQL (optional override)':'SELECT SQL を直接指定（任意・説明より優先）', 'Target table name (e.g. nation_summary)':'対象テーブル名（例: nation_summary）', 'Snapshot ID (for rollback)':'スナップショット ID（ロールバック用）', 'Action':'操作', 'Table (for describe or lineage)':'テーブル（詳細・リネージ確認用）', 'Local manifest path (for check)':'ローカルマニフェストのパス（検証用）', 'Run Bear':'Bear を実行', '{bear} response':'{bear} の応答',
+ 'generate':'生成', 'stage':'ステージング', 'publish':'公開', 'rollback':'ロールバック', 'refresh':'更新', 'search':'検索', 'describe':'詳細確認', 'lineage':'リネージ', 'baseline':'基準設定の監査', 'check':'検証',
+ 'Working…':'処理中…', 'No rows returned.':'該当する行はありません。', 'Unavailable':'利用不可', 'Running':'実行中', 'Chilled':'休止中', 'Starting':'起動中', 'Warehouse: {state}':'ウェアハウス: {state}', 'Replicas {ready} / {desired}':'レプリカ {ready} / {desired}', 'Readiness unavailable: {error}':'稼働状態を取得できません: {error}',
+ 'Component':'コンポーネント', 'Ready replicas':'稼働レプリカ数', 'Desired replicas':'設定レプリカ数', 'Executing…':'実行中…', '{rows} rows{truncated} · {duration} ms · {id}':'{rows} 行{truncated} · {duration} ms · {id}', ' · truncated':' · 表示上限あり', 'Query failed':'クエリ失敗',
+ 'Ingesting…':'取り込み中…', 'Audit needs review':'監査結果の確認が必要', 'Ingestion complete':'取り込み完了', 'Ingestion failed':'取り込み失敗', 'Column':'カラム', 'Type':'型', 'Extra':'追加情報', 'Comment':'コメント', 'Snapshot ID':'スナップショット ID', 'Parent ID':'親 ID', 'Committed at':'コミット日時', 'Rows: {rows} · Columns: {columns}':'行数: {rows} · カラム数: {columns}', 'Quality: {state}':'品質: {state}', 'Passed':'合格', 'Needs review':'要確認', 'NULL count':'NULL 件数', 'NULL %':'NULL 率', 'Definition unavailable':'定義を取得できません', 'Actions':'操作', 'Preview Snapshot':'スナップショットを確認', 'Rollback':'ロールバック',
+ 'Snapshot {snapshot} · Historical rows: {rows} · Current rows: {current} · Delta: {delta}':'スナップショット {snapshot} · 過去の行数: {rows} · 現在の行数: {current} · 差分: {delta}', 'unavailable':'取得不可', 'Rollback {table} to snapshot {snapshot}?':'{table} をスナップショット {snapshot} に戻しますか？', 'Rollback audit needs review':'ロールバックの監査結果を確認してください', 'Rollback failed: {error}':'ロールバックに失敗しました: {error}', 'Details unavailable':'詳細を取得できません',
+ 'Loading tables…':'テーブルを読み込み中…', 'Catalog unavailable. Check warehouse readiness and refresh.':'カタログを取得できません。ウェアハウスの状態を確認して更新してください。', 'Catalog unavailable. Use Refresh catalog in Database Explorer.':'カタログを取得できません。データベース探索で「カタログを更新」を実行してください。', 'No model dependencies recorded.':'モデルの依存関係は記録されていません。', 'Findings to review':'検出結果の確認が必要', 'Complete':'完了', 'Failed':'失敗', 'Refresh failed':'更新失敗', 'Upstream sources':'上流ソース', 'Model':'モデル', 'Downstream models':'下流モデル', 'None recorded':'記録なし', 'No matching tables.':'一致するテーブルはありません。', 'Drop {table}? This deletes the table.':'{table} を削除しますか？テーブルのデータも削除されます。', 'Table dropped':'テーブルを削除しました',
+ 'Browser storage unavailable. Changes stay in this session.':'ブラウザーに保存できません。変更はこのセッション内で保持されます。', 'Worksheet {number}':'ワークシート {number}', 'Downloaded visible rows.':'表示中の行をダウンロードしました。', 'Copied visible rows.':'表示中の行をコピーしました。', 'Copy failed: {error}':'コピーに失敗しました: {error}', 'Describe the SQL you need first.':'作成したい SQL の説明を入力してください。', 'Enter a WAP table to publish.':'公開する WAP テーブルを入力してください。', 'Enter a WAP table to stage.':'ステージングする WAP テーブルを入力してください。',
+ '{name} · {size} bytes':'{name} · {size} バイト', 'Choose a browser file or enter a local file path.':'ファイルを選択するか、ローカルファイルパスを入力してください。', 'Could not read {name}':'{name} を読み込めませんでした', 'File reading cancelled':'ファイルの読み込みを中止しました', 'Reading file…':'ファイルを読み込み中…', 'Inferred type':'推定される型', '{rows} file rows · {samples} sample rows':'ファイル全体 {rows} 行 · サンプル {samples} 行', 'No SQL recorded':'SQL は記録されていません', 'No models registered.':'登録済みモデルはありません。', 'No models registered':'登録済みモデルなし',
+ 'Timestamp (UTC)':'日時 (UTC)', 'Action / Bear':'操作 / Bear', 'Latency (ms)':'所要時間 (ms)', 'Details':'詳細', '{visible} / {total} events':'{visible} / {total} 件のイベント', 'success':'成功', 'failed':'失敗', 'degraded':'要確認', 'denied':'拒否', 'healthy':'正常', 'active':'稼働中', 'starting':'起動中', 'chilled':'休止中',
+ '{target}{model} · tokens {prompt} prompt / {completion} · trace {trace}':'{target}{model} · トークン 入力 {prompt} / 出力 {completion} · trace {trace}',
+}};
+i18n.en = Object.fromEntries(Object.keys(i18n.ja).map(key => [key, key]));
+let language = 'en';
+const languageKey = 'shirokuma.lang.v1', uiBindings = new Map();
+function t(key, values = {}) {
+ if (typeof values === 'function') values = values();
+ return (i18n[language][key] ?? key).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? '');
+}
+function ui(node, key, values = {}) {
+ if (node.nodeType !== Node.TEXT_NODE) {
+  const text = document.createTextNode(''); node.replaceChildren(text); node = text;
+ }
+ uiBindings.set(node, {key, values}); node.textContent = t(key, values);
+}
+function pruneUIBindings() {
+ for (const node of uiBindings.keys()) if (!node.isConnected) uiBindings.delete(node);
+}
+function setLanguage(lang) {
+ if (!['en','ja'].includes(lang)) return;
+ language = lang; document.documentElement.lang = lang;
+ for (const code of ['en','ja']) $('lang-'+code).setAttribute('aria-pressed', String(code === lang));
+ try { localStorage.setItem(languageKey, lang); } catch { /* Storage is optional. */ }
+ for (const [node, {key, values}] of uiBindings) {
+  if (!node.isConnected) { uiBindings.delete(node); continue; }
+  node.textContent = t(key, values);
+ }
+ for (const {node, attribute, key, values} of uiAttributes) node.setAttribute(attribute, t(key, values));
+}
+// Register only source UI nodes before dynamic data is loaded. Keep text nodes
+// separate so labels, <br> elements, focus and edited form values survive a switch.
+const uiAttributes = [];
+const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+while (walker.nextNode()) {
+ const node = walker.currentNode, key = node.textContent.trim();
+ if (!node.parentElement.closest('script,style,#lang-switcher,textarea') && key in i18n.en) ui(node, key);
+}
+document.querySelectorAll('[placeholder],[aria-label],option').forEach(node => {
+ // Option values must stay in the API's English vocabulary after relabeling.
+ if (node.tagName === 'OPTION') node.value = node.value;
+ for (const attribute of ['placeholder','aria-label']) {
+  const key = node.getAttribute(attribute);
+  if (key in i18n.en) uiAttributes.push({node, attribute, key});
+ }
+});
+$('lang-en').onclick = () => setLanguage('en');
+$('lang-ja').onclick = () => setLanguage('ja');
 const samples = {
  orders:'SELECT * FROM marts.fct_orders LIMIT 10',
  customers:'SELECT * FROM marts.dim_customers LIMIT 10',
@@ -93,18 +197,26 @@ async function api(path, body) {
  if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
  return data;
 }
-function message(id, text) { $(id).textContent=text; $(id).hidden=!text; }
+function message(id, text) {
+ const key = text in i18n.en ? text : Object.keys(i18n.ja).find(key => i18n.ja[key] === text);
+ if(key)ui($(id),key);else $(id).textContent=text;
+ $(id).hidden=!text;
+}
 async function busy(button, task) {
  if(button.disabled) return;
- const label=button.textContent; button.disabled=true; button.setAttribute('aria-busy','true');
- button.replaceChildren(Object.assign(document.createElement('span'),{className:'spinner'}),document.createTextNode(' Working…'));
- try {await task();} finally {button.textContent=label;button.disabled=false;button.removeAttribute('aria-busy');}
+ const label=button.textContent;
+ const textBinding=uiBindings.get(button.firstChild);
+ button.disabled=true; button.setAttribute('aria-busy','true');
+ const progress=document.createElement('span');ui(progress,'Working…');
+ button.replaceChildren(Object.assign(document.createElement('span'),{className:'spinner'}),progress);
+ // The busy label must survive a language change without losing the spinner.
+ try {await task();} finally {if(textBinding)ui(button,textBinding.key,textBinding.values);else button.textContent=label;button.disabled=false;button.removeAttribute('aria-busy');pruneUIBindings();}
 }
-function table(container, columns, rows) {
+function table(container, columns, rows, localizeHeaders=true) {
  container.replaceChildren();
- if(!rows.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='No rows returned.';container.append(empty);return;}
+ if(!rows.length){const empty=document.createElement('div');empty.className='empty';ui(empty,'No rows returned.');container.append(empty);return;}
  const element=document.createElement('table'),head=element.createTHead().insertRow(),body=element.createTBody();
- columns.forEach(c=>{const th=document.createElement('th');th.scope='col';th.textContent=typeof c==='string'?c:c.name; if(c.type)th.title=c.type;head.append(th);});
+ columns.forEach(c=>{const th=document.createElement('th');th.scope='col';const name=typeof c==='string'?c:c.name;if(localizeHeaders)ui(th,name);else th.textContent=name;if(c.type)th.title=c.type;head.append(th);});
  rows.forEach(row=>{const tr=body.insertRow();row.forEach(value=>{const td=tr.insertCell();td.textContent=value===null?'NULL':typeof value==='object'?JSON.stringify(value):String(value);});});
  container.append(element);
 }
@@ -113,37 +225,38 @@ async function refreshStatus(){
  try{
   const data=await api('/api/status'),w=data.warehouse;
   const state=w.error?'Unavailable':({active:'Running',chilled:'Chilled',starting:'Starting'}[w.state]||w.state);
-  $('quick-warehouse-state').textContent='Warehouse: '+state;
+  ui($('quick-warehouse-state'),'Warehouse: {state}',()=>({state:t(state)}));
   $('compute-warehouse').textContent=JSON.stringify(w,null,2);
   message('quick-status-error',w.error||'');
   table($('compute-components'),['Component','Ready replicas','Desired replicas'],Object.entries(data.components).map(([name,c])=>[name,c.ready_replicas??c,c.replicas??'—']));
-  $('warehouse-state').textContent=state;$('warehouse-state').className='badge '+(w.state==='active'?'good':w.error?'bad':'');
-  $('replicas').textContent=`Replicas ${w.ready_replicas??'—'} / ${w.replicas??'—'}`;
+  ui($('warehouse-state'),state);$('warehouse-state').className='badge '+(w.state==='active'?'good':w.error?'bad':'');
+  ui($('replicas'),'Replicas {ready} / {desired}',{ready:w.ready_replicas??'—',desired:w.replicas??'—'});
   $('components').replaceChildren();
-  Object.entries(data.components).forEach(([name,c])=>{const pill=document.createElement('span');pill.className='badge';pill.textContent=name==='error'?`Readiness unavailable: ${c}`:`${name}: ${c.ready_replicas}/${c.replicas}`;$('components').append(pill);});
+  Object.entries(data.components).forEach(([name,c])=>{const pill=document.createElement('span');pill.className='badge';if(name==='error')ui(pill,'Readiness unavailable: {error}',{error:c});else pill.textContent=`${name}: ${c.ready_replicas}/${c.replicas}`;$('components').append(pill);});
   if(w.error)message('status-error',w.error);
- }catch(error){$('warehouse-state').textContent='Unavailable';$('quick-warehouse-state').textContent='Warehouse: Unavailable';message('quick-status-error',error.message);message('status-error',error.message);}
+ }catch(error){ui($('warehouse-state'),'Unavailable');ui($('quick-warehouse-state'),'Warehouse: {state}',()=>({state:t('Unavailable')}));message('quick-status-error',error.message);message('status-error',error.message);}
+ finally {pruneUIBindings();}
 }
 $('refresh-status').onclick=()=>busy($('refresh-status'),refreshStatus);
 for(const action of ['chill','wake'])$(action).onclick=()=>busy($(action),async()=>{try{await api('/api/warehouse/'+action,{});await refreshStatus();}catch(e){message('status-error',e.message);}});
 document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{setSQL(samples[b.dataset.sample]);$('sql').focus();});
 $('run-query').onclick=()=>busy($('run-query'),async()=>{
- message('query-error','');$('query-meta').textContent='Executing…';
+ message('query-error','');ui($('query-meta'),'Executing…');
  try{const payload={sql:$('sql').value,warehouse:$('query-warehouse').value,max_rows:Number($('max-rows').value)};if($('query-mode').value!=='read-only')payload.mode=$('query-mode').value;const data=await api('/api/warehouse/query',payload);
- queryResult=data;sortColumn=-1;$('result-filter').value='';renderResults();rememberQuery(payload.sql);$('query-meta').textContent=`${data.rows.length} rows${data.truncated?' · truncated':''} · ${data.duration_ms??'—'} ms · ${data.query_id??''}`;
- }catch(e){queryResult=null;renderResults();message('query-error',e.message);$('query-meta').textContent='Query failed';$('query-results').replaceChildren();}
+ queryResult=data;sortColumn=-1;$('result-filter').value='';renderResults();rememberQuery(payload.sql);ui($('query-meta'),'{rows} rows{truncated} · {duration} ms · {id}',()=>({rows:data.rows.length,truncated:data.truncated?t(' · truncated'):'',duration:data.duration_ms??'—',id:data.query_id??''}));
+ }catch(e){queryResult=null;renderResults();message('query-error',e.message);ui($('query-meta'),'Query failed');$('query-results').replaceChildren();}
 });
 $('sql').onkeydown=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();$('run-query').click();}};
 $('ingest-form').onsubmit=e=>{e.preventDefault();busy($('run-ingest'),async()=>{
- message('ingest-error','');$('ingest-result').hidden=true;$('ingest-state').textContent='Ingesting…';
- try{const payload=await ingestionPayload();payload.mode=$('ingest-mode').value;if($('ingest-table').value.trim())payload.table=$('ingest-table').value.trim();if($('ingest-key').value.trim())payload.key=$('ingest-key').value.trim();const result=await api('/api/lake/ingest',payload);$('ingest-result').textContent=JSON.stringify(result,null,2);$('ingest-result').hidden=false;$('ingest-state').textContent=result.audit?.quality_passed===false?'Audit needs review':'Ingestion complete';await loadCatalog();}
- catch(error){message('ingest-error',error.message);$('ingest-state').textContent='Ingestion failed';}
+ message('ingest-error','');$('ingest-result').hidden=true;ui($('ingest-state'),'Ingesting…');
+ try{const payload=await ingestionPayload();payload.mode=$('ingest-mode').value;if($('ingest-table').value.trim())payload.table=$('ingest-table').value.trim();if($('ingest-key').value.trim())payload.key=$('ingest-key').value.trim();const result=await api('/api/lake/ingest',payload);$('ingest-result').textContent=JSON.stringify(result,null,2);$('ingest-result').hidden=false;ui($('ingest-state'),result.audit?.quality_passed===false?'Audit needs review':'Ingestion complete');await loadCatalog();}
+ catch(error){message('ingest-error',error.message);ui($('ingest-state'),'Ingestion failed');}
  });};
 let columnRequest=0;
 async function describeTable(schema,name){
  const request=++columnRequest,selected=schema+'.'+name;selectedTable=selected;
  $('table-title').textContent=selected;$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;
- for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).textContent='Loading…';
+ for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])ui($(id),'Loading…');
  try{
   const data=await api('/api/catalog?table='+encodeURIComponent(selected)+'&detail=full');if(request!==columnRequest)return;
   const m=data.metadata,snapshots=m.snapshots?.rows||[];
@@ -151,11 +264,11 @@ async function describeTable(schema,name){
   table($('column-snapshots'),['Snapshot ID','Parent ID','Committed at'],snapshots);
   renderData($('table-preview'),m.preview);
   const profile=m.profile||{};$('inspect-profile').replaceChildren();
-  const stats=document.createElement('p');stats.textContent=profile.error||`Rows: ${profile.row_count??'—'} · Columns: ${profile.column_count??'—'}`;
-  const badge=document.createElement('span');badge.className='badge '+(profile.quality_passed===true?'good':'');badge.textContent='Quality: '+(profile.quality_passed===true?'Passed':profile.quality_passed===false?'Needs review':'Unavailable');
+  const stats=document.createElement('p');if(profile.error)stats.textContent=profile.error;else ui(stats,'Rows: {rows} · Columns: {columns}',{rows:profile.row_count??'—',columns:profile.column_count??'—'});
+  const badge=document.createElement('span');badge.className='badge '+(profile.quality_passed===true?'good':'');ui(badge,'Quality: {state}',()=>({state:t(profile.quality_passed===true?'Passed':profile.quality_passed===false?'Needs review':'Unavailable')}));
   const nulls=document.createElement('div');nulls.className='table-wrap';
   table(nulls,['Column','NULL count','NULL %'],Object.entries(profile.null_counts||{}).map(([column,count])=>[column,count,profile.row_count>0?(100*count/profile.row_count).toFixed(2)+'%':'—']));$('inspect-profile').append(stats,badge,nulls);
-  $('table-ddl').textContent=m.definition?.error|| (m.definition||[]).map(r=>r[0]).join('\n')||'Definition unavailable';
+  const definition=m.definition?.error|| (m.definition||[]).map(r=>r[0]).join('\n');if(definition)$('table-ddl').textContent=definition;else ui($('table-ddl'),'Definition unavailable');
   renderLineage($('table-lineage'),m.lineage_detail?.upstream||[],selected,m.lineage_detail?.downstream||[]);
   if(m.lineage_detail?.wap_sql){const sql=document.createElement('pre');sql.textContent=m.lineage_detail.wap_sql;$('table-lineage').append(sql);}
   table($('table-snapshots'),['Snapshot ID','Parent ID','Committed at','Actions'],snapshots.map(r=>[...r.slice(0,3),'']));
@@ -163,18 +276,18 @@ async function describeTable(schema,name){
   $('snapshot-preview').replaceChildren();
   $('table-snapshots').querySelectorAll('tbody tr').forEach((row,i)=>{
    const snapshot=String(snapshots[i][0]);
-   const preview=actionButton('Preview Snapshot',async()=>{try{const data=await api('/api/catalog?table='+encodeURIComponent(selected)+'&snapshot_id='+encodeURIComponent(snapshot));if(request!==columnRequest)return;const heading=document.createElement('p');heading.textContent=`Snapshot ${snapshot} · Historical rows: ${data.row_count} · Current rows: ${data.current_row_count??'unavailable'} · Delta: ${data.current_row_count==null?'unavailable':data.row_count-data.current_row_count}`;const grid=document.createElement('div');grid.className='table-wrap';renderData(grid,data.preview);$('snapshot-preview').replaceChildren(heading,grid);}catch(e){if(request===columnRequest)$('snapshot-preview').textContent=e.message;}});
-   const rollback=actionButton('Rollback',async()=>{if(!confirm(`Rollback ${selected} to snapshot ${snapshot}?`))return;try{const result=await api('/api/bears/run',{bear:'data',action:'rollback',rollback:selected,snapshot_id:snapshot});if(request!==columnRequest)return;if(result.valid===false)throw new Error('Rollback audit needs review');await describeTable(schema,name);}catch(e){if(request===columnRequest)$('snapshot-preview').textContent='Rollback failed: '+e.message;}});
+   const preview=actionButton('Preview Snapshot',async()=>{try{const data=await api('/api/catalog?table='+encodeURIComponent(selected)+'&snapshot_id='+encodeURIComponent(snapshot));if(request!==columnRequest)return;const heading=document.createElement('p');ui(heading,'Snapshot {snapshot} · Historical rows: {rows} · Current rows: {current} · Delta: {delta}',()=>({snapshot,rows:data.row_count,current:data.current_row_count??t('unavailable'),delta:data.current_row_count==null?t('unavailable'):data.row_count-data.current_row_count}));const grid=document.createElement('div');grid.className='table-wrap';renderData(grid,data.preview);$('snapshot-preview').replaceChildren(heading,grid);}catch(e){if(request===columnRequest)$('snapshot-preview').textContent=e.message;}});
+   const rollback=actionButton('Rollback',async()=>{if(!confirm(t('Rollback {table} to snapshot {snapshot}?',{table:selected,snapshot})))return;try{const result=await api('/api/bears/run',{bear:'data',action:'rollback',rollback:selected,snapshot_id:snapshot});if(request!==columnRequest)return;if(result.valid===false)throw new Error(t('Rollback audit needs review'));await describeTable(schema,name);}catch(e){if(request===columnRequest)ui($('snapshot-preview'),'Rollback failed: {error}',{error:e.message});}});
    row.lastElementChild.append(preview,rollback);
   });
   $('open-table-sql').disabled=false;$('drop-table-btn').hidden=!['raw','sandbox','staging','scratch'].includes(schema);
- }catch(e){if(request===columnRequest){for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).textContent='Details unavailable';message('catalog-error',e.message);}}
+ }catch(e){if(request===columnRequest){for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])ui($(id),'Details unavailable');message('catalog-error',e.message);}}
 }
 async function loadCatalog(){
- message('catalog-error','');$('catalog-tree').textContent='Loading tables…';
+ message('catalog-error','');ui($('catalog-tree'),'Loading tables…');
  try{const data=await api('/api/catalog');catalogMetadata=data.metadata;renderCatalogTrees();
- }catch(e){message('catalog-error',e.message);$('catalog-tree').textContent='Catalog unavailable. Check warehouse readiness and refresh.';$('worksheet-tree').textContent='Catalog unavailable. Use Refresh catalog in Database Explorer.';}
- try{const data=await api('/api/lineage');$('lineage').replaceChildren();Object.entries(data.metadata.lineage).forEach(([model,parents])=>{if(!parents.length)return;const row=document.createElement('div');row.className='lineage-row';for(const name of [parents.join(' + '),'→',model]){const node=document.createElement('span');node.className=name==='→'?'arrow':'node';node.textContent=name;row.append(node);}$('lineage').append(row);});if(!$('lineage').childElementCount)$('lineage').textContent='No model dependencies recorded.';}catch(e){$('lineage').textContent=e.message;}
+ }catch(e){message('catalog-error',e.message);ui($('catalog-tree'),'Catalog unavailable. Check warehouse readiness and refresh.');ui($('worksheet-tree'),'Catalog unavailable. Use Refresh catalog in Database Explorer.');}
+ try{const data=await api('/api/lineage');$('lineage').replaceChildren();Object.entries(data.metadata.lineage).forEach(([model,parents])=>{if(!parents.length)return;const row=document.createElement('div');row.className='lineage-row';for(const name of [parents.join(' + '),'→',model]){const node=document.createElement('span');node.className=name==='→'?'arrow':'node';node.textContent=name;row.append(node);}$('lineage').append(row);});if(!$('lineage').childElementCount)ui($('lineage'),'No model dependencies recorded.');}catch(e){$('lineage').textContent=e.message;}
 }
 $('refresh-catalog').onclick=()=>busy($('refresh-catalog'),loadCatalog);
 const bears=[
@@ -185,14 +298,14 @@ const bears=[
  {key:'policy',name:'Policy Gatekeeper Bear',description:'Review the resident workload baseline or check a local manifest.',fields:[['action','Action',['baseline','check']],['manifest','Local manifest path (for check)','']]}
 ];
 for(const bear of bears){
- const card=document.createElement('article');card.className='panel';const content=document.createElement('div');content.className='panel-body';const title=document.createElement('h2');title.textContent=bear.name;const description=document.createElement('p');description.textContent=bear.description;content.append(title,description);
- for(const [key,label,value,multiline] of bear.fields){const id=`bear-${bear.key}-${key}`,l=document.createElement('label');l.htmlFor=id;l.textContent=label;const input=document.createElement(Array.isArray(value)?'select':multiline?'textarea':'input');input.id=id;if(Array.isArray(value))value.forEach(v=>input.add(new Option(v,v)));else input.value=value;content.append(l,input);}
- const footer=document.createElement('div');footer.className='bear-footer';const button=document.createElement('button');button.textContent='Run Bear';const state=document.createElement('span');state.className='badge';state.textContent='Ready';state.setAttribute('role','status');const output=document.createElement('pre');output.hidden=true;output.setAttribute('aria-label',bear.name+' response');footer.append(button,state);content.append(footer,output);card.append(content);$('bear-cards').append(card);
- button.onclick=()=>busy(button,async()=>{state.textContent='Running';state.className='badge';output.hidden=true;const payload={bear:bear.key};bear.fields.forEach(([key])=>{const v=$(`bear-${bear.key}-${key}`).value;if(v)payload[key]=v;});if(bear.key==='data'&&payload.action==='rollback')payload.rollback=payload.stage_table;try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';state.textContent=warning?'Findings to review':'Complete';state.className='badge '+(warning?'bad':'good');}catch(e){state.textContent='Failed';state.className='badge bad';output.textContent=e.message;}output.hidden=false;});
+ const card=document.createElement('article');card.className='panel';const content=document.createElement('div');content.className='panel-body';const title=document.createElement('h2');ui(title,bear.name);const description=document.createElement('p');ui(description,bear.description);content.append(title,description);
+ for(const [key,label,value,multiline] of bear.fields){const id=`bear-${bear.key}-${key}`,l=document.createElement('label');l.htmlFor=id;ui(l,label);const input=document.createElement(Array.isArray(value)?'select':multiline?'textarea':'input');input.id=id;if(Array.isArray(value))value.forEach(v=>{const option=new Option(v,v);ui(option,v);input.add(option);});else input.value=value;content.append(l,input);}
+ const footer=document.createElement('div');footer.className='bear-footer';const button=document.createElement('button');ui(button,'Run Bear');const state=document.createElement('span');state.className='badge';ui(state,'Ready');state.setAttribute('role','status');const output=document.createElement('pre');output.hidden=true;uiAttributes.push({node:output,attribute:'aria-label',key:'{bear} response',values:()=>({bear:t(bear.name)})});footer.append(button,state);content.append(footer,output);card.append(content);$('bear-cards').append(card);
+ button.onclick=()=>busy(button,async()=>{ui(state,'Running');state.className='badge';output.hidden=true;const payload={bear:bear.key};bear.fields.forEach(([key])=>{const v=$(`bear-${bear.key}-${key}`).value;if(v)payload[key]=v;});if(bear.key==='data'&&payload.action==='rollback')payload.rollback=payload.stage_table;try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';ui(state,warning?'Findings to review':'Complete');state.className='badge '+(warning?'bad':'good');}catch(e){ui(state,'Failed');state.className='badge bad';output.textContent=e.message;}output.hidden=false;});
 }
 async function loadPawprints(){
  message('pawprint-error','');
- try{pawprintRows=await api('/api/pawprints');renderPawprints();}catch(e){message('pawprint-error',e.message);$('pawprint-meta').textContent='Refresh failed';}
+ try{pawprintRows=await api('/api/pawprints');renderPawprints();}catch(e){message('pawprint-error',e.message);ui($('pawprint-meta'),'Refresh failed');}
 }
 $('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
 let activeTab='warehouse';
@@ -200,68 +313,73 @@ function activate(button){document.querySelectorAll('[data-tab]').forEach(b=>{co
 const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach((button,i)=>{button.onclick=()=>activate(button);button.onkeydown=e=>{let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%tabs.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=tabs.length-1;if(n!==undefined){e.preventDefault();tabs[n].focus();activate(tabs[n]);}};});
 setInterval(()=>{if(document.hidden)return;refreshStatus();if(activeTab==='pawprints')$('refresh-pawprints').click();},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
-function actionButton(label,task){const b=document.createElement('button');b.textContent=label;b.onclick=()=>busy(b,task);return b;}
-function renderData(container,data){if(data?.error){container.textContent=data.error;return;}table(container,data?.columns||[],(data?.rows||[]).slice(0,50));}
-function renderLineage(container,upstream,name,downstream=[]){container.replaceChildren();for(const [label,names] of [['Upstream sources',upstream],['Model',[name]],['Downstream models',downstream]]){const row=document.createElement('div');row.className='lineage-row';const title=document.createElement('strong');title.textContent=label;row.append(title);for(const text of names.length?names:['None recorded']){const node=document.createElement('span');node.className='node';node.textContent=text;row.append(node);}container.append(row);}}
+function actionButton(label,task){const b=document.createElement('button');ui(b,label);b.onclick=()=>busy(b,task);return b;}
+function renderData(container,data){if(data?.error){container.textContent=data.error;return;}table(container,data?.columns||[],(data?.rows||[]).slice(0,50),false);}
+function renderLineage(container,upstream,name,downstream=[]){container.replaceChildren();for(const [label,names] of [['Upstream sources',upstream],['Model',[name]],['Downstream models',downstream]]){const row=document.createElement('div');row.className='lineage-row';const title=document.createElement('strong');ui(title,label);row.append(title);for(const text of names.length?names:['None recorded']){const node=document.createElement('span');node.className='node';if(names.length)node.textContent=text;else ui(node,text);row.append(node);}container.append(row);}}
 let catalogMetadata={},selectedTable=null;
-function renderCatalogTrees(){for(const [target,filter,insert] of [['catalog-tree','catalog-filter',false],['worksheet-tree','worksheet-tree-filter',true]]){const container=$(target),term=$(filter).value.toLowerCase();container.replaceChildren();container.className='';for(const [schema,rows] of Object.entries(catalogMetadata)){if(!Array.isArray(rows))continue;const matches=rows.filter(row=>(schema+'.'+row[0]).toLowerCase().includes(term));if(!matches.length)continue;const group=document.createElement('details'),title=document.createElement('summary');group.open=true;title.textContent=`${schema} (${matches.length})`;group.append(title);for(const row of matches){const name=row[0],b=document.createElement('button');b.className='table-link';b.textContent=name;b.onclick=()=>{if(insert){const editor=$('sql'),start=editor.selectionStart,end=editor.selectionEnd;editor.setRangeText(schema+'.'+name,start,end,'end');saveWorksheet();editor.focus();}else describeTable(schema,name);};group.append(b);}container.append(group);}if(!container.childElementCount)container.textContent='No matching tables.';}}
+function renderCatalogTrees(){for(const [target,filter,insert] of [['catalog-tree','catalog-filter',false],['worksheet-tree','worksheet-tree-filter',true]]){const container=$(target),term=$(filter).value.toLowerCase();container.replaceChildren();container.className='';for(const [schema,rows] of Object.entries(catalogMetadata)){if(!Array.isArray(rows))continue;const matches=rows.filter(row=>(schema+'.'+row[0]).toLowerCase().includes(term));if(!matches.length)continue;const group=document.createElement('details'),title=document.createElement('summary');group.open=true;title.textContent=`${schema} (${matches.length})`;group.append(title);for(const row of matches){const name=row[0],b=document.createElement('button');b.className='table-link';b.textContent=name;b.onclick=()=>{if(insert){const editor=$('sql'),start=editor.selectionStart,end=editor.selectionEnd;editor.setRangeText(schema+'.'+name,start,end,'end');saveWorksheet();editor.focus();}else describeTable(schema,name);};group.append(b);}container.append(group);}if(!container.childElementCount)ui(container,'No matching tables.');}}
 $('catalog-filter').oninput=renderCatalogTrees;$('worksheet-tree-filter').oninput=renderCatalogTrees;
 $('open-table-sql').onclick=()=>openWorksheet('SELECT * FROM '+selectedTable+' LIMIT 50');
-$('drop-table-btn').onclick=()=>busy($('drop-table-btn'),async()=>{const selected=selectedTable;if(!selected||!confirm(`Drop ${selected}? This deletes the table.`))return;try{await api('/api/catalog/drop',{table:selected});if(selectedTable===selected){++columnRequest;selectedTable=null;$('table-title').textContent='Table dropped';$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).replaceChildren();}await loadCatalog();}catch(e){message('catalog-error',e.message);}});
+$('drop-table-btn').onclick=()=>busy($('drop-table-btn'),async()=>{const selected=selectedTable;if(!selected||!confirm(t('Drop {table}? This deletes the table.',{table:selected})))return;try{await api('/api/catalog/drop',{table:selected});if(selectedTable===selected){++columnRequest;selectedTable=null;ui($('table-title'),'Table dropped');$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).replaceChildren();}await loadCatalog();}catch(e){message('catalog-error',e.message);}});
 function wireTabs(buttons,select){buttons.forEach((b,i)=>{b.onclick=()=>select(b);b.onkeydown=e=>{let n;if(['ArrowRight','ArrowDown'].includes(e.key))n=(i+1)%buttons.length;else if(['ArrowLeft','ArrowUp'].includes(e.key))n=(i+buttons.length-1)%buttons.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=buttons.length-1;if(n!==undefined){e.preventDefault();select(buttons[n]);buttons[n].focus();}};});}
 const inspectorTabs=[...document.querySelectorAll('[data-inspect]')];wireTabs(inspectorTabs,button=>inspectorTabs.forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$('inspect-'+b.dataset.inspect).hidden=!selected;}));
 
 // Storage is optional (private browsing, quotas, or damaged records must not block SQL).
 const worksheetKey='shirokuma.worksheets.v1',historyKey='shirokuma.query_history.v1';
 function readStorage(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}}
-function writeStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{$('query-meta').textContent='Browser storage unavailable. Changes stay in this session.';}}
+function writeStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{ui($('query-meta'),'Browser storage unavailable. Changes stay in this session.');}}
 let saved=readStorage(worksheetKey,{});
 let worksheets=Array.isArray(saved?.tabs)?saved.tabs.filter(w=>w&&typeof w.id==='string'&&typeof w.name==='string'&&typeof w.sql==='string'):[];
 if(!worksheets.length)worksheets=[{id:'initial',name:'Worksheet 1',sql:$('sql').value}];
 let worksheetId=worksheets.some(w=>w.id===saved?.active)?saved.active:worksheets[0].id;
 function saveWorksheet(){const current=worksheets.find(w=>w.id===worksheetId);if(current)current.sql=$('sql').value;writeStorage(worksheetKey,{active:worksheetId,tabs:worksheets});}
 function setSQL(sql){$('sql').value=sql;saveWorksheet();}
-function renderWorksheets(){const container=$('worksheet-tabs');container.replaceChildren();for(const w of worksheets){const b=document.createElement('button');b.textContent=w.name;b.setAttribute('role','tab');b.id='worksheet-'+w.id;b.setAttribute('aria-controls','sql');b.setAttribute('aria-selected',String(w.id===worksheetId));b.tabIndex=w.id===worksheetId?0:-1;b.dataset.worksheet=w.id;container.append(b);}wireTabs([...container.children],b=>{saveWorksheet();worksheetId=b.dataset.worksheet;$('sql').value=worksheets.find(w=>w.id===worksheetId).sql;saveWorksheet();renderWorksheets();$(b.id)?.focus();});}
+function renderWorksheets(){const container=$('worksheet-tabs');container.replaceChildren();for(const w of worksheets){const b=document.createElement('button');const numbered=/^Worksheet (\d+)$/.exec(w.name);if(numbered)ui(b,'Worksheet {number}',{number:numbered[1]});else b.textContent=w.name;b.setAttribute('role','tab');b.id='worksheet-'+w.id;b.setAttribute('aria-controls','sql');b.setAttribute('aria-selected',String(w.id===worksheetId));b.tabIndex=w.id===worksheetId?0:-1;b.dataset.worksheet=w.id;container.append(b);}wireTabs([...container.children],b=>{saveWorksheet();worksheetId=b.dataset.worksheet;$('sql').value=worksheets.find(w=>w.id===worksheetId).sql;saveWorksheet();renderWorksheets();$(b.id)?.focus();});}
 function addWorksheet(sql=samples.orders){saveWorksheet();const w={id:crypto.randomUUID(),name:'Worksheet '+(worksheets.length+1),sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;saveWorksheet();renderWorksheets();}
 function openWorksheet(sql){addWorksheet(sql);activate($('tab-warehouse'));$('sql').focus();}
 $('sql').addEventListener('input',saveWorksheet);$('add-worksheet-tab').onclick=()=>addWorksheet();
 $('sql').value=worksheets.find(w=>w.id===worksheetId).sql;renderWorksheets();
 let history=readStorage(historyKey,[]);history=Array.isArray(history)?history.filter(q=>q&&typeof q.sql==='string'&&typeof q.at==='string').slice(0,50):[];
-function renderHistory(){$('query-history').replaceChildren(new Option('Restore a past query…',''));history.forEach((q,i)=>$('query-history').add(new Option(`${new Date(q.at).toLocaleString()} · ${q.sql.slice(0,100)}`,String(i))));}
+function historyPlaceholder(){const option=new Option('','');ui(option,'Restore a past query…');return option;}
+function renderHistory(){$('query-history').replaceChildren(historyPlaceholder());history.forEach((q,i)=>$('query-history').add(new Option(`${new Date(q.at).toLocaleString()} · ${q.sql.slice(0,100)}`,String(i))));}
 function rememberQuery(sql){history=[{sql,at:new Date().toISOString()},...history.filter(q=>q.sql!==sql)].slice(0,50);writeStorage(historyKey,history);renderHistory();}
 $('query-history').onchange=()=>{const value=$('query-history').value;if(value!==''){setSQL(history[Number(value)].sql);$('sql').focus();}};renderHistory();
 
 let queryResult=null,sortColumn=-1,sortDirection=1;
 const cellText=v=>v==null?'NULL':typeof v==='object'?JSON.stringify(v):String(v);
 function visibleRows(){const term=$('result-filter').value.toLowerCase(),rows=(queryResult?.rows||[]).filter(row=>row.some(v=>cellText(v).toLowerCase().includes(term)));if(sortColumn>=0)rows.sort((a,b)=>{const x=a[sortColumn],y=b[sortColumn];return sortDirection*(x==null?(y==null?0:-1):y==null?1:typeof x==='number'&&typeof y==='number'?x-y:cellText(x).localeCompare(cellText(y),undefined,{numeric:true}));});return rows;}
-function renderResults(){for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=!queryResult;if(!queryResult)return;table($('query-results'),queryResult.columns,visibleRows());$('query-results').querySelectorAll('th').forEach((th,i)=>{th.setAttribute('aria-sort',sortColumn===i?(sortDirection===1?'ascending':'descending'):'none');const b=document.createElement('button');b.textContent=th.textContent+(sortColumn===i?(sortDirection===1?' ↑':' ↓'):'');b.onclick=()=>{sortDirection=sortColumn===i?-sortDirection:1;sortColumn=i;renderResults();};th.replaceChildren(b);});}
+function renderResults(){for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=!queryResult;if(!queryResult)return;table($('query-results'),queryResult.columns,visibleRows(),false);$('query-results').querySelectorAll('th').forEach((th,i)=>{th.setAttribute('aria-sort',sortColumn===i?(sortDirection===1?'ascending':'descending'):'none');const b=document.createElement('button');b.textContent=th.textContent+(sortColumn===i?(sortDirection===1?' ↑':' ↓'):'');b.onclick=()=>{sortDirection=sortColumn===i?-sortDirection:1;sortColumn=i;renderResults();};th.replaceChildren(b);});}
 $('result-filter').oninput=renderResults;
 function delimited(separator){const quote=v=>'"'+cellText(v).replaceAll('"','""')+'"';return [queryResult.columns.map(c=>typeof c==='string'?c:c.name),...visibleRows()].map(row=>row.map(quote).join(separator)).join('\r\n');}
-function download(format){if(!queryResult)return;const content=format==='csv'?delimited(','):JSON.stringify(visibleRows().map(row=>Object.fromEntries(queryResult.columns.map((c,i)=>[typeof c==='string'?c:c.name,row[i]]))),null,2);const url=URL.createObjectURL(new Blob([content],{type:format==='csv'?'text/csv;charset=utf-8':'application/json'})),link=document.createElement('a');link.href=url;link.download='query-results.'+format;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);$('result-action-state').textContent='Downloaded visible rows.';}
-$('export-csv').onclick=()=>download('csv');$('export-json').onclick=()=>download('json');$('copy-tsv').onclick=async()=>{try{await navigator.clipboard.writeText(delimited('\t'));$('result-action-state').textContent='Copied visible rows.';}catch(e){$('result-action-state').textContent='Copy failed: '+e.message;}};
+function download(format){if(!queryResult)return;const content=format==='csv'?delimited(','):JSON.stringify(visibleRows().map(row=>Object.fromEntries(queryResult.columns.map((c,i)=>[typeof c==='string'?c:c.name,row[i]]))),null,2);const url=URL.createObjectURL(new Blob([content],{type:format==='csv'?'text/csv;charset=utf-8':'application/json'})),link=document.createElement('a');link.href=url;link.download='query-results.'+format;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);ui($('result-action-state'),'Downloaded visible rows.');}
+$('export-csv').onclick=()=>download('csv');$('export-json').onclick=()=>download('json');$('copy-tsv').onclick=async()=>{try{await navigator.clipboard.writeText(delimited('\t'));ui($('result-action-state'),'Copied visible rows.');}catch(e){ui($('result-action-state'),'Copy failed: {error}',{error:e.message});}};
 
-for(const [id,bear,action] of [['copilot-generate','data','generate'],['copilot-explain','query','explain'],['copilot-stage','data','stage'],['copilot-publish','data','publish']])$(id).onclick=()=>busy($(id),async()=>{try{const payload={bear,action};if(action==='generate'){payload.request=$('copilot-request').value.trim();if(!payload.request)throw new Error('Describe the SQL you need first.');}else if(action==='publish'){payload.publish=$('copilot-stage-table').value.trim();if(!payload.publish)throw new Error('Enter a WAP table to publish.');}else{payload.sql=$('sql').value;if(action==='stage'){payload.stage_table=$('copilot-stage-table').value.trim();if(!payload.stage_table)throw new Error('Enter a WAP table to stage.');}}const result=await api('/api/bears/run',payload);if(action==='generate'&&(result.generated_sql||result.sql))setSQL(result.generated_sql||result.sql);message('copilot-result',JSON.stringify(result,null,2));}catch(e){message('copilot-result',e.message);}});
+for(const [id,bear,action] of [['copilot-generate','data','generate'],['copilot-explain','query','explain'],['copilot-stage','data','stage'],['copilot-publish','data','publish']])$(id).onclick=()=>busy($(id),async()=>{try{const payload={bear,action};if(action==='generate'){payload.request=$('copilot-request').value.trim();if(!payload.request)throw new Error(t('Describe the SQL you need first.'));}else if(action==='publish'){payload.publish=$('copilot-stage-table').value.trim();if(!payload.publish)throw new Error(t('Enter a WAP table to publish.'));}else{payload.sql=$('sql').value;if(action==='stage'){payload.stage_table=$('copilot-stage-table').value.trim();if(!payload.stage_table)throw new Error(t('Enter a WAP table to stage.'));}}const result=await api('/api/bears/run',payload);if(action==='generate'&&(result.generated_sql||result.sql))setSQL(result.generated_sql||result.sql);message('copilot-result',JSON.stringify(result,null,2));}catch(e){message('copilot-result',e.message);}});
 
 let browserFile=null;
-function selectUpload(file){browserFile=file||null;$('ingest-preview').replaceChildren();$('ingest-file').disabled=!!file;$('upload-state').textContent=file?`${file.name} · ${file.size.toLocaleString()} bytes`:'No browser file selected. Use a server path below.';if(file){const stem=file.name.replace(/\.[^.]+$/,'').replace(/[^A-Za-z0-9_]/g,'_').toLowerCase();$('ingest-table').value='raw.'+(/^[a-z_]/.test(stem)?stem:'file_'+stem);}}
+function selectUpload(file){browserFile=file||null;$('ingest-preview').replaceChildren();$('ingest-file').disabled=!!file;file?ui($('upload-state'),'{name} · {size} bytes',{name:file.name,size:file.size.toLocaleString()}):ui($('upload-state'),'No browser file selected. Use a server path below.');if(file){const stem=file.name.replace(/\.[^.]+$/,'').replace(/[^A-Za-z0-9_]/g,'_').toLowerCase();$('ingest-table').value='raw.'+(/^[a-z_]/.test(stem)?stem:'file_'+stem);}}
 $('ingest-upload-input').onchange=e=>selectUpload(e.target.files[0]);$('clear-upload').onclick=()=>{$('ingest-upload-input').value='';selectUpload(null);};
 const dropzone=$('ingest-dropzone');for(const event of ['dragenter','dragover'])dropzone.addEventListener(event,e=>{e.preventDefault();dropzone.classList.add('dragging');});for(const event of ['dragleave','drop'])dropzone.addEventListener(event,e=>{e.preventDefault();dropzone.classList.remove('dragging');if(event==='drop'&&e.dataTransfer.files.length)selectUpload(e.dataTransfer.files[0]);});
-async function ingestionPayload(){const file=browserFile;if(!file){const path=$('ingest-file').value.trim();if(!path)throw new Error('Choose a browser file or enter a local file path.');return {file:path};}const binary=/\.parquet$/i.test(file.name);const content=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error('Could not read '+file.name));reader.onabort=()=>reject(new Error('File reading cancelled'));reader.onload=()=>resolve(binary?String(reader.result).split(',')[1]:reader.result);if(binary)reader.readAsDataURL(file);else reader.readAsText(file);});return {filename:file.name,[binary?'content_base64':'content']:content};}
-$('preview-ingest').onclick=()=>busy($('preview-ingest'),async()=>{message('ingest-error','');$('ingest-preview').textContent='Reading file…';try{const result=await api('/api/lake/preview',await ingestionPayload());const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';table(schema,['Column','Inferred type'],result.columns.map(c=>[c.name,c.type]));table(rows,result.columns,result.sample_rows);const title=document.createElement('p');title.textContent=`${result.row_count} file rows · ${result.sample_rows.length} sample rows`;$('ingest-preview').replaceChildren(title,schema,rows);}catch(e){$('ingest-preview').replaceChildren();message('ingest-error',e.message);}});
+async function ingestionPayload(){const file=browserFile;if(!file){const path=$('ingest-file').value.trim();if(!path)throw new Error(t('Choose a browser file or enter a local file path.'));return {file:path};}const binary=/\.parquet$/i.test(file.name);const content=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error(t('Could not read {name}',{name:file.name})));reader.onabort=()=>reject(new Error(t('File reading cancelled')));reader.onload=()=>resolve(binary?String(reader.result).split(',')[1]:reader.result);if(binary)reader.readAsDataURL(file);else reader.readAsText(file);});return {filename:file.name,[binary?'content_base64':'content']:content};}
+$('preview-ingest').onclick=()=>busy($('preview-ingest'),async()=>{message('ingest-error','');ui($('ingest-preview'),'Reading file…');try{const result=await api('/api/lake/preview',await ingestionPayload());const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';table(schema,['Column','Inferred type'],result.columns.map(c=>[c.name,c.type]));table(rows,result.columns,result.sample_rows,false);const title=document.createElement('p');ui(title,'{rows} file rows · {samples} sample rows',{rows:result.row_count,samples:result.sample_rows.length});$('ingest-preview').replaceChildren(title,schema,rows);}catch(e){$('ingest-preview').replaceChildren();message('ingest-error',e.message);}});
 
 let selectedModel=null;
-function selectModel(model){selectedModel=model;$('model-title').textContent=model.layer+' · '+model.name;$('model-sql-preview').textContent=model.sql||'No SQL recorded';renderLineage($('model-lineage'),model.sources||[],model.name,model.downstream||[]);$('open-model-sql').disabled=!model.sql;$('refresh-wap-model').hidden=model.layer!=='wap';}
-async function loadModels(){message('models-state','');try{const result=await api('/api/models');for(const [id,models] of [['dbt-models',result.dbt_models],['wap-models',result.wap_models]]){const container=$(id);container.replaceChildren();for(const model of models){const b=document.createElement('button');b.className='table-link';b.textContent=model.layer+' · '+model.name;b.onclick=()=>selectModel(model);container.append(b);}if(!models.length)container.textContent='No models registered.';}const all=[...result.dbt_models,...result.wap_models];const current=all.find(m=>m.name===selectedModel?.name&&m.layer===selectedModel?.layer)||all[0];if(current)selectModel(current);else{selectedModel=null;$('model-title').textContent='No models registered';$('model-sql-preview').textContent='';$('model-lineage').replaceChildren();$('open-model-sql').disabled=true;$('refresh-wap-model').hidden=true;}}catch(e){message('models-state',e.message);}}
+function selectModel(model){selectedModel=model;$('model-title').textContent=model.layer+' · '+model.name;model.sql?$('model-sql-preview').textContent=model.sql:ui($('model-sql-preview'),'No SQL recorded');renderLineage($('model-lineage'),model.sources||[],model.name,model.downstream||[]);$('open-model-sql').disabled=!model.sql;$('refresh-wap-model').hidden=model.layer!=='wap';}
+async function loadModels(){message('models-state','');try{const result=await api('/api/models');for(const [id,models] of [['dbt-models',result.dbt_models],['wap-models',result.wap_models]]){const container=$(id);container.replaceChildren();for(const model of models){const b=document.createElement('button');b.className='table-link';b.textContent=model.layer+' · '+model.name;b.onclick=()=>selectModel(model);container.append(b);}if(!models.length)ui(container,'No models registered.');}const all=[...result.dbt_models,...result.wap_models];const current=all.find(m=>m.name===selectedModel?.name&&m.layer===selectedModel?.layer)||all[0];if(current)selectModel(current);else{selectedModel=null;ui($('model-title'),'No models registered');$('model-sql-preview').textContent='';$('model-lineage').replaceChildren();$('open-model-sql').disabled=true;$('refresh-wap-model').hidden=true;}}catch(e){message('models-state',e.message);}}
 $('refresh-models').onclick=()=>busy($('refresh-models'),loadModels);$('open-model-sql').onclick=()=>{if(selectedModel)openWorksheet(selectedModel.sql);};
 $('refresh-wap-model').onclick=()=>busy($('refresh-wap-model'),async()=>{if(!selectedModel)return;try{const result=await api('/api/bears/run',{bear:'data',action:'refresh',refresh:selectedModel.name});message('models-state',JSON.stringify(result,null,2));}catch(e){message('models-state',e.message);}});
 for(const action of ['build','test'])$('run-dbt-'+action).onclick=()=>busy($('run-dbt-'+action),async()=>{try{const result=await api('/api/models/build',{action});await loadModels();message('models-state',JSON.stringify(result,null,2));}catch(e){message('models-state',e.message);}});
 
 let pawprintRows=[];
 $('pawprint-filter').oninput=renderPawprints;$('pawprint-status-filter').onchange=renderPawprints;
-function renderPawprints(){const term=$('pawprint-filter').value.toLowerCase(),status=$('pawprint-status-filter').value;for(const r of pawprintRows)if(r.status&&![...$('pawprint-status-filter').options].some(o=>o.value===r.status))$('pawprint-status-filter').add(new Option(r.status,r.status));const rows=pawprintRows.filter(r=>(!status||r.status===status)&&JSON.stringify(r).toLowerCase().includes(term));table($('pawprint-results'),['Timestamp (UTC)','Action / Bear','Latency (ms)','Status','Details'],rows.map(r=>[r.timestamp,r.action_type||r.agent_id,r.duration_ms,r.status,[r.target_system,r.model_name?`${r.model_name} · tokens ${r.prompt_tokens??'—'} prompt / ${r.completion_tokens??'—'} completion`:null,`trace ${r.trace_id}`].filter(Boolean).join(' · ')]));$('pawprint-results').querySelectorAll('td:last-child').forEach(c=>c.className='details-cell');$('pawprint-meta').textContent=`${rows.length} / ${pawprintRows.length} events`;}
+function addPawprintStatus(status){const option=new Option(status,status);ui(option,status);$('pawprint-status-filter').add(option);}
+function renderPawprints(){const term=$('pawprint-filter').value.toLowerCase(),status=$('pawprint-status-filter').value;for(const r of pawprintRows)if(r.status&&![...$('pawprint-status-filter').options].some(o=>o.value===r.status))addPawprintStatus(r.status);const rows=pawprintRows.filter(r=>(!status||r.status===status)&&JSON.stringify(r).toLowerCase().includes(term));table($('pawprint-results'),['Timestamp (UTC)','Action / Bear','Latency (ms)','Status','Details'],rows.map(r=>[r.timestamp,r.action_type||r.agent_id,r.duration_ms,r.status,[r.target_system,r.model_name?`${r.model_name} · tokens ${r.prompt_tokens??'—'} prompt / ${r.completion_tokens??'—'} completion`:null,`trace ${r.trace_id}`].filter(Boolean).join(' · ')]));$('pawprint-results').querySelectorAll('tbody tr').forEach((tr,i)=>{ui(tr.cells[3],rows[i].status||'');const r=rows[i];tr.cells[4].className='details-cell';if(r.model_name)ui(tr.cells[4],'{target}{model} · tokens {prompt} prompt / {completion} · trace {trace}',{target:r.target_system?r.target_system+' · ':'',model:r.model_name,prompt:r.prompt_tokens??'—',completion:r.completion_tokens??'—',trace:r.trace_id});});ui($('pawprint-meta'),'{visible} / {total} events',{visible:rows.length,total:pawprintRows.length});}
 for(const action of ['wake','chill'])$('quick-'+action).onclick=()=>busy($('quick-'+action),async()=>{try{await api('/api/warehouse/'+action,{});await refreshStatus();}catch(e){message('quick-status-error',e.message);}});
 $('compute-refresh').onclick=()=>busy($('compute-refresh'),refreshStatus);
 for(const [id,bear] of [['compute-sre-check','sre'],['compute-policy-check','policy']])$(id).onclick=()=>busy($(id),async()=>{try{const result=await api('/api/bears/run',bear==='policy'?{bear,action:'baseline'}:{bear});message('compute-check-result',JSON.stringify(result,null,2));}catch(e){message('compute-check-result',e.message);}});
+let initialLanguage;
+try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }
+setLanguage(['en','ja'].includes(initialLanguage) ? initialLanguage : navigator.language?.toLowerCase().startsWith('ja') ? 'ja' : 'en');
 refreshStatus();loadCatalog();
 </script>
 </body>
