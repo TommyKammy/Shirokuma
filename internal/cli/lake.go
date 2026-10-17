@@ -83,5 +83,43 @@ func newLakeCommand(runner lakeRunner) *cobra.Command {
 	command.Flags().IntVar(&batchSize, "batch-size", 500, "rows per write batch")
 	command.Flags().StringVar(&root, "repo-root", "", "repository root")
 	group.AddCommand(command)
+	group.AddCommand(newLakeExportCommand(runner))
 	return group
+}
+
+func newLakeExportCommand(runner lakeRunner) *cobra.Command {
+	var root, output, format string
+	var maxRows int
+	command := &cobra.Command{
+		Use: "export <table>", Short: "Export an Iceberg table to CSV, JSONL, or Parquet", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(output) == "" {
+				return errors.New("export requires --output")
+			}
+			if (format != "auto" && format != "csv" && format != "jsonl" && format != "parquet") || maxRows < 1 {
+				return errors.New("invalid export format or max-rows (must be >= 1)")
+			}
+			forward := []string{"--export", args[0], "--output", output, "--format", format, "--max-rows", strconv.Itoa(maxRows)}
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			data, err := runner.RunLake(ctx, root, forward)
+			if err != nil {
+				return err
+			}
+			var report map[string]json.RawMessage
+			if json.Unmarshal(data, &report) != nil || report == nil {
+				return errors.New("lake export returned invalid JSON")
+			}
+			var action string
+			if json.Unmarshal(report["action"], &action) != nil || action != "export" {
+				return errors.New("lake export response does not match request")
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(report)
+		},
+	}
+	command.Flags().StringVar(&output, "output", "", "destination file (required)")
+	command.Flags().StringVar(&format, "format", "auto", "auto, csv, jsonl, or parquet")
+	command.Flags().IntVar(&maxRows, "max-rows", 10000, "maximum rows to export")
+	command.Flags().StringVar(&root, "repo-root", "", "repository root")
+	return command
 }

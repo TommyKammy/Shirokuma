@@ -1,4 +1,6 @@
 import contextlib
+import base64
+import csv
 import io
 import json
 from pathlib import Path
@@ -13,6 +15,101 @@ import lake_ingest as lake
 
 
 class LakeIngestTests(unittest.TestCase):
+    def test_export_csv_jsonl_and_output_files(self):
+        rows = [[1, 'a,"b\n雪', None], [2, '', True]]
+        self.execute.return_value = dict(columns=[{'name': n} for n in ['id', 'text', 'value']], rows=rows)
+        report = lake.export_table('marts.orders', max_rows=7)
+        self.execute.assert_called_once_with('url', 'SELECT * FROM "iceberg"."marts"."orders" LIMIT 7')
+        self.assertEqual((report['action'], report['table'], report['filename'], report['row_count']),
+                         ('export', 'iceberg.marts.orders', 'orders.csv', 2))
+        self.assertEqual(list(csv.reader(io.StringIO(report['content']))),
+                         [['id', 'text', 'value'], ['1', rows[0][1], ''], ['2', '', 'True']])
+        self.telemetry.assert_called_once_with('export', report['duration_ms'], status='success', prefix='lake.')
+        for suffix in ('csv', 'jsonl', 'ndjson', 'parquet'):
+            if suffix == 'parquet':
+                continue
+            path = self.root / ('export.' + suffix)
+            result = lake.export_table('iceberg.tpch_tiny.orders', file=path)
+            self.assertEqual(result['file'], str(path))
+            self.assertNotIn('content', result)
+            if suffix != 'csv':
+                self.assertEqual([json.loads(l) for l in path.read_text().splitlines()],
+                                 [dict(zip(report['columns'], row)) for row in rows])
+        result = lake.export_table('smoke.orders', format='jsonl')
+        self.assertEqual(result['filename'], 'orders.jsonl')
+        self.assertEqual(json.loads(result['content'].splitlines()[0])['value'], None)
+        self.audit.assert_not_called()
+
+    def test_export_empty_and_large_results(self):
+        for rows in ([], [[i] for i in range(1501)]):
+            self.execute.return_value = dict(columns=[{'name': 'id'}], rows=rows)
+            result = lake.export_table('raw.orders')
+            self.assertEqual(result['row_count'], len(rows))
+            self.assertEqual(len(list(csv.reader(io.StringIO(result['content'])))), len(rows) + 1)
+        self.execute.return_value['rows'] = []
+        self.assertEqual(lake.export_table('raw.orders', format='jsonl')['content'], '')
+
+    def test_export_invalid_inputs_before_access(self):
+        for table in ('orders', 'other.raw.t', 'raw.bad-name', 'raw.t;DROP', None):
+            with self.subTest(table=table), self.assertRaises(ValueError):
+                lake.export_table(table)
+        for kwargs in (dict(max_rows=True), dict(max_rows=0), dict(max_rows=-1), dict(max_rows=1.0),
+                       dict(max_rows='5'), dict(format='xml'), dict(format=[]), dict(file='out.unknown')):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                lake.export_table('raw.orders', **kwargs)
+        self.trino.assert_not_called()
+        self.assertEqual(self.telemetry.call_args.args[0], 'export')
+        self.assertEqual(self.telemetry.call_args.kwargs, dict(status='failed', prefix='lake.'))
+
+    def test_export_parquet_optional_dependency_and_binary_payload(self):
+        self.execute.return_value = dict(columns=[{'name': 'id'}], rows=[[1], [2]])
+        with patch.dict(sys.modules, {'pyarrow': None, 'pyarrow.parquet': None}):
+            with self.assertRaisesRegex(ValueError, 'parquet export requires pyarrow'):
+                lake.export_table('raw.orders', format='parquet')
+        arrow, parquet = MagicMock(), MagicMock()
+        arrow.parquet = parquet
+        parquet.write_table.side_effect = lambda table, stream: stream.write(b'PAR1\x00\xffPAR1')
+        with patch.dict(sys.modules, {'pyarrow': arrow, 'pyarrow.parquet': parquet}):
+            result = lake.export_table('raw.orders', format='parquet')
+            arrow.table.assert_called_once_with({'id': [1, 2]})
+            self.assertEqual(base64.b64decode(result['content_base64']), b'PAR1\x00\xffPAR1')
+            self.assertNotIn('content', result)
+            path = self.root / 'data.parquet'
+            result = lake.export_table('raw.orders', file=path)
+            self.assertEqual(result['format'], 'parquet')
+            self.assertEqual(path.read_bytes(), b'PAR1\x00\xffPAR1')
+
+    def test_export_query_and_file_failures_record_telemetry(self):
+        self.execute.side_effect = RuntimeError('failed query')
+        with self.assertRaisesRegex(RuntimeError, 'failed query'):
+            lake.export_table('raw.orders')
+        self.assertEqual(self.telemetry.call_args.kwargs['status'], 'failed')
+        self.execute.side_effect = None
+        self.execute.return_value = dict(columns=[{'name': 'id'}], rows=[[1]])
+        with self.assertRaises(OSError):
+            lake.export_table('raw.orders', self.root / 'missing' / 'out.csv')
+        self.assertEqual(self.telemetry.call_args.kwargs['status'], 'failed')
+
+    def test_export_cli_dispatch_and_errors(self):
+        output = io.StringIO()
+        with patch.object(sys, 'argv', ['lake_ingest.py', '--export', 'raw.orders', '--output', 'out.csv',
+                                     '--format', 'jsonl', '--max-rows', '7']), \
+             patch.object(lake, 'export_table', return_value={'action': 'export'}) as export, \
+             contextlib.redirect_stdout(output):
+            self.assertEqual(lake.main(), 0)
+        export.assert_called_once_with(table='raw.orders', file='out.csv', format='jsonl', max_rows=7)
+        self.assertEqual(json.loads(output.getvalue()), {'action': 'export'})
+        with patch.object(sys, 'argv', ['lake_ingest.py', '--export=raw.orders']), \
+             patch.object(lake, 'export_table', side_effect=ValueError('invalid')) as export, \
+             contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(lake.main(), 1)
+        export.assert_called_once_with(table='raw.orders', file=None, format='auto', max_rows=10000)
+        with patch.object(sys, 'argv', ['lake_ingest.py', '--', '--export']), \
+             patch.object(lake, 'ingest', return_value={'action': 'ingest'}) as ingest, \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(lake.main(), 0)
+        self.assertEqual(ingest.call_args.kwargs['file'], '--export')
+
     def enterContext(self, manager):
         value = manager.__enter__()
         self.addCleanup(manager.__exit__, None, None, None)

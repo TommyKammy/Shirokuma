@@ -178,6 +178,20 @@ tags: [shirokuma, local, milestones]
 - Upgraded SQL Worksheets with an inline Database Object Explorer, persistent multi-tab worksheets and query history, inline AI Bear Copilot (`Generate SQL`, `Explain Plan`, `Stage & Audit`, `Publish`), client-side sorting/filtering, and CSV/JSON/TSV export.
 - Added browser drag-and-drop file upload with schema/row preview, a unified Transformation (`dbt` + `WAP`) view, and a 6-tab Table Inspector with Time Travel snapshot preview and rollback.
 
+---
+
+### 2026-10-17 — WP-P8-001: Session Schema Context, Sandbox Clone, Table Export CLI/API, Auto-Chill, & Activity History (Completed)
+
+- Added session `schema` selection to `POST /api/warehouse/query`, safe sandbox/raw table and historical snapshot cloning (`POST /api/catalog/clone`), and table data export (`shirokuma lake export` and `POST /api/lake/export` in CSV, JSONL, and Parquet).
+- Added configurable idle Auto-Chill (`POST /api/warehouse/autochill`) to `warehouse_resident.py` and dedicated Trino runtime query + copy/load history (`GET /api/history`) to `bears_resident.py`.
+- Verified across 311 Python unit tests and Go CLI tests.
+
+### 2026-10-17 — WP-P8-002: Bilingual (`EN` / `日本語`) UI Switcher, Inline Result Charts, & Snowflake Core Experience UI (Completed)
+
+- Added a top-right `EN / 日本語` language switcher with `localStorage` persistence and automatic browser locale detection covering all 7 Workbench sections and dynamic views.
+- Added zero-dependency inline SVG bar/line chart visualization (`Table View` / `Chart View`), selected-SQL execution, and session schema selector in SQL Worksheets.
+- Integrated 1-click Sandbox Clone (current table or historical snapshot) and Table Export in Database Explorer, Auto-Chill timer controls in Compute & Governance, and dedicated Query History & Copy/Load History tables in Pawprints.
+
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)
 
 The following capabilities were functionally demonstrated on `mac-studio-solo` during the initial local experiment wave and serve as the foundation for Phase 1–3 graduation:

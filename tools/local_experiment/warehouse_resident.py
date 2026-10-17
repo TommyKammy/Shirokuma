@@ -20,6 +20,32 @@ _PERSISTENT_TRINO = None
 _HTTP_POOL = threading.local()
 _DEFAULT_URLOPEN = urllib.request.urlopen
 WRITABLE_SCHEMAS = ('raw', 'sandbox', 'staging', 'marts')
+_AUTO_CHILL_MINUTES = 0
+_LAST_ACTIVITY = time.monotonic()
+
+
+def auto_chill_status():
+    return dict(auto_chill_minutes=_AUTO_CHILL_MINUTES,
+                idle_seconds=max(0, int(time.monotonic() - _LAST_ACTIVITY)))
+
+
+def configure_auto_chill(minutes: int):
+    global _AUTO_CHILL_MINUTES, _LAST_ACTIVITY
+    if type(minutes) is not int or not 0 <= minutes <= 1440:
+        raise ValueError('minutes must be an integer between 0 and 1440')
+    _AUTO_CHILL_MINUTES = minutes
+    _LAST_ACTIVITY = time.monotonic()
+    return auto_chill_status()
+
+
+def check_auto_chill(size='LOCAL'):
+    chilled = False
+    if (_AUTO_CHILL_MINUTES > 0 and
+            time.monotonic() - _LAST_ACTIVITY >= _AUTO_CHILL_MINUTES * 60 and
+            status(size)['replicas'] > 0):
+        transition('chill', size)
+        chilled = True
+    return dict(chilled=chilled, **auto_chill_status())
 
 
 def identifier(value: str) -> str:
@@ -176,6 +202,7 @@ def finish(report, started):
 
 
 def transition(action, size):
+    global _LAST_ACTIVITY
     started = time.monotonic()
     before = status(size)
     chilled = action == "chill"
@@ -194,6 +221,8 @@ def transition(action, size):
             kubectl("rollout", "status", "deployment/trino-local", f"--timeout={TIMEOUT}s")
             with trino():
                 pass
+    if action == 'wake':
+        _LAST_ACTIVITY = time.monotonic()
     return finish(dict(warehouse=warehouse(size), action=action,
                        result="noop" if noop else "verified", before_replicas=before["replicas"],
                        after_replicas=0 if chilled else 1,
@@ -316,6 +345,7 @@ def check_sql_policy(sql: str, mode: str = 'read-only') -> str:
 
 
 def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000, mode='read-only'):
+    global _LAST_ACTIVITY
     size = warehouse(size)
     if not sql or not sql.strip():
         raise ValueError("query requires non-empty SQL")
@@ -339,6 +369,7 @@ def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=100
     except Exception:
         telemetry("query", int((time.monotonic() - started) * 1000), status="failed")
         raise
+    _LAST_ACTIVITY = time.monotonic()
     return finish(dict(warehouse=size, action="query", result="verified", auto_woken=auto_woken,
                        **result, row_count=len(result["rows"]), mode=mode), started)
 

@@ -8,6 +8,8 @@ from http.server import HTTPServer
 from html.parser import HTMLParser
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 import sys
 import threading
@@ -49,6 +51,201 @@ class WorkbenchHTML(HTMLParser):
 
 
 class WorkbenchTests(unittest.TestCase):
+    def test_phase8_controls_and_defaults(self):
+        doc = self.workbench_document()
+        controls = {
+            'warehouse': 'query-schema result-view-table result-view-chart chart-type chart-x-col chart-y-col query-chart',
+            'catalog': 'clone-table-btn export-table-format export-table-btn',
+            'compute': 'auto-chill-minutes save-auto-chill auto-chill-state',
+            'pawprints': 'refresh-history runtime-queries-results load-history-results',
+        }
+        for section, identifiers in controls.items():
+            for identifier in identifiers.split():
+                self.assertIn(doc.by_id(section), doc.by_id(identifier)['ancestors'])
+        options = {
+            'query-schema': [('marts', 'marts'), ('raw', 'raw'), ('sandbox', 'sandbox'),
+                             ('staging', 'staging'), ('tpch_tiny', 'tpch_tiny'), ('smoke', 'smoke')],
+            'chart-type': [('bar', 'Bar Chart'), ('line', 'Line Chart')],
+            'export-table-format': [('csv', 'CSV'), ('jsonl', 'JSONL'), ('parquet', 'Parquet')],
+            'auto-chill-minutes': [('0', 'Off'), ('5', '5m'), ('15', '15m'), ('30', '30m'), ('60', '60m')],
+        }
+        for identifier, expected in options.items():
+            select = doc.by_id(identifier)
+            self.assertEqual(select['tag'], 'select')
+            self.assertEqual([(n.get('value', n['text']), n['text']) for n in doc.nodes
+                              if n['tag'] == 'option' and select in n['ancestors']], expected)
+        for identifier, text in {
+            'result-view-table': 'Table View', 'result-view-chart': 'Chart View',
+            'clone-table-btn': 'Clone to Sandbox', 'export-table-btn': 'Export Table',
+            'save-auto-chill': 'Apply Auto-Chill', 'refresh-history': 'Refresh History',
+            'auto-chill-state': 'Auto-Chill: Off',
+        }.items():
+            self.assertEqual(doc.by_id(identifier)['text'], text)
+        self.assertEqual(doc.by_id('result-view-table')['aria-pressed'], 'true')
+        self.assertEqual(doc.by_id('result-view-chart')['aria-pressed'], 'false')
+        self.assertIn('hidden', doc.by_id('query-chart'))
+        for identifier in ('clone-table-btn', 'export-table-btn'):
+            self.assertIn('disabled', doc.by_id(identifier))
+        self.assertEqual(doc.by_id('export-table-format')['aria-label'], 'Export format')
+        self.assertEqual(doc.by_id('auto-chill-state')['role'], 'status')
+        for identifier in ('query-schema', 'chart-type', 'chart-x-col', 'chart-y-col', 'auto-chill-minutes'):
+            self.assertTrue(any(n.get('for') == identifier for n in doc.nodes))
+
+    def test_phase8_translations_cover_static_and_dynamic_ui(self):
+        doc = self.workbench_document()
+        script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
+        dictionary = script.split('const i18n = {ja: {', 1)[1].split('}};', 1)[0]
+        translations = dict(re.findall(r"'([^']+)':'([^']+)'", dictionary))
+        labels = '''Schema|Table View|Chart View|Chart type|Bar Chart|Line Chart|X column|Y column|
+            Clone to Sandbox|Clone Snapshot|Export format|Export Table|Auto-Chill (idle minutes)|
+            Off|5m|15m|30m|60m|Apply Auto-Chill|Auto-Chill: Off|Auto-Chill: {minutes}m|
+            Query & Load History|Refresh History|Trino Query History|Copy & Data Load History|
+            Query ID|User|Source|SQL|Target|Result chart|
+            Choose a numeric Y column to chart visible rows.|Clone audit needs review|
+            Cloned {source} to {table}.|Clone failed: {error}|Exported {table} to {filename}.|
+            Export failed: {error}|Auto-Chill failed: {error}|History failed: {error}'''
+        for label in labels.split('|'):
+            with self.subTest(label=label.strip()):
+                self.assertRegex(translations[label.strip()], r'[ぁ-んァ-ヶ一-龯]')
+        for label in ('CSV', 'JSONL', 'Parquet'):
+            self.assertEqual(translations[label], label)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_phase8_javascript_execution_contracts(self):
+        """Execute production handlers with a small DOM/API adapter; no lab writes."""
+        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        # Parse the entire script, then execute the query handler itself.
+        handler = script.split("$('run-query').onclick=", 1)[1].split("$('sql').onkeydown", 1)[0]
+        harness = r"""
+const assert=require('node:assert/strict');
+new Function(SCRIPT);
+const nodes={sql:{value:'SELECT 1; SELECT 2',selectionStart:10,selectionEnd:18},
+ 'query-schema':{value:'raw'},'query-mode':{value:'read-only'},
+ 'query-warehouse':{value:'LOCAL'},'max-rows':{value:'1000'},
+ 'result-filter':{},'query-results':{replaceChildren(){}}};
+const $=id=>nodes[id]??{};let payload,queryResult,sortColumn;
+const busy=(button,task)=>task(),ui=()=>{},message=()=>{},renderResults=()=>{},
+ populateChartColumns=()=>{},rememberQuery=()=>{};
+const api=async(path,body)=>{assert.equal(path,'/api/warehouse/query');payload=body;return {rows:[]};};
+const run=eval(HANDLER);
+(async()=>{
+ await run();assert.equal(payload.sql,'SELECT 2');assert.equal(payload.schema,'raw');assert.ok(!('mode' in payload));
+ nodes['query-schema'].value='marts';nodes.sql.selectionStart=nodes.sql.selectionEnd=0;
+ await run();assert.equal(payload.sql,nodes.sql.value);assert.ok(!('schema' in payload));
+ nodes.sql.value='   SELECT 3';nodes.sql.selectionStart=0;nodes.sql.selectionEnd=3;
+ nodes['query-mode'].value='sandbox-write';await run();assert.equal(payload.sql,nodes.sql.value);assert.equal(payload.mode,'sandbox-write');
+})().catch(e=>{console.error(e);process.exitCode=1;});
+"""
+        source = 'const SCRIPT=' + json.dumps(script) + ';const HANDLER=' + json.dumps(handler) + ';\n' + harness
+        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_phase8_api_and_rendering_contracts(self):
+        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        for contract in (
+            "createElementNS(ns,'svg')", "const points=visibleRows().filter",
+            "for(const id of ['chart-type','chart-x-col','chart-y-col'])$(id).onchange=renderChart",
+            "$('query-results').hidden=view!=='table'", "$('query-chart').hidden=view!=='chart'",
+            "const payload={source_table:source}", 'payload.snapshot_id=snapshot',
+            "api('/api/catalog/clone',payload)", "actionButton('Clone Snapshot'",
+            "api('/api/lake/export',{table:selected,format})", 'atob(result.content_base64)',
+            'downloadFile(content,result.filename', 'link.download=filename',
+            "if(data.auto_chill)updateAutoChill(data.auto_chill)",
+            "document.activeElement!==select", "if(auto_chill_minutes>0)",
+            "api('/api/warehouse/autochill',{check:true})",
+            "api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})",
+            "api('/api/history')", "$('refresh-history').onclick",
+            "if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}",
+            "actionButton('Open in Worksheet',()=>openWorksheet(rows[i][sqlIndex]))",
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, script)
+        for action in ('lake.ingest', 'lake.export', 'catalog.clone', 'catalog.drop', 'bear.data_engineer'):
+            self.assertIn("'" + action + "'", script)
+
+    def test_query_session_schema_and_legacy_default(self):
+        with patch.object(wb.warehouse_resident, 'query', return_value={'rows': []}) as query:
+            for schema in ('marts', 'raw', 'sandbox', 'staging', 'tpch_tiny', 'smoke'):
+                self.assertEqual(self.json_request('/api/warehouse/query', dict(sql='SELECT 1', schema=schema))[0], 200)
+                query.assert_called_with('LOCAL', 'SELECT 1', catalog='iceberg', schema=schema, max_rows=1000)
+            self.assertEqual(self.json_request('/api/warehouse/query', dict(sql='SELECT 1'))[0], 200)
+            query.assert_called_with('LOCAL', 'SELECT 1', catalog='iceberg', schema='marts', max_rows=1000)
+            query.reset_mock()
+            for schema in ('other', '', None, 1, [], {}):
+                code, result = self.json_request('/api/warehouse/query', dict(sql='SELECT 1', schema=schema))
+                self.assertEqual((code, result['error']), (400, 'invalid query schema'))
+            query.assert_not_called()
+
+    def test_clone_api_inputs_and_snapshot_precision(self):
+        with patch.object(wb.bears_resident, 'clone_table',
+                          return_value=dict(audit={'snapshot_id': 9007199254740993})) as clone:
+            code, result = self.json_request('/api/catalog/clone', dict(source_table='marts.orders'))
+            self.assertEqual(code, 200)
+            self.assertEqual(result['audit']['snapshot_id'], '9007199254740993')
+            clone.assert_called_once_with('marts.orders', target_table=None, snapshot_id=None)
+            self.assertEqual(self.json_request('/api/catalog/clone', dict(source_table='raw.orders',
+                target_table='raw.copy', snapshot_id='9007199254740993'))[0], 200)
+            clone.assert_called_with('raw.orders', target_table='raw.copy', snapshot_id='9007199254740993')
+            clone.reset_mock()
+            for body in ({}, {'source_table': []}, {'source_table': ''},
+                         {'source_table': 'raw.orders', 'target_table': 1},
+                         {'source_table': 'raw.orders', 'snapshot_id': 1}):
+                self.assertEqual(self.json_request('/api/catalog/clone', body)[0], 400)
+            clone.assert_not_called()
+            clone.side_effect = ValueError('clone target must be in sandbox or raw schema')
+            self.assertEqual(self.json_request('/api/catalog/clone', dict(source_table='raw.orders', target_table='marts.x'))[0], 400)
+            clone.side_effect = RuntimeError('clone failed')
+            self.assertEqual(self.json_request('/api/catalog/clone', dict(source_table='raw.orders'))[0], 502)
+
+    def test_export_api_defaults_options_and_validation(self):
+        with patch.object(wb.lake_ingest, 'export_table', return_value={'content': 'id\n1\n'}) as export:
+            self.assertEqual(self.json_request('/api/lake/export', {'table': 'marts.orders'}), (200, {'content': 'id\n1\n'}))
+            export.assert_called_once_with('marts.orders', file=None, format='auto', max_rows=10000)
+            self.assertEqual(self.json_request('/api/lake/export', dict(table='raw.orders', file='out.jsonl', format='jsonl', max_rows=7))[0], 200)
+            export.assert_called_with('raw.orders', file='out.jsonl', format='jsonl', max_rows=7)
+            export.reset_mock()
+            for body in ({}, {'table': []}, {'table': ''}, {'table': 'raw.t', 'format': []},
+                         {'table': 'raw.t', 'format': 'xml'}, {'table': 'raw.t', 'file': 1},
+                         {'table': 'raw.t', 'file': ''}, {'table': 'raw.t', 'max_rows': True},
+                         {'table': 'raw.t', 'max_rows': 0}, {'table': 'raw.t', 'max_rows': '1'}):
+                self.assertEqual(self.json_request('/api/lake/export', body)[0], 400)
+            export.assert_not_called()
+            export.side_effect = ValueError('invalid table')
+            self.assertEqual(self.json_request('/api/lake/export', {'table': 'bad'})[0], 400)
+            export.side_effect = RuntimeError('unavailable')
+            self.assertEqual(self.json_request('/api/lake/export', {'table': 'raw.t'})[0], 502)
+
+    def test_auto_chill_routes_and_status(self):
+        auto = dict(auto_chill_minutes=5, idle_seconds=0)
+        with patch.object(wb.warehouse_resident, 'configure_auto_chill', return_value=auto) as configure, \
+             patch.object(wb.warehouse_resident, 'check_auto_chill', return_value=dict(chilled=True, **auto)) as check:
+            self.assertEqual(self.json_request('/api/warehouse/autochill', {'minutes': 5}), (200, auto))
+            configure.assert_called_once_with(5)
+            check.assert_not_called()
+            self.assertTrue(self.json_request('/api/warehouse/autochill', {'check': True})[1]['chilled'])
+            check.assert_called_once_with('LOCAL')
+            self.assertEqual(self.json_request('/api/warehouse/autochill', {'minutes': 0, 'check': True})[0], 200)
+            configure.assert_called_with(0)
+            configure.reset_mock()
+            check.reset_mock()
+            self.assertEqual(self.json_request('/api/warehouse/autochill', {'check': False})[0], 200)
+            for body in ({}, {'check': 1}, {'minutes': True}, {'minutes': -1},
+                         {'minutes': 1441}, {'minutes': '1'}, {'minutes': 1, 'check': 'true'}):
+                self.assertEqual(self.json_request('/api/warehouse/autochill', body)[0], 400)
+            configure.assert_not_called()
+            check.assert_not_called()
+        with patch.object(wb.warehouse_resident, 'auto_chill_status', return_value=auto), \
+             patch.object(wb.warehouse_resident, 'status', return_value={}), patch.object(wb, 'components', return_value={}):
+            self.assertEqual(self.json_request('/api/status')[1]['auto_chill'], auto)
+
+    def test_activity_history_route_and_failure(self):
+        report = dict(runtime_queries={'rows': []}, query_history=[], load_history=[])
+        with patch.object(wb.bears_resident, 'activity_history', return_value=report) as history:
+            self.assertEqual(self.json_request('/api/history'), (200, report))
+            history.assert_called_once_with()
+            history.side_effect = RuntimeError('unavailable')
+            self.assertEqual(self.json_request('/api/history')[0], 502)
+
     def workbench_document(self):
         status, _, body = self.request('/')
         self.assertEqual(status, 200)

@@ -72,9 +72,9 @@ flowchart TB
 | **1. SQL Safety Guardrails** | Enforces `read-only` by default on `shirokuma warehouse query`. `sandbox-write` permits DDL/DML only in `iceberg.scratch`, `iceberg.staging`, and `iceberg.raw`. Production `iceberg.marts` writes require `admin-write` or audited WAP publish. |
 | **2. Write-Audit-Publish (WAP) & Regression Guard** | AI-generated or operator SQL is materialized in `iceberg.scratch.<stage_table>` first. A single-scan audit checks row count (`--min-rows`), `NULL` constraints (`--not-null`), and **blocks accidental >50% row shrinkage or missing columns** before atomically publishing to `iceberg.marts` and recording dynamic lineage. |
 | **3. 1-Command Iceberg Snapshot Rollback** | Every Iceberg table snapshot is tracked. If a bad publish occurs, `shirokuma bear data --table marts.<name> --rollback --snapshot-id <id>` instantaneously restores the table via `iceberg.system.rollback_to_snapshot`. |
-| **4. Zero-Friction File Ingestion & Idempotent Upsert** | `shirokuma lake ingest` loads local **CSV, TSV, JSONL, and Parquet** files into Iceberg with automatic schema inference (`BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, `VARCHAR`) and supports `replace`, `append`, and keyed idempotent `upsert` (`--mode upsert --key <cols>`). |
+| **4. Zero-Friction File Ingestion, Idempotent Upsert, & Table Export** | `shirokuma lake ingest` loads local **CSV, TSV, JSONL, and Parquet** files into Iceberg with automatic schema inference (`BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, `VARCHAR`) and supports `replace`, `append`, and keyed idempotent `upsert` (`--mode upsert --key <cols>`). `shirokuma lake export` unloads any Iceberg table or view to CSV, JSONL, or Parquet. |
 | **5. 5 Core Autonomous Bears** | **SRE Bear** (cluster health & metrics), **Query Doctor Bear** (Trino `EXPLAIN` & skew analysis), **Data Engineer Bear** (LLM SQL generation with `QUALIFY` rewrite, 1-retry `EXPLAIN` self-correction, WAP, & `--refresh`), **Catalog Curator Bear** (Iceberg metadata & dbt + WAP lineage), and **Policy Gatekeeper Bear** (Kubernetes pod security audit). |
-| **6. Shirokuma Workbench & Pawprints Audit Trail** | `shirokuma workbench` launches a fast, zero-dependency Snowsight-style local Web UI (`http://127.0.0.1:8888`) featuring multi-tab SQL worksheets with an inline Object Explorer & AI Bear Copilot, CSV/JSON/TSV export, drag-and-drop browser file upload with pre-ingest schema preview, a 6-tab Table Inspector (Columns, 50-row Data Preview, NULL Profile, DDL, Iceberg Time Travel Snapshot Preview & Rollback, Lineage), a unified `dbt` + `WAP` Transformation hub, and live ClickHouse `agenthouse.pawprints` telemetry. |
+| **6. Bilingual (`EN` / `日本語`) Snowsight-Style Workbench & Pawprints Audit Trail** | `shirokuma workbench` launches a fast, zero-dependency bilingual local Web UI (`http://127.0.0.1:8888`) with a top-right `EN / 日本語` switcher, multi-tab SQL worksheets (Schema selector, Run Selected SQL, inline Object Explorer, AI Bear Copilot, inline SVG Bar/Line Charts, CSV/JSON/TSV export), drag-and-drop browser file upload with pre-ingest schema preview, a 6-tab Table Inspector with 1-click **Clone to Sandbox**, **Export Table**, and **Iceberg Time Travel Snapshot Preview & Rollback**, Virtual Warehouse **Auto-Chill** timer, and dedicated Query & Copy/Load History monitoring. |
 
 ---
 
@@ -96,13 +96,16 @@ make lake-build
 make lake-test
 ```
 
-#### 3. Ingest Local Files (Replace / Append / Idempotent Upsert)
+#### 3. Ingest & Export Local Files (Replace / Append / Idempotent Upsert / Export)
 ```bash
 # Automatically infer schema and load CSV/JSONL/Parquet into Iceberg
-go run ./cmd/shirokuma lake ingest --file customers.csv --table raw.customers --mode replace
+go run ./cmd/shirokuma lake ingest customers.csv --table raw.customers --mode replace
 
 # Idempotent keyed upsert (deduplicates input batch and atomically merges by key)
-go run ./cmd/shirokuma lake ingest --file orders_delta.jsonl --table raw.orders --mode upsert --key order_id
+go run ./cmd/shirokuma lake ingest orders_delta.jsonl --table raw.orders --mode upsert --key order_id
+
+# Export an Iceberg table to local CSV, JSONL, or Parquet
+go run ./cmd/shirokuma lake export marts.fct_orders --output fct_orders.csv --format csv
 ```
 
 #### 4. Query the Virtual Warehouse & Manage Compute Lifecycle
@@ -168,9 +171,9 @@ Snowflake や Databricks の巨大機能をすべて模倣するのではなく�
 | **1. SQL 安全ガードレール** | `shirokuma warehouse query` はデフォルトで `read-only`（DDL/DML 遮断）を強制します。`sandbox-write` は `iceberg.scratch` / `staging` / `raw` のみ書き込みを許可し、本番 `iceberg.marts` の直接変更は遮断します。 |
 | **2. Write-Audit-Publish (WAP) と回帰ガード** | AI またはオペレータの変換 SQL をまず `iceberg.scratch.<stage_table>` にステージング作成し、単一テーブルスキャンで件数（`--min-rows`）・NULL 制約（`--not-null`）・**既存本番テーブル比 50% 以上の急減やカラム欠落（回帰ガード）** を自動検査してから `iceberg.marts` へアトミックに公開します。 |
 | **3. Iceberg スナップショット Rollback** | 万一誤ったデータを公開しても、`shirokuma bear data --table marts.<name> --rollback --snapshot-id <id>` 1コマンドで過去のスナップショットへ即座に無停止ロールバックできます。 |
-| **4. 自動スキーマ推論 Ingest & 冪等 Upsert** | `shirokuma lake ingest` により、ローカルの **CSV / TSV / JSONL / Parquet** ファイルから型（`BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, `VARCHAR`）を自動推論して Iceberg テーブルへロードします。`replace`（全置換）・`append`（追記）に加え、複合キー対応の冪等 `upsert`（`--mode upsert --key <cols>`）に対応しています。 |
+| **4. 自動スキーマ推論 Ingest・冪等 Upsert・テーブル Export** | `shirokuma lake ingest` により、ローカルの **CSV / TSV / JSONL / Parquet** ファイルから型（`BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, `VARCHAR`）を自動推論して Iceberg テーブルへロードします。`replace`・`append`・複合キー対応の冪等 `upsert`（`--mode upsert --key <cols>`）に加え、`shirokuma lake export` で任意のテーブルを CSV / JSONL / Parquet に書き出せます。 |
 | **5. 5頭の自律 AI Bear と SQL 自己修復** | **SRE Bear**（稼働・リソース監視）、**Query Doctor Bear**（Trino 実行計画・Skew 診断）、**Data Engineer Bear**（自然言語からの SQL 生成、`QUALIFY` 句自動書き換え、`EXPLAIN` 失敗時の自動再試行、WAP 公開、`--refresh` 再実行）、**Catalog Curator Bear**（カタログ探索・dbt + WAP 統合リネージ）、**Policy Gatekeeper Bear**（Kubernetes セキュリティ監査）を提供します。 |
-| **6. Snowsight 風 Shirokuma Workbench & Pawprints 監査台帳** | `shirokuma workbench`（`http://127.0.0.1:8888`）により、Snowsight 風の3カテゴリ7メニュー構成で、オブジェクトツリー＆AI Copilot 付きマルチタブ SQL ワークシート、結果の CSV/JSON/TSV エクスポート、ブラウザ D&D アップロード＆事前スキーマプレビュー、6タブ Table Inspector（Columns / 50行プレビュー / NULL統計プロファイル / DDL / Iceberg Time Travel スナップショット比較＆Rollback / リネージ）、`dbt` + `WAP` 変換管理、ClickHouse `agenthouse.pawprints` 監査ログを単一画面で軽快に操作できます。 |
+| **6. 日英バイリンガル対応 Snowsight 風 Shirokuma Workbench & 監査台帳** | `shirokuma workbench`（`http://127.0.0.1:8888`）により、右上の `EN / 日本語` 切替ボタン付きで、オブジェクトツリー・スキーマ切替・選択範囲 SQL 実行・AI Copilot・インライン SVG チャート（棒/折れ線）・CSV/JSON/TSV 出力を備えたマルチタブ SQL ワークシート、D&D ブラウザアップロード＆事前プレビュー、1-Click **サンドボックス Clone** / **テーブル Export** / **Time Travel プレビュー＆Rollback** 付き 6タブ Table Inspector、**Auto-Chill（自動休止）** 設定、クエリ履歴＆ロード履歴監視を単一画面で完結できます。 |
 
 ---
 
@@ -187,9 +190,10 @@ make lake-seed
 make lake-build
 make lake-test
 
-# 3. ローカルファイル (CSV / TSV / JSONL / Parquet) の取り込みと冪等 Upsert
-go run ./cmd/shirokuma lake ingest --file customers.csv --table raw.customers --mode replace
-go run ./cmd/shirokuma lake ingest --file orders_q3.jsonl --table raw.orders --mode upsert --key order_id
+# 3. ローカルファイル (CSV / TSV / JSONL / Parquet) の取り込み・冪等 Upsert・エクスポート
+go run ./cmd/shirokuma lake ingest customers.csv --table raw.customers --mode replace
+go run ./cmd/shirokuma lake ingest orders_q3.jsonl --table raw.orders --mode upsert --key order_id
+go run ./cmd/shirokuma lake export marts.fct_orders --output fct_orders.csv --format csv
 
 # 4. Virtual Warehouse での SQL 実行（QUALIFY 句対応）と Chill / Wake
 go run ./cmd/shirokuma warehouse query LOCAL "SELECT * FROM iceberg.marts.fct_orders LIMIT 10"

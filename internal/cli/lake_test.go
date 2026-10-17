@@ -85,3 +85,59 @@ func TestRootContainsLakeIngest(t *testing.T) {
 		t.Fatalf("missing lake ingest: %v", err)
 	}
 }
+
+func TestLakeExportFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args, want []string
+		root       string
+	}{
+		{[]string{"export", "raw.orders", "--output", "out.csv"},
+			[]string{"--export", "raw.orders", "--output", "out.csv", "--format", "auto", "--max-rows", "10000"}, ""},
+		{[]string{"export", "iceberg.marts.orders", "--output", "my data.jsonl", "--format", "jsonl", "--max-rows", "7", "--repo-root", "/tmp/repo"},
+			[]string{"--export", "iceberg.marts.orders", "--output", "my data.jsonl", "--format", "jsonl", "--max-rows", "7"}, "/tmp/repo"},
+	} {
+		f := &fakeLake{data: []byte(`{"action":"export","row_count":7}`)}
+		out, err := executeLake(f, tc.args...)
+		if err != nil || !reflect.DeepEqual(f.args, tc.want) || f.root != tc.root || !strings.Contains(out, `"row_count":7`) {
+			t.Fatalf("args=%v forwarded=%v output=%s error=%v", tc.args, f.args, out, err)
+		}
+	}
+	for _, format := range []string{"csv", "jsonl", "parquet"} {
+		if _, err := executeLake(&fakeLake{data: []byte(`{"action":"export"}`)}, "export", "raw.orders", "--output", "out", "--format", format); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestLakeExportRejectsInvalidArgumentsBeforeRunner(t *testing.T) {
+	for _, args := range [][]string{
+		{"export"}, {"export", "a", "b", "--output", "out.csv"}, {"export", "raw.t"},
+		{"export", "raw.t", "--output", ""}, {"export", "raw.t", "--output", " \t "},
+		{"export", "raw.t", "--output", "out.csv", "--format", "xml"},
+		{"export", "raw.t", "--output", "out.csv", "--max-rows", "0"},
+		{"export", "raw.t", "--output", "out.csv", "--max-rows", "-1"},
+		{"export", "raw.t", "--output", "out.csv", "--max-rows", "1.5"},
+	} {
+		f := &fakeLake{}
+		if _, err := executeLake(f, args...); err == nil || f.args != nil {
+			t.Fatalf("accepted %v: %v", args, err)
+		}
+	}
+}
+
+func TestLakeExportRejectsInvalidReportsAndRunnerErrors(t *testing.T) {
+	for _, data := range []string{"null", "[]", "{}", "noise", `{"action":"ingest"}`, `{"action":1}`, `{"action":"export"} {}`} {
+		out, err := executeLake(&fakeLake{data: []byte(data)}, "export", "raw.t", "--output", "out.csv")
+		if err == nil || out != "" {
+			t.Fatalf("accepted %s: %q %v", data, out, err)
+		}
+	}
+	want := errors.New("offline")
+	if _, err := executeLake(&fakeLake{err: want}, "export", "raw.t", "--output", "out.csv"); !errors.Is(err, want) {
+		t.Fatalf("runner error lost: %v", err)
+	}
+	cmd, _, err := NewRootCommand(&bytes.Buffer{}).Find([]string{"lake", "export"})
+	if err != nil || cmd.Name() != "export" || cmd.Parent().Name() != "lake" {
+		t.Fatalf("missing lake export: %v", err)
+	}
+}

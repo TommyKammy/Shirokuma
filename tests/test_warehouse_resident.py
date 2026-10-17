@@ -12,6 +12,54 @@ SPEC.loader.exec_module(w)
 
 
 class ResidentWarehouseTests(unittest.TestCase):
+    def test_auto_chill_configuration_and_threshold(self):
+        with patch.object(w, '_AUTO_CHILL_MINUTES', 0), patch.object(w, '_LAST_ACTIVITY', 0), \
+             patch.object(w.time, 'monotonic', return_value=100) as clock, \
+             patch.object(w, 'status', return_value={'replicas': 1}) as status, \
+             patch.object(w, 'transition') as transition:
+            self.assertFalse(w.check_auto_chill()['chilled'])
+            status.assert_not_called()
+            for minutes in (-1, 1441, True, 1.0, '1', None):
+                with self.subTest(minutes=minutes), self.assertRaises(ValueError):
+                    w.configure_auto_chill(minutes)
+            self.assertEqual(w.configure_auto_chill(1), {'auto_chill_minutes': 1, 'idle_seconds': 0})
+            clock.return_value = 159
+            self.assertFalse(w.check_auto_chill()['chilled'])
+            clock.return_value = 160
+            self.assertEqual(w.check_auto_chill(), dict(chilled=True, auto_chill_minutes=1, idle_seconds=60))
+            transition.assert_called_once_with('chill', 'LOCAL')
+            status.return_value = {'replicas': 0}
+            self.assertFalse(w.check_auto_chill()['chilled'])
+            transition.assert_called_once()
+            self.assertEqual(w.configure_auto_chill(1440)['auto_chill_minutes'], 1440)
+            self.assertEqual(w.configure_auto_chill(0)['auto_chill_minutes'], 0)
+            clock.return_value = 0
+            self.assertEqual(w.auto_chill_status()['idle_seconds'], 0)
+
+    def test_activity_updated_only_for_successful_query_or_wake(self):
+        with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'monotonic', return_value=50), \
+             patch.object(w, 'status', return_value={'replicas': 1, 'state': 'active'}), \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', return_value={'rows': []}) as execute, \
+             patch.object(w, 'telemetry'):
+            w.query('LOCAL', 'SELECT 1')
+            self.assertEqual(w._LAST_ACTIVITY, 50)
+            w._LAST_ACTIVITY = 0
+            execute.side_effect = RuntimeError('failed')
+            with self.assertRaises(RuntimeError):
+                w.query('LOCAL', 'SELECT 1')
+            self.assertEqual(w._LAST_ACTIVITY, 0)
+            w.transition('wake', 'LOCAL')
+            self.assertEqual(w._LAST_ACTIVITY, 50)
+            w._LAST_ACTIVITY = 0
+            with patch.object(w, 'status', return_value={'replicas': 0, 'state': 'chilled'}):
+                w.transition('chill', 'LOCAL')
+            self.assertEqual(w._LAST_ACTIVITY, 0)
+            with patch.object(w, 'status', side_effect=RuntimeError('failed')):
+                with self.assertRaises(RuntimeError):
+                    w.transition('wake', 'LOCAL')
+            self.assertEqual(w._LAST_ACTIVITY, 0)
+
     def test_qualify_rewrite(self):
         body = 'SELECT id, row_number() OVER (PARTITION BY id ORDER BY ts DESC) AS rn FROM events'
         for suffix in ('', ' ORDER BY id', ' LIMIT 5', ' ORDER BY id LIMIT 5'):

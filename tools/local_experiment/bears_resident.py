@@ -38,8 +38,14 @@ data = partial(wap.data, _runtime)
 
 
 def sql(url, statement):
-    return wr.execute(url, statement, {"X-Trino-User": "shirokuma-bears", "X-Trino-Source": "shirokuma-bears",
-                                        "X-Trino-Catalog": "iceberg", "X-Trino-Schema": "marts"})
+    headers = {"X-Trino-User": "shirokuma-bears", "X-Trino-Source": "shirokuma-bears",
+               "X-Trino-Catalog": "iceberg", "X-Trino-Schema": "marts"}
+    # Honor explicit larger limits used by exports while keeping ordinary calls
+    # and their default result cap unchanged.
+    limit = re.search(r'\bLIMIT ([0-9]+)\s*$', statement)
+    if limit and int(limit[1]) > 1000:
+        return wr.execute(url, statement, headers, max_rows=int(limit[1]))
+    return wr.execute(url, statement, headers)
 
 
 def attempt(function):
@@ -178,6 +184,71 @@ def _table_lineage(table):
         if model['layer'] == 'wap':
             result['wap_sql'] = model['sql']
     return result
+
+
+def qualified_table(table):
+    if not isinstance(table, str) or not re.fullmatch(
+            r'(?:iceberg\.)?[A-Za-z_][A-Za-z_0-9]*\.[A-Za-z_][A-Za-z_0-9]*', table):
+        raise ValueError('table must be [iceberg.]<schema>.<identifier>')
+    return table if table.startswith('iceberg.') else 'iceberg.' + table
+
+
+def clone_table(source_table, target_table=None, snapshot_id=None):
+    full_source = qualified_table(source_table)
+    if target_table is None or target_table == '':
+        target_table = full_source.split('.')[-1] + '_clone'
+    if isinstance(target_table, str) and re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', target_table):
+        target_table = 'sandbox.' + target_table
+    if not isinstance(target_table, str) or not re.fullmatch(
+            r'(?:iceberg\.)?(?:sandbox|raw)\.[A-Za-z_][A-Za-z_0-9]*', target_table):
+        raise ValueError('clone target must be in sandbox or raw schema')
+    full_target = qualified_table(target_table)
+    select_sql = 'SELECT * FROM ' + identifier(full_source)
+    if snapshot_id not in (None, ''):
+        if not re.fullmatch(r'[0-9]+', str(snapshot_id)):
+            raise ValueError('snapshot_id must be digits-only')
+        select_sql += f' FOR VERSION AS OF {int(snapshot_id)}'
+    started, status = time.monotonic(), 'success'
+    try:
+        with wr.trino() as url:
+            for statement in (
+                    'CREATE SCHEMA IF NOT EXISTS iceberg.' + full_target.split('.')[1],
+                    'CREATE OR REPLACE TABLE ' + identifier(full_target) + ' AS ' + select_sql):
+                sql(url, wr.check_sql_policy(statement, mode='sandbox-write'))
+            audit = audit_table(url, full_target)
+    except Exception:
+        status = 'failed'
+        raise
+    finally:
+        telemetry = wr.telemetry('catalog.clone', int((time.monotonic() - started) * 1000),
+                                 status, prefix='', target=full_target)
+    return dict(action='clone', source_table=full_source, table=full_target,
+                snapshot_id=str(snapshot_id) if snapshot_id not in (None, '') else None,
+                audit=audit, telemetry=telemetry)
+
+
+def activity_history(limit=50):
+    if type(limit) is not int or limit < 1:
+        raise ValueError('limit must be a positive integer')
+
+    def runtime():
+        with wr.trino() as url:
+            return sql(url, 'SELECT query_id, state, "user", source, query FROM system.runtime.queries '
+                       "WHERE source <> 'shirokuma-bears' ORDER BY created DESC LIMIT " + str(limit))
+
+    def pawprints():
+        from agenthouse.manage import Client
+        return json.loads(Client().query(
+            'SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON'))['data']
+
+    runtime_queries = attempt(runtime)
+    events = attempt(pawprints)
+    if isinstance(events, dict):
+        return dict(runtime_queries=runtime_queries, query_history=events, load_history=events)
+    loads = {'lake.ingest', 'lake.export', 'catalog.clone', 'catalog.drop', 'bear.data_engineer'}
+    return dict(runtime_queries=runtime_queries,
+                query_history=[e for e in events if e.get('action_type') == 'warehouse.query'],
+                load_history=[e for e in events if e.get('action_type') in loads])
 
 
 def drop_table(table):

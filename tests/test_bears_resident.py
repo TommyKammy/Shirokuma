@@ -17,6 +17,90 @@ SPEC.loader.exec_module(b)
 
 
 class BearsResidentTests(unittest.TestCase):
+    def test_clone_targets_snapshots_and_audit(self):
+        for target, full in [(None, 'iceberg.sandbox.orders_clone'), ('', 'iceberg.sandbox.orders_clone'),
+                             ('custom', 'iceberg.sandbox.custom'), ('raw.copy', 'iceberg.raw.copy'),
+                             ('iceberg.sandbox.copy', 'iceberg.sandbox.copy')]:
+            for snapshot in (None, '', '00012', 9007199254740993):
+                with self.subTest(target=target, snapshot=snapshot), \
+                     patch.object(b.wr, 'trino', return_value=contextlib.nullcontext('url')), \
+                     patch.object(b, 'sql') as sql, \
+                     patch.object(b, 'audit_table', return_value={'snapshot_id': 123}) as audit, \
+                     patch.object(b.wr, 'telemetry', return_value='recorded') as telemetry:
+                    result = b.clone_table('marts.orders', target, snapshot)
+                    self.assertEqual(result, dict(action='clone', source_table='iceberg.marts.orders',
+                        table=full, snapshot_id=str(snapshot) if snapshot not in (None, '') else None,
+                        audit={'snapshot_id': 123}, telemetry='recorded'))
+                    statement = 'CREATE OR REPLACE TABLE ' + b.identifier(full) + ' AS SELECT * FROM "iceberg"."marts"."orders"'
+                    if snapshot not in (None, ''):
+                        statement += f' FOR VERSION AS OF {int(snapshot)}'
+                    self.assertEqual(sql.call_args_list[0].args, ('url', 'CREATE SCHEMA IF NOT EXISTS iceberg.' + full.split('.')[1]))
+                    sql.assert_called_with('url', statement)
+                    audit.assert_called_once_with('url', full)
+                    self.assertEqual(telemetry.call_args.args[::2], ('catalog.clone', 'success'))
+                    self.assertEqual(telemetry.call_args.kwargs, dict(prefix='', target=full))
+
+    def test_clone_validation_and_failure_telemetry(self):
+        with patch.object(b.wr, 'trino') as trino:
+            for source in ('orders', 'other.raw.t', 'raw.bad-name', 'raw.t; DROP', None):
+                with self.subTest(source=source), self.assertRaises(ValueError):
+                    b.clone_table(source)
+            for target in ('marts.x', 'tpch_tiny.x', 'other.raw.x', 'a.b.c.d', 'bad-name', 1):
+                with self.subTest(target=target), self.assertRaisesRegex(ValueError, 'clone target must be in sandbox or raw schema'):
+                    b.clone_table('iceberg.raw.orders', target)
+            for snapshot in ('-1', '1.0', '１２', '1;DROP', True):
+                with self.subTest(snapshot=snapshot), self.assertRaisesRegex(ValueError, 'snapshot_id must be digits-only'):
+                    b.clone_table('raw.orders', snapshot_id=snapshot)
+            trino.assert_not_called()
+        for failed in ('sql', 'audit_table'):
+            with patch.object(b.wr, 'trino', return_value=contextlib.nullcontext('url')), \
+                 patch.object(b, 'sql'), patch.object(b, 'audit_table'), \
+                 patch.object(b, failed, side_effect=RuntimeError('failed')), \
+                 patch.object(b.wr, 'telemetry') as telemetry:
+                with self.assertRaises(RuntimeError):
+                    b.clone_table('raw.orders')
+                self.assertEqual(telemetry.call_args.args[2], 'failed')
+
+    def test_activity_history_filters_and_independent_failures(self):
+        actions = ['warehouse.query', 'lake.ingest', 'lake.export', 'catalog.clone', 'catalog.drop',
+                   'bear.data_engineer', 'warehouse.wake', 'bear.sre']
+        events = [dict(action_type=a) for a in actions] + [{}]
+        with patch.object(b.wr, 'trino', return_value=contextlib.nullcontext('url')), \
+             patch.object(b, 'sql', return_value={'rows': [['q1']]}) as sql, \
+             patch('agenthouse.manage.Client') as client:
+            client.return_value.query.return_value = json.dumps({'data': events})
+            result = b.activity_history(7)
+            self.assertEqual(result['runtime_queries'], {'rows': [['q1']]})
+            self.assertEqual(result['query_history'], events[:1])
+            self.assertEqual(result['load_history'], events[1:6])
+            sql.assert_called_once_with('url', 'SELECT query_id, state, "user", source, query FROM system.runtime.queries '
+                                        "WHERE source <> 'shirokuma-bears' ORDER BY created DESC LIMIT 7")
+            client.return_value.query.assert_called_once_with(
+                'SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON')
+            sql.side_effect = RuntimeError('runtime unavailable')
+            self.assertEqual(b.activity_history()['load_history'], events[1:6])
+            sql.side_effect = None
+            client.return_value.query.side_effect = RuntimeError('history unavailable')
+            result = b.activity_history()
+            self.assertIn('error', result['query_history'])
+            self.assertEqual(result['runtime_queries'], {'rows': [['q1']]})
+        with patch.object(b.wr, 'trino', side_effect=RuntimeError('tunnel unavailable')), \
+             patch('agenthouse.manage.Client', side_effect=RuntimeError('client unavailable')):
+            result = b.activity_history()
+            self.assertIn('error', result['runtime_queries'])
+            self.assertIn('error', result['load_history'])
+        for limit in (True, 0, -1, '1'):
+            with self.assertRaises(ValueError):
+                b.activity_history(limit)
+
+    def test_sql_honors_export_limits_without_changing_default_calls(self):
+        with patch.object(b.wr, 'execute', return_value={'rows': []}) as execute:
+            b.sql('url', 'SELECT * FROM "iceberg"."raw"."orders" LIMIT 10000')
+            self.assertEqual(execute.call_args.kwargs, {'max_rows': 10000})
+            b.sql('url', 'SELECT 1')
+            self.assertEqual(len(execute.call_args.args), 3)
+            self.assertEqual(execute.call_args.kwargs, {})
+
     def test_snapshot_preview_and_validation(self):
         preview = {'rows': [[1, 'old']]}
         for current in ({'rows': [[5]]}, RuntimeError('current missing')):

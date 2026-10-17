@@ -1,9 +1,11 @@
 """Ingest local CSV, JSONL, and Parquet files into the resident Iceberg lake."""
 import argparse
+import base64
 import csv
 from contextlib import contextmanager
 from datetime import date
 import json
+import io
 import math
 from pathlib import Path
 import re
@@ -243,8 +245,70 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
     return result
 
 
+def export_table(table, file=None, format='auto', max_rows=10000):
+    started = time.monotonic()
+    try:
+        full_table = bears.qualified_table(table)
+        detected = (FORMATS.get(Path(file).suffix.lower()) if file is not None else 'csv') if format == 'auto' else format
+        if not isinstance(detected, str) or detected not in {'csv', 'jsonl', 'parquet'}:
+            raise ValueError('invalid export format')
+        if type(max_rows) is not int or max_rows < 1:
+            raise ValueError('max_rows must be a positive integer')
+        with wr.trino() as url:
+            result = bears.sql(url, f'SELECT * FROM {wr.identifier(full_table)} LIMIT {max_rows}')
+        columns = [column['name'] for column in result['columns']]
+        rows = result['rows']
+        if detected == 'parquet':
+            try:
+                import pyarrow as arrow
+                import pyarrow.parquet as parquet
+            except ImportError as exc:
+                raise ValueError('parquet export requires pyarrow') from exc
+            stream = io.BytesIO()
+            parquet.write_table(arrow.table({name: [row[i] for row in rows]
+                                             for i, name in enumerate(columns)}), stream)
+            raw_bytes = stream.getvalue()
+        else:
+            if detected == 'csv':
+                stream = io.StringIO(newline='')
+                writer = csv.writer(stream)
+                writer.writerow(columns)
+                writer.writerows(rows)
+                text_content = stream.getvalue()
+            else:
+                text_content = ''.join(json.dumps(dict(zip(columns, row)), ensure_ascii=False) + '\n' for row in rows)
+            raw_bytes = text_content.encode('utf-8')
+        if file is not None:
+            Path(file).write_bytes(raw_bytes)
+            payload = dict(file=str(Path(file)))
+        else:
+            payload = dict(filename=full_table.split('.')[-1] + '.' + detected)
+            payload.update(dict(content_base64=base64.b64encode(raw_bytes).decode('ascii'))
+                           if detected == 'parquet' else dict(content=text_content))
+    except Exception:
+        wr.telemetry('export', int((time.monotonic() - started) * 1000), status='failed', prefix='lake.')
+        raise
+    duration = int((time.monotonic() - started) * 1000)
+    telemetry = wr.telemetry('export', duration, status='success', prefix='lake.')
+    return dict(action='export', table=full_table, format=detected, columns=columns,
+                row_count=len(rows), duration_ms=duration, telemetry=telemetry, **payload)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    options = sys.argv[1:sys.argv.index('--')] if '--' in sys.argv else sys.argv[1:]
+    if any(arg == '--export' or arg.startswith('--export=') for arg in options):
+        parser.add_argument('--export', required=True, dest='table')
+        parser.add_argument('--output', dest='file')
+        parser.add_argument('--format', choices=['auto', 'csv', 'jsonl', 'parquet'], default='auto')
+        parser.add_argument('--max-rows', type=int, default=10000)
+        args = parser.parse_args()
+        try:
+            print(json.dumps(export_table(**vars(args))))
+            return 0
+        except Exception as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
     parser.add_argument('file')
     parser.add_argument('--table')
     parser.add_argument('--mode', choices=['replace', 'append', 'upsert'], default='replace')

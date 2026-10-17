@@ -46,4 +46,6 @@ tags: [shirokuma, local, handoff, gates]
 | **WP-P6-006** | Slim AgentHouse management, preserve credentials and resident APIs, verify standard HTTP responses, and synchronize Phase 6 documentation | **Completed (2026-10-17)** |
 | **WP-P7-001** | Add rich Table Inspector, Iceberg Time Travel preview, browser file upload & pre-ingest schema preview, and unified dbt/WAP transformation models APIs | **Completed (2026-10-17)** |
 | **WP-P7-002** | Upgrade Shirokuma Workbench with Snowsight-style 3-category navigation, multi-tab SQL worksheets, inline Bear Copilot, result export, D&D upload preview, and 6-tab Table Inspector | **Completed (2026-10-17)** |
+| **WP-P8-001** | Add session schema context, 1-click sandbox table & snapshot clone, table data export/unload (`shirokuma lake export`), Virtual Warehouse Auto-Chill, and query/load history APIs | **Completed (2026-10-17)** |
+| **WP-P8-002** | Add top-right `EN / 日本語` bilingual UI switcher, inline SVG result charts, selected-SQL execution, and Workbench controls for sandbox clone, table export, Auto-Chill, and query/load history | **Completed (2026-10-17)** |
 

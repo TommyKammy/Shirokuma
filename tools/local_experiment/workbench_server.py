@@ -86,6 +86,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 return
             if url.path == "/api/status":
                 report = {"status": "healthy", "warehouse": None, "components": {}}
+                report['auto_chill'] = warehouse_resident.auto_chill_status()
                 try:
                     report["warehouse"] = warehouse_resident.status("LOCAL")
                 except Exception as exc:
@@ -117,6 +118,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 if isinstance(profile, dict) and type(profile.get('snapshot_id')) is int:
                     profile['snapshot_id'] = str(profile['snapshot_id'])
                 self.respond(result)
+            elif url.path == '/api/history':
+                self.respond(bears_resident.activity_history())
             elif url.path == '/api/models':
                 self.respond(bears_resident.models_inventory())
             elif url.path == "/api/pawprints":
@@ -147,7 +150,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.respond({"error": "cross-origin control requests are not allowed"}, 403)
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/warehouse/chill", "/api/warehouse/wake", "/api/warehouse/query", "/api/bears/run", "/api/lake/ingest", '/api/lake/preview', '/api/catalog/drop', '/api/models/build'):
+        if path not in ("/api/warehouse/chill", "/api/warehouse/wake", "/api/warehouse/query", "/api/bears/run", "/api/lake/ingest", '/api/lake/preview', '/api/catalog/drop', '/api/models/build', '/api/catalog/clone', '/api/lake/export', '/api/warehouse/autochill'):
             self.respond({"error": "route not found"}, 404)
             return
         try:
@@ -162,13 +165,53 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     if not isinstance(size, str) or type(limit) is not int or limit < 1:
                         raise ValueError("warehouse must be a string and max_rows a positive integer")
                     size = warehouse_resident.warehouse(size)
+                    schema = body.get('schema', 'marts')
+                    if not isinstance(schema, str) or schema not in {'marts', 'raw', 'sandbox', 'staging', 'tpch_tiny', 'smoke'}:
+                        raise ValueError('invalid query schema')
                     options = {}
                     if 'mode' in body:
                         mode = body['mode']
                         if not isinstance(mode, str) or mode not in {'read-only', 'sandbox-write', 'admin-write'}:
                             raise ValueError('invalid query mode')
                         options['mode'] = mode
-                    result = warehouse_resident.query(size, statement, catalog="iceberg", schema="marts", max_rows=limit, **options)
+                    result = warehouse_resident.query(size, statement, catalog="iceberg", schema=schema, max_rows=limit, **options)
+                elif path == '/api/warehouse/autochill':
+                    if 'minutes' not in body and 'check' not in body:
+                        raise ValueError('minutes or check is required')
+                    if 'minutes' in body and (type(body['minutes']) is not int or not 0 <= body['minutes'] <= 1440):
+                        raise ValueError('minutes must be an integer between 0 and 1440')
+                    if 'check' in body and type(body['check']) is not bool:
+                        raise ValueError('check must be a boolean')
+                    if 'minutes' in body:
+                        result = warehouse_resident.configure_auto_chill(body['minutes'])
+                    else:
+                        result = warehouse_resident.auto_chill_status()
+                    if body.get('check') is True:
+                        result = warehouse_resident.check_auto_chill('LOCAL')
+                elif path == '/api/catalog/clone':
+                    source = body.get('source_table')
+                    if not isinstance(source, str) or not source.strip():
+                        raise ValueError('source_table must be a non-empty string')
+                    for key in ('target_table', 'snapshot_id'):
+                        if key in body and body[key] is not None and not isinstance(body[key], str):
+                            raise ValueError(key + ' must be a string')
+                    result = bears_resident.clone_table(source, target_table=body.get('target_table'),
+                                                        snapshot_id=body.get('snapshot_id'))
+                    audit = result.get('audit')
+                    if isinstance(audit, dict) and type(audit.get('snapshot_id')) is int:
+                        audit['snapshot_id'] = str(audit['snapshot_id'])
+                elif path == '/api/lake/export':
+                    table, fmt = body.get('table'), body.get('format', 'auto')
+                    file, limit = body.get('file'), body.get('max_rows', 10000)
+                    if not isinstance(table, str) or not table.strip():
+                        raise ValueError('table must be a non-empty string')
+                    if not isinstance(fmt, str) or fmt not in {'auto', 'csv', 'jsonl', 'parquet'}:
+                        raise ValueError('invalid export format')
+                    if file is not None and (not isinstance(file, str) or not file.strip()):
+                        raise ValueError('file must be a non-empty string')
+                    if type(limit) is not int or limit < 1:
+                        raise ValueError('max_rows must be a positive integer')
+                    result = lake_ingest.export_table(table, file=file, format=fmt, max_rows=limit)
                 elif path == '/api/catalog/drop':
                     table = body.get('table')
                     if not isinstance(table, str) or not table.strip():
