@@ -110,3 +110,31 @@ func TestResidentRunnerFailureAndInvalidJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestResidentSQLModeForwarding(t *testing.T) {
+	for _, mode := range []string{"read-only", "sandbox-write", "admin-write"} {
+		f := &fakeResidentWarehouse{}
+		if _, err := residentCommand(f, "query", "LOCAL", "SELECT 1", "--mode", mode); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"query", "--warehouse", "LOCAL", "--sql=SELECT 1", "--max-rows", "1000", "--mode", mode}
+		if !reflect.DeepEqual(f.args, want) {
+			t.Fatalf("mode not forwarded: %v", f.args)
+		}
+	}
+}
+
+func TestResidentRejectsInvalidSQLModes(t *testing.T) {
+	for _, args := range [][]string{
+		{"query", "LOCAL", "SELECT 1", "--mode", "unsafe"},
+		{"query", "LOCAL", "SELECT 1", "--mode", "ADMIN-WRITE"},
+		{"query", "XS", "--session", testWarehouseSession, "--mode", "read-only"},
+		{"query", "XS", "--session", testWarehouseSession, "--mode", "sandbox-write"},
+		{"query", "XS", "--session", testWarehouseSession, "--mode", "admin-write"},
+	} {
+		f := &fakeResidentWarehouse{}
+		if _, err := residentCommand(f, args...); err == nil || f.args != nil {
+			t.Fatalf("invalid mode reached runner: %v", args)
+		}
+	}
+}

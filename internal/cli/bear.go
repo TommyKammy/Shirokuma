@@ -40,12 +40,19 @@ func newBearCommand(runner bearRunner) *cobra.Command {
 	for _, name := range []string{"sre", "query", "data", "catalog", "policy"} {
 		name := name
 		var root, sql string
+		wapFlags := []string{"stage-table", "publish", "rollback", "snapshot-id"}
 		command := &cobra.Command{
 			Use: name + " [arguments]", Short: "Run the resident " + name + " Bear",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				forward := append([]string{name}, args...)
 				if cmd.Flags().Changed("sql") {
 					forward = append(forward, "--sql", sql)
+				}
+				for _, flag := range wapFlags {
+					if cmd.Flags().Changed(flag) {
+						value, _ := cmd.Flags().GetString(flag)
+						forward = append(forward, "--"+flag, value)
+					}
 				}
 				ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 				defer stop()
@@ -67,8 +74,13 @@ func newBearCommand(runner bearRunner) *cobra.Command {
 			},
 		}
 		command.Flags().StringVar(&root, "repo-root", "", "repository root")
-		if name == "query" {
+		if name == "query" || name == "data" {
 			command.Flags().StringVar(&sql, "sql", "", "SQL to explain")
+		}
+		if name == "data" {
+			for _, flag := range wapFlags {
+				command.Flags().String(flag, "", "Data Bear "+flag)
+			}
 		}
 		group.AddCommand(command)
 	}

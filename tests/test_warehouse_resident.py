@@ -12,6 +12,64 @@ SPEC.loader.exec_module(w)
 
 
 class ResidentWarehouseTests(unittest.TestCase):
+    def test_sql_policy_read_only_and_quoting(self):
+        for statement in ["SELECT 1", "WITH x AS (SELECT 1) SELECT * FROM x", "invalid SQL",
+                          "SELECT 'DROP; it''s fine', \"DELETE;\"", "-- INSERT ignored\nSELECT 1"]:
+            self.assertEqual(w.check_sql_policy(statement + ';  '), statement)
+        for mode in ('read-only', 'sandbox-write', 'admin-write'):
+            for statement in ["SELECT 1; SELECT 2", "SELECT 'x'; INSERT INTO iceberg.sandbox.t VALUES (1)"]:
+                with self.subTest(mode=mode, statement=statement), self.assertRaisesRegex(ValueError, 'SQL policy violation'):
+                    w.check_sql_policy(statement, mode)
+            for verb in ('DROP TABLE', 'TRUNCATE TABLE', 'DELETE FROM', 'GRANT', 'REVOKE'):
+                for prefix in ('', 'WITH x AS (SELECT 1) ', '/* comment */ '):
+                    with self.subTest(mode=mode, verb=verb, prefix=prefix), self.assertRaises(ValueError):
+                        w.check_sql_policy(prefix + verb.lower() + ' iceberg.sandbox.t', mode)
+        with self.assertRaises(ValueError):
+            w.check_sql_policy('SELECT 1', 'unknown')
+        for verb in ('INSERT INTO', 'UPDATE', 'MERGE INTO', 'CREATE TABLE', 'ALTER TABLE', 'CALL'):
+            with self.assertRaisesRegex(ValueError, 'read-only'):
+                w.check_sql_policy(verb + ' iceberg.sandbox.t')
+
+    def test_sql_policy_write_targets(self):
+        sandbox = ['CREATE SCHEMA IF NOT EXISTS iceberg.sandbox',
+                   'CREATE TABLE iceberg.sandbox.any_table (id BIGINT)',
+                   'CREATE OR REPLACE TABLE "iceberg"."sandbox"."other" AS SELECT 2',
+                   'INSERT INTO iceberg.sandbox.any_table VALUES (1)',
+                   'ALTER TABLE iceberg.sandbox.any_table EXECUTE rollback_to_snapshot(123)']
+        admin = ['CREATE SCHEMA IF NOT EXISTS iceberg.other',
+                 'CREATE OR REPLACE TABLE iceberg.marts.any_table AS SELECT 1',
+                 'INSERT INTO iceberg.marts.any_table VALUES (1)',
+                 'ALTER TABLE iceberg.other.any_table EXECUTE rollback_to_snapshot(123)']
+        for statement in sandbox:
+            for mode in ('sandbox-write', 'admin-write'):
+                with self.subTest(statement=statement, mode=mode):
+                    self.assertEqual(w.check_sql_policy(statement, mode), statement)
+        for statement in admin:
+            self.assertEqual(w.check_sql_policy(statement, 'admin-write'), statement)
+            with self.assertRaises(ValueError):
+                w.check_sql_policy(statement, 'sandbox-write')
+        for mode in ('sandbox-write', 'admin-write'):
+            for statement in ['CREATE TABLE marts.t AS SELECT 1', 'INSERT INTO iceberg.other.t VALUES (1)',
+                              'CREATE TABLE iceberg.sandbox.t.extra AS SELECT 1',
+                              'ALTER TABLE iceberg.sandbox.t RENAME TO iceberg.marts.t',
+                              'ALTER TABLE iceberg.sandbox.t EXECUTE optimize()',
+                              'UPDATE iceberg.sandbox.t SET x=1', 'CALL arbitrary()']:
+                with self.subTest(mode=mode, statement=statement), self.assertRaises(ValueError):
+                    w.check_sql_policy(statement, mode)
+
+    def test_policy_rejection_precedes_warehouse_access(self):
+        with patch.object(w, 'status') as status, patch.object(w, 'trino') as trino:
+            with self.assertRaises(ValueError):
+                w.query('LOCAL', 'INSERT INTO iceberg.marts.t VALUES (1)')
+            status.assert_not_called()
+            trino.assert_not_called()
+        with patch.object(w, 'status', return_value={'replicas': 1}), \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', return_value={'rows': []}) as execute, patch.object(w, 'telemetry'):
+            report = w.query('LOCAL', 'INSERT INTO iceberg.sandbox.t VALUES (1); ', mode='sandbox-write')
+            self.assertEqual(report['mode'], 'sandbox-write')
+            self.assertEqual(execute.call_args.args[1], 'INSERT INTO iceberg.sandbox.t VALUES (1)')
+
     def test_sizes_and_states(self):
         for size in ("xs", "s", "local"):
             self.assertEqual(w.warehouse(size), size.upper())
@@ -98,6 +156,13 @@ class ResidentWarehouseTests(unittest.TestCase):
                 self.assertEqual(call.args[1 if action in ("chill", "wake") else 0], "LOCAL")
                 if action == "query":
                     self.assertEqual(call.args[-1], 1000)
+
+    def test_query_mode_parser(self):
+        with patch.object(w.sys, 'argv', ['warehouse', 'query', '--sql', 'SELECT 1', '--mode', 'admin-write']), \
+             patch.object(w, 'query', return_value={}) as query, patch('sys.stdout', new_callable=io.StringIO):
+            self.assertEqual(w.main(), 0)
+        self.assertEqual(query.call_args.kwargs, {'mode': 'admin-write'})
+        self.assertEqual(query.call_args.args[-1], 1000)
 
     @patch.object(w, "telemetry", return_value="skipped")
     def test_bounded_rows_and_best_effort_cancel(self, telemetry):

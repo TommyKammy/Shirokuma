@@ -71,3 +71,25 @@ func TestRootContainsBearGroup(t *testing.T) {
 		t.Fatalf("missing bear group: %v", err)
 	}
 }
+
+func TestDataBearWAPFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"data", "--sql", "SELECT 42", "--stage-table", "custom"},
+		{"data", "--publish", "iceberg.sandbox.custom"},
+		{"data", "--rollback", "marts.custom", "--snapshot-id", "123"},
+		{"data", "intent", "--snapshot-id", "456", "--rollback", "t", "--publish", "t", "--stage-table", "t", "--sql", "SELECT 1"},
+		{"data", "--sql", ""},
+	} {
+		f := &fakeBear{data: []byte(`{"bear":"data_engineer"}`)}
+		if _, err := executeBear(f, args...); err != nil {
+			t.Fatal(err)
+		}
+		want := args
+		if len(args) > 2 && args[1] == "intent" {
+			want = []string{"data", "intent", "--sql", "SELECT 1", "--stage-table", "t", "--publish", "t", "--rollback", "t", "--snapshot-id", "456"}
+		}
+		if !reflect.DeepEqual(f.args, want) {
+			t.Fatalf("WAP flags: got %v want %v", f.args, want)
+		}
+	}
+}

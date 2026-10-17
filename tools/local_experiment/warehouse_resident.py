@@ -2,6 +2,7 @@
 import argparse
 from contextlib import contextmanager
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -154,12 +155,65 @@ def execute(url, sql, headers, max_rows=1000):
     return dict(query_id=query_id, columns=columns, rows=rows, truncated=truncated)
 
 
-def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000):
+def check_sql_policy(sql: str, mode: str = 'read-only') -> str:
+    """Check a single statement before any warehouse access and return clean SQL."""
+    if mode not in {'read-only', 'sandbox-write', 'admin-write'}:
+        raise ValueError(f"unknown SQL guardrail mode: {mode}")
+
+    def reject(reason):
+        raise ValueError(f"SQL policy violation ({mode}): {reason}")
+
+    statement = sql.rstrip().rstrip('; \t\r\n')
+    # Preserve quoted identifiers, mask literals, and ignore SQL comments. Doubled
+    # quotes are SQL escapes; semicolons inside either quote type are harmless.
+    tokens = []
+    pattern = r"--[^\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[^\s]"
+    for match in re.finditer(pattern, statement):
+        token = match.group()
+        if token.startswith(('--', '/*')):
+            continue
+        if token == ';':
+            reject('multiple statements are not allowed')
+        tokens.append("'literal'" if token.startswith("'") else token)
+    keywords = {t.upper() for t in tokens if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', t)}
+    destructive = keywords & {'DROP', 'TRUNCATE', 'DELETE', 'GRANT', 'REVOKE'}
+    if destructive:
+        reject('destructive statement: ' + ', '.join(sorted(destructive)))
+    mutations = keywords & {'INSERT', 'UPDATE', 'MERGE', 'CREATE', 'ALTER', 'CALL'}
+    if not mutations:
+        return statement
+    if mode == 'read-only':
+        reject('write statements are not allowed')
+
+    # Match only the supported write forms, including quoted qualified names.
+    normalized = ' '.join(tokens)
+    ident = r'(?:[A-Za-z_][A-Za-z_0-9]*|"(?:[^"]|"")+")'
+    def name(value):
+        return rf'(?:{value}|"{value}")'
+    dot = r'\s*\.\s*'
+    catalog = name('iceberg') + dot
+    schemas = name('sandbox') if mode == 'sandbox-write' else rf'(?:{name("sandbox")}|{name("marts")})'
+    target = catalog + schemas + dot + ident
+    schema = name('sandbox') if mode == 'sandbox-write' else ident
+    rollback_target = catalog + schema + dot + ident
+    allowed = [
+        rf'CREATE SCHEMA IF NOT EXISTS {catalog}{schema}',
+        rf'CREATE (?:OR REPLACE )?TABLE {target}(?=\s|\(|$)(?!\s*\.).*',
+        rf'INSERT INTO {target}(?=\s|\(|$)(?!\s*\.).*',
+        rf'ALTER TABLE {rollback_target} EXECUTE rollback_to_snapshot\s*\(\s*[0-9]+\s*\)',
+    ]
+    if not any(re.fullmatch(p, normalized, re.I | re.S) for p in allowed):
+        reject('write target or operation is not permitted')
+    return statement
+
+
+def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000, mode='read-only'):
     size = warehouse(size)
     if not sql or not sql.strip():
         raise ValueError("query requires non-empty SQL")
     if max_rows < 1:
         raise ValueError("max-rows must be >= 1")
+    sql = check_sql_policy(sql, mode)
     started = time.monotonic()
     auto_woken = status(size)["replicas"] == 0
     try:
@@ -178,7 +232,7 @@ def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=100
         telemetry("query", int((time.monotonic() - started) * 1000), status="failed")
         raise
     return finish(dict(warehouse=size, action="query", result="verified", auto_woken=auto_woken,
-                       **result, row_count=len(result["rows"])), started)
+                       **result, row_count=len(result["rows"]), mode=mode), started)
 
 
 def main():
@@ -193,12 +247,13 @@ def main():
             command.add_argument("--schema")
             command.add_argument("--no-auto-wake", action="store_true")
             command.add_argument("--max-rows", type=int, default=1000)
+            command.add_argument("--mode", default="read-only", choices=['read-only', 'sandbox-write', 'admin-write'])
     args = parser.parse_args()
     try:
         if args.action == "status":
             result = status(args.warehouse)
         elif args.action == "query":
-            result = query(args.warehouse, args.sql, args.catalog, args.schema, args.no_auto_wake, args.max_rows)
+            result = query(args.warehouse, args.sql, args.catalog, args.schema, args.no_auto_wake, args.max_rows, mode=args.mode)
         else:
             result = transition(args.action, args.warehouse)
         print(json.dumps(result))

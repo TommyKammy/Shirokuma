@@ -16,6 +16,97 @@ SPEC.loader.exec_module(b)
 
 
 class BearsResidentTests(unittest.TestCase):
+    def test_audit_table(self):
+        for columns in ([['a', 'bigint'], ['dotted.col', 'varchar']], []):
+            responses = [{'rows': [[3]]}, {'rows': columns}]
+            if columns:
+                responses.append({'rows': [[0, 2]]})
+            responses.extend([{'rows': [[1, 'x']]}, {'rows': [[123]]}])
+            with patch.object(b, 'sql', side_effect=responses) as execute:
+                audit = b.audit_table('url', 'iceberg.sandbox.custom')
+            self.assertEqual(audit['row_count'], 3)
+            self.assertEqual(audit['column_count'], len(columns))
+            self.assertEqual(audit['null_counts'], {'a': 0, 'dotted.col': 2} if columns else {})
+            self.assertEqual(audit['snapshot_id'], 123)
+            self.assertTrue(audit['quality_passed'])
+            self.assertIn('"custom$snapshots"', execute.call_args.args[1])
+            if columns:
+                self.assertIn('COUNT("dotted.col")', execute.call_args_list[2].args[1])
+
+    def test_explicit_sql_stage_and_dry_run(self):
+        for stage in (None, 'custom', 'iceberg.sandbox.custom', 'sandbox.custom'):
+            with patch.object(b, 'sql', return_value={'rows': []}) as execute, \
+                 patch.object(b, 'audit_table', return_value={'quality_passed': True}) as audit, \
+                 patch.object(b.wr, 'http_json') as model:
+                result = b.data(Args(request='', sql='SELECT 42; ', stage_table=stage))
+            self.assertTrue(result['valid'])
+            model.assert_not_called()
+            if stage:
+                self.assertEqual(result['staged_table'], 'iceberg.sandbox.custom')
+                self.assertEqual(result['wap_action'], 'stage')
+                self.assertEqual(execute.call_args_list[1].args[1], 'CREATE SCHEMA IF NOT EXISTS iceberg.sandbox')
+                self.assertEqual(execute.call_args.args[1], 'CREATE OR REPLACE TABLE "iceberg"."sandbox"."custom" AS SELECT 42')
+                audit.assert_called_once()
+            else:
+                self.assertNotIn('wap_action', result)
+                execute.assert_called_once_with('http://trino', 'EXPLAIN SELECT 42')
+                audit.assert_not_called()
+
+    def test_stage_validation_and_quality_failures(self):
+        for statement in ('SELECT 1; DELETE FROM x', 'WITH x AS (SELECT 1) INSERT INTO t SELECT * FROM x', 'DELETE FROM x'):
+            with patch.object(b, 'sql') as execute:
+                self.assertFalse(b.data(Args(request='', sql=statement, stage_table='t'))['valid'])
+                execute.assert_not_called()
+        with patch.object(b, 'sql', side_effect=RuntimeError('bad syntax')) as execute:
+            self.assertFalse(b.data(Args(sql='SELECT bad', stage_table='t'))['valid'])
+            self.assertEqual(execute.call_count, 1)
+        with patch.object(b, 'sql', return_value={}), patch.object(b, 'audit_table', return_value={'quality_passed': False}):
+            self.assertFalse(b.data(Args(sql='SELECT 1', stage_table='t'))['valid'])
+
+    def test_publish_and_empty_source(self):
+        for name in ('custom', 'sandbox.custom', 'marts.custom', 'iceberg.sandbox.custom', 'iceberg.marts.custom'):
+            for previous in (123, None):
+                with patch.object(b, 'audit_table', side_effect=[{'quality_passed': True}, {'snapshot_id': 456}]), \
+                     patch.object(b, 'latest_snapshot', side_effect=RuntimeError('not found') if previous is None else None, return_value=previous), \
+                     patch.object(b, 'sql', return_value={}) as execute:
+                    result = b.data(Args(publish=name))
+                self.assertEqual(result['previous_snapshot_id'], previous)
+                self.assertEqual(result['published_snapshot_id'], 456)
+                self.assertEqual(result['wap_action'], 'publish')
+                self.assertTrue(result['valid'])
+                execute.assert_called_once_with('http://trino', 'CREATE OR REPLACE TABLE "iceberg"."marts"."custom" AS SELECT * FROM "iceberg"."sandbox"."custom"')
+        with patch.object(b, 'audit_table', return_value={'quality_passed': False}), patch.object(b, 'sql') as execute:
+            result = b.data(Args(publish='custom'))
+            self.assertFalse(result['valid'])
+            self.assertIn('row_count must be > 0', result['error'])
+            execute.assert_not_called()
+
+    def test_rollback_and_invalid_arguments(self):
+        with patch.object(b, 'sql') as execute, patch.object(b, 'audit_table', return_value={}):
+            self.assertEqual(b.data(Args(rollback='t', snapshot_id=0))['restored_snapshot_id'], 0)
+        self.assertIn('rollback_to_snapshot(0)', execute.call_args.args[1])
+        for name in ('custom', 'marts.custom', 'iceberg.marts.custom', 'other.custom'):
+            with patch.object(b, 'sql', return_value={}) as execute, patch.object(b, 'audit_table', return_value={'snapshot_id': 12}):
+                result = b.data(Args(rollback=name, snapshot_id='0012'))
+            self.assertEqual(result['restored_snapshot_id'], 12)
+            self.assertEqual(result['wap_action'], 'rollback')
+            self.assertTrue(result['valid'])
+            self.assertIn('EXECUTE rollback_to_snapshot(12)', execute.call_args.args[1])
+        for args in (Args(), Args(rollback='t'), Args(rollback='t', snapshot_id='-1'),
+                     Args(rollback='t', snapshot_id='1); DROP TABLE t'),
+                     Args(sql='SELECT 1', stage_table='other.t'), Args(publish='t; DELETE'),
+                     Args(rollback='other.catalog.schema.t', snapshot_id=12)):
+            with self.subTest(args=args), patch.object(b, 'sql') as execute, self.assertRaises(ValueError):
+                b.data(args)
+            execute.assert_not_called()
+
+    def test_data_parser_optional_request_and_wap_flags(self):
+        with patch.object(sys, 'argv', ['bears', 'data', '--sql', 'SELECT 1', '--stage-table', 't', '--publish', 't', '--rollback', 't', '--snapshot-id', '12']), \
+             patch.object(b, 'run', return_value={}) as run, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(b.main(), 0)
+        args = run.call_args.args[0]
+        self.assertEqual((args.request, args.sql, args.stage_table, args.publish, args.rollback, args.snapshot_id), ('', 'SELECT 1', 't', 't', 't', '12'))
+
     def setUp(self):
         self.connection = patch.object(b.wr, "trino", return_value=contextlib.nullcontext("http://trino"))
         self.connection.start()

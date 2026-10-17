@@ -1,4 +1,4 @@
-"""Five resident lab Bears; observations and advice never mutate workloads."""
+"""Five resident lab Bears with explicit sandbox, publish, and rollback actions."""
 import argparse
 import json
 import os
@@ -95,21 +95,107 @@ def query(args):
                 "recommendations": recommendations})
 
 
+def latest_snapshot(url, table):
+    rows = sql(url, 'SELECT snapshot_id FROM ' + identifier(table + '$snapshots') +
+               ' ORDER BY committed_at DESC LIMIT 1')['rows']
+    return rows[0][0] if rows else None
+
+
+def audit_table(url, full_table_name):
+    table = identifier(full_table_name)
+    row_count = sql(url, 'SELECT COUNT(*) FROM ' + table)['rows'][0][0]
+    columns = [dict(name=row[0], type=row[1]) for row in
+               sql(url, 'SHOW COLUMNS FROM ' + table)['rows']]
+    null_counts = {}
+    if columns:
+        counts = sql(url, 'SELECT ' + ', '.join(
+            'COUNT(*) - COUNT("' + c['name'].replace('"', '""') + '")' for c in columns) +
+            ' FROM ' + table)['rows'][0]
+        null_counts = dict(zip([c['name'] for c in columns], counts))
+    sample_rows = sql(url, 'SELECT * FROM ' + table + ' LIMIT 5')['rows']
+    return dict(table=full_table_name, row_count=row_count, column_count=len(columns),
+                columns=columns, null_counts=null_counts, sample_rows=sample_rows,
+                snapshot_id=latest_snapshot(url, full_table_name), quality_passed=row_count > 0)
+
+
+def data_table(value, rollback=False):
+    """Normalize explicit lab table names without accepting SQL fragments."""
+    parts = value.split('.')
+    if parts[0] == 'iceberg':
+        parts = parts[1:]
+    if not 1 <= len(parts) <= 2 or not all(re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', p) for p in parts):
+        raise ValueError('invalid data table name')
+    if rollback:
+        return 'iceberg.' + ('.'.join(parts) if len(parts) == 2 else 'marts.' + parts[0])
+    if len(parts) == 2 and parts[0] not in {'sandbox', 'marts'}:
+        raise ValueError('stage/publish table must use sandbox or marts')
+    return parts[-1]
+
+
 def data(args):
+    request = getattr(args, 'request', '')
+    rollback = getattr(args, 'rollback', None)
+    publish = getattr(args, 'publish', None)
+    if rollback:
+        snapshot = str(getattr(args, 'snapshot_id', ''))
+        if not re.fullmatch(r'[0-9]+', snapshot):
+            raise ValueError('rollback requires a digits-only snapshot-id')
+        target = data_table(rollback, rollback=True)
+        statement = wr.check_sql_policy('ALTER TABLE ' + identifier(target) +
+            f' EXECUTE rollback_to_snapshot({int(snapshot)})', mode='admin-write')
+        with wr.trino() as url:
+            sql(url, statement)
+            audit = audit_table(url, target)
+        return dict(wap_action='rollback', table=target, restored_snapshot_id=int(snapshot), audit=audit, valid=True)
+    if publish:
+        name = data_table(publish)
+        source, target = 'iceberg.sandbox.' + name, 'iceberg.marts.' + name
+        with wr.trino() as url:
+            source_audit = audit_table(url, source)
+            if not source_audit['quality_passed']:
+                return dict(wap_action='publish', table=target, source_table=source, valid=False,
+                            audit=source_audit, error='sandbox table failed quality audit (row_count must be > 0)')
+            previous = attempt(lambda: dict(snapshot_id=latest_snapshot(url, target))).get('snapshot_id')
+            statement = wr.check_sql_policy('CREATE OR REPLACE TABLE ' + identifier(target) +
+                ' AS SELECT * FROM ' + identifier(source), mode='admin-write')
+            sql(url, statement)
+            audit = audit_table(url, target)
+        return dict(wap_action='publish', source_table=source, table=target, previous_snapshot_id=previous,
+                    published_snapshot_id=audit['snapshot_id'], audit=audit, valid=True)
+    explicit_sql = getattr(args, 'sql', None)
+    if not explicit_sql and not request:
+        raise ValueError('data bear requires request, --sql, --publish, or --rollback')
+    stage = getattr(args, 'stage_table', None)
+    staged_table = 'iceberg.sandbox.' + data_table(stage) if stage else None
     with wr.trino() as url:
-        sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny')")
-        body = {"model": os.environ.get("BEAR_MODEL", "qwen3.8-flash-next"), "temperature": 0,
-                "max_tokens": 512, "enable_thinking": False,
-                "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML."},
-                             {"role": "user", "content": json.dumps({"request": args.request, "sources": sources["rows"]})}]}
-        completion = wr.http_json(os.environ.get("BEAR_MODEL_URL", "http://127.0.0.1:8001/v1") +
-                                  "/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"}, timeout=30)
-        content = completion["choices"][0]["message"]["content"].strip()
-        if content.startswith("```"):
-            content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.MULTILINE).strip()
-        statement = json.loads(content)["generated_sql"].strip()
-        validation = attempt(lambda: sql(url, "EXPLAIN " + statement)) if re.match(r"(?i)^(SELECT|WITH)\b", statement) else {"error": "SELECT model required"}
-    return dict(intent=args.request, generated_sql=statement, valid="error" not in validation, validation=validation)
+        statement = explicit_sql.strip() if explicit_sql else generate_data_sql(url, request)
+        def validate():
+            if not re.match(r'(?i)^(SELECT|WITH)\b', statement):
+                raise ValueError('SELECT model required')
+            return sql(url, 'EXPLAIN ' + wr.check_sql_policy(statement, mode='read-only'))
+        validation = attempt(validate)
+        if staged_table and 'error' not in validation:
+            sql(url, wr.check_sql_policy('CREATE SCHEMA IF NOT EXISTS iceberg.sandbox', mode='sandbox-write'))
+            sql(url, wr.check_sql_policy('CREATE OR REPLACE TABLE ' + identifier(staged_table) +
+                ' AS ' + wr.check_sql_policy(statement), mode='sandbox-write'))
+            audit = audit_table(url, staged_table)
+            return dict(wap_action='stage', intent=request, generated_sql=statement,
+                        valid=audit['quality_passed'], validation=validation, staged_table=staged_table, audit=audit)
+    return dict(intent=request, generated_sql=statement, valid='error' not in validation, validation=validation)
+
+
+def generate_data_sql(url, request):
+    sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny')")
+    body = {"model": os.environ.get("BEAR_MODEL", "qwen3.8-flash-next"), "temperature": 0,
+            "max_tokens": 512, "enable_thinking": False,
+            "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML."},
+                         {"role": "user", "content": json.dumps({"request": request, "sources": sources["rows"]})}]}
+    completion = wr.http_json(os.environ.get("BEAR_MODEL_URL", "http://127.0.0.1:8001/v1") +
+                              "/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"}, timeout=30)
+    content = completion["choices"][0]["message"]["content"].strip()
+    if content.startswith("```"):
+        content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.MULTILINE).strip()
+    return json.loads(content)["generated_sql"].strip()
 
 
 def catalog(args):
@@ -188,7 +274,10 @@ def main():
     command = sub.add_parser("query")
     command.add_argument("target", nargs="?", default="latest")
     command.add_argument("--sql")
-    sub.add_parser("data").add_argument("request")
+    command = sub.add_parser("data")
+    command.add_argument("request", nargs="?", default="")
+    for flag in ('sql', 'stage-table', 'publish', 'rollback', 'snapshot-id'):
+        command.add_argument('--' + flag)
     command = sub.add_parser("catalog")
     command.add_argument("action", nargs="?", choices=["search", "lineage", "describe"], default="search")
     command.add_argument("table", nargs="?")
