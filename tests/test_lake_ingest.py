@@ -1,6 +1,7 @@
 import contextlib
 import base64
 import csv
+from decimal import Decimal
 import io
 import json
 from pathlib import Path
@@ -17,6 +18,44 @@ import lake_ingest as lake
 
 
 class LakeIngestTests(unittest.TestCase):
+    def test_upsert_casts_incoming_to_existing_decimal_types(self):
+        self.execute.side_effect = lambda url, sql: {'rows': [['id', 'decimal(20,2)'],
+            ['amount', 'decimal(38,8)']]} if sql.startswith('DESCRIBE') else {}
+        lake.ingest(filename='orders.csv', content='id,amount\n1.0,1.25\n', mode='upsert', key='id')
+        merged = self.statements()[-2]
+        self.assertIn('CAST(t."id" AS decimal(20,2)) AS "id"', merged)
+        self.assertIn('CAST(t."amount" AS decimal(38,8)) AS "amount"', merged)
+
+    def test_decimal_deduplication_retains_last_equivalent_key(self):
+        report = lake.ingest(filename='orders.csv', content='id,name\n1.0,first\n1.00,last\n-0.0,old\n0.00,new\n',
+                             mode='upsert', key='id', schema_hints={'id': 'DECIMAL(20,2)'})
+        self.assertEqual(report['rows_ingested'], 2)
+        self.assertNotIn("'first'", self.statements()[1])
+        self.assertNotIn("'old'", self.statements()[1])
+        self.assertEqual(lake.literal('1.0', 'DECIMAL(20,2)'), lake.literal('1.00', 'DECIMAL(20,2)'))
+
+    def test_json_decimal_precision_survives_loader_and_sql_literal(self):
+        amount = '12345678901234567890.123456789012345678'
+        for suffix, content in [('json', '[{"amount": ' + amount + '}]'),
+                                ('jsonl', '{"amount": ' + amount + '}\n')]:
+            with self.subTest(suffix=suffix):
+                path = self.file('orders.' + suffix, content)
+                hints = {'amount': 'DECIMAL(38,18)'}
+                value = lake.read_file(path, schema_hints=hints)[2][0][0]
+                self.assertIsInstance(value, Decimal)
+                self.assertEqual(str(value), amount)
+                lake.ingest(path, schema_hints=hints)
+                self.assertIn(f"CAST('{amount}' AS DECIMAL(38,18))", self.statements()[-3])
+
+    def test_nested_json_decimal_keeps_numeric_json_type(self):
+        amount = '12345678901234567890.123456789012345678'
+        path = self.file('nested.jsonl', '{"payload": {"amounts": [' + amount + ']}}')
+        value = lake.read_file(path)[2][0][0]
+        encoded = lake.json_text(value)
+        self.assertEqual(json.loads(encoded, parse_float=Decimal)['amounts'], [Decimal(amount)])
+        self.assertIn(amount, encoded)
+        self.assertNotIn('"' + amount + '"', encoded)
+
     def test_export_full_and_limited_row_count_verification(self):
         rows = [[i] for i in range(10001)]
         for options, exported in (({}, rows), ({'max_rows': None}, rows),
@@ -317,7 +356,8 @@ class LakeIngestTests(unittest.TestCase):
             self.assertIn(values, statement)
             self.assertIn(stage, statement)
         self.assertEqual(statements[5],
-                f'CREATE OR REPLACE TABLE {target} AS WITH incoming AS (SELECT * FROM {stage}) '
+                f'CREATE OR REPLACE TABLE {target} AS WITH incoming AS (SELECT CAST(t."id" AS BIGINT) AS "id", '
+                f'CAST(t."name" AS VARCHAR) AS "name" FROM {stage} t) '
                 f'SELECT t."id" AS "id", t."name" AS "name" FROM incoming t LEFT JOIN {target} old '
                 'ON t."id" IS NOT DISTINCT FROM old."id" '
                 f'UNION ALL SELECT old."id", old."name" FROM {target} old '
@@ -488,7 +528,7 @@ class LakeIngestTests(unittest.TestCase):
         args = ['ingest', str(path), '--schema-hints', '{"金額": "DECIMAL(12,4)"}', '--encoding', 'cp932']
         with patch.object(sys, 'argv', args), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(lake.main(), 0)
-        self.assertIn("CAST('123.4500' AS DECIMAL(12,4))", self.statements()[1])
+        self.assertIn("CAST('123.45' AS DECIMAL(12,4))", self.statements()[1])
 
     def test_literals_mask_sql_fragments(self):
         value = "x'); DROP TABLE iceberg.raw.t; --"

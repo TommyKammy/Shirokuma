@@ -19,6 +19,7 @@ import re
 import sqlite3
 import sys
 import tempfile
+import uuid
 
 import lake_ingest
 import warehouse_resident as wr
@@ -327,8 +328,40 @@ def reconcile(source_table, target_table, *, key=None, amount_col=None, **connec
 
 
 def sync(source_table, target_table, *, mode='replace', key=None, amount_col=None, **connection):
-    extract(source_table, target_table, mode=mode, key=key, **connection)
-    return reconcile(source_table, target_table, key=key, amount_col=amount_col, **connection)
+    target = lake_ingest.target_table(target_table, Path('source.csv'))
+    if mode not in {'replace', 'append', 'upsert'}:
+        raise ValueError('mode must be replace, append, or upsert')
+    if mode == 'upsert' and not key:
+        raise ValueError('upsert requires --key')
+    stage = target + '__sync_stage_' + uuid.uuid4().hex
+    sql_target, sql_stage = wr.identifier(target), wr.identifier(stage)
+    with wr.trino() as url:
+        def execute(statement):
+            return lake_ingest.bears.sql(url, wr.check_sql_policy(statement, mode='admin-write'))
+        try:
+            extracted = extract(source_table, stage, mode='upsert' if mode == 'upsert' else 'replace',
+                                key=key, **connection)
+            report = reconcile(source_table, stage, key=key, amount_col=amount_col, **connection)
+            schema = list(extracted['schema_hints'].items())
+            if mode == 'replace':
+                execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM {sql_stage}')
+            elif mode == 'append':
+                execute(f'CREATE TABLE IF NOT EXISTS {sql_target} (' +
+                        ', '.join(f'{identifier(c)} {t}' for c, t in schema) + ')')
+                columns = ', '.join(identifier(c) for c, _ in schema)
+                execute(f'INSERT INTO {sql_target} ({columns}) SELECT {columns} FROM {sql_stage}')
+            else:
+                lake_ingest.upsert_from_stage(execute, sql_target, sql_stage, schema,
+                                             [lake_ingest.sanitize(key)], bool(extracted['row_count']))
+            return dict(report, target_table=target)
+        finally:
+            failed = sys.exc_info()[0] is not None
+            try:
+                lake_ingest.bears.sql(url, f'DROP TABLE IF EXISTS {sql_stage}')
+            except Exception:
+                if not failed:
+                    raise
+                # Preserve the extraction/reconciliation error if cleanup also fails.
 
 
 def main(argv=None):

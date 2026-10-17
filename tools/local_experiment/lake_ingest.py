@@ -4,6 +4,7 @@ import base64
 import csv
 from contextlib import contextmanager
 from datetime import date
+from decimal import Decimal
 import json
 import io
 import math
@@ -77,8 +78,8 @@ def read_file(path, format='auto', schema_hints=None, encoding=None):
                     raise ValueError('CSV row has more values than headers')
             else:
                 content = stream.read()
-                rows = (json.loads(content) if content.lstrip().startswith('[') else
-                        [json.loads(line) for line in content.splitlines() if line.strip()])
+                rows = (json.loads(content, parse_float=Decimal) if content.lstrip().startswith('[') else
+                        [json.loads(line, parse_float=Decimal) for line in content.splitlines() if line.strip()])
                 if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
                     raise ValueError('JSON input must contain objects')
                 columns = list(dict.fromkeys(key for row in rows for key in row))
@@ -116,7 +117,7 @@ def integer(value):
 
 
 def numeric(value):
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal, str)):
         return False
     try:
         return math.isfinite(float(value))
@@ -149,6 +150,18 @@ def infer_type(values):
     return 'VARCHAR'
 
 
+def json_text(value):
+    """Serialize nested JSON without changing exact decimal numbers into strings."""
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return '{' + ', '.join(json.dumps(k, ensure_ascii=False) + ': ' + json_text(v)
+                               for k, v in value.items()) + '}'
+    if isinstance(value, list):
+        return '[' + ', '.join(json_text(v) for v in value) + ']'
+    return json.dumps(value, ensure_ascii=False)
+
+
 def literal(value, sql_type):
     sql_type = sql_type.upper()
     if is_null(value) or sql_type != 'VARCHAR' and value == '':
@@ -161,7 +174,15 @@ def literal(value, sql_type):
         return f'CAST({int(value)} AS BIGINT)'
     if sql_type == 'DOUBLE':
         return f'CAST({float(value)!r} AS DOUBLE)'
-    text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+    text = json_text(value) if isinstance(value, (dict, list)) else str(value)
+    if sql_type.startswith('DECIMAL'):
+        # Avoid normalize(), which can round 38-digit values to the context precision.
+        number = Decimal(str(value))
+        text = format(number, 'f')
+        if '.' in text:
+            text = text.rstrip('0').rstrip('.')
+        if number == 0:
+            text = '0'
     quoted = wr.literal(text)
     if sql_type.startswith('DECIMAL'):
         return f'CAST({quoted} AS {sql_type})'
@@ -197,6 +218,39 @@ def preview(file=None, *, filename=None, content=None, format='auto', limit=10,
     return dict(action='preview', file=str(Path(filename).name if filename else file),
                 format=detected, columns=[dict(name=c, type=t) for c, t in schema],
                 row_count=len(rows), sample_rows=rows[:max(1, int(limit))])
+
+
+def upsert_from_stage(execute, sql_target, sql_stage, schema, key_cols, has_rows=True):
+    """Merge a loaded stage while retaining the target's column order and types."""
+    execute('CREATE TABLE IF NOT EXISTS ' + sql_target + ' (' +
+            ', '.join(f'"{c}" {t}' for c, t in schema) + ')')
+    if not has_rows:
+        return
+    existing = [(row[0], row[1]) for row in execute('DESCRIBE ' + sql_target)['rows']]
+    existing_names = {name for name, _ in existing}
+    if any(c not in existing_names for c in key_cols):
+        raise ValueError('upsert keys must exist in the target table')
+    merged_schema = existing + [(c, t) for c, t in schema if c not in existing_names]
+    def quoted_column(column):
+        return '"' + column.replace('"', '""') + '"'
+    incoming_names = {c for c, _ in schema}
+    # Cast before the join as well as UNION so both use the target's key types.
+    incoming = ', '.join(
+        f'CAST(t.{quoted_column(c)} AS {t}) AS {quoted_column(c)}'
+        for c, t in merged_schema if c in incoming_names)
+    updated = ', '.join(
+        f'{"t" if c in incoming_names else "old"}.{quoted_column(c)} AS {quoted_column(c)}'
+        for c, _ in merged_schema)
+    retained = ', '.join(
+        f'old.{quoted_column(c)}' if c in existing_names else f'CAST(NULL AS {t})'
+        for c, t in merged_schema)
+    match = ' AND '.join(f't.{quoted_column(c)} IS NOT DISTINCT FROM old.{quoted_column(c)}'
+                         for c in key_cols)
+    execute(f'CREATE OR REPLACE TABLE {sql_target} AS '
+            f'WITH incoming AS (SELECT {incoming} FROM {sql_stage} t) '
+            f'SELECT {updated} FROM incoming t LEFT JOIN {sql_target} old ON {match} '
+            f'UNION ALL SELECT {retained} FROM {sql_target} old '
+            f'WHERE NOT EXISTS (SELECT 1 FROM incoming t WHERE {match})')
 
 
 def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500, key=None,
@@ -240,34 +294,6 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
             execute('CREATE SCHEMA IF NOT EXISTS ' + '.'.join(target.split('.')[:2]))
             sql_stage = (wr.identifier(f'{target}__stage_{uuid.uuid4().hex[:8]}')
                          if mode in {'replace', 'upsert'} or atomic_append else None)
-            def upsert_from_stage():
-                execute('CREATE TABLE IF NOT EXISTS ' + sql_target + ' (' +
-                        ', '.join(f'"{c}" {t}' for c, t in schema) + ')')
-                if not rows:
-                    return
-                existing = [(row[0], row[1]) for row in execute('DESCRIBE ' + sql_target)['rows']]
-                if any(c not in {name for name, _ in existing} for c in key_cols):
-                    raise ValueError('upsert keys must exist in the target table')
-                # Keep target order/types and columns absent from the input.
-                merged_schema = existing + [(c, t) for c, t in schema
-                                            if c not in {name for name, _ in existing}]
-                def quoted_column(column):
-                    return '"' + column.replace('"', '""') + '"'
-                incoming_names = {c for c, _ in schema}
-                existing_names = {c for c, _ in existing}
-                updated = ', '.join(
-                    f'{"t" if c in incoming_names else "old"}.{quoted_column(c)} AS {quoted_column(c)}'
-                    for c, _ in merged_schema)
-                retained = ', '.join(
-                    f'old.{quoted_column(c)}' if c in existing_names else f'CAST(NULL AS {t})'
-                    for c, t in merged_schema)
-                match = ' AND '.join(f't.{quoted_column(c)} IS NOT DISTINCT FROM old.{quoted_column(c)}'
-                                     for c in key_cols)
-                execute(f'CREATE OR REPLACE TABLE {sql_target} AS '
-                        f'WITH incoming AS (SELECT * FROM {sql_stage}) '
-                        f'SELECT {updated} FROM incoming t LEFT JOIN {sql_target} old ON {match} '
-                        f'UNION ALL SELECT {retained} FROM {sql_target} old '
-                        f'WHERE NOT EXISTS (SELECT 1 FROM incoming t WHERE {match})')
             try:
                 load_target = sql_stage or sql_target
                 if mode == 'append':
@@ -288,7 +314,7 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
                 if mode == 'replace':
                     execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM {sql_stage}')
                 elif mode == 'upsert':
-                    upsert_from_stage()
+                    upsert_from_stage(execute, sql_target, sql_stage, schema, key_cols, bool(rows))
                 elif mode == 'append' and sql_stage:
                     execute(f'INSERT INTO {sql_target} ({columns}) SELECT {columns} FROM {sql_stage}')
             finally:

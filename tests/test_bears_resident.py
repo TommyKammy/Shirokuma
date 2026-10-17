@@ -216,7 +216,7 @@ class BearsResidentTests(unittest.TestCase):
              patch.object(b, 'audit_table', return_value={'quality_passed': True, 'snapshot_id': 12}):
             self.assertTrue(b.data(Args(sql=statement, request='order items', stage_table='dynamic_orders'))['valid'])
         with patch.object(b, 'sql', return_value={'rows': []}), \
-             patch.object(b, 'latest_snapshot', return_value=None), \
+             patch.object(b, 'latest_snapshot', return_value=12), \
              patch.object(b, 'audit_table', side_effect=[dict(row_count=10, null_counts={}), dict(snapshot_id=34)]):
             self.assertTrue(b.data(Args(publish='dynamic_orders'))['valid'])
         entry = b.load_wap_registry()['dynamic_orders']
@@ -241,8 +241,11 @@ class BearsResidentTests(unittest.TestCase):
         for override in (None, 'SELECT * FROM raw.updated'):
             saved = 'SELECT * FROM raw.orders'
             b.save_wap_entry('dynamic_orders', sql=saved, intent='count orders')
-            with patch.object(b, 'sql', return_value={'rows': []}) as execute, \
-                 patch.object(b, 'latest_snapshot', return_value=12), \
+            def sql(_url, statement):
+                return {'rows': [['dynamic_orders']] if 'information_schema.tables' in statement else
+                        [[10]] if statement.startswith('SELECT COUNT') else []}
+            with patch.object(b, 'sql', side_effect=sql) as execute, \
+                 patch.object(b, 'latest_snapshot', side_effect=[23, 12]), \
                  patch.object(b, 'audit_table', side_effect=[dict(row_count=10, null_counts={}, snapshot_id=23),
                                                            dict(snapshot_id=34)]):
                 result = b.data(Args(refresh='iceberg.marts.dynamic_orders', sql=override, allow_shrink=True))
@@ -255,7 +258,7 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(execute.call_args_list[0].args[1], 'CREATE SCHEMA IF NOT EXISTS iceberg.sandbox')
             self.assertEqual(execute.call_args_list[1].args[1],
                              'CREATE OR REPLACE TABLE "iceberg"."sandbox"."dynamic_orders" AS ' + (override or saved))
-            self.assertEqual(execute.call_args_list[2].args[1],
+            self.assertEqual(execute.call_args_list[-1].args[1],
                              'CREATE OR REPLACE TABLE "iceberg"."marts"."dynamic_orders" AS SELECT * FROM "iceberg"."sandbox"."dynamic_orders" FOR VERSION AS OF 23')
             entry = b.load_wap_registry()['dynamic_orders']
             self.assertEqual(entry['intent'], 'count orders')
@@ -274,7 +277,8 @@ class BearsResidentTests(unittest.TestCase):
                 (49, 0, 1, True, True), (50, 0, 1, False, True)):
             def execute(_url, statement):
                 return {'rows': [[100]] if statement.startswith('SELECT COUNT') else
-                        [['id']] if statement.startswith('SHOW COLUMNS') else []}
+                        [['id']] if statement.startswith('SHOW COLUMNS') else
+                        [['orders']] if 'information_schema.tables' in statement else []}
             with self.subTest(count=count, nulls=nulls, minimum=minimum, allow_shrink=allow_shrink), \
                  patch.object(b, 'sql', side_effect=execute) as sql, \
                  patch.object(b, 'latest_snapshot', return_value=12), \
@@ -313,16 +317,16 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(execute.call_count, 4)
             self.assertEqual(execute.call_args_list[0].args[1], 'SHOW COLUMNS FROM "iceberg"."sandbox"."custom"')
             self.assertEqual(execute.call_args_list[2].args[1], 'SELECT * FROM "iceberg"."sandbox"."custom" LIMIT 5')
-            self.assertIn('"custom$snapshots"', execute.call_args.args[1])
+            self.assertIn('"custom$history"', execute.call_args.args[1])
             if columns:
                 self.assertEqual(execute.call_args_list[1].args[1],
                                  'SELECT COUNT(*), COUNT(*) - COUNT("a"), COUNT(*) - COUNT("dotted.col") FROM "iceberg"."sandbox"."custom"')
 
     def test_audit_empty_table_still_samples_and_escapes_columns(self):
         with patch.object(b, 'sql', side_effect=[{'rows': [['a"b', 'bigint']]},
-                 {'rows': [[0, 0]]}, {'rows': []}, {'rows': []}]) as execute:
+                 {'rows': [[0, 0]]}, {'rows': []}, {'rows': []}, {'rows': []}]) as execute:
             audit = b.audit_table('url', 'iceberg.sandbox.empty')
-        self.assertEqual(execute.call_count, 4)
+        self.assertEqual(execute.call_count, 5)
         self.assertIn('COUNT("a""b")', execute.call_args_list[1].args[1])
         self.assertEqual(audit['sample_rows'], [])
         self.assertFalse(audit['quality_passed'])
@@ -361,17 +365,18 @@ class BearsResidentTests(unittest.TestCase):
         for name in ('custom', 'sandbox.custom', 'marts.custom', 'iceberg.sandbox.custom', 'iceberg.marts.custom'):
             for previous in (123, None):
                 with patch.object(b, 'audit_table', side_effect=[{'row_count': 3, 'null_counts': {}, 'columns': []}, {'snapshot_id': 456}]), \
-                     patch.object(b, 'latest_snapshot', side_effect=RuntimeError('not found') if previous is None else None, return_value=previous), \
-                     patch.object(b, 'sql', side_effect=[{'rows': [[3]]}, {'rows': []}, {'rows': []}]
-                                  if previous is not None else [{'rows': []}]) as execute:
+                     patch.object(b, 'latest_snapshot', side_effect=[42, previous] if previous is not None else [42]), \
+                     patch.object(b, 'sql', side_effect=[{'rows': [['custom']]}, {'rows': [[3]]}, {'rows': []}, {'rows': []}]
+                                  if previous is not None else [{'rows': []}, {'rows': []}]) as execute:
                     result = b.data(Args(publish=name))
                 self.assertEqual(result['previous_snapshot_id'], previous)
                 self.assertEqual(result['published_snapshot_id'], 456)
                 self.assertEqual(result['wap_action'], 'publish')
                 self.assertTrue(result['valid'])
-                self.assertEqual(execute.call_count, 3 if previous is not None else 1)
-                self.assertEqual(execute.call_args.args, ('http://trino', 'CREATE OR REPLACE TABLE "iceberg"."marts"."custom" AS SELECT * FROM "iceberg"."sandbox"."custom"'))
-        with patch.object(b, 'audit_table', return_value={'row_count': 0, 'null_counts': {}}), patch.object(b, 'sql') as execute:
+                self.assertEqual(execute.call_count, 4 if previous is not None else 2)
+                self.assertEqual(execute.call_args.args, ('http://trino', 'CREATE OR REPLACE TABLE "iceberg"."marts"."custom" AS SELECT * FROM "iceberg"."sandbox"."custom" FOR VERSION AS OF 42'))
+        with patch.object(b, 'audit_table', return_value={'row_count': 0, 'null_counts': {}}), \
+             patch.object(b, 'latest_snapshot', return_value=42), patch.object(b, 'sql') as execute:
             result = b.data(Args(publish='custom'))
             self.assertFalse(result['valid'])
             self.assertIn('row_count must be > 0', result['error'])
@@ -390,6 +395,8 @@ class BearsResidentTests(unittest.TestCase):
                     return {'rows': [[100]]}
                 if statement.startswith('SHOW COLUMNS'):
                     return {'rows': [[c] for c in target_cols]}
+                if 'information_schema.tables' in statement:
+                    return {'rows': [['custom']]}
                 return {'rows': []}
             with self.subTest(count=count, target_cols=target_cols, allow_shrink=allow_shrink), \
                  patch.object(b, 'audit_table', side_effect=[source, {'snapshot_id': 456}]), \
@@ -412,7 +419,7 @@ class BearsResidentTests(unittest.TestCase):
             with self.subTest(responses=responses), \
                  patch.object(b, 'audit_table', return_value=source) as audit, \
                  patch.object(b, 'latest_snapshot', return_value=123), \
-                 patch.object(b, 'sql', side_effect=responses) as sql, \
+                 patch.object(b, 'sql', side_effect=[{'rows': [['custom']]}] + responses) as sql, \
                  patch.object(b, 'save_wap_entry') as save:
                 result = b.data(Args(publish='custom'))
             self.assertFalse(result['valid'])
@@ -420,22 +427,22 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(result['audit'], source)
             self.assertIn('publish blocked: failed to query baseline table for regression check (', result['error'])
             self.assertFalse(any(c.args[1].startswith('CREATE') for c in sql.call_args_list))
-            audit.assert_called_once_with('http://trino', 'iceberg.sandbox.custom')
+            audit.assert_called_once_with('http://trino', 'iceberg.sandbox.custom', snapshot_id=123)
             save.assert_not_called()
 
     def test_publish_pins_audited_snapshot(self):
-        for snapshot in (42, 9007199254740993, None):
+        for snapshot in (42, 9007199254740993):
             with self.subTest(snapshot=snapshot), \
                  patch.object(b, 'audit_table', side_effect=[
                      dict(row_count=3, null_counts={}, snapshot_id=snapshot), dict(snapshot_id=456)]), \
-                 patch.object(b, 'latest_snapshot', return_value=None), \
+                 patch.object(b, 'latest_snapshot', return_value=snapshot), \
                  patch.object(b, 'sql', return_value={'rows': []}) as sql:
                 self.assertTrue(b.data(Args(publish='custom'))['valid'])
             statement = ('CREATE OR REPLACE TABLE "iceberg"."marts"."custom" AS SELECT * FROM '
                          '"iceberg"."sandbox"."custom"')
             if snapshot is not None:
                 statement += f' FOR VERSION AS OF {snapshot}'
-            sql.assert_called_once_with('http://trino', statement)
+            self.assertEqual(sql.call_args.args, ('http://trino', statement))
 
     def test_publish_quality_assertions(self):
         for rows, minimum, not_null, nulls, valid, error in (
@@ -448,15 +455,15 @@ class BearsResidentTests(unittest.TestCase):
             source = dict(row_count=rows, null_counts=nulls)
             with self.subTest(rows=rows, minimum=minimum, not_null=not_null), \
                  patch.object(b, 'audit_table', side_effect=[source, {'snapshot_id': 456}]), \
-                 patch.object(b, 'latest_snapshot', return_value=None) as snapshot, \
-                 patch.object(b, 'sql') as sql:
+                 patch.object(b, 'latest_snapshot', return_value=42) as snapshot, \
+                 patch.object(b, 'sql', return_value={'rows': []}) as sql:
                 result = b.data(Args(publish='t', min_rows=minimum, not_null=not_null, allow_shrink=True))
             self.assertEqual(result['valid'], valid)
             self.assertEqual(source['quality_passed'], valid)
             if error:
                 self.assertIn(error, result['error'])
                 sql.assert_not_called()
-                snapshot.assert_not_called()
+                snapshot.assert_called_once_with('http://trino', 'iceberg.sandbox.t')
 
     def test_rollback_and_invalid_arguments(self):
         with patch.object(b, 'sql') as execute, patch.object(b, 'audit_table', return_value={}):

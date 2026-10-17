@@ -101,24 +101,33 @@ def save_wap_entry(b, name: str, **fields) -> dict:
 
 
 def latest_snapshot(b, url, table):
+    try:
+        rows = b.sql(url, 'SELECT snapshot_id FROM ' + b.identifier(table + '$history') +
+                     ' ORDER BY made_current_at DESC LIMIT 1')['rows']
+        if rows:
+            return rows[0][0]
+    except Exception:
+        pass  # Older connectors may not expose the history metadata table.
     rows = b.sql(url, 'SELECT snapshot_id FROM ' + b.identifier(table + '$snapshots') +
                ' ORDER BY committed_at DESC LIMIT 1')['rows']
     return rows[0][0] if rows else None
 
 
-def audit_table(b, url, full_table_name):
+def audit_table(b, url, full_table_name, snapshot_id=None):
     table = b.identifier(full_table_name)
     columns = [dict(name=row[0], type=row[1]) for row in
                b.sql(url, 'SHOW COLUMNS FROM ' + table)['rows']]
+    relation = table + (f' FOR VERSION AS OF {int(snapshot_id)}' if snapshot_id is not None else '')
     aggregates = ['COUNT(*)'] + [
         'COUNT(*) - COUNT("' + c['name'].replace('"', '""') + '")' for c in columns]
-    counts = b.sql(url, 'SELECT ' + ', '.join(aggregates) + ' FROM ' + table)['rows'][0]
+    counts = b.sql(url, 'SELECT ' + ', '.join(aggregates) + ' FROM ' + relation)['rows'][0]
     row_count = counts[0]
     null_counts = dict(zip([c['name'] for c in columns], counts[1:]))
-    sample_rows = b.sql(url, 'SELECT * FROM ' + table + ' LIMIT 5')['rows']
+    sample_rows = b.sql(url, 'SELECT * FROM ' + relation + ' LIMIT 5')['rows']
     return dict(table=full_table_name, row_count=row_count, column_count=len(columns),
                 columns=columns, null_counts=null_counts, sample_rows=sample_rows,
-                snapshot_id=b.latest_snapshot(url, full_table_name), quality_passed=row_count > 0)
+                snapshot_id=snapshot_id if snapshot_id is not None else b.latest_snapshot(url, full_table_name),
+                quality_passed=row_count > 0)
 
 
 def check_quality_assertions(audit, min_rows=1, not_null=''):
@@ -185,23 +194,35 @@ def data(b, args):
                 b.sql(url, b.wr.check_sql_policy('CREATE SCHEMA IF NOT EXISTS iceberg.sandbox', mode='sandbox-write'))
                 b.sql(url, b.wr.check_sql_policy('CREATE OR REPLACE TABLE ' + b.identifier(source) +
                     ' AS ' + saved_sql, mode='sandbox-write'))
-            source_audit = b.audit_table(url, source)
+            staged_snapshot = b.latest_snapshot(url, source)
+            if staged_snapshot is None:
+                raise RuntimeError('publish blocked: source snapshot unavailable')
+            source_audit = b.audit_table(url, source, snapshot_id=staged_snapshot)
             b.check_quality_assertions(source_audit, getattr(args, 'min_rows', 1), getattr(args, 'not_null', ''))
             if not source_audit['quality_passed']:
                 return dict(wap_action=action, table=target, source_table=source, valid=False,
                             audit=source_audit, error=source_audit.get('assertion_error') or
                             'sandbox table failed quality audit (row_count must be > 0)')
-            previous = b.attempt(lambda: dict(snapshot_id=b.latest_snapshot(url, target))).get('snapshot_id')
-            if previous is not None and not getattr(args, 'allow_shrink', False) and 'row_count' in source_audit:
+            previous = None
+            target_exists = bool(b.sql(url, 'SELECT table_name FROM iceberg.information_schema.tables '
+                "WHERE table_schema = 'marts' AND table_name = " + b.wr.literal(name))['rows'])
+            if target_exists:
                 try:
+                    previous = b.latest_snapshot(url, target)
+                    if previous is None:
+                        raise RuntimeError('target snapshot unavailable')
                     baseline = dict(
-                        row_count=b.sql(url, 'SELECT COUNT(*) FROM ' + b.identifier(target))['rows'][0][0],
+                        row_count=b.sql(url, 'SELECT COUNT(*) FROM ' + b.identifier(target) +
+                                        f' FOR VERSION AS OF {int(previous)}')['rows'][0][0],
                         columns=[r[0] for r in b.sql(url, 'SHOW COLUMNS FROM ' + b.identifier(target))['rows']])
+                    if type(baseline['row_count']) is not int or baseline['row_count'] < 0:
+                        raise RuntimeError('invalid baseline row count')
                 except Exception as exc:
                     return dict(wap_action=action, table=target, source_table=source,
                                 previous_snapshot_id=previous, valid=False, audit=source_audit,
                                 error='publish blocked: failed to query baseline table for regression check (' + str(exc) + ')')
-                target_count, target_cols = baseline.get('row_count'), baseline.get('columns', [])
+            if target_exists and not getattr(args, 'allow_shrink', False):
+                target_count, target_cols = baseline['row_count'], baseline['columns']
                 source_cols = {col['name'] for col in source_audit.get('columns', [])}
                 missing = [c for c in target_cols if c not in source_cols]
                 error = None
@@ -214,8 +235,7 @@ def data(b, args):
                     return dict(wap_action=action, table=target, source_table=source,
                                 previous_snapshot_id=previous, valid=False, audit=source_audit, error=error)
             statement = 'CREATE OR REPLACE TABLE ' + b.identifier(target) + ' AS SELECT * FROM ' + b.identifier(source)
-            if staged_snapshot := source_audit.get('snapshot_id'):
-                statement += f' FOR VERSION AS OF {staged_snapshot}'
+            statement += f' FOR VERSION AS OF {int(staged_snapshot)}'
             statement = b.wr.check_sql_policy(statement, mode='admin-write')
             b.sql(url, statement)
             audit = b.audit_table(url, target)

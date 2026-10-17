@@ -144,14 +144,59 @@ class SqlServerSyncTests(unittest.TestCase):
 
     def test_sync_order_and_extraction_failure(self):
         events = []
-        with patch.object(sync, 'extract', side_effect=lambda *a, **k: events.append('extract')), \
-             patch.object(sync, 'reconcile', side_effect=lambda *a, **k: events.append('reconcile')):
-            sync.sync(**self.options, key='id', amount_col='amount')
-        self.assertEqual(events, ['extract', 'reconcile'])
-        with patch.object(sync, 'extract', side_effect=RuntimeError('failed')), patch.object(sync, 'reconcile') as rec:
-            with self.assertRaises(RuntimeError):
+        for mode in ('replace', 'append', 'upsert'):
+            events.clear()
+            def extract(source, target, **kwargs):
+                self.assertIn('__sync_stage_', target)
+                events.append('extract')
+                return dict(schema_hints={'id': 'BIGINT'}, row_count=2)
+            def reconcile(source, target, **kwargs):
+                self.assertIn('__sync_stage_', target)
+                events.append('reconcile')
+                return {'status': 'matched'}
+            def execute(url, sql):
+                events.append(sql)
+                return {'rows': [['id', 'BIGINT']]}
+            with self.subTest(mode=mode), \
+                 patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')), \
+                 patch.object(sync.lake_ingest.bears, 'sql', side_effect=execute), \
+                 patch.object(sync, 'extract', side_effect=extract), \
+                 patch.object(sync, 'reconcile', side_effect=reconcile):
+                report = sync.sync(**self.options, mode=mode, key='id', amount_col='amount')
+            self.assertEqual(events[:2], ['extract', 'reconcile'])
+            self.assertTrue(events[-1].startswith('DROP TABLE IF EXISTS'))
+            self.assertEqual(report['target_table'], 'iceberg.raw.orders')
+            self.assertTrue(any('"iceberg"."raw"."orders"' in s for s in events[2:-1]))
+
+    def test_sync_failures_leave_target_untouched_and_drop_stage(self):
+        for mode in ('replace', 'append', 'upsert'):
+            for step in ('extract', 'reconcile'):
+                for error in (sync.ReconciliationError({'status': 'mismatch'}), RuntimeError('failed')):
+                    with self.subTest(mode=mode, step=step, error=error), \
+                         patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')), \
+                         patch.object(sync.lake_ingest.bears, 'sql') as sql, \
+                         patch.object(sync, 'extract', return_value={}) as extract, \
+                         patch.object(sync, 'reconcile', return_value={}) as rec:
+                        (extract if step == 'extract' else rec).side_effect = error
+                        with self.assertRaises(type(error)):
+                            sync.sync(**self.options, mode=mode, key='id')
+                        sql.assert_called_once()
+                        cleanup = sql.call_args.args[1]
+                        self.assertTrue(cleanup.startswith('DROP TABLE IF EXISTS'))
+                        self.assertIn('__sync_stage_', cleanup)
+                        self.assertNotIn('"orders"', cleanup)
+                        if step == 'extract':
+                            rec.assert_not_called()
+
+    def test_sync_cleanup_failure_preserves_reconciliation_error(self):
+        error = sync.ReconciliationError({'status': 'mismatch'})
+        with patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')), \
+             patch.object(sync, 'extract', return_value={}), \
+             patch.object(sync, 'reconcile', side_effect=error), \
+             patch.object(sync.lake_ingest.bears, 'sql', side_effect=RuntimeError('drop failed')):
+            with self.assertRaises(sync.ReconciliationError) as caught:
                 sync.sync(**self.options)
-            rec.assert_not_called()
+        self.assertIs(caught.exception, error)
 
     def test_sqlite_source_and_connection_closes(self):
         path = Path(self.temp.name) / 'source.sqlite'
