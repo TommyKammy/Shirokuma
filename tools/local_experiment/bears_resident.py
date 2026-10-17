@@ -127,8 +127,8 @@ def data_table(value, rollback=False):
         raise ValueError('invalid data table name')
     if rollback:
         return 'iceberg.' + ('.'.join(parts) if len(parts) == 2 else 'marts.' + parts[0])
-    if len(parts) == 2 and parts[0] not in {'sandbox', 'marts'}:
-        raise ValueError('stage/publish table must use sandbox or marts')
+    if len(parts) == 2 and parts[0] not in {'raw', 'sandbox', 'staging', 'marts'}:
+        raise ValueError('stage/publish table must use raw, sandbox, staging, or marts')
     return parts[-1]
 
 
@@ -185,7 +185,7 @@ def data(args):
 
 
 def generate_data_sql(url, request):
-    sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny')")
+    sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny', 'raw', 'sandbox')")
     body = {"model": os.environ.get("BEAR_MODEL", "qwen3.8-flash-next"), "temperature": 0,
             "max_tokens": 512, "enable_thinking": False,
             "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML."},
@@ -208,8 +208,9 @@ def catalog(args):
                     "lineage_note": "Dependencies from local dbt model definitions"})
     with wr.trino() as url:
         if args.action == "search":
-            for schema in ("tpch_tiny", "staging", "marts", "smoke"):
-                metadata[schema] = sql(url, "SHOW TABLES FROM iceberg." + identifier(schema))["rows"]
+            for schema in ("tpch_tiny", "raw", "sandbox", "staging", "marts", "smoke"):
+                result = attempt(lambda: sql(url, "SHOW TABLES FROM iceberg." + identifier(schema)))
+                metadata[schema] = result.get("rows", [])
         else:
             table = args.table
             if not table:

@@ -192,13 +192,14 @@ def check_sql_policy(sql: str, mode: str = 'read-only') -> str:
         return rf'(?:{value}|"{value}")'
     dot = r'\s*\.\s*'
     catalog = name('iceberg') + dot
-    schemas = name('sandbox') if mode == 'sandbox-write' else rf'(?:{name("sandbox")}|{name("marts")})'
+    writable = ('sandbox', 'raw') if mode == 'sandbox-write' else ('sandbox', 'raw', 'staging', 'marts')
+    schemas = '(?:' + '|'.join(name(s) for s in writable) + ')'
     target = catalog + schemas + dot + ident
-    schema = name('sandbox') if mode == 'sandbox-write' else ident
+    schema = schemas if mode == 'sandbox-write' else ident
     rollback_target = catalog + schema + dot + ident
     allowed = [
         rf'CREATE SCHEMA IF NOT EXISTS {catalog}{schema}',
-        rf'CREATE (?:OR REPLACE )?TABLE {target}(?=\s|\(|$)(?!\s*\.).*',
+        rf'CREATE (?:OR REPLACE )?TABLE (?:IF NOT EXISTS )?{target}(?=\s|\(|$)(?!\s*\.).*',
         rf'INSERT INTO {target}(?=\s|\(|$)(?!\s*\.).*',
         rf'ALTER TABLE {rollback_target} EXECUTE rollback_to_snapshot\s*\(\s*[0-9]+\s*\)',
     ]
