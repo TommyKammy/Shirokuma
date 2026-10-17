@@ -2,6 +2,7 @@
 import argparse
 from contextlib import contextmanager
 import http.client
+import http.server
 import json
 import logging
 import re
@@ -392,6 +393,142 @@ def check_sql_policy(sql: str, mode: str = 'read-only') -> str:
     return statement
 
 
+def _is_bi_user(user):
+    return user.lower() == 'powerbi' or user.lower().startswith('bi_')
+
+
+def _check_bi_schemas(sql, catalog=''):
+    # Tokenize so comments, strings, whitespace and quoted names cannot hide a
+    # restricted schema. String literals and quoted names remain distinct.
+    pattern = r"--[^\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|[A-Za-z_][A-Za-z_0-9]*|[^\s]"
+    tokens = [t.strip('"').lower() for t in re.findall(pattern, sql)
+              if not t.startswith(('--', '/*'))]
+    for i, token in enumerate(tokens):
+        qualified = tokens[i:i + 2] == ['iceberg', '.']
+        schema = i + 2 if qualified else i
+        contextual = catalog.lower() == 'iceberg' and tokens[i + 1:i + 2] == ['.']
+        if (qualified or contextual) and schema < len(tokens):
+            if tokens[schema] in {'raw', 'sandbox', 'staging'}:
+                raise ValueError('SQL policy violation (bi_reader): query restricted to iceberg.marts and metadata')
+
+
+def check_bi_policy(sql: str, user: str) -> str:
+    if not _is_bi_user(user):
+        return normalize_trino_sql(sql.rstrip().rstrip('; \t\r\n'))
+    statement = check_sql_policy(sql, mode='read-only')
+    _check_bi_schemas(statement)
+    return statement
+
+
+def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
+    """Serve Trino's client protocol, keeping result/cancel URLs on this endpoint."""
+    size = globals()['warehouse'](warehouse)
+    hop_headers = {'connection', 'keep-alive', 'proxy-authenticate',
+                   'proxy-authorization', 'te', 'trailer', 'transfer-encoding',
+                   'upgrade', 'host', 'content-length'}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            logging.getLogger(__name__).debug(fmt, *args)
+
+        def error_json(self, code, message):
+            data = json.dumps({'error': {'message': message}}).encode()
+            self.send_response(code)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def proxy(self):
+            global _LAST_ACTIVITY
+            path = urllib.parse.urlsplit(self.path).path
+            statement = self.command == 'POST' and path == '/v1/statement'
+            if not (statement or path.startswith('/v1/statement/') or path == '/v1/info'):
+                self.error_json(404, 'unknown Trino endpoint')
+                return
+            try:
+                if self.headers.get('Transfer-Encoding'):
+                    self.error_json(400, 'Content-Length is required')
+                    return
+                length = int(self.headers.get('Content-Length', '0'))
+                if length < 0:
+                    raise ValueError('invalid Content-Length')
+                body = self.rfile.read(length) if length else None
+                if statement:
+                    user = self.headers.get('X-Trino-User', '')
+                    try:
+                        sql = check_bi_policy((body or b'').decode('utf-8'), user)
+                        if _is_bi_user(user):
+                            catalog = self.headers.get('X-Trino-Catalog', '')
+                            _check_bi_schemas(sql, catalog)
+                            schema = self.headers.get('X-Trino-Schema', '')
+                            _check_bi_schemas(identifier(catalog) + '.' + identifier(schema))
+                    except ValueError as exc:
+                        self.error_json(403, str(exc))
+                        return
+                    body = sql.encode('utf-8')
+                    if status(size)['replicas'] == 0:
+                        transition('wake', size)
+                excluded = hop_headers | {h.strip().lower() for h in self.headers.get('Connection', '').split(',')}
+                headers = {k: v for k, v in self.headers.items() if k.lower() not in excluded}
+                # Request uncompressed JSON so continuation URLs can be rewritten.
+                headers['Accept-Encoding'] = 'identity'
+                with trino() as url:
+                    backend = urllib.parse.urlsplit(url)
+                    conn = http.client.HTTPConnection(backend.hostname, backend.port or 80, timeout=TIMEOUT)
+                    try:
+                        parsed_path = urllib.parse.urlsplit(self.path)
+                        target = urllib.parse.urlunsplit(('', '', parsed_path.path, parsed_path.query, ''))
+                        conn.request(self.command, target, body=body, headers=headers)
+                        response = conn.getresponse()
+                        data = response.read()
+                        response_headers = response.getheaders()
+                    finally:
+                        conn.close()
+                if response.status < 400:
+                    _LAST_ACTIVITY = time.monotonic()
+                host, actual_port = self.server.server_address[:2]
+                endpoint = f'http://{host}:{actual_port}'
+
+                def local_uri(value):
+                    parsed = urllib.parse.urlsplit(value)
+                    return endpoint + urllib.parse.urlunsplit(('', '', parsed.path, parsed.query, parsed.fragment))
+
+                if data:
+                    try:
+                        page = json.loads(data)
+                    except (ValueError, UnicodeError):
+                        page = None
+                    if isinstance(page, dict):
+                        for key in ('nextUri', 'partialCancelUri', 'infoUri'):
+                            if isinstance(page.get(key), str):
+                                page[key] = local_uri(page[key])
+                        data = json.dumps(page).encode('utf-8')
+                self.send_response(response.status)
+                excluded = hop_headers | {h.strip().lower() for h in response.getheader('Connection', '').split(',')}
+                for key, value in response_headers:
+                    if key.lower() not in excluded:
+                        self.send_header(key, local_uri(value) if key.lower() == 'location' else value)
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except ValueError as exc:
+                self.error_json(400, str(exc))
+            except (OSError, RuntimeError, http.client.HTTPException, subprocess.SubprocessError) as exc:
+                self.error_json(502, str(exc))
+
+        do_POST = proxy
+        do_GET = proxy
+        do_DELETE = proxy
+
+    with http.server.HTTPServer((bind, port), Handler) as server:
+        if once:
+            server.handle_request()
+        else:
+            server.serve_forever()
+    return dict(warehouse=size, action='endpoint', result='verified')
+
+
 def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000, mode='read-only'):
     global _LAST_ACTIVITY
     size = warehouse(size)
@@ -425,9 +562,13 @@ def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=100
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
-    for action in ("status", "chill", "wake", "query"):
+    for action in ("status", "chill", "wake", "query", "endpoint"):
         command = sub.add_parser(action)
         command.add_argument("--warehouse", default="LOCAL", type=warehouse)
+        if action == 'endpoint':
+            command.add_argument('--port', type=int, default=8080)
+            command.add_argument('--bind', default='127.0.0.1')
+            command.add_argument('--once', action='store_true')
         if action == "query":
             command.add_argument("--sql", required=True)
             command.add_argument("--catalog")
@@ -441,6 +582,8 @@ def main():
             result = status(args.warehouse)
         elif args.action == "query":
             result = query(args.warehouse, args.sql, args.catalog, args.schema, args.no_auto_wake, args.max_rows, mode=args.mode)
+        elif args.action == 'endpoint':
+            result = serve_endpoint(args.port, args.bind, args.warehouse, args.once)
         else:
             result = transition(args.action, args.warehouse)
         print(json.dumps(result))

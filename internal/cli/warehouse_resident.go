@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -81,6 +82,31 @@ func newResidentWarehouseCommand(action string, runner residentWarehouseRunner) 
 		},
 	}
 	command.Flags().StringVar(&profile, "profile", localExperimentProfile, "warehouse profile: local-experiment")
+	command.Flags().StringVar(&root, "repo-root", "", "repository root")
+	return command
+}
+
+func newWarehouseEndpointCommand(runner residentWarehouseRunner) *cobra.Command {
+	var size, bind, root string
+	var port int
+	command := &cobra.Command{
+		Use: "endpoint", Short: "Serve a fixed local Trino endpoint for BI clients",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !validResidentWarehouse(size) {
+				return errors.New("warehouse must be XS, S, or LOCAL")
+			}
+			if port < 1 || port > 65535 {
+				return errors.New("--port must be between 1 and 65535")
+			}
+			return runResidentWarehouse(cmd, runner, root, []string{
+				"endpoint", "--warehouse", size, "--port", strconv.Itoa(port), "--bind", bind,
+			})
+		},
+	}
+	command.Flags().StringVar(&size, "warehouse", "LOCAL", "resident warehouse: XS, S, or LOCAL")
+	command.Flags().IntVar(&port, "port", 8080, "local endpoint port")
+	command.Flags().StringVar(&bind, "bind", "127.0.0.1", "local endpoint bind address")
 	command.Flags().StringVar(&root, "repo-root", "", "repository root")
 	return command
 }

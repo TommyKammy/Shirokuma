@@ -59,6 +59,31 @@ func TestResidentLifecycleCommands(t *testing.T) {
 	}
 }
 
+func TestWarehouseEndpointCommand(t *testing.T) {
+	for _, options := range [][]string{nil, {"--warehouse", "S", "--port", "8090", "--bind", "localhost", "--repo-root", "/tmp/repo"}} {
+		f := &fakeResidentWarehouse{}
+		if _, err := residentCommand(f, append([]string{"endpoint"}, options...)...); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"endpoint", "--warehouse", "LOCAL", "--port", "8080", "--bind", "127.0.0.1"}
+		if len(options) > 0 {
+			want = []string{"endpoint", "--warehouse", "S", "--port", "8090", "--bind", "localhost"}
+			if f.root != "/tmp/repo" {
+				t.Fatalf("repository root not forwarded: %q", f.root)
+			}
+		}
+		if !reflect.DeepEqual(f.args, want) {
+			t.Fatalf("endpoint arguments: got %v want %v", f.args, want)
+		}
+	}
+	for _, options := range [][]string{{"--warehouse", "XL"}, {"--port", "0"}, {"--port", "65536"}, {"extra"}} {
+		f := &fakeResidentWarehouse{}
+		if _, err := residentCommand(f, append([]string{"endpoint"}, options...)...); err == nil || f.args != nil {
+			t.Fatalf("invalid endpoint input reached runner: %v", options)
+		}
+	}
+}
+
 func TestResidentGeneralSQL(t *testing.T) {
 	for _, args := range [][]string{
 		{"query", "S", "SELECT * FROM any_table", "--catalog", "iceberg", "--schema", "public", "--no-auto-wake"},

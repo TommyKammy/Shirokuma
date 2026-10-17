@@ -11,6 +11,7 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_seed.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_pipeline.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_ingest.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_sqlserver_sync.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_bears_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_workbench.py'
 

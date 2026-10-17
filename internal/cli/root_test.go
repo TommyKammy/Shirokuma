@@ -50,7 +50,7 @@ func TestRootCommandGroups(t *testing.T) {
 			}
 		}
 	}
-	if want := []string{"chill", "query", "status", "wake"}; !reflect.DeepEqual(names, want) {
+	if want := []string{"chill", "endpoint", "query", "status", "wake"}; !reflect.DeepEqual(names, want) {
 		t.Fatalf("warehouse commands = %v, want %v", names, want)
 	}
 }

@@ -60,5 +60,6 @@ func newWarehouseQueryCommand(resident residentWarehouseRunner) *cobra.Command {
 	for _, action := range []string{"status", "chill", "wake"} {
 		group.AddCommand(newResidentWarehouseCommand(action, resident))
 	}
+	group.AddCommand(newWarehouseEndpointCommand(resident))
 	return group
 }

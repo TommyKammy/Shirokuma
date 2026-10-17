@@ -1,5 +1,9 @@
 import importlib.util
 import io
+import json
+import http.client
+import http.server
+import threading
 from contextlib import nullcontext
 from pathlib import Path
 import unittest
@@ -12,6 +16,187 @@ SPEC.loader.exec_module(w)
 
 
 class ResidentWarehouseTests(unittest.TestCase):
+    def test_bi_policy(self):
+        allowed = ['SELECT 1', 'SELECT count(*) FROM iceberg.marts.revenue',
+                   'SELECT * FROM tpch_tiny.orders', 'SELECT * FROM information_schema.tables',
+                   'SELECT * FROM system.runtime.nodes', 'SHOW CATALOGS',
+                   'SHOW TABLES FROM iceberg.marts', 'DESCRIBE iceberg.marts.revenue',
+                   "SELECT 'iceberg.raw.t' /* iceberg.sandbox.t */ -- iceberg.staging.t\n",
+                   'WITH x AS (SELECT * FROM iceberg.marts.t) SELECT * FROM x']
+        for user in ('bi_reader', 'POWERBI', 'Bi_analyst'):
+            for sql in allowed:
+                with self.subTest(user=user, sql=sql):
+                    self.assertEqual(w.check_bi_policy(sql, user), w.check_sql_policy(sql))
+            for schema in ('raw', 'sandbox', 'staging'):
+                for target in (f'iceberg.{schema}.t', f'"ICEBERG" . "{schema.upper()}" . "t"',
+                               f'iceberg /* ignored */ . {schema}.t'):
+                    for sql in (f'SELECT * FROM {target}',
+                                f'SELECT * FROM iceberg.marts.t JOIN {target} ON true',
+                                f'WITH x AS (SELECT * FROM {target}) SELECT * FROM x',
+                                f'DESCRIBE {target}'):
+                        with self.subTest(user=user, sql=sql), self.assertRaisesRegex(
+                                ValueError, 'query restricted to iceberg.marts and metadata'):
+                            w.check_bi_policy(sql, user)
+            for sql in ('INSERT INTO iceberg.marts.t VALUES (1)', 'DROP TABLE iceberg.marts.t',
+                        'SELECT 1; SELECT 2'):
+                with self.assertRaises(ValueError):
+                    w.check_bi_policy(sql, user)
+        sql = 'INSERT INTO iceberg.raw.t VALUES (1)'
+        self.assertEqual(w.check_bi_policy(sql, 'engineer'), sql)
+        self.assertEqual(w.check_bi_policy('SELECT 1;  ', 'powerbi'), 'SELECT 1')
+
+    def endpoint_request(self, method, path, sql=None, headers=None, replicas=1,
+                         backend_status=200, payload=None, failure=None):
+        server = http.server.HTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
+        client = http.client.HTTPConnection(*server.server_address, timeout=5)
+        backend = Mock()
+        response = backend.getresponse.return_value
+        response.status = backend_status
+        response.read.return_value = json.dumps(payload or {'data': [[42]]}).encode()
+        response.getheaders.return_value = [('Content-Type', 'application/json'),
+                                            ('X-Trino-Set-Catalog', 'iceberg')]
+        response.getheader.return_value = ''
+        backend.request.side_effect = failure
+        # Keep a real listening server, while allowing serve_endpoint to install
+        # its handler and exercise one complete HTTP exchange synchronously.
+        def factory(address, handler):
+            server.RequestHandlerClass = handler
+            return server
+        with patch.object(w.http.server, 'HTTPServer', side_effect=factory), \
+             patch.object(w.http.client, 'HTTPConnection', return_value=backend), \
+             patch.object(w, 'trino', return_value=nullcontext('http://127.0.0.1:1234')) as trino, \
+             patch.object(w, 'status', return_value={'replicas': replicas}) as status, \
+             patch.object(w, 'transition') as wake, patch.object(w, '_LAST_ACTIVITY', 0):
+            thread = threading.Thread(target=w.serve_endpoint, kwargs={'port': server.server_port, 'once': True})
+            thread.start()
+            try:
+                client.request(method, path, body=sql, headers=headers or {})
+                result = client.getresponse()
+                code, result_headers, data = result.status, dict(result.getheaders()), result.read()
+            finally:
+                client.close()
+                thread.join(timeout=5)
+            self.assertFalse(thread.is_alive(), 'once=True did not stop')
+            return code, result_headers, json.loads(data), backend, wake, status, trino, w._LAST_ACTIVITY
+
+    def test_endpoint_statement_wake_headers_and_continuation_urls(self):
+        code, headers, page, backend, wake, _, _, activity = self.endpoint_request(
+            'POST', '/v1/statement', 'SELECT 42; ',
+            {'X-Trino-User': 'powerbi', 'X-Trino-Source': 'Power BI'}, replicas=0,
+            payload={'nextUri': 'http://backend:8080/v1/statement/queued/q/1?x=2',
+                     'partialCancelUri': 'http://backend:8080/v1/statement/queued/q/1', 'data': [[42]]})
+        self.assertEqual(code, 200)
+        wake.assert_called_once_with('wake', 'LOCAL')
+        self.assertGreater(activity, 0)
+        self.assertEqual(headers['X-Trino-Set-Catalog'], 'iceberg')
+        self.assertEqual(page['data'], [[42]])
+        self.assertTrue(page['nextUri'].startswith('http://127.0.0.1:'))
+        self.assertTrue(page['nextUri'].endswith('/v1/statement/queued/q/1?x=2'))
+        self.assertNotIn('backend', page['partialCancelUri'])
+        call = backend.request.call_args
+        self.assertEqual(call.args, ('POST', '/v1/statement'))
+        self.assertEqual(call.kwargs['body'], b'SELECT 42')
+        self.assertEqual(call.kwargs['headers']['X-Trino-Source'], 'Power BI')
+        self.assertEqual(call.kwargs['headers']['X-Trino-User'], 'powerbi')
+        backend.close.assert_called_once()
+
+    def test_powerbi_desktop_import_simulation(self):
+        headers = {
+            'User-Agent': 'Microsoft.Data.Mashup (https://go.microsoft.com/fwlink/?LinkID=304249)',
+            'X-Trino-User': 'bi_reader',
+            'X-Trino-Catalog': 'iceberg',
+            'X-Trino-Schema': 'marts',
+        }
+        cases = (
+            ('SHOW SCHEMAS FROM iceberg',
+             [{'name': 'Schema', 'type': 'varchar'}], [['marts']]),
+            ('SHOW TABLES FROM iceberg.marts',
+             [{'name': 'Table', 'type': 'varchar'}], [['fct_orders']]),
+            ("SELECT table_name FROM information_schema.tables WHERE table_schema = 'marts'",
+             [{'name': 'table_name', 'type': 'varchar'}], [['fct_orders']]),
+            ('SELECT order_id, customer_code, total_amount, order_date FROM iceberg.marts.fct_orders',
+             [{'name': 'order_id', 'type': 'bigint'},
+              {'name': 'customer_code', 'type': 'varchar'},
+              {'name': 'total_amount', 'type': 'decimal(18,2)'},
+              {'name': 'order_date', 'type': 'date'}],
+             [[1, '000123', '1250.50', '2026-10-17'],
+              [2, '000007', '0.01', '2026-10-16']]),
+        )
+        for sql, columns, rows in cases:
+            with self.subTest(sql=sql):
+                payload = {'id': 'powerbi-import', 'columns': columns, 'data': rows,
+                           'stats': {'state': 'FINISHED'}}
+                code, _, page, backend, _, _, _, activity = self.endpoint_request(
+                    'POST', '/v1/statement', sql, headers, payload=payload)
+                self.assertEqual(code, 200)
+                self.assertEqual(page, payload)
+                backend.request.assert_called_once()
+                call = backend.request.call_args
+                self.assertEqual(call.args, ('POST', '/v1/statement'))
+                self.assertEqual(call.kwargs['body'], sql.encode())
+                for name, value in headers.items():
+                    self.assertEqual(call.kwargs['headers'][name], value)
+                self.assertGreater(activity, 0)
+                backend.close.assert_called_once()
+
+        for sql in ('SELECT * FROM iceberg.raw.orders', 'SELECT * FROM raw.orders'):
+            with self.subTest(sql=sql):
+                code, _, page, backend, wake, status, trino, activity = self.endpoint_request(
+                    'POST', '/v1/statement', sql, headers, replicas=0)
+                self.assertEqual(code, 403)
+                self.assertIn('SQL policy violation', page['error']['message'])
+                self.assertIn('restricted to iceberg.marts and metadata', page['error']['message'])
+                for mock in (backend.request, wake, status, trino):
+                    mock.assert_not_called()
+                self.assertEqual(activity, 0)
+
+    def test_endpoint_rejection_precedes_access(self):
+        for sql, headers in (
+                ('DELETE FROM iceberg.marts.t', {'X-Trino-User': 'bi_reader'}),
+                ('SELECT * FROM "iceberg"."raw".t', {'X-Trino-User': 'BI_tool'}),
+                ('SELECT * FROM staging.t', {'X-Trino-User': 'powerbi', 'X-Trino-Catalog': 'iceberg'}),
+                ('SELECT * FROM t', {'X-Trino-User': 'bi_reader', 'X-Trino-Catalog': 'iceberg',
+                                     'X-Trino-Schema': 'sandbox'})):
+            with self.subTest(sql=sql):
+                code, _, page, backend, wake, status, trino, activity = self.endpoint_request(
+                    'POST', '/v1/statement', sql, headers, replicas=0)
+                self.assertEqual(code, 403)
+                self.assertIn('SQL policy violation', page['error']['message'])
+                for mock in (backend.request, wake, status, trino):
+                    mock.assert_not_called()
+                self.assertEqual(activity, 0)
+
+    def test_endpoint_continuations_info_errors_and_non_bi(self):
+        for method, path in (('GET', '/v1/statement/queued/q/1?token=abc'),
+                             ('DELETE', '/v1/statement/executing/q/1'),
+                             ('POST', '/v1/statement/executing/q/1'), ('GET', '/v1/info')):
+            code, _, _, backend, wake, status, _, _ = self.endpoint_request(method, path)
+            self.assertEqual(code, 200)
+            self.assertEqual(backend.request.call_args.args, (method, path))
+            wake.assert_not_called()
+            status.assert_not_called()
+        code, _, page, _, _, _, _, activity = self.endpoint_request(
+            'GET', '/v1/info', backend_status=503, payload={'error': {'message': 'unavailable'}})
+        self.assertEqual(code, 503)
+        self.assertEqual(page['error']['message'], 'unavailable')
+        self.assertEqual(activity, 0)
+        self.assertEqual(self.endpoint_request('GET', '/v1/info', failure=OSError('offline'))[0], 502)
+        self.assertEqual(self.endpoint_request('GET', '/unrelated')[0], 404)
+        code, _, _, _, wake, _, _, _ = self.endpoint_request(
+            'POST', '/v1/statement', 'INSERT INTO iceberg.raw.t VALUES (1)', {'X-Trino-User': 'engineer'})
+        self.assertEqual(code, 200)
+        wake.assert_not_called()
+
+    def test_endpoint_parser(self):
+        for options, expected in (([], (8080, '127.0.0.1', 'LOCAL', False)),
+                (['--port', '8090', '--bind', 'localhost', '--warehouse', 's', '--once'],
+                 (8090, 'localhost', 'S', True))):
+            with patch.object(w.sys, 'argv', ['warehouse', 'endpoint'] + options), \
+                 patch.object(w, 'serve_endpoint', return_value={}) as serve, \
+                 patch('sys.stdout', new_callable=io.StringIO):
+                self.assertEqual(w.main(), 0)
+                serve.assert_called_once_with(*expected)
+
     def test_auto_chill_configuration_and_threshold(self):
         with patch.object(w, '_AUTO_CHILL_MINUTES', 0), patch.object(w, '_LAST_ACTIVITY', 0), \
              patch.object(w.time, 'monotonic', return_value=100) as clock, \

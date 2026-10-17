@@ -45,7 +45,7 @@ def read_file(path, format='auto', schema_hints=None, encoding=None):
         raise ValueError('schema_hints must be a column-to-type dictionary')
     for sql_type in schema_hints.values():
         if not isinstance(sql_type, str) or not re.fullmatch(
-                r'(?:VARCHAR|BIGINT|DOUBLE|BOOLEAN|DATE|DECIMAL(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)',
+                r'(?:VARCHAR|BIGINT|DOUBLE|BOOLEAN|DATE|TIMESTAMP|DECIMAL(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)',
                 sql_type, re.IGNORECASE):
             raise ValueError('unsupported schema hint type: ' + str(sql_type))
     detected = FORMATS.get(path.suffix.lower()) if format == 'auto' else format
@@ -165,6 +165,8 @@ def literal(value, sql_type):
     quoted = wr.literal(text)
     if sql_type.startswith('DECIMAL'):
         return f'CAST({quoted} AS {sql_type})'
+    if sql_type == 'TIMESTAMP':
+        return 'TIMESTAMP ' + quoted
     return 'DATE ' + quoted if sql_type == 'DATE' else quoted
 
 
@@ -198,11 +200,11 @@ def preview(file=None, *, filename=None, content=None, format='auto', limit=10,
 
 
 def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500, key=None,
-           *, filename=None, content=None, schema_hints=None, encoding=None):
+           *, filename=None, content=None, schema_hints=None, encoding=None, atomic_append=False):
     if filename is not None or content is not None:
         with input_file(file, filename=filename, content=content) as path:
             result = ingest(path, table, mode, format, batch_size, key,
-                            schema_hints=schema_hints, encoding=encoding)
+                            schema_hints=schema_hints, encoding=encoding, atomic_append=atomic_append)
         result['file'] = Path(filename).name
         return result
     started = time.monotonic()
@@ -237,7 +239,7 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
                 return bears.sql(url, wr.check_sql_policy(statement, mode=guardrail))
             execute('CREATE SCHEMA IF NOT EXISTS ' + '.'.join(target.split('.')[:2]))
             sql_stage = (wr.identifier(f'{target}__stage_{uuid.uuid4().hex[:8]}')
-                         if mode in {'replace', 'upsert'} else None)
+                         if mode in {'replace', 'upsert'} or atomic_append else None)
             def upsert_from_stage():
                 execute('CREATE TABLE IF NOT EXISTS ' + sql_target + ' (' +
                         ', '.join(f'"{c}" {t}' for c, t in schema) + ')')
@@ -271,7 +273,7 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
                 if mode == 'append':
                     execute('CREATE TABLE IF NOT EXISTS ' + sql_target + ' (' +
                             ', '.join(f'"{c}" {t}' for c, t in schema) + ')')
-                elif not rows:
+                if sql_stage and not rows:
                     execute('CREATE TABLE ' + sql_stage + ' AS SELECT ' +
                             ', '.join(f'CAST(NULL AS {t}) AS "{c}"' for c, t in schema) + ' WHERE FALSE')
                 for offset in range(0, len(rows), batch_size):
@@ -287,6 +289,8 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
                     execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM {sql_stage}')
                 elif mode == 'upsert':
                     upsert_from_stage()
+                elif mode == 'append' and sql_stage:
+                    execute(f'INSERT INTO {sql_target} ({columns}) SELECT {columns} FROM {sql_stage}')
             finally:
                 if sql_stage:
                     # The general SQL guardrail rejects DROP. This identifier is
