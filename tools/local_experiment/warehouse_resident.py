@@ -1,19 +1,24 @@
 """Resident Trino warehouse control for the dedicated local lab."""
 import argparse
 from contextlib import contextmanager
+import http.client
 import json
 import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
 KUBECTL = ["kubectl", "--context", "colima-mac-studio-solo", "-n", "shirokuma-dev"]
 TIMEOUT = 180
 _PERSISTENT_TRINO = None
+_HTTP_POOL = threading.local()
+_DEFAULT_URLOPEN = urllib.request.urlopen
 WRITABLE_SCHEMAS = ('raw', 'sandbox', 'staging', 'marts')
 
 
@@ -61,9 +66,39 @@ def wait_for(check):
 
 
 def http_json(url, data=None, headers=None, timeout=30):
-    request = urllib.request.Request(url, data=data, headers=headers or {})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.load(response)
+    parsed = urllib.parse.urlsplit(url)
+    if urllib.request.urlopen is not _DEFAULT_URLOPEN or parsed.scheme != "http" or not parsed.hostname:
+        request = urllib.request.Request(url, data=data, headers=headers or {})
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.load(response)
+    conns = getattr(_HTTP_POOL, "conns", None)
+    if conns is None:
+        conns = _HTTP_POOL.conns = {}
+    key = (parsed.hostname, parsed.port or 80)
+    path = parsed.path or "/"
+    if parsed.query:
+        path += "?" + parsed.query
+    method = "POST" if data is not None else "GET"
+    req_headers = dict(headers or {})
+    req_headers.setdefault("Connection", "keep-alive")
+    for attempt in range(2):
+        conn = conns.get(key)
+        if conn is None:
+            conn = conns[key] = http.client.HTTPConnection(key[0], key[1], timeout=timeout)
+        else:
+            conn.timeout = timeout
+        try:
+            conn.request(method, path, body=data, headers=req_headers)
+            response = conn.getresponse()
+            payload = response.read()
+            if response.status >= 400:
+                raise urllib.error.HTTPError(url, response.status, response.reason, response.headers, None)
+            return json.loads(payload)
+        except (http.client.HTTPException, OSError) as exc:
+            conn.close()
+            conns.pop(key, None)
+            if isinstance(exc, urllib.error.HTTPError) or attempt == 1:
+                raise
 
 
 @contextmanager

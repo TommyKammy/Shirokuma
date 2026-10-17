@@ -2,7 +2,7 @@
 """Serve the local Shirokuma Workbench with standard-library HTTP tooling."""
 import argparse
 import contextlib
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -77,7 +77,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             elif url.path in ("/api/catalog", "/api/lineage"):
                 table = parse_qs(url.query).get("table", [None])[0]
                 action = "lineage" if url.path.endswith("lineage") else "describe" if table else "search"
-                result = bears_resident.catalog(SimpleNamespace(bear="catalog", action=action, table=table))
+                result = bears_resident.catalog(SimpleNamespace(
+                    bear="catalog", action=action, table=table, include_config=False))
                 # Iceberg IDs exceed JavaScript's safe integer range. Preserve
                 # their exact digits for snapshot display and rollback requests.
                 snapshots = result.get('metadata', {}).get('snapshots')

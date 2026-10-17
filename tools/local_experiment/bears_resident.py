@@ -149,11 +149,31 @@ def catalog(args):
                 lineage.setdefault(name, entry['sources'])
         return dict(action="lineage", catalog="iceberg", metadata={"lineage": lineage,
                     "lineage_note": "Dependencies from local dbt models and recorded WAP models"})
+    include_config = getattr(args, "include_config", True)
     with wr.trino() as url:
         if args.action == "search":
-            for schema in ("tpch_tiny", *wr.WRITABLE_SCHEMAS, "smoke"):
-                result = attempt(lambda: sql(url, "SHOW TABLES FROM iceberg." + identifier(schema)))
-                metadata[schema] = result.get("rows", [])
+            schemas = ("tpch_tiny", *wr.WRITABLE_SCHEMAS, "smoke")
+            if not include_config:
+                for schema in schemas:
+                    metadata[schema] = []
+                schema_list = ", ".join(wr.literal(s) for s in schemas)
+                result = attempt(lambda: sql(
+                    url,
+                    f"SELECT table_schema, table_name FROM iceberg.information_schema.tables "
+                    f"WHERE table_schema IN ({schema_list}) ORDER BY table_schema, table_name",
+                ))
+                rows = result.get("rows", [])
+                if rows and all(isinstance(r, list) and len(r) >= 2 for r in rows):
+                    for row in rows:
+                        if row[0] in metadata:
+                            metadata[row[0]].append([row[1]])
+                elif rows:
+                    for schema in schemas:
+                        metadata[schema] = rows
+            else:
+                for schema in schemas:
+                    result = attempt(lambda: sql(url, "SHOW TABLES FROM iceberg." + identifier(schema)))
+                    metadata[schema] = result.get("rows", [])
         else:
             table = args.table
             if not table:
@@ -161,7 +181,8 @@ def catalog(args):
             if not table.startswith("iceberg."):
                 table = "iceberg." + table if "." in table else "iceberg.marts." + table
             metadata["columns"] = sql(url, "SHOW COLUMNS FROM " + identifier(table))["rows"]
-            metadata["definition"] = sql(url, "SHOW CREATE TABLE " + identifier(table))["rows"]
+            if include_config:
+                metadata["definition"] = sql(url, "SHOW CREATE TABLE " + identifier(table))["rows"]
             metadata["snapshots"] = attempt(lambda: sql(url, "SELECT snapshot_id, parent_id, committed_at FROM " + identifier(table + "$snapshots") + " ORDER BY committed_at DESC"))
             if args.action == "lineage":
                 models = Path(__file__).parent / "dataops" / "dbt_persistent" / "models"
@@ -173,7 +194,8 @@ def catalog(args):
                     metadata['lineage'] = entry.get('sources', [])
                     if 'sql' in entry:
                         metadata['wap_sql'] = entry['sql']
-        metadata["catalog_config"] = attempt(lambda: wr.kubectl("get", "configmap", "-l", "app.kubernetes.io/name=trino-local", "-o", "json"))
+        if include_config:
+            metadata["catalog_config"] = attempt(lambda: wr.kubectl("get", "configmap", "-l", "app.kubernetes.io/name=trino-local", "-o", "json"))
     return dict(action=args.action, catalog="iceberg", metadata=metadata)
 
 
