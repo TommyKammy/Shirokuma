@@ -146,6 +146,24 @@ tags: [shirokuma, local, milestones]
 - Removed 261 legacy fixture test files and ~910 lines of retired `local-*` Make targets while preserving all 42 CI and resident core test suites.
 - Verified `make verify-core` (all 114 resident Python tests and Go CLI tests passing) and synchronized Phase 6 roadmap, gates, and milestones.
 
+### 2026-10-17 — WP-P6-004: CVE Source-Build Cleanup & Verification Alignment (Completed)
+
+- Removed retired CVE source-build scripts, patches, and evidence.
+- Removed associated legacy tests and verification dependencies.
+- Aligned `make verify` with the retained resident core and upstream images.
+
+### 2026-10-17 — WP-P6-005: Doctor Implementation & Test Simplification (Completed)
+
+- Simplified Doctor JSON handling and component health checks.
+- Removed byte-mutation defensive tests from the local Doctor suite.
+- Preserved resident health reporting and CLI verification.
+
+### 2026-10-17 — WP-P6-006: AgentHouse Simplification & Phase 6 Sync (Completed)
+
+- Replaced fd-level state handling and byte-level inspection with standard path, JSON, and HTTP operations.
+- Preserved saved credentials, resident telemetry APIs, and all five CLI commands; covered chunked and NDJSON responses.
+- Synchronized Phase 6 roadmap, gate summary, and milestones with core, full, and live runtime verification.
+
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)
 
 The following capabilities were functionally demonstrated on `mac-studio-solo` during the initial local experiment wave and serve as the foundation for Phase 1–3 graduation:

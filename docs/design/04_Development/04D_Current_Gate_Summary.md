@@ -41,3 +41,6 @@ tags: [shirokuma, local, handoff, gates]
 | **WP-P6-001** | Extract the resident WAP module and deduplicate shared SQL helpers | **Completed (2026-10-17)** |
 | **WP-P6-002** | Remove legacy fixture CLI subcommands and consolidate the resident Warehouse CLI | **Completed (2026-10-17)** |
 | **WP-P6-003** | Remove retired fixture scripts, tests, virtual environments, and Make targets; verify the retained core and synchronize Phase 6 documentation | **Completed (2026-10-17)** |
+| **WP-P6-004** | Remove retired CVE source-build scripts, evidence, and tests; align `make verify` with the retained core | **Completed (2026-10-17)** |
+| **WP-P6-005** | Simplify Doctor implementation and tests while preserving resident health checks | **Completed (2026-10-17)** |
+| **WP-P6-006** | Slim AgentHouse management, preserve credentials and resident APIs, verify standard HTTP responses, and synchronize Phase 6 documentation | **Completed (2026-10-17)** |
