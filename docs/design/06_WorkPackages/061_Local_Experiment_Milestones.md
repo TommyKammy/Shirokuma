@@ -4,7 +4,7 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-16
+updated: 2026-10-17
 version: "6.0.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
@@ -18,7 +18,7 @@ tags: [shirokuma, local, milestones]
 
 ---
 
-## Active Roadmap Milestones (Phase 0 – Phase 3)
+## Active Roadmap Milestones (Phase 0 – Phase 4)
 
 ### 2026-10-16 — WP-P0-001: Governance Reset & Documentation Slimming (Completed)
 - Adopted [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) and [DEV-04F](../04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md), establishing the **Commander (`Antigravity`) + Implementation Worker (`codex-cli` GPT-6.1 Sol Medium)** operating model.
@@ -79,6 +79,32 @@ tags: [shirokuma, local, milestones]
   3. **Autonomous Bears Cockpit**: Interactive controls for all 5 Core Bears (`SRE`, `Query Doctor`, `Data Engineer`, `Catalog Curator`, `Policy Gatekeeper`) with instant formatted finding/recommendation display.
   4. **AgentHouse Pawprints Telemetry**: Real-time ClickHouse telemetry viewer with automatic background polling.
 - Unit testing: 14 tests in `tests/test_workbench.py` and 7 tests in `internal/cli/workbench_test.go` (100% green). Live cluster verification passed across all HTTP REST API endpoints and SQL execution.
+
+---
+
+### 2026-10-17 — WP-P4-001: SQL Safety Guardrails, Write-Audit-Publish (WAP), & Iceberg Snapshot Rollback (Completed)
+
+- Added SQL safety checks and WAP sandbox execution to review changes before publishing them to Iceberg.
+- Provided Iceberg snapshot rollback to restore an earlier table state.
+- Exposed the workflow through the resident warehouse CLI for controlled data changes.
+
+### 2026-10-17 — WP-P4-002: Local File (CSV / JSONL / Parquet) Ingestion into Iceberg (Completed)
+
+- Added `shirokuma lake ingest` for local CSV, TSV, JSONL, and Parquet files.
+- Infers source schemas and loads data into a selected Iceberg table.
+- Supports configurable ingestion mode and batch size for different input datasets.
+
+### 2026-10-17 — WP-P4-003: Rich Pawprints Audit Trail, Persistent Trino Tunnel, & Workbench WAP/Ingest UI (Completed)
+
+- Enriched AgentHouse Pawprints with audit details for resident operations.
+- Reuses the resident Trino tunnel across requests to reduce connection setup overhead.
+- Integrated WAP and local file ingestion controls into Shirokuma Workbench.
+
+### 2026-10-17 — WP-P4-004: Fast Resident Core Verification (`make verify-core`) & Phase 4 Roadmap Sync (Completed)
+
+- Added `make test-resident-core` for the 7 resident core test modules and included it in `make verify-local-experiment`.
+- Added `make verify-core` to combine resident tests, Go checks, design validation, and repository hygiene checks.
+- Synchronized Phase 4 completion records across DEV-04F, DEV-04D, and this milestone ledger.
 
 ---
 

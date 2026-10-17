@@ -4,7 +4,7 @@ doc_id: "DEV-04D"
 title: "Current local gate summary"
 status: active
 created: 2026-10-06
-updated: 2026-10-16
+updated: 2026-10-17
 version: "2.0.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
@@ -28,5 +28,10 @@ tags: [shirokuma, local, handoff, gates]
 | **WP-P1-002** | Verify `shirokuma doctor` reports all components Healthy on the live cluster; provide clean `make lab-up / lab-down / lab-status` entrypoints | **Completed (2026-10-16)** |
 | **WP-P2-001** | Graduate Virtual Warehouse (`shirokuma warehouse chill / wake / query`) from fixed 25-row fixture to general SQL execution | **Completed (2026-10-16)** |
 | **WP-P2-002** | Establish persistent Iceberg sample Lakehouse with Dagster/dbt, OpenMetadata lineage, and Superset dashboards | **Completed (2026-10-17)** |
+| **WP-P2-003** | Integrate all 5 Core Bears with resident services and Pawprints telemetry through general CLI / MCP workflows | **Completed (2026-10-17)** |
 | **WP-P3-001** | Formalize Peripheral Engine Optional Plugin Tracks (`02D_Optional_Plugin_Tracks.md`) to guard core lakehouse simplicity | **Completed (2026-10-17)** |
 | **WP-P3-002** | Build unified **Shirokuma Workbench** local Web UI (`shirokuma workbench`, `make workbench`) for warehouse, catalog, bears, and Pawprints | **Completed (2026-10-17)** |
+| **WP-P4-001** | Add SQL safety guardrails, Write-Audit-Publish sandbox execution, and Iceberg snapshot rollback | **Completed (2026-10-17)** |
+| **WP-P4-002** | Ingest local CSV / TSV / JSONL / Parquet files into Iceberg with automatic schema inference (`shirokuma lake ingest`) | **Completed (2026-10-17)** |
+| **WP-P4-003** | Enrich Pawprints audit trails, reuse the resident Trino tunnel, and integrate Workbench WAP / Ingest UI | **Completed (2026-10-17)** |
+| **WP-P4-004** | Add fast resident core verification (`make verify-core`) and synchronize Phase 4 roadmap, gates, and milestones | **Completed (2026-10-17)** |

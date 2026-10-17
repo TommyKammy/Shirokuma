@@ -1,6 +1,18 @@
 SHELL := /bin/bash
 PYTHON ?= python3
 
+.PHONY: verify-core test-resident-core
+verify-core: test-resident-core verify-go verify-design-context check-newlines check-trailing-whitespace check-no-secret-filenames
+
+test-resident-core:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lab_lifecycle.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_resident.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_seed.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_pipeline.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_ingest.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_bears_resident.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_workbench.py'
+
 WAREHOUSE ?= LOCAL
 BEAR_QUERY ?= SELECT * FROM iceberg.marts.fct_orders LIMIT 10
 BEAR_REQUEST ?= aggregate total sales and quantity by customer and nation
@@ -47,7 +59,7 @@ lab-status:
 	@$(PYTHON) tools/local_experiment/lab_lifecycle.py status
 test-lab-lifecycle:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lab_lifecycle.py'
-verify-local-experiment: test-lab-lifecycle
+verify-local-experiment: test-resident-core
 PREFLIGHT_REF ?= origin/main
 TOFU ?= tofu
 TOFU_DIR ?= opentofu/dev
@@ -265,9 +277,9 @@ verify-repository-skeleton:
 verify-go:
 	@command -v go >/dev/null || { echo "go is required for repository verification"; exit 1; }
 	@command -v gofmt >/dev/null || { echo "gofmt is required for repository verification"; exit 1; }
-	@unformatted="$$(find . -type f -name '*.go' -not -path './.git/*' -exec gofmt -l {} +)"; test -z "$$unformatted" || { echo "gofmt required for:"; echo "$$unformatted"; exit 1; }
-	@go test ./...
-	@go vet ./...
+	@unformatted="$$(git ls-files -z --cached --others --exclude-standard -- '*.go' | xargs -0 gofmt -l)"; test -z "$$unformatted" || { echo "gofmt required for:"; echo "$$unformatted"; exit 1; }
+	@go test ./cmd/... ./internal/...
+	@go vet ./cmd/... ./internal/...
 	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; go build -o "$$tmp/shirokuma" ./cmd/shirokuma
 	@go run ./cmd/shirokuma --help >/dev/null
 	@test "$$(go run ./cmd/shirokuma version)" = "shirokuma dev"
