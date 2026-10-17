@@ -1,171 +1,237 @@
-# Shirokuma
-Shirokuma is an agentic OSS data cloud lab that recreates core ideas from Snowflake, Databricks, and Microsoft Fabric using open-source components and an AI-first operating model.
+# 🐻‍❄️ Shirokuma (しろくま)
 
-Current development uses the owner-approved local experimental loop: Work Package
-→ implementation → local verification/application → local commit. No Issue or PR
-is required. Read [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) and
-[the local workflow](docs/design/04_Development/04B_Autonomous_Local_Development.md)
-for scope, evidence and external-action boundaries.
+**Trustworthy Agentic OSS Data Warehouse & Lakehouse**
+*AIエージェントにデータ処理を安心して任せられる、中小規模向けオープンソース Data Cloud / Lakehouse 基盤*
 
-## Development
+[**English**](#english) | [**日本語**](#日本語)
 
-Shirokuma requires Go 1.24 or newer. Build the minimal CLI and inspect its
-current command surface with:
+---
 
-```bash
-go build ./cmd/shirokuma
-go run ./cmd/shirokuma --help
-go run ./cmd/shirokuma version
+<a id="english"></a>
+
+## English
+
+### Overview
+
+**Shirokuma** is a lightweight, self-hosted Open Source Data Warehouse & Lakehouse built on **Apache Iceberg**, **Apache Polaris**, **Trino**, **SeaweedFS**, **dbt**, and **ClickHouse**, designed from the ground up so **human operators and AI agents can collaborate safely on production data**.
+
+Instead of attempting to clone every heavyweight enterprise feature of Snowflake or Databricks, Shirokuma focuses on what small-to-medium teams actually need:
+1. **A clean, resident Iceberg Lakehouse** that runs reliably on a single machine (macOS Apple Silicon / Colima k3s) or Kubernetes cluster and can `chill` (scale to zero) and auto-`wake` on demand.
+2. **Defense-in-Depth Guardrails for AI Agents** so autonomous agents can ingest files, write analytical SQL, build marts, and refresh pipelines **without risking production data corruption**.
+
+---
+
+### Architecture at a Glance
+
+```mermaid
+flowchart TB
+    subgraph UI["Operator & Agent Surfaces"]
+        CLI["shirokuma CLI<br/>(warehouse / lake / bear / doctor)"]
+        WB["Shirokuma Workbench<br/>(Unified Web UI :8888)"]
+    end
+
+    subgraph Guardrails["Trustworthy AI Delegation Layer"]
+        Pol["SQL Policy Guard<br/>(read-only / sandbox-write / admin-write)"]
+        WAP["Write-Audit-Publish (WAP) Engine<br/>Single-Scan Audit • Regression Guard • Model Registry"]
+        Bears["5 Core Autonomous Bears<br/>(SRE / Query Doctor / Data Engineer / Catalog Curator / Policy Gatekeeper)"]
+    end
+
+    subgraph Lakehouse["Resident Lakehouse Core (Kubernetes / Colima)"]
+        Trino["Trino 483<br/>(Virtual Warehouse: LOCAL / XS / S)"]
+        Polaris["Apache Polaris<br/>(Iceberg REST Catalog)"]
+        Seaweed["SeaweedFS<br/>(S3 Object Storage)"]
+        DBT["dbt-trino<br/>(Staging Views & Iceberg Marts)"]
+    end
+
+    subgraph Observability["Telemetry & Audit Ledger"]
+        CH["ClickHouse AgentHouse<br/>(agenthouse.pawprints)"]
+        Loki["Grafana Loki<br/>(Log Aggregation)"]
+    end
+
+    CLI --> Pol
+    WB --> Pol
+    CLI --> Bears
+    WB --> Bears
+    Bears --> WAP
+    Pol --> Trino
+    WAP --> Trino
+    DBT --> Trino
+    Trino --> Polaris
+    Trino --> Seaweed
+    Pol -.-> CH
+    WAP -.-> CH
+    Bears -.-> CH
 ```
 
-Run focused checks during development and the local verification at milestones:
+---
 
+### Key Capabilities
+
+| Capability | What It Does |
+|---|---|
+| **1. SQL Safety Guardrails** | Enforces `read-only` by default on `shirokuma warehouse query`. `sandbox-write` permits DDL/DML only in `iceberg.scratch`, `iceberg.staging`, and `iceberg.raw`. Production `iceberg.marts` writes require `admin-write` or audited WAP publish. |
+| **2. Write-Audit-Publish (WAP) & Regression Guard** | AI-generated or operator SQL is materialized in `iceberg.scratch.<stage_table>` first. A single-scan audit checks row count (`--min-rows`), `NULL` constraints (`--not-null`), and **blocks accidental >50% row shrinkage or missing columns** before atomically publishing to `iceberg.marts` and recording dynamic lineage. |
+| **3. 1-Command Iceberg Snapshot Rollback** | Every Iceberg table snapshot is tracked. If a bad publish occurs, `shirokuma bear data --table marts.<name> --rollback --snapshot-id <id>` instantaneously restores the table via `iceberg.system.rollback_to_snapshot`. |
+| **4. Zero-Friction File Ingestion & Idempotent Upsert** | `shirokuma lake ingest` loads local **CSV, TSV, JSONL, and Parquet** files into Iceberg with automatic schema inference (`BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, `VARCHAR`) and supports `replace`, `append`, and keyed idempotent `upsert` (`--mode upsert --key <cols>`). |
+| **5. 5 Core Autonomous Bears** | **SRE Bear** (cluster health & metrics), **Query Doctor Bear** (Trino `EXPLAIN` & skew analysis), **Data Engineer Bear** (LLM SQL generation with `QUALIFY` rewrite, 1-retry `EXPLAIN` self-correction, WAP, & `--refresh`), **Catalog Curator Bear** (Iceberg metadata & dbt + WAP lineage), and **Policy Gatekeeper Bear** (Kubernetes pod security audit). |
+| **6. Shirokuma Workbench & Pawprints Audit Trail** | `shirokuma workbench` launches a zero-dependency local Web UI (`http://127.0.0.1:8888`) uniting SQL execution, Catalog & Lineage browsing, File Ingestion, Bear & WAP controls, and live ClickHouse `agenthouse.pawprints` telemetry (tracking snapshot IDs, duration, and LLM token counts). |
+
+---
+
+### Quick Start
+
+#### 1. Start the Resident Lakehouse Lab
 ```bash
-make verify-local-experiment
-go test ./...
-go vet ./...
+# Boot Colima (mac-studio-solo), unsuspend Flux/Polaris/SeaweedFS/Trino/ClickHouse/Loki, and verify health
+make lab-up
+make lab-status
+go run ./cmd/shirokuma doctor --profile local-experiment
 ```
 
-With the dedicated Colima lakehouse running, inspect readiness and exercise the
-data path. The smoke commands open and close their own loopback port-forward:
-
+#### 2. Seed Sample TPC-H Data & Build dbt Marts
 ```bash
-make local-doctor
-make local-lakehouse-smoke
-make local-dataops-recovery-smoke
+# Seed 8 persistent TPC-H tables into iceberg.tpch_tiny and build dbt staging/marts models
+make lake-seed
+make lake-build
+make lake-test
 ```
 
-The DataOps command installs the locked Python dependencies in a project-local
-environment, materializes dbt staging/mart tables through Dagster, verifies repeat
-results and recovery from a controlled test failure, and removes its experiment
-tables. See [the runbook](tools/local_experiment/dataops/README.md).
-The [Iceberg snapshot sandbox](tools/local_experiment/iceberg_sandbox/README.md)
-demonstrates historical reads, a separate CTAS restoration and rollback on new
-disposable tables. Run it with `rtk make local-iceberg-sandbox`.
-The [named-reference experiment](tools/local_experiment/iceberg_refs/README.md)
-creates a tag and branch on one disposable table, checks named historical reads,
-and verifies conditional branch updates and stale-update rejection.
-Run it with `rtk make local-iceberg-refs`.
-The historical `make verify` retains publication checks and is separate from
-this local loop.
-
-The extended local profile adds Superset, OpenMetadata, ClickHouse AgentHouse,
-Loki, an MCP stdio gateway and a bounded LangGraph workflow:
-
+#### 3. Ingest Local Files (Replace / Append / Idempotent Upsert)
 ```bash
-rtk make local-platform-status
-rtk make local-superset-smoke local-metadata-ingest
-rtk make local-gateway-smoke local-llm-smoke
-rtk make local-llm-qwen-smoke
-rtk make local-llm-qwen-eval
-rtk make local-sre-qwen-smoke local-sre-qwen-eval
-rtk make local-sre-qwen-drill
-rtk make local-data-bear-eval local-data-bear-smoke
-rtk make local-policy-status local-policy-smoke
-rtk make local-tpch-smoke
+# Automatically infer schema and load CSV/JSONL/Parquet into Iceberg
+go run ./cmd/shirokuma lake ingest --file customers.csv --table raw.customers --mode replace
+
+# Idempotent keyed upsert (deduplicates input batch and atomically merges by key)
+go run ./cmd/shirokuma lake ingest --file orders_delta.jsonl --table raw.orders --mode upsert --key order_id
 ```
 
-The TPC-H target generates disposable SF10 Iceberg tables and compares 22 queries
-with the generator reference. This is a functional experiment on one shared
-host, not an official performance result. `local-llm-smoke` uses a deterministic
-mock. `local-llm-qwen-smoke` uses the existing MTPLX `qwen3.8-flash-next` server
-at `127.0.0.1:8001`, validates real MCP inventory summaries, and reads back token
-counts and timing from AgentHouse. `local-llm-qwen-eval` checks five synthetic
-inventory cases twice each. See the [LLM runbook](tools/local_experiment/llm/README.md).
-Cloud execution remains disabled and is not required for this local loop.
-The [SRE workflow](tools/local_experiment/bears/README.md) uses Qwen to select
-follow-up MCP reads, verifies the evidence references, and compares selected
-Pod/Event observations by UID. It also observes all five runtime groups,
-distinguishes unavailable services from unknown status, and requires critical
-runtime findings to be re-observed. It does not perform workload remediation.
-The optional drill creates one disposable Failed Pod, verifies that Qwen selects
-its re-observation, and removes only the creation receipt's matching UID.
-The [local admission baseline](tools/local_experiment/policy/README.md) reuses
-seven repository CEL rules through native Kubernetes policies scoped to
-`shirokuma-dev`. Its smoke requests are server-side dry-runs. This local bridge
-does not install Kyverno or attest image signatures/vulnerabilities.
-The [Data Engineer Bear](tools/local_experiment/bears/DATA_ENGINEER.md) converts
-small requests into a validated plan, generates fixed dbt templates, and checks
-disposable Iceberg results against an independent oracle before scoped cleanup.
-The [Catalog Curator Bear](tools/local_experiment/bears/CATALOG_CURATOR.md) records
-verified Data Engineer runs as historical metadata with fixed owners and lineage.
-The [Data → Catalog handoff](tools/local_experiment/bears/DATA_CATALOG.md) connects
-both workflows and resumes from saved evidence without invoking Data twice.
-Use `shirokuma data run --case name_lengths_ja` or supply a bounded request with
-`shirokuma data run --request-stdin`. Inspect saved evidence with
-`shirokuma data status TOKEN`, or resume the same operation with
-`shirokuma data resume TOKEN`. The existing Make entrypoints remain available.
-The [lineage coverage report](tools/local_experiment/metadata/COVERAGE.md) compares
-verified Data Plan histories with saved OpenMetadata edges and distinguishes
-missing, conflicting and unknown observations. Run `rtk make local-lineage-coverage`
-to produce private JSON and HTML reports.
-The [Query Doctor Bear](tools/local_experiment/bears/QUERY_DOCTOR.md) selects bounded
-read-only follow-ups from verified Trino plan and query-history observations.
-The [Policy Gatekeeper Bear](tools/local_experiment/bears/POLICY_GATEKEEPER.md)
-classifies fixed policy candidates and verifies native admission through server dry-runs.
-The [isolated Trino/OPA experiment](tools/local_experiment/trino_opa/README.md)
-checks row filters, column masks, denials and an unavailable policy backend on
-disposable TPCH-only Pods. Its synthetic user headers demonstrate authorization
-behavior. The [Keycloak identity experiment](tools/local_experiment/trino_identity/README.md)
-adds private TLS, live Keycloak tokens, fixed username mapping and signed negative
-controls in a separate disposable Pod. It checks row/column authorization and
-both user-header impersonation paths. Browser SSO, key rotation and realm role
-propagation remain outside this experiment. Its explicit
-`rtk make local-trino-identity-telemetry TRINO_IDENTITY_BUILD_TOKEN=<token>`
-mode records a fresh run in Pawprints, Loki and OTel, with expected rejections
-kept visible as blocked requests. Existing MCP/Grafana reads expose the results.
-The [Gateway warehouse experiment](tools/local_experiment/gateway_warehouse/README.md)
-checks two disposable Trino routes, continuation stickiness, unknown-route and
-read-only denials, and an isolated PostgreSQL backup/restore. It does not install
-a warehouse controller or claim tenant isolation.
-The [warehouse lifecycle experiment](tools/local_experiment/warehouse_lifecycle/README.md)
-uses separate disposable XS/S Deployments to exercise idle checks, Gateway
-deactivation, scale-to-zero and wake with a new coordinator. A short-lived local
-session also accepts `shirokuma chill XS` and `shirokuma wake XS` commands and
-records the actual transitions in Pawprints, Loki and OTel.
-The [evaluation report](tools/local_experiment/evaluation/README.md) checks all
-retained suite receipts and keeps failures, missing evidence and case differences visible.
-The [AgentHouse dashboard](tools/local_experiment/grafana/README.md) provides
-read-only Task/Trace filters, recorded failures and blocks, phase latency and
-model token coverage at [local Grafana](http://127.0.0.1:18030/d/shirokuma-agenthouse-local).
-Run `rtk make local-grafana-up local-grafana-smoke` to start and verify it.
-The [benchmark receipt importer](tools/local_experiment/benchmark_events/README.md)
-preserves recorded successes, failures and missing comparisons in separate
-AgentHouse tables. `rtk make local-benchmark-events-import` reuses retained
-receipts and inserts nothing on a repeated import of the same input.
-The [Query Doctor history importer](tools/local_experiment/query_history/README.md)
-retains captured query identities and measured history separately from auxiliary
-reads. `rtk make local-query-history-import` checks terminal evidence and imports
-saved observations without sending new Trino or model requests.
-The [query experiment history](http://127.0.0.1:18030/d/shirokuma-query-history-local)
-displays retained failures, missing comparisons and Query Doctor measurements.
-After importing receipts, enable its bounded reader with
-`rtk make local-grafana-history-enable local-grafana-verify-history`.
-Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
-and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
-Generated credentials stay in private ignored state; see the component runbooks
-linked from [the local runner guide](docs/LOCAL_EXPERIMENT_RUNNER.md).
-The [Spark/Trino snapshot measurements](tools/local_experiment/spark_benchmark/README.md)
-compare fixed decimal aggregates against an independent oracle on one disposable
-Iceberg snapshot. Run `rtk make local-spark-benchmark` with the verified Spark
-classpath build token. First-observed and repeated timings retain their cache,
-resource and startup boundaries; they do not imply a general engine ranking.
-
-## Design context
-
-The repository-owned snapshot of the approved Shirokuma design notes lives
-under `docs/design/`. Work Packages and local worktrees use these repository-relative
-paths. Matching Obsidian notes remain the planning source.
-
-Verify the checked-in context and issue mapping:
-
+#### 4. Query the Virtual Warehouse & Manage Compute Lifecycle
 ```bash
-make verify-design-context
+# Run analytical SQL (read-only guardrail by default; supports Trino QUALIFY rewrite)
+go run ./cmd/shirokuma warehouse query LOCAL "SELECT region, COUNT(*) FROM iceberg.raw.customers GROUP BY 1"
+
+# Scale Trino down to zero replicas when idle, and auto-wake on the next query
+go run ./cmd/shirokuma warehouse chill LOCAL
+go run ./cmd/shirokuma warehouse status LOCAL
 ```
 
-The GitHub supervisor path is inactive in local mode. Only before starting that
-separately authorized path, verify its issue references on `origin/main`:
+#### 5. Delegate Data Engineering to AI Bears with WAP & Rollback
+```bash
+# Stage, audit, and atomically publish a mart with quality & regression guards
+go run ./cmd/shirokuma bear data "aggregate net revenue by customer segment" \
+  --sql "SELECT segment, COUNT(*) AS orders, SUM(amount) AS revenue FROM iceberg.raw.orders GROUP BY 1" \
+  --stage-table stg_segment_rev \
+  --publish marts.segment_revenue \
+  --min-rows 1 \
+  --not-null segment,revenue
+
+# Re-run a registered WAP mart in one command as upstream raw data changes
+go run ./cmd/shirokuma bear data --refresh marts.segment_revenue
+
+# Inspect combined dbt + WAP lineage or roll back to a previous Iceberg snapshot
+go run ./cmd/shirokuma bear catalog lineage
+go run ./cmd/shirokuma bear data --table marts.segment_revenue --rollback --snapshot-id <SNAPSHOT_ID>
+```
+
+#### 6. Launch Shirokuma Workbench (Web UI)
+```bash
+go run ./cmd/shirokuma workbench --port 8888
+# Open http://127.0.0.1:8888
+```
+
+#### 7. Run Verification Suites
+```bash
+make verify-core   # Fast resident core Python + Go CLI + design context checks (~6s)
+make verify        # Full CI verification including OpenTofu, Kyverno policy tests, and secret scan (~12s)
+```
+
+---
+
+<a id="日本語"></a>
+
+## 日本語
+
+### 概要
+
+**Shirokuma（しろくま）** は、**Apache Iceberg**・**Apache Polaris**・**Trino**・**SeaweedFS**・**dbt**・**ClickHouse** を組み合わせた、**「AIエージェントにデータ処理を安心して任せることができる中小規模向けオープンソース Data Warehouse / Lakehouse 基盤」** です。
+
+Snowflake や Databricks の巨大機能をすべて模倣するのではなく、中小規模のデータチームや AI ネイティブな開発現場に本当に必要な **2つの柱** に集中しています。
+1. **軽量・常駐型の本物の Iceberg Lakehouse**: 単一の Mac（Apple Silicon / Colima k3s）や Kubernetes 上で軽快に常駐稼働し、アイドル時の `chill`（ゼロスケール停止）とクエリ実行時の自動 `wake`（コールドスタート復帰）を備えています。
+2. **AIエージェント安全委任ガードレール**: AI エージェントがローカルデータの取り込み、SQL 生成、マート構築、パイプライン更新を自律実行しても、**本番データを決して破壊しない多層防御（SQL ポリシー・Write-Audit-Publish・回帰ガード・1コマンド Snapshot Rollback・全操作監査証跡）** を標準搭載しています。
+
+---
+
+### 主要機能
+
+| 機能領域 | 内容 |
+|---|---|
+| **1. SQL 安全ガードレール** | `shirokuma warehouse query` はデフォルトで `read-only`（DDL/DML 遮断）を強制します。`sandbox-write` は `iceberg.scratch` / `staging` / `raw` のみ書き込みを許可し、本番 `iceberg.marts` の直接変更は遮断します。 |
+| **2. Write-Audit-Publish (WAP) と回帰ガード** | AI またはオペレータの変換 SQL をまず `iceberg.scratch.<stage_table>` にステージング作成し、単一テーブルスキャンで件数（`--min-rows`）・NULL 制約（`--not-null`）・**既存本番テーブル比 50% 以上の急減やカラム欠落（回帰ガード）** を自動検査してから `iceberg.marts` へアトミックに公開します。 |
+| **3. Iceberg スナップショット Rollback** | 万一誤ったデータを公開しても、`shirokuma bear data --table marts.<name> --rollback --snapshot-id <id>` 1コマンドで過去のスナップショットへ即座に無停止ロールバックできます。 |
+| **4. 自動スキーマ推論 Ingest & 冪等 Upsert** | `shirokuma lake ingest` により、ローカルの **CSV / TSV / JSONL / Parquet** ファイルから型（`BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, `VARCHAR`）を自動推論して Iceberg テーブルへロードします。`replace`（全置換）・`append`（追記）に加え、複合キー対応の冪等 `upsert`（`--mode upsert --key <cols>`）に対応しています。 |
+| **5. 5頭の自律 AI Bear と SQL 自己修復** | **SRE Bear**（稼働・リソース監視）、**Query Doctor Bear**（Trino 実行計画・Skew 診断）、**Data Engineer Bear**（自然言語からの SQL 生成、`QUALIFY` 句自動書き換え、`EXPLAIN` 失敗時の自動再試行、WAP 公開、`--refresh` 再実行）、**Catalog Curator Bear**（カタログ探索・dbt + WAP 統合リネージ）、**Policy Gatekeeper Bear**（Kubernetes セキュリティ監査）を提供します。 |
+| **6. Shirokuma Workbench & Pawprints 監査台帳** | `shirokuma workbench`（`http://127.0.0.1:8888`）により、Warehouse 操作・SQL 実行・カタログ＆リネージ閲覧・ファイル Ingest・5 Bears＆WAP/Rollback 操作・ClickHouse `agenthouse.pawprints` 監査ログ（対象スナップショット ID や LLM トークン消費量を含む）を単一のローカル Web UI で完結できます。 |
+
+---
+
+### クイックスタート（主要コマンド）
 
 ```bash
-make supervisor-preflight
+# 1. ローカル Lakehouse ラボの起動・ヘルスチェック
+make lab-up
+make lab-status
+go run ./cmd/shirokuma doctor --profile local-experiment
+
+# 2. サンプルデータ (TPC-H) のシードと常設 dbt パイプラインのビルド・検証
+make lake-seed
+make lake-build
+make lake-test
+
+# 3. ローカルファイル (CSV / TSV / JSONL / Parquet) の取り込みと冪等 Upsert
+go run ./cmd/shirokuma lake ingest --file customers.csv --table raw.customers --mode replace
+go run ./cmd/shirokuma lake ingest --file orders_q3.jsonl --table raw.orders --mode upsert --key order_id
+
+# 4. Virtual Warehouse での SQL 実行（QUALIFY 句対応）と Chill / Wake
+go run ./cmd/shirokuma warehouse query LOCAL "SELECT * FROM iceberg.marts.fct_orders LIMIT 10"
+go run ./cmd/shirokuma warehouse chill LOCAL
+go run ./cmd/shirokuma warehouse wake LOCAL
+
+# 5. Data Engineer Bear による WAP ステージング・品質監査・本番 Publish・ワンコマンド Refresh・Rollback
+go run ./cmd/shirokuma bear data "セグメント別の純売上を集計" \
+  --sql "SELECT segment, COUNT(*) AS order_count, SUM(net_amount) AS revenue FROM iceberg.raw.orders GROUP BY 1" \
+  --stage-table stg_seg_rev \
+  --publish marts.segment_revenue \
+  --min-rows 1 \
+  --not-null segment,revenue
+
+go run ./cmd/shirokuma bear data --refresh marts.segment_revenue
+go run ./cmd/shirokuma bear catalog lineage
+go run ./cmd/shirokuma bear data --table marts.segment_revenue --rollback --snapshot-id <SNAPSHOT_ID>
+
+# 6. 統合 Web UI「Shirokuma Workbench」の起動 (http://127.0.0.1:8888)
+go run ./cmd/shirokuma workbench --port 8888
+
+# 7. 高速コア検証（約6秒）およびフル CI 検証（約12秒）
+make verify-core
+make verify
 ```
+
+---
+
+### Repository Structure / リポジトリ構成
+
+| Path | Description / 役割 |
+|---|---|
+| [`cmd/shirokuma/`](cmd/shirokuma/) | Go CLI entrypoint (`shirokuma`) / CLI エントリポイント |
+| [`internal/cli/`](internal/cli/) | Go CLI commands (`warehouse`, `lake`, `bear`, `workbench`, `doctor`, `version`) |
+| [`tools/local_experiment/`](tools/local_experiment/) | Resident Lakehouse core modules (`warehouse_resident.py`, `wap_resident.py`, `bears_resident.py`, `lake_ingest.py`, `lake_seed.py`, `lake_pipeline.py`, `workbench_server.py`, `lab_lifecycle.py`, `agenthouse/`, `loki/`, `workbench/`, `dataops/dbt_persistent/`) |
+| [`deploy/`](deploy/) | Kubernetes / Flux v2 GitOps manifests for SeaweedFS, Polaris, PostgreSQL, Trino, and local overlays |
+| [`opentofu/dev/`](opentofu/dev/) | OpenTofu infrastructure definitions for the local Kubernetes environment |
+| [`policies/kyverno/`](policies/kyverno/) | Kyverno admission security policies (`baseline.yaml`) |
+| [`docs/design/`](docs/design/) | Architecture Decision Records ([`ADR-0036`](docs/design/07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md)), Roadmap ([`DEV-04F`](docs/design/04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md)), Gate Summary ([`DEV-04D`](docs/design/04_Development/04D_Current_Gate_Summary.md)), Optional Plugin Tracks ([`ARCH-02D`](docs/design/02_Architecture/02D_Optional_Plugin_Tracks.md)), and Milestones ([`WP-061`](docs/design/06_WorkPackages/061_Local_Experiment_Milestones.md)) |
+
+---
+
+### License
+
+Apache License 2.0 — see [`LICENSE`](LICENSE).
