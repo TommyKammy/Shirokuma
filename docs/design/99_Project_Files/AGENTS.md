@@ -34,7 +34,7 @@ and `docs/design/04_Development/04B_Autonomous_Local_Development.md`).
   - Reviews worker diffs, test outcomes, and runtime behavior; rejects
     fixture-only hacks, defensive symlink/fd paranoia, or scope drift.
 - **Implementation Worker (`codex-cli` with `gpt-6.1-sol` Medium)**:
-  - Invoked via `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s workspace-write -C /Users/jp.infra/Dev/Shirokuma/worktree/local-autonomous "<task>"`.
+  - Invoked via `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s workspace-write -C "$(git rev-parse --show-toplevel)" "<task>"`.
   - Executes scoped code edits and focused unit/integration tests in the target
     files specified by the Commander.
 - **Retirement of Unattended 500-Session Autonomous Loop**:

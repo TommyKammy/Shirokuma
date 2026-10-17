@@ -49,7 +49,7 @@ rtk proxy /Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex exec 
   -m gpt-6.1-sol \
   -c model_reasoning_effort="medium" \
   -s workspace-write \
-  -C /Users/jp.infra/Dev/Shirokuma/worktree/local-autonomous \
+  -C "$(git rev-parse --show-toplevel)" \
   "<Antigravityが作成した構造化タスク指示>"
 ```
 
