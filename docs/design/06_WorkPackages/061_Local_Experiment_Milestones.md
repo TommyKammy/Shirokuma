@@ -192,6 +192,18 @@ tags: [shirokuma, local, milestones]
 - Added zero-dependency inline SVG bar/line chart visualization (`Table View` / `Chart View`), selected-SQL execution, and session schema selector in SQL Worksheets.
 - Integrated 1-click Sandbox Clone (current table or historical snapshot) and Table Export in Database Explorer, Auto-Chill timer controls in Compute & Governance, and dedicated Query History & Copy/Load History tables in Pawprints.
 
+---
+
+### 2026-10-17 — WP-P9-001 to WP-P9-006: Data Correctness & Lakehouse Integrity Hardening (Completed)
+
+- **Type & Character Preservation (WP-P9-001)**: Prevented string identifiers with leading zeros (e.g. `'000123'`) from being coerced into BIGINT; preserved DECIMAL precision, distinguished empty strings from NULL for VARCHAR, auto-detected CP932 CSVs, preserved Japanese column names, and added `--schema-hints` & `--encoding`.
+- **Atomic Staging & Swap Ingest (WP-P9-002)**: Replaced direct in-place multi-batch table updates with an isolated staging table (`__stage_<id>`) and atomic swap upon completion, preventing corrupted table states on partial batch failures.
+- **Upsert Column Preservation (WP-P9-003)**: Resolved column loss bug in upsert by introspecting existing table schemas and preserving unmentioned existing columns across set-based updates (`LEFT JOIN` / `IS NOT DISTINCT FROM`).
+- **Full Export Guarantee (WP-P9-004)**: Removed the silent 10,000-row limit on table exports, defaulted to full export (`--full`), verified exported row counts against total row counts, and displayed exact match details in UI.
+- **WAP Strict Regression Audit & Snapshot Pinning (WP-P9-005)**: Blocked publication if baseline table introspection encounters an error, and pinned published tables to the exact snapshot ID verified during audit.
+- **Server-Side Auto-Chill Daemon & Query Protection (WP-P9-006)**: Added a background idle check daemon thread operating independently of browser window state, and protected active/queued Trino queries from unexpected warehouse suspension.
+
+
 ## Summary of Pre-Reset Verified Capabilities (2026-09-16 to 2026-10-10)
 
 The following capabilities were functionally demonstrated on `mac-studio-solo` during the initial local experiment wave and serve as the foundation for Phase 1–3 graduation:

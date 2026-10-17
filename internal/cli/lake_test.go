@@ -45,6 +45,12 @@ func TestLakeIngestFlags(t *testing.T) {
 			[]string{"--mode", "upsert", "--format", "auto", "--batch-size", "500", "--key", "id", "--", "data.csv"}, ""},
 		{[]string{"ingest", "data.csv", "--key", ""},
 			[]string{"--mode", "replace", "--format", "auto", "--batch-size", "500", "--key", "", "--", "data.csv"}, ""},
+		{[]string{"ingest", "data.csv", "--schema-hints", `{"id":"BIGINT","name":"VARCHAR"}`, "--encoding", "shift_jis"},
+			[]string{"--mode", "replace", "--format", "auto", "--batch-size", "500", "--schema-hints", `{"id":"BIGINT","name":"VARCHAR"}`, "--encoding", "shift_jis", "--", "data.csv"}, ""},
+		{[]string{"ingest", "data.csv", "--schema-hints", ""},
+			[]string{"--mode", "replace", "--format", "auto", "--batch-size", "500", "--schema-hints", "", "--", "data.csv"}, ""},
+		{[]string{"ingest", "data.csv", "--encoding", ""},
+			[]string{"--mode", "replace", "--format", "auto", "--batch-size", "500", "--encoding", "", "--", "data.csv"}, ""},
 	} {
 		f := &fakeLake{data: []byte(`{"action":"ingest","rows_ingested":7}`)}
 		out, err := executeLake(f, tc.args...)
@@ -92,7 +98,13 @@ func TestLakeExportFlags(t *testing.T) {
 		root       string
 	}{
 		{[]string{"export", "raw.orders", "--output", "out.csv"},
+			[]string{"--export", "raw.orders", "--output", "out.csv", "--format", "auto"}, ""},
+		{[]string{"export", "raw.orders", "--output", "out.csv", "--full"},
+			[]string{"--export", "raw.orders", "--output", "out.csv", "--format", "auto"}, ""},
+		{[]string{"export", "raw.orders", "--output", "out.csv", "--max-rows", "10000"},
 			[]string{"--export", "raw.orders", "--output", "out.csv", "--format", "auto", "--max-rows", "10000"}, ""},
+		{[]string{"export", "raw.orders", "--output", "out.csv", "--full=false", "--max-rows", "7"},
+			[]string{"--export", "raw.orders", "--output", "out.csv", "--format", "auto", "--max-rows", "7"}, ""},
 		{[]string{"export", "iceberg.marts.orders", "--output", "my data.jsonl", "--format", "jsonl", "--max-rows", "7", "--repo-root", "/tmp/repo"},
 			[]string{"--export", "iceberg.marts.orders", "--output", "my data.jsonl", "--format", "jsonl", "--max-rows", "7"}, "/tmp/repo"},
 	} {
@@ -100,6 +112,14 @@ func TestLakeExportFlags(t *testing.T) {
 		out, err := executeLake(f, tc.args...)
 		if err != nil || !reflect.DeepEqual(f.args, tc.want) || f.root != tc.root || !strings.Contains(out, `"row_count":7`) {
 			t.Fatalf("args=%v forwarded=%v output=%s error=%v", tc.args, f.args, out, err)
+		}
+	}
+	for _, maxRows := range []string{"7", "0", "-1"} {
+		f := &fakeLake{data: []byte(`{"action":"export"}`)}
+		_, err := executeLake(f, "export", "raw.orders", "--output", "out.csv", "--max-rows", maxRows, "--full")
+		want := []string{"--export", "raw.orders", "--output", "out.csv", "--format", "auto"}
+		if err != nil || !reflect.DeepEqual(f.args, want) {
+			t.Fatalf("--full with --max-rows=%s forwarded=%v error=%v", maxRows, f.args, err)
 		}
 	}
 	for _, format := range []string{"csv", "jsonl", "parquet"} {

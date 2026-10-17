@@ -202,14 +202,14 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         audit['snapshot_id'] = str(audit['snapshot_id'])
                 elif path == '/api/lake/export':
                     table, fmt = body.get('table'), body.get('format', 'auto')
-                    file, limit = body.get('file'), body.get('max_rows', 10000)
+                    file, limit = body.get('file'), body.get('max_rows')
                     if not isinstance(table, str) or not table.strip():
                         raise ValueError('table must be a non-empty string')
                     if not isinstance(fmt, str) or fmt not in {'auto', 'csv', 'jsonl', 'parquet'}:
                         raise ValueError('invalid export format')
                     if file is not None and (not isinstance(file, str) or not file.strip()):
                         raise ValueError('file must be a non-empty string')
-                    if type(limit) is not int or limit < 1:
+                    if limit is not None and (type(limit) is not int or limit < 1):
                         raise ValueError('max_rows must be a positive integer')
                     result = lake_ingest.export_table(table, file=file, format=fmt, max_rows=limit)
                 elif path == '/api/catalog/drop':

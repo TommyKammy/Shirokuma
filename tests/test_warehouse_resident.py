@@ -16,6 +16,10 @@ class ResidentWarehouseTests(unittest.TestCase):
         with patch.object(w, '_AUTO_CHILL_MINUTES', 0), patch.object(w, '_LAST_ACTIVITY', 0), \
              patch.object(w.time, 'monotonic', return_value=100) as clock, \
              patch.object(w, 'status', return_value={'replicas': 1}) as status, \
+             patch.object(w, 'start_auto_chill_daemon') as start, \
+             patch.object(w, 'stop_auto_chill_daemon') as stop, \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', return_value={'rows': [[0]]}), \
              patch.object(w, 'transition') as transition:
             self.assertFalse(w.check_auto_chill()['chilled'])
             status.assert_not_called()
@@ -33,8 +37,72 @@ class ResidentWarehouseTests(unittest.TestCase):
             transition.assert_called_once()
             self.assertEqual(w.configure_auto_chill(1440)['auto_chill_minutes'], 1440)
             self.assertEqual(w.configure_auto_chill(0)['auto_chill_minutes'], 0)
+            self.assertEqual(start.call_count, 2)
+            stop.assert_called_once_with()
             clock.return_value = 0
             self.assertEqual(w.auto_chill_status()['idle_seconds'], 0)
+
+    def test_auto_chill_active_queries_postpone_chill(self):
+        for count in (1, 7):
+            with self.subTest(count=count), patch.object(w, '_AUTO_CHILL_MINUTES', 1), \
+                 patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'monotonic', return_value=100), \
+                 patch.object(w, 'status', return_value={'replicas': 1}), \
+                 patch.object(w, 'trino', return_value=nullcontext('url')), \
+                 patch.object(w, 'execute', return_value={'rows': [[count]]}) as execute, \
+                 patch.object(w, 'transition') as transition:
+                self.assertEqual(w.check_auto_chill(), dict(chilled=False, active_queries=count,
+                    auto_chill_minutes=1, idle_seconds=0))
+                self.assertEqual(w._LAST_ACTIVITY, 100)
+                transition.assert_not_called()
+                self.assertEqual(execute.call_args.args[1],
+                    "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('RUNNING', 'QUEUED') "
+                    "AND query NOT LIKE '%system.runtime.queries%'")
+
+    def test_auto_chill_query_failure_does_not_chill(self):
+        with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
+             patch.object(w.time, 'monotonic', return_value=100), \
+             patch.object(w, 'status', return_value={'replicas': 1}), \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', side_effect=RuntimeError('Trino unavailable')), \
+             patch.object(w, 'transition') as transition:
+            with self.assertRaisesRegex(RuntimeError, 'Trino unavailable'):
+                w.check_auto_chill()
+            transition.assert_not_called()
+
+    def test_auto_chill_daemon_start_stop_and_restart(self):
+        self.addCleanup(w.stop_auto_chill_daemon)
+        with patch.object(w, '_AUTO_CHILL_MINUTES', 0), patch.object(w, '_LAST_ACTIVITY', 0):
+            w.configure_auto_chill(1)
+            first = w._AUTO_CHILL_THREAD
+            self.assertTrue(first.daemon)
+            self.assertTrue(first.is_alive())
+            w.configure_auto_chill(2)
+            self.assertIs(w._AUTO_CHILL_THREAD, first)
+            w.configure_auto_chill(0)
+            self.assertFalse(first.is_alive())
+            self.assertIsNone(w._AUTO_CHILL_THREAD)
+            w.stop_auto_chill_daemon()
+            w.configure_auto_chill(1)
+            self.assertIsNot(w._AUTO_CHILL_THREAD, first)
+            w.configure_auto_chill(0)
+
+    def test_auto_chill_daemon_checks_periodically_and_recovers(self):
+        with patch.object(w, '_AUTO_CHILL_THREAD', None), \
+             patch.object(w, '_AUTO_CHILL_STOP') as stop, \
+             patch.object(w.threading, 'Thread') as thread, \
+             patch.object(w, 'check_auto_chill', side_effect=[RuntimeError('temporary'), {}]) as check, \
+             patch.object(w.logging, 'getLogger') as logger:
+            stop.wait.side_effect = [False, False, True]
+            w.start_auto_chill_daemon(interval=3)
+            thread.return_value.start.assert_called_once_with()
+            thread.call_args.kwargs['target']()
+            self.assertEqual(check.call_count, 2)
+            self.assertEqual(stop.wait.call_count, 3)
+            stop.wait.assert_called_with(3)
+            logger.return_value.exception.assert_called_once()
+            w.stop_auto_chill_daemon()
+            stop.set.assert_called_once_with()
+            thread.return_value.join.assert_called_once_with()
 
     def test_activity_updated_only_for_successful_query_or_wake(self):
         with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'monotonic', return_value=50), \

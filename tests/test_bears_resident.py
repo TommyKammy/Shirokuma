@@ -255,7 +255,7 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(execute.call_args_list[1].args[1],
                              'CREATE OR REPLACE TABLE "iceberg"."sandbox"."dynamic_orders" AS ' + (override or saved))
             self.assertEqual(execute.call_args_list[2].args[1],
-                             'CREATE OR REPLACE TABLE "iceberg"."marts"."dynamic_orders" AS SELECT * FROM "iceberg"."sandbox"."dynamic_orders"')
+                             'CREATE OR REPLACE TABLE "iceberg"."marts"."dynamic_orders" AS SELECT * FROM "iceberg"."sandbox"."dynamic_orders" FOR VERSION AS OF 23')
             entry = b.load_wap_registry()['dynamic_orders']
             self.assertEqual(entry['intent'], 'count orders')
             self.assertEqual(entry['sql'], override or saved)
@@ -401,6 +401,40 @@ class BearsResidentTests(unittest.TestCase):
             self.assertEqual(len(writes), int(valid))
             if error:
                 self.assertIn(error, result['error'])
+
+    def test_publish_blocks_baseline_query_failures(self):
+        for responses in ([RuntimeError('count unavailable')],
+                          [{'rows': [[100]]}, RuntimeError('columns unavailable')],
+                          [{'error': 'count failed'}],
+                          [{'rows': [[100]]}, {'error': 'columns failed'}]):
+            source = dict(row_count=100, columns=[{'name': 'id'}], null_counts={}, snapshot_id=42)
+            with self.subTest(responses=responses), \
+                 patch.object(b, 'audit_table', return_value=source) as audit, \
+                 patch.object(b, 'latest_snapshot', return_value=123), \
+                 patch.object(b, 'sql', side_effect=responses) as sql, \
+                 patch.object(b, 'save_wap_entry') as save:
+                result = b.data(Args(publish='custom'))
+            self.assertFalse(result['valid'])
+            self.assertEqual(result['previous_snapshot_id'], 123)
+            self.assertEqual(result['audit'], source)
+            self.assertIn('publish blocked: failed to query baseline table for regression check (', result['error'])
+            self.assertFalse(any(c.args[1].startswith('CREATE') for c in sql.call_args_list))
+            audit.assert_called_once_with('http://trino', 'iceberg.sandbox.custom')
+            save.assert_not_called()
+
+    def test_publish_pins_audited_snapshot(self):
+        for snapshot in (42, 9007199254740993, None):
+            with self.subTest(snapshot=snapshot), \
+                 patch.object(b, 'audit_table', side_effect=[
+                     dict(row_count=3, null_counts={}, snapshot_id=snapshot), dict(snapshot_id=456)]), \
+                 patch.object(b, 'latest_snapshot', return_value=None), \
+                 patch.object(b, 'sql', return_value={'rows': []}) as sql:
+                self.assertTrue(b.data(Args(publish='custom'))['valid'])
+            statement = ('CREATE OR REPLACE TABLE "iceberg"."marts"."custom" AS SELECT * FROM '
+                         '"iceberg"."sandbox"."custom"')
+            if snapshot is not None:
+                statement += f' FOR VERSION AS OF {snapshot}'
+            sql.assert_called_once_with('http://trino', statement)
 
     def test_publish_quality_assertions(self):
         for rows, minimum, not_null, nulls, valid, error in (

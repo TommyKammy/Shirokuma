@@ -102,7 +102,7 @@ class WorkbenchTests(unittest.TestCase):
             Query & Load History|Refresh History|Trino Query History|Copy & Data Load History|
             Query ID|User|Source|SQL|Target|Result chart|
             Choose a numeric Y column to chart visible rows.|Clone audit needs review|
-            Cloned {source} to {table}.|Clone failed: {error}|Exported {table} to {filename}.|
+            Cloned {source} to {table}.|Clone failed: {error}|Exported {table} ({row_count} / {total_rows} rows) to {filename}.|
             Export failed: {error}|Auto-Chill failed: {error}|History failed: {error}'''
         for label in labels.split('|'):
             with self.subTest(label=label.strip()):
@@ -150,6 +150,7 @@ const run=eval(HANDLER);
             "api('/api/catalog/clone',payload)", "actionButton('Clone Snapshot'",
             "api('/api/lake/export',{table:selected,format})", 'atob(result.content_base64)',
             'downloadFile(content,result.filename', 'link.download=filename',
+            'row_count:result.row_count,total_rows:result.total_rows',
             "if(data.auto_chill)updateAutoChill(data.auto_chill)",
             "document.activeElement!==select", "if(auto_chill_minutes>0)",
             "api('/api/warehouse/autochill',{check:true})",
@@ -200,7 +201,9 @@ const run=eval(HANDLER);
     def test_export_api_defaults_options_and_validation(self):
         with patch.object(wb.lake_ingest, 'export_table', return_value={'content': 'id\n1\n'}) as export:
             self.assertEqual(self.json_request('/api/lake/export', {'table': 'marts.orders'}), (200, {'content': 'id\n1\n'}))
-            export.assert_called_once_with('marts.orders', file=None, format='auto', max_rows=10000)
+            export.assert_called_once_with('marts.orders', file=None, format='auto', max_rows=None)
+            self.assertEqual(self.json_request('/api/lake/export', dict(table='raw.orders', max_rows=None))[0], 200)
+            export.assert_called_with('raw.orders', file=None, format='auto', max_rows=None)
             self.assertEqual(self.json_request('/api/lake/export', dict(table='raw.orders', file='out.jsonl', format='jsonl', max_rows=7))[0], 200)
             export.assert_called_with('raw.orders', file='out.jsonl', format='jsonl', max_rows=7)
             export.reset_mock()

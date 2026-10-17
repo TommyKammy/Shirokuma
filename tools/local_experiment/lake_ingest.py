@@ -12,6 +12,7 @@ import re
 import sys
 import time
 import tempfile
+import uuid
 
 import bears_resident as bears
 import warehouse_resident as wr
@@ -22,7 +23,7 @@ FORMATS = {'.csv': 'csv', '.tsv': 'csv', '.jsonl': 'jsonl',
 
 
 def sanitize(value):
-    name = re.sub(r'[^a-z0-9_]', '_', str(value).lower()) or 'col'
+    name = re.sub(r'[^\w]', '_', str(value).lower()) or 'col'
     return 'col_' + name if name[0].isdigit() else name
 
 
@@ -38,7 +39,15 @@ def target_table(value, path):
     return '.'.join(parts)
 
 
-def read_file(path, format='auto'):
+def read_file(path, format='auto', schema_hints=None, encoding=None):
+    schema_hints = {} if schema_hints is None else schema_hints
+    if not isinstance(schema_hints, dict):
+        raise ValueError('schema_hints must be a column-to-type dictionary')
+    for sql_type in schema_hints.values():
+        if not isinstance(sql_type, str) or not re.fullmatch(
+                r'(?:VARCHAR|BIGINT|DOUBLE|BOOLEAN|DATE|DECIMAL(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)',
+                sql_type, re.IGNORECASE):
+            raise ValueError('unsupported schema hint type: ' + str(sql_type))
     detected = FORMATS.get(path.suffix.lower()) if format == 'auto' else format
     if detected not in {'csv', 'jsonl', 'parquet'}:
         raise ValueError('cannot detect file format; use --format')
@@ -50,7 +59,14 @@ def read_file(path, format='auto'):
         table = parquet.read_table(path)
         columns, rows = table.column_names, table.to_pylist()
     else:
-        with path.open(encoding='utf-8-sig', newline='') as stream:
+        raw = path.read_bytes()
+        try:
+            content = raw.decode(encoding or 'utf-8-sig')
+        except UnicodeDecodeError:
+            if detected != 'csv' or encoding is not None:
+                raise
+            content = raw.decode('cp932')
+        with io.StringIO(content, newline='') as stream:
             if detected == 'csv':
                 reader = csv.DictReader(stream, delimiter='\t' if path.suffix.lower() == '.tsv' else ',')
                 columns = reader.fieldnames or []
@@ -78,16 +94,22 @@ def read_file(path, format='auto'):
         names.append(name)
     keys = range(len(columns)) if detected == 'csv' else columns
     values = [[row.get(column) for column in keys] for row in rows]
-    schema = [(name, infer_type([row[i] for row in values])) for i, name in enumerate(names)]
+    schema = [(name, schema_hints.get(column, schema_hints.get(name)) or
+               infer_type([row[i] for row in values]))
+              for i, (column, name) in enumerate(zip(columns, names))]
     return detected, schema, values
 
 
 def is_null(value):
-    return value is None or isinstance(value, str) and value == ''
+    return value is None
+
+
+def leading_zero(value):
+    return isinstance(value, str) and re.fullmatch(r'[+-]?0[0-9]+', value.strip()) is not None
 
 
 def integer(value):
-    return (not isinstance(value, bool) and
+    return (not isinstance(value, bool) and not leading_zero(value) and
             (isinstance(value, int) or isinstance(value, str) and
              re.fullmatch(r'[+-]?[0-9]+', value.strip()) is not None) and
             -(2**63) <= int(value) < 2**63)
@@ -113,14 +135,14 @@ def is_date(value):
 
 
 def infer_type(values):
-    values = [v for v in values if not is_null(v)]
+    values = [v for v in values if not is_null(v) and v != '']
     if not values:
         return 'VARCHAR'
     if all(isinstance(v, bool) or isinstance(v, str) and v.lower() in {'true', 'false'} for v in values):
         return 'BOOLEAN'
     if all(integer(v) for v in values):
         return 'BIGINT'
-    if all(numeric(v) for v in values):
+    if not any(leading_zero(v) for v in values) and all(numeric(v) for v in values):
         return 'DOUBLE'
     if all(is_date(v) for v in values):
         return 'DATE'
@@ -128,7 +150,8 @@ def infer_type(values):
 
 
 def literal(value, sql_type):
-    if is_null(value):
+    sql_type = sql_type.upper()
+    if is_null(value) or sql_type != 'VARCHAR' and value == '':
         return f'CAST(NULL AS {sql_type})'
     if sql_type == 'BOOLEAN':
         return 'TRUE' if str(value).lower() == 'true' else 'FALSE'
@@ -140,6 +163,8 @@ def literal(value, sql_type):
         return f'CAST({float(value)!r} AS DOUBLE)'
     text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
     quoted = wr.literal(text)
+    if sql_type.startswith('DECIMAL'):
+        return f'CAST({quoted} AS {sql_type})'
     return 'DATE ' + quoted if sql_type == 'DATE' else quoted
 
 
@@ -163,19 +188,21 @@ def input_file(file=None, *, filename=None, content=None):
         yield path
 
 
-def preview(file=None, *, filename=None, content=None, format='auto', limit=10):
+def preview(file=None, *, filename=None, content=None, format='auto', limit=10,
+            schema_hints=None, encoding=None):
     with input_file(file, filename=filename, content=content) as path:
-        detected, schema, rows = read_file(path, format)
+        detected, schema, rows = read_file(path, format, schema_hints, encoding)
     return dict(action='preview', file=str(Path(filename).name if filename else file),
                 format=detected, columns=[dict(name=c, type=t) for c, t in schema],
                 row_count=len(rows), sample_rows=rows[:max(1, int(limit))])
 
 
 def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500, key=None,
-           *, filename=None, content=None):
+           *, filename=None, content=None, schema_hints=None, encoding=None):
     if filename is not None or content is not None:
         with input_file(file, filename=filename, content=content) as path:
-            result = ingest(path, table, mode, format, batch_size, key)
+            result = ingest(path, table, mode, format, batch_size, key,
+                            schema_hints=schema_hints, encoding=encoding)
         result['file'] = Path(filename).name
         return result
     started = time.monotonic()
@@ -187,14 +214,14 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
         path = Path(file)
         target = target_table(table, path)
         sql_target = wr.identifier(target)
-        detected, schema, rows = read_file(path, format)
+        detected, schema, rows = read_file(path, format, schema_hints, encoding)
         if mode == 'upsert':
             key_cols = [sanitize(k) for k in (key or '').split(',') if k.strip()]
             names = [c for c, _ in schema]
             if not key_cols or any(c not in names for c in key_cols):
                 raise ValueError('upsert requires --key matching input columns')
             key_indices = [names.index(c) for c in key_cols]
-            # Compare typed SQL values so e.g. CSV integer keys 01 and 1 match.
+            # Compare typed SQL values, preserving distinct VARCHAR keys such as 01 and 1.
             # Reverse traversal retains the last occurrences in their file order.
             unique = {}
             for row in reversed(rows):
@@ -202,7 +229,6 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
                 if row_key not in unique:
                     unique[row_key] = row
             rows = list(reversed(unique.values()))
-            key_columns = ', '.join(f'"{c}"' for c in key_cols)
         guardrail = 'sandbox-write' if target.split('.')[1] in {'raw', 'sandbox'} else 'admin-write'
         columns = ', '.join('"' + c + '"' for c, _ in schema)
         batches = 0
@@ -210,27 +236,62 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
             def execute(statement):
                 return bears.sql(url, wr.check_sql_policy(statement, mode=guardrail))
             execute('CREATE SCHEMA IF NOT EXISTS ' + '.'.join(target.split('.')[:2]))
-            if mode in {'append', 'upsert'}:
+            sql_stage = (wr.identifier(f'{target}__stage_{uuid.uuid4().hex[:8]}')
+                         if mode in {'replace', 'upsert'} else None)
+            def upsert_from_stage():
                 execute('CREATE TABLE IF NOT EXISTS ' + sql_target + ' (' +
                         ', '.join(f'"{c}" {t}' for c, t in schema) + ')')
-            elif not rows:
-                execute('CREATE OR REPLACE TABLE ' + sql_target + ' AS SELECT ' +
-                        ', '.join(f'CAST(NULL AS {t}) AS "{c}"' for c, t in schema) + ' WHERE FALSE')
-            for offset in range(0, len(rows), batch_size):
-                values = ', '.join('(' + ', '.join(literal(v, t) for v, (_, t) in zip(row, schema)) + ')'
-                                   for row in rows[offset:offset + batch_size])
-                if mode == 'upsert':
-                    execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT {columns} FROM ('
-                            f'SELECT {columns}, ROW_NUMBER() OVER (PARTITION BY {key_columns} ORDER BY _src) AS _rn FROM ('
-                            f'SELECT {columns}, 1 AS _src FROM (VALUES {values}) AS t({columns}) '
-                            f'UNION ALL SELECT {columns}, 2 AS _src FROM {sql_target})) WHERE _rn = 1')
-                elif mode == 'replace' and offset == 0:
-                    execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM (VALUES {values}) AS t({columns})')
-                else:
-                    # A column list also supports append into an existing table
-                    # whose physical column order differs from the input file.
-                    execute(f'INSERT INTO {sql_target} ({columns}) VALUES {values}')
-                batches += 1
+                if not rows:
+                    return
+                existing = [(row[0], row[1]) for row in execute('DESCRIBE ' + sql_target)['rows']]
+                if any(c not in {name for name, _ in existing} for c in key_cols):
+                    raise ValueError('upsert keys must exist in the target table')
+                # Keep target order/types and columns absent from the input.
+                merged_schema = existing + [(c, t) for c, t in schema
+                                            if c not in {name for name, _ in existing}]
+                def quoted_column(column):
+                    return '"' + column.replace('"', '""') + '"'
+                incoming_names = {c for c, _ in schema}
+                existing_names = {c for c, _ in existing}
+                updated = ', '.join(
+                    f'{"t" if c in incoming_names else "old"}.{quoted_column(c)} AS {quoted_column(c)}'
+                    for c, _ in merged_schema)
+                retained = ', '.join(
+                    f'old.{quoted_column(c)}' if c in existing_names else f'CAST(NULL AS {t})'
+                    for c, t in merged_schema)
+                match = ' AND '.join(f't.{quoted_column(c)} IS NOT DISTINCT FROM old.{quoted_column(c)}'
+                                     for c in key_cols)
+                execute(f'CREATE OR REPLACE TABLE {sql_target} AS '
+                        f'WITH incoming AS (SELECT * FROM {sql_stage}) '
+                        f'SELECT {updated} FROM incoming t LEFT JOIN {sql_target} old ON {match} '
+                        f'UNION ALL SELECT {retained} FROM {sql_target} old '
+                        f'WHERE NOT EXISTS (SELECT 1 FROM incoming t WHERE {match})')
+            try:
+                load_target = sql_stage or sql_target
+                if mode == 'append':
+                    execute('CREATE TABLE IF NOT EXISTS ' + sql_target + ' (' +
+                            ', '.join(f'"{c}" {t}' for c, t in schema) + ')')
+                elif not rows:
+                    execute('CREATE TABLE ' + sql_stage + ' AS SELECT ' +
+                            ', '.join(f'CAST(NULL AS {t}) AS "{c}"' for c, t in schema) + ' WHERE FALSE')
+                for offset in range(0, len(rows), batch_size):
+                    values = ', '.join('(' + ', '.join(literal(v, t) for v, (_, t) in zip(row, schema)) + ')'
+                                       for row in rows[offset:offset + batch_size])
+                    if sql_stage and offset == 0:
+                        execute(f'CREATE TABLE {sql_stage} AS SELECT * FROM (VALUES {values}) AS t({columns})')
+                    else:
+                        # Match columns even when the target physical order differs.
+                        execute(f'INSERT INTO {load_target} ({columns}) VALUES {values}')
+                    batches += 1
+                if mode == 'replace':
+                    execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM {sql_stage}')
+                elif mode == 'upsert':
+                    upsert_from_stage()
+            finally:
+                if sql_stage:
+                    # The general SQL guardrail rejects DROP. This identifier is
+                    # generated here from the validated target, never user SQL.
+                    bears.sql(url, f'DROP TABLE IF EXISTS {sql_stage}')
             audit = bears.audit_table(url, target)
     except Exception:
         wr.telemetry('ingest', int((time.monotonic() - started) * 1000), status='failed', prefix='lake.')
@@ -245,17 +306,25 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
     return result
 
 
-def export_table(table, file=None, format='auto', max_rows=10000):
+def export_table(table, file=None, format='auto', max_rows=None, full=False):
     started = time.monotonic()
     try:
         full_table = bears.qualified_table(table)
         detected = (FORMATS.get(Path(file).suffix.lower()) if file is not None else 'csv') if format == 'auto' else format
         if not isinstance(detected, str) or detected not in {'csv', 'jsonl', 'parquet'}:
             raise ValueError('invalid export format')
-        if type(max_rows) is not int or max_rows < 1:
+        if max_rows is not None and (type(max_rows) is not int or max_rows < 1):
             raise ValueError('max_rows must be a positive integer')
         with wr.trino() as url:
-            result = bears.sql(url, f'SELECT * FROM {wr.identifier(full_table)} LIMIT {max_rows}')
+            sql_target = wr.identifier(full_table)
+            total_count = bears.sql(url, f'SELECT COUNT(*) FROM {sql_target}')['rows'][0][0]
+            limit = f' LIMIT {max_rows}' if max_rows is not None and not full else ''
+            # Export must also bypass the resident helper's 1,000-row fetch cap.
+            result = wr.execute(url, f'SELECT * FROM {sql_target}{limit}',
+                                {'X-Trino-User': 'shirokuma-bears',
+                                 'X-Trino-Source': 'shirokuma-bears',
+                                 'X-Trino-Catalog': 'iceberg', 'X-Trino-Schema': 'marts'},
+                                max_rows=max_rows if limit else math.inf)
         columns = [column['name'] for column in result['columns']]
         rows = result['rows']
         if detected == 'parquet':
@@ -291,7 +360,8 @@ def export_table(table, file=None, format='auto', max_rows=10000):
     duration = int((time.monotonic() - started) * 1000)
     telemetry = wr.telemetry('export', duration, status='success', prefix='lake.')
     return dict(action='export', table=full_table, format=detected, columns=columns,
-                row_count=len(rows), duration_ms=duration, telemetry=telemetry, **payload)
+                row_count=len(rows), total_rows=total_count, truncated=len(rows) < total_count,
+                duration_ms=duration, telemetry=telemetry, **payload)
 
 
 def main():
@@ -301,7 +371,7 @@ def main():
         parser.add_argument('--export', required=True, dest='table')
         parser.add_argument('--output', dest='file')
         parser.add_argument('--format', choices=['auto', 'csv', 'jsonl', 'parquet'], default='auto')
-        parser.add_argument('--max-rows', type=int, default=10000)
+        parser.add_argument('--max-rows', type=int)
         args = parser.parse_args()
         try:
             print(json.dumps(export_table(**vars(args))))
@@ -315,6 +385,8 @@ def main():
     parser.add_argument('--key', default=None)
     parser.add_argument('--format', choices=['auto', 'csv', 'jsonl', 'parquet'], default='auto')
     parser.add_argument('--batch-size', type=int, default=500)
+    parser.add_argument('--schema-hints', type=json.loads, help='JSON object mapping columns to SQL types')
+    parser.add_argument('--encoding', help='input encoding (CSV defaults to UTF-8, then CP932)')
     args = parser.parse_args()
     try:
         print(json.dumps(ingest(**vars(args))))

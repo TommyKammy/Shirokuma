@@ -48,4 +48,11 @@ tags: [shirokuma, local, handoff, gates]
 | **WP-P7-002** | Upgrade Shirokuma Workbench with Snowsight-style 3-category navigation, multi-tab SQL worksheets, inline Bear Copilot, result export, D&D upload preview, and 6-tab Table Inspector | **Completed (2026-10-17)** |
 | **WP-P8-001** | Add session schema context, 1-click sandbox table & snapshot clone, table data export/unload (`shirokuma lake export`), Virtual Warehouse Auto-Chill, and query/load history APIs | **Completed (2026-10-17)** |
 | **WP-P8-002** | Add top-right `EN / 日本語` bilingual UI switcher, inline SVG result charts, selected-SQL execution, and Workbench controls for sandbox clone, table export, Auto-Chill, and query/load history | **Completed (2026-10-17)** |
+| **WP-P9-001** | Preserve identifiers with leading zeroes, DECIMAL precision, empty string vs NULL, CP932 auto-detection, and explicit `--schema-hints` / `--encoding` | **Completed (2026-10-17)** |
+| **WP-P9-002** | Guarantee atomic batch ingestion via intermediate staging table swap (preventing table corruption on partial batch failure) | **Completed (2026-10-17)** |
+| **WP-P9-003** | Fix upsert column loss bug: preserve existing table columns absent from input file via set-based merge | **Completed (2026-10-17)** |
+| **WP-P9-004** | Guarantee full table export without silent 10k capping and verify row counts in CLI and Workbench UI | **Completed (2026-10-17)** |
+| **WP-P9-005** | Enforce strict WAP regression checks (block publish on baseline query errors) and pin published table to audited snapshot | **Completed (2026-10-17)** |
+| **WP-P9-006** | Run background server-side Auto-Chill daemon and protect active/queued Trino queries from unexpected chill | **Completed (2026-10-17)** |
+
 

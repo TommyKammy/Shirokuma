@@ -3,6 +3,7 @@ import argparse
 from contextlib import contextmanager
 import http.client
 import json
+import logging
 import re
 import socket
 import subprocess
@@ -22,6 +23,40 @@ _DEFAULT_URLOPEN = urllib.request.urlopen
 WRITABLE_SCHEMAS = ('raw', 'sandbox', 'staging', 'marts')
 _AUTO_CHILL_MINUTES = 0
 _LAST_ACTIVITY = time.monotonic()
+_AUTO_CHILL_THREAD = None
+_AUTO_CHILL_STOP = threading.Event()
+_AUTO_CHILL_LOCK = threading.Lock()
+
+
+def start_auto_chill_daemon(interval=15):
+    """Start one background idle check loop for this server process."""
+    global _AUTO_CHILL_THREAD
+    if interval <= 0:
+        raise ValueError('interval must be positive')
+    with _AUTO_CHILL_LOCK:
+        if _AUTO_CHILL_THREAD is not None and _AUTO_CHILL_THREAD.is_alive():
+            return
+        _AUTO_CHILL_STOP.clear()
+
+        def run():
+            while not _AUTO_CHILL_STOP.wait(interval):
+                try:
+                    check_auto_chill()
+                except Exception:
+                    logging.getLogger(__name__).exception('auto-chill check failed')
+
+        _AUTO_CHILL_THREAD = threading.Thread(target=run, name='warehouse-auto-chill', daemon=True)
+        _AUTO_CHILL_THREAD.start()
+
+
+def stop_auto_chill_daemon():
+    """Stop the loop and wait for any in-progress check to finish."""
+    global _AUTO_CHILL_THREAD
+    with _AUTO_CHILL_LOCK:
+        _AUTO_CHILL_STOP.set()
+        if _AUTO_CHILL_THREAD is not None:
+            _AUTO_CHILL_THREAD.join()
+            _AUTO_CHILL_THREAD = None
 
 
 def auto_chill_status():
@@ -35,14 +70,27 @@ def configure_auto_chill(minutes: int):
         raise ValueError('minutes must be an integer between 0 and 1440')
     _AUTO_CHILL_MINUTES = minutes
     _LAST_ACTIVITY = time.monotonic()
+    if minutes > 0:
+        start_auto_chill_daemon()
+    else:
+        stop_auto_chill_daemon()
     return auto_chill_status()
 
 
 def check_auto_chill(size='LOCAL'):
+    global _LAST_ACTIVITY
     chilled = False
     if (_AUTO_CHILL_MINUTES > 0 and
             time.monotonic() - _LAST_ACTIVITY >= _AUTO_CHILL_MINUTES * 60 and
             status(size)['replicas'] > 0):
+        with trino() as url:
+            count = execute(url,
+                "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('RUNNING', 'QUEUED') "
+                "AND query NOT LIKE '%system.runtime.queries%'",
+                {'X-Trino-User': 'shirokuma-warehouse'})['rows'][0][0]
+        if count > 0:
+            _LAST_ACTIVITY = time.monotonic()
+            return dict(chilled=False, active_queries=count, **auto_chill_status())
         transition('chill', size)
         chilled = True
     return dict(chilled=chilled, **auto_chill_status())

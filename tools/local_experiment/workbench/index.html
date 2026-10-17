@@ -95,7 +95,7 @@ const i18n = {ja: {
  'Schema':'スキーマ', 'Table View':'テーブル表示', 'Chart View':'グラフ表示', 'Chart type':'グラフの種類', 'Bar Chart':'棒グラフ', 'Line Chart':'折れ線グラフ', 'X column':'X 軸のカラム', 'Y column':'Y 軸のカラム',
  'Choose a numeric Y column to chart visible rows.':'表示中の行をグラフにする数値カラムを Y 軸に選択してください。', 'Result chart':'結果グラフ',
  'Clone to Sandbox':'サンドボックスに複製', 'Clone Snapshot':'スナップショットを複製', 'Cloned {source} to {table}.':'{source} を {table} に複製しました。', 'Clone audit needs review':'複製の監査結果を確認してください', 'Clone failed: {error}':'複製に失敗しました: {error}',
- 'Export format':'エクスポート形式', 'CSV':'CSV', 'JSONL':'JSONL', 'Parquet':'Parquet', 'Export Table':'テーブルをエクスポート', 'Exported {table} to {filename}.':'{table} を {filename} にエクスポートしました。', 'Export failed: {error}':'エクスポートに失敗しました: {error}',
+ 'Export format':'エクスポート形式', 'CSV':'CSV', 'JSONL':'JSONL', 'Parquet':'Parquet', 'Export Table':'テーブルをエクスポート', 'Exported {table} ({row_count} / {total_rows} rows) to {filename}.':'{table}（{row_count} / {total_rows} 行）を {filename} にエクスポートしました。', 'Export failed: {error}':'エクスポートに失敗しました: {error}',
  'Auto-Chill (idle minutes)':'自動休止（アイドル時間・分）', 'Off':'無効', '5m':'5 分', '15m':'15 分', '30m':'30 分', '60m':'60 分', 'Apply Auto-Chill':'自動休止を適用', 'Auto-Chill: Off':'自動休止: 無効', 'Auto-Chill: {minutes}m':'自動休止: {minutes} 分', 'Auto-Chill failed: {error}':'自動休止の設定・確認に失敗しました: {error}',
  'Query & Load History':'クエリ・読み込み履歴', 'Refresh History':'履歴を更新', 'Trino Query History':'Trino クエリ履歴', 'Copy & Data Load History':'コピー・データ読み込み履歴', 'History failed: {error}':'履歴を取得できません: {error}', 'Query ID':'クエリ ID', 'User':'ユーザー', 'Source':'実行元', 'SQL':'SQL 文', 'Target':'対象',
 
@@ -440,7 +440,7 @@ $('export-table-btn').onclick=()=>busy($('export-table-btn'),async()=>{
  try{const format=$('export-table-format').value,result=await api('/api/lake/export',{table:selected,format});
  const content=format==='parquet'?Uint8Array.from(atob(result.content_base64),c=>c.charCodeAt(0)):result.content;
  downloadFile(content,result.filename,{csv:'text/csv;charset=utf-8',jsonl:'application/x-ndjson',parquet:'application/vnd.apache.parquet'}[format]);
- if(request===columnRequest){ui($('catalog-error'),'Exported {table} to {filename}.',{table:selected,filename:result.filename});$('catalog-error').hidden=false;}
+ if(request===columnRequest){ui($('catalog-error'),'Exported {table} ({row_count} / {total_rows} rows) to {filename}.',{table:selected,filename:result.filename,row_count:result.row_count,total_rows:result.total_rows});$('catalog-error').hidden=false;}
  }catch(e){if(request===columnRequest){ui($('catalog-error'),'Export failed: {error}',{error:e.message});$('catalog-error').hidden=false;}}
 });
 let auto_chill_minutes=0;

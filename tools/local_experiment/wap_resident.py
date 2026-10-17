@@ -165,9 +165,14 @@ def data(b, args):
                             'sandbox table failed quality audit (row_count must be > 0)')
             previous = b.attempt(lambda: dict(snapshot_id=b.latest_snapshot(url, target))).get('snapshot_id')
             if previous is not None and not getattr(args, 'allow_shrink', False) and 'row_count' in source_audit:
-                baseline = b.attempt(lambda: dict(
-                    row_count=b.sql(url, 'SELECT COUNT(*) FROM ' + b.identifier(target))['rows'][0][0],
-                    columns=[r[0] for r in b.sql(url, 'SHOW COLUMNS FROM ' + b.identifier(target))['rows']]))
+                try:
+                    baseline = dict(
+                        row_count=b.sql(url, 'SELECT COUNT(*) FROM ' + b.identifier(target))['rows'][0][0],
+                        columns=[r[0] for r in b.sql(url, 'SHOW COLUMNS FROM ' + b.identifier(target))['rows']])
+                except Exception as exc:
+                    return dict(wap_action=action, table=target, source_table=source,
+                                previous_snapshot_id=previous, valid=False, audit=source_audit,
+                                error='publish blocked: failed to query baseline table for regression check (' + str(exc) + ')')
                 target_count, target_cols = baseline.get('row_count'), baseline.get('columns', [])
                 source_cols = {col['name'] for col in source_audit.get('columns', [])}
                 missing = [c for c in target_cols if c not in source_cols]
@@ -180,8 +185,10 @@ def data(b, args):
                 if error:
                     return dict(wap_action=action, table=target, source_table=source,
                                 previous_snapshot_id=previous, valid=False, audit=source_audit, error=error)
-            statement = b.wr.check_sql_policy('CREATE OR REPLACE TABLE ' + b.identifier(target) +
-                ' AS SELECT * FROM ' + b.identifier(source), mode='admin-write')
+            statement = 'CREATE OR REPLACE TABLE ' + b.identifier(target) + ' AS SELECT * FROM ' + b.identifier(source)
+            if staged_snapshot := source_audit.get('snapshot_id'):
+                statement += f' FOR VERSION AS OF {staged_snapshot}'
+            statement = b.wr.check_sql_policy(statement, mode='admin-write')
             b.sql(url, statement)
             audit = b.audit_table(url, target)
         fields = dict(table=target, source_table=source, published=True,
