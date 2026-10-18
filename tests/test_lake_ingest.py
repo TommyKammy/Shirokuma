@@ -18,6 +18,57 @@ import lake_ingest as lake
 
 
 class LakeIngestTests(unittest.TestCase):
+    def test_integer_key_types_normalize_before_staging_and_repeat_upsert(self):
+        for kind in ('INTEGER', 'INT', 'SMALLINT', 'TINYINT', 'BIGINT'):
+            with self.subTest(kind=kind), sqlite3.connect(':memory:') as db:
+                db.execute(f'CREATE TABLE target (id {kind}, amount BIGINT)')
+                db.execute('INSERT INTO target VALUES (1, 10)')
+                def execute(url, statement):
+                    statement = statement.replace('"iceberg"."raw"."orders__stage_abcd1234"', 'stage')
+                    if 'information_schema.columns' in statement or statement.startswith('DESCRIBE'):
+                        return dict(rows=[['id', kind], ['amount', 'BIGINT']])
+                    if statement.startswith('CREATE TABLE stage AS SELECT * FROM (VALUES'):
+                        db.execute(f'CREATE TABLE stage (id {kind}, amount BIGINT)')
+                        values = statement.split('FROM (VALUES ', 1)[1].rsplit(') AS t(', 1)[0]
+                        db.execute('INSERT INTO stage VALUES ' + values)
+                    elif statement.startswith(('INSERT INTO stage', 'DROP TABLE IF EXISTS stage')):
+                        db.execute(statement)
+                    elif statement.startswith('CREATE OR REPLACE TABLE'):
+                        query = statement.split(' AS ', 1)[1].replace('"iceberg"."raw"."orders"', 'target')
+                        rows = db.execute(query).fetchall()
+                        db.execute('DELETE FROM target')
+                        db.executemany('INSERT INTO target VALUES (?, ?)', rows)
+                    return {}
+                self.execute.side_effect = execute
+                for _ in range(2):
+                    result = lake.ingest(filename='orders.csv', content='id,amount\n01,4\n1,7\n',
+                                         mode='upsert', key='id', batch_size=1)
+                    self.assertEqual(result['rows_ingested'], 1)
+                    self.assertEqual(db.execute('SELECT * FROM target').fetchall(), [(1, 7)])
+                self.assertEqual(lake.literal('01', kind), lake.literal('1', kind))
+                self.assertEqual(lake.preview(filename='key.csv', content='id\n01\n',
+                    schema_hints={'id': kind})['columns'], [dict(name='id', type=kind)])
+
+    def test_stage_cleanup_failure_preserves_commit_and_original_write_error(self):
+        for fail_commit in (False, True):
+            def execute(url, statement):
+                if statement.startswith('DROP TABLE'):
+                    raise RuntimeError('drop failed')
+                if fail_commit and statement.startswith('CREATE OR REPLACE'):
+                    raise ValueError('promotion failed')
+                return {}
+            self.execute.side_effect = execute
+            with self.subTest(fail_commit=fail_commit), self.assertLogs(lake.__name__, level='WARNING') as logs:
+                if fail_commit:
+                    with self.assertRaisesRegex(ValueError, 'promotion failed'):
+                        lake.ingest(filename='orders.csv', content='id\n1\n')
+                else:
+                    result = lake.ingest(filename='orders.csv', content='id\n1\n')
+                    self.assertEqual(result['rows_ingested'], 1)
+                    self.assertEqual(self.telemetry.call_args.kwargs['status'], 'success')
+                    self.audit.assert_called()
+            self.assertIn('Failed to drop ingest staging table', logs.output[0])
+
     def test_upsert_casts_incoming_to_existing_decimal_types(self):
         self.execute.side_effect = lambda url, sql: {'rows': [['id', 'decimal(20,2)'],
             ['amount', 'decimal(38,8)']]} if sql.startswith('DESCRIBE') or 'information_schema.columns' in sql else {}

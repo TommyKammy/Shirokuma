@@ -78,10 +78,12 @@ def convert(value, hint):
                     or number != number.quantize(Decimal(1).scaleb(-s))):
                 raise ValueError('decimal does not fit ' + hint)
         return format(number, 'f')
-    if hint == 'BIGINT':
+    if hint in lake_ingest.INTEGER_TYPES:
         number = Decimal(str(value))
-        if not number.is_finite() or number != number.to_integral_value() or not -(2**63) <= number < 2**63:
-            raise ValueError('invalid BIGINT value')
+        bits = {'TINYINT': 8, 'SMALLINT': 16, 'INTEGER': 32, 'INT': 32, 'BIGINT': 64}[hint]
+        if (not number.is_finite() or number != number.to_integral_value()
+                or not -(2**(bits - 1)) <= number < 2**(bits - 1)):
+            raise ValueError('invalid ' + hint + ' value')
         return int(number)
     if hint == 'BOOLEAN':
         if str(value).lower() not in {'true', 'false', '0', '1'}:
@@ -227,7 +229,7 @@ class BatchMetrics:
         for column in (self.key, self.amount):
             if column and column not in hints:
                 raise ValueError('reconciliation column not found in source')
-        if self.amount and not (hints[self.amount].startswith('DECIMAL') or hints[self.amount] == 'BIGINT'):
+        if self.amount and not (hints[self.amount].startswith('DECIMAL') or hints[self.amount] in lake_ingest.INTEGER_TYPES):
             raise ValueError('amount column must be an integer or decimal')
         self.hints = hints
         self.metrics = dict(row_count=0, null_counts={c: 0 for c in hints})
@@ -254,7 +256,8 @@ class BatchMetrics:
         return self.metrics
 
 
-def extract(source_table, target_table, *, mode='replace', key=None, amount_col=None, batch_size=500, **connection):
+def extract(source_table, target_table, *, mode='replace', key=None, amount_col=None, batch_size=500,
+            target_types=None, **connection):
     target = lake_ingest.target_table(target_table, Path('source.csv'))
     if mode not in {'replace', 'append', 'upsert'}:
         raise ValueError('mode must be replace, append, or upsert')
@@ -265,7 +268,17 @@ def extract(source_table, target_table, *, mode='replace', key=None, amount_col=
                 raise ValueError('key not found in source')
         if mode == 'upsert' and not key:
             raise ValueError('upsert requires --key')
-        manifest = BatchMetrics(source.hints, key, amount_col)
+        hints = dict(source.hints)
+        for column, kind in (target_types or {}).items():
+            if column not in hints:
+                continue
+            kind = kind.upper().strip()
+            if not re.fullmatch(r'(?:VARCHAR|INTEGER|INT|SMALLINT|TINYINT|BIGINT|BOOLEAN|DATE|TIMESTAMP|DECIMAL\(\d+,\s*\d+\))', kind):
+                raise ValueError('unsupported target type for ' + column + ': ' + kind)
+            hints[column] = kind
+        extraction = BatchMetrics(source.hints, key, amount_col)
+        manifest = BatchMetrics(hints, key, amount_col)
+        unique = {}
         path = Path(directory) / 'source.csv'
         # JSONL retains NULL versus empty string, unlike CSV ingestion.
         path = path.with_suffix('.jsonl')
@@ -273,7 +286,12 @@ def extract(source_table, target_table, *, mode='replace', key=None, amount_col=
         with path.open('w', encoding='utf-8') as stream:
             for batch in source.batches(batch_size):
                 for row in batch:
-                    manifest.add(row)
+                    extraction.add(row)
+                    row = {c: convert(v, hints[c]) for c, v in row.items()}
+                    if mode == 'upsert':
+                        unique[lake_ingest.key_value(row[key.lower()], hints[key.lower()])] = row
+                    else:
+                        manifest.add(row)
                     stream.write(json.dumps(row, ensure_ascii=False) + '\n')
                 count += len(batch)
             if not count:
@@ -281,11 +299,14 @@ def extract(source_table, target_table, *, mode='replace', key=None, amount_col=
                 path = path.with_suffix('.csv')
                 with path.open('w', encoding='utf-8', newline='') as empty:
                     csv.writer(empty).writerow(source.hints)
+        for row in unique.values():
+            manifest.add(row)
         result = lake_ingest.ingest(path, table=target, mode=mode, key=key,
-                                   batch_size=batch_size, schema_hints=source.hints,
+                                   batch_size=batch_size, schema_hints=hints,
                                    atomic_append=(mode == 'append'))
         return dict(source_table=source_table, target_table=target, row_count=count,
-                    schema_hints=source.hints, metrics=manifest.finish(), ingest=result)
+                    schema_hints=hints, metrics=manifest.finish(),
+                    extraction_metrics=extraction.finish(), ingest=result)
 
 
 class ReconciliationError(RuntimeError):
@@ -311,6 +332,27 @@ def reconcile(source_table, target_table, *, key=None, amount_col=None, extracte
                 metrics = manifest.finish()
     else:
         metrics = extracted_metrics
+    target_metrics = table_metrics(target, metrics['null_counts'], key, amount_col)
+    discrepancies = []
+    for name, expected in metrics.items():
+        pairs = ((('null_counts.' + c, v, target_metrics['null_counts'][c])
+                  for c, v in expected.items()) if name == 'null_counts' else
+                 [(name, expected, target_metrics[name])])
+        for metric, expected, value in pairs:
+            matched = (expected == value if metric != 'sum_amount' or expected is None or value is None
+                       else Decimal(expected) == Decimal(str(value)))
+            if not matched:
+                discrepancies.append(dict(metric=metric, source=expected, target=value))
+    report = dict(status='mismatch' if discrepancies else 'matched', source_table=source_table,
+                  target_table=target, metrics=dict(source=metrics, target=target_metrics),
+                  discrepancies=discrepancies)
+    if discrepancies:
+        raise ReconciliationError(report)
+    return report
+
+
+def table_metrics(target, columns, key=None, amount_col=None):
+    """Read metrics from the actual typed table before it is published."""
     expressions = ['COUNT(*)']
     names = ['row_count']
     if key:
@@ -320,7 +362,7 @@ def reconcile(source_table, target_table, *, key=None, amount_col=None, extracte
         # Trino JSON decoding must never turn an exact decimal into a float.
         expressions.append('CAST(SUM(' + identifier(amount_col.lower()) + ') AS VARCHAR)')
         names.append('sum_amount')
-    for column in metrics['null_counts']:
+    for column in columns:
         expressions.append('COUNT(*) - COUNT(' + identifier(column.lower()) + ')')
         names.append('null_counts.' + column)
     with wr.trino() as url:
@@ -330,24 +372,13 @@ def reconcile(source_table, target_table, *, key=None, amount_col=None, extracte
     if result.get('truncated') or len(rows) != 1 or len(rows[0]) != len(names):
         raise RuntimeError('invalid target aggregate result')
     target_metrics = dict(null_counts={})
-    discrepancies = []
     for name, value in zip(names, rows[0]):
         column = name.removeprefix('null_counts.')
-        expected = metrics['null_counts'][column] if name.startswith('null_counts.') else metrics[name]
         if name.startswith('null_counts.'):
             target_metrics['null_counts'][column] = value
         else:
             target_metrics[name] = value
-        matched = (expected == value if name != 'sum_amount' or expected is None or value is None
-                   else Decimal(expected) == Decimal(str(value)))
-        if not matched:
-            discrepancies.append(dict(metric=name, source=expected, target=value))
-    report = dict(status='mismatch' if discrepancies else 'matched', source_table=source_table,
-                  target_table=target, metrics=dict(source=metrics, target=target_metrics),
-                  discrepancies=discrepancies)
-    if discrepancies:
-        raise ReconciliationError(report)
-    return report
+    return target_metrics
 
 
 def sync(source_table, target_table, *, mode='replace', key=None, amount_col=None, **connection):
@@ -357,32 +388,48 @@ def sync(source_table, target_table, *, mode='replace', key=None, amount_col=Non
     if mode == 'upsert' and not key:
         raise ValueError('upsert requires --key')
     stage = target + '__sync_stage_' + uuid.uuid4().hex
+    candidate = stage + '__candidate'
     sql_target, sql_stage = wr.identifier(target), wr.identifier(stage)
+    sql_candidate = wr.identifier(candidate)
     with wr.trino() as url:
         def execute(statement):
             return lake_ingest.bears.sql(url, wr.check_sql_policy(statement, mode='admin-write'))
+        cleanup = [sql_stage]
         try:
+            target_types = {}
+            if mode != 'replace':
+                metadata = execute('SELECT column_name, data_type FROM iceberg.information_schema.columns '
+                    'WHERE table_schema = ' + wr.literal(target.split('.')[1]) +
+                    ' AND table_name = ' + wr.literal(target.split('.')[2]))
+                target_types = dict(metadata['rows'])
             extracted = extract(source_table, stage, mode='upsert' if mode == 'upsert' else 'replace',
-                                key=key, amount_col=amount_col, **connection)
+                                key=key, amount_col=amount_col, target_types=target_types, **connection)
             report = reconcile(source_table, stage, key=key, amount_col=amount_col,
                                extracted_metrics=extracted['metrics'])
             schema = list(extracted['schema_hints'].items())
-            if mode == 'replace':
-                execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM {sql_stage}')
-            elif mode == 'append':
-                execute(f'CREATE TABLE IF NOT EXISTS {sql_target} (' +
-                        ', '.join(f'{identifier(c)} {t}' for c, t in schema) + ')')
-                columns = ', '.join(identifier(c) for c, _ in schema)
-                execute(f'INSERT INTO {sql_target} ({columns}) SELECT {columns} FROM {sql_stage}')
-            else:
-                lake_ingest.upsert_from_stage(execute, sql_target, sql_stage, schema,
-                                             [lake_ingest.sanitize(key)], bool(extracted['row_count']))
-            return dict(report, target_table=target)
+            publish = sql_stage
+            if target_types:
+                cleanup.append(sql_candidate)
+                execute(f'CREATE TABLE {sql_candidate} AS SELECT * FROM {sql_target}')
+                if mode == 'append':
+                    columns = ', '.join(identifier(c) for c, _ in schema)
+                    execute(f'INSERT INTO {sql_candidate} ({columns}) SELECT {columns} FROM {sql_stage}')
+                else:
+                    lake_ingest.upsert_from_stage(execute, sql_candidate, sql_stage, schema,
+                                                 [lake_ingest.sanitize(key)], bool(extracted['row_count']))
+                publish = sql_candidate
+            candidate_metrics = table_metrics(candidate if target_types else stage,
+                                              dict(schema), key, amount_col)
+            execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM {publish}')
+            return dict(report, target_table=target, reconciliation_scope='normalized_extraction_batch',
+                        extraction_metrics=extracted['extraction_metrics'],
+                        final_candidate_metrics=candidate_metrics)
         finally:
-            try:
-                lake_ingest.bears.sql(url, f'DROP TABLE IF EXISTS {sql_stage}')
-            except Exception:
-                logging.getLogger(__name__).warning('Failed to drop sync staging table %s', stage)
+            for sql_table in reversed(cleanup):
+                try:
+                    lake_ingest.bears.sql(url, f'DROP TABLE IF EXISTS {sql_table}')
+                except Exception:
+                    logging.getLogger(__name__).warning('Failed to drop sync staging table %s', sql_table)
 
 
 def main(argv=None):

@@ -3,6 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 import io
 import json
+import re
 from pathlib import Path
 import sqlite3
 import sys
@@ -37,6 +38,82 @@ class SqlServerSyncTests(unittest.TestCase):
         stack.enter_context(patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')))
         execute = stack.enter_context(patch.object(sync.wr, 'execute', return_value=dict(rows=[values])))
         return stack, execute
+
+    @contextlib.contextmanager
+    def typed_target(self, kind):
+        """Execute emitted merge and aggregate SQL against a typed SQLite table."""
+        with sqlite3.connect(':memory:') as db:
+            db.execute(f'CREATE TABLE orders (id {kind}, amount BIGINT)')
+            db.executemany('INSERT INTO orders VALUES (?, ?)', [(1, 10), (2, 20)])
+            statements = []
+            def execute(url, sql, *args, **kwargs):
+                statements.append(sql)
+                if 'information_schema.columns' in sql:
+                    return dict(rows=[['id', kind], ['amount', 'BIGINT']])
+                sql = re.sub(r'"iceberg"\."raw"\."(\w+)"', r'"\1"', sql)
+                if sql.startswith('CREATE SCHEMA'):
+                    return {}
+                if sql.startswith('DESCRIBE '):
+                    return dict(rows=[[r[1], r[2]] for r in db.execute('PRAGMA table_info(' + sql[9:] + ')')])
+                values = re.fullmatch(r'(CREATE TABLE .+ AS )SELECT \* FROM \(VALUES (.*)\) AS t\((.*)\)', sql)
+                if values:
+                    sql = values[1] + f'WITH t({values[3]}) AS (VALUES {values[2]}) SELECT * FROM t'
+                if sql.startswith('CREATE OR REPLACE TABLE '):
+                    target, query = sql[len('CREATE OR REPLACE TABLE '):].split(' AS ', 1)
+                    db.execute('CREATE TABLE promoted AS ' + query)
+                    db.execute('DROP TABLE IF EXISTS ' + target)
+                    db.execute('ALTER TABLE promoted RENAME TO ' + target)
+                    return {}
+                cursor = db.execute(sql)
+                return dict(rows=cursor.fetchall())
+            with patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')), \
+                 patch.object(sync.wr, 'execute', side_effect=execute), \
+                 patch.object(sync.lake_ingest.bears, 'sql', side_effect=execute), \
+                 patch.object(sync.lake_ingest.bears, 'audit_table', return_value={}), \
+                 patch.object(sync.wr, 'telemetry', return_value={}):
+                yield db, statements
+
+    def test_sync_target_integer_keys_and_candidate_metrics(self):
+        self.columns = [dict(name='id', type='VARCHAR'), dict(name='amount', type='BIGINT')]
+        self.rows = [dict(id='01', amount=4), dict(id='1', amount=7)]
+        self.write()
+        for kind in ('INTEGER', 'INT', 'SMALLINT', 'TINYINT', 'BIGINT'):
+            with self.subTest(kind=kind), self.typed_target(kind) as (db, statements):
+                for _ in range(2):
+                    report = sync.sync(**self.options, mode='upsert', key='id', amount_col='amount', batch_size=1)
+                    self.assertEqual(db.execute('SELECT * FROM orders ORDER BY id').fetchall(), [(1, 7), (2, 20)])
+                    self.assertEqual(report['status'], 'matched')
+                    self.assertEqual(report['reconciliation_scope'], 'normalized_extraction_batch')
+                    self.assertEqual(report['extraction_metrics']['distinct_keys'], 2)
+                    self.assertEqual(report['extraction_metrics']['row_count'], 2)
+                    for side in ('source', 'target'):
+                        self.assertEqual(report['metrics'][side]['distinct_keys'], 1)
+                        self.assertEqual(report['metrics'][side]['row_count'], 1)
+                        self.assertEqual(report['metrics'][side]['sum_amount'], '7')
+                    self.assertEqual(report['final_candidate_metrics'], dict(row_count=2, distinct_keys=2,
+                        sum_amount='27', null_counts=dict(id=0, amount=0)))
+
+    def test_sync_incompatible_target_values_fail_before_promotion(self):
+        self.columns = [dict(name='id', type='VARCHAR'), dict(name='amount', type='BIGINT')]
+        for value in ('invalid', '1.5', str(2**31)):
+            self.rows = [dict(id='1', amount=4), dict(id=value, amount=7)]
+            self.write()
+            with self.subTest(value=value), self.typed_target('INTEGER') as (db, statements):
+                with self.assertRaises((ValueError, ArithmeticError)):
+                    sync.sync(**self.options, mode='upsert', key='id', amount_col='amount', batch_size=1)
+                self.assertEqual(db.execute('SELECT * FROM orders ORDER BY id').fetchall(), [(1, 10), (2, 20)])
+                self.assertFalse(any(s.startswith('CREATE OR REPLACE TABLE') for s in statements))
+
+    def test_sync_append_reports_full_candidate_in_target_key_types(self):
+        self.columns = [dict(name='id', type='VARCHAR'), dict(name='amount', type='BIGINT')]
+        self.rows = [dict(id='03', amount=4), dict(id='3', amount=7)]
+        self.write()
+        with self.typed_target('BIGINT') as (db, statements):
+            report = sync.sync(**self.options, mode='append', key='id', amount_col='amount')
+            self.assertEqual(report['metrics']['target']['distinct_keys'], 1)
+            self.assertEqual(report['final_candidate_metrics']['distinct_keys'], 3)
+            self.assertEqual(report['final_candidate_metrics']['row_count'], 4)
+            self.assertEqual(db.execute('SELECT COUNT(DISTINCT id) FROM orders').fetchone()[0], 3)
 
     def test_all_type_mappings(self):
         for kind in ('INT', 'BIGINT', 'SMALLINT', 'TINYINT'):
@@ -200,7 +277,8 @@ class SqlServerSyncTests(unittest.TestCase):
             def extract(source, target, **kwargs):
                 self.assertIn('__sync_stage_', target)
                 events.append('extract')
-                return dict(schema_hints={'id': 'BIGINT'}, row_count=2, metrics={'row_count': 2})
+                return dict(schema_hints={'id': 'BIGINT'}, row_count=2, metrics={'row_count': 2},
+                            extraction_metrics={'row_count': 2})
             def reconcile(source, target, **kwargs):
                 self.assertIn('__sync_stage_', target)
                 self.assertEqual(kwargs['extracted_metrics'], {'row_count': 2})
@@ -212,10 +290,11 @@ class SqlServerSyncTests(unittest.TestCase):
             with self.subTest(mode=mode), \
                  patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')), \
                  patch.object(sync.lake_ingest.bears, 'sql', side_effect=execute), \
+                 patch.object(sync, 'table_metrics', return_value={'row_count': 2}), \
                  patch.object(sync, 'extract', side_effect=extract), \
                  patch.object(sync, 'reconcile', side_effect=reconcile):
                 report = sync.sync(**self.options, mode=mode, key='id', amount_col='amount')
-            self.assertEqual(events[:2], ['extract', 'reconcile'])
+            self.assertEqual([s for s in events if s in ('extract', 'reconcile')], ['extract', 'reconcile'])
             self.assertTrue(events[-1].startswith('DROP TABLE IF EXISTS'))
             self.assertEqual(report['target_table'], 'iceberg.raw.orders')
             self.assertTrue(any('"iceberg"."raw"."orders"' in s for s in events[2:-1]))
@@ -232,7 +311,9 @@ class SqlServerSyncTests(unittest.TestCase):
                         (extract if step == 'extract' else rec).side_effect = error
                         with self.assertRaises(type(error)):
                             sync.sync(**self.options, mode=mode, key='id')
-                        sql.assert_called_once()
+                        writes = [call.args[1] for call in sql.call_args_list
+                                  if not call.args[1].startswith('SELECT column_name')]
+                        self.assertEqual(len(writes), 1)
                         cleanup = sql.call_args.args[1]
                         self.assertTrue(cleanup.startswith('DROP TABLE IF EXISTS'))
                         self.assertIn('__sync_stage_', cleanup)

@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal, localcontext, ROUND_HALF_UP
 import json
 import io
+import logging
 import math
 from pathlib import Path
 import re
@@ -19,6 +20,7 @@ import bears_resident as bears
 import warehouse_resident as wr
 
 SCHEMAS = set(wr.WRITABLE_SCHEMAS)
+INTEGER_TYPES = {'INTEGER', 'INT', 'SMALLINT', 'TINYINT', 'BIGINT'}
 FORMATS = {'.csv': 'csv', '.tsv': 'csv', '.jsonl': 'jsonl',
            '.ndjson': 'jsonl', '.json': 'jsonl', '.parquet': 'parquet'}
 
@@ -46,7 +48,7 @@ def read_file(path, format='auto', schema_hints=None, encoding=None):
         raise ValueError('schema_hints must be a column-to-type dictionary')
     for sql_type in schema_hints.values():
         if not isinstance(sql_type, str) or not re.fullmatch(
-                r'(?:VARCHAR|BIGINT|DOUBLE|BOOLEAN|DATE|TIMESTAMP|DECIMAL(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)',
+                r'(?:VARCHAR|INTEGER|INT|SMALLINT|TINYINT|BIGINT|DOUBLE|BOOLEAN|DATE|TIMESTAMP|DECIMAL(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)',
                 sql_type, re.IGNORECASE):
             raise ValueError('unsupported schema hint type: ' + str(sql_type))
     detected = FORMATS.get(path.suffix.lower()) if format == 'auto' else format
@@ -170,8 +172,8 @@ def literal(value, sql_type):
         return 'TRUE' if str(value).lower() == 'true' else 'FALSE'
     # Explicit casts keep CTAS types stable even when the first batch contains
     # only small integers or decimal-looking floats.
-    if sql_type == 'BIGINT':
-        return f'CAST({int(value)} AS BIGINT)'
+    if sql_type in INTEGER_TYPES:
+        return f'CAST({int(value)} AS {sql_type})'
     if sql_type == 'DOUBLE':
         return f'CAST({float(value)!r} AS DOUBLE)'
     text = json_text(value) if isinstance(value, (dict, list)) else str(value)
@@ -338,7 +340,10 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
                 if sql_stage:
                     # The general SQL guardrail rejects DROP. This identifier is
                     # generated here from the validated target, never user SQL.
-                    bears.sql(url, f'DROP TABLE IF EXISTS {sql_stage}')
+                    try:
+                        bears.sql(url, f'DROP TABLE IF EXISTS {sql_stage}')
+                    except Exception:
+                        logging.getLogger(__name__).warning('Failed to drop ingest staging table %s', sql_stage)
             audit = bears.audit_table(url, target)
     except Exception:
         wr.telemetry('ingest', int((time.monotonic() - started) * 1000), status='failed', prefix='lake.')
