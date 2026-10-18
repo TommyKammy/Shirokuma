@@ -707,7 +707,7 @@ eval(HANDLERS+`
   const pending=$('stages-refresh').onclick();respond({stages:[fresh]});await pending;
   assert.equal(selectedStage.schedule.enabled,enabled);assert.equal($('stage-schedule-enabled').checked,enabled);
   assert.equal($('stage-schedule-minutes').value,9);assert.equal($('stage-schedule-stop').disabled,!enabled);
-  assert.equal($('stage-schedule-state').children[0].textContent,enabled?'Enabled':'Automatic ingestion is off.');
+  assert.equal($('stage-schedule-state').children[0].textContent,enabled?'Enabled':'Disabled');
   assert.equal(stagePreview,preview);assert.deepEqual($('stage-preview').children,['preview']);assert.equal($('stage-import').disabled,false);
   assert.equal($('stage-file').value,'orders.csv');assert.deepEqual($('stage-exports').children,['output-list']);
   assert.equal($('stage-export-table').value,'raw.custom');assert.equal($('stage-export-file').value,'custom.csv');assert.equal(stageRunId,'keep-history');
@@ -1366,13 +1366,13 @@ const run=eval(HANDLER);
                     if n['tag'] == 'h2' and navigation in n['ancestors']]
         self.assertEqual(headings, ['Work with Data', 'Catalog', 'Manage & Monitor'])
         expected = [
-            ('warehouse', 'SQL Worksheets · Warehouse & SQL'),
-            ('ingestion', 'Ingestion · File Upload'),
-            ('transformation', 'Transformation · dbt & WAP'),
+            ('warehouse', 'SQL Worksheets'),
+            ('ingestion', 'Ingestion & Stages'),
+            ('transformation', 'Transformation'),
             ('jobs', 'Jobs'),
-            ('bears', 'Autonomous Bears'),
-            ('catalog', 'Database Explorer · Catalog'),
-            ('pawprints', 'AgentHouse Pawprints'),
+            ('bears', 'AI Bears'),
+            ('catalog', 'Database Explorer'),
+            ('pawprints', 'Audit Log'),
             ('compute', 'Compute & Governance'),
         ]
         tabs = [n for n in doc.nodes if 'data-tab' in n]
@@ -1458,11 +1458,12 @@ const run=eval(HANDLER);
         expected = {
             'Work with Data': 'データを扱う', 'Catalog': 'カタログ',
             'Manage & Monitor': '監視・管理',
-            'SQL Worksheets · Warehouse & SQL': 'SQL ワークシート · Warehouse & SQL',
-            'Ingestion · File Upload': 'データ取り込み · ファイルアップロード',
-            'Transformation · dbt & WAP': 'データ変換 · dbt & WAP',
-            'Autonomous Bears': '自律 AI Bears',
-            'Database Explorer · Catalog': 'データベース探索 · カタログ',
+            'SQL Worksheets': 'SQL ワークシート',
+            'Ingestion & Stages': '取り込み・ステージ',
+            'Transformation': 'データ変換',
+            'AI Bears': 'AI Bears（専門AI）',
+            'Database Explorer': 'データベース探索',
+            'Audit Log': '監査ログ',
             'AgentHouse Pawprints': 'AgentHouse 監査ログ (Pawprints)',
             'Compute & Governance': 'コンピュート & ガバナンス',
             'Columns': 'カラム定義', 'Data Preview': 'データプレビュー',
@@ -1638,7 +1639,7 @@ const run=eval(HANDLER);
                 status, headers, body = self.request(path)
                 self.assertEqual(status, 200)
                 self.assertIn("text/html", headers["Content-Type"])
-                self.assertIn(b"Warehouse &amp; SQL", body)
+                self.assertIn(b"SQL Worksheets", body)
                 self.assertIn(b"AgentHouse Pawprints", body)
 
     @patch.object(wb.warehouse_resident, "kubectl")

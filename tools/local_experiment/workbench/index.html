@@ -6,188 +6,622 @@
 <meta name="color-scheme" content="light dark">
 <title>Shirokuma · Workbench</title>
 <style>
-:root{color-scheme:light;--bg:oklch(0.978 .005 255);--surface:oklch(1 0 0);--ink:oklch(.23 .035 258);--muted:oklch(.46 .025 258);--line:oklch(.86 .015 255);--soft:oklch(.95 .01 255);--accent:oklch(.43 .12 255);--good:oklch(.36 .08 160);--bad:oklch(.43 .16 25);--badge:oklch(.93 .025 160)}
-@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:oklch(.17 .025 258);--surface:oklch(.21 .028 258);--ink:oklch(.96 .008 255);--muted:oklch(.77 .022 255);--line:oklch(.37 .025 255);--soft:oklch(.26 .03 255);--accent:oklch(.83 .08 250);--good:oklch(.85 .09 160);--bad:oklch(.84 .1 25);--badge:oklch(.28 .035 160)}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:7px 13px;font-weight:600}button:hover{background:var(--soft)}button:active{transform:translateY(1px)}button:disabled{cursor:wait;opacity:.65}button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}button.primary:hover{opacity:.88}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}input,select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:9px;width:100%}textarea{resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.7}input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}label{display:block;font-weight:600;margin:12px 0 5px}.app-header{background:var(--surface);border-bottom:1px solid var(--line);padding:17px 30px;display:flex;align-items:center;gap:16px}.brand{font-size:18px;font-weight:750;letter-spacing:-.025em}.divider{height:22px;border-left:1px solid var(--line)}.muted,small{color:var(--muted)}.environment{margin-left:auto;font:12px ui-monospace,monospace}.layout{display:grid;grid-template-columns:224px minmax(0,1fr);min-height:calc(100vh - 64px)}nav{padding:26px 14px;border-right:1px solid var(--line);background:var(--surface)}nav button{display:block;text-align:left;border:0;width:100%;margin-bottom:6px;padding:12px;font-weight:500}nav button[aria-selected=true]{background:var(--soft);color:var(--accent);font-weight:700}.nav-note{margin:30px 12px;color:var(--muted);font-size:12px}main{max-width:1450px;width:100%;padding:32px 38px 60px}h1{font-size:27px;letter-spacing:-.025em;line-height:1.25;margin:0 0 8px}h2{font-size:16px;margin:0;font-weight:650}h3{font-size:15px;margin:0}p{max-width:72ch;margin:0 0 20px}.page-title{margin-bottom:26px}.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;margin-bottom:20px;overflow:hidden}.panel-head{padding:15px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.panel-body{padding:20px}.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.status-strip{display:flex;align-items:center;gap:24px;flex-wrap:wrap}.status-strip .toolbar{margin-left:auto}.badge{display:inline-flex;align-items:center;gap:7px;border-radius:100px;background:var(--soft);padding:3px 10px;font-size:12px;font-weight:650}.badge.good{color:var(--good);background:var(--badge)}.badge.bad{color:var(--bad)}.error{color:var(--bad);white-space:pre-wrap;margin-top:10px}.samples{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.samples button{font-size:12px;font-weight:500}.editor{min-height:190px;border:0;border-radius:0;background:var(--surface);padding:20px;display:block;tab-size:2}.query-footer{padding:12px 20px;background:var(--soft);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.query-footer select,.query-footer input{width:90px;padding:5px}.query-footer label{display:inline;margin:0;font-weight:500}.table-wrap{overflow:auto;max-height:520px}table{border-collapse:collapse;width:100%;text-align:left;white-space:nowrap;font-size:13px}th,td{padding:11px 17px;border-bottom:1px solid var(--line);vertical-align:top}th{position:sticky;top:0;background:var(--soft);font-size:12px;color:var(--muted);font-weight:600}td{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}.empty{padding:35px 20px;color:var(--muted);text-align:center}.catalog-grid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px}.catalog-grid .panel{margin-bottom:0}details{border-bottom:1px solid var(--line);padding:12px 16px}summary{cursor:pointer;font-weight:600}.table-link{display:block;margin-top:7px;width:100%;text-align:left;font-family:ui-monospace,monospace;font-size:12px;font-weight:400}.lineage{display:grid;gap:14px}.lineage-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.node{padding:9px 13px;background:var(--soft);border:1px solid var(--line);border-radius:5px;font-family:ui-monospace,monospace;font-size:12px}.arrow{color:var(--muted)}.bear-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.bear-grid .panel{margin:0}.bear-grid p{font-size:13px;margin:8px 0;color:var(--muted)}.bear-grid textarea{min-height:90px}.bear-footer{display:flex;align-items:center;gap:12px;margin-top:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);padding:15px;border-radius:5px;max-height:360px;overflow:auto;font:12px/1.65 ui-monospace,monospace}.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}[hidden]{display:none!important}.components{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}.details-cell{white-space:normal;min-width:240px;max-width:440px;overflow-wrap:anywhere}
-@media(max-width:1000px){main{padding:26px 22px}.layout{grid-template-columns:195px minmax(0,1fr)}.bear-grid{grid-template-columns:1fr}.catalog-grid{grid-template-columns:1fr}}
-@media(max-width:700px){.app-header{padding:14px 16px;flex-wrap:wrap}.environment{font-size:10px}.layout{display:block}nav{display:flex;overflow-x:auto;padding:8px;border-right:0;border-bottom:1px solid var(--line)}nav button{width:auto;white-space:nowrap;margin:0}.nav-note{display:none}main{padding:24px 14px}.panel-head,.panel-body{padding:15px}.status-strip{gap:12px}.status-strip .toolbar{margin-left:0}.query-footer{padding:12px}.app-header .divider{display:none}}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
-.nav-category{font-size:12px;color:var(--muted);margin:18px 12px 8px}.layout{grid-template-columns:250px minmax(0,1fr)}.worksheet-workspace{display:flex;gap:16px;align-items:stretch;min-width:0}.worksheet-workspace>.panel:last-child{flex:1;min-width:0}#worksheet-explorer{flex:0 0 240px;padding:12px;align-self:flex-start}#worksheet-explorer:not([open]){flex-basis:auto}#worksheet-explorer label{font-size:12px}#worksheet-tabs{display:flex;gap:6px;flex-wrap:wrap}button[aria-selected=true]{background:var(--soft);color:var(--accent)}.copilot{background:var(--soft);padding:14px;margin:18px 0}.copilot .toolbar{margin-top:12px}#copilot-stage-table{width:170px}#ingest-dropzone{border:1px dashed var(--accent);border-radius:6px;padding:20px;background:var(--soft)}#ingest-dropzone.dragging{outline:3px solid var(--accent)}#ingest-dropzone small{display:block}.app-header{flex-wrap:wrap}.app-header .toolbar{margin-left:auto}.environment{margin-left:0}.results-tools input{width:220px}.results-tools{padding:12px 20px}#inspector-tabs{border-bottom:1px solid var(--line)}#inspector-tabs button{font-size:12px}.worksheet-workspace summary{padding-bottom:8px}#query-results th button{border:0;background:transparent;padding:0;width:100%;text-align:left}.panel h2+.panel{margin-top:10px}
-@media(max-width:1150px){.worksheet-workspace{flex-direction:column}#worksheet-explorer{width:100%;flex-basis:auto}.layout{grid-template-columns:220px minmax(0,1fr)}}
-@media(max-width:700px){.layout{display:block}nav{display:block;max-height:240px;overflow:auto}nav button{display:block;width:100%;white-space:normal}.nav-category{margin-top:12px}.app-header .toolbar{margin-left:0}.environment{width:100%}}
-</style>
-<style>
-.chart-tools select,.toolbar select{width:auto;max-width:100%}.chart-tools label{margin:0}.chart-tools button[aria-pressed=true]{background:var(--soft);color:var(--accent)}#query-chart{overflow:auto}#query-chart svg{display:block;width:100%;min-width:480px;height:auto;color:var(--ink)}.chart-mark{fill:var(--accent)}.chart-line{fill:none;stroke:var(--accent);stroke-width:2}.chart-axis{stroke:var(--line);stroke-width:1}.chart-label{fill:currentColor;font:12px system-ui,sans-serif}
-#lang-switcher{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--soft);flex-shrink:0}
-#lang-switcher button{border:0;background:transparent;color:var(--muted);padding:5px 10px;font-size:12px;border-radius:5px}
-#lang-switcher button:hover{color:var(--ink)}
-#lang-switcher button[aria-pressed="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px #0002}
-dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px;width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#0007}dialog h2{font-size:18px}dialog .toolbar{margin-top:20px}dialog .badge{white-space:normal;overflow-wrap:anywhere}
-</style>
-<style>
-#stages-area,#stages-area .panel-body,#stages-area .job-fields>div,#stage-files-area,#stage-preview{min-width:0;max-width:100%}#stages-area p,#stages-area .error{overflow-wrap:anywhere}#stages-area input,#stages-area select{min-width:0;max-width:100%}#stages-area .table-wrap{max-width:100%;overflow:auto}#stage-export-directory,#stage-exports th,#stage-exports td{white-space:normal;overflow-wrap:anywhere}#stages-list table,#stage-files table{table-layout:fixed;min-width:520px}#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}#stages-area button{max-width:100%;white-space:normal}
-#marts-admin,#marts-admin .catalog-grid>*{min-width:0}#mart-form{margin-bottom:16px}#marts-admin .error,#mart-schedule-state{overflow-wrap:anywhere}#marts-admin input{min-width:0}#mart-schedule-state{margin-top:16px}
-#jobs-alert-count{margin-left:6px}
-#job-alerts table{table-layout:fixed;min-width:960px}#job-alerts th,#job-alerts td{padding:10px;white-space:normal;overflow-wrap:anywhere}#job-alerts th:nth-child(1){width:8%}#job-alerts th:nth-child(2){width:31%}#job-alerts th:nth-child(3){width:13%}#job-alerts th:nth-child(4){width:14%}#job-alerts th:nth-child(5){width:6%}#job-alerts th:nth-child(6){width:15%}#job-alerts th:nth-child(7){width:13%}#job-alerts button{max-width:100%;white-space:normal}#job-alerts small{display:block;margin-top:5px}#job-alerts .alert-main{font-family:system-ui,sans-serif}#job-alerts details{padding:5px 0 0;border:0;font-size:12px}#job-alerts summary{font-weight:500;color:var(--muted)}
-.job-enable-label{display:flex;align-items:center;gap:8px}.job-enable-label input{width:auto}#job-schedule-state{margin-top:16px;overflow-wrap:anywhere}#job-schedule-state span{white-space:normal}
-.schedule-weekdays{border:0;padding:0;margin:12px 0 0;min-width:0}.schedule-weekdays legend{font-weight:600}.schedule-weekdays label{font-weight:400;margin:5px 0}.job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:0 18px;min-width:0}.job-step{margin:18px 0;padding:16px 0;border:0;border-top:1px solid var(--line);min-width:0}.job-step legend{font-weight:650;padding-right:8px}.job-step .toolbar{justify-content:space-between}.job-step textarea{min-height:100px}.job-step small{display:block;margin:6px 0}.job-step-heading{margin-top:20px}#job-run-state{margin-left:12px}#job-steps label{font-size:13px}
-#role-controls{display:inline-flex;align-items:center;gap:8px}#role-controls label{margin:0}#role-selector{width:auto}
+/* Design tokens. Every colour, radius and type size below comes from this block. */
+:root{color-scheme:light;
+--bg:oklch(.975 .004 255);--surface:oklch(1 0 0);--surface-2:oklch(.968 .006 255);--surface-3:oklch(.935 .01 255);
+--ink:oklch(.25 .03 258);--ink-2:oklch(.4 .025 258);--muted:oklch(.5 .02 258);
+--line:oklch(.905 .01 255);--line-strong:oklch(.82 .015 255);
+--accent:oklch(.5 .14 256);--accent-hover:oklch(.44 .14 256);--accent-ink:oklch(.43 .13 256);--accent-soft:oklch(.952 .025 256);--on-accent:oklch(1 0 0);
+--ok:oklch(.45 .11 155);--ok-soft:oklch(.955 .035 155);--warn:oklch(.48 .1 65);--warn-soft:oklch(.965 .045 85);--bad:oklch(.5 .17 27);--bad-soft:oklch(.962 .025 27);
+--focus:oklch(.58 .16 256);--radius:6px;--radius-lg:8px;
+--sans:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;
+--bg:oklch(.18 .02 258);--surface:oklch(.215 .022 258);--surface-2:oklch(.245 .024 258);--surface-3:oklch(.29 .026 258);
+--ink:oklch(.95 .008 255);--ink-2:oklch(.85 .015 255);--muted:oklch(.73 .02 255);--line:oklch(.32 .022 255);--line-strong:oklch(.43 .025 255);
+--accent:oklch(.74 .12 252);--accent-hover:oklch(.8 .1 252);--accent-ink:oklch(.84 .09 252);--accent-soft:oklch(.3 .05 256);--on-accent:oklch(.18 .02 258);
+--ok:oklch(.82 .12 155);--ok-soft:oklch(.3 .05 155);--warn:oklch(.85 .11 85);--warn-soft:oklch(.31 .05 80);--bad:oklch(.8 .13 25);--bad-soft:oklch(.31 .06 25);--focus:oklch(.78 .12 252)}}
+
+/* Base */
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+h1{font-size:20px;line-height:1.3;font-weight:650;letter-spacing:-.01em;margin:0}
+h2{font-size:14px;line-height:1.4;font-weight:650;margin:0}
+h3{font-size:13px;line-height:1.4;font-weight:650;margin:0}
+p{margin:0 0 8px;max-width:84ch}
+code,pre{font-family:var(--mono)}
+code{font-size:12px;overflow-wrap:anywhere}
+.muted,small{color:var(--muted)}small{font-size:12px}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Buttons: default (secondary), primary (commit), run (execute now), stop (pause automation), danger (destructive). */
+button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:30px;padding:4px 12px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);color:var(--ink);font-weight:550;line-height:1.25;cursor:pointer;white-space:nowrap;max-width:100%}
+button:hover:not(:disabled){background:var(--surface-2);border-color:var(--muted)}
+button:disabled{cursor:not-allowed;opacity:.5}
+button[aria-busy=true]{cursor:progress;opacity:.85}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button.primary:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}
+button.run{color:var(--accent-ink);border-color:var(--accent)}button.run.primary{color:var(--on-accent)}
+button.run::before{content:"";flex:none;border-left:7px solid currentColor;border-top:4.5px solid transparent;border-bottom:4.5px solid transparent}
+button.stop::before{content:"";flex:none;width:8px;height:8px;border-radius:1px;background:currentColor}
+button.stop,button.danger{color:var(--bad)}
+button.stop:hover:not(:disabled),button.danger:hover:not(:disabled){background:var(--bad-soft);border-color:var(--bad)}
+button.quiet{border-color:transparent;background:transparent}
+button.small,td button{min-height:26px;padding:2px 8px;font-size:12px}
+button[aria-busy=true]::before{display:none}
+.spinner{display:inline-block;flex:none;width:12px;height:12px;border:2px solid var(--line-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Forms */
+input,select,textarea{width:100%;min-width:0;min-height:30px;padding:5px 8px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface)}
+input[type=checkbox]{width:16px;height:16px;min-height:0;margin:0;accent-color:var(--accent)}
+input[type=file]{padding:4px}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
+input:disabled,select:disabled,textarea:disabled,input[readonly]{background:var(--surface-2);color:var(--muted)}
+input:user-invalid,select:user-invalid,textarea:user-invalid{border-color:var(--bad)}
+textarea{resize:vertical;font-family:var(--mono);font-size:12.5px;line-height:1.6}
+label{display:block;margin:12px 0 4px;font-size:12px;font-weight:600;color:var(--ink-2)}
+form small,.help{display:block;margin:4px 0 0;font-size:12px;color:var(--muted)}
+.job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:0 14px;min-width:0}
+.job-fields>*{min-width:0}
+.job-enable-label{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:13px;font-weight:500;color:var(--ink)}
+fieldset{border:0;padding:0;margin:0;min-width:0}
+legend{font-size:12px;font-weight:600;color:var(--ink-2);padding:0}
+.form-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+/* Status: text always states the condition; colour and the glyph reinforce it. */
+.badge,.pill{display:inline-flex;align-items:center;gap:5px;min-height:20px;padding:1px 8px;border-radius:999px;background:var(--surface-3);color:var(--ink-2);font:600 12px/1.3 var(--sans);white-space:nowrap;max-width:100%}
+.badge:empty{display:none}
+.good,.tone-ok{background:var(--ok-soft);color:var(--ok)}
+.bad,.tone-bad{background:var(--bad-soft);color:var(--bad)}
+.tone-warn{background:var(--warn-soft);color:var(--warn)}
+.tone-run{background:var(--accent-soft);color:var(--accent-ink)}
+:is(.badge,.pill):is(.good,.tone-ok)::before{content:"✓"}
+:is(.badge,.pill):is(.bad,.tone-bad)::before{content:"✕"}
+:is(.badge,.pill).tone-warn::before{content:"!";font-weight:800}
+:is(.badge,.pill).tone-run::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.4s ease-in-out infinite}
+td.tone-ok,td.tone-bad,td.tone-warn,td.tone-run{background:none;font-family:var(--sans);font-weight:600}
+@keyframes pulse{50%{opacity:.3}}
+.status-line{display:inline-flex;align-items:center;gap:6px;margin:0;color:var(--muted);font-size:12px;background:none;overflow-wrap:anywhere}
+.status-line:empty{display:none}
+.status-line[class*=tone-]{background:none;font-weight:600}
+.status-line[class*=tone-]::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:currentColor}
+.status-line.tone-run::before{animation:pulse 1.4s ease-in-out infinite}
+.status-line.tone-ok{color:var(--ok)}.status-line.tone-bad{color:var(--bad)}.status-line.tone-warn{color:var(--warn)}.status-line.tone-run{color:var(--accent-ink)}
+.error,.callout{display:block;margin:8px 0;padding:8px 12px;border:1px solid var(--line);border-left:3px solid var(--muted);border-radius:var(--radius);background:var(--surface-2);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
+.error{border-color:color-mix(in oklch,var(--bad) 30%,var(--line));border-left-color:var(--bad);background:var(--bad-soft)}
+.error::before{content:"✕  ";color:var(--bad);font-weight:700}
+.error:empty,.callout:empty{display:none}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.callout.info{border-left-color:var(--accent);background:var(--accent-soft)}
+.empty{padding:24px 16px;text-align:center;color:var(--muted)}
+.state{margin:8px 0 0;color:var(--ink-2);font-size:12px;overflow-wrap:anywhere}
+.state:empty{display:none}
+
+/* Application shell */
+.app-header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;min-height:48px;padding:7px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700;letter-spacing:-.01em}
+.brand svg{color:var(--accent)}
+.brand-product{font-weight:500;color:var(--muted)}
+.environment{font:12px var(--mono);color:var(--muted);padding:1px 8px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
+.header-spacer{flex:1}
+.header-group{display:inline-flex;align-items:center;gap:6px}
+.header-group button{min-height:28px;padding:2px 10px;font-size:12px}
+.app-header .divider{width:1px;height:20px;background:var(--line)}
+#quick-status-error{margin:0;padding:2px 8px;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+#role-controls{display:inline-flex;align-items:center;gap:6px}
+#role-controls label{margin:0;font-weight:500;color:var(--muted)}
+#role-selector{width:auto;min-height:28px;padding:2px 6px}
+#lang-switcher{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2);flex-shrink:0}
+#lang-switcher button{min-height:24px;border:0;background:transparent;color:var(--muted);padding:2px 8px;font-size:12px;border-radius:4px}
+#lang-switcher button:hover{color:var(--ink);background:transparent}
+#lang-switcher button[aria-pressed="true"]{background:var(--surface);color:var(--accent-ink);box-shadow:0 0 0 1px var(--line)}
+.layout{display:grid;grid-template-columns:228px minmax(0,1fr);min-height:calc(100vh - 48px)}
+nav{position:sticky;top:48px;align-self:start;display:flex;flex-direction:column;height:calc(100vh - 48px);overflow:auto;padding:8px 8px 12px;background:var(--surface);border-right:1px solid var(--line)}
+.nav-category{margin:14px 8px 4px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+nav button{position:relative;width:100%;justify-content:flex-start;gap:10px;min-height:32px;margin:1px 0;padding:5px 8px;border:0;background:transparent;color:var(--ink-2);font-weight:500;text-align:left;white-space:normal}
+nav button:hover:not(:disabled){background:var(--surface-2);color:var(--ink)}
+nav button[aria-selected=true]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+nav button[aria-selected=true]::after{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:3px;border-radius:0 2px 2px 0;background:var(--accent)}
+.icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#jobs-alert-count{margin-left:auto;background:var(--bad);color:var(--on-accent);min-height:18px;padding:0 6px;font-size:11px}
+.nav-note{margin:auto 8px 0;padding-top:16px;color:var(--muted);font-size:11.5px;line-height:1.45}
+main{min-width:0;padding:18px 24px 48px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px 24px;flex-wrap:wrap;margin-bottom:14px}
+.page-title p{margin:3px 0 0;color:var(--muted)}
+.page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* Views inside a page */
+.subnav{display:flex;gap:2px;margin:0 0 14px;border-bottom:1px solid var(--line);overflow-x:auto}
+.subnav button{min-height:34px;margin-bottom:-1px;padding:6px 12px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--ink-2);font-weight:550}
+.subnav button:hover:not(:disabled){background:transparent;color:var(--ink)}
+.subnav button[aria-selected=true]{color:var(--accent-ink);border-bottom-color:var(--accent)}
+.subnav .badge{min-height:18px;padding:0 6px;font-size:11px}
+html:not([data-role="admin"]) [data-admin-view]{display:none!important}
+
+/* Surfaces */
+.panel{min-width:0;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;min-height:46px;padding:8px 14px;border-bottom:1px solid var(--line)}
+.panel-head>div:first-child{min-width:0}
+.panel-head small{display:block;font-size:12px}
+.panel-body{padding:14px}
+.section{min-width:0;padding:14px;border-top:1px solid var(--line)}
+.section:first-child{border-top:0}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.section-head h3{font-size:13px}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.toolbar label{margin:0}
+.toolbar select,.toolbar input{width:auto}
+.detail-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);border-top:1px solid var(--line)}
+.detail-grid>*{min-width:0}
+.detail-grid>*+*{border-left:1px solid var(--line)}
+.detail-grid .section:first-child{border-top:0}
+.detail-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.detail-title h2{overflow-wrap:anywhere}
+.kv{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0;font-size:12px;color:var(--ink-2)}
+.kv>span{overflow-wrap:anywhere}
+
+/* Tables */
+.table-wrap{overflow:auto;max-width:100%}
+table{width:100%;border-collapse:separate;border-spacing:0;text-align:left;white-space:nowrap;font-size:12.5px}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{position:sticky;top:0;z-index:1;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:600}
+td{font-family:var(--mono);font-size:12px}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--surface-2)}
+td.null{color:var(--muted);font-style:italic}
+td button+button{margin-left:6px}
+.list table{white-space:normal}
+.list th{white-space:nowrap}
+.list td{font-family:var(--sans);font-size:12.5px;overflow-wrap:break-word}
+.list td:first-child{overflow-wrap:anywhere;min-width:160px}
+.list td:first-child{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink)}
+.list tr[aria-current=true] td{background:var(--accent-soft)}
+.list td .badge+.badge{display:flex;width:max-content;margin-top:4px}
+.list td small,.list td .badge+time{display:block;margin-top:2px;font-size:12px;color:var(--muted)}
+.list:not(:has(table,.empty)){padding:14px;color:var(--muted)}
+.details-cell{white-space:normal;min-width:240px;max-width:440px;overflow-wrap:anywhere}
+pre{margin:0;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:360px;background:var(--surface-2);border-radius:var(--radius);font:12px/1.6 var(--mono)}
+details>summary{cursor:pointer;font-weight:600}
+details>summary::marker{color:var(--muted)}
+
+/* SQL worksheets */
+.sql-layout{display:grid;grid-template-columns:232px minmax(0,1fr);gap:14px;align-items:start}
+.explorer{position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto;margin:0;padding:10px}
+.explorer>summary{padding:2px 2px 6px;font-size:13px}
+.explorer label{margin-top:4px}
+#worksheet-tree,#catalog-tree{margin-top:8px}
+#worksheet-tree details,#catalog-tree details{padding:2px 0}
+#worksheet-tree summary,#catalog-tree summary{padding:3px 2px;font-size:12px;color:var(--ink-2)}
+.table-link{display:block;width:100%;min-height:24px;margin:0;padding:2px 8px 2px 18px;border:0;border-radius:4px;background:transparent;font:12px/1.5 var(--mono);text-align:left;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.table-link:hover:not(:disabled){background:var(--surface-2)}
+.samples{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.samples h3{margin-bottom:4px;font-size:12px;color:var(--ink-2)}
+.samples button{display:block;width:100%;min-height:26px;margin:2px 0;padding:2px 8px;border:0;background:transparent;text-align:left;font-size:12px;font-weight:500;color:var(--accent-ink);white-space:normal}
+.warehouse-strip{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;font-size:12px}
+.warehouse-strip details{position:relative}
+.warehouse-strip details>summary{font-weight:500;color:var(--ink-2)}
+.components{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.components .badge{font-family:var(--mono);font-weight:500}
+.editor-panel{overflow:hidden}
+.editor-tabs{display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--surface-2);border-bottom:1px solid var(--line);border-radius:var(--radius-lg) var(--radius-lg) 0 0;flex-wrap:wrap}
+#worksheet-tabs{display:flex;gap:2px;flex:1;min-width:0;overflow-x:auto}
+#worksheet-tabs button{min-height:28px;padding:3px 10px;border-color:transparent;background:transparent;color:var(--ink-2);font-weight:500}
+#worksheet-tabs button[aria-selected=true]{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:600}
+#add-worksheet-tab{min-height:28px;padding:2px 8px}
+.history-field{display:flex;align-items:center;gap:6px;max-width:340px;min-width:0}
+.history-field label{margin:0;white-space:nowrap;font-weight:500}
+#query-history{min-height:28px;padding:2px 6px}
+.editor{display:block;width:100%;min-height:200px;height:clamp(200px,32vh,420px);margin:0;padding:12px 14px;border:0;border-radius:0;background:var(--surface);font-size:13px;line-height:1.65;tab-size:2}
+.editor:focus-visible{outline-offset:-2px}
+.query-footer{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;padding:8px 10px;background:var(--surface-2);border-top:1px solid var(--line)}
+.query-footer .toolbar{gap:6px 12px}
+.query-footer label{margin:0;font-weight:500;color:var(--muted)}
+.query-footer select{min-height:28px;padding:2px 6px}
+.query-footer .field{display:inline-flex;align-items:center;gap:6px}
+#max-rows{width:84px;min-height:28px}
+.run-group{display:inline-flex;align-items:center;gap:10px;margin-left:auto}
+@media(max-width:1500px){.wide-only{display:none}}
+kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid var(--line-strong);border-radius:4px;background:var(--surface)}
+.copilot{border-top:1px solid var(--line)}
+.copilot>summary{padding:8px 12px;font-size:12.5px;color:var(--ink-2)}
+.copilot-body{padding:0 12px 12px}
+.copilot-body label{margin-top:0}
+.copilot .toolbar{margin-top:8px}
+#copilot-stage-table{width:180px}
+#copilot-result{margin-top:8px}
+.results-tools{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)}
+.results-tools label{margin:0;font-weight:500;color:var(--muted)}
+.results-tools input[type=search]{width:220px}
+.results-tools select{width:auto;min-height:28px;padding:2px 6px}
+.segmented{display:inline-flex;padding:2px;gap:2px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2)}
+.segmented button{min-height:24px;padding:2px 10px;border:0;background:transparent;font-size:12px;color:var(--ink-2)}
+.segmented button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+#query-results{max-height:max(300px,calc(100vh - 300px))}
+#query-results th button{min-height:0;padding:0;border:0;background:transparent;font:inherit;color:inherit;width:100%;justify-content:flex-start}
+#query-error{margin:10px 14px}
+#query-chart{overflow:auto;padding:14px}
+#query-chart svg{display:block;width:100%;min-width:480px;height:auto;color:var(--ink)}
+.chart-mark{fill:var(--accent)}.chart-line{fill:none;stroke:var(--accent);stroke-width:2}.chart-axis{stroke:var(--line);stroke-width:1}.chart-label{fill:currentColor;font:12px var(--sans)}
+
+/* Ingestion */
+#ingest-dropzone{display:grid;gap:6px;padding:14px;border:1px dashed var(--line-strong);border-radius:var(--radius);background:var(--surface-2)}
+#ingest-dropzone label{margin:0}
+#ingest-dropzone.dragging{border-color:var(--accent);background:var(--accent-soft);outline:2px solid var(--accent)}
+#ingest-dropzone .toolbar{justify-content:space-between}
+.or-divider{display:flex;align-items:center;gap:8px;margin:12px 0 0;color:var(--muted);font-size:12px}
+.or-divider::before,.or-divider::after{content:"";flex:1;height:1px;background:var(--line)}
+#ingest-preview p,#stage-preview p{margin:12px 0 6px;font-weight:600}
+#ingest-preview .table-wrap,#stage-preview .table-wrap{margin-top:8px;border:1px solid var(--line);border-radius:var(--radius);max-height:320px}
+#ingest-result{margin-top:10px}
+#stages-area,#stages-area .section,#stage-files-area,#stage-preview{min-width:0;max-width:100%}
+#stages-area p,#stages-area .error{overflow-wrap:anywhere}
+#stages-area .table-wrap{max-width:100%;overflow:auto}
+#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}
+#stages-list table,#stage-files table{min-width:520px}
+#stage-export-directory,#stage-exports th,#stage-exports td{white-space:normal;overflow-wrap:anywhere}
+#stage-files,#stage-exports{margin-top:8px;border:1px solid var(--line);border-radius:var(--radius)}
+:is(#stages-list,#stage-files,#stage-exports) th{white-space:nowrap}
+:is(#stages-list,#stage-files) td:not(:first-child){overflow-wrap:break-word}
+
+/* Schedules (jobs, stages, refresh targets share one layout) */
+.schedule-status{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin:6px 0 4px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2);font-size:12px;color:var(--ink-2)}
+.schedule-status p{margin:0}
+.schedule-status>button{margin-left:auto}
+#job-schedule-state,#stage-schedule-state{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;min-width:0}
+#job-schedule-state span,#stage-schedule-state p{overflow-wrap:anywhere}
+.schedule-daily{display:contents}
+.schedule-weekdays{margin:12px 0 0}
+.schedule-weekdays .toolbar{gap:4px 14px;margin-top:4px}
+.schedule-weekdays .job-enable-label{margin:0}
+.schedule-help{margin:6px 0 0;font-size:12px;color:var(--muted)}
+
+/* Jobs */
+.job-step{margin:10px 0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2)}
+.job-step legend{float:left;margin-bottom:2px;font-size:12px;font-weight:700;color:var(--ink)}
+.job-step legend+*{clear:both}
+.job-step label{margin-top:8px}
+.job-step textarea{min-height:84px}
+.job-step>button{margin-top:10px}
+.job-step small{display:block;margin:6px 0}
+#job-steps:empty::after{content:"—";color:var(--muted)}
+#job-alerts table{table-layout:fixed;min-width:900px}
+#job-alerts th,#job-alerts td{white-space:normal;overflow-wrap:anywhere}
+#job-alerts th:nth-child(1){width:9%}#job-alerts th:nth-child(2){width:31%}#job-alerts th:nth-child(3){width:14%}#job-alerts th:nth-child(4){width:14%}#job-alerts th:nth-child(5){width:7%}#job-alerts th:nth-child(6){width:13%}#job-alerts th:nth-child(7){width:12%}
+#job-alerts td{font-family:var(--sans)}
+#job-alerts small{display:block;margin-top:4px}
+#job-alerts details{padding:4px 0 0;font-size:12px}
+#job-alerts summary{font-weight:500;color:var(--muted)}
+#job-runs{max-height:420px}
+#job-runs-filter{max-width:280px}
+#job-runs td{white-space:nowrap}#job-runs td:first-child{min-width:0}#job-runs td:nth-child(2){white-space:normal;overflow-wrap:anywhere;min-width:160px}
+#job-failure{margin:10px 14px}
+.notes{display:grid;gap:2px;padding:10px 14px 0;font-size:12px;color:var(--muted)}
+
+/* Transformation */
+#marts-admin,#marts-admin .detail-grid>*{min-width:0}
+#marts-admin .error,#mart-schedule-help{overflow-wrap:anywhere}
+.model-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;align-items:start}
+.model-list{padding:6px}
+.model-list h2{margin:8px 8px 4px;font-size:12px;color:var(--ink-2)}
+.model-list .table-link{padding-left:8px}
+#dbt-models,#wap-models{padding:2px 0 6px}
+.lineage{display:grid;gap:10px}
+.lineage-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lineage-row strong{min-width:120px;font-size:12px;color:var(--ink-2)}
+.node{padding:3px 8px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;font:12px var(--mono);overflow-wrap:anywhere}
+.arrow{color:var(--muted)}
+#model-sql-preview{margin:0 14px 14px}
+#models-state{margin-bottom:14px}
+
+/* Catalog */
+.catalog-grid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;align-items:start}
+.catalog-grid .panel{margin-bottom:0}
+#catalog-tree{padding:4px 8px 10px;max-height:calc(100vh - 220px);overflow:auto}
+#catalog-tree.empty{padding:24px 12px}
+#inspector-tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);overflow-x:auto}
+#inspector-tabs button{min-height:34px;margin-bottom:-1px;padding:6px 10px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;font-size:12.5px;color:var(--ink-2)}
+#inspector-tabs button[aria-selected=true]{color:var(--accent-ink);border-bottom-color:var(--accent)}
+#inspect-columns h3{padding:12px 14px 6px}
+#table-ddl{margin:14px}
+#table-title{font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+
+/* AI Bears */
+.bear-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:14px;align-items:start}
+.bear-list{display:grid;gap:2px;padding:6px}
+.bear-list button{display:grid;justify-items:start;justify-content:stretch;gap:2px;width:100%;min-height:0;padding:8px 10px;border:0;background:transparent;text-align:left;white-space:normal;font-weight:600}
+.bear-list button[aria-selected=true]{background:var(--accent-soft);color:var(--accent-ink)}
+.bear-list .badge{font-size:11px}
+.bear-panel p{color:var(--muted)}
+.bear-panel textarea{min-height:84px}
+.bear-footer{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
+.bear-panel pre{margin-top:12px}
+
+/* Compute & monitor */
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.facts>div{padding:10px 14px;background:var(--surface)}
+.facts dt{font-size:12px;color:var(--muted)}
+.facts dd{margin:2px 0 0;font-weight:600;overflow-wrap:anywhere}
+.raw{padding:10px 14px}
+.raw summary{font-weight:500;color:var(--ink-2)}
+.raw pre{margin-top:8px}
+#compute-check-result{margin-top:12px}
+.filters{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filters label{margin:0;font-weight:500;color:var(--muted)}
+.filters input[type=search]{width:280px}
+.filters select{width:auto}
+#pawprint-results,#runtime-queries-results,#load-history-results{max-height:460px}
+.subhead{padding:12px 14px 6px;font-size:12.5px}
+
+/* Dialog */
+dialog{width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto;padding:20px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg)}
+dialog::backdrop{background:oklch(.2 .02 258 / .45)}
+dialog h2{font-size:16px}
+dialog .badge{white-space:normal;overflow-wrap:anywhere;margin-top:12px}
+
+/* Roles: hidden controls are a convenience only; the server enforces every permission. */
+#role-indicator{background:var(--warn-soft);color:var(--warn)}
 html:not([data-role="admin"]) #marts-admin{display:none}
 html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#run-ingest,#ai-settings-button,#clone-table-btn,#copilot-stage,#copilot-publish,#refresh-wap-model,[data-role-write="admin"],[data-role-write="engineer"]),html[data-role="data_engineer"] :is(#ai-settings-button,#copilot-publish,#refresh-wap-model,[data-role-write="admin"]){display:none!important}
+
+/* Responsive */
+@media(max-width:1180px){.detail-grid{grid-template-columns:1fr}.detail-grid>*+*{border-left:0;border-top:1px solid var(--line)}}
+@media(max-width:1024px){.layout{grid-template-columns:184px minmax(0,1fr)}main{padding:16px 16px 40px}.sql-layout,.catalog-grid,.model-layout,.bear-layout{grid-template-columns:1fr}.explorer{position:static;max-height:none}.sql-main{order:-1}#worksheet-tree{max-height:260px;overflow:auto}#catalog-tree{max-height:300px}.environment{display:none}}
+@media(max-width:760px){
+.app-header{position:static;padding:8px 12px}.app-header .divider{display:none}.header-spacer{flex-basis:100%;order:1;height:0}
+.header-group,#role-controls,#lang-switcher,#ai-settings-button{order:2}
+.layout{display:block}
+nav{position:static;height:auto;flex-direction:row;align-items:center;gap:2px;padding:6px 8px;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
+nav button{width:auto;flex:none;white-space:nowrap}nav button[aria-selected=true]::after{left:8px;right:8px;top:auto;bottom:-6px;width:auto;height:2px}
+.nav-category,.nav-note{display:none}
+main{padding:14px 12px 32px}
+.results-tools input[type=search],.filters input[type=search]{width:100%}
+#quick-status-error{max-width:100%}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
-<header class="app-header"><span class="brand">Shirokuma</span><span class="divider"></span><span class="muted">Workbench</span><div class="toolbar" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status"></span></div><span class="environment">Local lab · mac-studio-solo</span><button id="ai-settings-button" aria-haspopup="dialog" aria-controls="ai-settings">AI Model Settings</button><div id="role-controls"><label for="role-selector">Role</label><select id="role-selector"><option value="admin">Admin</option><option value="data_engineer">Data Engineer</option><option value="bi_viewer">BI Viewer</option></select><span id="role-indicator" class="badge" role="status" hidden>Read-only role</span></div><div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div></header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<symbol id="i-sql" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M4.5 6.5 6.5 8l-2 1.5M8 10h3.5"/></symbol>
+<symbol id="i-ingest" viewBox="0 0 16 16"><path d="M8 2v8m-3-3 3 3 3-3M2.5 11v1.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V11"/></symbol>
+<symbol id="i-transform" viewBox="0 0 16 16"><circle cx="4" cy="4" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="8" r="1.8"/><path d="M5.8 4.4 10.2 7.4M5.8 11.6l4.4-3"/></symbol>
+<symbol id="i-jobs" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></symbol>
+<symbol id="i-bears" viewBox="0 0 16 16"><circle cx="4" cy="4.2" r="1.7"/><circle cx="12" cy="4.2" r="1.7"/><circle cx="8" cy="9" r="5"/><path d="M6.6 10.6c.8.6 2 .6 2.8 0"/></symbol>
+<symbol id="i-catalog" viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5.5" ry="2"/><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/></symbol>
+<symbol id="i-audit" viewBox="0 0 16 16"><path d="M3.5 2.5h7l2 2v9h-9z"/><path d="M5.5 7h5M5.5 9.5h5M5.5 12h3"/></symbol>
+<symbol id="i-compute" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="4.5" rx="1"/><rect x="2" y="9" width="12" height="4.5" rx="1"/><path d="M4.5 4.75h.01M4.5 11.25h.01"/></symbol>
+</svg>
+<header class="app-header">
+<span class="brand"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="5" r="2.6" fill="currentColor"/><circle cx="15" cy="5" r="2.6" fill="currentColor"/><circle cx="10" cy="11" r="7" fill="currentColor"/><circle cx="10" cy="13" r="2.4" fill="var(--surface)"/></svg>Shirokuma <span class="brand-product">Workbench</span></span>
+<span class="environment">Local lab · mac-studio-solo</span>
+<span class="header-spacer"></span>
+<div class="header-group" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status" hidden></span></div>
+<span class="divider"></span>
+<div id="role-controls"><label for="role-selector">Role</label><select id="role-selector"><option value="admin">Admin</option><option value="data_engineer">Data Engineer</option><option value="bi_viewer">BI Viewer</option></select><span id="role-indicator" class="badge" role="status" hidden>Read-only role</span></div>
+<button id="ai-settings-button" class="quiet small" aria-haspopup="dialog" aria-controls="ai-settings">AI Model Settings</button>
+<div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div>
+</header>
 <div class="layout">
 <nav aria-label="Workbench sections" role="tablist" aria-orientation="vertical">
 <h2 class="nav-category">Work with Data</h2>
-<button id="tab-warehouse" role="tab" aria-controls="warehouse" aria-selected="true" data-tab="warehouse">SQL Worksheets · Warehouse &amp; SQL</button>
-<button id="tab-ingestion" role="tab" aria-controls="ingestion" aria-selected="false" tabindex="-1" data-tab="ingestion">Ingestion · File Upload</button>
-<button id="tab-transformation" role="tab" aria-controls="transformation" aria-selected="false" tabindex="-1" data-tab="transformation">Transformation · dbt &amp; WAP</button>
-<button id="tab-jobs" role="tab" aria-controls="jobs" aria-selected="false" tabindex="-1" data-tab="jobs" data-role-write="engineer">Jobs<span id="jobs-alert-count" class="badge" role="status" hidden></span></button>
-<button id="tab-bears" role="tab" aria-controls="bears" aria-selected="false" tabindex="-1" data-tab="bears">Autonomous Bears</button>
+<button id="tab-warehouse" role="tab" aria-controls="warehouse" aria-selected="true" data-tab="warehouse"><svg class="icon" aria-hidden="true"><use href="#i-sql"/></svg>SQL Worksheets</button>
+<button id="tab-ingestion" role="tab" aria-controls="ingestion" aria-selected="false" tabindex="-1" data-tab="ingestion"><svg class="icon" aria-hidden="true"><use href="#i-ingest"/></svg>Ingestion &amp; Stages</button>
+<button id="tab-transformation" role="tab" aria-controls="transformation" aria-selected="false" tabindex="-1" data-tab="transformation"><svg class="icon" aria-hidden="true"><use href="#i-transform"/></svg>Transformation</button>
+<button id="tab-jobs" role="tab" aria-controls="jobs" aria-selected="false" tabindex="-1" data-tab="jobs" data-role-write="engineer"><svg class="icon" aria-hidden="true"><use href="#i-jobs"/></svg>Jobs<span id="jobs-alert-count" class="badge" role="status" hidden></span></button>
+<button id="tab-bears" role="tab" aria-controls="bears" aria-selected="false" tabindex="-1" data-tab="bears"><svg class="icon" aria-hidden="true"><use href="#i-bears"/></svg>AI Bears</button>
 <h2 class="nav-category">Catalog</h2>
-<button id="tab-catalog" role="tab" aria-controls="catalog" aria-selected="false" tabindex="-1" data-tab="catalog">Database Explorer · Catalog</button>
+<button id="tab-catalog" role="tab" aria-controls="catalog" aria-selected="false" tabindex="-1" data-tab="catalog"><svg class="icon" aria-hidden="true"><use href="#i-catalog"/></svg>Database Explorer</button>
 <h2 class="nav-category">Manage &amp; Monitor</h2>
-<button id="tab-pawprints" role="tab" aria-controls="pawprints" aria-selected="false" tabindex="-1" data-tab="pawprints">AgentHouse Pawprints</button>
-<button id="tab-compute" role="tab" aria-controls="compute" aria-selected="false" tabindex="-1" data-tab="compute">Compute &amp; Governance</button>
-<div class="nav-note">One workspace for your resident lakehouse.<br><br>Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.</div>
+<button id="tab-pawprints" role="tab" aria-controls="pawprints" aria-selected="false" tabindex="-1" data-tab="pawprints"><svg class="icon" aria-hidden="true"><use href="#i-audit"/></svg>Audit Log</button>
+<button id="tab-compute" role="tab" aria-controls="compute" aria-selected="false" tabindex="-1" data-tab="compute"><svg class="icon" aria-hidden="true"><use href="#i-compute"/></svg>Compute &amp; Governance</button>
+<p class="nav-note">Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.</p>
 </nav>
 <main>
 <section id="warehouse" role="tabpanel" aria-labelledby="tab-warehouse">
-<div class="page-title"><h1>Warehouse &amp; SQL</h1><p class="muted">Explore your Iceberg data with the resident Trino warehouse.</p></div>
-<div class="panel"><div class="panel-body"><div class="status-strip"><strong>Trino / LOCAL</strong><span id="warehouse-state" class="badge">Loading…</span><span id="replicas" class="muted">Replicas —</span><div class="toolbar"><button id="chill">Chill</button><button id="wake">Wake</button><button id="refresh-status">Refresh</button></div></div><div id="components" class="components"></div><div id="status-error" class="error" role="status"></div></div></div>
-<div class="worksheet-workspace"><details id="worksheet-explorer" class="panel" open><summary>Database Object Explorer</summary><label for="worksheet-tree-filter">Find schema or table</label><input id="worksheet-tree-filter" type="search" placeholder="Search objects"><div id="worksheet-tree" aria-live="polite">Loading catalog…</div></details><div class="panel"><div class="panel-head"><h2>SQL workspace</h2><small>Catalog: iceberg · Schema: marts</small></div>
-<div class="panel-body"><div class="toolbar"><div id="worksheet-tabs" role="tablist" aria-label="SQL worksheets"></div><button id="add-worksheet-tab" aria-label="Add SQL worksheet">+ Worksheet</button></div><label for="query-history">Recent Query History</label><select id="query-history"><option value="">Restore a past query…</option></select>
-<div class="copilot"><h3>AI Bear Copilot</h3><label for="copilot-request">Describe the SQL you need</label><input id="copilot-request" placeholder="Revenue by nation"><div class="toolbar"><button id="copilot-generate">Generate SQL</button><button id="copilot-explain">Explain Plan</button><label for="copilot-stage-table">WAP table</label><input id="copilot-stage-table" placeholder="nation_summary"><button id="copilot-stage">Stage &amp; Audit</button><button id="copilot-publish">Publish</button></div><pre id="copilot-result" role="status" hidden></pre></div>
-<div class="samples"><button data-sample="orders">Recent orders</button><button data-sample="revenue">TPC-H Revenue by Nation</button><button data-sample="customers">Customers</button></div><label for="sql" class="muted">SQL statement</label></div><textarea id="sql" class="editor" spellcheck="false">SELECT * FROM marts.fct_orders LIMIT 10</textarea><div class="query-footer"><div class="toolbar"><label for="query-warehouse">Warehouse</label><select id="query-warehouse"><option>LOCAL</option><option>XS</option><option>S</option></select><label for="query-schema">Schema</label><select id="query-schema"><option>marts</option><option>raw</option><option>sandbox</option><option>staging</option><option>tpch_tiny</option><option>smoke</option></select><label for="query-mode">Mode</label><select id="query-mode" style="width:auto"><option>read-only</option><option>sandbox-write</option><option>admin-write</option></select><label for="max-rows">Max rows</label><input id="max-rows" type="number" min="1" value="1000"></div><button id="run-query" class="primary">Run Query</button></div></div></div>
-<div class="panel"><div class="panel-head"><h2>Results</h2><span id="query-meta" class="muted" role="status">Ready · ⌘/Ctrl + Enter to run</span></div><div class="toolbar results-tools"><label for="result-filter">Filter rows</label><input id="result-filter" type="search" placeholder="Search returned rows"><button id="export-csv" disabled>Download CSV</button><button id="export-json" disabled>Download JSON</button><button id="copy-tsv" disabled>Copy TSV</button><small id="result-action-state" role="status"></small></div><div class="toolbar results-tools chart-tools"><button id="result-view-table" aria-pressed="true">Table View</button><button id="result-view-chart" aria-pressed="false">Chart View</button><label for="chart-type">Chart type</label><select id="chart-type"><option value="bar">Bar Chart</option><option value="line">Line Chart</option></select><label for="chart-x-col">X column</label><select id="chart-x-col"></select><label for="chart-y-col">Y column</label><select id="chart-y-col"></select></div><div id="query-chart" class="panel-body" hidden></div><div id="query-error" class="panel-body error" role="alert" hidden></div><div id="query-results" class="table-wrap"><div class="empty">Run a query to inspect rows and column types. Chilled warehouses wake automatically.</div></div></div>
+<div class="page-head"><div class="page-title"><h1>SQL Worksheets</h1><p>Query Iceberg tables with the resident Trino warehouse.</p></div>
+<div class="warehouse-strip" aria-label="Warehouse status"><strong>Trino / LOCAL</strong><span id="warehouse-state" class="badge">Loading…</span><span id="replicas" class="muted">Replicas —</span><details><summary>Components</summary><div id="components" class="components"></div></details><button id="chill" class="small">Chill</button><button id="wake" class="small">Wake</button><button id="refresh-status" class="small">Refresh</button></div></div>
+<div id="status-error" class="error" role="status" hidden></div>
+<div class="sql-layout">
+<details id="worksheet-explorer" class="panel explorer" open><summary>Database Object Explorer</summary><label for="worksheet-tree-filter">Find schema or table</label><input id="worksheet-tree-filter" type="search" placeholder="Search objects"><div id="worksheet-tree" aria-live="polite">Loading catalog…</div><p class="help">Select a table to insert its name at the cursor.</p>
+<div class="samples"><h3>Sample queries</h3><button data-sample="orders">Recent orders</button><button data-sample="revenue">TPC-H Revenue by Nation</button><button data-sample="customers">Customers</button></div></details>
+<div class="sql-main">
+<div class="panel editor-panel">
+<div class="editor-tabs"><div id="worksheet-tabs" role="tablist" aria-label="SQL worksheets"></div><button id="add-worksheet-tab" aria-label="Add SQL worksheet">+ Worksheet</button><div class="history-field"><label for="query-history">Recent Query History</label><select id="query-history"><option value="">Restore a past query…</option></select></div></div>
+<label for="sql" class="visually-hidden">SQL statement</label><textarea id="sql" class="editor" spellcheck="false">SELECT * FROM marts.fct_orders LIMIT 10</textarea>
+<div class="query-footer"><div class="toolbar"><span class="field"><label for="query-warehouse">Warehouse</label><select id="query-warehouse"><option>LOCAL</option><option>XS</option><option>S</option></select></span><span class="field"><label for="query-schema">Schema</label><select id="query-schema"><option>marts</option><option>raw</option><option>sandbox</option><option>staging</option><option>tpch_tiny</option><option>smoke</option></select></span><span class="field"><label for="query-mode">Mode</label><select id="query-mode"><option>read-only</option><option>sandbox-write</option><option>admin-write</option></select></span><span class="field"><label for="max-rows">Max rows</label><input id="max-rows" type="number" min="1" value="1000"></span></div><div class="run-group"><small class="wide-only">Runs selected text when present</small><kbd>⌘/Ctrl + Enter</kbd><button id="run-query" class="primary run">Run Query</button></div></div>
+<details class="copilot"><summary>AI Bear Copilot</summary><div class="copilot-body"><label for="copilot-request">Describe the SQL you need</label><input id="copilot-request" placeholder="Revenue by nation"><div class="toolbar"><button id="copilot-generate">Generate SQL</button><button id="copilot-explain">Explain Plan</button><span class="divider"></span><label for="copilot-stage-table">WAP table</label><input id="copilot-stage-table" placeholder="nation_summary"><button id="copilot-stage">Stage &amp; Audit</button><button id="copilot-publish">Publish</button></div><pre id="copilot-result" role="status" hidden></pre></div></details>
+</div>
+<div class="panel results-panel"><div class="panel-head"><h2>Results</h2><span id="query-meta" class="status-line" role="status">Ready</span></div>
+<div class="results-tools"><div class="segmented" role="group" aria-label="Result view"><button id="result-view-table" aria-pressed="true">Table View</button><button id="result-view-chart" aria-pressed="false">Chart View</button></div><label for="result-filter">Filter rows</label><input id="result-filter" type="search" placeholder="Search returned rows"><span class="header-spacer"></span><button id="export-csv" class="small" disabled>Download CSV</button><button id="export-json" class="small" disabled>Download JSON</button><button id="copy-tsv" class="small" disabled>Copy TSV</button><small id="result-action-state" role="status"></small></div>
+<div id="chart-tools" class="results-tools chart-tools" hidden><label for="chart-type">Chart type</label><select id="chart-type"><option value="bar">Bar Chart</option><option value="line">Line Chart</option></select><label for="chart-x-col">X column</label><select id="chart-x-col"></select><label for="chart-y-col">Y column</label><select id="chart-y-col"></select></div>
+<div id="query-chart" hidden></div><div id="query-error" class="error" role="alert" hidden></div><div id="query-results" class="table-wrap"><div class="empty">Run a query to inspect rows and column types. Chilled warehouses wake automatically.</div></div></div>
+</div></div>
 </section>
 <section id="ingestion" role="tabpanel" aria-labelledby="tab-ingestion" hidden>
-<div class="page-title"><h1>Ingestion · File Upload</h1><p class="muted">Preview file columns and sample rows before loading an Iceberg table.</p></div>
-<div class="panel"><div class="panel-head"><h2>Local File Ingestion (CSV / JSONL / Parquet)</h2></div><div class="panel-body">
-<p class="muted">Import a file from the Workbench server into the local lake. Replace overwrites the target table; append adds rows; upsert updates matching keys and adds new rows. For repeated keys, the last row in the file wins.</p>
-<form id="ingest-form"><div id="ingest-dropzone"><label for="ingest-upload-input">Choose a browser file or drop it here</label><input id="ingest-upload-input" type="file" accept=".csv,.tsv,.jsonl,.ndjson,.json,.parquet"><span id="upload-state" role="status">No browser file selected. Use a server path below.</span><button id="clear-upload" type="button">Use server path</button></div><label for="ingest-file">Local file path</label><input id="ingest-file" placeholder="data/sales_events.csv">
-<label for="ingest-table">Target table (optional)</label><input id="ingest-table" placeholder="raw.sales_events">
-<label for="ingest-mode">Mode</label><select id="ingest-mode"><option value="replace">replace</option><option value="append">append</option><option value="upsert">upsert</option></select>
-<label for="ingest-key">Upsert key columns (required for upsert)</label><input id="ingest-key" placeholder="Upsert key columns, e.g. order_id" aria-describedby="ingest-key-help">
+<div class="page-head"><div class="page-title"><h1>Ingestion &amp; Stages</h1><p>Preview file columns and sample rows before loading an Iceberg table.</p></div></div>
+<div class="subnav" role="tablist" aria-label="Ingestion views"><button id="ingestion-view-file" role="tab" aria-selected="true" aria-controls="ingestion-file" data-view="ingestion">File upload</button><button id="ingestion-view-stages" role="tab" aria-selected="false" tabindex="-1" aria-controls="ingestion-stages" data-view="ingestion" data-admin-view>Stages</button></div>
+<div id="ingestion-file" role="tabpanel" aria-labelledby="ingestion-view-file">
+<div class="panel"><div class="panel-head"><div><h2>Local File Ingestion (CSV / JSONL / Parquet)</h2><small>Import a file from the Workbench server into the local lake. Replace overwrites the target table; append adds rows; upsert updates matching keys and adds new rows. For repeated keys, the last row in the file wins.</small></div></div><div class="panel-body">
+<form id="ingest-form"><div id="ingest-dropzone"><label for="ingest-upload-input">Choose a browser file or drop it here</label><input id="ingest-upload-input" type="file" accept=".csv,.tsv,.jsonl,.ndjson,.json,.parquet"><div class="toolbar"><span id="upload-state" role="status">No browser file selected. Use a server path below.</span><button id="clear-upload" class="small" type="button">Use server path</button></div></div>
+<div class="job-fields"><div><label for="ingest-file">Local file path</label><input id="ingest-file" placeholder="data/sales_events.csv"></div>
+<div><label for="ingest-table">Target table (optional)</label><input id="ingest-table" placeholder="raw.sales_events"></div>
+<div><label for="ingest-mode">Mode</label><select id="ingest-mode"><option value="replace">replace</option><option value="append">append</option><option value="upsert">upsert</option></select></div>
+<div><label for="ingest-key">Upsert key columns (required for upsert)</label><input id="ingest-key" placeholder="Upsert key columns, e.g. order_id" aria-describedby="ingest-key-help"></div></div>
 <small id="ingest-key-help">Use input column names, separated by commas for a composite key.</small>
-<div class="bear-footer"><button id="preview-ingest" type="button">Preview Schema &amp; Sample Rows</button><button id="run-ingest" type="submit">Ingest File</button><span id="ingest-state" role="status">Ready</span></div></form><div id="ingest-preview" aria-live="polite"></div>
+<div class="form-actions"><button id="preview-ingest" type="button">Preview Schema &amp; Sample Rows</button><button id="run-ingest" class="primary" type="submit">Ingest File</button><span id="ingest-state" class="status-line" role="status">Ready</span></div></form><div id="ingest-preview" aria-live="polite"></div>
 <div id="ingest-error" class="error" role="alert" hidden></div><pre id="ingest-result" aria-label="Ingestion audit summary" hidden></pre>
 </div></div>
-<div id="stages-area" class="panel" hidden aria-labelledby="stages-title"><div class="panel-head"><h2 id="stages-title">Local stages</h2><div class="toolbar"><button id="stages-refresh" type="button">Refresh stages</button><button id="stage-new" type="button">New stage</button></div></div><div class="panel-body">
-<p class="muted">A stage uses a folder on the Workbench server host. Automatic ingestion starts disabled.</p>
-<p class="muted">Files up to 25 MiB must remain unchanged for 30 seconds. Each scan imports at most 10 unseen files. Scheduled checks require the Workbench server to be running.</p>
-<div id="stages-list" class="table-wrap" aria-live="polite">No stages loaded.</div>
-<h3>Stage definition</h3><form id="stage-form"><div class="job-fields">
+</div>
+<div id="ingestion-stages" role="tabpanel" aria-labelledby="ingestion-view-stages" hidden>
+<div id="stages-area" class="panel" hidden aria-labelledby="stages-title"><div class="panel-head"><div><h2 id="stages-title">Local stages</h2><small>A stage uses a folder on the Workbench server host. Automatic ingestion starts disabled.</small></div><div class="toolbar"><p id="stage-state" class="status-line" role="status" aria-live="polite">Choose or save a stage.</p><button id="stages-refresh" type="button">Refresh stages</button><button id="stage-new" type="button">New stage</button></div></div>
+<p class="notes">Files up to 25 MiB must remain unchanged for 30 seconds. Each scan imports at most 10 unseen files. Scheduled checks require the Workbench server to be running.</p>
+<div id="stages-list" class="table-wrap list" aria-live="polite">No stages loaded.</div>
+<div class="detail-grid">
+<div>
+<div class="section"><div class="section-head"><h3>Stage definition</h3></div>
+<form id="stage-form"><div class="job-fields">
 <div><label for="stage-name">Stage name</label><input id="stage-name" required maxlength="48" pattern="[a-z][a-z0-9_-]{0,47}" placeholder="sales-files"></div>
 <div><label for="stage-directory">Host folder (absolute path)</label><input id="stage-directory" required placeholder="/absolute/path/to/files"></div>
 <div><label for="stage-table">Target table</label><input id="stage-table" required placeholder="raw.sales_events"></div>
 <div><label for="stage-mode">Mode</label><select id="stage-mode"><option value="append">append</option><option value="replace">replace</option><option value="upsert">upsert</option></select></div>
 <div><label for="stage-format">File format</label><select id="stage-format"><option value="auto">Automatic</option><option value="csv">csv</option><option value="jsonl">jsonl</option><option value="parquet">parquet</option></select></div>
 <div><label for="stage-key">Upsert key columns (required for upsert)</label><input id="stage-key" placeholder="order_id" aria-describedby="ingest-key-help"></div>
-</div><button id="stage-save" type="submit">Save stage</button></form>
-<p id="stage-state" role="status" aria-live="polite">Choose or save a stage.</p><div id="stage-error" class="error" role="alert" hidden></div>
-<p id="stage-legacy-notice" class="muted" hidden>Earlier imports have no duplicate-detection record. Check imported files, move them out of the source folder, then register a new stage name.</p><div id="stage-schedule-area" hidden><h3>Automatic ingestion</h3>
-<p class="muted">Automatic ingestion supports append and upsert. Replace is available through single-file import.</p>
+</div><div class="form-actions"><button id="stage-save" class="primary" type="submit">Save stage</button></div></form>
+<div id="stage-error" class="error" role="alert" hidden></div>
+<p id="stage-legacy-notice" class="callout warn" hidden>Earlier imports have no duplicate-detection record. Check imported files, move them out of the source folder, then register a new stage name.</p>
+</div>
+</div>
+<div>
+<p id="stage-detail-hint" class="empty">Save or select a stage to import files, schedule automatic ingestion, or export a table.</p>
+<div id="stage-schedule-area" class="section" hidden><div class="section-head"><h3>Automatic ingestion</h3></div>
+<p class="help">Automatic ingestion supports append and upsert. Replace is available through single-file import.</p>
+<div class="schedule-status"><div id="stage-schedule-state" role="status" aria-live="polite"></div><button id="stage-schedule-stop" class="stop small" type="button" disabled>Stop automatic ingestion</button></div>
 <form id="stage-schedule-form" novalidate><div class="job-fields"><div><label for="stage-schedule-kind">Frequency</label><select id="stage-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="once">Once</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
 <div id="stage-schedule-interval"><label for="stage-schedule-minutes">Interval (minutes)</label><input id="stage-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled></div>
-<div id="stage-schedule-daily" hidden><label for="stage-schedule-time">Local time</label><input id="stage-schedule-time" type="time" step="60" value="09:00" required disabled><label for="stage-schedule-timezone">Timezone (IANA)</label><input id="stage-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div>
 <div id="stage-schedule-once" hidden><label for="stage-schedule-date">Local date</label><input id="stage-schedule-date" type="date" required disabled></div>
+<div id="stage-schedule-monthly" hidden><label for="stage-schedule-day">Day of the month</label><select id="stage-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div>
+<div id="stage-schedule-daily" class="schedule-daily" hidden><div><label for="stage-schedule-time">Local time</label><input id="stage-schedule-time" type="time" step="60" value="09:00" required disabled></div><div><label for="stage-schedule-timezone">Timezone (IANA)</label><input id="stage-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div></div></div>
 <fieldset class="schedule-weekdays" id="stage-schedule-weekly" hidden><legend>Days of the week</legend><div class="toolbar"><label class="job-enable-label" for="stage-schedule-weekday-1"><input id="stage-schedule-weekday-1" type="checkbox" disabled> Monday</label><label class="job-enable-label" for="stage-schedule-weekday-2"><input id="stage-schedule-weekday-2" type="checkbox" disabled> Tuesday</label><label class="job-enable-label" for="stage-schedule-weekday-3"><input id="stage-schedule-weekday-3" type="checkbox" disabled> Wednesday</label><label class="job-enable-label" for="stage-schedule-weekday-4"><input id="stage-schedule-weekday-4" type="checkbox" disabled> Thursday</label><label class="job-enable-label" for="stage-schedule-weekday-5"><input id="stage-schedule-weekday-5" type="checkbox" disabled> Friday</label><label class="job-enable-label" for="stage-schedule-weekday-6"><input id="stage-schedule-weekday-6" type="checkbox" disabled> Saturday</label><label class="job-enable-label" for="stage-schedule-weekday-7"><input id="stage-schedule-weekday-7" type="checkbox" disabled> Sunday</label></div></fieldset>
-<div id="stage-schedule-monthly" hidden><label for="stage-schedule-day">Day of the month</label><select id="stage-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div></div>
-<p id="stage-schedule-once-help" class="muted" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
-<p id="stage-schedule-calendar-help" class="muted" hidden>Calendar times use the specified timezone.</p>
-<p id="stage-schedule-monthly-help" class="muted" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
+<p id="stage-schedule-once-help" class="schedule-help" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
+<p id="stage-schedule-calendar-help" class="schedule-help" hidden>Calendar times use the specified timezone.</p>
+<p id="stage-schedule-monthly-help" class="schedule-help" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
 <label class="job-enable-label" for="stage-schedule-enabled"><input id="stage-schedule-enabled" type="checkbox" disabled> Enable automatic ingestion</label>
-<div class="toolbar"><button id="stage-schedule-save" type="submit" disabled>Save schedule</button><button id="stage-schedule-stop" type="button" disabled>Stop automatic ingestion</button><button id="stage-scan" type="button" disabled>Check and ingest now</button></div></form>
-<div id="stage-schedule-state" role="status" aria-live="polite"></div></div>
-<div id="stage-files-area" hidden><h3 id="stage-files-title">Stage files</h3><button id="stage-files-refresh" type="button">Refresh files</button><div id="stage-files" class="table-wrap" aria-live="polite"></div>
-<label for="stage-file">File to import</label><select id="stage-file" aria-describedby="stage-confirmation"><option value="">Choose a file</option></select>
-<div class="toolbar"><button id="stage-preview-button" type="button" disabled>Preview file</button><button id="stage-import" type="button" class="primary" disabled>Import</button></div>
-<p id="stage-confirmation" role="status" aria-live="polite">Preview a file before importing.</p><p id="stage-append-notice" class="muted" hidden>Successfully imported content is skipped, even after a file is renamed. Failed or uncertain imports need explicit confirmation before retry.</p><p id="stage-file-status" role="status" aria-live="polite"></p><label id="stage-retry-area" class="job-enable-label" hidden for="stage-retry"><input id="stage-retry" type="checkbox"> The target may already contain these rows. I checked the destination and want to retry this file.</label><div id="stage-preview" aria-live="polite"></div></div>
-<div id="stage-export-area" hidden><h3>Manual export</h3>
-<p class="muted">Export the whole table, up to 100000 rows and 25 MiB. Existing filenames are refused. Outputs stay in exports/ and are excluded from input scans.</p>
-<p><span id="stage-export-directory-label">Output folder</span>: <code id="stage-export-directory"></code></p>
-<p class="muted">Parquet requires pyarrow in the Workbench server Python.</p>
+<div class="form-actions"><button id="stage-schedule-save" class="primary" type="submit" disabled>Save schedule</button><button id="stage-scan" class="run" type="button" disabled>Check and ingest now</button></div></form>
+</div>
+</div>
+</div>
+<div id="stage-files-area" class="section" hidden><div class="section-head"><h3 id="stage-files-title">Stage files</h3><button id="stage-files-refresh" class="small" type="button">Refresh files</button></div><div id="stage-files" class="table-wrap list" aria-live="polite"></div>
+<div class="job-fields"><div><label for="stage-file">File to import</label><select id="stage-file" aria-describedby="stage-confirmation"><option value="">Choose a file</option></select></div></div>
+<div class="form-actions"><button id="stage-preview-button" type="button" disabled>Preview file</button><button id="stage-import" type="button" class="primary run" disabled>Import</button><span id="stage-file-status" class="badge" role="status" aria-live="polite"></span></div>
+<p id="stage-confirmation" class="state" role="status" aria-live="polite">Preview a file before importing.</p><p id="stage-append-notice" class="help" hidden>Successfully imported content is skipped, even after a file is renamed. Failed or uncertain imports need explicit confirmation before retry.</p><label id="stage-retry-area" class="job-enable-label callout warn" hidden for="stage-retry"><input id="stage-retry" type="checkbox"> The target may already contain these rows. I checked the destination and want to retry this file.</label><div id="stage-preview" aria-live="polite"></div><div class="form-actions"><button id="stage-view-run" class="small" type="button" hidden>View run history</button></div></div>
+<div id="stage-export-area" class="section" hidden><div class="section-head"><h3>Manual export</h3><button id="stage-exports-refresh" class="small" type="button">Refresh outputs</button></div>
+<p class="help">Export the whole table, up to 100000 rows and 25 MiB. Existing filenames are refused. Outputs stay in exports/ and are excluded from input scans.</p>
+<p class="help"><span id="stage-export-directory-label">Output folder</span>: <code id="stage-export-directory"></code></p>
 <form id="stage-export-form"><div class="job-fields">
 <div><label for="stage-export-table">Source table (qualified name)</label><input id="stage-export-table" required placeholder="iceberg.raw.sales_events"></div>
 <div><label for="stage-export-format">Export format</label><select id="stage-export-format"><option value="csv">csv</option><option value="jsonl">jsonl</option><option value="parquet">parquet</option></select></div>
 <div><label for="stage-export-file">Output filename</label><input id="stage-export-file" required placeholder="sales.csv"></div>
-</div><button id="stage-export-submit" type="submit">Export table</button></form>
-<button id="stage-exports-refresh" type="button">Refresh outputs</button><div id="stage-exports" class="table-wrap" aria-live="polite"></div></div>
-<button id="stage-view-run" type="button" hidden>View run history</button>
-</div></div>
+</div><small>Parquet requires pyarrow in the Workbench server Python.</small><div class="form-actions"><button id="stage-export-submit" class="run" type="submit">Export table</button></div></form>
+<div id="stage-exports" class="table-wrap list" aria-live="polite"></div></div>
+</div>
+</div>
 </section>
-<section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden><div class="page-title"><h1>Transformation · dbt &amp; WAP</h1><p class="muted">Inspect model definitions and dependencies, then build or refresh.</p><div class="toolbar"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build">Run dbt Build</button><button id="run-dbt-test">Run dbt Test</button></div></div><section id="marts-admin" hidden aria-labelledby="marts-title"><div class="panel-head"><h2 id="marts-title">Registered refresh targets</h2><div class="toolbar"><button id="marts-reload" type="button">Reload targets</button><button id="mart-new" type="button">New target</button></div></div>
-<p class="muted">Save a SELECT definition without executing it. Refresh builds, audits, and publishes the saved definition to iceberg.marts.</p>
-<div id="mart-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div id="marts-list" class="table-wrap"><p class="empty">Load targets to select a saved definition.</p></div>
-<div><form id="mart-form" class="panel panel-body"><h3>Refresh target definition</h3><label for="mart-name">Mart name</label><input id="mart-name" required pattern="[a-z][a-z0-9_]*" placeholder="sales_summary"><p class="muted">Bare name only. Target schema: iceberg.marts.</p>
-<label for="mart-sql">SELECT definition</label><textarea id="mart-sql" rows="6" spellcheck="false" required></textarea><div class="form-grid"><div><label for="mart-min-rows">Minimum rows</label><input id="mart-min-rows" type="number" min="1" step="1" value="1" required></div><div><label for="mart-not-null">Not-null columns (comma-separated, optional)</label><input id="mart-not-null"></div></div>
-<label for="mart-watch-tables">Watched source tables (comma-separated, optional for manual refresh)</label><input id="mart-watch-tables" aria-describedby="mart-watch-help" placeholder="iceberg.raw.orders, iceberg.staging.customers"><p id="mart-watch-help" class="muted">Explicit watched sources only: Iceberg base tables in raw or staging. Dependencies are not inferred; time-dependent SQL and undeclared changes are not detected.</p>
-<p id="mart-definition-state" class="muted" role="status">Choose a target or save a new definition.</p><div class="toolbar"><button id="mart-save" type="submit">Save target</button><button id="mart-run" type="button" disabled>Refresh target</button><button id="mart-view-run" type="button" hidden>Inspect run in Jobs</button></div><p id="mart-state" role="status" aria-live="polite"></p></form><div class="panel panel-body"><h3>Automatic refresh</h3><p class="muted">Keep Workbench active. Missed slots and overlapping runs are skipped. Each check refreshes only when a watched source changed.</p><form id="mart-schedule-form" novalidate><div class="job-fields"><div><label for="mart-schedule-kind">Frequency</label><select id="mart-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="once">Once</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+<section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden>
+<div class="page-head"><div class="page-title"><h1>Transformation</h1><p>Inspect model definitions and dependencies, then build or refresh.</p></div></div>
+<div class="subnav" role="tablist" aria-label="Transformation views"><button id="transformation-view-models" role="tab" aria-selected="true" aria-controls="transformation-models" data-view="transformation">Models</button><button id="transformation-view-marts" role="tab" aria-selected="false" tabindex="-1" aria-controls="transformation-marts" data-view="transformation" data-admin-view>Refresh targets</button></div>
+<div id="transformation-models" role="tabpanel" aria-labelledby="transformation-view-models">
+<div class="toolbar" style="margin-bottom:12px"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build" class="run">Run dbt Build</button><button id="run-dbt-test" class="run">Run dbt Test</button></div>
+<pre id="models-state" role="status" hidden></pre>
+<div class="model-layout"><div class="panel model-list"><h2>Persistent dbt Models</h2><div id="dbt-models"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models"></div></div>
+<div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" class="small" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" class="small run" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div>
+</div>
+<div id="transformation-marts" role="tabpanel" aria-labelledby="transformation-view-marts" hidden>
+<section id="marts-admin" hidden aria-labelledby="marts-title" class="panel"><div class="panel-head"><div><h2 id="marts-title">Registered refresh targets</h2><small>Save a SELECT definition without executing it. Refresh builds, audits, and publishes the saved definition to iceberg.marts.</small></div><div class="toolbar"><button id="marts-reload" type="button">Reload targets</button><button id="mart-new" type="button">New target</button></div></div>
+<div id="mart-error" class="error" role="alert" hidden></div>
+<div id="marts-list" class="table-wrap list"><p class="empty">Load targets to select a saved definition.</p></div>
+<div class="detail-grid">
+<form id="mart-form" class="section"><div class="section-head"><h3>Refresh target definition</h3><p id="mart-definition-state" class="status-line" role="status">Choose a target or save a new definition.</p></div>
+<label for="mart-name">Mart name</label><input id="mart-name" required pattern="[a-z][a-z0-9_]*" placeholder="sales_summary"><small>Bare name only. Target schema: iceberg.marts.</small>
+<label for="mart-sql">SELECT definition</label><textarea id="mart-sql" rows="7" spellcheck="false" required></textarea>
+<div class="job-fields"><div><label for="mart-min-rows">Minimum rows</label><input id="mart-min-rows" type="number" min="1" step="1" value="1" required></div><div><label for="mart-not-null">Not-null columns (comma-separated, optional)</label><input id="mart-not-null"></div></div>
+<label for="mart-watch-tables">Watched source tables (comma-separated, optional for manual refresh)</label><input id="mart-watch-tables" aria-describedby="mart-watch-help" placeholder="iceberg.raw.orders, iceberg.staging.customers"><small id="mart-watch-help">Explicit watched sources only: Iceberg base tables in raw or staging. Dependencies are not inferred; time-dependent SQL and undeclared changes are not detected.</small>
+<div class="form-actions"><button id="mart-save" class="primary" type="submit">Save target</button></div></form>
+<div>
+<div class="section"><div class="section-head"><h3>Manual refresh</h3></div><p class="help">Builds, audits and publishes the saved version. Rows are fully replaced; nothing is computed incrementally.</p>
+<p id="mart-state" class="state" role="status" aria-live="polite"></p>
+<div class="form-actions"><button id="mart-run" class="primary run" type="button" disabled>Refresh target</button><button id="mart-view-run" class="small" type="button" hidden>Inspect run in Jobs</button></div></div>
+<div class="section"><div class="section-head"><h3>Automatic refresh</h3></div><p class="help">Keep Workbench active. Missed slots and overlapping runs are skipped. Each check refreshes only when a watched source changed.</p>
+<div class="schedule-status"><span id="mart-schedule-state" class="pill" role="status" aria-live="polite"></span><span id="mart-schedule-next"></span><span id="mart-schedule-last"></span><button id="mart-schedule-stop" class="stop small" type="button" disabled>Stop automatic refresh</button></div>
+<p id="mart-schedule-help" class="callout"></p>
+<form id="mart-schedule-form" novalidate><div class="job-fields"><div><label for="mart-schedule-kind">Frequency</label><select id="mart-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="once">Once</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
 <div id="mart-schedule-interval"><label for="mart-schedule-minutes">Interval (minutes)</label><input id="mart-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled></div>
-<div id="mart-schedule-daily" hidden><label for="mart-schedule-time">Local time</label><input id="mart-schedule-time" type="time" step="60" value="09:00" required disabled><label for="mart-schedule-timezone">Timezone (IANA)</label><input id="mart-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div>
 <div id="mart-schedule-once" hidden><label for="mart-schedule-date">Local date</label><input id="mart-schedule-date" type="date" required disabled></div>
+<div id="mart-schedule-monthly" hidden><label for="mart-schedule-day">Day of the month</label><select id="mart-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div>
+<div id="mart-schedule-daily" class="schedule-daily" hidden><div><label for="mart-schedule-time">Local time</label><input id="mart-schedule-time" type="time" step="60" value="09:00" required disabled></div><div><label for="mart-schedule-timezone">Timezone (IANA)</label><input id="mart-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div></div></div>
 <fieldset class="schedule-weekdays" id="mart-schedule-weekly" hidden><legend>Days of the week</legend><div class="toolbar"><label class="job-enable-label" for="mart-schedule-weekday-1"><input id="mart-schedule-weekday-1" type="checkbox" disabled> Monday</label><label class="job-enable-label" for="mart-schedule-weekday-2"><input id="mart-schedule-weekday-2" type="checkbox" disabled> Tuesday</label><label class="job-enable-label" for="mart-schedule-weekday-3"><input id="mart-schedule-weekday-3" type="checkbox" disabled> Wednesday</label><label class="job-enable-label" for="mart-schedule-weekday-4"><input id="mart-schedule-weekday-4" type="checkbox" disabled> Thursday</label><label class="job-enable-label" for="mart-schedule-weekday-5"><input id="mart-schedule-weekday-5" type="checkbox" disabled> Friday</label><label class="job-enable-label" for="mart-schedule-weekday-6"><input id="mart-schedule-weekday-6" type="checkbox" disabled> Saturday</label><label class="job-enable-label" for="mart-schedule-weekday-7"><input id="mart-schedule-weekday-7" type="checkbox" disabled> Sunday</label></div></fieldset>
-<div id="mart-schedule-monthly" hidden><label for="mart-schedule-day">Day of the month</label><select id="mart-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div></div>
-<p id="mart-schedule-once-help" class="muted" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
-<p id="mart-schedule-calendar-help" class="muted" hidden>Calendar times use the specified timezone.</p>
-<p id="mart-schedule-monthly-help" class="muted" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
+<p id="mart-schedule-once-help" class="schedule-help" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
+<p id="mart-schedule-calendar-help" class="schedule-help" hidden>Calendar times use the specified timezone.</p>
+<p id="mart-schedule-monthly-help" class="schedule-help" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
 <label class="job-enable-label" for="mart-schedule-enabled"><input id="mart-schedule-enabled" type="checkbox" disabled> Enable automatic refresh</label>
-<div class="toolbar"><button id="mart-schedule-save" type="submit" disabled>Save schedule</button><button id="mart-schedule-stop" type="button" disabled>Stop automatic refresh</button></div></form><p id="mart-schedule-state" role="status" aria-live="polite"></p><p id="mart-schedule-help" class="muted"></p></div></div></div></section><pre id="models-state" role="status" hidden></pre><div class="catalog-grid"><div><h2>Persistent dbt Models</h2><div id="dbt-models" class="panel panel-body"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models" class="panel panel-body"></div></div><div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div></section>
+<div class="form-actions"><button id="mart-schedule-save" class="primary" type="submit" disabled>Save schedule</button></div></form></div>
+</div>
+</div>
+</section>
+</div>
+</section>
 <section id="jobs" role="tabpanel" aria-labelledby="tab-jobs" hidden>
-<div class="page-title"><h1>Jobs</h1><p class="muted">Save ordered steps and run them manually with typed arguments.</p></div>
-<div class="panel"><div class="panel-head"><h2>Notifications</h2><button id="job-alerts-refresh" type="button">Refresh notifications</button></div><div class="panel-body"><small>Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.</small><br><small>Up to 100 notifications, unacknowledged first.</small><br><small id="job-alerts-timezone"></small><div id="job-alerts-error" class="error" role="alert" hidden></div></div><div id="job-alerts" class="table-wrap"><div class="empty">No notifications loaded.</div></div></div>
+<div class="page-head"><div class="page-title"><h1>Jobs</h1><p>Save ordered steps, run them now, or schedule them.</p></div></div>
+<div class="subnav" role="tablist" aria-label="Jobs views"><button id="jobs-view-definitions" role="tab" aria-selected="true" aria-controls="jobs-definitions" data-view="jobs">Saved jobs</button><button id="jobs-view-runs" role="tab" aria-selected="false" tabindex="-1" aria-controls="jobs-runs" data-view="jobs">Run history</button><button id="jobs-view-alerts" role="tab" aria-selected="false" tabindex="-1" aria-controls="jobs-alerts" data-view="jobs">Notifications <span id="jobs-alert-tab-count" class="badge tone-bad" hidden></span></button></div>
 <div id="jobs-error" class="error" role="alert" hidden></div>
-<div class="panel"><div class="panel-head"><h2>Saved jobs</h2><div class="toolbar"><button id="jobs-refresh" type="button">Refresh jobs</button><button id="job-new" type="button">New job</button></div></div><div id="jobs-list" class="table-wrap"><div class="empty">No jobs loaded.</div></div></div>
-<div class="panel"><div class="panel-head"><h2>Job definition</h2><small id="job-editor-state" role="status">New definition</small></div><form id="job-form" class="panel-body">
+<div id="jobs-definitions" role="tabpanel" aria-labelledby="jobs-view-definitions">
+<div class="panel"><div class="panel-head"><div><h2>Saved jobs</h2><small>Select a job to edit, run or schedule it.</small></div><div class="toolbar"><button id="jobs-refresh" type="button">Refresh jobs</button><button id="job-new" type="button">New job</button></div></div><div id="jobs-list" class="table-wrap list"><div class="empty">No jobs loaded.</div></div>
+<div class="detail-grid">
+<form id="job-form" class="section"><div class="section-head"><h3>Job definition</h3><small id="job-editor-state" class="badge" role="status">New definition</small></div>
 <div class="job-fields"><div><label for="job-name">Job name</label><input id="job-name" required maxlength="64" pattern="[a-z][a-z0-9_-]*" placeholder="daily_sales"></div><div><label for="job-description">Description</label><input id="job-description" maxlength="500"></div></div>
 <label for="job-parameters">Argument definitions (JSON)</label><textarea id="job-parameters" rows="3" spellcheck="false" aria-describedby="job-parameter-help">{}</textarea><small id="job-parameter-help">Types: string, integer, boolean, date. Use every argument in SQL as a template value without quotes. <code>{{name}}</code></small>
-<details><summary>Argument definition example</summary><pre id="job-parameter-example"></pre></details>
-<h3 class="job-step-heading">Steps</h3><div id="job-steps"></div><div class="toolbar"><button id="job-add-step" type="button">Add step</button><button id="job-save" class="primary" type="submit">Save job</button><span id="job-save-state" role="status"></span></div>
-</form></div>
-<div class="panel"><div class="panel-head"><h2>Manual run</h2><span id="job-run-name" class="muted">Choose a saved job.</span></div><form id="job-run-form" class="panel-body"><div id="job-run-arguments" class="job-fields"></div><p id="job-run-help" class="muted">Runs use your authenticated role. Steps stop at the first failure.</p><button id="job-run" class="primary" type="submit" disabled>Run job</button><span id="job-run-state" role="status" aria-live="polite"></span></form></div>
-<div class="panel"><div class="panel-head"><h2>Schedule</h2><span id="job-schedule-name" class="muted">Choose a saved job.</span></div><form id="job-schedule-form" class="panel-body" novalidate>
-<p class="muted">Runs only while the service is running. Occurrences at least 60 seconds late or blocked by another job are skipped. No catch-up or automatic retry.</p>
+<details class="help"><summary>Argument definition example</summary><pre id="job-parameter-example"></pre></details>
+<h3 class="job-step-heading" style="margin-top:14px">Steps</h3><div id="job-steps"></div><div class="form-actions"><button id="job-add-step" type="button">Add step</button><button id="job-save" class="primary" type="submit">Save job</button><span id="job-save-state" class="state" role="status"></span></div>
+</form>
+<div>
+<form id="job-run-form" class="section"><div class="section-head"><h3>Manual run</h3><span id="job-run-name" class="muted">Choose a saved job.</span></div><div id="job-run-arguments" class="job-fields"></div><p id="job-run-help" class="help">Runs use your authenticated role. Steps stop at the first failure.</p><div class="form-actions"><button id="job-run" class="primary run" type="submit" disabled>Run job</button><span id="job-run-state" class="state" role="status" aria-live="polite"></span><button id="job-run-open" class="small" type="button" hidden>Inspect run</button></div></form>
+<form id="job-schedule-form" class="section" novalidate><div class="section-head"><h3>Schedule</h3><span id="job-schedule-name" class="muted">Choose a saved job.</span></div>
+<p class="help">Runs only while the service is running. Occurrences at least 60 seconds late or blocked by another job are skipped. No catch-up or automatic retry.</p>
+<div class="schedule-status"><div id="job-schedule-state" role="status" aria-live="polite"></div><button id="job-schedule-stop" class="stop small" type="button" disabled>Stop schedule</button></div>
 <div class="job-fields"><div><label for="job-schedule-kind">Frequency</label><select id="job-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="once">Once</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
 <div id="job-schedule-interval"><label for="job-schedule-minutes">Interval (minutes)</label><input id="job-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled></div>
-<div id="job-schedule-daily" hidden><label for="job-schedule-time">Local time</label><input id="job-schedule-time" type="time" step="60" value="09:00" required disabled><label for="job-schedule-timezone">Timezone (IANA)</label><input id="job-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div>
 <div id="job-schedule-once" hidden><label for="job-schedule-date">Local date</label><input id="job-schedule-date" type="date" required disabled></div>
+<div id="job-schedule-monthly" hidden><label for="job-schedule-day">Day of the month</label><select id="job-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div>
+<div id="job-schedule-daily" class="schedule-daily" hidden><div><label for="job-schedule-time">Local time</label><input id="job-schedule-time" type="time" step="60" value="09:00" required disabled></div><div><label for="job-schedule-timezone">Timezone (IANA)</label><input id="job-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div></div></div>
 <fieldset class="schedule-weekdays" id="job-schedule-weekly" hidden><legend>Days of the week</legend><div class="toolbar"><label class="job-enable-label" for="job-schedule-weekday-1"><input id="job-schedule-weekday-1" type="checkbox" disabled> Monday</label><label class="job-enable-label" for="job-schedule-weekday-2"><input id="job-schedule-weekday-2" type="checkbox" disabled> Tuesday</label><label class="job-enable-label" for="job-schedule-weekday-3"><input id="job-schedule-weekday-3" type="checkbox" disabled> Wednesday</label><label class="job-enable-label" for="job-schedule-weekday-4"><input id="job-schedule-weekday-4" type="checkbox" disabled> Thursday</label><label class="job-enable-label" for="job-schedule-weekday-5"><input id="job-schedule-weekday-5" type="checkbox" disabled> Friday</label><label class="job-enable-label" for="job-schedule-weekday-6"><input id="job-schedule-weekday-6" type="checkbox" disabled> Saturday</label><label class="job-enable-label" for="job-schedule-weekday-7"><input id="job-schedule-weekday-7" type="checkbox" disabled> Sunday</label></div></fieldset>
-<div id="job-schedule-monthly" hidden><label for="job-schedule-day">Day of the month</label><select id="job-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div></div>
-<p id="job-schedule-once-help" class="muted" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
-<p id="job-schedule-calendar-help" class="muted" hidden>Calendar times use the specified timezone.</p>
-<p id="job-schedule-monthly-help" class="muted" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
+<p id="job-schedule-once-help" class="schedule-help" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
+<p id="job-schedule-calendar-help" class="schedule-help" hidden>Calendar times use the specified timezone.</p>
+<p id="job-schedule-monthly-help" class="schedule-help" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
 <label class="job-enable-label" for="job-schedule-enabled"><input id="job-schedule-enabled" type="checkbox" disabled> Enable schedule</label>
-<p class="muted">Uses the argument values entered above. Saving captures your current authenticated role.</p>
-<div class="toolbar"><button id="job-schedule-save" type="submit" disabled>Save schedule</button><span id="job-schedule-message" role="status" aria-live="polite"></span></div>
-<div id="job-schedule-state" class="toolbar" role="status" aria-live="polite"></div>
-</form></div>
-<div class="panel"><div class="panel-head"><h2>Run history</h2><button id="job-runs-refresh" type="button">Refresh runs</button></div><div id="job-runs" class="table-wrap"><div class="empty">No runs loaded.</div></div></div>
-<div class="panel"><div class="panel-head"><h2>Step history</h2><span id="job-detail-state" role="status" aria-live="polite">Choose a run to inspect its steps.</span></div><div id="job-failure" class="panel-body error" role="alert" hidden></div><div id="job-run-detail" class="table-wrap"></div></div>
+<p class="help">Uses the argument values entered above. Saving captures your current authenticated role.</p>
+<div class="form-actions"><button id="job-schedule-save" class="primary" type="submit" disabled>Save schedule</button><span id="job-schedule-message" class="state" role="status" aria-live="polite"></span></div>
+</form>
+</div>
+</div>
+</div>
+</div>
+<div id="jobs-runs" role="tabpanel" aria-labelledby="jobs-view-runs" hidden>
+<div class="panel"><div class="panel-head"><h2>Run history</h2><div class="toolbar"><label for="job-runs-filter" class="muted">Job</label><select id="job-runs-filter"><option value="">All jobs</option></select><button id="job-runs-refresh" type="button">Refresh runs</button></div></div><div id="job-runs" class="table-wrap list"><div class="empty">No runs loaded.</div></div></div>
+<div class="panel" id="job-step-panel"><div class="panel-head"><h2>Step history</h2><span id="job-detail-state" class="state" role="status" aria-live="polite">Choose a run to inspect its steps.</span></div><div id="job-failure" class="error" role="alert" hidden></div><div id="job-run-detail" class="table-wrap list"></div></div>
+</div>
+<div id="jobs-alerts" role="tabpanel" aria-labelledby="jobs-view-alerts" hidden>
+<div class="panel"><div class="panel-head"><div><h2>Notifications</h2><small id="job-alerts-timezone"></small></div><button id="job-alerts-refresh" type="button">Refresh notifications</button></div><div class="notes"><span>Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.</span><span>Up to 100 notifications, unacknowledged first.</span></div><div id="job-alerts-error" class="error" role="alert" hidden></div><div id="job-alerts" class="table-wrap list"><div class="empty">No notifications loaded.</div></div></div>
+</div>
 </section>
 <section id="catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
-<div class="page-title"><h1>Catalog &amp; Lineage</h1><p class="muted">Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.</p><button id="refresh-catalog">Refresh catalog</button></div>
-<div id="catalog-error" class="error" role="alert"></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2><label for="catalog-filter">Find schema or table</label><input id="catalog-filter" type="search" placeholder="Search catalog"></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table Inspector</h2><div class="toolbar"><button id="open-table-sql" disabled>Open in Worksheet</button><button id="clone-table-btn" disabled>Clone to Sandbox</button><select id="export-table-format" aria-label="Export format"><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="parquet">Parquet</option></select><button id="export-table-btn" disabled>Export Table</button><button id="drop-table-btn" hidden>Drop Table</button></div></div>
-<div id="inspector-tabs" class="toolbar panel-body" role="tablist" aria-label="Table Inspector">
+<div class="page-head"><div class="page-title"><h1>Database Explorer</h1><p>Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.</p></div><div class="page-actions"><button id="refresh-catalog">Refresh catalog</button></div></div>
+<div id="catalog-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2></div><div class="panel-body" style="padding-bottom:0"><label for="catalog-filter" style="margin-top:0">Find schema or table</label><input id="catalog-filter" type="search" placeholder="Search catalog"></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table Inspector</h2><div class="toolbar"><button id="open-table-sql" class="small" disabled>Open in Worksheet</button><button id="clone-table-btn" class="small" disabled>Clone to Sandbox</button><select id="export-table-format" aria-label="Export format"><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="parquet">Parquet</option></select><button id="export-table-btn" class="small" disabled>Export Table</button><button id="drop-table-btn" class="small danger" hidden>Drop Table</button></div></div>
+<div id="inspector-tabs" role="tablist" aria-label="Table Inspector">
 <button id="inspect-tab-columns" role="tab" aria-selected="true" aria-controls="inspect-columns" data-inspect="columns">Columns</button>
 <button id="inspect-tab-preview" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-preview" data-inspect="preview">Data Preview</button>
 <button id="inspect-tab-profile" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-profile" data-inspect="profile">Profile &amp; NULL Stats</button>
 <button id="inspect-tab-ddl" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-ddl" data-inspect="ddl">DDL</button>
 <button id="inspect-tab-snapshots" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-snapshots" data-inspect="snapshots">Snapshots &amp; Time Travel</button>
 <button id="inspect-tab-lineage" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-lineage" data-inspect="lineage">Table Lineage</button></div>
-<div id="inspect-columns" role="tabpanel" aria-labelledby="inspect-tab-columns"><div id="table-columns" class="table-wrap"><div class="empty">Choose a table to see its columns and types.</div></div><h3 class="panel-body">Iceberg snapshots</h3><div id="column-snapshots" class="table-wrap"></div></div>
+<div id="inspect-columns" role="tabpanel" aria-labelledby="inspect-tab-columns"><div id="table-columns" class="table-wrap"><div class="empty">Choose a table to see its columns and types.</div></div><h3>Iceberg snapshots</h3><div id="column-snapshots" class="table-wrap"></div></div>
 <div id="inspect-preview" role="tabpanel" aria-labelledby="inspect-tab-preview" hidden><div id="table-preview" class="table-wrap"></div></div>
 <div id="inspect-profile" role="tabpanel" aria-labelledby="inspect-tab-profile" class="panel-body" hidden></div>
 <div id="inspect-ddl" role="tabpanel" aria-labelledby="inspect-tab-ddl" hidden><pre id="table-ddl"></pre></div>
 <div id="inspect-snapshots" role="tabpanel" aria-labelledby="inspect-tab-snapshots" hidden><div id="table-snapshots" class="table-wrap"></div><div id="snapshot-preview" class="panel-body" aria-live="polite"></div></div>
 <div id="inspect-lineage" role="tabpanel" aria-labelledby="inspect-tab-lineage" hidden><div id="table-lineage" class="panel-body lineage"></div></div></div></div>
-<div class="panel" style="margin-top:20px"><div class="panel-head"><h2>dbt model lineage</h2><small>Local model definitions</small></div><div id="lineage" class="panel-body lineage">Loading dependencies…</div></div>
+<div class="panel" style="margin-top:14px"><div class="panel-head"><h2>dbt model lineage</h2><small>Local model definitions</small></div><div id="lineage" class="panel-body lineage">Loading dependencies…</div></div>
 </section>
-<section id="bears" role="tabpanel" aria-labelledby="tab-bears" hidden><div class="page-title"><h1>Autonomous Bears Cockpit</h1><p class="muted">Run the five resident specialists. Inspect their findings, recommendations, and telemetry.</p></div><div id="bear-cards" class="bear-grid"></div></section>
-<section id="pawprints" role="tabpanel" aria-labelledby="tab-pawprints" hidden><div class="page-title"><h1>AgentHouse Pawprints</h1><p class="muted">Recent warehouse and Bear activity, recorded in ClickHouse.</p></div><div class="panel"><div class="panel-head"><h2>Recent telemetry</h2><div class="toolbar"><small id="pawprint-meta" role="status">Latest 100 events</small><button id="refresh-pawprints">Refresh</button></div></div><div class="toolbar panel-body"><label for="pawprint-filter">Search Pawprints</label><input id="pawprint-filter" type="search" placeholder="Action, Bear, trace, or model"><label for="pawprint-status-filter">Status</label><select id="pawprint-status-filter"><option value="">All statuses</option><option>success</option><option>failed</option><option>degraded</option><option>denied</option></select></div><div id="pawprint-error" class="panel-body error" role="alert" hidden></div><div id="pawprint-results" class="table-wrap"><div class="empty">Refresh to load recent Pawprints.</div></div></div><div class="panel"><div class="panel-head"><h2>Query &amp; Load History</h2><button id="refresh-history">Refresh History</button></div><div id="history-error" class="panel-body error" role="alert" hidden></div><h3 class="panel-body">Trino Query History</h3><div id="runtime-queries-results" class="table-wrap"></div><h3 class="panel-body">Copy &amp; Data Load History</h3><div id="load-history-results" class="table-wrap"></div></div></section>
-<section id="compute" role="tabpanel" aria-labelledby="tab-compute" hidden><div class="page-title"><h1>Compute &amp; Governance</h1><p class="muted">Virtual warehouse readiness and resident cluster checks.</p><div class="toolbar"><button id="compute-refresh">Refresh status</button><button id="compute-sre-check">SRE Cluster Health Check</button><button id="compute-policy-check">Policy Gatekeeper Audit</button></div></div><div class="panel"><div class="panel-head"><h2>Virtual warehouse status</h2></div><pre id="compute-warehouse" role="status">Loading…</pre><h2 class="panel-body">Component readiness</h2><div id="compute-components" class="table-wrap"></div></div><div class="panel panel-body toolbar"><label for="auto-chill-minutes">Auto-Chill (idle minutes)</label><select id="auto-chill-minutes"><option value="0">Off</option><option value="5">5m</option><option value="15">15m</option><option value="30">30m</option><option value="60">60m</option></select><button id="save-auto-chill">Apply Auto-Chill</button><span id="auto-chill-state" role="status">Auto-Chill: Off</span></div><pre id="compute-check-result" role="status" hidden></pre></section>
+<section id="bears" role="tabpanel" aria-labelledby="tab-bears" hidden><div class="page-head"><div class="page-title"><h1>AI Bears</h1><p>Run the five resident specialists. Inspect their findings, recommendations, and telemetry.</p></div></div><div id="bear-cards" class="bear-layout"></div></section>
+<section id="pawprints" role="tabpanel" aria-labelledby="tab-pawprints" hidden><div class="page-head"><div class="page-title"><h1>Audit Log</h1><p>Recent warehouse and Bear activity, recorded in ClickHouse.</p></div></div>
+<div class="panel"><div class="panel-head"><div><h2>AgentHouse Pawprints</h2><small id="pawprint-meta" role="status">Latest 100 events</small></div><button id="refresh-pawprints">Refresh</button></div><div class="filters"><label for="pawprint-filter">Search Pawprints</label><input id="pawprint-filter" type="search" placeholder="Action, Bear, trace, or model"><label for="pawprint-status-filter">Status</label><select id="pawprint-status-filter"><option value="">All statuses</option><option>success</option><option>failed</option><option>degraded</option><option>denied</option></select></div><div id="pawprint-error" class="error" role="alert" hidden></div><div id="pawprint-results" class="table-wrap"><div class="empty">Refresh to load recent Pawprints.</div></div></div>
+<div class="panel"><div class="panel-head"><h2>Query &amp; Load History</h2><button id="refresh-history">Refresh History</button></div><div id="history-error" class="error" role="alert" hidden></div><h3 class="subhead">Trino Query History</h3><div id="runtime-queries-results" class="table-wrap"></div><h3 class="subhead">Copy &amp; Data Load History</h3><div id="load-history-results" class="table-wrap"></div></div></section>
+<section id="compute" role="tabpanel" aria-labelledby="tab-compute" hidden><div class="page-head"><div class="page-title"><h1>Compute &amp; Governance</h1><p>Virtual warehouse readiness and resident cluster checks.</p></div><div class="page-actions"><button id="compute-refresh">Refresh status</button><button id="compute-sre-check" class="run">SRE Cluster Health Check</button><button id="compute-policy-check" class="run">Policy Gatekeeper Audit</button></div></div>
+<pre id="compute-check-result" role="status" hidden></pre>
+<div class="panel"><div class="panel-head"><h2>Virtual warehouse status</h2></div><dl id="compute-summary" class="facts"></dl><details class="raw"><summary>Raw status</summary><pre id="compute-warehouse" role="status">Loading…</pre></details><h3 class="subhead">Component readiness</h3><div id="compute-components" class="table-wrap"></div></div>
+<div class="panel"><div class="panel-head"><div><h2>Auto-Chill</h2><small>Chill the warehouse after it has been idle for the selected time.</small></div></div><div class="panel-body toolbar"><label for="auto-chill-minutes">Auto-Chill (idle minutes)</label><select id="auto-chill-minutes"><option value="0">Off</option><option value="5">5m</option><option value="15">15m</option><option value="30">30m</option><option value="60">60m</option></select><button id="save-auto-chill" class="primary">Apply Auto-Chill</button><span id="auto-chill-state" class="badge" role="status">Auto-Chill: Off</span></div></div></section>
 </main></div>
 <dialog id="ai-settings" aria-labelledby="ai-settings-title">
 <form id="ai-settings-form">
@@ -197,7 +631,7 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <label for="ai-url">API URL</label><input id="ai-url" type="url" required>
 <label for="ai-key">API Key</label><input id="ai-key" type="password" autocomplete="new-password" aria-describedby="ai-key-help"><small id="ai-key-help">Leave blank to keep the saved key or environment credential.</small>
 <label for="ai-timeout">Timeout (seconds)</label><input id="ai-timeout" type="number" min="1" max="600" step="1" required>
-<div class="toolbar"><button id="ai-test" type="button">Test Connection</button><button id="ai-save" type="submit" class="primary">Save Settings</button><button id="ai-close" type="button">Close</button></div>
+<div class="form-actions"><button id="ai-test" type="button">Test Connection</button><button id="ai-save" type="submit" class="primary">Save Settings</button><button id="ai-close" type="button">Close</button></div>
 <p id="ai-config-status" class="badge" role="status" aria-live="polite" hidden></p>
 </form>
 </dialog>
@@ -207,6 +641,30 @@ const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+// Redesigned navigation, page structure and state copy.
+'SQL Worksheets':'SQL ワークシート', 'Ingestion & Stages':'取り込み・ステージ', 'Transformation':'データ変換',
+'AI Bears':'AI Bears（専門AI）', 'Database Explorer':'データベース探索', 'Audit Log':'監査ログ',
+'Query Iceberg tables with the resident Trino warehouse.':'常駐 Trino ウェアハウスで Iceberg テーブルを照会します。',
+'Warehouse status':'ウェアハウスの状態', 'Components':'コンポーネント', 'Sample queries':'サンプルクエリ',
+'Select a table to insert its name at the cursor.':'テーブルを選ぶとカーソル位置に名前を挿入します。',
+'Runs selected text when present':'選択中のテキストがあればその部分だけを実行', 'Result view':'結果の表示形式',
+'Ingestion views':'取り込みの表示', 'File upload':'ファイル取り込み', 'Stages':'ステージ',
+'No stages yet. Choose New stage to register a folder.':'ステージはまだありません。「ステージを登録」からフォルダーを登録してください。',
+'Transformation views':'データ変換の表示', 'Models':'モデル', 'Refresh targets':'更新対象',
+'Manual refresh':'手動更新', 'Manual refresh required':'手動更新が必要', 'Outcome unknown. Check {table}, then run a manual refresh. Automatic refresh stays off until one succeeds.':'結果が不明です。{table} を確認してから手動更新を実行してください。手動更新が成功するまで自動更新は再開できません。',
+'Builds, audits and publishes the saved version. Rows are fully replaced; nothing is computed incrementally.':'保存済みの版をビルド・品質確認して公開します。全件を置き換え、増分計算は行いません。',
+'Last status: {status}':'前回の状態: {status}',
+'Save ordered steps, run them now, or schedule them.':'順序付きの処理を保存し、すぐに実行するかスケジュールを設定します。',
+'Jobs views':'ジョブの表示', 'Select a job to edit, run or schedule it.':'ジョブを選ぶと、定義の編集・実行・スケジュール設定ができます。',
+'Open':'開く', 'Discard unsaved changes to the job definition?':'ジョブ定義の未保存の変更を破棄しますか？', 'Never run':'未実行', 'Last run':'前回の実行', '1 step':'1 ステップ', '{count} steps':'{count} ステップ',
+'No saved jobs yet. Choose New job to create the first one.':'ジョブはまだありません。「ジョブを登録」から作成してください。',
+'Save the job before running or scheduling it.':'実行やスケジュール設定の前にジョブを保存してください。',
+'Save the definition before running. Runs always use the saved version.':'実行前に定義を保存してください。実行には常に保存済みの版を使います。',
+'All jobs':'すべてのジョブ', 'No runs for this job yet.':'このジョブの実行履歴はまだありません。',
+'No runs yet. Run a saved job to see its history here.':'実行履歴はまだありません。保存したジョブを実行するとここに表示されます。',
+'Stop schedule':'スケジュールを停止', 'Save or select a stage to import files, schedule automatic ingestion, or export a table.':'ステージを保存または選択すると、ファイル取込・自動取込の設定・テーブル出力ができます。', 'Schedule stopped.':'スケジュールを停止しました。',
+'State':'状態', 'Components ready':'稼働中のコンポーネント', 'Raw status':'取得した状態（JSON）',
+'Auto-Chill':'自動休止', 'Chill the warehouse after it has been idle for the selected time.':'指定した時間アイドル状態が続くとウェアハウスを休止します。',
 "Automatic refresh":"自動更新",
 "Enable automatic refresh":"自動更新を有効にする",
 "Stop automatic refresh":"自動更新を停止",
@@ -409,15 +867,11 @@ const i18n = {ja: {
  'Query & Load History':'クエリ・読み込み履歴', 'Refresh History':'履歴を更新', 'Trino Query History':'Trino クエリ履歴', 'Copy & Data Load History':'コピー・データ読み込み履歴', 'History failed: {error}':'履歴を取得できません: {error}', 'Query ID':'クエリ ID', 'User':'ユーザー', 'Source':'実行元', 'SQL':'SQL 文', 'Target':'対象',
 
  'Work with Data':'データを扱う', 'Catalog':'カタログ', 'Manage & Monitor':'監視・管理',
- 'SQL Worksheets · Warehouse & SQL':'SQL ワークシート · Warehouse & SQL',
- 'Ingestion · File Upload':'データ取り込み · ファイルアップロード',
- 'Transformation · dbt & WAP':'データ変換 · dbt & WAP',
- 'Autonomous Bears':'自律 AI Bears', 'Database Explorer · Catalog':'データベース探索 · カタログ',
+    'Autonomous Bears':'自律 AI Bears', 'Database Explorer · Catalog':'データベース探索 · カタログ',
  'AgentHouse Pawprints':'AgentHouse 監査ログ (Pawprints)', 'Compute & Governance':'コンピュート & ガバナンス',
  'Columns':'カラム定義', 'Data Preview':'データプレビュー', 'Profile & NULL Stats':'プロファイル & NULL統計',
  'DDL':'DDL 定義', 'Snapshots & Time Travel':'スナップショット & Time Travel', 'Table Lineage':'テーブルリネージ',
- 'One workspace for your resident lakehouse.':'常駐レイクハウスの操作をひとつのワークスペースで。',
- 'Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.':'ウェアハウス操作と Data Bear の実行はローカルラボを変更します。書き込み後は監査結果を確認してください。',
+  'Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.':'ウェアハウス操作と Data Bear の実行はローカルラボを変更します。書き込み後は監査結果を確認してください。',
  'Workbench':'ワークベンチ', 'Local lab · mac-studio-solo':'ローカルラボ · mac-studio-solo',
  'Global warehouse controls':'ウェアハウスの共通操作', 'Workbench sections':'ワークベンチのセクション',
  'Warehouse & SQL':'ウェアハウス & SQL', 'Explore your Iceberg data with the resident Trino warehouse.':'常駐 Trino ウェアハウスで Iceberg データを探索します。',
@@ -512,10 +966,11 @@ const samples = {
 let currentRole = 'admin';
 function applyRole() {
  document.documentElement.dataset.role=currentRole;
+ if(typeof resetAdminViews==='function')resetAdminViews();
  if(typeof resetStageUI==='function')resetStageUI();
  if(typeof resetMartsUI==='function')resetMartsUI();
  $('tab-jobs').hidden=currentRole==='bi_viewer';
- if(currentRole==='bi_viewer')$('jobs-alert-count').hidden=true;
+ if(currentRole==='bi_viewer')$('jobs-alert-count').hidden=$('jobs-alert-tab-count').hidden=true;
  if(currentRole==='bi_viewer'&&typeof activeTab!=='undefined'&&activeTab==='jobs')activate($('tab-warehouse'));
  if(typeof renderJobSteps==='function')renderJobSteps();
  if(typeof activeTab!=='undefined'&&activeTab==='jobs')loadJobs();
@@ -604,7 +1059,7 @@ function table(container, columns, rows, localizeHeaders=true) {
  if(!rows.length){const empty=document.createElement('div');empty.className='empty';ui(empty,'No rows returned.');container.append(empty);return;}
  const element=document.createElement('table'),head=element.createTHead().insertRow(),body=element.createTBody();
  columns.forEach(c=>{const th=document.createElement('th');th.scope='col';const name=typeof c==='string'?c:c.name;if(localizeHeaders)ui(th,name);else th.textContent=name;if(c.type)th.title=c.type;head.append(th);});
- rows.forEach(row=>{const tr=body.insertRow();row.forEach(value=>{const td=tr.insertCell();td.textContent=value===null?'NULL':typeof value==='object'?JSON.stringify(value):String(value);});});
+ rows.forEach(row=>{const tr=body.insertRow();row.forEach(value=>{const td=tr.insertCell();if(value===null)td.className='null';td.textContent=value===null?'NULL':typeof value==='object'?JSON.stringify(value):String(value);});});
  container.append(element);
 }
 async function refreshStatus(){
@@ -613,33 +1068,40 @@ async function refreshStatus(){
   const data=await api('/api/status'),w=data.warehouse;
   if(data.auto_chill)updateAutoChill(data.auto_chill);
   const state=w.error?'Unavailable':({active:'Running',chilled:'Chilled',starting:'Starting'}[w.state]||w.state);
-  ui($('quick-warehouse-state'),'Warehouse: {state}',()=>({state:t(state)}));
+  const tone=w.error?'tone-bad':w.state==='active'?'tone-ok':w.state==='starting'?'tone-run':'';
+  ui($('quick-warehouse-state'),'Warehouse: {state}',()=>({state:t(state)}));$('quick-warehouse-state').className='badge '+tone;
   $('compute-warehouse').textContent=JSON.stringify(w,null,2);
-  message('quick-status-error',w.error||'');
+  renderComputeSummary(w,state,data.components);
+  message('quick-status-error',w.error||'');$('quick-status-error').title=w.error||'';
   table($('compute-components'),['Component','Ready replicas','Desired replicas'],Object.entries(data.components).map(([name,c])=>[name,c.ready_replicas??c,c.replicas??'—']));
-  ui($('warehouse-state'),state);$('warehouse-state').className='badge '+(w.state==='active'?'good':w.error?'bad':'');
+  ui($('warehouse-state'),state);$('warehouse-state').className='badge '+tone;
   ui($('replicas'),'Replicas {ready} / {desired}',{ready:w.ready_replicas??'—',desired:w.replicas??'—'});
   $('components').replaceChildren();
   Object.entries(data.components).forEach(([name,c])=>{const pill=document.createElement('span');pill.className='badge';if(name==='error')ui(pill,'Readiness unavailable: {error}',{error:c});else pill.textContent=`${name}: ${c.ready_replicas}/${c.replicas}`;$('components').append(pill);});
   if(w.error)message('status-error',w.error);
- }catch(error){ui($('warehouse-state'),'Unavailable');ui($('quick-warehouse-state'),'Warehouse: {state}',()=>({state:t('Unavailable')}));message('quick-status-error',error.message);message('status-error',error.message);}
+ }catch(error){ui($('warehouse-state'),'Unavailable');ui($('quick-warehouse-state'),'Warehouse: {state}',()=>({state:t('Unavailable')}));for(const id of ['warehouse-state','quick-warehouse-state'])$(id).className='badge tone-bad';message('quick-status-error',error.message);$('quick-status-error').title=error.message;message('status-error',error.message);}
  finally {pruneUIBindings();}
+}
+function renderComputeSummary(w,state,components){
+ const known=Object.values(components||{}).filter(c=>c&&typeof c==='object');
+ const facts=[['State',state],['Ready replicas',(w.ready_replicas??'—')+' / '+(w.replicas??'—')],['Components ready',known.filter(c=>c.ready_replicas>=c.replicas).length+' / '+known.length]];
+ $('compute-summary').replaceChildren(...facts.map(([label,value])=>{const item=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,label);ui(dd,value);item.append(dt,dd);return item;}));
 }
 $('refresh-status').onclick=()=>busy($('refresh-status'),refreshStatus);
 for(const action of ['chill','wake'])$(action).onclick=()=>busy($(action),async()=>{try{await api('/api/warehouse/'+action,{});await refreshStatus();}catch(e){message('status-error',e.message);}});
 document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{setSQL(samples[b.dataset.sample]);$('sql').focus();});
 $('run-query').onclick=()=>busy($('run-query'),async()=>{
- message('query-error','');ui($('query-meta'),'Executing…');
+ message('query-error','');ui($('query-meta'),'Executing…');$('query-meta').className='status-line tone-run';
  try{const editor=$('sql'),selection=editor.selectionStart<editor.selectionEnd?editor.value.slice(editor.selectionStart,editor.selectionEnd):'';
  const payload={sql:selection.trim()?selection:editor.value,warehouse:$('query-warehouse').value,max_rows:Number($('max-rows').value)};if($('query-schema').value!=='marts')payload.schema=$('query-schema').value;if($('query-mode').value!=='read-only')payload.mode=$('query-mode').value;const data=await api('/api/warehouse/query',payload);
- queryResult=data;populateChartColumns();sortColumn=-1;$('result-filter').value='';renderResults();rememberQuery(payload.sql);ui($('query-meta'),'{rows} rows{truncated} · {duration} ms · {id}',()=>({rows:data.rows.length,truncated:data.truncated?t(' · truncated'):'',duration:data.duration_ms??'—',id:data.query_id??''}));
- }catch(e){queryResult=null;renderResults();message('query-error',e.message);ui($('query-meta'),'Query failed');$('query-results').replaceChildren();}
+ queryResult=data;populateChartColumns();sortColumn=-1;$('result-filter').value='';renderResults();rememberQuery(payload.sql);ui($('query-meta'),'{rows} rows{truncated} · {duration} ms · {id}',()=>({rows:data.rows.length,truncated:data.truncated?t(' · truncated'):'',duration:data.duration_ms??'—',id:data.query_id??''}));$('query-meta').className='status-line tone-ok';
+ }catch(e){queryResult=null;renderResults();message('query-error',e.message);ui($('query-meta'),'Query failed');$('query-meta').className='status-line tone-bad';$('query-results').replaceChildren();}
 });
 $('sql').onkeydown=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();$('run-query').click();}};
 $('ingest-form').onsubmit=e=>{e.preventDefault();busy($('run-ingest'),async()=>{
- message('ingest-error','');$('ingest-result').hidden=true;ui($('ingest-state'),'Ingesting…');
- try{const payload=await ingestionPayload();payload.mode=$('ingest-mode').value;if($('ingest-table').value.trim())payload.table=$('ingest-table').value.trim();if($('ingest-key').value.trim())payload.key=$('ingest-key').value.trim();const result=await api('/api/lake/ingest',payload);$('ingest-result').textContent=JSON.stringify(result,null,2);$('ingest-result').hidden=false;ui($('ingest-state'),result.audit?.quality_passed===false?'Audit needs review':'Ingestion complete');await loadCatalog();}
- catch(error){message('ingest-error',error.message);ui($('ingest-state'),'Ingestion failed');}
+ message('ingest-error','');$('ingest-result').hidden=true;ui($('ingest-state'),'Ingesting…');$('ingest-state').className='status-line tone-run';
+ try{const payload=await ingestionPayload();payload.mode=$('ingest-mode').value;if($('ingest-table').value.trim())payload.table=$('ingest-table').value.trim();if($('ingest-key').value.trim())payload.key=$('ingest-key').value.trim();const result=await api('/api/lake/ingest',payload);$('ingest-result').textContent=JSON.stringify(result,null,2);$('ingest-result').hidden=false;const review=result.audit?.quality_passed===false;ui($('ingest-state'),review?'Audit needs review':'Ingestion complete');$('ingest-state').className='status-line '+(review?'tone-warn':'tone-ok');await loadCatalog();}
+ catch(error){message('ingest-error',error.message);ui($('ingest-state'),'Ingestion failed');$('ingest-state').className='status-line tone-bad';}
  });};
 let columnRequest=0;
 async function describeTable(schema,name){
@@ -688,12 +1150,25 @@ const bears=[
  {key:'catalog',name:'Catalog Curator Bear',description:'Search tables or inspect a table’s columns and dependencies.',fields:[['action','Action',['search','describe','lineage']],['table','Table (for describe or lineage)','']]},
  {key:'policy',name:'Policy Gatekeeper Bear',description:'Review the resident workload baseline or check a local manifest.',fields:[['action','Action',['baseline','check']],['manifest','Local manifest path (for check)','']]}
 ];
+// One list of specialists and one working area: choose a Bear, then fill only its inputs.
+const bearList=document.createElement('div'),bearPanels=document.createElement('div');
+bearList.className='panel bear-list';bearList.setAttribute('role','tablist');bearList.setAttribute('aria-orientation','vertical');
+uiAttributes.push({node:bearList,attribute:'aria-label',key:'AI Bears'});$('bear-cards').append(bearList,bearPanels);
 for(const bear of bears){
- const card=document.createElement('article');card.className='panel';const content=document.createElement('div');content.className='panel-body';const title=document.createElement('h2');ui(title,bear.name);const description=document.createElement('p');ui(description,bear.description);content.append(title,description);
+ const tab=document.createElement('button'),tabName=document.createElement('span'),tabState=document.createElement('span');
+ tab.id='bear-tab-'+bear.key;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','bear-panel-'+bear.key);tab.dataset.bear=bear.key;
+ ui(tabName,bear.name);tabState.className='badge';tab.append(tabName,tabState);bearList.append(tab);
+ const card=document.createElement('article');card.className='panel bear-panel';card.id='bear-panel-'+bear.key;card.setAttribute('role','tabpanel');card.setAttribute('aria-labelledby',tab.id);
+ const content=document.createElement('div');content.className='panel-body';const title=document.createElement('h2');ui(title,bear.name);const description=document.createElement('p');ui(description,bear.description);content.append(title,description);
  for(const [key,label,value,multiline] of bear.fields){const id=`bear-${bear.key}-${key}`,l=document.createElement('label');l.htmlFor=id;ui(l,label);const input=document.createElement(Array.isArray(value)?'select':multiline?'textarea':'input');input.id=id;if(Array.isArray(value))value.forEach(v=>{const option=new Option(v,v);ui(option,v);input.add(option);});else input.value=value;content.append(l,input);}
- const footer=document.createElement('div');footer.className='bear-footer';const button=document.createElement('button');ui(button,'Run Bear');const state=document.createElement('span');state.className='badge';ui(state,'Ready');state.setAttribute('role','status');const output=document.createElement('pre');output.hidden=true;uiAttributes.push({node:output,attribute:'aria-label',key:'{bear} response',values:()=>({bear:t(bear.name)})});footer.append(button,state);content.append(footer,output);card.append(content);$('bear-cards').append(card);
- button.onclick=()=>busy(button,async()=>{ui(state,'Running');state.className='badge';output.hidden=true;const payload={bear:bear.key};bear.fields.forEach(([key])=>{const v=$(`bear-${bear.key}-${key}`).value;if(v)payload[key]=v;});if(bear.key==='data'&&payload.action==='rollback')payload.rollback=payload.stage_table;try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';ui(state,warning?'Findings to review':'Complete');state.className='badge '+(warning?'bad':'good');}catch(e){ui(state,'Failed');state.className='badge bad';output.textContent=e.message;}output.hidden=false;});
+ const footer=document.createElement('div');footer.className='bear-footer';const button=document.createElement('button');button.className='primary run';ui(button,'Run Bear');const state=document.createElement('span');state.className='badge';ui(state,'Ready');state.setAttribute('role','status');const output=document.createElement('pre');output.hidden=true;uiAttributes.push({node:output,attribute:'aria-label',key:'{bear} response',values:()=>({bear:t(bear.name)})});footer.append(button,state);content.append(footer,output);card.append(content);bearPanels.append(card);
+ const show=(label,tone)=>{for(const node of [state,tabState]){ui(node,label);node.className='badge '+tone;}};
+ button.onclick=()=>busy(button,async()=>{show('Running','tone-run');output.hidden=true;const payload={bear:bear.key};bear.fields.forEach(([key])=>{const v=$(`bear-${bear.key}-${key}`).value;if(v)payload[key]=v;});if(bear.key==='data'&&payload.action==='rollback')payload.rollback=payload.stage_table;try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';show(warning?'Findings to review':'Complete',warning?'tone-warn':'tone-ok');}catch(e){show('Failed','tone-bad');output.textContent=e.message;}output.hidden=false;});
 }
+// wireTabs is declared later as a function, so it is available here.
+const bearTabs=[...bearList.children];
+wireTabs(bearTabs,selected=>bearTabs.forEach(b=>{const active=b===selected;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;$('bear-panel-'+b.dataset.bear).hidden=!active;}));
+bearTabs[0].click();
 async function loadPawprints(){
  message('pawprint-error','');
  try{pawprintRows=await api('/api/pawprints');renderPawprints();}catch(e){message('pawprint-error',e.message);ui($('pawprint-meta'),'Refresh failed');}
@@ -713,6 +1188,18 @@ $('catalog-filter').oninput=renderCatalogTrees;$('worksheet-tree-filter').oninpu
 $('open-table-sql').onclick=()=>openWorksheet('SELECT * FROM '+selectedTable+' LIMIT 50');
 $('drop-table-btn').onclick=()=>busy($('drop-table-btn'),async()=>{const selected=selectedTable;if(!selected||!confirm(t('Drop {table}? This deletes the table.',{table:selected})))return;try{await api('/api/catalog/drop',{table:selected});if(selectedTable===selected){++columnRequest;selectedTable=null;$('clone-table-btn').disabled=true;$('export-table-btn').disabled=true;ui($('table-title'),'Table dropped');$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).replaceChildren();}await loadCatalog();}catch(e){message('catalog-error',e.message);}});
 function wireTabs(buttons,select){buttons.forEach((b,i)=>{b.onclick=()=>select(b);b.onkeydown=e=>{let n;if(['ArrowRight','ArrowDown'].includes(e.key))n=(i+1)%buttons.length;else if(['ArrowLeft','ArrowUp'].includes(e.key))n=(i+buttons.length-1)%buttons.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=buttons.length-1;if(n!==undefined){e.preventDefault();select(buttons[n]);buttons[n].focus();}};});}
+// Views inside a page (for example Jobs → Run history) share the same tab behaviour.
+function showView(id){const button=$(id);if(button&&!button.hidden)button.click();}
+function selectView(button){
+ for(const b of document.querySelectorAll(`[data-view="${button.dataset.view}"]`)){const active=b===button;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;$(b.getAttribute('aria-controls')).hidden=!active;}
+}
+function resetAdminViews(){
+ for(const button of document.querySelectorAll('[data-admin-view][aria-selected="true"]'))if(currentRole!=='admin')selectView(document.querySelector(`[data-view="${button.dataset.view}"]`));
+}
+for(const group of new Set([...document.querySelectorAll('[data-view]')].map(b=>b.dataset.view))){
+ const buttons=[...document.querySelectorAll(`[data-view="${group}"]`)];
+ wireTabs(buttons,button=>{if(button.hasAttribute('data-admin-view')&&currentRole!=='admin')return;selectView(button);});
+}
 const inspectorTabs=[...document.querySelectorAll('[data-inspect]')];wireTabs(inspectorTabs,button=>inspectorTabs.forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$('inspect-'+b.dataset.inspect).hidden=!selected;}));
 
 // Storage is optional (private browsing, quotas, or damaged records must not block SQL).
@@ -801,10 +1288,18 @@ function scheduleSummary(saved){
  return [kind,detail,saved.time,saved.timezone].filter(Boolean).join(' · ');
 }
 function scheduleNextTime(saved){
- if(!saved?.next_run_at)return '\u2014';const zone=saved.timezone||'UTC',date=new Date(saved.next_run_at);
+ // Interval schedules have no zone of their own; show them in the browser's zone.
+ if(!saved?.next_run_at)return '\u2014';const zone=saved.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC',date=new Date(saved.next_run_at);
  if(!Number.isFinite(date.getTime()))return saved.next_run_at;
  return new Intl.DateTimeFormat(language==='ja'?'ja-JP':'en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:zone}).format(date)+' ('+zone+')';
 }
+// Shared by jobs, stages and refresh targets: browser-local time with its zone.
+function jobAlertTime(value){
+ if(!value)return '—';const date=new Date(value);if(!Number.isFinite(date.getTime()))return value;
+ return new Intl.DateTimeFormat(language==='ja'?'ja-JP':'en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}).format(date);
+}
+// Status colour classes; the visible label always states the outcome in words.
+function statusTone(status){return ({success:'tone-ok',succeeded:'tone-ok',finished:'tone-ok',queued:'tone-run',running:'tone-run',failed:'tone-bad',denied:'tone-bad',unknown:'tone-warn',interrupted:'tone-warn',degraded:'tone-warn'})[status]||'';}
 function stageCurrent(epoch){return currentRole==='admin'&&epoch===stageEpoch;}
 function invalidateStagePreview(){stagePreview=null;$('stage-retry').checked=false;$('stage-retry-area').hidden=true;$('stage-file-status').replaceChildren();$('stage-preview').replaceChildren();ui($('stage-confirmation'),'Preview a file before importing.');$('stage-import').disabled=true;}
 function stageIngestionStatus(status){return ({new:'Not imported',queued:'Queued',running:'Running',success:'Already imported',failed:'Failed',unknown:'Outcome unknown'})[status]||status||'Not imported';}
@@ -812,13 +1307,13 @@ function stageNeedsRetry(){return ['failed','unknown'].includes(stagePreview?.in
 function stageImportAllowed(){return !selectedStage?.legacy_history&&!!stagePreview&&!['success','queued','running'].includes(stagePreview.ingestion_status)&&(!stageNeedsRetry()||$('stage-retry').checked===true);}
 function renderStageSchedule(){
  const schedule=selectedStage?.schedule;const area=$('stage-schedule-state');area.replaceChildren();
- const state=document.createElement('p');ui(state,schedule?.enabled?'Enabled':'Automatic ingestion is off.');area.append(state);
+ const state=document.createElement('span');state.className='badge '+(schedule?.enabled?'tone-ok':'');ui(state,schedule?.enabled?'Enabled':'Disabled');area.append(state);
+ if(schedule){const summary=document.createElement('span');ui(summary,'{summary}',()=>({summary:scheduleSummary(schedule)}));area.append(summary);}
  for(const [label,value] of [['Next check',schedule?.next_run_at],['Last check',schedule?.last_status]]){
-  const line=document.createElement('p'),title=document.createElement('span');ui(title,label);line.append(title,': ');
-  if(label==='Next check'&&value){const time=document.createElement('span');ui(time,'{time}',()=>({time:scheduleNextTime(schedule)}));line.append(time);}else{const text=document.createElement('span');ui(text,value?(jobStatuses[value]||'Unknown'):'None recorded');line.append(text);}area.append(line);
+  const line=document.createElement('span'),title=document.createElement('span');ui(title,label);line.append(title,': ');
+  if(label==='Next check'&&value){const time=document.createElement('span');ui(time,'{time}',()=>({time:scheduleNextTime(schedule)}));line.append(time);}else{const text=document.createElement('span');ui(text,value?(jobStatuses[value]||'Unknown'):'None recorded');if(value)text.className='badge '+statusTone(value);line.append(text);}area.append(line);
  }
- if(schedule){const summary=document.createElement('p');ui(summary,'{summary}',()=>({summary:scheduleSummary(schedule)}));area.append(summary);}
- if(schedule?.last_run_id){const button=actionButton('View run history',()=>{if(currentRole!=='admin')return;selectedRunId=schedule.last_run_id;activate($('tab-jobs'));});area.append(button);}
+ if(schedule?.last_run_id){const button=actionButton('View run history',()=>{if(currentRole!=='admin')return;selectedRunId=schedule.last_run_id;activate($('tab-jobs'));showView('jobs-view-runs');});area.append(button);}
 }
 function clearStageExports(resetInputs=false){
  $('stage-exports').replaceChildren();ui($('stage-exports'),'Refresh outputs to list exported files.');
@@ -849,7 +1344,7 @@ function stageControls(){
  for(const id of ['stage-export-table','stage-export-format','stage-export-file','stage-export-submit','stage-exports-refresh'])$(id).disabled=stagePending||stageDirty||!managed;
  const automatic=managed&&!stageDirty&&!selectedStage.legacy_history&&selectedStage.definition.mode!=='replace';
  $('stage-legacy-notice').hidden=!managed||!selectedStage.legacy_history;
- $('stage-schedule-area').hidden=!managed;
+ $('stage-schedule-area').hidden=!managed;$('stage-detail-hint').hidden=!!managed;
  updateScheduleKind('stage-schedule',automatic&&!stagePending);
  for(const id of ['stage-schedule-enabled','stage-schedule-save','stage-scan'])$(id).disabled=stagePending||!automatic;
  $('stage-schedule-stop').disabled=stagePending||!managed||!selectedStage.schedule?.enabled;
@@ -870,9 +1365,13 @@ async function stageTask(label,task){
  finally{if(stageCurrent(epoch)){stagePending=false;stageControls();}pruneUIBindings();}
 }
 function renderStages(){
- if(!stageEntries.length){ui($('stages-list'),'No saved stages.');return;}
- table($('stages-list'),['Stage name','Target table','Mode','Owner','Actions'],stageEntries.map(entry=>[entry.name,entry.definition.table,t(entry.definition.mode),entry.owner,'']));
- $('stages-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=stageEntries[index];ui(row.cells[2],entry.definition.mode);if(entry.can_manage)row.lastElementChild.append(actionButton('Select stage',()=>selectStage(entry)));else ui(row.lastElementChild,'Read-only definition');});
+ if(!stageEntries.length){ui($('stages-list'),'No stages yet. Choose New stage to register a folder.');return;}
+ table($('stages-list'),['Stage name','Target table','Mode','Automatic ingestion','Owner','Actions'],stageEntries.map(entry=>[entry.name,entry.definition.table,t(entry.definition.mode),'',entry.owner,'']));
+ $('stages-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=stageEntries[index];ui(row.cells[2],entry.definition.mode);
+  if(entry.name===selectedStage?.name)row.setAttribute('aria-current','true');
+  const schedule=entry.schedule,state=document.createElement('span');state.className='badge '+(schedule?.enabled?'tone-ok':'');ui(state,schedule?.enabled?'Enabled':'Disabled');row.cells[3].append(state);
+  if(schedule?.enabled){const next=document.createElement('small');ui(next,'Next run: {time}',()=>({time:scheduleNextTime(schedule)}));row.cells[3].append(next);}
+  if(entry.can_manage)row.lastElementChild.append(actionButton('Select stage',()=>selectStage(entry)));else ui(row.lastElementChild,'Read-only definition');});
 }
 async function loadStages(){await stageTask('Loading stages…',async epoch=>{
  const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];
@@ -896,7 +1395,7 @@ function stageDefinition(){
 function editStage(entry){
  selectedStage=entry;clearStageExports(true);stageDirty=false;stageFiles=[];stageRunId=null;stageExportRunId=null;$('stage-view-run').hidden=true;$('stage-file').replaceChildren();$('stage-files').replaceChildren();invalidateStagePreview();
  const definition=entry?.definition||{mode:'append',format:'auto'};for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
- fillScheduleFields('stage-schedule',entry?.schedule);renderStageSchedule();stageControls();
+ fillScheduleFields('stage-schedule',entry?.schedule);renderStageSchedule();renderStages();stageControls();
 }
 async function refreshStageSchedule(epoch){
  const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];
@@ -915,8 +1414,8 @@ async function fetchStageFiles(epoch){
  const placeholder=document.createElement('option');placeholder.value='';ui(placeholder,'Choose a file');$('stage-file').append(placeholder);
  for(const file of stageFiles){const option=document.createElement('option');option.value=file.name;option.textContent=file.name;option.disabled=file.available===false;$('stage-file').append(option);}
  if(!stageFiles.length)ui($('stage-files'),'No files available.');
- else{table($('stage-files'),['File name','Size (bytes)','Modified','Availability','Ingestion status','Actions'],stageFiles.map(file=>[file.name,file.size,'','','','']));$('stage-files').querySelectorAll('tbody tr').forEach((row,index)=>{const file=stageFiles[index];if(file.modified_at)row.cells[2].append(jobAlertTimestamp(file.modified_at));else row.cells[2].textContent='\u2014';ui(row.cells[3],file.available===false?'Unavailable':'Available');if(file.error)row.cells[3].title=file.error;ui(row.cells[4],stageIngestionStatus(file.ingestion_status));if(file.last_run_id)row.lastElementChild.append(actionButton('View run history',()=>{if(currentRole!=='admin')return;selectedRunId=file.last_run_id;activate($('tab-jobs'));}));});}
- ui($('stage-state'),'Stage files');
+ else{table($('stage-files'),['File name','Size (bytes)','Modified','Availability','Ingestion status','Actions'],stageFiles.map(file=>[file.name,file.size,'','','','']));$('stage-files').querySelectorAll('tbody tr').forEach((row,index)=>{const file=stageFiles[index];if(file.modified_at)row.cells[2].append(jobAlertTimestamp(file.modified_at));else row.cells[2].textContent='\u2014';ui(row.cells[3],file.available===false?'Unavailable':'Available');if(file.error)row.cells[3].title=file.error;const status=document.createElement('span');status.className='badge '+statusTone(file.ingestion_status);ui(status,stageIngestionStatus(file.ingestion_status));row.cells[4].append(status);if(file.last_run_id)row.lastElementChild.append(actionButton('View run history',()=>{if(currentRole!=='admin')return;selectedRunId=file.last_run_id;activate($('tab-jobs'));showView('jobs-view-runs');}));});}
+ ui($('stage-state'),'Ready');
 }
 async function selectStage(entry){if(stagePending||currentRole!=='admin')return;++stageEpoch;editStage(entry);await stageTask('Loading files…',fetchStageFiles);}
 $('stages-refresh').onclick=loadStages;
@@ -935,7 +1434,7 @@ $('stage-preview-button').onclick=()=>stageTask('Previewing file…',async epoch
  const definition=result.stage;if(!definition||definition.name!==selection.name||!definition.table||!definition.mode)throw Error(t('Stage preview did not include its saved settings.'));
  selectedStage={...selectedStage,definition};clearStageExports();stageEntries=stageEntries.map(entry=>entry.name===selection.name?selectedStage:entry);renderStages();
  for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
- stagePreview={...selection,ingestion_status:result.ingestion_status||file.ingestion_status||'new'};ui($('stage-file-status'),stageIngestionStatus(stagePreview.ingestion_status));const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';
+ stagePreview={...selection,ingestion_status:result.ingestion_status||file.ingestion_status||'new'};ui($('stage-file-status'),stageIngestionStatus(stagePreview.ingestion_status));$('stage-file-status').className='badge '+(stagePreview.ingestion_status==='success'?'tone-ok':statusTone(stagePreview.ingestion_status));const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';
  table(schema,['Column','Inferred type'],result.columns.map(column=>[column.name,column.type]));table(rows,result.columns,result.sample_rows,false);$('stage-preview').replaceChildren(schema,rows);
  ui($('stage-confirmation'),'{file} → {table} · {mode} · {count} rows',()=>({file:selection.file,table:definition.table,mode:t(definition.mode),count:result.row_count}));ui($('stage-state'),'Ready');
 });
@@ -965,7 +1464,7 @@ $('stage-export-form').onsubmit=event=>{event.preventDefault();if(stagePending||
  const data=await api('/api/stages/export',payload);if(!stageCurrent(epoch))return;
  stageRunId=data.run.id;stageExportRunId=data.run.id;$('stage-view-run').hidden=false;clearStageExports();ui($('stage-state'),'Export queued.');
 });};
-$('stage-view-run').onclick=()=>{if(!stageRunId||currentRole!=='admin')return;selectedRunId=stageRunId;activate($('tab-jobs'));};
+$('stage-view-run').onclick=()=>{if(!stageRunId||currentRole!=='admin')return;selectedRunId=stageRunId;activate($('tab-jobs'));showView('jobs-view-runs');};
 
 // Registered refresh targets use saved, versioned definitions and the Jobs executor.
 let martEntries=[],selectedMart=null,martDirty=false,martPending=false,martEpoch=0,martRequest=0,martPoll=null,martRunId=null,martStale=false,martScheduleDirty=false;
@@ -1001,13 +1500,22 @@ function selectMart(entry,internal=false){
 }
 function renderMartRun(){
  const run=selectedMart?.last_run;
- if(run)ui($('mart-state'),martUnchanged(run)?'Check unchanged · {time}':'Refresh {status} · {time}',()=>({status:jobStatus(run.status),time:run.finished_at||run.started_at||run.created_at||'—'}));
+ // An unresolved unknown outcome outranks any later unchanged check.
+ if(selectedMart?.requires_manual_refresh){ui($('mart-state'),'Outcome unknown. Check {table}, then run a manual refresh. Automatic refresh stays off until one succeeds.',{table:selectedMart.table||'iceberg.marts.'+selectedMart.name});$('mart-state').className='state callout warn';return;}
+ if(run)ui($('mart-state'),martUnchanged(run)?'Check unchanged · {time}':'Refresh {status} · {time}',()=>({status:jobStatus(run.status),time:jobAlertTime(run.finished_at||run.started_at||run.created_at)}));
  else ui($('mart-state'),selectedMart?'Never refreshed':'');
+ $('mart-state').className='state status-line '+(run?statusTone(run.status):'');
 }
 function renderMarts(){
  if(!martEntries.length){ui($('marts-list'),'No refresh targets registered. Save a SELECT definition to begin.');return;}
- table($('marts-list'),['Mart name','User','Last check / refresh','Run time','Last successful refresh','Actions'],martEntries.map(entry=>[entry.table||'iceberg.marts.'+entry.name,entry.owner,entry.last_run?martRunLabel(entry.last_run):t('Never refreshed'),entry.last_run?.finished_at||entry.last_run?.started_at||entry.last_run?.created_at||'—',entry.last_success_at||'—','']));
- $('marts-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=martEntries[index];ui(row.cells[2],entry.last_run?martUnchanged(entry.last_run)?'Check unchanged':jobStatuses[entry.last_run.status]||'Unknown':'Never refreshed');const button=actionButton('Select target',()=>selectMart(entry));button.disabled=martPending;row.lastElementChild.append(button);});
+ table($('marts-list'),['Mart name','Owner','Last check / refresh','Run time','Last successful refresh','Automatic refresh','Actions'],martEntries.map(entry=>[entry.table||'iceberg.marts.'+entry.name,entry.owner,'',jobAlertTime(entry.last_run?.finished_at||entry.last_run?.started_at||entry.last_run?.created_at),jobAlertTime(entry.last_success_at),'','']));
+ $('marts-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=martEntries[index],run=entry.last_run;
+  if(entry.name===selectedMart?.name)row.setAttribute('aria-current','true');
+  const status=document.createElement('span');status.className='badge '+(run?statusTone(run.status):'');ui(status,run?martUnchanged(run)?'Check unchanged':jobStatuses[run.status]||'Unknown':'Never refreshed');row.cells[2].append(status);
+  if(entry.requires_manual_refresh){const note=document.createElement('span');note.className='badge tone-warn';ui(note,'Manual refresh required');row.cells[2].prepend(note);status.className='badge';}
+  const schedule=document.createElement('span');schedule.className='badge '+(entry.schedule?.enabled?'tone-ok':'');ui(schedule,entry.schedule?.enabled?'Enabled':'Disabled');row.cells[5].append(schedule);
+  if(entry.schedule?.enabled){const next=document.createElement('small');ui(next,'Next run: {time}',()=>({time:scheduleNextTime(entry.schedule)}));row.cells[5].append(next);}
+  const button=actionButton('Select target',()=>selectMart(entry));button.disabled=martPending;row.lastElementChild.append(button);});
 }
 async function loadMarts(){
  if(!martsVisible())return;const epoch=martEpoch,request=++martRequest;stopMartsPolling();
@@ -1031,7 +1539,10 @@ function renderMartSchedule(){
  $('mart-schedule-enabled').disabled=!martScheduleCanEnable();
  $('mart-schedule-save').disabled=!martScheduleCanEnable();
  $('mart-schedule-stop').disabled=!editable||!saved?.enabled;
- ui($('mart-schedule-state'),'{enabled} · Next run: {time} · Last status: {status}',()=>({enabled:t(saved?.enabled?'Enabled':'Disabled'),time:scheduleNextTime(saved),status:selectedMart?.last_run?martRunLabel(selectedMart.last_run):t('Never refreshed')}));
+ ui($('mart-schedule-state'),saved?.enabled?'Enabled':'Disabled');$('mart-schedule-state').className='pill '+(saved?.enabled?'tone-ok':'');
+ ui($('mart-schedule-next'),'Next run: {time}',()=>({time:scheduleNextTime(saved)}));
+ ui($('mart-schedule-last'),'Last status: {status}',()=>({status:selectedMart?.last_run?martRunLabel(selectedMart.last_run):t('Never refreshed')}));
+ $('mart-schedule-help').className=selectedMart?.requires_manual_refresh||martStale||martDirty?'callout warn':!selectedMart?.watch_tables?.length?'callout info':'help';
  ui($('mart-schedule-help'),selectedMart?.requires_manual_refresh?'Outcome unknown. Complete a successful manual refresh before enabling automatic refresh.':martStale?'Saved definition changed. Select the target again to load its latest version.':martDirty?'Unsaved changes. Save the definition before refreshing.':!selectedMart?.watch_tables?.length?'Save at least one watched source table before enabling automatic refresh.':'Failure pauses automatic refresh. Saving a definition pauses its schedule and resets its source baseline.');
 }
 function martSchedulePayload(entry,fields){return {name:entry.name,version:entry.version,...schedulePayload(fields)};}
@@ -1062,7 +1573,7 @@ $('mart-run').onclick=()=>{if($('mart-run').disabled)return;martTask(async epoch
  const name=selectedMart.name,version=selectedMart.version;const data=await api('/api/marts/run',{name,version});if(!martCurrent(epoch))return;
  selectedMart={...selectedMart,last_run:data.run};martRunId=data.run.id;ui($('mart-state'),'Refresh queued. Inspect progress in Jobs.');await loadMarts();
  });};
-$('mart-view-run').onclick=()=>{if(!martRunId||currentRole!=='admin')return;selectedRunId=martRunId;activate($('tab-jobs'));};
+$('mart-view-run').onclick=()=>{if(!martRunId||currentRole!=='admin')return;selectedRunId=martRunId;activate($('tab-jobs'));showView('jobs-view-runs');};
 
 let selectedModel=null;
 function managedMartModel(model){return !!model?.registered_refresh_target;}
@@ -1076,7 +1587,7 @@ for(const action of ['build','test'])$('run-dbt-'+action).onclick=()=>busy($('ru
 let pawprintRows=[];
 $('pawprint-filter').oninput=renderPawprints;$('pawprint-status-filter').onchange=renderPawprints;
 function addPawprintStatus(status){const option=new Option(status,status);ui(option,status);$('pawprint-status-filter').add(option);}
-function renderPawprints(){const term=$('pawprint-filter').value.toLowerCase(),status=$('pawprint-status-filter').value;for(const r of pawprintRows)if(r.status&&![...$('pawprint-status-filter').options].some(o=>o.value===r.status))addPawprintStatus(r.status);const rows=pawprintRows.filter(r=>(!status||r.status===status)&&JSON.stringify(r).toLowerCase().includes(term));table($('pawprint-results'),['Timestamp (UTC)','Action / Bear','Latency (ms)','Status','Details'],rows.map(r=>[r.timestamp,r.action_type||r.agent_id,r.duration_ms,r.status,[r.target_system,r.model_name?`${r.model_name} · tokens ${r.prompt_tokens??'—'} prompt / ${r.completion_tokens??'—'} completion`:null,`trace ${r.trace_id}`].filter(Boolean).join(' · ')]));$('pawprint-results').querySelectorAll('tbody tr').forEach((tr,i)=>{ui(tr.cells[3],rows[i].status||'');const r=rows[i];tr.cells[4].className='details-cell';if(r.model_name)ui(tr.cells[4],'{target}{model} · tokens {prompt} prompt / {completion} · trace {trace}',{target:r.target_system?r.target_system+' · ':'',model:r.model_name,prompt:r.prompt_tokens??'—',completion:r.completion_tokens??'—',trace:r.trace_id});});ui($('pawprint-meta'),'{visible} / {total} events',{visible:rows.length,total:pawprintRows.length});}
+function renderPawprints(){const term=$('pawprint-filter').value.toLowerCase(),status=$('pawprint-status-filter').value;for(const r of pawprintRows)if(r.status&&![...$('pawprint-status-filter').options].some(o=>o.value===r.status))addPawprintStatus(r.status);const rows=pawprintRows.filter(r=>(!status||r.status===status)&&JSON.stringify(r).toLowerCase().includes(term));table($('pawprint-results'),['Timestamp (UTC)','Action / Bear','Latency (ms)','Status','Details'],rows.map(r=>[r.timestamp,r.action_type||r.agent_id,r.duration_ms,r.status,[r.target_system,r.model_name?`${r.model_name} · tokens ${r.prompt_tokens??'—'} prompt / ${r.completion_tokens??'—'} completion`:null,`trace ${r.trace_id}`].filter(Boolean).join(' · ')]));$('pawprint-results').querySelectorAll('tbody tr').forEach((tr,i)=>{ui(tr.cells[3],rows[i].status||'');tr.cells[3].className=statusTone(rows[i].status);const r=rows[i];tr.cells[4].className='details-cell';if(r.model_name)ui(tr.cells[4],'{target}{model} · tokens {prompt} prompt / {completion} · trace {trace}',{target:r.target_system?r.target_system+' · ':'',model:r.model_name,prompt:r.prompt_tokens??'—',completion:r.completion_tokens??'—',trace:r.trace_id});});ui($('pawprint-meta'),'{visible} / {total} events',{visible:rows.length,total:pawprintRows.length});}
 for(const action of ['wake','chill'])$('quick-'+action).onclick=()=>busy($('quick-'+action),async()=>{try{await api('/api/warehouse/'+action,{});await refreshStatus();}catch(e){message('quick-status-error',e.message);}});
 $('compute-refresh').onclick=()=>busy($('compute-refresh'),refreshStatus);
 for(const [id,bear] of [['compute-sre-check','sre'],['compute-policy-check','policy']])$(id).onclick=()=>busy($(id),async()=>{try{const result=await api('/api/bears/run',bear==='policy'?{bear,action:'baseline'}:{bear});message('compute-check-result',JSON.stringify(result,null,2));}catch(e){message('compute-check-result',e.message);}});
@@ -1109,7 +1620,7 @@ function renderChart(){
  mark('text',{x:420,y:325,'text-anchor':'middle',class:'chart-label'},name(xi));
  mark('text',{x:80,y:22,class:'chart-label'},name(yi));container.append(svg);
 }
-for(const view of ['table','chart'])$('result-view-'+view).onclick=()=>{for(const kind of ['table','chart'])$('result-view-'+kind).setAttribute('aria-pressed',String(kind===view));$('query-results').hidden=view!=='table';$('query-chart').hidden=view!=='chart';renderChart();};
+for(const view of ['table','chart'])$('result-view-'+view).onclick=()=>{for(const kind of ['table','chart'])$('result-view-'+kind).setAttribute('aria-pressed',String(kind===view));$('query-results').hidden=view!=='table';$('query-chart').hidden=view!=='chart';$('chart-tools').hidden=view!=='chart';renderChart();};
 for(const id of ['chart-type','chart-x-col','chart-y-col'])$(id).onchange=renderChart;
 async function cloneTable(source,snapshot,request=columnRequest){
  if(!source)return;
@@ -1153,18 +1664,19 @@ async function loadRuntimeHistory(){
  else{
  const rows=runtime?.rows||[];table($('runtime-queries-results'),[...columnNames.map(name=>({'query_id':'Query ID',state:'Status',user:'User',source:'Source',query:'SQL'}[name]||name)),'Actions'],rows.map(row=>[...row,'']));
  const sqlIndex=columnNames.indexOf('query');
- $('runtime-queries-results').querySelectorAll('tbody tr').forEach((tr,i)=>{if(sqlIndex>=0&&typeof rows[i][sqlIndex]==='string')tr.lastElementChild.append(actionButton('Open in Worksheet',()=>openWorksheet(rows[i][sqlIndex])));});
+ const stateIndex=columnNames.indexOf('state');
+ $('runtime-queries-results').querySelectorAll('tbody tr').forEach((tr,i)=>{if(stateIndex>=0)tr.cells[stateIndex].className=statusTone(String(rows[i][stateIndex]).toLowerCase());if(sqlIndex>=0&&typeof rows[i][sqlIndex]==='string')tr.lastElementChild.append(actionButton('Open in Worksheet',()=>openWorksheet(rows[i][sqlIndex])));});
  }
  const loads=data.load_history,actions=['lake.ingest','lake.export','catalog.clone','catalog.drop','bear.data_engineer'];
  if(loads?.error)message('load-history-results',loads.error);
- else{const rows=(Array.isArray(loads)?loads:[]).filter(row=>actions.includes(row.action_type));table($('load-history-results'),['Timestamp (UTC)','Action / Bear','Target','Status','Latency (ms)'],rows.map(row=>[row.timestamp,row.action_type,row.target_system,row.status,row.duration_ms]));$('load-history-results').querySelectorAll('tbody tr').forEach((tr,i)=>ui(tr.cells[3],rows[i].status||''));}
+ else{const rows=(Array.isArray(loads)?loads:[]).filter(row=>actions.includes(row.action_type));table($('load-history-results'),['Timestamp (UTC)','Action / Bear','Target','Status','Latency (ms)'],rows.map(row=>[row.timestamp,row.action_type,row.target_system,row.status,row.duration_ms]));$('load-history-results').querySelectorAll('tbody tr').forEach((tr,i)=>{ui(tr.cells[3],rows[i].status||'');tr.cells[3].className=statusTone(rows[i].status);});}
  }catch(e){$('runtime-queries-results').replaceChildren();$('load-history-results').replaceChildren();ui($('history-error'),'History failed: {error}',{error:e.message});$('history-error').hidden=false;}
  finally{pruneUIBindings();}
 }
 $('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
 
 // Jobs are manually admitted by the server; this page never schedules or retries work.
-let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;
+let jobEntries=[],jobRunCache=[],jobDirty=false,jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
 const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
@@ -1188,10 +1700,6 @@ function jobSummary(step){
 function jobEmpty(id,key){$(id).replaceChildren();const node=document.createElement('div');node.className='empty';ui(node,key);$(id).append(node);}
 function jobAlertCanAcknowledge(alert){return currentRole!=='bi_viewer'&&alert.can_manage===true&&!alert.acknowledged_at;}
 function jobAlertResolution(alert){return alert.resolution==='condition_cleared'?'Condition cleared':alert.resolution==='definition_changed'?'Definition changed':alert.resolved_at?'Resolved':'Active condition';}
-function jobAlertTime(value){
- if(!value)return '\u2014';const date=new Date(value);if(!Number.isFinite(date.getTime()))return value;
- return new Intl.DateTimeFormat(language==='ja'?'ja-JP':'en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}).format(date);
-}
 function jobAlertTimestamp(value){
  const time=document.createElement('time');time.dateTime=value;time.title=value;ui(time,'{time}',()=>({time:jobAlertTime(value)}));return time;
 }
@@ -1215,10 +1723,11 @@ function renderJobAlerts(alerts){
 }
 
 async function loadJobAlerts(render=jobsVisible()){
- const role=currentRole;if(role==='bi_viewer'){$('jobs-alert-count').hidden=true;return;}
+ const role=currentRole;if(role==='bi_viewer'){$('jobs-alert-count').hidden=$('jobs-alert-tab-count').hidden=true;return;}
  try{
  const data=await api('/api/alerts');if(currentRole!==role)return;
  const count=Math.max(0,Number(data.unacknowledged_count)||0);ui($('jobs-alert-count'),'{count} unacknowledged',{count});$('jobs-alert-count').hidden=count===0;
+ $('jobs-alert-tab-count').textContent=String(count);$('jobs-alert-tab-count').hidden=count===0;
  if(render&&jobsVisible()){message('job-alerts-error','');renderJobAlerts(data.alerts||[]);}
  }catch(error){if(render&&jobsVisible()){ui($('job-alerts-error'),'Notification failed: {error}',{error:error.message});$('job-alerts-error').hidden=false;}}
  finally{pruneUIBindings();}
@@ -1270,7 +1779,7 @@ function renderJobSteps(){
  jobField(options,'Export format','format',step.format||'auto',['auto','csv','jsonl','parquet']);
  jobField(options,'Upsert key (optional)','key',step.key||'');
  }else if(['wap_refresh','wap_publish'].includes(step.action))jobField(fieldset,'WAP model','table',step.table||'');
- const remove=actionButton('Remove step',async()=>{syncJobSteps();jobSteps.splice(index,1);$('job-steps').replaceChildren();renderJobSteps();});remove.type='button';fieldset.append(remove);
+ const remove=actionButton('Remove step',async()=>{syncJobSteps();jobSteps.splice(index,1);markJobDirty();$('job-steps').replaceChildren();renderJobSteps();});remove.type='button';fieldset.append(remove);
  if(editingJob&&!editingJob.can_manage)for(const control of fieldset.querySelectorAll('input,select,textarea,button'))control.disabled=true;
  $('job-steps').append(fieldset);
  });
@@ -1284,7 +1793,42 @@ function editJob(entry){
  $('job-steps').replaceChildren();jobSteps=structuredClone(definition.steps||[]);renderJobSteps();
  ui($('job-editor-state'),entry&&!entry.can_manage?'Read-only definition':entry?definition.name:'New definition');
  for(const element of $('job-form').querySelectorAll('input,textarea,select,button'))element.disabled=!!entry&&!entry.can_manage;
- $('job-save-state').textContent='';
+ $('job-save-state').textContent='';jobDirty=false;updateJobRunControls();
+}
+// The run button follows the saved definition: unsaved edits must be saved before running.
+function markJobDirty(){if(jobDirty)return;jobDirty=true;updateJobRunControls();}
+function updateJobRunControls(){
+ const dirty=jobDirty&&!!selectedJob&&editingJob?.name===selectedJob.name;
+ $('job-run').disabled=!selectedJob?.can_manage||dirty||$('job-run').getAttribute('aria-busy')==='true';
+ ui($('job-run-help'),dirty?'Save the definition before running. Runs always use the saved version.':'Runs use your authenticated role. Steps stop at the first failure.');
+ $('job-run-help').className=dirty?'callout warn':'help';
+}
+function confirmDiscardJob(){return !jobDirty||confirm(t('Discard unsaved changes to the job definition?'));}
+function openJob(entry){editJob(entry);selectJob(entry);renderJobList();}
+function clearSelectedJob(){
+ selectedJob=null;ui($('job-run-name'),'Choose a saved job.');jobEmpty('job-run-arguments','Save the job before running or scheduling it.');
+ $('job-run-open').hidden=true;$('job-run-state').textContent='';updateJobRunControls();renderJobSchedule();if(jobEntries.length)renderJobList();
+}
+function updateRunFilter(){
+ const filter=$('job-runs-filter'),value=filter.value,names=[...new Set([...jobEntries.map(entry=>entry.name),...jobRunCache.map(run=>run.job_name)])].filter(Boolean).sort();
+ if([...filter.options].slice(1).map(option=>option.value).join('\n')===names.join('\n'))return;
+ filter.replaceChildren(filter.options[0],...names.map(name=>new Option(name,name)));filter.value=names.includes(value)?value:'';
+}
+function renderJobList(runs){
+ if(runs)jobRunCache=runs;updateRunFilter();
+ if(!jobEntries.length){jobEmpty('jobs-list','No saved jobs yet. Choose New job to create the first one.');return;}
+ table($('jobs-list'),['Job name','Description','Owner','Schedule','Last run','Actions'],jobEntries.map(entry=>[entry.name,entry.definition.description||'',entry.owner,'','','']));
+ $('jobs-list').querySelectorAll('tbody tr').forEach((row,index)=>{
+  const entry=jobEntries[index],schedule=jobSchedules.find(item=>item.name===entry.name),run=jobRunCache.find(item=>item.job_name===entry.name),count=entry.definition.steps.length;
+  if(entry.name===(selectedJob||editingJob)?.name)row.setAttribute('aria-current','true');
+  const steps=document.createElement('small');ui(steps,count===1?'1 step':'{count} steps',{count});row.cells[1].append(steps);
+  if(!entry.can_manage){const note=document.createElement('small');ui(note,'Read-only definition');row.cells[2].append(note);}
+  const state=document.createElement('span');state.className='badge '+(schedule?.enabled?'tone-ok':'');ui(state,schedule?.enabled?'Enabled':'Disabled');row.cells[3].append(state);
+  if(schedule?.enabled){const next=document.createElement('small');ui(next,'Next run: {time}',()=>({time:scheduleNextTime(schedule)}));row.cells[3].append(next);}
+  if(run){const status=document.createElement('span');status.className='badge '+statusTone(run.status);ui(status,jobStatuses[run.status]||'Unknown');row.cells[4].append(status,jobAlertTimestamp(run.started_at||run.created_at));}
+  else ui(row.cells[4],'Never run');
+  row.lastElementChild.append(actionButton('Open',async()=>{if(!confirmDiscardJob())return;openJob(entry);$('job-name').focus();}),actionButton('Run history',async()=>{$('job-runs-filter').value=entry.name;renderJobRuns();showView('jobs-view-runs');}));
+ });
 }
 function selectJob(entry){
  selectedJob=entry;$('job-run-name').textContent=entry.definition.name;$('job-run-arguments').replaceChildren();
@@ -1300,19 +1844,16 @@ function selectJob(entry){
  wrap.append(label,input);$('job-run-arguments').append(wrap);
  }
  if(!Object.keys(parameters).length)jobEmpty('job-run-arguments','No arguments required.');
- $('job-run').disabled=!entry.can_manage;
+ if($('job-run-open').dataset.job!==entry.name){$('job-run-open').hidden=true;$('job-run-state').textContent='';}
+ updateJobRunControls();
  renderJobSchedule();
 }
 async function loadJobs(){
  if(!jobsVisible())return;
  message('jobs-error','');try{
  const data=await api('/api/jobs');jobEntries=data.jobs||[];
- if(!jobEntries.length)jobEmpty('jobs-list','No saved jobs.');
- else{
- table($('jobs-list'),['Job name','Description','User','Steps','Actions'],jobEntries.map(entry=>[entry.name,entry.definition.description||'',entry.owner,entry.definition.steps.length,'']));
- $('jobs-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=jobEntries[index];row.lastElementChild.append(actionButton('Edit job',async()=>{editJob(entry);$('job-name').focus();}),actionButton('Select job',async()=>{selectJob(entry);$('job-run').focus();}));});
- }
- if(selectedJob){const updated=jobEntries.find(entry=>entry.name===selectedJob.name);if(updated)selectJob(updated);else{selectedJob=null;$('job-run').disabled=true;}}
+ if(selectedJob){const updated=jobEntries.find(entry=>entry.name===selectedJob.name);if(updated)selectJob(updated);else clearSelectedJob();}
+ renderJobList();
  await loadJobSchedules();
  await refreshJobRuns();
  }catch(error){message('jobs-error',error.message);stopJobsPolling();}
@@ -1324,12 +1865,8 @@ async function refreshJobRuns(){
  const current=()=>request===jobsRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
  try{
  const data=await api('/api/jobs/runs');if(!current())return;
- const runs=data.runs||[];
- if(!runs.length)jobEmpty('job-runs','No runs yet.');
- else{
- table($('job-runs'),['Run ID','Job','Status','Trigger','Scheduled for (UTC)','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),t(jobTrigger(run)),run.scheduled_for||'\u2014',run.actor,run.started_at||run.created_at||'\u2014',jobDuration(run),'']));
- $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{ui(row.cells[2],jobStatuses[runs[index].status]||'Unknown');ui(row.cells[3],jobTrigger(runs[index]));row.lastElementChild.append(actionButton('Inspect run',()=>showJobRun(runs[index].id)));});
- }
+ const runs=data.runs||[];jobRunCache=runs;renderJobRuns();
+ if(typeof renderJobList==='function')renderJobList(runs);
  if(selectedRunId)await showJobRun(selectedRunId);
  if(!current())return;
  await loadJobAlerts(true);
@@ -1340,17 +1877,29 @@ async function refreshJobRuns(){
  }catch(error){if(current()){message('jobs-error',error.message);stopJobsPolling();}}
  finally{pruneUIBindings();}
 }
+function renderJobRuns(){
+ const filter=$('job-runs-filter').value,runs=filter?jobRunCache.filter(run=>run.job_name===filter):jobRunCache;
+ if(!runs.length){jobEmpty('job-runs',filter?'No runs for this job yet.':'No runs yet. Run a saved job to see its history here.');return;}
+ table($('job-runs'),['Run ID','Job','Status','Trigger','Scheduled for (UTC)','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),t(jobTrigger(run)),run.scheduled_for||'\u2014',run.actor,'',jobDuration(run),'']));
+ $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{const run=runs[index];ui(row.cells[2],jobStatuses[run.status]||'Unknown');
+  // Short IDs keep the table readable; the full value stays available on hover and in Step history.
+  row.cells[0].title=run.id;row.cells[0].textContent=String(run.id).slice(0,8);
+  if(run.scheduled_for){row.cells[4].title=run.scheduled_for;row.cells[4].textContent=String(run.scheduled_for).slice(0,16).replace('T',' ');}row.cells[2].className=statusTone(run.status);ui(row.cells[3],jobTrigger(run));
+  if(run.started_at||run.created_at)row.cells[6].append(jobAlertTimestamp(run.started_at||run.created_at));else row.cells[6].textContent='\u2014';
+  row.lastElementChild.append(actionButton('Inspect run',async()=>{await showJobRun(run.id);$('job-step-panel').scrollIntoView({block:'nearest'});}));});
+}
 async function showJobRun(id){
  const data=await api('/api/jobs/detail',{run_id:id});if(!jobsVisible())return;
  selectedRunId=id;const run=data.run||data;
- ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));
- ui($('job-detail-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));
+ if(run.job_name===undefined||run.job_name===selectedJob?.name){ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-run-state').className='state status-line '+statusTone(run.status);}
+ ui($('job-detail-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-detail-state').className='state status-line '+statusTone(run.status);
  const unknown=['unknown','interrupted'].includes(run.status),failed=(run.steps||[]).find(step=>['failed','unknown','interrupted'].includes(step.status));
+ $('job-failure').className=unknown?'callout warn':'error';
  message('job-failure',unknown?t('Outcome unknown. Check the target before running again.')+(failed?'\n'+(failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1))+(failed.error?': '+failed.error:''):''):failed?t('Failed step: {step}',{step:failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1)})+(failed.error?'\n'+failed.error:''):run.error||'');
  const steps=run.steps||[];
  if(run.id===stageExportRunId&&!liveJobStates.has(run.status)&&currentRole==='admin'&&!stageDirty&&!stagePending){stageExportRunId=null;await stageTask('Loading outputs…',fetchStageExports);}
  if(!steps.length)jobEmpty('job-run-detail','No steps recorded.');
- else{table($('job-run-detail'),['Steps','Step type','Status','Duration (ms)','Summary'],steps.map((step,index)=>[step.name||String(index+1),step.action||run.definition?.steps?.[index]?.action||'',jobStatus(step.status),jobDuration(step),step.error||jobSummary(step)]));$('job-run-detail').querySelectorAll('tbody tr').forEach((row,index)=>{const step=steps[index];ui(row.cells[1],jobActionLabels[step.action||run.definition?.steps?.[index]?.action]||'Unknown');ui(row.cells[2],jobStatuses[step.status]||'Unknown');if(!step.error)ui(row.cells[4],'{summary}',()=>({summary:jobSummary(step)}));});}
+ else{table($('job-run-detail'),['Steps','Step type','Status','Duration (ms)','Summary'],steps.map((step,index)=>[step.name||String(index+1),step.action||run.definition?.steps?.[index]?.action||'',jobStatus(step.status),jobDuration(step),step.error||jobSummary(step)]));$('job-run-detail').querySelectorAll('tbody tr').forEach((row,index)=>{const step=steps[index];ui(row.cells[1],jobActionLabels[step.action||run.definition?.steps?.[index]?.action]||'Unknown');ui(row.cells[2],jobStatuses[step.status]||'Unknown');row.cells[2].className=statusTone(step.status);if(step.error)row.cells[4].className='details-cell';else ui(row.cells[4],'{summary}',()=>({summary:jobSummary(step)}));});}
 }
 function readJobArguments(){
  const values={};for(const input of $('job-run-arguments').querySelectorAll('[data-argument]')){
@@ -1369,7 +1918,8 @@ function renderJobSchedule(preserveInputs=false){
  if(!preserveInputs){fillScheduleFields('job-schedule',saved);jobScheduleEnabledDirty=false;}
  for(const control of $('job-schedule-form').querySelectorAll('input,select,button'))control.disabled=!editable;
  updateJobScheduleKind();$('job-schedule-state').replaceChildren();
- const badge=document.createElement('span');badge.className='badge';ui(badge,saved?.enabled?'Enabled':'Disabled');$('job-schedule-state').append(badge);
+ const badge=document.createElement('span');badge.className='badge '+(saved?.enabled?'tone-ok':'');ui(badge,saved?.enabled?'Enabled':'Disabled');$('job-schedule-state').append(badge);
+ $('job-schedule-stop').disabled=!editable||!saved?.enabled;
  if(saved){
  const labels={admin:'Admin',data_engineer:'Data Engineer',bi_viewer:'BI Viewer'};
  for(const [key,values] of [['Saved role: {role}',()=>({role:t(labels[saved.role]||'Unknown')})],['Authentication: {mode}',{mode:saved.auth_mode}],['Next run: {time}',()=>({time:scheduleNextTime(saved)})],['{summary}',()=>({summary:scheduleSummary(saved)})]]){
@@ -1392,6 +1942,18 @@ function saveJobSchedule(){
  }catch(error){if(current())ui($('job-schedule-message'),'Schedule failed: {error}',{error:error.message});}
  }).finally(()=>{$('job-schedule-save').disabled=!jobScheduleEditable(selectedJob);});
 }
+// Stopping changes only the saved schedule; calendar and argument drafts stay in the form.
+function stopJobSchedule(){
+ if(!jobScheduleEditable(selectedJob)||!jobSchedules.some(schedule=>schedule.name===selectedJob.name&&schedule.enabled===true))return;
+ const name=selectedJob.name,role=currentRole,epoch=stageEpoch;
+ const current=()=>currentRole===role&&stageEpoch===epoch&&selectedJob?.name===name;
+ return busy($('job-schedule-stop'),async()=>{
+ try{
+ await api('/api/jobs/schedule',{name,enabled:false});if(!current())return;
+ jobScheduleEnabledDirty=false;await loadJobSchedules(true);if(current())ui($('job-schedule-message'),'Schedule stopped.');
+ }catch(error){if(current())ui($('job-schedule-message'),'Schedule failed: {error}',{error:error.message});}
+ }).finally(()=>{$('job-schedule-stop').disabled=!jobScheduleEditable(selectedJob)||!jobSchedules.some(schedule=>schedule.name===selectedJob?.name&&schedule.enabled===true);});
+}
 async function loadJobSchedules(preserveInputs=false){
  const request=++jobScheduleRequest,role=currentRole,epoch=stageEpoch,name=selectedJob?.name;
  const data=await api('/api/jobs/schedules');if(request!==jobScheduleRequest||role!==currentRole||epoch!==stageEpoch||name!==selectedJob?.name)return;
@@ -1400,14 +1962,19 @@ async function loadJobSchedules(preserveInputs=false){
  // explicitly edited checkbox across repeated server-side state changes.
  if(preserveInputs&&!jobScheduleEnabledDirty)$('job-schedule-enabled').checked=jobSchedules.some(schedule=>schedule.name===name&&schedule.enabled===true);
  renderJobSchedule(preserveInputs);
+ if(typeof renderJobList==='function')renderJobList();
 }
 $('job-schedule-kind').onchange=updateJobScheduleKind;
+$('job-schedule-stop').onclick=stopJobSchedule;
 $('job-schedule-enabled').onchange=()=>{jobScheduleEnabledDirty=true;};
 $('job-schedule-form').onsubmit=event=>{event.preventDefault();saveJobSchedule();};
 renderJobSchedule();
 $('job-parameter-example').textContent=JSON.stringify({start_date:{type:'date',required:true},limit:{type:'integer',default:100}},null,2)+'\n\nSELECT * FROM marts.fct_orders WHERE order_date >= {{start_date}} LIMIT {{limit}}';
-$('job-new').onclick=()=>{editJob(null);$('job-name').focus();};
-$('job-add-step').onclick=()=>{syncJobSteps();jobSteps.push({action:'sql',sql:'SELECT 1',mode:'read-only',schema:'marts'});renderJobSteps();};
+$('job-new').onclick=()=>{if(!confirmDiscardJob())return;editJob(null);clearSelectedJob();$('job-name').focus();};
+$('job-add-step').onclick=()=>{syncJobSteps();jobSteps.push({action:'sql',sql:'SELECT 1',mode:'read-only',schema:'marts'});renderJobSteps();markJobDirty();};
+$('job-form').oninput=$('job-form').onchange=()=>{if(!editingJob||editingJob.can_manage)markJobDirty();};
+$('job-runs-filter').onchange=renderJobRuns;
+$('job-run-open').onclick=()=>showView('jobs-view-runs');
 $('jobs-refresh').onclick=()=>busy($('jobs-refresh'),loadJobs);
 $('job-runs-refresh').onclick=()=>busy($('job-runs-refresh'),refreshJobRuns);
 $('job-form').onsubmit=event=>{event.preventDefault();busy($('job-save'),async()=>{
@@ -1415,20 +1982,21 @@ $('job-form').onsubmit=event=>{event.preventDefault();busy($('job-save'),async()
  syncJobSteps();const parameters=JSON.parse($('job-parameters').value);
  if(!parameters||Array.isArray(parameters)||typeof parameters!=='object')throw Error(t('Argument definitions must be a JSON object.'));
  const definition={name:$('job-name').value.trim(),description:$('job-description').value.trim(),parameters,steps:jobSteps.map(step=>Object.fromEntries(Object.entries(step).filter(([key,value])=>value!==''||key==='sql')))};
- await api('/api/jobs/save',definition);await loadJobs();const entry=jobEntries.find(entry=>entry.name===definition.name);if(entry){editJob(entry);selectJob(entry);}ui($('job-save-state'),'Job saved.');
+ await api('/api/jobs/save',definition);await loadJobs();const entry=jobEntries.find(entry=>entry.name===definition.name);if(entry)openJob(entry);ui($('job-save-state'),'Job saved.');
  }catch(error){ui($('job-save-state'),'Save failed: {error}',{error:error.message});}
  });};
-$('job-run-form').onsubmit=event=>{event.preventDefault();if(!selectedJob?.can_manage)return;busy($('job-run'),async()=>{
+$('job-run-form').onsubmit=event=>{event.preventDefault();if(!selectedJob?.can_manage||$('job-run').disabled)return;busy($('job-run'),async()=>{
  try{
  const values=readJobArguments();
- const data=await api('/api/jobs/run',{name:selectedJob.name,arguments:values});selectedRunId=data.run.id;ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:data.run.id,status:jobStatus(data.run.status)}));await refreshJobRuns();
- }catch(error){ui($('job-run-state'),'Run failed: {error}',{error:error.message});}
- });};
+ const data=await api('/api/jobs/run',{name:selectedJob.name,arguments:values});selectedRunId=data.run.id;ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:data.run.id,status:jobStatus(data.run.status)}));$('job-run-state').className='state status-line '+statusTone(data.run.status);
+ $('job-run-open').dataset.job=selectedJob.name;$('job-run-open').hidden=false;await refreshJobRuns();
+ }catch(error){ui($('job-run-state'),'Run failed: {error}',{error:error.message});$('job-run-state').className='state status-line tone-bad';}
+ }).finally(updateJobRunControls);};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMartsPolling();else if(martsVisible())loadMarts();});
 window.addEventListener('pagehide',stopMartsPolling);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopJobsPolling();else if(jobsVisible())refreshJobRuns();});
 window.addEventListener('pagehide',stopJobsPolling);
-editJob(null);
+editJob(null);clearSelectedJob();
 
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

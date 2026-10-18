@@ -103,6 +103,39 @@ const ui=()=>{};
         parsed = Elements()
         self.assertIn('novalidate', parsed.ids['job-schedule-form'][1])
 
+    def test_stop_button_pauses_saved_schedule_without_touching_drafts(self):
+        self.javascript(r"""
+const assert=require('node:assert/strict');
+let selectedJob={name:'job',can_manage:true},jobSchedules=[{name:'job',enabled:true,kind:'interval',every_minutes:5}];
+let jobScheduleEnabledDirty=true,submitted=[],reloaded=0;
+const fields={'job-schedule-timezone':{value:'Bad/Zone'},'job-schedule-stop':{disabled:false},'job-schedule-message':{}};
+const $=id=>fields[id]??={};
+const busy=async(button,task)=>task(),ui=(node,key)=>{node.text=key;};
+const api=async(path,payload)=>{submitted.push({path,payload});};
+const loadJobSchedules=async preserve=>{reloaded++;assert.equal(preserve,true,'drafts must be preserved');jobSchedules=[{name:'job',enabled:false}];};
+(async()=>{
+ await stopJobSchedule();
+ assert.deepEqual(submitted,[{path:'/api/jobs/schedule',payload:{name:'job',enabled:false}}],'minimal pause payload');
+ assert.equal(reloaded,1);assert.equal(jobScheduleEnabledDirty,false);assert.equal($('job-schedule-timezone').value,'Bad/Zone');
+ assert.equal($('job-schedule-message').text,'Schedule stopped.');assert.equal($('job-schedule-stop').disabled,true);
+ await stopJobSchedule();assert.equal(submitted.length,1,'nothing to stop');
+ currentRole='bi_viewer';jobSchedules=[{name:'job',enabled:true}];await stopJobSchedule();assert.equal(submitted.length,1,'viewer cannot stop');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""", 'jobScheduleEditable', 'stopJobSchedule')
+
+    def test_unsaved_definition_blocks_manual_run(self):
+        self.javascript(r"""
+const assert=require('node:assert/strict');
+const nodes={},$=id=>nodes[id]??={getAttribute(){return null;}};
+const ui=(node,key)=>{node.text=key;};
+let selectedJob={name:'job',can_manage:true},editingJob={name:'job'},jobDirty=true;
+updateJobRunControls();assert.equal($('job-run').disabled,true);assert.match($('job-run-help').text,/Save the definition/);
+editingJob={name:'other'};updateJobRunControls();assert.equal($('job-run').disabled,false,'edits to another job do not block this run');
+editingJob={name:'job'};jobDirty=false;updateJobRunControls();assert.equal($('job-run').disabled,false);
+selectedJob={name:'job',can_manage:false};updateJobRunControls();assert.equal($('job-run').disabled,true);
+selectedJob={name:'job',can_manage:true};$('job-run').getAttribute=()=> 'true';updateJobRunControls();assert.equal($('job-run').disabled,true,'busy run stays disabled');
+""", 'updateJobRunControls')
+
     def test_disabled_schedule_edits_use_full_payload(self):
         self.javascript(r"""
 const selectedJob={name:'job',can_manage:true},jobSchedules=[{name:'job',kind:'daily',enabled:false}];
@@ -222,7 +255,7 @@ const arg={value:'3',dataset:{argument:'limit',type:'integer'}};
 $('job-run-arguments').querySelectorAll=()=>[arg];
 const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
 const pruneUIBindings=()=>{},message=(id,text)=>{$(id).textContent=text;},jobEmpty=(id,text)=>{$(id).textContent=text;};
-let jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false,selectedRunId=null,visible=true,pollRuns=[];
+let jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false,selectedRunId=null,visible=true,pollRuns=[],jobRunCache=[];
 let selectedJob={name:'orders',can_manage:true};
 let jobSchedules=[{name:'orders',kind:'once',date:'2030-01-01',time:'09:00',timezone:'UTC',enabled:true,next_run_at:'2030-01-01T09:00:00Z',arguments:{limit:3}}];
 const scheduleFields=['kind','minutes','time','timezone','date','day',...Array.from({length:7},(_,i)=>'weekday-'+(i+1))];
@@ -289,9 +322,10 @@ const stateText=()=>$('job-schedule-state').children.map(child=>child.textConten
  pendingRuns={};pending=refreshJobRuns();const oldRuns=pendingRuns;pendingRuns=null;
  await refreshJobRuns();const freshReads=scheduleReads;oldRuns.resolve({runs});await pending;assert.equal(scheduleReads,freshReads);
 })().catch(error=>{console.error(error);process.exitCode=1;});
-""", 'refreshJobRuns', 'loadJobSchedules', 'renderJobSchedule', 'jobScheduleEditable',
+""", 'refreshJobRuns', 'renderJobRuns', 'loadJobSchedules', 'renderJobSchedule', 'jobScheduleEditable',
                         'updateJobScheduleKind', 'fillScheduleFields', 'updateScheduleKind',
-                        'scheduleNextTime', 'scheduleSummary', 'jobTrigger')
+                        'scheduleNextTime', 'scheduleSummary', 'jobTrigger', 'statusTone',
+                        'jobAlertTime', 'jobAlertTimestamp')
 
     def test_javascript_parses(self):
         result = subprocess.run(['node', '--check'], input=SCRIPT, capture_output=True, text=True)
