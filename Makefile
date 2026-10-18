@@ -22,6 +22,7 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_sqlserver_sync.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_bears_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_workbench.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_marts_ui.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_ai_semantic_benchmark.py'
 
 WAREHOUSE ?= LOCAL

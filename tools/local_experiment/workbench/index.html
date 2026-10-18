@@ -31,6 +31,7 @@ dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);b
 .job-enable-label{display:flex;align-items:center;gap:8px}.job-enable-label input{width:auto}#job-schedule-state{margin-top:16px;overflow-wrap:anywhere}#job-schedule-state span{white-space:normal}
 .schedule-weekdays{border:0;padding:0;margin:12px 0 0;min-width:0}.schedule-weekdays legend{font-weight:600}.schedule-weekdays label{font-weight:400;margin:5px 0}.job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:0 18px;min-width:0}.job-step{margin:18px 0;padding:16px 0;border:0;border-top:1px solid var(--line);min-width:0}.job-step legend{font-weight:650;padding-right:8px}.job-step .toolbar{justify-content:space-between}.job-step textarea{min-height:100px}.job-step small{display:block;margin:6px 0}.job-step-heading{margin-top:20px}#job-run-state{margin-left:12px}#job-steps label{font-size:13px}
 #role-controls{display:inline-flex;align-items:center;gap:8px}#role-controls label{margin:0}#role-selector{width:auto}
+html:not([data-role="admin"]) #marts-admin{display:none}
 html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#run-ingest,#ai-settings-button,#clone-table-btn,#copilot-stage,#copilot-publish,#refresh-wap-model,[data-role-write="admin"],[data-role-write="engineer"]),html[data-role="data_engineer"] :is(#ai-settings-button,#copilot-publish,#refresh-wap-model,[data-role-write="admin"]){display:none!important}
 </style>
 </head>
@@ -117,7 +118,12 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <button id="stage-view-run" type="button" hidden>View run history</button>
 </div></div>
 </section>
-<section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden><div class="page-title"><h1>Transformation · dbt &amp; WAP</h1><p class="muted">Inspect model definitions and dependencies, then build or refresh.</p><div class="toolbar"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build">Run dbt Build</button><button id="run-dbt-test">Run dbt Test</button></div></div><pre id="models-state" role="status" hidden></pre><div class="catalog-grid"><div><h2>Persistent dbt Models</h2><div id="dbt-models" class="panel panel-body"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models" class="panel panel-body"></div></div><div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div></section>
+<section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden><div class="page-title"><h1>Transformation · dbt &amp; WAP</h1><p class="muted">Inspect model definitions and dependencies, then build or refresh.</p><div class="toolbar"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build">Run dbt Build</button><button id="run-dbt-test">Run dbt Test</button></div></div><section id="marts-admin" hidden aria-labelledby="marts-title"><div class="panel-head"><h2 id="marts-title">Registered refresh targets</h2><div class="toolbar"><button id="marts-reload" type="button">Reload targets</button><button id="mart-new" type="button">New target</button></div></div>
+<p class="muted">Save a SELECT definition without executing it. Refresh builds, audits, and publishes the saved definition to iceberg.marts.</p>
+<div id="mart-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div id="marts-list" class="table-wrap"><p class="empty">Load targets to select a saved definition.</p></div>
+<form id="mart-form" class="panel panel-body"><h3>Refresh target definition</h3><label for="mart-name">Mart name</label><input id="mart-name" required pattern="[a-z][a-z0-9_]*" placeholder="sales_summary"><p class="muted">Bare name only. Target schema: iceberg.marts.</p>
+<label for="mart-sql">SELECT definition</label><textarea id="mart-sql" rows="6" spellcheck="false" required></textarea><div class="form-grid"><div><label for="mart-min-rows">Minimum rows</label><input id="mart-min-rows" type="number" min="1" step="1" value="1" required></div><div><label for="mart-not-null">Not-null columns (comma-separated, optional)</label><input id="mart-not-null"></div></div>
+<p id="mart-definition-state" class="muted" role="status">Choose a target or save a new definition.</p><div class="toolbar"><button id="mart-save" type="submit">Save target</button><button id="mart-run" type="button" disabled>Refresh target</button><button id="mart-view-run" type="button" hidden>Inspect run in Jobs</button></div><p id="mart-state" role="status" aria-live="polite"></p></form></div></section><pre id="models-state" role="status" hidden></pre><div class="catalog-grid"><div><h2>Persistent dbt Models</h2><div id="dbt-models" class="panel panel-body"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models" class="panel panel-body"></div></div><div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div></section>
 <section id="jobs" role="tabpanel" aria-labelledby="tab-jobs" hidden>
 <div class="page-title"><h1>Jobs</h1><p class="muted">Save ordered steps and run them manually with typed arguments.</p></div>
 <div class="panel"><div class="panel-head"><h2>Notifications</h2><button id="job-alerts-refresh" type="button">Refresh notifications</button></div><div class="panel-body"><small>Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.</small><br><small>Up to 100 notifications, unacknowledged first.</small><br><small id="job-alerts-timezone"></small><div id="job-alerts-error" class="error" role="alert" hidden></div></div><div id="job-alerts" class="table-wrap"><div class="empty">No notifications loaded.</div></div></div>
@@ -301,6 +307,34 @@ const i18n = {ja: {
  'Stage import':'ステージ取込',
  '{file} → {table} · {mode} · {count} rows':'{file} → {table}・{mode}・{count}行',
 
+ "Registered refresh targets":"登録済みの更新対象",
+ "Reload targets":"更新対象を再読込",
+ "New target":"更新対象を新規登録",
+ "Save a SELECT definition without executing it. Refresh builds, audits, and publishes the saved definition to iceberg.marts.":"SELECT 定義を実行せずに保存します。更新では保存済みの定義を構築・監査し、iceberg.marts に公開します。",
+ "Load targets to select a saved definition.":"更新対象を読み込み、保存済みの定義を選択してください。",
+ "Refresh target definition":"更新対象の定義",
+ "Mart name":"マート名",
+ "Bare name only. Target schema: iceberg.marts.":"名前のみ入力してください。対象スキーマ: iceberg.marts。",
+ "SELECT definition":"SELECT 定義",
+ "Minimum rows":"最小行数",
+ "Not-null columns (comma-separated, optional)":"NULL を許可しない列（カンマ区切り、省略可）",
+ "Choose a target or save a new definition.":"更新対象を選択するか、新しい定義を保存してください。",
+ "Save target":"更新対象を保存",
+ "Refresh target":"更新対象を更新",
+ "Inspect run in Jobs":"ジョブで実行を確認",
+ "No refresh targets registered. Save a SELECT definition to begin.":"更新対象は未登録です。SELECT 定義を保存してください。",
+ "Select target":"更新対象を選択",
+ "Last refresh":"前回の更新",
+ "Last successful refresh":"前回の更新成功",
+ "Refresh time":"更新日時",
+ "Never refreshed":"未実行",
+ "Saved version {version} · Owner: {owner}":"保存済みの版 {version}・所有者: {owner}",
+ "Unsaved changes. Save the definition before refreshing.":"未保存の変更があります。更新前に定義を保存してください。",
+ "Target saved. No SQL executed.":"更新対象を保存しました。SQL は実行していません。",
+ "Refresh queued. Inspect progress in Jobs.":"更新を受け付けました。ジョブで進捗を確認できます。",
+ "Refresh {status} · {time}":"更新 {status}・{time}",
+ "Minimum rows must be a positive integer.":"最小行数は1以上の整数を入力してください。",
+ "Saved definition changed. Select the target again to load its latest version.":"保存済みの定義が変更されました。更新対象を選択し直して最新の版を読み込んでください。",
  'Importance':'重要度', 'Acknowledged':'確認済み', 'Times use your browser timezone: {timezone}':'日時はブラウザのタイムゾーンで表示します: {timezone}', '{time}':'{time}', 'Job: {job} · Step: {step} · Owner: {owner}':'ジョブ: {job}・ステップ: {step}・所有者: {owner}',
  'Evaluate alert':'アラート判定', 'Alert message':'通知メッセージ', 'Severity':'重要度', 'warning':'警告', 'critical':'重大',
  'Read-only evaluation. Return exactly one row and one boolean column: true opens a notification; false clears it.':'読み取り専用で判定します。1行1列の boolean を返してください。true は異常、false は正常です。',
@@ -452,6 +486,7 @@ let currentRole = 'admin';
 function applyRole() {
  document.documentElement.dataset.role=currentRole;
  if(typeof resetStageUI==='function')resetStageUI();
+ if(typeof resetMartsUI==='function')resetMartsUI();
  $('tab-jobs').hidden=currentRole==='bi_viewer';
  if(currentRole==='bi_viewer')$('jobs-alert-count').hidden=true;
  if(currentRole==='bi_viewer'&&typeof activeTab!=='undefined'&&activeTab==='jobs')activate($('tab-warehouse'));
@@ -638,7 +673,7 @@ async function loadPawprints(){
 }
 $('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
 let activeTab='warehouse';
-function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='jobs')loadJobs();if(activeTab==='ingestion'&&currentRole==='admin')loadStages();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation')$('refresh-models').click();if(activeTab==='compute')$('compute-refresh').click();}
+function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='jobs')loadJobs();if(activeTab==='ingestion'&&currentRole==='admin')loadStages();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation'){$('refresh-models').click();loadMarts();}if(activeTab==='compute')$('compute-refresh').click();}
 const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach(button=>{button.onclick=()=>activate(button);button.onkeydown=e=>{const available=tabs.filter(tab=>!tab.hidden&&!tab.disabled),i=available.indexOf(button);let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%available.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();available[n].focus();activate(available[n]);}};});
 setInterval(async()=>{if(document.hidden)return;if(currentRole!=='bi_viewer')loadJobAlerts(jobsVisible());await refreshStatus();if(auto_chill_minutes>0){try{updateAutoChill(await api('/api/warehouse/autochill',{check:true}));}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}}if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
@@ -905,11 +940,79 @@ $('stage-export-form').onsubmit=event=>{event.preventDefault();if(stagePending||
 });};
 $('stage-view-run').onclick=()=>{if(!stageRunId||currentRole!=='admin')return;selectedRunId=stageRunId;activate($('tab-jobs'));};
 
+// Registered refresh targets use saved, versioned definitions and the Jobs executor.
+let martEntries=[],selectedMart=null,martDirty=false,martPending=false,martEpoch=0,martRequest=0,martPoll=null,martRunId=null,martStale=false;
+function martsVisible(){return currentRole==='admin'&&activeTab==='transformation'&&!document.hidden;}
+function stopMartsPolling(){clearTimeout(martPoll);martPoll=null;}
+function martCurrent(epoch){return epoch===martEpoch&&currentRole==='admin';}
+function resetMartsUI(){
+ martEpoch++;martRequest++;stopMartsPolling();martEntries=[];selectedMart=null;martRunId=null;martDirty=false;martPending=false;martStale=false;
+ $('marts-admin').hidden=currentRole!=='admin';$('marts-list').replaceChildren();$('mart-form').reset();message('mart-error','');ui($('mart-state'),'');updateMartControls();
+ if(typeof activeTab!=='undefined'&&activeTab==='transformation'&&currentRole==='admin')loadMarts();
+}
+function readMartDefinition(){
+ const minRows=Number($('mart-min-rows').value);
+ if($('mart-min-rows').value===''||!Number.isSafeInteger(minRows)||minRows<1)throw Error(t('Minimum rows must be a positive integer.'));
+ return {name:$('mart-name').value.trim().toLowerCase(),sql:$('mart-sql').value.trim(),min_rows:minRows,not_null:$('mart-not-null').value.split(',').map(x=>x.trim()).filter(Boolean)};
+}
+function updateMartControls(){
+ const writable=currentRole==='admin'&&(!selectedMart||selectedMart.can_manage),active=selectedMart&&liveJobStates.has(selectedMart.last_run?.status);
+ for(const id of ['mart-name','mart-sql','mart-min-rows','mart-not-null'])$(id).disabled=!writable||martPending||(id==='mart-name'&&!!selectedMart);
+ $('mart-save').disabled=!writable||martPending||martStale;
+ $('mart-run').disabled=!writable||martPending||!selectedMart||martDirty||martStale||active;
+ $('mart-new').disabled=martPending;$('marts-reload').disabled=martPending;
+ $('mart-view-run').hidden=!martRunId||currentRole!=='admin';
+ ui($('mart-definition-state'),martStale?'Saved definition changed. Select the target again to load its latest version.':martDirty?'Unsaved changes. Save the definition before refreshing.':selectedMart?'Saved version {version} · Owner: {owner}':'Choose a target or save a new definition.',selectedMart?{version:selectedMart.version,owner:selectedMart.owner}:{});
+}
+function selectMart(entry,internal=false){
+ if((martPending&&!internal)||currentRole!=='admin')return;
+ selectedMart=entry;martDirty=false;martStale=false;martRunId=entry?.last_run?.id||null;
+ $('mart-name').value=entry?.name||'';$('mart-sql').value=entry?.sql||'';$('mart-min-rows').value=entry?.min_rows??1;$('mart-not-null').value=(entry?.not_null||[]).join(', ');
+ message('mart-error','');renderMartRun();updateMartControls();
+}
+function renderMartRun(){
+ const run=selectedMart?.last_run;
+ if(run)ui($('mart-state'),'Refresh {status} · {time}',()=>({status:jobStatus(run.status),time:run.finished_at||run.started_at||run.created_at||'—'}));
+ else ui($('mart-state'),selectedMart?'Never refreshed':'');
+}
+function renderMarts(){
+ if(!martEntries.length){ui($('marts-list'),'No refresh targets registered. Save a SELECT definition to begin.');return;}
+ table($('marts-list'),['Mart name','User','Last refresh','Refresh time','Last successful refresh','Actions'],martEntries.map(entry=>[entry.table||'iceberg.marts.'+entry.name,entry.owner,entry.last_run?jobStatus(entry.last_run.status):t('Never refreshed'),entry.last_run?.finished_at||entry.last_run?.started_at||entry.last_run?.created_at||'—',entry.last_success_at||'—','']));
+ $('marts-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=martEntries[index];ui(row.cells[2],entry.last_run?jobStatuses[entry.last_run.status]||'Unknown':'Never refreshed');const button=actionButton('Select target',()=>selectMart(entry));button.disabled=martPending;row.lastElementChild.append(button);});
+}
+async function loadMarts(){
+ if(!martsVisible())return;const epoch=martEpoch,request=++martRequest;stopMartsPolling();
+ const current=()=>martCurrent(epoch)&&request===martRequest&&martsVisible();
+ try{const data=await api('/api/marts');if(!current())return;martEntries=data.marts||[];renderMarts();
+ if(selectedMart){const latest=martEntries.find(entry=>entry.name===selectedMart.name);if(!latest||latest.version!==selectedMart.version)martStale=true;else{selectedMart=latest;martRunId=latest.last_run?.id||martRunId;renderMartRun();}updateMartControls();}
+ if(martEntries.some(entry=>liveJobStates.has(entry.last_run?.status)))martPoll=setTimeout(loadMarts,2000);
+ }catch(error){if(current())message('mart-error',error.message);}finally{pruneUIBindings();}
+}
+async function martTask(action){
+ if(currentRole!=='admin'||martPending)return;const epoch=martEpoch;martPending=true;message('mart-error','');updateMartControls();
+ try{await action(epoch);}catch(error){if(martCurrent(epoch))message('mart-error',error.message);}
+ finally{if(martCurrent(epoch)){martPending=false;renderMarts();updateMartControls();}}
+}
+$('marts-reload').onclick=loadMarts;$('mart-new').onclick=()=>selectMart(null);
+$('mart-form').oninput=()=>{martDirty=true;updateMartControls();};
+$('mart-form').onsubmit=event=>{event.preventDefault();if(!$('mart-form').reportValidity()||$('mart-save').disabled)return;martTask(async epoch=>{
+ const payload=readMartDefinition();if(selectedMart)payload.version=selectedMart.version;
+ const data=await api('/api/marts/save',payload);if(!martCurrent(epoch))return;
+ selectMart(data.mart,true);await loadMarts();if(martCurrent(epoch))ui($('mart-state'),'Target saved. No SQL executed.');
+ });};
+$('mart-run').onclick=()=>{if($('mart-run').disabled)return;martTask(async epoch=>{
+ const name=selectedMart.name,version=selectedMart.version;const data=await api('/api/marts/run',{name,version});if(!martCurrent(epoch))return;
+ selectedMart={...selectedMart,last_run:data.run};martRunId=data.run.id;ui($('mart-state'),'Refresh queued. Inspect progress in Jobs.');await loadMarts();
+ });};
+$('mart-view-run').onclick=()=>{if(!martRunId||currentRole!=='admin')return;selectedRunId=martRunId;activate($('tab-jobs'));};
+
 let selectedModel=null;
-function selectModel(model){selectedModel=model;$('model-title').textContent=model.layer+' · '+model.name;model.sql?$('model-sql-preview').textContent=model.sql:ui($('model-sql-preview'),'No SQL recorded');renderLineage($('model-lineage'),model.sources||[],model.name,model.downstream||[]);$('open-model-sql').disabled=!model.sql;$('refresh-wap-model').hidden=model.layer!=='wap';}
+function managedMartModel(model){return !!model?.registered_refresh_target;}
+function updateLegacyRefresh(){const model=selectedModel;$('refresh-wap-model').hidden=!model||model.layer!=='wap'||managedMartModel(model);}
+function selectModel(model){selectedModel=model;$('model-title').textContent=model.layer+' · '+model.name;model.sql?$('model-sql-preview').textContent=model.sql:ui($('model-sql-preview'),'No SQL recorded');renderLineage($('model-lineage'),model.sources||[],model.name,model.downstream||[]);$('open-model-sql').disabled=!model.sql;updateLegacyRefresh();}
 async function loadModels(){message('models-state','');try{const result=await api('/api/models');for(const [id,models] of [['dbt-models',result.dbt_models],['wap-models',result.wap_models]]){const container=$(id);container.replaceChildren();for(const model of models){const b=document.createElement('button');b.className='table-link';b.textContent=model.layer+' · '+model.name;b.onclick=()=>selectModel(model);container.append(b);}if(!models.length)ui(container,'No models registered.');}const all=[...result.dbt_models,...result.wap_models];const current=all.find(m=>m.name===selectedModel?.name&&m.layer===selectedModel?.layer)||all[0];if(current)selectModel(current);else{selectedModel=null;ui($('model-title'),'No models registered');$('model-sql-preview').textContent='';$('model-lineage').replaceChildren();$('open-model-sql').disabled=true;$('refresh-wap-model').hidden=true;}}catch(e){message('models-state',e.message);}}
 $('refresh-models').onclick=()=>busy($('refresh-models'),loadModels);$('open-model-sql').onclick=()=>{if(selectedModel)openWorksheet(selectedModel.sql);};
-$('refresh-wap-model').onclick=()=>busy($('refresh-wap-model'),async()=>{if(!selectedModel)return;try{const result=await api('/api/bears/run',{bear:'data',action:'refresh',refresh:selectedModel.name});message('models-state',JSON.stringify(result,null,2));}catch(e){message('models-state',e.message);}});
+$('refresh-wap-model').onclick=()=>busy($('refresh-wap-model'),async()=>{if(!selectedModel||managedMartModel(selectedModel))return;try{const result=await api('/api/bears/run',{bear:'data',action:'refresh',refresh:selectedModel.name});message('models-state',JSON.stringify(result,null,2));}catch(e){message('models-state',e.message);}});
 for(const action of ['build','test'])$('run-dbt-'+action).onclick=()=>busy($('run-dbt-'+action),async()=>{try{const result=await api('/api/models/build',{action});await loadModels();message('models-state',JSON.stringify(result,null,2));}catch(e){message('models-state',e.message);}});
 
 let pawprintRows=[];

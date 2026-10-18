@@ -468,6 +468,9 @@ def get_run(run_id, actor, role):
 
 def _execute_step(step):
     action = step['action']
+    if action == 'mart_refresh':
+        import marts_resident
+        return marts_resident._execute_refresh(step)
     if action == 'sql':
         return wr.query('LOCAL', step['sql'], catalog='iceberg', schema=step.get('schema', 'marts'),
                         mode=step['mode'], max_rows=None)
@@ -522,7 +525,7 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         raise ValueError('Job budget exceeded between steps; no further steps started')
                     with _db() as connection:
                         connection.execute("UPDATE steps SET status='running',started_at=? WHERE run_id=? AND position=?", (_now(), run_id, position))
-                    if step['action'] in {'stage_import', 'stage_export'} and not shared:
+                    if step['action'] in {'stage_import', 'stage_export', 'mart_refresh'} and not shared:
                         wr.resolve_role(actor, role)
                     report = _execute_step(step)
                     summary = {key: report[key] for key in ('action', 'table', 'rows_ingested', 'row_count', 'result', 'valid', 'duration_ms', 'file', 'format', 'size') if key in report}
@@ -547,7 +550,7 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                             uncertain = uncertain or (claim is not None and claim['status'] == 'running')
                     if step['action'] == 'stage_export':
                         summary = summary or getattr(exc, 'summary', None)
-                    if step['action'] == 'stage_export' and report is not None:
+                    if step['action'] in {'stage_export', 'mart_refresh'} and report is not None:
                         uncertain = True  # The complete file was already published.
                     status = 'unknown' if uncertain else 'failed'
                     # Provider/driver exception messages may contain credentials or rows.

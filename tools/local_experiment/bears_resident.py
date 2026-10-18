@@ -258,7 +258,8 @@ def models_inventory():
     for name, entry in sorted(load_wap_registry().items()):
         wap_models.append(dict(name=name, layer='wap',
                                table=entry.get('table') or entry.get('staged_table') or f'iceberg.sandbox.{name}',
-                               sql=entry.get('sql', ''), sources=entry.get('sources', [])))
+                               sql=entry.get('sql', ''), sources=entry.get('sources', []),
+                               registered_refresh_target=bool(entry.get('owner') and entry.get('version'))))
     all_models = dbt_models + wap_models
     def depends_on(source, model):
         return (source == model['name'] or

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+from contextlib import contextmanager
 
 import warehouse_resident as wr
 
@@ -34,6 +35,15 @@ def persist_json(path, value):
 
 
 WAP_REGISTRY = state_path('wap_models.json')
+
+
+@contextmanager
+def model_operation(b):
+    """Serialize model registration with legacy WAP operations."""
+    b.WAP_REGISTRY.parent.mkdir(parents=True, exist_ok=True)
+    with b.WAP_REGISTRY.with_suffix('.operations.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
 
 
 def extract_source_tables(statement: str) -> list[str]:
@@ -94,9 +104,17 @@ def save_wap_entry(b, name: str, **fields) -> dict:
         with b.WAP_REGISTRY.with_suffix('.lock').open('a') as lock_fd:
             fcntl.flock(lock_fd, fcntl.LOCK_EX)
             registry = b.load_wap_registry()
+            if any(key.lower() == name.lower() and key != name and value.get('owner')
+                   for key, value in registry.items()):
+                raise PermissionError('Model name collides with a registered mart')
+            old = registry.get(name) or {}
+            if old.get('owner') and any(key in fields for key in ('sql', 'owner', 'version', 'min_rows', 'not_null')):
+                raise PermissionError('Registered mart definitions must be edited through Marts')
             entry = dict(registry.get(name) or {}, **fields)
             registry[name] = entry
             persist_json(b.WAP_REGISTRY, registry)
+    except PermissionError:
+        raise
     except OSError as err:
         raise RuntimeError('failed to persist WAP registry: ' + str(err)) from err
     return entry
@@ -168,6 +186,20 @@ def data_table(value, rollback=False):
 
 
 def data(b, args):
+    with model_operation(b):
+        candidate = (getattr(args, 'refresh', None) or getattr(args, 'publish', None)
+                     or getattr(args, 'stage_table', None))
+        if candidate:
+            name = b.data_table(candidate)
+            entry = next((value for key, value in b.load_wap_registry().items()
+                          if key.lower() == name.lower()), {})
+            if entry.get('owner') and (getattr(args, '_managed_version', None) != entry.get('version')
+                    or not getattr(args, 'refresh', None)):
+                raise PermissionError('Registered mart must be refreshed through Marts')
+        return _data(b, args)
+
+
+def _data(b, args):
     request = getattr(args, 'request', '')
     rollback = getattr(args, 'rollback', None)
     publish = getattr(args, 'publish', None)
@@ -244,16 +276,28 @@ def data(b, args):
             statement = 'CREATE OR REPLACE TABLE ' + b.identifier(target) + ' AS SELECT * FROM ' + b.identifier(source)
             statement += f' FOR VERSION AS OF {int(staged_snapshot)}'
             statement = b.wr.check_sql_policy(statement, mode='admin-write')
-            b.sql(url, statement)
-            audit = b.audit_table(url, target)
+            try:
+                b.sql(url, statement)
+                audit = b.audit_table(url, target)
+            except Exception as exc:
+                if getattr(args, '_managed_version', None) is not None:
+                    from jobs_resident import StepUnknown
+                    raise StepUnknown('Publication started but its outcome could not be confirmed; no automatic retry') from exc
+                raise
         fields = dict(table=target, source_table=source, published=True,
                       published_snapshot_id=audit.get('snapshot_id'), previous_snapshot_id=previous)
         extra = {}
         if refresh:
             extra = dict(generated_sql=saved_sql, sources=b.extract_source_tables(saved_sql))
-            fields.update(sql=saved_sql, sources=extra['sources'], staged_table=source,
+            fields.update(sources=extra['sources'], staged_table=source,
                           staged_snapshot_id=source_audit.get('snapshot_id'))
-        b.save_wap_entry(name, **fields)
+            if getattr(args, '_managed_version', None) is None:
+                fields['sql'] = saved_sql
+        try:
+            b.save_wap_entry(name, **fields)
+        except Exception as exc:
+            from jobs_resident import StepUnknown
+            raise StepUnknown('Table was published but WAP metadata could not be recorded; outcome unknown') from exc
         return dict(wap_action=action, source_table=source, table=target, previous_snapshot_id=previous,
                     published_snapshot_id=audit['snapshot_id'], audit=audit, valid=True, **extra)
     explicit_sql = getattr(args, 'sql', None)

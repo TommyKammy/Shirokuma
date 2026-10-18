@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-18
-version: "1.13"
+version: "1.14"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -274,3 +274,10 @@ CSV・JSONL・Parquet、最大100,000行・25 MiBを対象にする。
 履歴更新後に1回実行の有効状態・次回時刻が残る画面表示を修正し、編集中の入力を保持した。
 `make verify` とカレンダー実機3件、通常Workbenchの既存状態保持を確認した。
 修正内容と検証範囲は [スケジュール最終レビュー](../../guides/calendar_schedule_review.md) に記録する。
+
+### Phase 19.1: 更新対象の登録・一覧・手動更新【2026-10-18】
+
+Transformation画面でSELECTと品質条件を登録し、既存WAP・ジョブ基盤で手動全件更新できるようにした。
+所有者・版・排他を検証し、品質不合格では公開済みテーブルを保持し、中断時の自動再実行を行わない。
+`make verify`、実機9件、日英画面、再起動・復元、通常Workbenchの状態保持を確認した。
+操作・構成・検証範囲は [登録マートの手動更新](../../guides/managed_marts.md) に記録する。

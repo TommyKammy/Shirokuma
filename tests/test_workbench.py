@@ -53,6 +53,78 @@ class WorkbenchHTML(HTMLParser):
 
 
 class WorkbenchTests(unittest.TestCase):
+    def test_mart_routes_authenticated_dispatch_and_admission(self):
+        definition = dict(name='orders', sql='SELECT 1 AS id', min_rows=1, not_null=['id'])
+        cases = [('/api/marts', None, 'list_targets', ('alice', 'admin'), {'marts': []}, []),
+                 ('/api/marts/save', definition, 'save_target', (definition, 'alice', 'admin'), {'mart': definition}, definition),
+                 ('/api/marts/run', {'name': 'orders', 'version': 1}, 'submit_refresh',
+                  ('orders', 1, 'alice', 'admin'), {'run': {'id': 'mart-1', 'status': 'queued'}}, {'id': 'mart-1', 'status': 'queued'})]
+        with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')):
+            for path, body, method, args, expected, backend in cases:
+                with self.subTest(path=path), patch.object(wb.marts_resident, method, return_value=backend) as call:
+                    self.assertEqual(self.json_request(path, body), (202 if path.endswith('/run') else 200, expected))
+                    call.assert_called_once_with(*args)
+
+    def test_mart_routes_reject_role_auth_and_payload_spoofing(self):
+        paths = ('/api/marts', '/api/marts/save', '/api/marts/run')
+        for role in ('data_engineer', 'bi_viewer'):
+            with patch.object(wb.request_auth, 'authenticate', return_value=('alice', role)), patch.object(wb, 'marts_resident') as backend:
+                for path in paths:
+                    self.assertEqual(self.json_request(path, None if path == paths[0] else {})[0], 403)
+                self.assertEqual(backend.mock_calls, [])
+        with patch.object(wb.request_auth, 'authenticate', side_effect=wb.request_auth.AuthenticationError('credentials required')):
+            for path in paths:
+                self.assertEqual(self.json_request(path, None if path == paths[0] else {})[0], 401)
+        definition = dict(name='orders', sql='SELECT 1', min_rows=0, not_null=[])
+        with patch.object(wb, 'marts_resident') as backend:
+            for path, valid in [('/api/marts/save', definition), ('/api/marts/run', dict(name='orders', version=1))]:
+                for key in ('actor', 'owner', 'role', 'table', 'auth_mode'):
+                    self.assertEqual(self.json_request(path, {**valid, key: 'bob'})[0], 400)
+            for body in ({}, {'name': 'orders'}, {'name': 'orders', 'version': ''}, {'name': [], 'version': 1}):
+                self.assertEqual(self.json_request('/api/marts/run', body)[0], 400)
+            self.assertEqual(backend.mock_calls, [])
+
+    def test_mart_http_registry_edits_are_versioned_without_execution(self):
+        definition = dict(name='orders', sql='SELECT 1 AS id', min_rows=1, not_null=['id'])
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ,
+                SHIROKUMA_STATE_DIR=temporary, SHIROKUMA_AUTH_MODE='local', SHIROKUMA_AUTH_FILE=''), \
+                patch.object(wb.bears_resident, 'WAP_REGISTRY', Path(temporary) / 'wap_models.json'), \
+                patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')), \
+                patch.object(wb.warehouse_resident, 'execute') as execute, \
+                patch.object(wb.bears_resident, 'sql') as sql:
+            code, result = self.json_request('/api/marts/save', dict(name='defaults', sql='SELECT 1 AS id'))
+            self.assertEqual(code, 200, result)
+            self.assertEqual((result['mart']['min_rows'], result['mart']['not_null']), (1, []))
+            self.assertEqual(self.json_request('/api/marts/save', {**definition, 'min_rows': 0})[0], 400)
+            code, result = self.json_request('/api/marts/save', definition)
+            self.assertEqual(code, 200, result)
+            saved = result['mart']
+            self.assertEqual((saved['owner'], saved['last_run']), ('alice', None))
+            self.assertEqual(self.json_request('/api/jobs/runs')[1]['runs'], [])
+            code, result = self.json_request('/api/marts/save', {**definition, 'version': saved['version'], 'sql': 'SELECT 2 AS id'})
+            self.assertEqual(code, 200, result)
+            updated = result['mart']
+            self.assertNotEqual(updated['version'], saved['version'])
+            self.assertEqual(self.json_request('/api/marts/save', {**definition, 'version': saved['version']})[0], 409)
+            self.assertEqual(self.json_request('/api/marts/run', dict(name='orders', version=saved['version']))[0], 409)
+            with patch.object(wb.request_auth, 'authenticate', return_value=('bob', 'admin')):
+                self.assertFalse(next(mart for mart in self.json_request('/api/marts')[1]['marts'] if mart['name'] == 'orders')['can_manage'])
+                self.assertEqual(self.json_request('/api/marts/save', {**definition, 'version': updated['version']})[0], 403)
+                self.assertEqual(self.json_request('/api/marts/run', dict(name='orders', version=updated['version']))[0], 403)
+            execute.assert_not_called()
+            sql.assert_not_called()
+
+    def test_mart_routes_map_backend_errors(self):
+        definition = dict(name='orders', sql='SELECT 1', min_rows=0, not_null=[])
+        for path, body, method in [('/api/marts', None, 'list_targets'),
+                ('/api/marts/save', definition, 'save_target'),
+                ('/api/marts/run', dict(name='orders', version=1), 'submit_refresh')]:
+            for error, code in [(PermissionError('owner mismatch'), 403),
+                    (wb.jobs_resident.JobNotFound('absent'), 404),
+                    (wb.jobs_resident.JobConflict('stale version'), 409), (ValueError('invalid'), 400)]:
+                with self.subTest(path=path, error=error), patch.object(wb.marts_resident, method, side_effect=error):
+                    self.assertEqual(self.json_request(path, body), (code, {'error': str(error)}))
+
     def test_stage_export_routes_and_strict_payloads(self):
         payload = dict(name='orders', table='iceberg.raw.orders', format='csv', file='orders.csv', version='revision-1')
         outputs = dict(directory='/host/orders/exports', files=[], limits=dict(max_rows=100000, max_file_bytes=26214400))
@@ -1407,6 +1479,27 @@ const run=eval(HANDLER);
                 call.assert_not_called()
         for limit in (0, -1, True, '1', None, 1.5):
             self.assertEqual(self.json_request('/api/lake/preview', {'file': 'x.csv', 'limit': limit})[0], 400)
+
+    def test_models_http_marks_registered_targets_without_exposing_owner(self):
+        registry = {
+            'managed': dict(owner='alice', version=2, table='iceberg.marts.managed',
+                            sql='SELECT id FROM raw.orders', sources=['raw.orders']),
+            'legacy': dict(staged_table='iceberg.sandbox.legacy', sql='SELECT 1', sources=[]),
+        }
+        with patch.object(wb.bears_resident, 'load_wap_registry', return_value=registry):
+            code, inventory = self.json_request('/api/models')
+        self.assertEqual(code, 200)
+        models = {item['name']: item for item in inventory['wap_models']}
+        for name, registered in [('managed', True), ('legacy', False)]:
+            self.assertIs(models[name]['registered_refresh_target'], registered)
+            self.assertEqual(models[name]['layer'], 'wap')
+            self.assertEqual(models[name]['sql'], registry[name]['sql'])
+            self.assertEqual(models[name]['sources'], registry[name]['sources'])
+            self.assertNotIn('owner', models[name])
+            self.assertNotIn('version', models[name])
+        self.assertEqual(models['managed']['table'], 'iceberg.marts.managed')
+        self.assertEqual(models['legacy']['table'], 'iceberg.sandbox.legacy')
+        self.assertEqual(inventory['lineage']['managed'], ['raw.orders'])
 
     def test_models_routes_and_drop(self):
         with patch.object(wb.bears_resident, 'models_inventory', return_value={'dbt_models': [], 'wap_models': [], 'lineage': {}}) as inventory:
