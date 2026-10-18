@@ -69,6 +69,7 @@ class JobsAPITests(unittest.TestCase):
 
     def test_authentication_and_viewer_denied_on_every_route(self):
         routes = [('/api/jobs', None), ('/api/jobs/runs', None),
+                  ('/api/jobs/schedules', None), ('/api/jobs/schedule', self.schedule()),
                   ('/api/jobs/save', self.definition()),
                   ('/api/jobs/run', {'name': 'daily_check'}),
                   ('/api/jobs/detail', {'run_id': 'missing'})]
@@ -130,6 +131,70 @@ class JobsAPITests(unittest.TestCase):
             self.assertEqual(self.request('/api/jobs/run', {'name': 42})[0], 400)
             self.assertEqual(self.request('/api/jobs/detail', {'run_id': 'x', 'actor': 'alice'})[0], 400)
             submit.assert_not_called()
+
+    @staticmethod
+    def schedule():
+        return dict(name='daily_check', kind='interval', every_minutes=60,
+                    arguments={'value': 7}, enabled=False)
+
+    def test_schedule_uses_authenticated_identity_and_selected_role(self):
+        payload = self.schedule()
+        with patch.object(jobs, 'save_schedule', return_value=payload) as save:
+            code, body = self.request('/api/jobs/schedule', payload, user='alice',
+                                      headers={'X-Shirokuma-Role': 'data_engineer'})
+        self.assertEqual(code, 200)
+        self.assertEqual(body['schedule'], payload)
+        save.assert_called_once_with(payload, 'alice', 'data_engineer')
+
+    def test_schedule_owner_visibility_and_disabled_persistence(self):
+        self.assertEqual(self.request('/api/jobs/save', self.definition())[0], 200)
+        code, body = self.request('/api/jobs/schedule', self.schedule())
+        self.assertEqual(code, 200)
+        self.assertEqual(body['schedule']['role'], 'data_engineer')
+        self.assertFalse(body['schedule']['enabled'])
+        self.assertEqual(body['schedule']['auth_mode'], 'shared')
+        self.assertEqual(self.request('/api/jobs/schedules')[1]['schedules'][0]['arguments'], {'value': 7})
+        self.assertEqual(self.request('/api/jobs/schedules', user='oscar')[1]['schedules'], [])
+        admin_view = self.request('/api/jobs/schedules', user='alice')[1]['schedules']
+        self.assertEqual(len(admin_view), 1)
+        self.assertFalse(admin_view[0]['can_manage'])
+        for user in ('oscar', 'alice'):
+            self.assertIn(self.request('/api/jobs/schedule', self.schedule(), user=user)[0], (403, 404))
+
+    def test_schedule_rejects_identity_fields_and_cross_origin(self):
+        self.request('/api/jobs/save', self.definition())
+        for key, value in [('role', 'admin'), ('actor', 'alice'), ('owner', 'alice'),
+                           ('auth_mode', 'local'), ('next_run_at', '2000-01-01T00:00:00Z')]:
+            self.assertEqual(self.request('/api/jobs/schedule', {**self.schedule(), key: value})[0], 400)
+        with patch.object(jobs, 'save_schedule') as save:
+            self.assertEqual(self.request('/api/jobs/schedule', self.schedule(),
+                                         headers={'Origin': 'https://example.invalid'})[0], 403)
+            save.assert_not_called()
+        self.assertEqual(self.request('/api/jobs/schedules')[1]['schedules'], [])
+
+    def test_schedule_validates_arguments_and_cannot_expand_selected_role(self):
+        self.request('/api/jobs/save', self.definition())
+        self.assertEqual(self.request('/api/jobs/schedule', {**self.schedule(), 'arguments': {'value': '7'}})[0], 400)
+        privileged = dict(name='admin_build', parameters={}, steps=[{'action': 'dbt_build'}])
+        self.assertEqual(self.request('/api/jobs/save', privileged, user='alice')[0], 200)
+        self.assertEqual(self.request('/api/jobs/schedule', {**self.schedule(), 'name': 'admin_build', 'arguments': {}},
+                                      user='alice', headers={'X-Shirokuma-Role': 'data_engineer'})[0], 403)
+
+    def test_owner_can_pause_without_execution_role_or_replacing_arguments(self):
+        definition = dict(name='admin_build', steps=[{'action': 'dbt_build'}])
+        self.assertEqual(self.request('/api/jobs/save', definition, user='alice')[0], 200)
+        payload = {**self.schedule(), 'name': 'admin_build', 'arguments': {}, 'enabled': True}
+        self.assertEqual(self.request('/api/jobs/schedule', payload, user='alice')[0], 200)
+        pause = {'name': 'admin_build', 'enabled': False}
+        self.assertEqual(self.request('/api/jobs/schedule', pause, user='emily')[0], 403)
+        code, body = self.request('/api/jobs/schedule', pause, user='alice',
+                                  headers={'X-Shirokuma-Role': 'data_engineer'})
+        self.assertEqual(code, 200)
+        self.assertFalse(body['schedule']['enabled'])
+        self.assertIsNone(body['schedule']['next_run_at'])
+        self.assertEqual(body['schedule']['role'], 'admin')
+        self.assertEqual(body['schedule']['arguments'], {})
+        self.assertEqual(self.request('/api/jobs/schedule', {'name': 'missing', 'enabled': False})[0], 404)
 
 
 if __name__ == '__main__':

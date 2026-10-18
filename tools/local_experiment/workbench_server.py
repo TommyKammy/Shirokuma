@@ -24,7 +24,7 @@ GET_ROUTES = {path: ALL_ROLES for path in (
     '/', '/index.html', '/api/session', '/api/status', '/api/catalog', '/api/lineage',
     '/api/history', '/api/models', '/api/pawprints')}
 GET_ROUTES['/api/ai/config'] = {'admin'}
-GET_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs', '/api/jobs/runs')})
+GET_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs', '/api/jobs/runs', '/api/jobs/schedules')})
 POST_ROUTES = {path: EDIT_ROLES for path in (
     '/api/warehouse/chill', '/api/warehouse/autochill', '/api/lake/ingest',
     '/api/lake/preview', '/api/lake/export', '/api/catalog/drop',
@@ -32,7 +32,7 @@ POST_ROUTES = {path: EDIT_ROLES for path in (
 POST_ROUTES.update({path: ALL_ROLES for path in (
     '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
 POST_ROUTES.update({path: {'admin'} for path in ('/api/ai/config', '/api/ai/test')})
-POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail')})
+POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail', '/api/jobs/schedule')})
 
 
 def masked_ai_config(config):
@@ -215,6 +215,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.respond({'jobs': jobs_resident.list_jobs(self.authenticated_user or 'local', role)})
             elif url.path == '/api/jobs/runs':
                 self.respond({'runs': jobs_resident.list_runs(self.authenticated_user or 'local', role)})
+            elif url.path == '/api/jobs/schedules':
+                self.respond({'schedules': jobs_resident.list_schedules(self.authenticated_user or 'local', role)})
             elif url.path == "/api/pawprints":
                 result = manage.Client().query(
                     "SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON")
@@ -262,6 +264,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 body = self.body()
                 if path == '/api/jobs/save':
                     result = {'job': jobs_resident.save_job(body, self.authenticated_user or 'local', role)}
+                elif path == '/api/jobs/schedule':
+                    result = {'schedule': jobs_resident.save_schedule(body, self.authenticated_user or 'local', role)}
                 elif path == '/api/jobs/run':
                     if set(body) - {'name', 'arguments'} or not isinstance(body.get('name'), str):
                         raise ValueError('name and arguments are required job inputs')
@@ -450,6 +454,8 @@ def main(argv=None):
                     stack.enter_context(warehouse_resident.persistent_trino())
                 except (OSError, RuntimeError) as exc:
                     print(f'Trino tunnel unavailable; queries will reconnect: {exc}', flush=True)
+                stack.callback(jobs_resident.stop_scheduler)
+                jobs_resident.start_scheduler()
                 server.serve_forever()
         except KeyboardInterrupt:
             pass

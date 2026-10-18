@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-18
-version: "1.4"
+version: "1.5"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -205,4 +205,12 @@ L0〜L6 に分散していた「局所的な実験スクリプト群」を整理
 
 構成、API、再実行時の制約と検証結果は [登録ジョブガイド](../../guides/registered_jobs.md) に記録する。
 標準ライブラリのSQLiteと既存Workbenchのバックグラウンドスレッドを利用する。
-スケジュール実行は次段階の検討範囲とする。
+スケジュール実行は Phase 17.2 で追加する。
+
+### Phase 17.2: スケジュール実行【2026-10-18】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P17-002** | 一定間隔・日次スケジュール | 登録ジョブの予定をSQLiteに保存し、Workbench内で実行する。保存時の利用者・権限を再検証し、予定消費の原子性、競合・遅延時のスキップ、停止操作、復旧時の無効化を確認する。 | **Completed (2026-10-18)** |
+
+設定、時刻・停止・復旧の扱いと検証記録は [スケジュール実行ガイド](../../guides/scheduled_jobs.md) を参照する。

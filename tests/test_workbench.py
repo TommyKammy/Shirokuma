@@ -1135,11 +1135,15 @@ const run=eval(HANDLER);
                     events.append('close')
             def serve():
                 self.assertEqual(events, [] if unavailable else ['open'])
+                start_schedule.assert_called_once_with()
                 raise KeyboardInterrupt()
             server.return_value.__enter__.return_value.serve_forever.side_effect = serve
             with self.subTest(unavailable=unavailable), patch.object(wb.warehouse_resident, 'persistent_trino', tunnel), \
+                 patch.object(wb.jobs_resident, 'start_scheduler') as start_schedule, \
+                 patch.object(wb.jobs_resident, 'stop_scheduler') as stop_schedule, \
                  patch('builtins.print'):
                 wb.main(['--port', '0'])
+                stop_schedule.assert_called_once_with()
             self.assertEqual(events, [] if unavailable else ['open', 'close'])
 
 

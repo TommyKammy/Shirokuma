@@ -137,6 +137,37 @@ class DisasterRecoveryTests(unittest.TestCase):
         with sqlite3.connect(self.state / 'jobs.sqlite3') as db:
             self.assertEqual(db.execute('SELECT id FROM executions').fetchone()[0], 42)
 
+    def test_restored_schedules_are_paused_and_original_is_unchanged(self):
+        import jobs_resident as jobs
+        with patch.dict(os.environ, SHIROKUMA_STATE_DIR=str(self.state), SHIROKUMA_AUTH_MODE='local'):
+            jobs.save_job(dict(name='daily', steps=[dict(action='sql', sql='SELECT 1', mode='read-only')]), 'local', 'admin')
+            jobs.save_schedule(dict(name='daily', kind='interval', every_minutes=60, arguments={}, enabled=True), 'local', 'admin')
+            self.create(include_tables=False)
+            target = self.root / 'restored-schedules'
+            dr.restore(self.archive, target)
+            self.assertTrue(jobs.list_schedules('local', 'admin')[0]['enabled'])
+        with patch.dict(os.environ, SHIROKUMA_STATE_DIR=str(target), SHIROKUMA_AUTH_MODE='local'):
+            restored = jobs.list_schedules('local', 'admin')[0]
+            self.assertFalse(restored['enabled'])
+            self.assertIsNone(restored['next_run_at'])
+            self.assertTrue(all(not values for values in jobs.tick().values()))
+            self.assertEqual(jobs.list_runs('local', 'admin'), [])
+
+    def test_invalid_job_ledger_is_rejected_before_any_restore_writes(self):
+        # Use a checksummed archive to exercise restore validation, not backup.
+        self.create(include_tables=False)
+        def add_invalid_ledger(files):
+            data = b'not a sqlite database'
+            files['state/jobs.sqlite3'] = data
+            manifest = json.loads(files['manifest.json'])
+            manifest['checksums']['state/jobs.sqlite3'] = hashlib.sha256(data).hexdigest()
+            files['manifest.json'] = json.dumps(manifest).encode()
+        self.rewrite(add_invalid_ledger)
+        target = self.root / 'invalid-jobs'
+        with self.assertRaisesRegex(dr.BackupError, 'Invalid job ledger'):
+            dr.restore(self.archive, target)
+        self.assertFalse(target.exists())
+
     def test_restore_preserves_job_ledger_created_after_preflight(self):
         with sqlite3.connect(self.state / 'jobs.sqlite3') as db:
             db.execute('CREATE TABLE executions (id INTEGER)')

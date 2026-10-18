@@ -1,6 +1,6 @@
-"""Manually submitted local jobs with a durable ledger and one host-wide worker.
+"""Local jobs with a durable ledger and one host-wide worker.
 
-No retries or scheduling. The 900 second budget is checked between steps, not a
+No automatic retries. The 900 second budget is checked between steps, not a
 hard cancellation deadline for a running warehouse operation. A lost worker is
 reported unknown; already successful steps are retained and never replayed.
 """
@@ -75,7 +75,19 @@ def _db():
                 action TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT,
                 finished_at TEXT, error TEXT, summary TEXT,
                 PRIMARY KEY(run_id, position));
+            CREATE TABLE IF NOT EXISTS schedules (
+                name TEXT PRIMARY KEY, owner TEXT NOT NULL, kind TEXT NOT NULL,
+                every_minutes INTEGER, time TEXT, timezone TEXT, arguments TEXT NOT NULL,
+                enabled INTEGER NOT NULL, role TEXT NOT NULL, auth_mode TEXT NOT NULL,
+                next_run_at TEXT, last_status TEXT, last_run_id TEXT, last_scheduled_for TEXT);
         ''')
+        connection.execute('BEGIN IMMEDIATE')
+        columns = {row['name'] for row in connection.execute('PRAGMA table_info(runs)')}
+        if 'trigger' not in columns:
+            connection.execute("ALTER TABLE runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'")
+        if 'scheduled_for' not in columns:
+            connection.execute('ALTER TABLE runs ADD COLUMN scheduled_for TEXT')
+        connection.commit()
         yield connection
         connection.commit()
     finally:
@@ -317,21 +329,58 @@ def submit_run(name, arguments, actor, role):
                 raise JobNotFound('Job not found or not owned by this identity')
             definition = json.loads(job['definition'])
             values, prepared = _validate(definition, role, arguments, preflight=True)
-            run_id = uuid.uuid4().hex
-            connection.execute('INSERT INTO runs(id,job_name,actor,role,definition,arguments,status,created_at) '
-                               'VALUES (?,?,?,?,?,?,?,?)',
-                               (run_id, name, actor, role, json.dumps(definition), json.dumps(values), 'queued', _now()))
-            connection.executemany('INSERT INTO steps(run_id,position,name,action,status) VALUES (?,?,?,?,?)',
-                [(run_id, i, step.get('name') or 'Step ' + str(i), step['action'], 'pending')
-                 for i, step in enumerate(prepared, 1)])
+            run_id = _insert_run(connection, definition, values, prepared, actor, role)
         result = get_run(run_id, actor, role)
-        thread = threading.Thread(target=_worker, args=(run_id, prepared, actor, role, lock, request_auth.shared_mode(), name),
-                                  name='job-' + run_id[:8], daemon=True)
-        thread.start()
+        _start_worker(run_id, prepared, actor, role, lock, request_auth.shared_mode(), name)
         return result
     except Exception:
         lock.close()
         raise
+
+
+def _insert_run(connection, definition, arguments, steps, actor, role, *,
+                trigger='manual', scheduled_for=None, status='queued', error=None):
+    run_id, now = uuid.uuid4().hex, _now()
+    finished = now if status not in ACTIVE else None
+    connection.execute('INSERT INTO runs(id,job_name,actor,role,definition,arguments,status,created_at,'
+                       'finished_at,error,trigger,scheduled_for) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                       (run_id, definition['name'], actor, role, json.dumps(definition), json.dumps(arguments),
+                        status, now, finished, error, trigger, scheduled_for))
+    connection.executemany('INSERT INTO steps(run_id,position,name,action,status,finished_at) VALUES (?,?,?,?,?,?)',
+        [(run_id, i, step.get('name') or 'Step ' + str(i), step['action'],
+          'pending' if status in ACTIVE else 'skipped', finished) for i, step in enumerate(steps, 1)])
+    return run_id
+
+
+def _start_worker(run_id, steps, actor, role, lock, shared, name, auth_mode=None):
+    thread = threading.Thread(target=_worker, args=(run_id, steps, actor, role, lock, shared, name, auth_mode),
+                              name='job-' + run_id[:8], daemon=True)
+    thread.start()
+
+
+def save_schedule(payload, actor, role):
+    import schedule_resident
+    return schedule_resident.save_schedule(payload, actor, role)
+
+
+def list_schedules(actor, role):
+    import schedule_resident
+    return schedule_resident.list_schedules(actor, role)
+
+
+def tick(now=None):
+    import schedule_resident
+    return schedule_resident.tick(now)
+
+
+def start_scheduler(interval=10):
+    import schedule_resident
+    return schedule_resident.start_scheduler(interval)
+
+
+def stop_scheduler():
+    import schedule_resident
+    return schedule_resident.stop_scheduler()
 
 
 def _run(row, connection):
@@ -390,7 +439,7 @@ def _execute_step(step):
     return report
 
 
-def _worker(run_id, steps, actor, role, lock, shared=False, job_name=''):
+def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mode=None):
     deadline = time.monotonic() + 900
     final_status = None
     try:
@@ -399,6 +448,8 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name=''):
                 connection.execute("UPDATE runs SET status='running',started_at=? WHERE id=?", (_now(), run_id))
             for position, step in enumerate(steps, 1):
                 try:
+                    if auth_mode is not None and auth_mode != ('shared' if request_auth.shared_mode() else 'local'):
+                        raise PermissionError('Authentication mode changed while the scheduled job was active')
                     _check_account(actor, role, require_shared=shared)
                     if time.monotonic() >= deadline:
                         raise ValueError('Job budget exceeded between steps; no further steps started')

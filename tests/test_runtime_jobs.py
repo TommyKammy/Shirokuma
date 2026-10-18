@@ -83,6 +83,12 @@ class RuntimeJobsTests(unittest.TestCase):
         self.addCleanup(self.wait_terminal, run['id'])
         return self.wait_terminal(run['id'])
 
+    def stop_scheduler_and_wait(self):
+        self.jobs.stop_scheduler()
+        for run in self.jobs.list_runs('local', 'admin'):
+            if run['status'] in {'queued', 'running'}:
+                self.wait_terminal(run['id'])
+
     def test_ingest_parameterized_sql_preserves_quoted_value(self):
         source = self.directory / 'input.csv'
         source.write_text('id,label\n1,seed\n')
@@ -141,6 +147,45 @@ class RuntimeJobsTests(unittest.TestCase):
         self.assertEqual(run['status'], 'success')
         self.assertEqual(run['steps'][0]['status'], 'success')
         self.assertEqual(run['steps'][0]['summary']['model_count'], 7)
+
+    def test_interval_scheduler_fires_once_and_retains_engineer_role(self):
+        self.sql('CREATE TABLE ' + warehouse.identifier(self.raw) + ' (id BIGINT)')
+        name = 'scheduled_' + uuid.uuid4().hex[:16]
+        definition = dict(name=name, parameters={'id': {'type': 'integer', 'required': True}}, steps=[
+            dict(action='sql', sql='INSERT INTO ' + warehouse.identifier(self.raw) +
+                 ' VALUES ({{id}})', mode='sandbox-write', schema='raw'),
+            # A default-admin worker would wrongly succeed here.
+            dict(action='sql', sql='SELECT query FROM system.runtime.queries', mode='read-only'),
+            dict(action='sql', sql='INSERT INTO ' + warehouse.identifier(self.raw) +
+                 ' VALUES (99)', mode='sandbox-write', schema='raw'),
+        ])
+        self.jobs.save_job(definition, 'local', 'data_engineer')
+        schedule = dict(name=name, kind='interval', every_minutes=1,
+                        arguments={'id': 7}, enabled=True)
+        self.jobs.save_schedule(schedule, 'local', 'data_engineer')
+        self.jobs.start_scheduler(interval=.2)
+        self.addCleanup(self.stop_scheduler_and_wait)
+        # Real elapsed time exercises the daemon, not a direct injected tick.
+        deadline = time.monotonic() + 100
+        runs = []
+        while time.monotonic() < deadline:
+            runs = self.jobs.list_runs('local', 'admin')
+            if runs:
+                break
+            time.sleep(.1)
+        self.assertEqual(len(runs), 1, 'one due run must be claimed within the bounded wait')
+        self.addCleanup(self.wait_terminal, runs[0]['id'])
+        run = self.wait_terminal(runs[0]['id'])
+        self.assertEqual(run['trigger'], 'schedule')
+        self.assertTrue(run['scheduled_for'])
+        self.assertEqual(run['role'], 'data_engineer')
+        self.assertEqual(run['status'], 'failed')
+        self.assertEqual([step['status'] for step in run['steps']], ['success', 'failed', 'skipped'])
+        self.assertEqual(self.sql('SELECT id FROM ' + warehouse.identifier(self.raw))['rows'], [[7]])
+        self.jobs.save_schedule({**schedule, 'enabled': False}, 'local', 'data_engineer')
+        self.jobs.tick()
+        self.jobs.tick()
+        self.assertEqual(len(self.jobs.list_runs('local', 'admin')), 1)
 
 
 if __name__ == '__main__':

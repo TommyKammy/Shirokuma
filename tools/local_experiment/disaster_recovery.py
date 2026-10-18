@@ -236,6 +236,21 @@ def _warehouse_plan(files, manifest):
     return schemas, tables, data, statements
 
 
+def _pause_restored_schedules(data):
+    """A recovered copy must not start recurring writes without re-enabling it."""
+    with tempfile.TemporaryDirectory(prefix='shirokuma-jobs-restore-') as directory:
+        snapshot = Path(directory) / 'jobs.sqlite3'
+        snapshot.write_bytes(data)
+        try:
+            with closing(sqlite3.connect(snapshot)) as connection:
+                if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schedules'").fetchone():
+                    connection.execute('UPDATE schedules SET enabled=0,next_run_at=NULL')
+                    connection.commit()
+        except sqlite3.DatabaseError as exc:
+            raise BackupError('Invalid job ledger in backup') from exc
+        return snapshot.read_bytes()
+
+
 def restore(archive_path, target_state_dir=None, dry_run=False, restore_warehouse=False):
     """Validate the bundle and optionally recover warehouse DDL and logical rows."""
     files, manifest = _validated_files(archive_path)
@@ -248,6 +263,8 @@ def restore(archive_path, target_state_dir=None, dry_run=False, restore_warehous
     target = Path(target_state_dir) if target_state_dir is not None else state_dir()
     if 'state/jobs.sqlite3' in files and (target / 'jobs.sqlite3').exists():
         raise BackupError('Restore jobs to an empty state directory; an existing job ledger must not be overwritten')
+    if 'state/jobs.sqlite3' in files:
+        files['state/jobs.sqlite3'] = _pause_restored_schedules(files['state/jobs.sqlite3'])
     restored = []
     for name, data in files.items():
         path = PurePosixPath(name)
