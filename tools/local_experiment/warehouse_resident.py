@@ -417,21 +417,21 @@ def resolve_role(user: str, role: str = None) -> str:
     aliases = {'admin': 'admin', 'data_engineer': 'data_engineer', 'editor': 'data_engineer',
                'bi_viewer': 'bi_viewer', 'viewer': 'bi_viewer', 'bi_reader': 'bi_viewer'}
     user = (user or '').strip().lower()
+    default = os.environ.get('SHIROKUMA_DEFAULT_ROLE', 'admin').strip().lower()
+    if default not in aliases:
+        raise ValueError(f'Invalid role: {default}')
+    # The admin default is the trusted local single-user mode. Request headers
+    # and user names are selectors, not verified identities in restricted mode.
+    maximum = 'bi_viewer' if _is_bi_user(user) else aliases[default]
     if role:
         if role.strip().lower() not in aliases:
             raise ValueError(f'Invalid role: {role}')
         resolved = aliases[role.strip().lower()]
-        if _is_bi_user(user) and resolved != 'bi_viewer':
-            raise ValueError('BI user cannot assume role: ' + role)
+        ranks = {'bi_viewer': 0, 'data_engineer': 1, 'admin': 2}
+        if ranks[resolved] > ranks[maximum]:
+            raise ValueError('User cannot assume role: ' + role)
         return resolved
-    if user in ('admin', 'root'):
-        return 'admin'
-    if user in ('bi_reader', 'powerbi') or user.startswith('bi_'):
-        return 'bi_viewer'
-    default = os.environ.get('SHIROKUMA_DEFAULT_ROLE', 'admin')
-    if default.strip().lower() not in aliases:
-        raise ValueError(f'Invalid role: {default}')
-    return aliases[default.strip().lower()]
+    return maximum
 
 
 def _check_dynamic_sql(sql):
@@ -441,9 +441,29 @@ def _check_dynamic_sql(sql):
     rollback = re.fullmatch(
         rf'ALTER TABLE {ident}(?: \. {ident}){{2}} EXECUTE ROLLBACK_TO_SNAPSHOT \( [0-9 ]+ \)(?: ;)?',
         ' '.join(tokens), re.S)
-    if (set(tokens) & {'PREPARE', 'DEALLOCATE'} or
-            ('EXECUTE' in tokens and not rollback)):
-        raise ValueError('SQL policy violation: dynamic SQL and prepared statements are not allowed')
+    # Inspect statement positions, not column names such as SELECT execute.
+    statements = [[]]
+    for token in tokens:
+        if token == ';':
+            statements.append([])
+        else:
+            statements[-1].append(token)
+    for statement in statements:
+        words = list(statement)
+        while words and words[0] in {'EXPLAIN', 'ANALYZE', 'VERBOSE'}:
+            words.pop(0)
+            if words[:1] == ['(']:
+                depth = 0
+                for i, token in enumerate(words):
+                    depth += (token == '(') - (token == ')')
+                    if depth == 0:
+                        words = words[i + 1:]
+                        break
+                else:
+                    words = []
+        if (words and words[0] in {'PREPARE', 'DEALLOCATE', 'EXECUTE'} or
+                (words[:1] == ['ALTER'] and 'EXECUTE' in words and not rollback)):
+            raise ValueError('SQL policy violation: dynamic SQL and prepared statements are not allowed')
 
 
 def check_sql_policy(sql: str, mode: str = 'read-only', role: str = 'admin') -> str:
@@ -534,10 +554,19 @@ def _check_bi_schemas(sql):
     # Inspect relation names, including comma joins and nested FROM clauses,
     # while leaving column aliases (t.column) and literals alone.
     depth, from_depths = 0, set()
+    skip_alias = False
     for i, token in enumerate(tokens):
+        if skip_alias:
+            skip_alias = False
+            continue
         # Quoted identifiers retain their names for schema comparisons, but
         # never change the parser's clause state or introduce a relation.
         if raw_tokens[i].startswith(('"', "'")):
+            continue
+        if token == 'as' and i + 1 < len(tokens) and (
+                raw_tokens[i + 1].startswith('"') or
+                re.fullmatch(r'[a-z_][a-z_0-9$]*', tokens[i + 1])):
+            skip_alias = True
             continue
         if token == '(':
             depth += 1

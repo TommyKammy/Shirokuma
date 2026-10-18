@@ -70,11 +70,54 @@ class WorkbenchTests(unittest.TestCase):
         with patch.object(wb.bears_resident, 'load_ai_config', return_value={}), \
              patch.dict(os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'bi_viewer'}):
             self.assertEqual(self.json_request('/api/ai/config')[0], 403)
-            for user, expected in (('admin', 200), ('root', 200), ('powerbi', 403), ('bi_reader', 403)):
+            for user, expected in (('admin', 403), ('root', 403), ('powerbi', 403), ('bi_reader', 403)):
                 self.assertEqual(self.request('/api/ai/config', headers={'X-Trino-User': user})[0], expected)
             self.assertEqual(self.request('/api/ai/config', headers={
                 'X-Trino-User': 'bi_reader', 'X-Shirokuma-Role': 'admin'})[0], 403)
-            self.assertEqual(self.json_request('/api/ai/config?role=admin')[0], 200)
+            self.assertEqual(self.json_request('/api/ai/config?role=admin')[0], 403)
+
+    def test_restricted_default_cannot_be_overridden_by_selectors(self):
+        with patch.dict(os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'bi_viewer'}), \
+             patch.object(wb.bears_resident, 'load_ai_config') as load, \
+             patch.object(wb.warehouse_resident, 'query') as query:
+            for user in ('', 'ordinary_person', 'bi_reader', 'unknown', 'admin'):
+                for selector in ('admin', 'data_engineer'):
+                    headers = {'X-Trino-User': user, 'X-Shirokuma-Role': selector}
+                    self.assertEqual(self.request('/api/ai/config', headers=headers)[0], 403)
+                    self.assertEqual(self.request('/api/ai/config?role=' + selector,
+                        headers={'X-Trino-User': user})[0], 403)
+                    self.assertEqual(self.request('/api/warehouse/query',
+                        {'sql': 'SELECT * FROM raw.orders'}, headers={
+                            **headers, 'Content-Type': 'application/json'})[0], 403)
+            load.assert_not_called()
+            query.assert_not_called()
+
+    def test_catalog_bear_restricts_all_table_reads_before_dispatch(self):
+        with patch.object(wb.bears_resident, 'run', return_value={}) as run:
+            for action in ('describe', 'search', 'lineage'):
+                for field in ('table', 'target'):
+                    for schema in ('raw', 'sandbox', 'staging'):
+                        for prefix in ('', 'iceberg.'):
+                            body = {'bear': 'catalog', 'action': action,
+                                    field: prefix + schema + '.orders', 'snapshot_id': '123'}
+                            code, data = self.json_request('/api/bears/run?role=bi_viewer', body)
+                            self.assertEqual(code, 403, data)
+                            self.assertIn('marts', data['error'])
+            run.assert_not_called()
+            self.assertEqual(self.json_request('/api/bears/run?role=bi_viewer', {
+                'bear': 'catalog', 'action': 'describe', 'table': 'marts.orders',
+                'snapshot_id': '123'})[0], 200)
+            self.assertEqual(run.call_args.args[0].role, 'bi_viewer')
+
+        from types import SimpleNamespace
+        with patch.object(wb.bears_resident.wr, 'trino') as trino:
+            for action in ('describe', 'lineage', 'search'):
+                args = SimpleNamespace(bear='catalog', role='bi_viewer', action=action,
+                                       table='raw.orders', snapshot_id='123')
+                for dispatch in (wb.bears_resident.catalog, wb.bears_resident.run):
+                    with self.assertRaises(PermissionError):
+                        dispatch(args)
+            trino.assert_not_called()
 
     def test_role_typos_escalation_and_catalog_boundaries(self):
         with patch.object(wb.bears_resident, 'catalog', return_value={}) as catalog:
@@ -164,6 +207,28 @@ class WorkbenchTests(unittest.TestCase):
                  patch.dict(wb.bears_resident._ai_config, {}, clear=True), \
                  patch.object(wb.bears_resident.wap, 'persist_json'):
                 self.assertEqual(wb.bears_resident.save_ai_config(change)['api_key'], 'old-secret')
+
+    def test_ai_endpoint_changes_clear_environment_credentials(self):
+        bears = wb.bears_resident
+        for key_env in ('OPENAI_API_KEY', 'BEAR_API_KEY'):
+            active = dict(provider='openai', api_url='https://api.openai.com/v1',
+                          api_key='', api_key_env=key_env)
+            with patch.object(bears, 'load_ai_config', side_effect=lambda: dict(active)), \
+                 patch.dict(os.environ, {'OPENAI_API_KEY': 'openai-secret',
+                                         'BEAR_API_KEY': 'bear-secret', 'NEW_KEY': 'new-secret'}):
+                for change in ({'api_url': 'https://new.example/v1'}, {'provider': 'custom'}):
+                    for key in (None, '', '********'):
+                        supplied = {**change, **({'api_key': key} if key is not None else {})}
+                        result = bears.merged_ai_config(supplied)
+                        self.assertEqual(result['api_key_env'], '')
+                        self.assertIsNone(bears.resolve_api_key(result))
+                    result = bears.merged_ai_config({**change, 'api_key_env': 'NEW_KEY'})
+                    self.assertEqual(bears.resolve_api_key(result), 'new-secret')
+                    result = bears.merged_ai_config({**change, 'api_key': 'direct-new'})
+                    self.assertEqual(bears.resolve_api_key(result), 'direct-new')
+                self.assertEqual(bears.resolve_api_key(bears.merged_ai_config({'model': 'new'})),
+                                 os.environ[key_env])
+                self.assertIsNone(bears.resolve_api_key({'api_key_env': ''}))
 
     def test_role_endpoint_permissions_before_dispatch(self):
         routes = ['/api/catalog/drop', '/api/models/build', '/api/lake/ingest',

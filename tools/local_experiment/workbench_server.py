@@ -170,16 +170,13 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             elif url.path in ("/api/catalog", "/api/lineage"):
                 params = parse_qs(url.query, keep_blank_values=True)
                 table = params.get('table', [None])[0]
-                if role == 'bi_viewer' and table:
-                    qualified = bears_resident.qualified_table(table)
-                    if qualified.split('.')[1].lower() != 'marts':
-                        raise PermissionError('BI Viewer is restricted to marts tables')
+                bears_resident.check_catalog_access(role, table)
                 options = {key: params[key][0] for key in ('detail', 'snapshot_id') if key in params}
                 if 'snapshot_id' in options and not table:
                     raise ValueError('table is required for snapshot_id')
                 action = "lineage" if url.path.endswith("lineage") else "describe" if table else "search"
                 result = bears_resident.catalog(SimpleNamespace(
-                    bear="catalog", action=action, table=table, include_config=False, **options))
+                    bear="catalog", action=action, table=table, role=role, include_config=False, **options))
                 # Iceberg IDs exceed JavaScript's safe integer range. Preserve
                 # their exact digits for snapshot display and rollback requests.
                 snapshots = result.get('metadata', {}).get('snapshots')
@@ -366,6 +363,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                             fields[key] = body[key]
                     if bear == "catalog":
                         fields["table"] = fields["table"] or fields["target"]
+                        bears_resident.check_catalog_access(role, fields['table'])
+                        fields['role'] = role
+                        fields['include_config'] = False
                     if bear == 'data':
                         if action == 'stage':
                             fields['stage_table'] = fields.get('stage_table') or fields['table']

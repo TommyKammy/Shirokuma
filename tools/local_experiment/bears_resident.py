@@ -47,8 +47,8 @@ def merged_ai_config(config):
     if config.get('api_key') == '********':
         del config['api_key']
     if any(key in config and config[key] != active.get(key) for key in ('api_url', 'provider')):
-        if not config.get('api_key'):
-            active['api_key'] = ''
+        active['api_key'] = ''
+        active['api_key_env'] = ''
     active.update(config)
     return active
 
@@ -67,7 +67,9 @@ def save_ai_config(config):
 def resolve_api_key(config):
     if config.get('api_key'):
         return config['api_key']
-    key_env = config.get('api_key_env') or 'BEAR_API_KEY'
+    key_env = config.get('api_key_env')
+    if not key_env:
+        return None
     if config.get('provider') in {'custom', 'local-openai'} and key_env == 'OPENAI_API_KEY':
         return None
     return os.environ.get(key_env)
@@ -368,7 +370,15 @@ def drop_table(table):
     return dict(action='drop', table=full_table, dropped=True, telemetry=telemetry)
 
 
+def check_catalog_access(role, table):
+    if role == 'bi_viewer' and table:
+        table = table if '.' in table else 'marts.' + table
+        if qualified_table(table).split('.')[1].lower() != 'marts':
+            raise PermissionError('BI Viewer is restricted to marts tables')
+
+
 def catalog(args):
+    check_catalog_access(getattr(args, 'role', 'admin'), getattr(args, 'table', None))
     metadata = {}
     if getattr(args, 'snapshot_id', None) is not None:
         if not getattr(args, 'table', None):
@@ -478,6 +488,8 @@ def policy(args):
 
 
 def run(args):
+    if args.bear == 'catalog':
+        check_catalog_access(getattr(args, 'role', 'admin'), getattr(args, 'table', None))
     started, status = time.monotonic(), "success"
     try:
         result = globals()[args.bear](args)

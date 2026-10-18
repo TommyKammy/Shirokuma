@@ -50,25 +50,39 @@ class ResidentWarehouseTests(unittest.TestCase):
         with patch.dict(w.os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'viewer'}):
             for user in ('', 'person'):
                 self.assertEqual(w.resolve_role(user), 'bi_viewer')
-            for user in ('admin', 'root'):
-                self.assertEqual(w.resolve_role(user), 'admin')
+            for user in ('admin', 'root', 'ordinary_person', 'bi_reader', 'unknown'):
+                self.assertEqual(w.resolve_role(user), 'bi_viewer')
+                for role in ('admin', 'data_engineer', 'editor'):
+                    with self.assertRaises(ValueError):
+                        w.resolve_role(user, role)
+        with patch.dict(w.os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'data_engineer'}):
+            self.assertEqual(w.resolve_role('person'), 'data_engineer')
+            with self.assertRaises(ValueError):
+                w.resolve_role('person', 'admin')
         with patch.dict(w.os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'admn'}):
             with self.assertRaisesRegex(ValueError, 'Invalid role:'):
                 w.resolve_role('person')
 
     def test_quoted_keywords_and_dynamic_sql_boundaries(self):
         for keyword in ('where', 'group', 'order', 'having', 'limit', 'union', 'except', 'intersect'):
-            with self.subTest(keyword=keyword), self.assertRaises(ValueError):
-                w.check_bi_policy(f'SELECT * FROM iceberg.marts.t AS "{keyword}", iceberg.raw.secret', 'bi_reader')
+            for alias in (keyword, '"' + keyword + '"'):
+                with self.subTest(alias=alias), self.assertRaises(ValueError):
+                    w.check_bi_policy(f'SELECT * FROM iceberg.marts.t AS {alias}, iceberg.raw.secret', 'bi_reader')
         sql = 'SELECT "from", a.b FROM iceberg.marts.t a'
         self.assertEqual(w.check_bi_policy(sql, 'bi_reader'), sql)
         for sql in ('EXPLAIN EXECUTE p', 'EXPLAIN ANALYZE EXECUTE p', 'EXECUTE p',
+                    'EXPLAIN (TYPE LOGICAL) EXECUTE p',
                     'SELECT 1; EXECUTE p', 'EXECUTE IMMEDIATE \'SELECT 1\''):
             for mode in ('read-only', 'sandbox-write', 'admin-write'):
                 with self.subTest(sql=sql, mode=mode), self.assertRaises(ValueError):
                     w.check_sql_policy(sql, mode)
         self.assertEqual(w.check_sql_policy('SELECT "execute" FROM iceberg.marts.t'),
                          'SELECT "execute" FROM iceberg.marts.t')
+        for sql in ('SELECT execute FROM iceberg.marts.t',
+                    'SELECT t.execute FROM iceberg.marts.t t',
+                    "SELECT 'text ; EXECUTE p' FROM iceberg.marts.t"):
+            self.assertEqual(w.check_sql_policy(sql), sql)
+            self.assertEqual(w.check_sql_policy(sql, role='bi_viewer'), sql)
         rollback = 'ALTER TABLE iceberg.marts.t EXECUTE rollback_to_snapshot(123)'
         self.assertEqual(w.check_sql_policy(rollback, 'admin-write'), rollback)
 
