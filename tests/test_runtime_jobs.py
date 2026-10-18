@@ -4,14 +4,21 @@ Set SHIROKUMA_RUNTIME_TESTS=1 and the existing backend credential/CA variables.
 Job state and input files are temporary; only uniquely named synthetic tables
 are written. No remote SQL Server, AI request, or external publication is used.
 """
+import base64
 import importlib
+import json
 import os
 from pathlib import Path
+import re
+import signal
+import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from unittest.mock import patch
+import urllib.error
+import urllib.request
 import uuid
 
 
@@ -91,6 +98,181 @@ class RuntimeJobsTests(unittest.TestCase):
         for run in self.jobs.list_runs('local', 'admin'):
             if run['status'] in {'queued', 'running'}:
                 self.wait_terminal(run['id'])
+
+    def start_http_workbench(self, accounts, state=None):
+        """Use the normal entrypoint and isolated state, including its scheduler."""
+        log_path = self.directory / ('http-' + uuid.uuid4().hex + '.log')
+        env = {**os.environ, 'SHIROKUMA_AUTH_MODE': 'shared', 'SHIROKUMA_AUTH_FILE': str(accounts),
+               'SHIROKUMA_STATE_DIR': str(state or self.directory)}
+        with log_path.open('w') as log:
+            child = subprocess.Popen([sys.executable, str(Path(__file__).resolve().parents[1] /
+                'tools/local_experiment/workbench_server.py'), '--port', '0'], env=env,
+                stdout=log, stderr=log, start_new_session=True)
+        self.addCleanup(self.stop_http_workbench, child)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if child.poll() is not None:
+                self.fail('Isolated Workbench exited before accepting requests')
+            match = re.search(r'Shirokuma Workbench: (http://127\.0\.0\.1:\d+)', log_path.read_text())
+            if match:
+                url = match.group(1)
+                try:
+                    if self.http_request(url, '/api/session', user='alice')[0] == 200:
+                        return child, url
+                except (OSError, TimeoutError):
+                    pass
+            time.sleep(.1)
+        self.fail('Isolated Workbench did not start within 30 seconds')
+
+    @staticmethod
+    def stop_http_workbench(child):
+        if child.poll() is None:
+            child.send_signal(signal.SIGINT)
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # This group belongs only to this isolated test server and its tunnel.
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait(timeout=5)
+
+    @staticmethod
+    def http_request(url, path, body=None, user='emily', role=None):
+        headers = {'Content-Type': 'application/json', 'Origin': url}
+        if user:
+            token = base64.b64encode((user + ':test-' + user).encode()).decode()
+            headers['Authorization'] = 'Basic ' + token
+        if role:
+            headers['X-Shirokuma-Role'] = role
+        request = urllib.request.Request(url + path, headers=headers,
+            data=None if body is None else json.dumps(body).encode())
+        try:
+            response = urllib.request.urlopen(request, timeout=5)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response:
+            return response.status, json.load(response)
+
+    def test_http_restart_scheduled_to_manual_alert_lifecycle_and_revoked_owner(self):
+        self.sql('CREATE TABLE ' + warehouse.identifier(self.raw) + ' (id BIGINT)')
+        accounts = {}
+        for user, role in [('alice', 'admin'), ('emily', 'data_engineer'),
+                           ('oscar', 'data_engineer'), ('vera', 'bi_viewer')]:
+            salt = os.urandom(16).hex()
+            accounts[user] = dict(role=role, salt=salt,
+                                  password_hash=auth.password_hash('test-' + user, salt))
+        account_file = self.directory / 'accounts.json'
+        account_file.write_text(json.dumps(accounts))
+        child, url = self.start_http_workbench(account_file)
+
+        def request(path, body=None, user='emily', expected=200, role=None):
+            code, result = self.http_request(url, path, body, user, role)
+            self.assertEqual(code, expected, result)
+            return result
+
+        def manual():
+            run_id = request('/api/jobs/run', {'name': name, 'arguments': {'id': 7}}, expected=202)['run']['id']
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                run = request('/api/jobs/detail', {'run_id': run_id})['run']
+                if run['status'] not in {'queued', 'running'}:
+                    self.assertEqual(run['status'], 'success', run)
+                    self.assertEqual(run['trigger'], 'manual')
+                    self.assertEqual(run['role'], 'data_engineer')
+                    return run
+                time.sleep(.1)
+            self.fail('HTTP manual run did not finish')
+
+        name = 'restart_quality'
+        definition = dict(name=name, parameters={'id': {'type': 'integer', 'required': True}}, steps=[
+            dict(action='sql', sql='INSERT INTO ' + warehouse.identifier(self.raw) + ' VALUES ({{id}})',
+                 mode='sandbox-write', schema='raw'),
+            dict(action='alert', sql='SELECT count(*) > 0 AND min(id) >= 0 FROM ' + warehouse.identifier(self.raw),
+                 message='Synthetic scheduled and manual condition'),
+        ])
+        request('/api/jobs/save', definition)
+        request('/api/jobs/save', dict(name='revoked_owner', steps=[dict(action='alert',
+            sql='SELECT TRUE', message='Must never run after revocation')]), user='oscar')
+        for path in ('/api/jobs', '/api/jobs/runs', '/api/jobs/schedules', '/api/alerts'):
+            request(path, user=None, expected=401)
+            request(path, user='vera', expected=403)
+        request('/api/jobs/run', {'name': name, 'arguments': {'id': 7}}, user='oscar', expected=404)
+        request('/api/jobs/run', {'name': name, 'arguments': {'id': 7}}, role='admin', expected=403)
+        saved = request('/api/jobs/schedule', dict(name=name, kind='interval', every_minutes=1,
+            enabled=True, arguments={'id': 7}))['schedule']
+        request('/api/jobs/schedule', dict(name='revoked_owner', kind='interval', every_minutes=1,
+            enabled=True, arguments={}), user='oscar')
+        accounts['oscar']['role'] = 'bi_viewer'
+        account_file.write_text(json.dumps(accounts))
+        self.stop_http_workbench(child)
+        child, url = self.start_http_workbench(account_file)
+        restored = request('/api/jobs/schedules')['schedules'][0]
+        self.assertEqual(restored['next_run_at'], saved['next_run_at'])
+        self.assertEqual((restored['owner'], restored['role'], restored['auth_mode']),
+                         ('emily', 'data_engineer', 'shared'))
+
+        # Wait for actual wall time through the normal server's ten-second poll.
+        deadline = time.monotonic() + 100
+        while time.monotonic() < deadline:
+            runs = request('/api/jobs/runs', user='alice')['runs']
+            if len(runs) == 2 and all(run['status'] not in {'queued', 'running'} for run in runs):
+                break
+            time.sleep(.5)
+        self.assertEqual(len(runs), 2, runs)
+        scheduled = next(run for run in runs if run['job_name'] == name)
+        self.assertEqual((scheduled['status'], scheduled['actor'], scheduled['role'], scheduled['trigger']),
+                         ('success', 'emily', 'data_engineer', 'schedule'))
+        self.assertEqual(scheduled['scheduled_for'], saved['next_run_at'])
+        revoked = next(run for run in runs if run['job_name'] == 'revoked_owner')
+        self.assertEqual(revoked['status'], 'skipped')
+        schedules = request('/api/jobs/schedules', user='alice')['schedules']
+        self.assertFalse(next(item for item in schedules if item['name'] == 'revoked_owner')['enabled'])
+        request('/api/jobs/schedule', {'name': name, 'enabled': False})
+        self.assertEqual(self.sql('SELECT id FROM ' + warehouse.identifier(self.raw))['rows'], [[7]])
+        first = request('/api/alerts')['alerts'][0]
+        self.assertEqual(first['first_run_id'], scheduled['id'])
+        self.assertEqual(first['owner'], 'emily')
+        request('/api/alerts/ack', {'alert_id': first['id']}, user='alice', expected=403)
+        request('/api/alerts/ack', {'alert_id': first['id']}, user='vera', expected=403)
+        confirmed = request('/api/alerts/ack', {'alert_id': first['id']})['alert']
+        self.stop_http_workbench(child)
+        child, url = self.start_http_workbench(account_file)
+        self.assertEqual(request('/api/alerts')['alerts'][0], confirmed)
+        self.assertEqual(len(request('/api/jobs/runs', user='alice')['runs']), 2)
+
+        manual()
+        ongoing = request('/api/alerts')
+        self.assertEqual(len(ongoing['alerts']), 1)
+        self.assertEqual(ongoing['alerts'][0]['id'], first['id'])
+        self.assertEqual(ongoing['alerts'][0]['occurrences'], 2)
+        self.assertEqual(ongoing['unacknowledged_count'], 0)
+        self.sql('UPDATE ' + warehouse.identifier(self.raw) + ' SET id = -1')
+        manual()
+        resolved = request('/api/alerts')['alerts'][0]
+        self.assertEqual(resolved['resolution'], 'condition_cleared')
+        self.assertEqual(resolved['last_seen_at'], ongoing['alerts'][0]['last_seen_at'])
+        self.sql('DELETE FROM ' + warehouse.identifier(self.raw) + ' WHERE id < 0')
+        manual()
+        notices = request('/api/alerts')
+        self.assertEqual(len(notices['alerts']), 2)
+        active = next(item for item in notices['alerts'] if item['resolved_at'] is None)
+        self.assertNotEqual(active['id'], first['id'])
+        self.assertEqual(notices['unacknowledged_count'], 1)
+        # Restore an independently usable ledger: history survives, schedules pause.
+        import disaster_recovery as dr
+        request('/api/jobs/schedule', dict(name=name, kind='interval', every_minutes=60,
+            enabled=True, arguments={'id': 7}))
+        archive = self.directory / 'backup.tar.gz'
+        dr.backup(archive, include_tables=False)
+        self.stop_http_workbench(child)
+        restored_state = self.directory / 'restored'
+        with patch.object(dr, 'MODELS_DIR', restored_state / 'models'):
+            dr.restore(archive, target_state_dir=restored_state)
+        child, url = self.start_http_workbench(account_file, restored_state)
+        self.assertEqual(request('/api/alerts'), notices)
+        self.assertEqual(len(request('/api/jobs/runs', user='alice')['runs']), 5)
+        restored_schedules = request('/api/jobs/schedules', user='alice')['schedules']
+        self.assertTrue(all(not item['enabled'] and item['next_run_at'] is None for item in restored_schedules))
+        self.stop_http_workbench(child)
 
     def test_ingest_parameterized_sql_preserves_quoted_value(self):
         source = self.directory / 'input.csv'

@@ -94,11 +94,26 @@ def lake_input(body):
     return None, dict(filename=filename, content=content)
 
 
+def request_origin_allowed(headers):
+    """Match the browser authority; TLS proxies must preserve Host."""
+    origin, host = headers.get('Origin'), headers.get('Host')
+    if not origin or not host:
+        return False
+    if origin == 'http://' + host:
+        return True
+    if origin == 'https://' + host:
+        try:
+            return request_auth.shared_mode()
+        except request_auth.AuthenticationError:
+            return False
+    return False
+
+
 class WorkbenchHandler(BaseHTTPRequestHandler):
     def end_headers(self):
         # Only the Workbench's own origin may control this local lab.
         origin = self.headers.get("Origin")
-        if origin == "http://" + self.headers.get("Host", ""):
+        if request_origin_allowed(self.headers):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -253,7 +268,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
     @request_auth.role_scope
     def do_POST(self):
         origin = self.headers.get("Origin")
-        if origin and origin != "http://" + self.headers.get("Host", ""):
+        if origin and not request_origin_allowed(self.headers):
             self.respond({"error": "cross-origin control requests are not allowed"}, 403)
             return
         path = urlsplit(self.path).path

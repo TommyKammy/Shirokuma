@@ -5,7 +5,9 @@ hard cancellation deadline for a running warehouse operation. A lost worker is
 reported unknown; already successful steps are retained and never replayed.
 """
 from contextlib import contextmanager
+import csv
 from datetime import date, datetime, timezone
+from decimal import InvalidOperation
 import fcntl
 import json
 import os
@@ -256,7 +258,12 @@ def _validate(definition, role, arguments=None, preflight=False):
             if step['mode'] == 'upsert' and not step.get('key'):
                 raise ValueError('upsert requires key')
             if preflight:
-                _, schema, _ = lake_ingest.read_file(Path(path), step.get('format', 'auto'))
+                try:
+                    _, schema, _ = lake_ingest.read_file(Path(path), step.get('format', 'auto'))
+                except csv.Error as exc:
+                    raise ValueError('ingest CSV could not be parsed') from exc
+                except InvalidOperation as exc:
+                    raise ValueError('ingest JSON number could not be parsed') from exc
                 if step['mode'] == 'upsert':
                     names = [name for name, _ in schema]
                     keys = [lake_ingest.sanitize(k) for k in step['key'].split(',') if k.strip()]

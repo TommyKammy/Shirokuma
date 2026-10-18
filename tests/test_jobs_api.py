@@ -1,5 +1,6 @@
 """Job HTTP boundaries use the authenticated caller, including async submission."""
 import base64
+import csv
 import http.client
 from http.server import ThreadingHTTPServer
 import json
@@ -82,6 +83,52 @@ class JobsAPITests(unittest.TestCase):
                 self.assertEqual(self.request(path, body, user='vera')[0], 403)
                 self.assertEqual(self.request(path, body, user='emily',
                     headers={'X-Shirokuma-Role': 'admin', 'X-Trino-User': 'admin'})[0], 403)
+
+    def test_tls_proxy_origin_uses_same_host_and_shared_authentication_only(self):
+        def request(origin, host, extra=None, name='origin_check'):
+            headers = {'Host': host, 'Origin': origin, 'Content-Type': 'application/json', **(extra or {})}
+            headers['Authorization'] = 'Basic ' + base64.b64encode(b'alice:test-alice').decode()
+            client = http.client.HTTPConnection(*self.server.server_address, timeout=10)
+            try:
+                client.request('POST', '/api/jobs/save', json.dumps(self.definition(name)), headers)
+                response = client.getresponse()
+                return response.status, dict(response.getheaders()), json.loads(response.read())
+            finally:
+                client.close()
+        for index, origin in enumerate(('https://workbench.example', 'http://workbench.example')):
+            code, headers, body = request(origin, 'workbench.example', name='origin_shared_' + str(index))
+            self.assertEqual(code, 200)
+            self.assertEqual(body['job']['owner'], 'alice')
+            self.assertEqual(headers.get('Access-Control-Allow-Origin'), origin)
+        for origin, host, forwarded in (
+                ('https://other.example', 'workbench.example', {}),
+                ('https://workbench.example', '127.0.0.1',
+                 {'X-Forwarded-Host': 'workbench.example', 'X-Forwarded-Proto': 'https'})):
+            code, headers, _ = request(origin, host, forwarded)
+            self.assertEqual(code, 403)
+            self.assertNotIn('Access-Control-Allow-Origin', headers)
+        with patch.dict(os.environ, SHIROKUMA_AUTH_MODE='local', SHIROKUMA_AUTH_FILE=''):
+            code, headers, _ = request('https://workbench.example', 'workbench.example')
+            self.assertEqual(code, 403)
+            self.assertNotIn('Access-Control-Allow-Origin', headers)
+            code, headers, body = request('http://workbench.example', 'workbench.example', name='origin_local')
+            self.assertEqual(code, 200)
+            self.assertEqual(body['job']['owner'], 'local')
+            self.assertEqual(headers.get('Access-Control-Allow-Origin'), 'http://workbench.example')
+
+    def test_oversized_csv_field_is_rejected_before_run_admission(self):
+        path = Path(os.environ['SHIROKUMA_STATE_DIR']) / 'oversized.csv'
+        marker = 'PRIVATE_CSV_CONTENT_'
+        path.write_text('id\n' + marker + 'x' * (csv.field_size_limit() + 10) + '\n')
+        definition = dict(name='csv_preflight', steps=[dict(action='ingest', file=str(path),
+                          table='raw.csv_preflight', mode='append')])
+        self.assertEqual(self.request('/api/jobs/save', definition, user='alice')[0], 200)
+        with patch.object(jobs, '_start_worker') as worker:
+            code, body = self.request('/api/jobs/run', {'name': 'csv_preflight'}, user='alice')
+            self.assertEqual(code, 400)
+            self.assertNotIn(marker, json.dumps(body))
+            worker.assert_not_called()
+        self.assertEqual(self.request('/api/jobs/runs', user='alice')[1], {'runs': []})
 
     def test_explicit_caller_identity_and_selected_role_reach_runner(self):
         with patch.object(jobs, 'submit_run', return_value={'id': 'accepted', 'status': 'running'}) as submit:

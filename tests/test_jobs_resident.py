@@ -1,4 +1,5 @@
 """Focused state, authorization, and process-loss checks for manual jobs."""
+import csv
 import json
 import os
 from pathlib import Path
@@ -268,6 +269,89 @@ class JobsTests(unittest.TestCase):
             jobs.submit_run('example', {}, 'local', 'admin')
         execute.assert_not_called()
         self.assertEqual(jobs.list_runs('local', 'admin'), [])
+
+    def test_expected_ingest_parser_errors_are_safe_value_errors_before_acceptance(self):
+        for filename, content, message in (
+                ('large.csv', 'payload\n' + 'x' * (csv.field_size_limit() + 1) + '\n', 'ingest CSV could not be parsed'),
+                ('large.jsonl', '{"value":1e9999999999999999999}', 'ingest JSON number could not be parsed')):
+            path = Path(self.directory.name) / filename
+            path.write_text(content)
+            definition = self.definition(steps=[dict(action='sql', sql='SELECT 1', mode='read-only'),
+                dict(action='ingest', file=str(path), table='raw.input', mode='replace')])
+            jobs.save_job(definition, 'local', 'admin')
+            with self.subTest(filename=filename), patch.object(jobs, '_execute_step') as execute:
+                with self.assertRaises(ValueError) as caught:
+                    jobs.submit_run('example', {}, 'local', 'admin')
+                self.assertEqual(str(caught.exception), message)
+                execute.assert_not_called()
+                self.assertEqual(jobs.list_runs('local', 'admin'), [])
+
+    def test_process_loss_preserves_successful_alert_and_acknowledgement_without_replay(self):
+        definition = self.definition(steps=[dict(action='alert', sql='SELECT TRUE', message='Synthetic condition'),
+            dict(action='sql', sql='SELECT 1', mode='read-only'), dict(action='sql', sql='SELECT 2', mode='read-only')])
+        jobs.save_job(definition, 'local', 'admin')
+        run_marker = Path(self.directory.name) / 'crash-run-id'
+        blocked_marker = Path(self.directory.name) / 'crash-sql-blocked'
+        code = f'''
+import sys,threading,os
+from pathlib import Path
+sys.path.insert(0,{str(TOOLS)!r})
+import jobs_resident as jobs
+ready=threading.Event()
+def execute(step):
+    ready.wait(5)
+    if step['action']=='alert': return {{'condition_met':True}}
+    Path({str(blocked_marker)!r}).write_text('ready')
+    sys.stdin.readline()
+    return {{}}
+jobs._execute_step=execute
+jobs.wr.telemetry=lambda *a,**k:'skipped'
+run=jobs.submit_run('example',{{}},'local','admin')
+Path({str(run_marker)!r}).write_text(run['id'])
+ready.set()
+threading.Event().wait()
+'''
+        child = subprocess.Popen([sys.executable, '-c', code], stdin=subprocess.PIPE,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not blocked_marker.is_file():
+                if child.poll() is not None:
+                    break
+                time.sleep(.01)
+            self.assertTrue(run_marker.is_file() and blocked_marker.is_file(),
+                            'child did not reach the SQL boundary within five seconds')
+            run_id = run_marker.read_text().strip()
+            self.assertTrue(run_id)
+            alert = jobs.list_alerts('local', 'admin')['alerts'][0]
+            acknowledged = jobs.acknowledge(alert['id'], 'local', 'admin')
+            child.kill()
+            child.communicate(timeout=5)
+            # Fresh process performs normal restart recovery and reads durable state.
+            restart = f'''
+import sys,json
+sys.path.insert(0,{str(TOOLS)!r})
+import jobs_resident as jobs
+run=jobs.get_run({run_id!r},'local','admin')
+print(json.dumps({{'run':run,'alerts':jobs.list_alerts('local','admin'),'run_count':len(jobs.list_runs('local','admin'))}}))
+'''
+            reader = subprocess.run([sys.executable, '-c', restart], capture_output=True, text=True, timeout=5)
+            self.assertEqual(reader.returncode, 0, reader.stderr)
+            result = json.loads(reader.stdout)
+            self.assertEqual(result['run']['status'], 'unknown')
+            self.assertEqual([step['status'] for step in result['run']['steps']], ['success', 'unknown', 'skipped'])
+            self.assertEqual(result['run_count'], 1)
+            self.assertEqual(result['alerts']['unacknowledged_count'], 0)
+            restored = result['alerts']['alerts'][0]
+            self.assertEqual(restored['id'], alert['id'])
+            self.assertEqual(restored['acknowledged_at'], acknowledged['acknowledged_at'])
+            self.assertEqual(restored['acknowledged_by'], 'local')
+            self.assertIsNone(restored['resolved_at'])
+            self.assertEqual(restored['occurrences'], 1)
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.communicate(timeout=5)
 
     def test_process_loss_is_unknown_without_replay_and_cross_process_claim_is_exclusive(self):
         jobs.save_job(self.definition(steps=[dict(action='sql', sql='SELECT 1', mode='read-only')] * 2), 'local', 'admin')

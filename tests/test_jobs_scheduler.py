@@ -1,5 +1,6 @@
 """Synthetic scheduler checks: cadence, authorization, DST and process claims."""
 from datetime import datetime, timedelta, timezone
+import csv
 import json
 import os
 from pathlib import Path
@@ -155,6 +156,31 @@ class SchedulerTests(unittest.TestCase):
             result = jobs.tick(due + timedelta(seconds=60))
         execute.assert_not_called()
         self.assertEqual(len(result['skipped']), 1)
+
+    def test_bad_csv_and_json_inputs_pause_without_starving_healthy_due_job(self):
+        for name, filename, content in (
+                ('a_bad_csv', 'input.csv', 'payload\n' + 'x' * (csv.field_size_limit() + 1) + '\n'),
+                ('b_bad_json', 'input.jsonl', '{"value":1e9999999999999999999}')):
+            path = self.directory / filename
+            path.write_text(content)
+            self.job(name=name, steps=[dict(action='ingest', file=str(path), table='raw.input', mode='replace')])
+            self.schedule(name=name)
+        self.job(name='z_healthy')
+        due = datetime.fromisoformat(self.schedule(name='z_healthy')['next_run_at'])
+        with patch.object(jobs, '_execute_step', return_value={}) as execute:
+            result = jobs.tick(due)
+            self.assertEqual(self.terminal(result['started'][0])['status'], 'success')
+        self.assertEqual(execute.call_count, 1)
+        self.assertEqual(result['paused'], ['a_bad_csv', 'b_bad_json'])
+        self.assertEqual(len(result['skipped']), 2)
+        self.assertEqual(len(result['started']), 1)
+        schedules = {row['name']: row for row in jobs.list_schedules('local', 'admin')}
+        for name in ('a_bad_csv', 'b_bad_json'):
+            self.assertFalse(schedules[name]['enabled'])
+            self.assertIsNone(schedules[name]['next_run_at'])
+        self.assertTrue(schedules['z_healthy']['enabled'])
+        self.assertEqual(len(jobs.list_runs('local', 'admin')), 3)
+        self.assertEqual(jobs.tick(due)['started'], [])
 
     def test_busy_run_skips_due_slot_without_queue_or_preflight_file_read(self):
         self.job(name='manual')

@@ -41,7 +41,11 @@ the role menu from the authenticated account and disables higher roles.
 
 Basic credentials must travel over HTTPS for remote use: terminate TLS at a
 trusted reverse proxy and keep these listeners privately reachable only through
-that proxy. Do not expose plain HTTP listeners to a shared network. Service startup requires backend Trino password authentication, private service
+that proxy. Preserve the original `Host` header when forwarding to Workbench.
+Shared mode accepts browser origins with either HTTP or HTTPS only when their
+authority exactly matches `Host`; forwarded host/protocol headers do not grant
+origin trust. Local mode accepts only the matching HTTP origin.
+Do not expose plain HTTP listeners to a shared network. Service startup requires backend Trino password authentication, private service
 credentials and a trusted CA certificate. Configure
 backend Trino password authentication and role-specific service users as described
 in the Trino access-control deployment configuration; protect the backend port
