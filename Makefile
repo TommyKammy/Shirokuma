@@ -12,6 +12,7 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_concurrency.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_security_boundary.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_jobs_*.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trino_auth.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_permissions.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_runtime_*.py'

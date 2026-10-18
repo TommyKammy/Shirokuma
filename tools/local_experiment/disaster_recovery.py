@@ -5,6 +5,7 @@ Restore validates the whole bundle before writing state/models. Opt-in warehouse
 recovery also recreates catalog objects and restores logical table data.
 """
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import gzip
@@ -12,6 +13,7 @@ import io
 import json
 import os
 import re
+import sqlite3
 from pathlib import Path, PurePosixPath
 import sys
 import subprocess
@@ -23,7 +25,7 @@ import warehouse_resident as warehouse
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = ROOT / 'tools/local_experiment/dataops/dbt_persistent/models'
-STATE_FILES = ('wap_models.json', 'ai_config.json')
+STATE_FILES = ('wap_models.json', 'ai_config.json', 'jobs.sqlite3')
 VERSION = 1
 
 
@@ -86,7 +88,17 @@ def backup(output_path=None, include_tables=True):
     for name in STATE_FILES:
         source = state_dir() / name
         if source.exists():
-            files['state/' + name] = source.read_bytes()
+            if name == 'jobs.sqlite3':
+                # Capture committed transactions, including any live WAL,
+                # without copying an inconsistent database/journal pair.
+                with tempfile.TemporaryDirectory(prefix='shirokuma-jobs-backup-') as temporary:
+                    snapshot = Path(temporary) / name
+                    with closing(sqlite3.connect(source.resolve().as_uri() + '?mode=ro', uri=True)) as live:
+                        with closing(sqlite3.connect(snapshot)) as saved:
+                            live.backup(saved)
+                    files['state/' + name] = snapshot.read_bytes()
+            else:
+                files['state/' + name] = source.read_bytes()
     for source in sorted(MODELS_DIR.rglob('*')):
         if not source.is_file() or source.suffix not in {'.sql', '.yml', '.yaml'}:
             continue
@@ -234,6 +246,8 @@ def restore(archive_path, target_state_dir=None, dry_run=False, restore_warehous
         except (KeyError, TypeError, ValueError) as exc:
             raise BackupError('Invalid warehouse recovery payload') from exc
     target = Path(target_state_dir) if target_state_dir is not None else state_dir()
+    if 'state/jobs.sqlite3' in files and (target / 'jobs.sqlite3').exists():
+        raise BackupError('Restore jobs to an empty state directory; an existing job ledger must not be overwritten')
     restored = []
     for name, data in files.items():
         path = PurePosixPath(name)
@@ -274,7 +288,13 @@ def restore(archive_path, target_state_dir=None, dry_run=False, restore_warehous
                 temporary = Path(stream.name)
                 stream.write(data)
             try:
-                temporary.replace(destination)
+                if destination == target / 'jobs.sqlite3':
+                    try:
+                        os.link(temporary, destination)
+                    except FileExistsError as exc:
+                        raise BackupError('Job ledger appeared during restore; existing ledger was preserved') from exc
+                else:
+                    temporary.replace(destination)
             finally:
                 temporary.unlink(missing_ok=True)
     return dict(status='success', restored_files=[str(path) for path, _ in restored],

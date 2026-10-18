@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import bears_resident
 import lake_ingest
+import jobs_resident
 import warehouse_resident
 import request_auth
 from agenthouse import manage
@@ -23,6 +24,7 @@ GET_ROUTES = {path: ALL_ROLES for path in (
     '/', '/index.html', '/api/session', '/api/status', '/api/catalog', '/api/lineage',
     '/api/history', '/api/models', '/api/pawprints')}
 GET_ROUTES['/api/ai/config'] = {'admin'}
+GET_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs', '/api/jobs/runs')})
 POST_ROUTES = {path: EDIT_ROLES for path in (
     '/api/warehouse/chill', '/api/warehouse/autochill', '/api/lake/ingest',
     '/api/lake/preview', '/api/lake/export', '/api/catalog/drop',
@@ -30,6 +32,7 @@ POST_ROUTES = {path: EDIT_ROLES for path in (
 POST_ROUTES.update({path: ALL_ROLES for path in (
     '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
 POST_ROUTES.update({path: {'admin'} for path in ('/api/ai/config', '/api/ai/test')})
+POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail')})
 
 
 def masked_ai_config(config):
@@ -208,6 +211,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.respond(bears_resident.activity_history())
             elif url.path == '/api/models':
                 self.respond(bears_resident.models_inventory())
+            elif url.path == '/api/jobs':
+                self.respond({'jobs': jobs_resident.list_jobs(self.authenticated_user or 'local', role)})
+            elif url.path == '/api/jobs/runs':
+                self.respond({'runs': jobs_resident.list_runs(self.authenticated_user or 'local', role)})
             elif url.path == "/api/pawprints":
                 result = manage.Client().query(
                     "SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON")
@@ -218,6 +225,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.respond({'error': str(exc)}, 401)
         except PermissionError as exc:
             self.respond({'error': str(exc)}, 403)
+        except jobs_resident.JobNotFound as exc:
+            self.respond({'error': str(exc)}, 404)
+        except jobs_resident.JobConflict as exc:
+            self.respond({'error': str(exc)}, 409)
         except (ValueError, UnicodeError) as exc:
             self.respond({'error': str(exc)}, 400)
         except Exception as exc:
@@ -249,7 +260,20 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 result = warehouse_resident.transition(path.rsplit("/", 1)[1], "LOCAL")
             else:
                 body = self.body()
-                if path == '/api/ai/config':
+                if path == '/api/jobs/save':
+                    result = {'job': jobs_resident.save_job(body, self.authenticated_user or 'local', role)}
+                elif path == '/api/jobs/run':
+                    if set(body) - {'name', 'arguments'} or not isinstance(body.get('name'), str):
+                        raise ValueError('name and arguments are required job inputs')
+                    result = {'run': jobs_resident.submit_run(body['name'], body.get('arguments', {}),
+                                                            self.authenticated_user or 'local', role)}
+                    self.respond(result, 202)
+                    return
+                elif path == '/api/jobs/detail':
+                    if set(body) != {'run_id'} or not isinstance(body['run_id'], str):
+                        raise ValueError('run_id must be a string')
+                    result = {'run': jobs_resident.get_run(body['run_id'], self.authenticated_user or 'local', role)}
+                elif path == '/api/ai/config':
                     result = masked_ai_config(bears_resident.save_ai_config(ai_config_input(body)))
                 elif path == '/api/ai/test':
                     result = bears_resident.test_ai_connection(ai_config_input(body))
@@ -401,6 +425,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.respond({'error': str(exc)}, 401)
         except PermissionError as exc:
             self.respond({'error': str(exc)}, 403)
+        except jobs_resident.JobNotFound as exc:
+            self.respond({'error': str(exc)}, 404)
+        except jobs_resident.JobConflict as exc:
+            self.respond({'error': str(exc)}, 409)
         except (ValueError, UnicodeError) as exc:
             self.respond({"error": str(exc)}, 400)
         except Exception as exc:

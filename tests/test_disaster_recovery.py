@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import os
+import sqlite3
 from pathlib import Path
 import subprocess
 import sys
@@ -105,6 +106,52 @@ class DisasterRecoveryTests(unittest.TestCase):
         (self.state / 'ai_config.json').write_bytes(b'changed')
         dr.restore(self.archive)
         self.assertEqual((self.state / 'ai_config.json').read_bytes(), self.original['ai_config.json'])
+
+    def test_job_ledger_snapshot_includes_live_wal_and_restores_to_empty_state(self):
+        source = self.state / 'jobs.sqlite3'
+        with sqlite3.connect(source) as live:
+            live.execute('PRAGMA journal_mode=WAL')
+            live.execute('CREATE TABLE executions (id TEXT, status TEXT)')
+            live.execute("INSERT INTO executions VALUES ('job-1', 'running')")
+            live.commit()
+            self.assertTrue(Path(str(source) + '-wal').exists())
+            self.create(include_tables=False)
+            live.execute("UPDATE executions SET status='success'")
+            live.commit()
+        target = self.root / 'restored-jobs'
+        dr.restore(self.archive, target)
+        with sqlite3.connect(target / 'jobs.sqlite3') as restored:
+            self.assertEqual(restored.execute('SELECT * FROM executions').fetchall(), [('job-1', 'running')])
+            self.assertEqual(restored.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+        self.assertEqual((target / 'jobs.sqlite3').stat().st_mode & 0o777, 0o600)
+
+    def test_restore_does_not_overwrite_existing_job_ledger(self):
+        with sqlite3.connect(self.state / 'jobs.sqlite3') as db:
+            db.execute('CREATE TABLE executions (id INTEGER)')
+            db.execute('INSERT INTO executions VALUES (42)')
+        self.create(include_tables=False)
+        (self.state / 'ai_config.json').write_bytes(b'current configuration')
+        with self.assertRaisesRegex(dr.BackupError, 'empty state directory'):
+            dr.restore(self.archive)
+        self.assertEqual((self.state / 'ai_config.json').read_bytes(), b'current configuration')
+        with sqlite3.connect(self.state / 'jobs.sqlite3') as db:
+            self.assertEqual(db.execute('SELECT id FROM executions').fetchone()[0], 42)
+
+    def test_restore_preserves_job_ledger_created_after_preflight(self):
+        with sqlite3.connect(self.state / 'jobs.sqlite3') as db:
+            db.execute('CREATE TABLE executions (id INTEGER)')
+        self.create(include_tables=False)
+        target = self.root / 'new-state'
+        link = os.link
+
+        def concurrent_creation(source, destination):
+            destination.write_bytes(b'newly created ledger')
+            return link(source, destination)
+
+        with patch.object(dr.os, 'link', side_effect=concurrent_creation):
+            with self.assertRaisesRegex(dr.BackupError, 'appeared during restore'):
+                dr.restore(self.archive, target)
+        self.assertEqual((target / 'jobs.sqlite3').read_bytes(), b'newly created ledger')
 
     def test_no_tables_and_missing_state(self):
         (self.state / 'ai_config.json').unlink()

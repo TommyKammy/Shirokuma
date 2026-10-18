@@ -39,6 +39,15 @@ _AUTO_CHILL_LOCK = threading.Lock()
 _WAREHOUSE_GATE = threading.local()
 
 
+class TrinoQueryError(RuntimeError):
+    """Keep a safe error code available without exposing backend message values."""
+
+    def __init__(self, message, error_name=None):
+        super().__init__('Trino query failed: ' + message)
+        self.error_name = (error_name if isinstance(error_name, str) and
+                           re.fullmatch(r'[A-Z][A-Z0-9_]{0,63}', error_name) else 'UNKNOWN')
+
+
 def start_auto_chill_daemon(interval=15):
     """Start one background idle check loop for this server process."""
     global _AUTO_CHILL_THREAD
@@ -443,20 +452,26 @@ def execute(url, sql, headers, max_rows=1000):
 
 
 def _execute(url, sql, headers, max_rows=1000):
+    # None drains the query to completion without retaining result rows for jobs.
     import request_auth
     import trino_auth
     headers = trino_auth.backend_headers(headers, role=request_auth.current_role())
     rows, columns, query_id, truncated = [], [], None, False
+    row_count = 0
     page = trino_http_json(url + "/v1/statement", sql.encode("utf-8"), headers)
     while True:
         if page.get("error"):
-            raise RuntimeError("Trino query failed: " + page["error"].get("message", "unknown error"))
+            raise TrinoQueryError(page["error"].get("message", "unknown error"),
+                                  page["error"].get("errorName"))
         query_id = page.get("id", query_id)
         columns = page.get("columns", columns)
         data, next_uri = page.get("data", []), page.get("nextUri")
-        remaining = max_rows - len(rows)
-        rows.extend(data if len(data) <= remaining else data[:remaining])
-        truncated = len(data) > remaining or (len(rows) == max_rows and bool(next_uri))
+        if max_rows is None:
+            row_count += len(data)
+        else:
+            remaining = max_rows - len(rows)
+            rows.extend(data if len(data) <= remaining else data[:remaining])
+            truncated = len(data) > remaining or (len(rows) == max_rows and bool(next_uri))
         if truncated:
             if next_uri:
                 try:
@@ -471,7 +486,10 @@ def _execute(url, sql, headers, max_rows=1000):
         if not next_uri:
             break
         page = trino_http_json(next_uri, headers=headers)
-    return dict(query_id=query_id, columns=columns, rows=rows, truncated=truncated)
+    result = dict(query_id=query_id, columns=columns, rows=rows, truncated=truncated)
+    if max_rows is None:
+        result['row_count'] = row_count
+    return result
 
 
 def normalize_trino_sql(sql: str) -> str:
@@ -944,7 +962,7 @@ def _query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=10
     size = warehouse(size)
     if not sql or not sql.strip():
         raise ValueError("query requires non-empty SQL")
-    if max_rows < 1:
+    if max_rows is not None and max_rows < 1:
         raise ValueError("max-rows must be >= 1")
     sql = check_sql_policy(sql, mode)
     touch_activity()
@@ -966,8 +984,9 @@ def _query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=10
         telemetry("query", int((time.monotonic() - started) * 1000), status="failed")
         raise
     touch_activity()
+    row_count = result.pop('row_count', len(result['rows']))
     return finish(dict(warehouse=size, action="query", result="verified", auto_woken=auto_woken,
-                       **result, row_count=len(result["rows"]), mode=mode), started)
+                       **result, row_count=row_count, mode=mode), started)
 
 
 def main():

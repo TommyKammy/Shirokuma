@@ -905,6 +905,37 @@ class ResidentWarehouseTests(unittest.TestCase):
             self.assertEqual(headers["X-Trino-Schema"], "public")
             self.assertEqual(headers["X-Trino-Source"], "shirokuma-warehouse-LOCAL")
 
+    @patch.object(w, "telemetry", return_value="recorded")
+    def test_job_query_drains_pages_without_retaining_rows(self, telemetry):
+        with patch.object(w, "status", return_value={"replicas": 1}), \
+             patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
+             patch.object(w, "http_json", side_effect=[
+                 {"id": "job1", "data": [[1], [2]], "nextUri": "http://localhost:1234/next"},
+                 {"data": [[3]], "nextUri": "http://localhost:1234/done"},
+                 {}]) as http, patch.object(w.urllib.request, "urlopen") as cancel:
+            report = w.query("LOCAL", "SELECT 1", max_rows=None)
+        self.assertEqual(http.call_count, 3)
+        cancel.assert_not_called()
+        self.assertEqual(report['rows'], [])
+        self.assertEqual(report['row_count'], 3)
+        self.assertFalse(report['truncated'])
+        self.assertEqual(report['result'], 'verified')
+
+    @patch.object(w, "telemetry", return_value="recorded")
+    def test_job_query_reports_error_after_result_page(self, telemetry):
+        with patch.object(w, "status", return_value={"replicas": 1}), \
+             patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
+             patch.object(w, "http_json", side_effect=[
+                 {"data": [[1]], "nextUri": "http://localhost:1234/next"},
+                 {"error": {"message": "private value", "errorName": "DIVISION_BY_ZERO"}}]), \
+             patch.object(w.urllib.request, "urlopen") as cancel:
+            with self.assertRaises(w.TrinoQueryError) as failure:
+                w.query("LOCAL", "SELECT 1", max_rows=None)
+        cancel.assert_not_called()
+        self.assertEqual(failure.exception.error_name, 'DIVISION_BY_ZERO')
+        self.assertEqual(w.TrinoQueryError('private', 'unsafe value').error_name, 'UNKNOWN')
+        self.assertEqual(telemetry.call_args.kwargs, {'status': 'failed'})
+
     def test_query_rejections_and_trino_error(self):
         with self.assertRaises(ValueError):
             w.query("XS", "  ")

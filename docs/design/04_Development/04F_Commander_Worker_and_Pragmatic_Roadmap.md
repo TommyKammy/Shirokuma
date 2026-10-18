@@ -4,8 +4,8 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-10-17
-version: "1.3"
+updated: 2026-10-18
+version: "1.4"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -196,3 +196,13 @@ L0〜L6 に分散していた「局所的な実験スクリプト群」を整理
 | **WP-P12-002** | 状態の永続化 (`var/shirokuma`) & 保存失敗時の Fail-Closed 保証 | WAP モデル定義や AI 設定を `tmp/` から永続ディレクトリへ移管し、保存失敗時にサイレントに無視せず即座にエラーを通知する。 | **Completed (2026-10-17)** |
 | **WP-P12-003** | 包括的ディザスタリカバリ バックアップ＆リストア スイート (`disaster_recovery.py`) | カタログDDL、データファイル、WAP定義、AI設定、dbtモデルを SHA256 検証付き単一アーカイブとして安全にバックアップ・復元する。 | **Completed (2026-10-17)** |
 | **WP-P12-004** | 汎用 Linux 本番配備ガイド & Kubernetes コンテキスト結合の解消 | `KUBE_CONTEXT` の環境変数オーバーライド対応、バックアップの macOS 固有制限解除、Ubuntu 22/24 本番ガイドおよび systemd 設定を提供する。 | **Completed (2026-10-17)** |
+
+### Phase 17.1: 登録ジョブと手動実行【2026-10-18】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P17-001** | 登録ジョブ・手動実行・処理別履歴 | 既存のSQL／dbt／取込／WAPを名前付きジョブとして保存し、型付き引数で手動実行する。所有者とロールを引き継ぎ、同時実行を1件に制限する。途中失敗で後続を止め、中断時は結果不明として自動再試行しない。 | **Completed (2026-10-18)** |
+
+構成、API、再実行時の制約と検証結果は [登録ジョブガイド](../../guides/registered_jobs.md) に記録する。
+標準ライブラリのSQLiteと既存Workbenchのバックグラウンドスレッドを利用する。
+スケジュール実行は次段階の検討範囲とする。

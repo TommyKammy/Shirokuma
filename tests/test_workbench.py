@@ -675,6 +675,7 @@ const run=eval(HANDLER);
             ('warehouse', 'SQL Worksheets · Warehouse & SQL'),
             ('ingestion', 'Ingestion · File Upload'),
             ('transformation', 'Transformation · dbt & WAP'),
+            ('jobs', 'Jobs'),
             ('bears', 'Autonomous Bears'),
             ('catalog', 'Database Explorer · Catalog'),
             ('pawprints', 'AgentHouse Pawprints'),

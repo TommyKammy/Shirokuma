@@ -25,6 +25,7 @@
 dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px;width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#0007}dialog h2{font-size:18px}dialog .toolbar{margin-top:20px}dialog .badge{white-space:normal;overflow-wrap:anywhere}
 </style>
 <style>
+.job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:0 18px;min-width:0}.job-step{margin:18px 0;padding:16px 0;border:0;border-top:1px solid var(--line);min-width:0}.job-step legend{font-weight:650;padding-right:8px}.job-step .toolbar{justify-content:space-between}.job-step textarea{min-height:100px}.job-step small{display:block;margin:6px 0}.job-step-heading{margin-top:20px}#job-run-state{margin-left:12px}#job-steps label{font-size:13px}
 #role-controls{display:inline-flex;align-items:center;gap:8px}#role-controls label{margin:0}#role-selector{width:auto}
 html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#run-ingest,#ai-settings-button,#clone-table-btn,#copilot-stage,#copilot-publish,#refresh-wap-model,[data-role-write="admin"],[data-role-write="engineer"]),html[data-role="data_engineer"] :is(#ai-settings-button,#copilot-publish,#refresh-wap-model,[data-role-write="admin"]){display:none!important}
 </style>
@@ -37,6 +38,7 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <button id="tab-warehouse" role="tab" aria-controls="warehouse" aria-selected="true" data-tab="warehouse">SQL Worksheets · Warehouse &amp; SQL</button>
 <button id="tab-ingestion" role="tab" aria-controls="ingestion" aria-selected="false" tabindex="-1" data-tab="ingestion">Ingestion · File Upload</button>
 <button id="tab-transformation" role="tab" aria-controls="transformation" aria-selected="false" tabindex="-1" data-tab="transformation">Transformation · dbt &amp; WAP</button>
+<button id="tab-jobs" role="tab" aria-controls="jobs" aria-selected="false" tabindex="-1" data-tab="jobs" data-role-write="engineer">Jobs</button>
 <button id="tab-bears" role="tab" aria-controls="bears" aria-selected="false" tabindex="-1" data-tab="bears">Autonomous Bears</button>
 <h2 class="nav-category">Catalog</h2>
 <button id="tab-catalog" role="tab" aria-controls="catalog" aria-selected="false" tabindex="-1" data-tab="catalog">Database Explorer · Catalog</button>
@@ -69,6 +71,20 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 </div></div>
 </section>
 <section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden><div class="page-title"><h1>Transformation · dbt &amp; WAP</h1><p class="muted">Inspect model definitions and dependencies, then build or refresh.</p><div class="toolbar"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build">Run dbt Build</button><button id="run-dbt-test">Run dbt Test</button></div></div><pre id="models-state" role="status" hidden></pre><div class="catalog-grid"><div><h2>Persistent dbt Models</h2><div id="dbt-models" class="panel panel-body"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models" class="panel panel-body"></div></div><div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div></section>
+<section id="jobs" role="tabpanel" aria-labelledby="tab-jobs" hidden>
+<div class="page-title"><h1>Jobs</h1><p class="muted">Save ordered steps and run them manually with typed arguments.</p></div>
+<div id="jobs-error" class="error" role="alert" hidden></div>
+<div class="panel"><div class="panel-head"><h2>Saved jobs</h2><div class="toolbar"><button id="jobs-refresh" type="button">Refresh jobs</button><button id="job-new" type="button">New job</button></div></div><div id="jobs-list" class="table-wrap"><div class="empty">No jobs loaded.</div></div></div>
+<div class="panel"><div class="panel-head"><h2>Job definition</h2><small id="job-editor-state" role="status">New definition</small></div><form id="job-form" class="panel-body">
+<div class="job-fields"><div><label for="job-name">Job name</label><input id="job-name" required maxlength="64" pattern="[a-z][a-z0-9_-]*" placeholder="daily_sales"></div><div><label for="job-description">Description</label><input id="job-description" maxlength="500"></div></div>
+<label for="job-parameters">Argument definitions (JSON)</label><textarea id="job-parameters" rows="3" spellcheck="false" aria-describedby="job-parameter-help">{}</textarea><small id="job-parameter-help">Types: string, integer, boolean, date. Use every argument in SQL as a template value without quotes. <code>{{name}}</code></small>
+<details><summary>Argument definition example</summary><pre id="job-parameter-example"></pre></details>
+<h3 class="job-step-heading">Steps</h3><div id="job-steps"></div><div class="toolbar"><button id="job-add-step" type="button">Add step</button><button id="job-save" class="primary" type="submit">Save job</button><span id="job-save-state" role="status"></span></div>
+</form></div>
+<div class="panel"><div class="panel-head"><h2>Manual run</h2><span id="job-run-name" class="muted">Choose a saved job.</span></div><form id="job-run-form" class="panel-body"><div id="job-run-arguments" class="job-fields"></div><p id="job-run-help" class="muted">Runs use your authenticated role. Steps stop at the first failure.</p><button id="job-run" class="primary" type="submit" disabled>Run job</button><span id="job-run-state" role="status" aria-live="polite"></span></form></div>
+<div class="panel"><div class="panel-head"><h2>Run history</h2><button id="job-runs-refresh" type="button">Refresh runs</button></div><div id="job-runs" class="table-wrap"><div class="empty">No runs loaded.</div></div></div>
+<div class="panel"><div class="panel-head"><h2>Step history</h2><span id="job-detail-state" role="status" aria-live="polite">Choose a run to inspect its steps.</span></div><div id="job-failure" class="panel-body error" role="alert" hidden></div><div id="job-run-detail" class="table-wrap"></div></div>
+</section>
 <section id="catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
 <div class="page-title"><h1>Catalog &amp; Lineage</h1><p class="muted">Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.</p><button id="refresh-catalog">Refresh catalog</button></div>
 <div id="catalog-error" class="error" role="alert"></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2><label for="catalog-filter">Find schema or table</label><input id="catalog-filter" type="search" placeholder="Search catalog"></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table Inspector</h2><div class="toolbar"><button id="open-table-sql" disabled>Open in Worksheet</button><button id="clone-table-btn" disabled>Clone to Sandbox</button><select id="export-table-format" aria-label="Export format"><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="parquet">Parquet</option></select><button id="export-table-btn" disabled>Export Table</button><button id="drop-table-btn" hidden>Drop Table</button></div></div>
@@ -109,6 +125,24 @@ const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+ 'Run SQL':'SQL 実行', 'Build dbt models':'dbt モデル更新', 'Test dbt models':'dbt テスト', 'Ingest file':'ファイル取込', 'Refresh WAP model':'WAP 更新', 'Publish WAP model':'WAP 公開',
+ '1 result row':'結果行1件', '{count} result rows':'結果行{count}件', '1 model':'モデル1件', '{count} models':'モデル{count}件', '{count} rows ingested':'取込{count}件', 'Target table {table}':'対象表 {table}', '{summary}':'{summary}',
+ 'Jobs':'ジョブ', 'Saved jobs':'登録済みジョブ', 'Refresh jobs':'ジョブを更新', 'New job':'ジョブを登録', 'No jobs loaded.':'ジョブはまだ読み込まれていません。',
+ 'Save ordered steps and run them manually with typed arguments.':'順序付きの処理を保存し、型付きの引数で手動実行します。',
+ 'Job definition':'ジョブ定義', 'New definition':'新しい定義', 'Job name':'ジョブ名', 'Argument definitions (JSON)':'引数の定義（JSON）',
+ 'Types: string, integer, boolean, date. Use every argument in SQL as a template value without quotes.':'型は string・integer・boolean・date。宣言した引数はすべて、SQL 内でテンプレート値として引用符なしで使います。',
+ 'Argument definition example':'引数定義の例', 'Steps':'ステップ', 'Add step':'ステップを追加', 'Save job':'ジョブを保存',
+ 'Manual run':'手動実行', 'Choose a saved job.':'登録済みのジョブを選択してください。', 'Runs use your authenticated role. Steps stop at the first failure.':'認証済みのロールで実行します。失敗したステップで停止します。',
+ 'Run job':'ジョブを実行', 'Run history':'実行履歴', 'Refresh runs':'実行履歴を更新', 'No runs loaded.':'実行履歴はまだ読み込まれていません。', 'Step history':'ステップの実行履歴',
+ 'Choose a run to inspect its steps.':'実行履歴を選択するとステップの詳細を表示します。', 'Step {number}':'ステップ {number}', 'Remove step':'ステップを削除', 'Step name':'ステップ名', 'Step type':'処理の種類',
+ 'SQL text':'SQL 文', 'Server file path':'サーバー上のファイルパス', 'Target table':'書き込み先テーブル', 'Upsert key (optional)':'更新キー（任意）', 'WAP model':'WAP モデル',
+ 'Edit job':'定義を編集', 'Select job':'実行するジョブを選択', 'Inspect run':'実行詳細を表示', 'No saved jobs.':'登録されたジョブはありません。', 'No runs yet.':'実行履歴はありません。',
+ 'Job saved.':'ジョブを保存しました。', 'Save failed: {error}':'保存できませんでした: {error}', 'Run failed: {error}':'実行を開始できませんでした: {error}',
+ 'Queued':'待機中', 'Running':'実行中', 'Succeeded':'成功', 'Failed':'失敗', 'Interrupted':'中断・結果不明', 'Unknown outcome':'結果不明', 'Skipped':'未実行', 'Pending':'未実行',
+ 'Outcome unknown. Check the target before running again.':'結果が不明です。再実行する前に書き込み先を確認してください。', 'Run {id} · {status}':'実行 {id} · {status}', 'Failed step: {step}':'失敗したステップ: {step}',
+ 'No steps recorded.':'記録されたステップはありません。', 'Argument definitions must be a JSON object.':'引数定義は JSON オブジェクトで入力してください。', 'No arguments required.':'引数はありません。',
+ 'Started':'開始時刻', 'Duration (ms)':'実行時間（ミリ秒）', 'Summary':'概要', 'Run ID':'実行 ID', 'Job':'ジョブ', 'Required':'必須', 'Description':'説明',
+ 'Arguments must match their declared types.':'引数は定義した型に合わせて入力してください。', 'SQL steps only for Data Engineer.':'データ作成者は SQL ステップのみ登録できます。', 'Unknown':'不明', 'Read-only definition':'参照のみの定義',
  'Role':'ロール', 'Admin':'管理者', 'Data Engineer':'データ作成者', 'BI Viewer':'閲覧者', 'Read-only role':'閲覧専用ロール',
  'AI Model Settings':'AI モデル設定', 'Provider':'プロバイダー', 'Model Name':'モデル名', 'API URL':'API の URL', 'API Key':'API キー', 'Timeout (seconds)':'タイムアウト（秒）',
  'Leave blank to keep the saved key or environment credential.':'空欄の場合は保存済みキーまたは環境変数の認証情報を使用します。', 'Test Connection':'接続をテスト', 'Save Settings':'設定を保存', 'Close':'閉じる',
@@ -224,6 +258,10 @@ const samples = {
 let currentRole = 'admin';
 function applyRole() {
  document.documentElement.dataset.role=currentRole;
+ $('tab-jobs').hidden=currentRole==='bi_viewer';
+ if(currentRole==='bi_viewer'&&typeof activeTab!=='undefined'&&activeTab==='jobs')activate($('tab-warehouse'));
+ if(typeof renderJobSteps==='function')renderJobSteps();
+ if(typeof activeTab!=='undefined'&&activeTab==='jobs')loadJobs();
  const viewer=currentRole==='bi_viewer', engineer=currentRole==='data_engineer';
  $('role-indicator').hidden=!viewer;
  for(const id of ['run-dbt-build','run-dbt-test','drop-table-btn','run-ingest','clone-table-btn','copilot-stage'])$(id).disabled=viewer||(['drop-table-btn','clone-table-btn'].includes(id)&&!selectedTable);
@@ -405,8 +443,8 @@ async function loadPawprints(){
 }
 $('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
 let activeTab='warehouse';
-function activate(button){document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation')$('refresh-models').click();if(activeTab==='compute')$('compute-refresh').click();}
-const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach((button,i)=>{button.onclick=()=>activate(button);button.onkeydown=e=>{let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%tabs.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=tabs.length-1;if(n!==undefined){e.preventDefault();tabs[n].focus();activate(tabs[n]);}};});
+function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='jobs')loadJobs();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation')$('refresh-models').click();if(activeTab==='compute')$('compute-refresh').click();}
+const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach(button=>{button.onclick=()=>activate(button);button.onkeydown=e=>{const available=tabs.filter(tab=>!tab.hidden&&!tab.disabled),i=available.indexOf(button);let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%available.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();available[n].focus();activate(available[n]);}};});
 setInterval(async()=>{if(document.hidden)return;await refreshStatus();if(auto_chill_minutes>0){try{updateAutoChill(await api('/api/warehouse/autochill',{check:true}));}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}}if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
 function actionButton(label,task){const b=document.createElement('button');ui(b,label);if(label==='Rollback')b.dataset.roleWrite='admin';if(label==='Clone Snapshot')b.dataset.roleWrite='engineer';b.onclick=()=>busy(b,task);return b;}
@@ -555,6 +593,161 @@ async function loadRuntimeHistory(){
  finally{pruneUIBindings();}
 }
 $('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
+
+// Jobs are manually admitted by the server; this page never schedules or retries work.
+let jobEntries=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0;
+const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
+const liveJobStates=new Set(['queued','running']);
+const jobActions=['sql','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
+const jobActionLabels={sql:'Run SQL',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
+function jobSummary(step){
+ const summary=step.summary;if(!summary||typeof summary!=='object')return '\u2014';
+ const parts=[],count=summary.rows_ingested??summary.row_count,models=summary.model_count??(Array.isArray(summary.models)?summary.models.length:undefined);
+ if(step.action==='ingest'&&count!==undefined)parts.push(t('{count} rows ingested',{count}));
+ else if(models!==undefined)parts.push(t(models===1?'1 model':'{count} models',{count:models}));
+ else if(count!==undefined)parts.push(t(count===1?'1 result row':'{count} result rows',{count}));
+ if(summary.table)parts.push(t('Target table {table}',{table:summary.table}));
+ if(summary.duration_ms!==undefined)parts.push(String(summary.duration_ms)+(language==='ja'?'ms':' ms'));
+ return parts.join(language==='ja'?'・':' · ')||'\u2014';
+}
+function jobEmpty(id,key){$(id).replaceChildren();const node=document.createElement('div');node.className='empty';ui(node,key);$(id).append(node);}
+function jobStatus(status){return t(jobStatuses[status]||'Unknown');}
+function jobDuration(item){if(item.duration_ms!==undefined)return item.duration_ms;const start=Date.parse(item.started_at),end=item.finished_at?Date.parse(item.finished_at):Date.now();return Number.isFinite(start)&&Number.isFinite(end)?Math.max(0,end-start):'\u2014';}
+function stopJobsPolling(){clearTimeout(jobsPoll);jobsPoll=null;}
+function jobsVisible(){return activeTab==='jobs'&&!document.hidden&&currentRole!=='bi_viewer';}
+function scheduleJobsPolling(runs){stopJobsPolling();if(jobsVisible()&&runs.some(run=>liveJobStates.has(run.status)))jobsPoll=setTimeout(()=>refreshJobRuns(),2000);}
+function jobField(parent,label,key,value='',choices=null){
+ const wrap=document.createElement('div'),caption=document.createElement('label'),id='job-field-'+crypto.randomUUID();
+ caption.htmlFor=id;ui(caption,label);const input=document.createElement(choices?'select':key==='sql'?'textarea':'input');input.id=id;input.dataset.field=key;
+ if(choices)for(const optionValue of choices){const option=document.createElement('option');option.value=optionValue;const label=key==='action'?jobActionLabels[optionValue]:optionValue;if(label in i18n.en)ui(option,label);else option.textContent=label;input.append(option);}
+ input.value=value??'';if(key==='sql'){input.rows=4;input.spellcheck=false;}
+ wrap.append(caption,input);parent.append(wrap);return input;
+}
+function syncJobSteps(){
+ for(const node of $('job-steps').children){const index=Number(node.dataset.index),step=jobSteps[index];if(!step)continue;
+ for(const field of node.querySelectorAll('[data-field]'))step[field.dataset.field]=field.value;}
+}
+function renderJobSteps(){
+ if(!$('job-steps'))return;
+ syncJobSteps();$('job-steps').replaceChildren();
+ jobSteps.forEach((step,index)=>{
+ const fieldset=document.createElement('fieldset');fieldset.className='job-step';fieldset.dataset.index=index;
+ const legend=document.createElement('legend');ui(legend,'Step {number}',{number:index+1});fieldset.append(legend);
+ const row=document.createElement('div');row.className='job-fields';fieldset.append(row);
+ jobField(row,'Step name','name',step.name||'');
+ const action=jobField(row,'Step type','action',step.action||'sql',jobActions);
+ for(const option of action.options)option.disabled=currentRole!=='admin'&&option.value!=='sql';
+ action.onchange=()=>{syncJobSteps();const name=jobSteps[index].name;jobSteps[index]={name,action:action.value};$('job-steps').replaceChildren();renderJobSteps();};
+ if(step.action==='sql'){
+ jobField(fieldset,'SQL text','sql',step.sql||'SELECT 1');
+ const options=document.createElement('div');options.className='job-fields';fieldset.append(options);
+ const mode=jobField(options,'Mode','mode',step.mode||'read-only',['read-only','sandbox-write','admin-write']);
+ for(const option of mode.options)option.disabled=currentRole!=='admin'&&option.value==='admin-write';
+ jobField(options,'Schema','schema',step.schema||'marts',['marts','raw','sandbox','staging','tpch_tiny','smoke']);
+ }else if(step.action==='ingest'){
+ jobField(fieldset,'Server file path','file',step.file||'');jobField(fieldset,'Target table','table',step.table||'raw.events');
+ const options=document.createElement('div');options.className='job-fields';fieldset.append(options);
+ jobField(options,'Mode','mode',step.mode||'append',['append','replace','upsert']);
+ jobField(options,'Export format','format',step.format||'auto',['auto','csv','jsonl','parquet']);
+ jobField(options,'Upsert key (optional)','key',step.key||'');
+ }else if(['wap_refresh','wap_publish'].includes(step.action))jobField(fieldset,'WAP model','table',step.table||'');
+ const remove=actionButton('Remove step',async()=>{syncJobSteps();jobSteps.splice(index,1);$('job-steps').replaceChildren();renderJobSteps();});remove.type='button';fieldset.append(remove);
+ if(editingJob&&!editingJob.can_manage)for(const control of fieldset.querySelectorAll('input,select,textarea,button'))control.disabled=true;
+ $('job-steps').append(fieldset);
+ });
+ pruneUIBindings();
+}
+function editJob(entry){
+ editingJob=entry;
+ const definition=entry?.definition||{name:'',description:'',parameters:{},steps:[{action:'sql',sql:'SELECT 1',mode:'read-only',schema:'marts'}]};
+ $('job-name').value=definition.name;$('job-name').readOnly=!!entry;
+ $('job-description').value=definition.description||'';$('job-parameters').value=JSON.stringify(definition.parameters||{},null,2);
+ $('job-steps').replaceChildren();jobSteps=structuredClone(definition.steps||[]);renderJobSteps();
+ ui($('job-editor-state'),entry&&!entry.can_manage?'Read-only definition':entry?definition.name:'New definition');
+ for(const element of $('job-form').querySelectorAll('input,textarea,select,button'))element.disabled=!!entry&&!entry.can_manage;
+ $('job-save-state').textContent='';
+}
+function selectJob(entry){
+ selectedJob=entry;$('job-run-name').textContent=entry.definition.name;$('job-run-arguments').replaceChildren();
+ const parameters=entry.definition.parameters||{};
+ for(const [name,spec] of Object.entries(parameters)){
+ const wrap=document.createElement('div'),label=document.createElement('label'),input=document.createElement(spec.type==='boolean'?'select':'input');
+ input.id='job-arg-'+name;input.dataset.argument=name;input.dataset.type=spec.type;
+ label.htmlFor=input.id;label.textContent=name+' ('+spec.type+')'+(spec.required===true&&spec.default===undefined?' *':'');
+ if(spec.type==='boolean')for(const value of ['','true','false']){const option=document.createElement('option');option.value=value;option.textContent=value||'\u2014';input.append(option);}
+ else input.type=spec.type==='integer'?'number':spec.type==='date'?'date':'text';
+ if(spec.type==='integer')input.step='1';input.required=spec.required===true&&spec.default===undefined;
+ if(spec.default!==undefined)input.value=String(spec.default);
+ wrap.append(label,input);$('job-run-arguments').append(wrap);
+ }
+ if(!Object.keys(parameters).length)jobEmpty('job-run-arguments','No arguments required.');
+ $('job-run').disabled=!entry.can_manage;
+}
+async function loadJobs(){
+ if(!jobsVisible())return;
+ message('jobs-error','');try{
+ const data=await api('/api/jobs');jobEntries=data.jobs||[];
+ if(!jobEntries.length)jobEmpty('jobs-list','No saved jobs.');
+ else{
+ table($('jobs-list'),['Job name','Description','User','Steps','Actions'],jobEntries.map(entry=>[entry.name,entry.definition.description||'',entry.owner,entry.definition.steps.length,'']));
+ $('jobs-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=jobEntries[index];row.lastElementChild.append(actionButton('Edit job',async()=>{editJob(entry);$('job-name').focus();}),actionButton('Select job',async()=>{selectJob(entry);$('job-run').focus();}));});
+ }
+ if(selectedJob){const updated=jobEntries.find(entry=>entry.name===selectedJob.name);if(updated)selectJob(updated);else{selectedJob=null;$('job-run').disabled=true;}}
+ await refreshJobRuns();
+ }catch(error){message('jobs-error',error.message);stopJobsPolling();}
+ finally{pruneUIBindings();}
+}
+async function refreshJobRuns(){
+ if(!jobsVisible())return;
+ const request=++jobsRequest;
+ try{
+ const data=await api('/api/jobs/runs');if(request!==jobsRequest||!jobsVisible())return;
+ const runs=data.runs||[];
+ if(!runs.length)jobEmpty('job-runs','No runs yet.');
+ else{
+ table($('job-runs'),['Run ID','Job','Status','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),run.actor,run.started_at||run.created_at||'\u2014',jobDuration(run),'']));
+ $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{ui(row.cells[2],jobStatuses[runs[index].status]||'Unknown');row.lastElementChild.append(actionButton('Inspect run',()=>showJobRun(runs[index].id)));});
+ }
+ if(selectedRunId)await showJobRun(selectedRunId);
+ scheduleJobsPolling(runs);
+ }catch(error){message('jobs-error',error.message);stopJobsPolling();}
+ finally{pruneUIBindings();}
+}
+async function showJobRun(id){
+ const data=await api('/api/jobs/detail',{run_id:id});if(!jobsVisible())return;
+ selectedRunId=id;const run=data.run||data;
+ ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));
+ ui($('job-detail-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));
+ const unknown=['unknown','interrupted'].includes(run.status),failed=(run.steps||[]).find(step=>['failed','unknown','interrupted'].includes(step.status));
+ message('job-failure',unknown?t('Outcome unknown. Check the target before running again.')+(failed?'\n'+(failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1))+(failed.error?': '+failed.error:''):''):failed?t('Failed step: {step}',{step:failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1)})+(failed.error?'\n'+failed.error:''):run.error||'');
+ const steps=run.steps||[];
+ if(!steps.length)jobEmpty('job-run-detail','No steps recorded.');
+ else{table($('job-run-detail'),['Steps','Step type','Status','Duration (ms)','Summary'],steps.map((step,index)=>[step.name||String(index+1),step.action||run.definition?.steps?.[index]?.action||'',jobStatus(step.status),jobDuration(step),step.error||jobSummary(step)]));$('job-run-detail').querySelectorAll('tbody tr').forEach((row,index)=>{const step=steps[index];ui(row.cells[1],jobActionLabels[step.action||run.definition?.steps?.[index]?.action]||'Unknown');ui(row.cells[2],jobStatuses[step.status]||'Unknown');if(!step.error)ui(row.cells[4],'{summary}',()=>({summary:jobSummary(step)}));});}
+}
+$('job-parameter-example').textContent=JSON.stringify({start_date:{type:'date',required:true},limit:{type:'integer',default:100}},null,2)+'\n\nSELECT * FROM marts.fct_orders WHERE order_date >= {{start_date}} LIMIT {{limit}}';
+$('job-new').onclick=()=>{editJob(null);$('job-name').focus();};
+$('job-add-step').onclick=()=>{syncJobSteps();jobSteps.push({action:'sql',sql:'SELECT 1',mode:'read-only',schema:'marts'});renderJobSteps();};
+$('jobs-refresh').onclick=()=>busy($('jobs-refresh'),loadJobs);
+$('job-runs-refresh').onclick=()=>busy($('job-runs-refresh'),refreshJobRuns);
+$('job-form').onsubmit=event=>{event.preventDefault();busy($('job-save'),async()=>{
+ try{
+ syncJobSteps();const parameters=JSON.parse($('job-parameters').value);
+ if(!parameters||Array.isArray(parameters)||typeof parameters!=='object')throw Error(t('Argument definitions must be a JSON object.'));
+ const definition={name:$('job-name').value.trim(),description:$('job-description').value.trim(),parameters,steps:jobSteps.map(step=>Object.fromEntries(Object.entries(step).filter(([key,value])=>value!==''||key==='sql')))};
+ await api('/api/jobs/save',definition);await loadJobs();const entry=jobEntries.find(entry=>entry.name===definition.name);if(entry){editJob(entry);selectJob(entry);}ui($('job-save-state'),'Job saved.');
+ }catch(error){ui($('job-save-state'),'Save failed: {error}',{error:error.message});}
+ });};
+$('job-run-form').onsubmit=event=>{event.preventDefault();if(!selectedJob?.can_manage)return;busy($('job-run'),async()=>{
+ try{
+ const values={};for(const input of $('job-run-arguments').querySelectorAll('[data-argument]')){
+ if(input.value==='')continue;let value=input.value;if(input.dataset.type==='integer'){value=Number(value);if(!Number.isSafeInteger(value))throw Error(t('Arguments must match their declared types.'));}else if(input.dataset.type==='boolean')value=value==='true';values[input.dataset.argument]=value;
+ }
+ const data=await api('/api/jobs/run',{name:selectedJob.name,arguments:values});selectedRunId=data.run.id;ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:data.run.id,status:jobStatus(data.run.status)}));await refreshJobRuns();
+ }catch(error){ui($('job-run-state'),'Run failed: {error}',{error:error.message});}
+ });};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopJobsPolling();else if(jobsVisible())refreshJobRuns();});
+window.addEventListener('pagehide',stopJobsPolling);
+editJob(null);
 
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }
