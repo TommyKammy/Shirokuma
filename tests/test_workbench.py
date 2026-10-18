@@ -1039,6 +1039,170 @@ eval(HANDLERS+`
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_data_bear_completion_uses_current_action_and_role(self):
+        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        dictionary = script[script.index('const i18n'):script.index('function ui(')]
+        helpers = script[script.index('const dataBearActions='):script.index('// One list of specialists')]
+        busy = script[script.index('async function busy('):script.index('function aiStatus(')]
+        handler = script[script.index(' const show=(label,tone)=>', script.index('for(const bear of bears)')):script.index("\n}\n$('bear-data-action').onchange")]
+        role = script[script.index(" for(const option of $('bear-data-action').options)"):script.index("\n}\n$('role-selector').onchange")]
+        harness = r'''
+const assert=require('node:assert/strict');
+class Element{constructor(){this.value='';this.disabled=false;this.attrs={};this.parentElement={};this.labels=[{}];this.children=[];this.textContent='';}
+ setAttribute(k,v){this.attrs[k]=v;}removeAttribute(k){delete this.attrs[k];}getAttribute(k){return this.attrs[k]??null;}
+ replaceChildren(...nodes){this.children=nodes;this.firstChild=nodes[0];}checkValidity(){return true;}}
+const nodes={},$=id=>nodes[id]??=new Element(),document={createElement:()=>new Element()};
+const ui=(node,key)=>{node.textContent=t(key);},pruneUIBindings=()=>{};
+const button=$('bear-data-run'),state=new Element(),tabState=new Element(),output=new Element();
+const fields=['action','request','sql','stage_table','publish','refresh','rollback','snapshot_id'];
+const bear={key:'data',fields:fields.map(key=>[key])};
+const content={querySelectorAll:()=>fields.map(key=>$('bear-data-'+key))};
+let calls=[],pending=[],currentRole='admin';
+const api=(path,payload)=>{calls.push(payload);return new Promise((resolve,reject)=>pending.push({resolve,reject}));};
+$('bear-data-action').options=['generate','stage','publish','refresh','rollback'].map(value=>({value}));
+Object.defineProperty($('bear-data-action'),'selectedOptions',{get(){return this.options.filter(o=>o.value===this.value);}});
+const applyRole=()=>{const viewer=currentRole==='bi_viewer',engineer=currentRole==='data_engineer';eval(ROLE);};
+eval(HANDLER);
+for(const [key,value] of Object.entries({request:'draft',sql:'SELECT 1',stage_table:'sandbox.t',publish:'sandbox.p',refresh:'marts.f',rollback:'marts.r',snapshot_id:'9223372036854775807'}))$('bear-data-'+key).value=value;
+(async()=>{
+ for(const fail of [false,true]){
+  $('bear-data-action').value='generate';updateDataBearForm();const count=calls.length;
+  const run=button.onclick();assert.equal(button.disabled,true);assert.equal(button.getAttribute('aria-busy'),'true');
+  $('bear-data-action').value='rollback';updateDataBearForm();await button.onclick();
+  assert.equal(calls.length,count+1);assert.equal(button.disabled,true);
+  assert.deepEqual(calls.at(-1),{bear:'data',action:'generate',request:'draft',sql:'SELECT 1'});
+  fail?pending.at(-1).reject(Error('failed')):pending.at(-1).resolve({status:'ok'});await run;
+  assert.equal(button.disabled,false);assert.equal(button.getAttribute('aria-busy'),null);
+  assert.equal(button.textContent,t('Roll back to snapshot'));assert.equal($('bear-data-action').value,'rollback');
+  assert.equal($('bear-data-sql').disabled,true);assert.equal($('bear-data-sql').value,'SELECT 1');
+  const rollback=button.onclick();assert.deepEqual(calls.at(-1),{bear:'data',action:'rollback',rollback:'marts.r',snapshot_id:'9223372036854775807'});
+  pending.at(-1).resolve({status:'ok'});await rollback;
+ }
+ for(const role of ['bi_viewer','data_engineer']){
+  currentRole='admin';$('bear-data-action').value='rollback';applyRole();const run=button.onclick();
+  currentRole=role;applyRole();await button.onclick();assert.equal(button.disabled,true);
+  assert.equal($('bear-data-action').value,'generate');assert.equal($('bear-data-rollback').disabled,true);
+  pending.at(-1).reject(Error('old role request'));await run;
+  assert.equal(button.textContent,t('Generate SQL'));assert.equal(button.disabled,false);
+  assert.equal($('bear-data-request').disabled,false);assert.equal($('bear-data-snapshot_id').value,'9223372036854775807');
+ }
+})().catch(error=>{console.error(error);process.exitCode=1;});
+'''
+        source = dictionary + helpers + busy + '\nconst HANDLER=' + json.dumps(handler) + ',ROLE=' + json.dumps(role) + ';\n' + harness
+        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_worksheet_close_behaviors_and_reload(self):
+        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        dictionary = script[script.index('const i18n'):script.index('function ui(')]
+        source = script[script.index("const worksheetKey="):script.index("if(matchMedia('(max-width: 1024px)')")]
+        wire = script[script.index('function wireTabs('):script.index('// Views inside a page')]
+        harness = r'''
+const assert=require('node:assert/strict'),vm=require('node:vm');
+function boot(saved=null,unavailable=false){
+ const nodes={},store=saved?{'shirokuma.worksheets.v1':JSON.stringify(saved)}:{};
+ let focused=null,confirmations=[],answer=true,sequence=0;
+ class Element{
+  constructor(tag='div'){this.tag=tag;this.children=[];this.attrs={};this.dataset={};this.value='';this.selectionStart=0;this.selectionEnd=0;this.selectionDirection='none';this.disabled=false;}
+  append(...c){this.children.push(...c);}replaceChildren(...c){this.children=c;}
+  setAttribute(k,v){this.attrs[k]=v;}getAttribute(k){return this.attrs[k];}
+  addEventListener(k,fn){this['on'+k]=fn;}focus(){focused=this;}click(){if(!this.disabled)this.onclick?.();}
+  setSelectionRange(a,b,d){this.selectionStart=a;this.selectionEnd=b;this.selectionDirection=d;}
+  querySelectorAll(selector){return this.children.flatMap(c=>[...(selector==='[role=tab]'&&c.attrs.role==='tab'||selector==='.worksheet-close'&&c.className==='worksheet-close'?[c]:[]),...c.querySelectorAll(selector)]);}
+ }
+ const $=id=>nodes[id]||$('worksheet-tabs').querySelectorAll('[role=tab]').find(n=>n.id===id);
+ for(const id of ['sql','worksheet-tabs','add-worksheet-tab','query-meta'])nodes[id]=new Element();
+ const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10'};nodes.sql.value=samples.orders;
+ const context=vm.createContext({$,samples,document:{createElement:tag=>new Element(tag)},crypto:{randomUUID:()=>String(++sequence)},
+  localStorage:{getItem:k=>{if(unavailable)throw Error('blocked');return store[k]??null;},setItem:(k,v)=>{if(unavailable)throw Error('blocked');store[k]=v;}},
+  confirm:text=>{confirmations.push(text);return answer;},activate:()=>{},ui:(node,key,values)=>{node.textContent=context.t(key,values);}});
+ vm.runInContext(DICTIONARY+WIRE+SOURCE,context);
+ return {context,nodes,store,confirmations,answer:value=>answer=value,run:code=>vm.runInContext(code,context),
+  tabs:()=>nodes['worksheet-tabs'].querySelectorAll('[role=tab]'),closes:()=>nodes['worksheet-tabs'].querySelectorAll('.worksheet-close'),focus:()=>focused};
+}
+const a=boot();assert.equal(a.closes()[0].disabled,true);assert.match(a.closes()[0].title,/at least one/);
+a.run("closeWorksheet(worksheetId)");assert.equal(a.tabs().length,1);
+a.nodes['add-worksheet-tab'].click();a.nodes['add-worksheet-tab'].click();
+assert.equal(a.tabs().length,3);assert.equal(a.closes()[0].tag,'button');assert.equal(a.tabs()[0].children.length,0);
+// Closing a nonactive sample preserves the current draft and selection, even before an input event.
+a.nodes.sql.value='SELECT latest';a.nodes.sql.setSelectionRange(2,7,'backward');a.closes()[0].click();
+assert.equal(a.confirmations.length,0);assert.equal(a.nodes.sql.value,'SELECT latest');assert.equal(a.nodes.sql.selectionStart,2);assert.equal(a.nodes.sql.selectionEnd,7);assert.equal(a.nodes.sql.selectionDirection,'backward');
+assert.equal(a.run('worksheets.find(w=>w.id===worksheetId).sql'),'SELECT latest');
+// Cancellation leaves state, persisted data and focus unchanged.
+const before=a.run('JSON.stringify({worksheets,worksheetId})'),stored=a.store['shirokuma.worksheets.v1'],focus=a.focus();
+a.answer(false);a.closes()[1].click();assert.equal(a.run('JSON.stringify({worksheets,worksheetId})'),before);assert.equal(a.store['shirokuma.worksheets.v1'],stored);assert.equal(a.focus(),focus);
+assert.match(a.confirmations.at(-1),/removes this worksheet’s SQL/);
+// Active last tab chooses left; the replacement active ID and removal survive reload.
+a.answer(true);a.closes()[1].click();assert.equal(a.tabs().length,1);assert.equal(a.nodes.sql.value,a.context.samples.orders);assert.equal(a.focus(),a.tabs()[0]);
+const reloaded=boot(JSON.parse(a.store['shirokuma.worksheets.v1']));assert.equal(reloaded.tabs().length,1);assert.equal(reloaded.run('worksheetId'),a.run('worksheetId'));
+// Numbering follows the largest remaining number, never the tab count.
+const b=boot({active:'b',tabs:[{id:'a',name:'Worksheet 1',sql:''},{id:'b',name:'Worksheet 3',sql:'persisted SQL'},{id:'c',name:'Worksheet 4',sql:''}]});
+b.answer(false);b.closes()[1].click();assert.equal(b.tabs().length,3);assert.equal(b.confirmations.length,1,'persisted SQL needs confirmation');
+b.answer(true);b.closes()[1].click();assert.equal(b.run('worksheetId'),'c');assert.equal(b.focus(),b.tabs()[1]);
+b.nodes['add-worksheet-tab'].click();assert.equal(b.run('worksheets.at(-1).name'),'Worksheet 5');
+// Keyboard tab movement receives only role=tab buttons; close uses native button activation.
+let prevented=0;b.tabs()[2].onkeydown({key:'Home',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'a');
+b.tabs()[0].onkeydown({key:'End',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'1');
+b.tabs()[2].onkeydown({key:'ArrowLeft',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'c');assert.equal(prevented,3);
+b.closes()[0].click();assert.equal(b.confirmations.length,2,'empty SQL closes directly');
+b.run("language='ja';updateWorksheetCloseLabels()");assert.match(b.closes()[0].title,/閉じる/);
+b.nodes.sql.value='編集 SQL';b.answer(false);b.closes()[0].click();assert.match(b.confirmations.at(-1),/SQL が削除/);
+const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.closes()[0].click();assert.equal(c.tabs().length,1);assert.match(c.nodes['query-meta'].textContent,/storage unavailable/);
+'''
+        result = subprocess.run(['node', '-e', 'const DICTIONARY=' + json.dumps(dictionary) + ',WIRE=' + json.dumps(wire) + ',SOURCE=' + json.dumps(source) + ';\n' + harness], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_copilot_generate_preserves_origin_and_intervening_edits(self):
+        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        helpers = script[script.index('const worksheetKey='):script.index('function worksheetName(')]
+        handlers = script[script.index("for(const [id,bear,action] of [['copilot-generate'"):script.index('let browserFile=null;')]
+        harness = r'''
+const assert=require('node:assert/strict'),vm=require('node:vm');
+async function check(scenario){
+ const nodes={},store={},$=id=>nodes[id]??={value:'',textContent:''};
+ $('sql').value='SELECT original';$('copilot-request').value='generate a query';
+ let resolve,request;
+ const response=new Promise(done=>resolve=done);
+ const context=vm.createContext({$,t:text=>text,busy:(_node,fn)=>fn(),
+  message:(id,text)=>$(id).textContent=text,
+  localStorage:{getItem:key=>store[key]??null,setItem:(key,value)=>store[key]=value},
+  api:(url,payload)=>{request={url,payload};return response;}});
+ const run=code=>vm.runInContext(code,context);
+ run(HELPERS+HANDLERS);
+ run("worksheets.push({id:'survivor',name:'Worksheet 2',sql:'SELECT survivor'});saveWorksheet()");
+ const pending=$('copilot-generate').onclick();
+ assert.equal(request.url,'/api/bears/run');
+ assert.equal(JSON.stringify(request.payload),JSON.stringify({bear:'data',action:'generate',request:'generate a query'}));
+ if(scenario!=='active'&&scenario!=='edited active'){
+  run("saveWorksheet();worksheetId='survivor';$('sql').value=worksheets[1].sql;saveWorksheet()");
+ }
+ if(scenario==='deleted')run('worksheets.splice(0,1);saveWorksheet()');
+ if(scenario==='edited active')$('sql').value='SELECT edited active'; // Before an input event saves it.
+ if(scenario==='edited inactive')run("worksheets[0].sql='SELECT edited inactive';saveWorksheet()");
+ const active=run('worksheetId'),editor=$('sql').value;
+ const result={generated_sql:'SELECT generated',detail:'Generation completed'};
+ resolve(result);await pending;
+ assert.equal(run('worksheetId'),active,scenario+' keeps active selection');
+ assert.equal($('sql').value,scenario==='active'?result.generated_sql:editor,scenario+' editor');
+ assert.equal(run("worksheets.find(w=>w.id==='survivor').sql"),'SELECT survivor',scenario+' survivor');
+ const origin=run("worksheets.find(w=>w.id==='initial')");
+ if(scenario==='deleted')assert.equal(origin,undefined);
+ else if(scenario==='edited active')assert.equal($('sql').value,'SELECT edited active');
+ else assert.equal(origin.sql,scenario==='edited inactive'?'SELECT edited inactive':result.generated_sql,scenario+' origin');
+ assert.equal($('copilot-result').textContent,JSON.stringify(result,null,2),scenario+' result remains visible');
+ const persisted=JSON.parse(store['shirokuma.worksheets.v1']);
+ assert.equal(persisted.active,active,scenario+' persisted selection');
+ if(scenario==='active'||scenario==='inactive')assert.equal(persisted.tabs[0].sql,result.generated_sql,scenario+' persisted SQL');
+}
+(async()=>{for(const scenario of ['active','inactive','deleted','edited active','edited inactive'])await check(scenario);})().catch(error=>{console.error(error);process.exitCode=1;});
+'''
+        source = 'const HELPERS=' + json.dumps(helpers) + ',HANDLERS=' + json.dumps(handlers) + ';\n' + harness
+        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_data_bear_sends_only_the_current_action_inputs(self):
         script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
         dictionary = script[script.index('const i18n'):script.index('function ui(')]

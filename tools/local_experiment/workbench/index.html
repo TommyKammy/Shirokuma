@@ -212,6 +212,8 @@ details>summary::marker{color:var(--muted)}
 #worksheet-tabs{display:flex;gap:2px;flex:1;min-width:0;overflow-x:auto}
 #worksheet-tabs button{min-height:28px;padding:3px 10px;border-color:transparent;background:transparent;color:var(--ink-2);font-weight:500}
 #worksheet-tabs button[aria-selected=true]{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:600}
+#worksheet-tabs .worksheet-tab{display:flex;align-items:center;flex:none}
+#worksheet-tabs .worksheet-close{min-width:24px;min-height:28px;padding:2px 5px;font-size:16px}
 #add-worksheet-tab{min-height:28px;padding:2px 8px}
 .history-field{display:flex;align-items:center;gap:6px;max-width:340px;min-width:0}
 .history-field label{margin:0;white-space:nowrap;font-weight:500}
@@ -897,6 +899,7 @@ const i18n = {ja: {
  'Wake':'起動', 'Chill':'休止', 'Refresh':'更新', 'Loading…':'読み込み中…', 'Warehouse: Loading…':'ウェアハウス: 読み込み中…', 'Replicas —':'レプリカ —',
  'Database Object Explorer':'データベースオブジェクト探索', 'Find schema or table':'スキーマやテーブルを検索', 'Search objects':'オブジェクトを検索', 'Loading catalog…':'カタログを読み込み中…',
  'SQL workspace':'SQL ワークスペース', 'Catalog: iceberg · Schema: marts':'カタログ: iceberg · スキーマ: marts', 'SQL worksheets':'SQL ワークシート', 'Add SQL worksheet':'SQL ワークシートを追加', '+ Worksheet':'+ ワークシート',
+ 'Close {name}':'{name}を閉じる', 'Keep at least one worksheet.':'ワークシートは最低1つ必要です。', 'Closing removes this worksheet’s SQL. Close {name}?':'閉じるとこのワークシートの SQL が削除されます。{name}を閉じますか？',
  'Recent Query History':'最近のクエリ履歴', 'Restore a past query…':'過去のクエリを復元…', 'AI Bear Copilot':'AI Bear コパイロット',
  'Describe the SQL you need':'作成したい SQL を説明', 'Revenue by nation':'国別の売上', 'Generate SQL':'SQL を生成', 'Explain Plan':'実行計画を確認', 'WAP table':'WAP テーブル', 'Stage & Audit':'ステージングと監査', 'Publish':'公開',
  'Recent orders':'最近の注文', 'TPC-H Revenue by Nation':'TPC-H 国別売上', 'Customers':'顧客', 'SQL statement':'SQL 文', 'Warehouse':'ウェアハウス', 'Mode':'モード', 'Max rows':'最大行数', 'Run Query':'クエリを実行',
@@ -957,6 +960,7 @@ function setLanguage(lang) {
   node.textContent = t(key, values);
  }
  for (const {node, attribute, key, values} of uiAttributes) node.setAttribute(attribute, t(key, values));
+ if (typeof worksheets !== 'undefined') updateWorksheetCloseLabels();
  if (typeof queryResult !== 'undefined') renderChart();
 }
 // Register only source UI nodes before dynamic data is loaded. Keep text nodes
@@ -1220,7 +1224,7 @@ for(const bear of bears){
  try{if(bear.key==='data')payload=dataBearPayload($('bear-data-action').value,Object.fromEntries(bear.fields.map(([key])=>[key,$('bear-data-'+key).value])));
   else bear.fields.forEach(([key])=>{const v=$(`bear-${bear.key}-${key}`).value;if(v)payload[key]=v;});}
  catch(error){show('Check inputs','tone-warn');output.textContent=error.message;output.hidden=false;return;}
- return busy(button,async()=>{show('Running','tone-run');output.hidden=true;try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';show(warning?'Findings to review':'Complete',warning?'tone-warn':'tone-ok');}catch(e){show('Failed','tone-bad');output.textContent=e.message;}output.hidden=false;});};
+ return busy(button,async()=>{show('Running','tone-run');output.hidden=true;try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';show(warning?'Findings to review':'Complete',warning?'tone-warn':'tone-ok');}catch(e){show('Failed','tone-bad');output.textContent=e.message;}output.hidden=false;}).finally(()=>{if(bear.key==='data')updateDataBearForm();});};
 }
 $('bear-data-action').onchange=updateDataBearForm;updateDataBearForm();
 // wireTabs is declared later as a function, so it is available here.
@@ -1270,8 +1274,22 @@ if(!worksheets.length)worksheets=[{id:'initial',name:'Worksheet 1',sql:$('sql').
 let worksheetId=worksheets.some(w=>w.id===saved?.active)?saved.active:worksheets[0].id;
 function saveWorksheet(){const current=worksheets.find(w=>w.id===worksheetId);if(current)current.sql=$('sql').value;writeStorage(worksheetKey,{active:worksheetId,tabs:worksheets});}
 function setSQL(sql){$('sql').value=sql;saveWorksheet();}
-function renderWorksheets(){const container=$('worksheet-tabs');container.replaceChildren();for(const w of worksheets){const b=document.createElement('button');const numbered=/^Worksheet (\d+)$/.exec(w.name);if(numbered)ui(b,'Worksheet {number}',{number:numbered[1]});else b.textContent=w.name;b.setAttribute('role','tab');b.id='worksheet-'+w.id;b.setAttribute('aria-controls','sql');b.setAttribute('aria-selected',String(w.id===worksheetId));b.tabIndex=w.id===worksheetId?0:-1;b.dataset.worksheet=w.id;container.append(b);}wireTabs([...container.children],b=>{saveWorksheet();worksheetId=b.dataset.worksheet;$('sql').value=worksheets.find(w=>w.id===worksheetId).sql;saveWorksheet();renderWorksheets();$(b.id)?.focus();});}
-function addWorksheet(sql=samples.orders){saveWorksheet();const w={id:crypto.randomUUID(),name:'Worksheet '+(worksheets.length+1),sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;saveWorksheet();renderWorksheets();}
+function worksheetName(w){const numbered=/^Worksheet (\d+)$/.exec(w.name);return numbered?t('Worksheet {number}',{number:numbered[1]}):w.name;}
+function updateWorksheetCloseLabels(){for(const button of $('worksheet-tabs').querySelectorAll('.worksheet-close')){const w=worksheets.find(w=>w.id===button.dataset.worksheet);const label=t('Close {name}',{name:worksheetName(w)})+(button.disabled?' '+t('Keep at least one worksheet.'):'');button.setAttribute('aria-label',label);button.title=label;}}
+function closeWorksheet(id){
+ if(worksheets.length===1)return;
+ const index=worksheets.findIndex(w=>w.id===id);if(index<0)return;
+ const w=worksheets[index],sql=id===worksheetId?$('sql').value:w.sql;
+ // No dirty-history tracking: empty SQL and the pristine default sample close directly.
+ if(sql.trim()&&sql!==samples.orders&&!confirm(t('Closing removes this worksheet’s SQL. Close {name}?',{name:worksheetName(w)})))return;
+ const editor=$('sql'),selection=[editor.selectionStart,editor.selectionEnd,editor.selectionDirection];
+ saveWorksheet();worksheets.splice(index,1);
+ if(id===worksheetId){worksheetId=worksheets[Math.min(index,worksheets.length-1)].id;editor.value=worksheets.find(w=>w.id===worksheetId).sql;}
+ else editor.setSelectionRange(...selection);
+ saveWorksheet();renderWorksheets();$('worksheet-'+worksheetId)?.focus();
+}
+function renderWorksheets(){const container=$('worksheet-tabs');container.replaceChildren();for(const w of worksheets){const group=document.createElement('div'),b=document.createElement('button'),close=document.createElement('button');group.className='worksheet-tab';const numbered=/^Worksheet (\d+)$/.exec(w.name);if(numbered)ui(b,'Worksheet {number}',{number:numbered[1]});else b.textContent=w.name;b.setAttribute('role','tab');b.id='worksheet-'+w.id;b.setAttribute('aria-controls','sql');b.setAttribute('aria-selected',String(w.id===worksheetId));b.tabIndex=w.id===worksheetId?0:-1;b.dataset.worksheet=w.id;close.type='button';close.className='worksheet-close';close.textContent='×';close.dataset.worksheet=w.id;close.disabled=worksheets.length===1;close.onclick=()=>closeWorksheet(w.id);group.append(b,close);container.append(group);}updateWorksheetCloseLabels();wireTabs([...container.querySelectorAll('[role=tab]')],b=>{saveWorksheet();worksheetId=b.dataset.worksheet;$('sql').value=worksheets.find(w=>w.id===worksheetId).sql;saveWorksheet();renderWorksheets();$(b.id)?.focus();});}
+function addWorksheet(sql=samples.orders){saveWorksheet();const number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={id:crypto.randomUUID(),name:'Worksheet '+number,sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;saveWorksheet();renderWorksheets();}
 function openWorksheet(sql){addWorksheet(sql);activate($('tab-warehouse'));$('sql').focus();}
 $('sql').addEventListener('input',saveWorksheet);$('add-worksheet-tab').onclick=()=>addWorksheet();
 $('sql').value=worksheets.find(w=>w.id===worksheetId).sql;renderWorksheets();
@@ -1291,7 +1309,14 @@ function delimited(separator){const quote=v=>'"'+cellText(v).replaceAll('"','""'
 function download(format){if(!queryResult)return;const content=format==='csv'?delimited(','):JSON.stringify(visibleRows().map(row=>Object.fromEntries(queryResult.columns.map((c,i)=>[typeof c==='string'?c:c.name,row[i]]))),null,2);const url=URL.createObjectURL(new Blob([content],{type:format==='csv'?'text/csv;charset=utf-8':'application/json'})),link=document.createElement('a');link.href=url;link.download='query-results.'+format;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);ui($('result-action-state'),'Downloaded visible rows.');}
 $('export-csv').onclick=()=>download('csv');$('export-json').onclick=()=>download('json');$('copy-tsv').onclick=async()=>{try{await navigator.clipboard.writeText(delimited('\t'));ui($('result-action-state'),'Copied visible rows.');}catch(e){ui($('result-action-state'),'Copy failed: {error}',{error:e.message});}};
 
-for(const [id,bear,action] of [['copilot-generate','data','generate'],['copilot-explain','query','explain'],['copilot-stage','data','stage'],['copilot-publish','data','publish']])$(id).onclick=()=>busy($(id),async()=>{try{const payload={bear,action};if(action==='generate'){payload.request=$('copilot-request').value.trim();if(!payload.request)throw new Error(t('Describe the SQL you need first.'));}else if(action==='publish'){payload.publish=$('copilot-stage-table').value.trim();if(!payload.publish)throw new Error(t('Enter a WAP table to publish.'));}else{payload.sql=$('sql').value;if(action==='stage'){payload.stage_table=$('copilot-stage-table').value.trim();if(!payload.stage_table)throw new Error(t('Enter a WAP table to stage.'));}}const result=await api('/api/bears/run',payload);if(action==='generate'&&(result.generated_sql||result.sql))setSQL(result.generated_sql||result.sql);message('copilot-result',JSON.stringify(result,null,2));}catch(e){message('copilot-result',e.message);}});
+for(const [id,bear,action] of [['copilot-generate','data','generate'],['copilot-explain','query','explain'],['copilot-stage','data','stage'],['copilot-publish','data','publish']])$(id).onclick=()=>busy($(id),async()=>{try{const payload={bear,action},origin=action==='generate'?{id:worksheetId,sql:$('sql').value}:null;if(action==='generate'){payload.request=$('copilot-request').value.trim();if(!payload.request)throw new Error(t('Describe the SQL you need first.'));}else if(action==='publish'){payload.publish=$('copilot-stage-table').value.trim();if(!payload.publish)throw new Error(t('Enter a WAP table to publish.'));}else{payload.sql=$('sql').value;if(action==='stage'){payload.stage_table=$('copilot-stage-table').value.trim();if(!payload.stage_table)throw new Error(t('Enter a WAP table to stage.'));}}const result=await api('/api/bears/run',payload);if(action==='generate'&&(result.generated_sql||result.sql)){
+ const worksheet=worksheets.find(w=>w.id===origin.id);
+ if(worksheet&&(worksheetId===origin.id?$('sql').value:worksheet.sql)===origin.sql){
+  worksheet.sql=result.generated_sql||result.sql;
+  if(worksheetId===origin.id)$('sql').value=worksheet.sql;
+  saveWorksheet();
+ }
+}message('copilot-result',JSON.stringify(result,null,2));}catch(e){message('copilot-result',e.message);}});
 
 let browserFile=null;
 function selectUpload(file){browserFile=file||null;$('ingest-preview').replaceChildren();$('ingest-file').disabled=!!file;file?ui($('upload-state'),'{name} · {size} bytes',{name:file.name,size:file.size.toLocaleString()}):ui($('upload-state'),'No browser file selected. Use a server path below.');if(file){const stem=file.name.replace(/\.[^.]+$/,'').replace(/[^A-Za-z0-9_]/g,'_').toLowerCase();$('ingest-table').value='raw.'+(/^[a-z_]/.test(stem)?stem:'file_'+stem);}}
@@ -2051,7 +2076,7 @@ $('job-runs-filter').onchange=renderJobRuns;
 $('job-run-open').onclick=()=>{
  const id=$('job-run-open').dataset.run,job=$('job-run-open').dataset.job;if(!id)return;
  const filter=$('job-runs-filter');if(filter.value&&filter.value!==job)filter.value=[...filter.options].some(option=>option.value===job)?job:'';
- showView('jobs-view-runs');return showJobRun(id);
+ renderJobRuns();showView('jobs-view-runs');return showJobRun(id);
 };
 $('jobs-refresh').onclick=()=>busy($('jobs-refresh'),loadJobs);
 $('job-runs-refresh').onclick=()=>busy($('job-runs-refresh'),refreshJobRuns);

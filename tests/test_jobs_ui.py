@@ -392,7 +392,9 @@ const message=(id,text)=>{$(id).textContent=text;$(id).hidden=!text;},jobEmpty=(
 let rendered=[];const table=(container,columns,rows)=>{container.rows=rows;};
 const jobsVisible=()=>true,jobStatus=s=>s,jobStatuses={},liveJobStates=new Set(['queued','running']),jobDuration=()=>0,jobSummary=()=>'',jobActionLabels={};
 let selectedJob={name:'job_a'},selectedRunId='run-b',stageExportRunId=null,stageDirty=false,stagePending=false,views=[],renders=0,jobDetailRequest=0;
-const showView=id=>views.push(id),renderJobRuns=()=>{renders++;};
+const showView=id=>views.push(id);
+const jobRunCache=[{id:'run-a',job_name:'job_a',status:'success',steps:[]},{id:'run-b',job_name:'job_b',status:'success',steps:[]}];
+const jobTrigger=()=>'manual';
 let pending={};const api=(path,body)=>new Promise((resolve,reject)=>{pending[body.run_id]={resolve,reject};});
 eval(CLICK);
 $('job-runs-filter').options=[{value:''},{value:'job_a'},{value:'job_b'}];
@@ -404,6 +406,13 @@ const detail=id=>({run:{id,job_name:id==='run-b'?'job_b':'job_a',status:'success
  let opened=$('job-run-open').onclick();
  assert.deepEqual(views,['jobs-view-runs']);assert.equal(selectedRunId,'run-a');assert.ok(pending['run-a'],'details requested for run-a');
  assert.equal($('job-runs-filter').value,'job_a');assert.match($('job-detail-state').textContent,/run-a/);assert.deepEqual($('job-run-detail').children,[]);
+ pending['run-a'].resolve(detail('run-a'));await opened;
+ assert.match($('job-detail-state').textContent,/Run run-a/);assert.deepEqual($('job-run-detail').rows.map(r=>r[0]),['s']);
+ // Completed A remains selected; changing only the filter to B must not leave B's rows when reopening A.
+ $('job-runs-filter').value='job_b';renderJobRuns();assert.deepEqual($('job-runs').rows.map(r=>r[0]),['run-b']);
+ opened=$('job-run-open').onclick();
+ assert.equal(selectedRunId,'run-a');assert.equal($('job-runs-filter').value,'job_a');
+ assert.deepEqual($('job-runs').rows.map(r=>r[0]),['run-a']);
  pending['run-a'].resolve(detail('run-a'));await opened;
  assert.match($('job-detail-state').textContent,/Run run-a/);assert.deepEqual($('job-run-detail').rows.map(r=>r[0]),['s']);
  // A failed fetch never leaves another run's steps as the target's details.
@@ -418,7 +427,7 @@ const detail=id=>({run:{id,job_name:id==='run-b'?'job_b':'job_a',status:'success
  // Without a reported run the button does nothing.
  delete $('job-run-open').dataset.run;views=[];assert.equal($('job-run-open').onclick(),undefined);assert.deepEqual(views,[]);
 })().catch(error=>{console.error(error);process.exitCode=1;});
-""", 'showJobRun', 'statusTone')
+""", 'showJobRun', 'renderJobRuns', 'statusTone')
 
     def test_runs_outside_the_loaded_window_are_not_called_never_run(self):
         self.javascript(r"""
