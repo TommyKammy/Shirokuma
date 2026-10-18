@@ -20,7 +20,7 @@ import lake_ingest as lake
 class LakeIngestTests(unittest.TestCase):
     def test_upsert_casts_incoming_to_existing_decimal_types(self):
         self.execute.side_effect = lambda url, sql: {'rows': [['id', 'decimal(20,2)'],
-            ['amount', 'decimal(38,8)']]} if sql.startswith('DESCRIBE') else {}
+            ['amount', 'decimal(38,8)']]} if sql.startswith('DESCRIBE') or 'information_schema.columns' in sql else {}
         lake.ingest(filename='orders.csv', content='id,amount\n1.0,1.25\n', mode='upsert', key='id')
         merged = self.statements()[-2]
         self.assertIn('CAST(t."id" AS decimal(20,2)) AS "id"', merged)
@@ -30,9 +30,46 @@ class LakeIngestTests(unittest.TestCase):
         report = lake.ingest(filename='orders.csv', content='id,name\n1.0,first\n1.00,last\n-0.0,old\n0.00,new\n',
                              mode='upsert', key='id', schema_hints={'id': 'DECIMAL(20,2)'})
         self.assertEqual(report['rows_ingested'], 2)
-        self.assertNotIn("'first'", self.statements()[1])
-        self.assertNotIn("'old'", self.statements()[1])
+        self.assertNotIn("'first'", self.statements()[2])
+        self.assertNotIn("'old'", self.statements()[2])
         self.assertEqual(lake.literal('1.0', 'DECIMAL(20,2)'), lake.literal('1.00', 'DECIMAL(20,2)'))
+
+    def test_prior_decimal_contract_preserves_unhinted_exact_value(self):
+        self.execute.side_effect = lambda url, sql: {'rows': [
+            ['id', 'bigint'], ['amount', 'decimal(20,2)']]} if (
+                sql.startswith('DESCRIBE') or 'information_schema.columns' in sql) else {}
+        for content, suffix in [('id,amount\n1,9007199254740993.25\n', 'csv'),
+                                ('{"id": 1, "amount": 9007199254740993.25}', 'jsonl')]:
+            with self.subTest(suffix=suffix):
+                self.execute.reset_mock()
+                lake.ingest(filename='orders.' + suffix, content=content, mode='upsert', key='id')
+                stage = self.statements()[2]
+                self.assertIn("CAST('9007199254740993.25' AS DECIMAL(20,2))", stage)
+                self.assertNotIn('DOUBLE', stage)
+
+    def test_target_cast_key_collisions_retain_last_row(self):
+        for kind, first, last in [('bigint', '01', '1'),
+                                  ('decimal(20,2)', '1.001', '1.004'),
+                                  ('decimal(20,2)', '1.005', '1.01')]:
+            with self.subTest(kind=kind):
+                self.execute.reset_mock()
+                self.execute.side_effect = lambda url, sql: {'rows': [
+                    ['id', kind], ['name', 'varchar']]} if (
+                        sql.startswith('DESCRIBE') or 'information_schema.columns' in sql) else {}
+                report = lake.ingest(filename='orders.csv',
+                    content=f'id,name\n{first},discard\n{last},keep\n',
+                    mode='upsert', key='id', batch_size=1)
+                self.assertEqual(report['rows_ingested'], 1)
+                self.assertNotIn("'discard'", self.statements()[2])
+                self.assertIn("'keep'", self.statements()[2])
+
+    def test_prior_type_lookup_failure_blocks_stage_creation(self):
+        self.execute.side_effect = RuntimeError('target schema unavailable')
+        with self.assertRaisesRegex(RuntimeError, 'target schema unavailable'):
+            lake.ingest(filename='orders.csv', content='id,amount\n1,9007199254740993.25\n',
+                        mode='upsert', key='id')
+        self.assertEqual(len(self.statements()), 1)
+        self.assertIn('information_schema.columns', self.statements()[0])
 
     def test_json_decimal_precision_survives_loader_and_sql_literal(self):
         amount = '12345678901234567890.123456789012345678'
@@ -103,7 +140,7 @@ class LakeIngestTests(unittest.TestCase):
                         lake.ingest(path, mode=mode, key='id', batch_size=1)
                     statements = self.statements()
                     self.assertEqual(statements[-1], f'DROP TABLE IF EXISTS {stage}')
-                    self.assertFalse(any(target in s for s in statements))
+                    self.assertFalse(any(target in s for s in statements if not s.startswith('SELECT')))
                     self.audit.assert_not_called()
                     self.assertEqual(self.telemetry.call_args.kwargs['status'], 'failed')
 
@@ -346,6 +383,7 @@ class LakeIngestTests(unittest.TestCase):
         self.assertEqual((report['rows_ingested'], report['batches']), (4, 2))
         statements = self.statements()
         target = '"iceberg"."raw"."orders"'
+        self.assertIn('information_schema.columns', statements.pop(0))
         self.assertEqual(statements[0], 'CREATE SCHEMA IF NOT EXISTS iceberg.raw')
         stage = '"iceberg"."raw"."orders__stage_abcd1234"'
         self.assertEqual(statements[3], f'CREATE TABLE IF NOT EXISTS {target} ("id" BIGINT, "name" VARCHAR)')
@@ -373,9 +411,9 @@ class LakeIngestTests(unittest.TestCase):
         sql = self.statements()[-2]
         self.assertIn('t."order_id" IS NOT DISTINCT FROM old."order_id" AND '
                       't."region" IS NOT DISTINCT FROM old."region"', sql)
-        self.assertIn("('01', 'west', 'old')", self.statements()[1])
-        self.assertNotIn("'old-null'", self.statements()[1])
-        self.assertIn("('', 'south', 'new-null')", self.statements()[1])
+        self.assertIn("('01', 'west', 'old')", self.statements()[2])
+        self.assertNotIn("'old-null'", self.statements()[2])
+        self.assertIn("('', 'south', 'new-null')", self.statements()[2])
 
     def test_upsert_rejects_missing_or_unknown_keys_before_access(self):
         path = self.file('orders.csv', 'id,name\n1,first\n')
@@ -388,8 +426,8 @@ class LakeIngestTests(unittest.TestCase):
     def test_empty_upsert_creates_table_without_replacing_it(self):
         report = lake.ingest(self.file('empty.csv', 'id,name\n'), mode='upsert', key='id')
         self.assertEqual((report['rows_ingested'], report['batches'], report['key']), (0, 0, ['id']))
-        self.assertEqual(len(self.statements()), 4)
-        self.assertTrue(self.statements()[2].startswith('CREATE TABLE IF NOT EXISTS'))
+        self.assertEqual(len(self.statements()), 5)
+        self.assertTrue(self.statements()[3].startswith('CREATE TABLE IF NOT EXISTS'))
         self.assertFalse(any(s.startswith('CREATE OR REPLACE') for s in self.statements()))
 
     def test_duplicate_csv_headers_preserve_values_and_reserved_names(self):
@@ -501,7 +539,7 @@ class LakeIngestTests(unittest.TestCase):
                         db.execute('INSERT INTO stage VALUES ' + values)
                     elif statement.startswith('INSERT INTO stage') or statement.startswith('DROP TABLE IF EXISTS stage'):
                         db.execute(statement)
-                    if statement.startswith('DESCRIBE '):
+                    if statement.startswith('DESCRIBE ') or 'information_schema.columns' in statement:
                         return dict(rows=[['id', 'bigint'], ['name', 'varchar'],
                                           ['extra', 'varchar'], ['score', 'bigint']])
                     if statement.startswith('CREATE OR REPLACE TABLE '):
@@ -512,7 +550,7 @@ class LakeIngestTests(unittest.TestCase):
                     return {}
                 self.execute.side_effect = execute
                 content = '\n'.join(json.dumps(row) for row in [
-                    {'name': 'discard', 'id': 1}, {'name': '', 'id': 1},
+                    {'name': 'discard', 'id': '01'}, {'name': '', 'id': '1'},
                     {'name': 'new', 'id': 3}, {'name': None, 'id': None}])
                 expected = [(None, None, 'null-key', 9), (1, '', 'keep', 7),
                             (2, 'untouched', 'stay', 8), (3, 'new', None, None)]

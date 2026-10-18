@@ -106,13 +106,18 @@ def latest_snapshot(b, url, table):
     try:
         rows = b.sql(url, 'SELECT snapshot_id FROM ' + b.identifier(table + '$history') +
                      ' ORDER BY made_current_at DESC LIMIT 1')['rows']
-        if rows:
+        if rows and rows[0][0] is not None:
             return rows[0][0]
     except Exception:
-        pass  # Older connectors may not expose the history metadata table.
-    rows = b.sql(url, 'SELECT snapshot_id FROM ' + b.identifier(table + '$snapshots') +
-               ' ORDER BY committed_at DESC LIMIT 1')['rows']
-    return rows[0][0] if rows else None
+        pass  # Some connectors expose refs instead of history.
+    try:
+        rows = b.sql(url, 'SELECT snapshot_id FROM ' + b.identifier(table + '$refs') +
+                     " WHERE name = 'main'")['rows']
+        if len(rows) == 1 and rows[0][0] is not None:
+            return rows[0][0]
+    except Exception as exc:
+        raise RuntimeError('current active snapshot unavailable: ' + table) from exc
+    raise RuntimeError('current active snapshot unavailable: ' + table)
 
 
 def audit_table(b, url, full_table_name, snapshot_id=None):

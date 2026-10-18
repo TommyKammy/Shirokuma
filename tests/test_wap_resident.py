@@ -71,11 +71,21 @@ class WapResidentTests(unittest.TestCase):
         sql.assert_called_once_with('url', 'SELECT snapshot_id FROM "iceberg"."marts"."t$history" '
                                     'ORDER BY made_current_at DESC LIMIT 1')
 
-    def test_snapshot_fallback_for_missing_or_empty_history(self):
+    def test_refs_fallback_for_missing_or_empty_history(self):
         for history in (RuntimeError('unsupported'), {'rows': []}):
             with self.subTest(history=history), patch.object(b, 'sql', side_effect=[history, {'rows': [[22]]}]) as sql:
                 self.assertEqual(b.latest_snapshot('url', 'iceberg.marts.t'), 22)
-                self.assertIn('"t$snapshots" ORDER BY committed_at DESC LIMIT 1', sql.call_args.args[1])
+                self.assertIn('"t$refs" WHERE name = \'main\'', sql.call_args.args[1])
+
+    def test_current_snapshot_unavailable_fails_closed(self):
+        for history in (RuntimeError('history unavailable'), {'rows': []}):
+            for refs in (RuntimeError('refs unavailable'), {'rows': []}):
+                with self.subTest(history=history, refs=refs), patch.object(
+                        b, 'sql', side_effect=[history, refs]) as sql:
+                    with self.assertRaisesRegex(RuntimeError, 'current active snapshot unavailable'):
+                        b.latest_snapshot('url', 'iceberg.marts.t')
+                self.assertEqual(sql.call_count, 2)
+                self.assertFalse(any('$snapshots' in c.args[1] for c in sql.call_args_list))
 
     def test_pinned_audit_reads_only_selected_snapshot(self):
         with patch.object(b, 'sql', side_effect=[{'rows': [['id', 'bigint']]},

@@ -92,14 +92,65 @@ class SqlServerSyncTests(unittest.TestCase):
             for mode in ('replace', 'append', 'upsert'):
                 result = sync.extract(**self.options, mode=mode, key='id', batch_size=1)
                 self.assertEqual(result['row_count'], 2)
+                self.assertEqual(result['metrics'], dict(row_count=2, distinct_keys=1,
+                    null_counts=dict(id=1, amount=1, code=0, day=1, active=0, created=1)))
                 self.assertEqual(load.call_args.kwargs['atomic_append'], mode == 'append')
                 self.assertEqual(load.call_args.kwargs['table'], 'iceberg.raw.orders')
             self.rows = []
             self.write()
             self.assertEqual(sync.extract(**self.options)['row_count'], 0)
 
+    def test_extract_manifest_sums_exactly_across_batches_and_counts_all_nulls(self):
+        self.rows = [dict(self.rows[0], amount='9007199254740993.25'),
+                     dict(self.rows[0], amount='0.25', code=None)]
+        self.write()
+        with patch.object(sync.lake_ingest, 'ingest', return_value={}):
+            result = sync.extract(**self.options, key='id', amount_col='amount', batch_size=1)
+        self.assertEqual(result['metrics'], dict(row_count=2, distinct_keys=1,
+            sum_amount='9007199254740993.50',
+            null_counts=dict(id=0, amount=0, code=1, day=0, active=0, created=0)))
+
+    def test_sync_reconciles_single_extraction_and_cleanup_failure_keeps_commit(self):
+        statements = []
+        def ingest(path, **kwargs):
+            # Source changes after extraction; reconciliation must use the manifest.
+            self.rows = []
+            self.write()
+            return {}
+        def execute(url, sql):
+            statements.append(sql)
+            if sql.startswith('DROP TABLE'):
+                raise RuntimeError('cleanup failed')
+            return {}
+        stack, aggregate = self.target([2, 1, '1250.50', 1, 1, 0, 1, 0, 1])
+        with stack, patch.object(sync, 'open_source', wraps=sync.open_source) as source, \
+             patch.object(sync.lake_ingest, 'ingest', side_effect=ingest), \
+             patch.object(sync.lake_ingest.bears, 'sql', side_effect=execute), \
+             self.assertLogs(sync.__name__, level='WARNING') as logs:
+            report = sync.sync(**self.options, key='id', amount_col='amount')
+        self.assertEqual(source.call_count, 1)
+        self.assertEqual(report['status'], 'matched')
+        self.assertEqual(report['target_table'], 'iceberg.raw.orders')
+        self.assertIn('__sync_stage_', aggregate.call_args.args[1])
+        self.assertTrue(statements[0].startswith('CREATE OR REPLACE TABLE "iceberg"."raw"."orders"'))
+        self.assertTrue(statements[1].startswith('DROP TABLE'))
+        self.assertIn('Failed to drop sync staging table', logs.output[0])
+
+    def test_sync_all_column_null_mismatch_blocks_promotion(self):
+        stack, aggregate = self.target([2, 1, '1250.50', 1, 1, 1, 1, 0, 1])
+        with stack, patch.object(sync.lake_ingest, 'ingest', return_value={}), \
+             patch.object(sync.lake_ingest.bears, 'sql') as sql, \
+             self.assertRaises(sync.ReconciliationError) as caught:
+            sync.sync(**self.options, key='id', amount_col='amount')
+        self.assertEqual(caught.exception.report['discrepancies'], [
+            dict(metric='null_counts.code', source=0, target=1)])
+        for column in ('id', 'amount', 'code', 'day', 'active', 'created'):
+            self.assertIn(f'COUNT(*) - COUNT("{column}")', aggregate.call_args.args[1])
+        sql.assert_called_once()
+        self.assertTrue(sql.call_args.args[1].startswith('DROP TABLE'))
+
     def test_reconcile_matches_and_aggregate_sql(self):
-        stack, execute = self.target([2, 1, '1250.5000', 1, 1])
+        stack, execute = self.target([2, 1, '1250.5000', 1, 1, 0, 1, 0, 1])
         with stack:
             report = sync.reconcile(**self.options, key='id', amount_col='amount')
         self.assertEqual(report['status'], 'matched')
@@ -110,7 +161,7 @@ class SqlServerSyncTests(unittest.TestCase):
         self.assertIn('FROM "iceberg"."raw"."orders"', sql)
 
     def test_mismatch_has_report_and_raises(self):
-        stack, _ = self.target([3, 2, '1250.51', 0, 0])
+        stack, _ = self.target([3, 2, '1250.51', 0, 0, 0, 1, 0, 1])
         with stack, self.assertRaises(sync.ReconciliationError) as caught:
             sync.reconcile(**self.options, key='id', amount_col='amount')
         report = caught.exception.report
@@ -122,20 +173,20 @@ class SqlServerSyncTests(unittest.TestCase):
         for rows in ([], [self.rows[1]]):
             self.rows = rows
             self.write()
-            stack, _ = self.target([len(rows), 0, None, len(rows), len(rows)])
+            stack, _ = self.target([len(rows), 0, None, len(rows), len(rows), 0, len(rows), 0, len(rows)])
             with stack:
                 self.assertEqual(sync.reconcile(**self.options, key='id', amount_col='amount')['status'], 'matched')
 
     def test_large_decimal_sum_is_exact(self):
         self.rows = [dict(self.rows[0], amount='123456789012345678901234567890123456.78')]
         self.write()
-        stack, _ = self.target([1, '123456789012345678901234567890123456.78', 0])
+        stack, _ = self.target([1, '123456789012345678901234567890123456.78', 0, 0, 0, 0, 0, 0])
         with stack:
             report = sync.reconcile(**self.options, amount_col='amount')
         self.assertEqual(report['status'], 'matched')
 
     def test_count_only_and_bad_target_result(self):
-        stack, _ = self.target([2])
+        stack, _ = self.target([2, 1, 1, 0, 1, 0, 1])
         with stack:
             self.assertEqual(sync.reconcile(**self.options)['status'], 'matched')
         stack, _ = self.target([])
@@ -149,9 +200,10 @@ class SqlServerSyncTests(unittest.TestCase):
             def extract(source, target, **kwargs):
                 self.assertIn('__sync_stage_', target)
                 events.append('extract')
-                return dict(schema_hints={'id': 'BIGINT'}, row_count=2)
+                return dict(schema_hints={'id': 'BIGINT'}, row_count=2, metrics={'row_count': 2})
             def reconcile(source, target, **kwargs):
                 self.assertIn('__sync_stage_', target)
+                self.assertEqual(kwargs['extracted_metrics'], {'row_count': 2})
                 events.append('reconcile')
                 return {'status': 'matched'}
             def execute(url, sql):
@@ -175,7 +227,7 @@ class SqlServerSyncTests(unittest.TestCase):
                     with self.subTest(mode=mode, step=step, error=error), \
                          patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')), \
                          patch.object(sync.lake_ingest.bears, 'sql') as sql, \
-                         patch.object(sync, 'extract', return_value={}) as extract, \
+                         patch.object(sync, 'extract', return_value={'metrics': {}}) as extract, \
                          patch.object(sync, 'reconcile', return_value={}) as rec:
                         (extract if step == 'extract' else rec).side_effect = error
                         with self.assertRaises(type(error)):
@@ -191,7 +243,7 @@ class SqlServerSyncTests(unittest.TestCase):
     def test_sync_cleanup_failure_preserves_reconciliation_error(self):
         error = sync.ReconciliationError({'status': 'mismatch'})
         with patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')), \
-             patch.object(sync, 'extract', return_value={}), \
+             patch.object(sync, 'extract', return_value={'metrics': {}}), \
              patch.object(sync, 'reconcile', side_effect=error), \
              patch.object(sync.lake_ingest.bears, 'sql', side_effect=RuntimeError('drop failed')):
             with self.assertRaises(sync.ReconciliationError) as caught:

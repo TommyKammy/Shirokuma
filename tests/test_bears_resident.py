@@ -324,9 +324,10 @@ class BearsResidentTests(unittest.TestCase):
 
     def test_audit_empty_table_still_samples_and_escapes_columns(self):
         with patch.object(b, 'sql', side_effect=[{'rows': [['a"b', 'bigint']]},
-                 {'rows': [[0, 0]]}, {'rows': []}, {'rows': []}, {'rows': []}]) as execute:
+                 {'rows': [[0, 0]]}, {'rows': []}, {'rows': [[11]]}]) as execute:
             audit = b.audit_table('url', 'iceberg.sandbox.empty')
-        self.assertEqual(execute.call_count, 5)
+        self.assertEqual(execute.call_count, 4)
+        self.assertEqual(audit['snapshot_id'], 11)
         self.assertIn('COUNT("a""b")', execute.call_args_list[1].args[1])
         self.assertEqual(audit['sample_rows'], [])
         self.assertFalse(audit['quality_passed'])

@@ -14,6 +14,7 @@ from datetime import date, datetime
 from decimal import Decimal, localcontext
 import importlib
 import json
+import logging
 from pathlib import Path
 import re
 import sqlite3
@@ -146,10 +147,9 @@ class Source:
         if amount_col:
             expressions.append('CAST(SUM(' + identifier(amount_col, '[') + ') AS VARCHAR(100))')
             names.append('sum_amount')
-        columns = list(dict.fromkeys(c for c in (key, amount_col) if c))
-        for column in columns:
+        for column in (c['name'] for c in self.columns):
             expressions.append('COUNT_BIG(*) - COUNT_BIG(' + identifier(column, '[') + ')')
-            names.append('null_counts.' + column)
+            names.append('null_counts.' + lake_ingest.sanitize(column))
         cursor = self.connection.cursor()
         try:
             cursor.execute('SELECT ' + ', '.join(expressions) + ' FROM ' + self.table)
@@ -219,7 +219,42 @@ def open_source(source_table, *, host=None, port=1433, database=None, user=None,
             connection.close()
 
 
-def extract(source_table, target_table, *, mode='replace', key=None, batch_size=500, **connection):
+class BatchMetrics:
+    """Accumulate the manifest while consuming the extracted rows once."""
+    def __init__(self, hints, key=None, amount_col=None):
+        self.key = key.lower() if key else None
+        self.amount = amount_col.lower() if amount_col else None
+        for column in (self.key, self.amount):
+            if column and column not in hints:
+                raise ValueError('reconciliation column not found in source')
+        if self.amount and not (hints[self.amount].startswith('DECIMAL') or hints[self.amount] == 'BIGINT'):
+            raise ValueError('amount column must be an integer or decimal')
+        self.hints = hints
+        self.metrics = dict(row_count=0, null_counts={c: 0 for c in hints})
+        self.keys, self.total, self.amounts = set(), Decimal(0), 0
+
+    def add(self, row):
+        self.metrics['row_count'] += 1
+        for column in self.hints:
+            self.metrics['null_counts'][column] += row[column] is None
+        if self.key and row[self.key] is not None:
+            value = row[self.key]
+            self.keys.add(Decimal(value) if self.hints[self.key].startswith('DECIMAL') else value)
+        if self.amount and row[self.amount] is not None:
+            with localcontext() as ctx:
+                ctx.prec = 100
+                self.total += Decimal(row[self.amount])
+            self.amounts += 1
+
+    def finish(self):
+        if self.key:
+            self.metrics['distinct_keys'] = len(self.keys)
+        if self.amount:
+            self.metrics['sum_amount'] = format(self.total, 'f') if self.amounts else None
+        return self.metrics
+
+
+def extract(source_table, target_table, *, mode='replace', key=None, amount_col=None, batch_size=500, **connection):
     target = lake_ingest.target_table(target_table, Path('source.csv'))
     if mode not in {'replace', 'append', 'upsert'}:
         raise ValueError('mode must be replace, append, or upsert')
@@ -230,6 +265,7 @@ def extract(source_table, target_table, *, mode='replace', key=None, batch_size=
                 raise ValueError('key not found in source')
         if mode == 'upsert' and not key:
             raise ValueError('upsert requires --key')
+        manifest = BatchMetrics(source.hints, key, amount_col)
         path = Path(directory) / 'source.csv'
         # JSONL retains NULL versus empty string, unlike CSV ingestion.
         path = path.with_suffix('.jsonl')
@@ -237,6 +273,7 @@ def extract(source_table, target_table, *, mode='replace', key=None, batch_size=
         with path.open('w', encoding='utf-8') as stream:
             for batch in source.batches(batch_size):
                 for row in batch:
+                    manifest.add(row)
                     stream.write(json.dumps(row, ensure_ascii=False) + '\n')
                 count += len(batch)
             if not count:
@@ -248,7 +285,7 @@ def extract(source_table, target_table, *, mode='replace', key=None, batch_size=
                                    batch_size=batch_size, schema_hints=source.hints,
                                    atomic_append=(mode == 'append'))
         return dict(source_table=source_table, target_table=target, row_count=count,
-                    schema_hints=source.hints, ingest=result)
+                    schema_hints=source.hints, metrics=manifest.finish(), ingest=result)
 
 
 class ReconciliationError(RuntimeError):
@@ -257,49 +294,35 @@ class ReconciliationError(RuntimeError):
         super().__init__('SQL Server / Iceberg reconciliation mismatch')
 
 
-def reconcile(source_table, target_table, *, key=None, amount_col=None, **connection):
+def reconcile(source_table, target_table, *, key=None, amount_col=None, extracted_metrics=None, **connection):
     target = lake_ingest.target_table(target_table, Path('source.csv'))
     columns = list(dict.fromkeys(c for c in (key, amount_col) if c))
     for column in columns:
         identifier(column)
-    metrics = dict(row_count=0, null_counts={c: 0 for c in columns})
-    keys, total, amounts = set(), Decimal(0), 0
-    with open_source(source_table, read_rows=False, **connection) as source, localcontext() as ctx:
-        # SQL Server's maximum decimal precision is 38; leave ample sum headroom.
-        ctx.prec = 100
-        if any(c.lower() not in source.hints for c in columns):
-            raise ValueError('reconciliation column not found in source')
-        if amount_col and not (source.hints[amount_col.lower()].startswith('DECIMAL') or
-                               source.hints[amount_col.lower()] == 'BIGINT'):
-            raise ValueError('amount column must be an integer or decimal')
-        for batch in (() if source.connection is not None else source.batches()):
-            for row in batch:
-                metrics['row_count'] += 1
-                for column in columns:
-                    metrics['null_counts'][column] += row[column.lower()] is None
-                if key and row[key.lower()] is not None:
-                    value = row[key.lower()]
-                    keys.add(Decimal(value) if source.hints[key.lower()].startswith('DECIMAL') else value)
-                if amount_col and row[amount_col.lower()] is not None:
-                    total += Decimal(row[amount_col.lower()])
-                    amounts += 1
-        server_metrics = source.aggregate_metrics(key, amount_col) if source.connection is not None else None
+    if extracted_metrics is None:
+        with open_source(source_table, read_rows=False, **connection) as source:
+            manifest = BatchMetrics(source.hints, key, amount_col)
+            if source.connection is not None:
+                metrics = source.aggregate_metrics(key, amount_col)
+            else:
+                for batch in source.batches():
+                    for row in batch:
+                        manifest.add(row)
+                metrics = manifest.finish()
+    else:
+        metrics = extracted_metrics
     expressions = ['COUNT(*)']
     names = ['row_count']
     if key:
-        metrics['distinct_keys'] = len(keys)
         expressions.append('COUNT(DISTINCT ' + identifier(key.lower()) + ')')
         names.append('distinct_keys')
     if amount_col:
-        metrics['sum_amount'] = format(total, 'f') if amounts else None
         # Trino JSON decoding must never turn an exact decimal into a float.
         expressions.append('CAST(SUM(' + identifier(amount_col.lower()) + ') AS VARCHAR)')
         names.append('sum_amount')
-    for column in columns:
+    for column in metrics['null_counts']:
         expressions.append('COUNT(*) - COUNT(' + identifier(column.lower()) + ')')
         names.append('null_counts.' + column)
-    if server_metrics is not None:
-        metrics = server_metrics
     with wr.trino() as url:
         result = wr.execute(url, 'SELECT ' + ', '.join(expressions) + ' FROM ' + wr.identifier(target),
                             {'X-Trino-User': 'shirokuma', 'X-Trino-Catalog': 'iceberg'})
@@ -340,8 +363,9 @@ def sync(source_table, target_table, *, mode='replace', key=None, amount_col=Non
             return lake_ingest.bears.sql(url, wr.check_sql_policy(statement, mode='admin-write'))
         try:
             extracted = extract(source_table, stage, mode='upsert' if mode == 'upsert' else 'replace',
-                                key=key, **connection)
-            report = reconcile(source_table, stage, key=key, amount_col=amount_col, **connection)
+                                key=key, amount_col=amount_col, **connection)
+            report = reconcile(source_table, stage, key=key, amount_col=amount_col,
+                               extracted_metrics=extracted['metrics'])
             schema = list(extracted['schema_hints'].items())
             if mode == 'replace':
                 execute(f'CREATE OR REPLACE TABLE {sql_target} AS SELECT * FROM {sql_stage}')
@@ -355,13 +379,10 @@ def sync(source_table, target_table, *, mode='replace', key=None, amount_col=Non
                                              [lake_ingest.sanitize(key)], bool(extracted['row_count']))
             return dict(report, target_table=target)
         finally:
-            failed = sys.exc_info()[0] is not None
             try:
                 lake_ingest.bears.sql(url, f'DROP TABLE IF EXISTS {sql_stage}')
             except Exception:
-                if not failed:
-                    raise
-                # Preserve the extraction/reconciliation error if cleanup also fails.
+                logging.getLogger(__name__).warning('Failed to drop sync staging table %s', stage)
 
 
 def main(argv=None):
