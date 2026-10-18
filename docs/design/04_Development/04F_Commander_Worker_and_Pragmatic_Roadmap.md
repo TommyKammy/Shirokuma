@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-18
-version: "1.9"
+version: "1.10"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -245,3 +245,13 @@ SQLite・取込処理・Workbenchを再利用し、追加サービスやライ�
 
 ステージ設定・取込台帳・予定は既存SQLiteに置き、追加サービスや依存ライブラリは導入しない。
 構成と運用上の境界は [ローカルステージガイド](../../guides/local_stages.md) に記録する。
+
+### Phase 18.3: ステージへのファイル出力【2026-10-18】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P18-003** | 登録ステージへの手動ファイル出力 | 既存エクスポート・ジョブ基盤でテーブル全件を `exports/` へ出力する。非上書き公開、入力スキャンとの分離、所有者・設定版・権限、失敗・再起動と実機出力を検証する。 | **Completed (2026-10-18)** |
+
+CSV・JSONL・Parquet、最大100,000行・25 MiBを対象にする。
+追加サービスや依存ライブラリ、出力スケジュール、双方向同期は導入しない。
+構成と形式の制約は [ローカルステージガイド](../../guides/local_stages.md) に記録する。

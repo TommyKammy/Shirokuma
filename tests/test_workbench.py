@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 import sys
 import threading
+import tempfile
 import unittest
 from unittest.mock import patch, Mock
 
@@ -52,6 +53,113 @@ class WorkbenchHTML(HTMLParser):
 
 
 class WorkbenchTests(unittest.TestCase):
+    def test_stage_export_routes_and_strict_payloads(self):
+        payload = dict(name='orders', table='iceberg.raw.orders', format='csv', file='orders.csv', version='revision-1')
+        outputs = dict(directory='/host/orders/exports', files=[], limits=dict(max_rows=100000, max_file_bytes=26214400))
+        with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')):
+            with patch.object(wb.stage_exports, 'submit_export', return_value={'id':'export-1'}) as submit:
+                self.assertEqual(self.json_request('/api/stages/export', payload), (202, {'run':{'id':'export-1'}}))
+                submit.assert_called_once_with('orders','iceberg.raw.orders','csv','orders.csv','revision-1','alice','admin')
+            with patch.object(wb.stage_exports, 'list_exports', return_value=outputs) as listing:
+                self.assertEqual(self.json_request('/api/stages/exports', {'name':'orders'}), (200, outputs))
+                listing.assert_called_once_with('orders','alice','admin')
+        with patch.object(wb, 'stage_exports') as exports:
+            for path, valid in [('/api/stages/export',payload),('/api/stages/exports',{'name':'orders'})]:
+                invalid = [{}, *[{k:v for k,v in valid.items() if k != key} for key in valid]]
+                invalid += [{**valid,key:value} for key in valid for value in ('', ' ', None, True, [], {})]
+                invalid += [{**valid,key:'override'} for key in ('actor','role','directory','path','limit','max_rows')]
+                for body in invalid:
+                    with self.subTest(path=path,body=body):
+                        self.assertEqual(self.json_request(path,body)[0],400)
+                self.assertEqual(self.json_request(path)[0],404)
+                self.assertEqual(self.request(path,valid,method='PUT')[0],501)
+                status, _, _ = self.request(path,valid,headers={'Content-Type':'application/json','Origin':'https://outside.example'})
+                self.assertEqual(status,403)
+                for role in ('data_engineer','bi_viewer'):
+                    with patch.object(wb.request_auth,'authenticate',return_value=('alice',role)):
+                        self.assertEqual(self.json_request(path,valid)[0],403)
+                with patch.object(wb.request_auth,'authenticate',side_effect=wb.request_auth.AuthenticationError('credentials required')):
+                    self.assertEqual(self.json_request(path,valid)[0],401)
+            self.assertEqual(exports.mock_calls,[])
+
+    def test_stage_export_owner_and_stale_revision_use_real_registry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary).resolve()
+            with patch.dict(os.environ, {'SHIROKUMA_STATE_DIR':str(directory / 'state')}), patch.object(wb.jobs_resident,'_check_account'), patch.object(wb.request_auth,'authenticate',return_value=('alice','admin')):
+                definition=dict(name='orders',directory=str(directory),table='raw.orders',mode='append',format='csv')
+                stage=wb.stages_resident.save_stage(definition,'alice','admin')
+                status, outputs=self.json_request('/api/stages/exports',{'name':'orders'})
+                self.assertEqual(status,200)
+                self.assertEqual(outputs['directory'],str(directory / 'exports'))
+                self.assertEqual(outputs['files'],[])
+                payload=dict(name='orders',table='iceberg.raw.orders',format='csv',file='orders.csv',version='stale')
+                self.assertEqual(self.json_request('/api/stages/export',payload)[0],400)
+                payload['version']=stage['updated_at']
+                with patch.object(wb.request_auth,'authenticate',return_value=('bob','admin')):
+                    self.assertEqual(self.json_request('/api/stages/export',payload)[0],404)
+                    self.assertEqual(self.json_request('/api/stages/exports',{'name':'orders'})[0],404)
+                self.assertEqual(self.json_request('/api/stages/exports',{'name':'missing'})[0],404)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_stage_export_controls_revisions_and_stale_output_responses(self):
+        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
+        harness = r"""
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],querySelectorAll(){return [];},replaceChildren(){this.textContent='';},setAttribute(){},reset(){},append(){},focus(){}};
+const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
+let currentRole='admin',activeTab='warehouse',selectedRunId=null;
+const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
+const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;
+const document={createElement:()=>({append(){}})};
+eval(HANDLERS+`
+(async()=>{
+ const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',directory:'/host/orders',mode:'append',table:'raw.orders'},schedule:null};
+ editStage(entry);assert.equal($('stage-export-area').hidden,false);assert.equal($('stage-export-table').value,'raw.orders');assert.equal($('stage-export-directory').textContent,'/host/orders/exports');
+ $('stage-export-format').value='jsonl';$('stage-export-format').onchange();assert.equal($('stage-export-file').value,'orders.jsonl');
+ $('stage-export-table').value='iceberg.marts.results';
+ let pending=$('stage-export-form').onsubmit({preventDefault(){}});
+ assert.deepEqual(calls.at(-1),{path:'/api/stages/export',body:{name:'orders',table:'iceberg.marts.results',format:'jsonl',file:'orders.jsonl',version:'revision-1'}});
+ assert.equal($('stage-export-submit').disabled,true);let count=calls.length;
+ $('stage-export-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
+ respond({run:{id:'export-1'}});await pending;assert.equal(stageRunId,'export-1');assert.equal($('stage-view-run').hidden,false);
+ pending=$('stage-exports-refresh').onclick();assert.equal(calls.at(-1).path,'/api/stages');
+ respond({stages:[entry]});await Promise.resolve();await Promise.resolve();assert.equal(calls.at(-1).path,'/api/stages/exports');
+ respond({directory:'/host/orders/exports',files:[]});await pending;
+ assert.equal(stageRunId,'export-1');assert.equal($('stage-exports').textContent,'No exported files.');
+ // Saved edits invalidate displayed output and use the new revision on the next export.
+ pending=$('stage-exports-refresh').onclick();
+ const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,directory:'/host/new'}};
+ respond({stages:[revised]});await Promise.resolve();await Promise.resolve();
+ assert.equal($('stage-export-directory').textContent,'/host/new/exports');assert.equal(selectedStage.updated_at,'revision-2');
+ // Changing stage while the response is in flight must not show an old path or files.
+ ++stageEpoch;editStage({...revised,name:'other',definition:{...revised.definition,name:'other',directory:'/host/other'}});
+ respond({directory:'/secret/old/exports',files:[{name:'old.csv'}]});await pending;
+ assert.equal($('stage-export-directory').textContent,'/host/other/exports');assert.equal($('stage-exports').textContent,'Refresh outputs to list exported files.');
+ stagePending=false;$('stage-form').oninput();assert.equal($('stage-export-area').hidden,true);count=calls.length;
+ $('stage-export-form').onsubmit({preventDefault(){}});$('stage-exports-refresh').onclick();assert.equal(calls.length,count);
+ stageDirty=false;pending=$('stage-export-form').onsubmit({preventDefault(){}});
+ currentRole='bi_viewer';resetStageUI();respond({run:{id:'late-secret'}});await pending;
+ assert.equal(selectedStage,null);assert.equal(stageRunId,null);assert.equal($('stage-export-area').hidden,true);assert.equal($('stage-export-directory').textContent,'');
+})().catch(error=>{console.error(error);process.exitCode=1;});`);
+"""
+        result=subprocess.run(['node','-e','const HANDLERS='+json.dumps(handlers)+';'+harness],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_stage_export_ui_has_labels_limits_and_translations(self):
+        doc=self.workbench_document()
+        self.assertIn(doc.by_id('stages-area'),doc.by_id('stage-export-area')['ancestors'])
+        for identifier in ('stage-export-table','stage-export-format','stage-export-file'):
+            self.assertTrue(any(node.get('for')==identifier for node in doc.nodes))
+        self.assertEqual(doc.by_id('stage-export-form')['tag'],'form')
+        script=next(node['text'] for node in doc.nodes if node['tag']=='script')
+        for key in ('Manual export','Output folder','Source table (qualified name)','Export format','Output filename','Export table','Refresh outputs','Stage export','parquet export requires pyarrow','export filename already exists; choose a new filename'):
+            self.assertIn(repr(key)+':',script)
+        self.assertIn('100000 rows and 25 MiB',doc.by_id('stage-export-area')['text'])
+        self.assertIn('Existing filenames are refused.',doc.by_id('stage-export-area')['text'])
+        self.assertIn("run.id===stageExportRunId&&!liveJobStates.has(run.status)",script)
+        self.assertIn("stage_export:'Stage export'",script)
+
     def test_stage_routes_dispatch_authenticated_identity(self):
         definition = dict(name='orders', directory='/host/orders', table='raw.orders', mode='append', format='auto')
         selection = dict(name='orders', file='orders.csv', version='version-1')

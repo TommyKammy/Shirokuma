@@ -121,9 +121,14 @@ for(const key of ['Schedule','Every N minutes','Daily','Enable schedule','Saved 
  if(!i18n.en[key]||!i18n.ja[key]||i18n.en[key]===i18n.ja[key])throw Error('missing localized schedule text: '+key);
 }
 language='ja';if(t('Skipped')!==String.fromCodePoint(0x30b9,0x30ad,0x30c3,0x30d7))throw Error('skip label');
-""")
+for(const [run,expected] of [
+ [{trigger:'manual'},'Manual'],[{trigger:'schedule'},'Scheduled'],
+ [{trigger:'stage',steps:[{action:'stage_import'}]},'Stage import'],
+ [{trigger:'stage',steps:[{action:'stage_export'}]},'Stage export']]){
+ if(jobTrigger(run)!==expected||t(jobTrigger(run))===expected)throw Error('localized trigger: '+expected);
+}
+""", 'jobTrigger')
         self.assertIn("run.scheduled_for||", SCRIPT)
-        self.assertIn("runs[index].trigger==='schedule'?'Scheduled':'Manual'", SCRIPT)
 
     def test_alert_confirmation_and_resolution_are_independent(self):
         self.javascript(r"""

@@ -15,6 +15,7 @@ import lake_ingest
 import jobs_resident
 import alerts_resident
 import stages_resident
+import stage_exports
 import warehouse_resident
 import request_auth
 from agenthouse import manage
@@ -35,7 +36,7 @@ POST_ROUTES = {path: EDIT_ROLES for path in (
 POST_ROUTES.update({path: ALL_ROLES for path in (
     '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
 POST_ROUTES.update({path: {'admin'} for path in ('/api/ai/config', '/api/ai/test')})
-POST_ROUTES.update({path: {'admin'} for path in ('/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import', '/api/stages/schedule', '/api/stages/scan')})
+POST_ROUTES.update({path: {'admin'} for path in ('/api/stages/export', '/api/stages/exports', '/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import', '/api/stages/schedule', '/api/stages/scan')})
 POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail', '/api/jobs/schedule', '/api/alerts/ack')})
 
 
@@ -304,6 +305,17 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         raise ValueError('invalid stage scan fields')
                     self.respond({'run': stages_resident.submit_scan(body['name'], self.authenticated_user or 'local', role, body['version'])}, 202)
                     return
+                elif path in {'/api/stages/export', '/api/stages/exports'}:
+                    fields = {'name'} if path.endswith('/exports') else {'name', 'table', 'format', 'file', 'version'}
+                    if set(body) != fields or any(not isinstance(body[key], str) or not body[key].strip() for key in fields):
+                        raise ValueError('invalid stage export fields')
+                    actor = self.authenticated_user or 'local'
+                    if path.endswith('/exports'):
+                        result = stage_exports.list_exports(body['name'], actor, role)
+                    else:
+                        run = stage_exports.submit_export(body['name'], body['table'], body['format'], body['file'], body['version'], actor, role)
+                        self.respond({'run': run}, 202)
+                        return
                 elif path in {'/api/stages/files', '/api/stages/preview', '/api/stages/import'}:
                     fields = {'name'} if path.endswith('/files') else {'name', 'file', 'version'}
                     optional = {'retry'} if path.endswith('/import') else set()

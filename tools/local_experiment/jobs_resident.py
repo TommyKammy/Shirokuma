@@ -480,6 +480,9 @@ def _execute_step(step):
         return report
     if action == 'stage_scan_empty':
         return {'result': 'success', 'rows_ingested': 0}
+    if action == 'stage_export':
+        import stage_exports
+        return stage_exports._execute_export(step)
     if action == 'stage_import':
         import stages_resident
         return stages_resident._execute_import(step)
@@ -505,6 +508,8 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                 arguments = json.loads(connection.execute('SELECT arguments FROM runs WHERE id=?', (run_id,)).fetchone()[0])
                 connection.execute("UPDATE runs SET status='running',started_at=? WHERE id=?", (_now(), run_id))
             for position, step in enumerate(steps, 1):
+                report = None
+                summary = None
                 try:
                     if auth_mode is not None and auth_mode != ('shared' if request_auth.shared_mode() else 'local'):
                         raise PermissionError('Authentication mode changed while the scheduled job was active')
@@ -513,10 +518,10 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         raise ValueError('Job budget exceeded between steps; no further steps started')
                     with _db() as connection:
                         connection.execute("UPDATE steps SET status='running',started_at=? WHERE run_id=? AND position=?", (_now(), run_id, position))
-                    if step['action'] == 'stage_import' and not shared:
+                    if step['action'] in {'stage_import', 'stage_export'} and not shared:
                         wr.resolve_role(actor, role)
                     report = _execute_step(step)
-                    summary = {key: report[key] for key in ('action', 'table', 'rows_ingested', 'row_count', 'result', 'valid', 'duration_ms') if key in report}
+                    summary = {key: report[key] for key in ('action', 'table', 'rows_ingested', 'row_count', 'result', 'valid', 'duration_ms', 'file', 'format', 'size') if key in report}
                     if step['action'] in {'dbt_build', 'dbt_test'}:
                         summary['model_count'] = len(report.get('models', []))
                     with _db() as connection:
@@ -536,6 +541,10 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         with _db() as connection:
                             claim = connection.execute('SELECT status FROM stage_files WHERE last_run_id=? AND position=?', (run_id, position)).fetchone()
                             uncertain = uncertain or (claim is not None and claim['status'] == 'running')
+                    if step['action'] == 'stage_export':
+                        summary = summary or getattr(exc, 'summary', None)
+                    if step['action'] == 'stage_export' and report is not None:
+                        uncertain = True  # The complete file was already published.
                     status = 'unknown' if uncertain else 'failed'
                     # Provider/driver exception messages may contain credentials or rows.
                     if isinstance(exc, wr.TrinoQueryError):
@@ -547,7 +556,8 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         if step['action'] == 'stage_import':
                             connection.execute("UPDATE stage_files SET status=? WHERE last_run_id=? AND position=?", (status, run_id, position))
                             connection.execute("DELETE FROM stage_files WHERE last_run_id=? AND status='queued'", (run_id,))
-                        connection.execute('UPDATE steps SET status=?,finished_at=?,error=? WHERE run_id=? AND position=?', (status, now, error, run_id, position))
+                        connection.execute('UPDATE steps SET status=?,finished_at=?,error=?,summary=? WHERE run_id=? AND position=?',
+                                           (status, now, error, json.dumps(summary) if summary is not None else None, run_id, position))
                         connection.execute("UPDATE steps SET status='skipped',finished_at=? WHERE run_id=? AND status='pending'", (now, run_id))
                         connection.execute('UPDATE runs SET status=?,finished_at=?,error=? WHERE id=?', (status, now, error, run_id))
                     final_status = status

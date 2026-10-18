@@ -25,7 +25,7 @@
 dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px;width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#0007}dialog h2{font-size:18px}dialog .toolbar{margin-top:20px}dialog .badge{white-space:normal;overflow-wrap:anywhere}
 </style>
 <style>
-#stages-area,#stages-area .panel-body,#stages-area .job-fields>div,#stage-files-area,#stage-preview{min-width:0;max-width:100%}#stages-area p,#stages-area .error{overflow-wrap:anywhere}#stages-area input,#stages-area select{min-width:0;max-width:100%}#stages-area .table-wrap{max-width:100%;overflow:auto}#stages-list table,#stage-files table{table-layout:fixed;min-width:520px}#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}#stages-area button{max-width:100%;white-space:normal}
+#stages-area,#stages-area .panel-body,#stages-area .job-fields>div,#stage-files-area,#stage-preview{min-width:0;max-width:100%}#stages-area p,#stages-area .error{overflow-wrap:anywhere}#stages-area input,#stages-area select{min-width:0;max-width:100%}#stages-area .table-wrap{max-width:100%;overflow:auto}#stage-export-directory,#stage-exports th,#stage-exports td{white-space:normal;overflow-wrap:anywhere}#stages-list table,#stage-files table{table-layout:fixed;min-width:520px}#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}#stages-area button{max-width:100%;white-space:normal}
 #jobs-alert-count{margin-left:6px}
 #job-alerts table{table-layout:fixed;min-width:960px}#job-alerts th,#job-alerts td{padding:10px;white-space:normal;overflow-wrap:anywhere}#job-alerts th:nth-child(1){width:8%}#job-alerts th:nth-child(2){width:31%}#job-alerts th:nth-child(3){width:13%}#job-alerts th:nth-child(4){width:14%}#job-alerts th:nth-child(5){width:6%}#job-alerts th:nth-child(6){width:15%}#job-alerts th:nth-child(7){width:13%}#job-alerts button{max-width:100%;white-space:normal}#job-alerts small{display:block;margin-top:5px}#job-alerts .alert-main{font-family:system-ui,sans-serif}#job-alerts details{padding:5px 0 0;border:0;font-size:12px}#job-alerts summary{font-weight:500;color:var(--muted)}
 .job-enable-label{display:flex;align-items:center;gap:8px}.job-enable-label input{width:auto}#job-schedule-state{margin-top:16px;overflow-wrap:anywhere}#job-schedule-state span{white-space:normal}
@@ -96,6 +96,16 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <label for="stage-file">File to import</label><select id="stage-file" aria-describedby="stage-confirmation"><option value="">Choose a file</option></select>
 <div class="toolbar"><button id="stage-preview-button" type="button" disabled>Preview file</button><button id="stage-import" type="button" class="primary" disabled>Import</button></div>
 <p id="stage-confirmation" role="status" aria-live="polite">Preview a file before importing.</p><p id="stage-append-notice" class="muted" hidden>Successfully imported content is skipped, even after a file is renamed. Failed or uncertain imports need explicit confirmation before retry.</p><p id="stage-file-status" role="status" aria-live="polite"></p><label id="stage-retry-area" class="job-enable-label" hidden for="stage-retry"><input id="stage-retry" type="checkbox"> The target may already contain these rows. I checked the destination and want to retry this file.</label><div id="stage-preview" aria-live="polite"></div></div>
+<div id="stage-export-area" hidden><h3>Manual export</h3>
+<p class="muted">Export the whole table, up to 100000 rows and 25 MiB. Existing filenames are refused. Outputs stay in exports/ and are excluded from input scans.</p>
+<p><span id="stage-export-directory-label">Output folder</span>: <code id="stage-export-directory"></code></p>
+<p class="muted">Parquet requires pyarrow in the Workbench server Python.</p>
+<form id="stage-export-form"><div class="job-fields">
+<div><label for="stage-export-table">Source table (qualified name)</label><input id="stage-export-table" required placeholder="iceberg.raw.sales_events"></div>
+<div><label for="stage-export-format">Export format</label><select id="stage-export-format"><option value="csv">csv</option><option value="jsonl">jsonl</option><option value="parquet">parquet</option></select></div>
+<div><label for="stage-export-file">Output filename</label><input id="stage-export-file" required placeholder="sales.csv"></div>
+</div><button id="stage-export-submit" type="submit">Export table</button></form>
+<button id="stage-exports-refresh" type="button">Refresh outputs</button><div id="stage-exports" class="table-wrap" aria-live="polite"></div></div>
 <button id="stage-view-run" type="button" hidden>View run history</button>
 </div></div>
 </section>
@@ -185,6 +195,29 @@ const i18n = {ja: {
  'Submitting scan…':'確認・取込を受け付け中…',
  'Retry file':'ファイルを再実行',
  'Scan stage':'ステージを確認・取込',
+ 'Parquet requires pyarrow in the Workbench server Python.':'Parquet 出力には Workbench サーバーの Python に pyarrow が必要です。',
+ 'parquet export requires pyarrow':'Parquet 出力には pyarrow が必要です。',
+ 'export filename already exists; choose a new filename':'同名ファイルが存在します。別のファイル名を指定してください。',
+ 'stage changed; refresh stages before exporting':'ステージが変更されました。ステージを更新してから出力してください。',
+ 'export must contain the complete table within the 100000 row limit':'テーブル全体が 100000 行以下の場合に出力できます。',
+ 'export exceeds the 25 MiB limit':'出力が上限の 25 MiB を超えています。',
+ 'exports directory is unavailable or outside the stage directory':'ステージの出力先フォルダーを利用できません。',
+ 'Operation failed.':'操作に失敗しました。',
+ 'Manual export':'手動エクスポート',
+ 'Export the whole table, up to 100000 rows and 25 MiB. Existing filenames are refused. Outputs stay in exports/ and are excluded from input scans.':'テーブル全体を最大 100000 行・25 MiB まで出力します。同名ファイルは拒否します。出力先は exports/ で、取込確認の対象外です。',
+ 'Output folder':'出力先フォルダー',
+ 'Source table (qualified name)':'出力元テーブル（修飾名）',
+ 'Export format':'出力形式',
+ 'Output filename':'出力ファイル名',
+ 'Export table':'テーブルを出力',
+ 'Refresh outputs':'出力一覧を更新',
+ 'Refresh outputs to list exported files.':'出力一覧を更新するとファイルを表示します。',
+ 'No exported files.':'出力済みファイルはありません。',
+ 'Loading outputs…':'出力一覧を読み込み中…',
+ 'Submitting export…':'出力を受け付け中…',
+ 'Export queued.':'出力を受け付けました。',
+ 'Stage export':'ステージ出力',
+ 'Filename must end with .{format}.':'ファイル名の末尾を .{format} にしてください。',
  'Local stages':'ローカルステージ', 'Automatic':'自動判定',
  'Refresh stages':'ステージを更新',
  'New stage':'ステージを登録',
@@ -618,7 +651,7 @@ async function ingestionPayload(){const file=browserFile;if(!file){const path=$(
 $('preview-ingest').onclick=()=>busy($('preview-ingest'),async()=>{message('ingest-error','');ui($('ingest-preview'),'Reading file…');try{const result=await api('/api/lake/preview',await ingestionPayload());const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';table(schema,['Column','Inferred type'],result.columns.map(c=>[c.name,c.type]));table(rows,result.columns,result.sample_rows,false);const title=document.createElement('p');ui(title,'{rows} file rows · {samples} sample rows',{rows:result.row_count,samples:result.sample_rows.length});$('ingest-preview').replaceChildren(title,schema,rows);}catch(e){$('ingest-preview').replaceChildren();message('ingest-error',e.message);}});
 
 
-let stageEntries=[],selectedStage=null,stageFiles=[],stagePreview=null,stageEpoch=0,stagePending=false,stageDirty=false,stageRunId=null;
+let stageEntries=[],selectedStage=null,stageFiles=[],stagePreview=null,stageEpoch=0,stagePending=false,stageDirty=false,stageRunId=null,stageExportRunId=null;
 function stageCurrent(epoch){return currentRole==='admin'&&epoch===stageEpoch;}
 function invalidateStagePreview(){stagePreview=null;$('stage-retry').checked=false;$('stage-retry-area').hidden=true;$('stage-file-status').replaceChildren();$('stage-preview').replaceChildren();ui($('stage-confirmation'),'Preview a file before importing.');$('stage-import').disabled=true;}
 function stageIngestionStatus(status){return ({new:'Not imported',queued:'Queued',running:'Running',success:'Already imported',failed:'Failed',unknown:'Outcome unknown'})[status]||status||'Not imported';}
@@ -633,6 +666,19 @@ function renderStageSchedule(){
  }
  if(schedule?.last_run_id){const button=actionButton('View run history',()=>{if(currentRole!=='admin')return;selectedRunId=schedule.last_run_id;activate($('tab-jobs'));});area.append(button);}
 }
+function clearStageExports(resetInputs=false){
+ $('stage-exports').replaceChildren();ui($('stage-exports'),'Refresh outputs to list exported files.');
+ $('stage-export-directory').textContent=selectedStage?.definition.directory?selectedStage.definition.directory.replace(/\/$/,'')+'/exports':'';
+ if(resetInputs){$('stage-export-table').value=selectedStage?.definition.table||'';$('stage-export-format').value='csv';$('stage-export-file').value=selectedStage?selectedStage.name+'.csv':'';}
+}
+async function fetchStageExports(epoch){
+ await refreshStageSchedule(epoch);if(!stageCurrent(epoch)||!selectedStage?.can_manage||stageDirty)return;
+ const name=selectedStage.name,revision=selectedStage.updated_at;const data=await api('/api/stages/exports',{name});
+ if(!stageCurrent(epoch)||selectedStage?.name!==name||selectedStage.updated_at!==revision||stageDirty)return;
+ $('stage-export-directory').textContent=data.directory;
+ const files=data.files||[];if(!files.length)ui($('stage-exports'),'No exported files.');
+ else{table($('stage-exports'),['File name','Size (bytes)','Modified'],files.map(file=>[file.name,file.size,'']));$('stage-exports').querySelectorAll('tbody tr').forEach((row,index)=>{if(files[index].modified_at)row.cells[2].append(jobAlertTimestamp(files[index].modified_at));});}
+}
 function stageControls(){
  const editable=currentRole==='admin'&&(!selectedStage||selectedStage.can_manage);
  for(const element of $('stage-form').elements)element.disabled=!editable||stagePending;
@@ -645,6 +691,8 @@ function stageControls(){
  ui($('stage-import'),stageNeedsRetry()?'Retry file':'Import');
  $('stage-retry-area').hidden=!stageNeedsRetry();$('stage-retry').disabled=stagePending;
  const managed=currentRole==='admin'&&selectedStage?.can_manage;
+ $('stage-export-area').hidden=!managed||stageDirty;
+ for(const id of ['stage-export-table','stage-export-format','stage-export-file','stage-export-submit','stage-exports-refresh'])$(id).disabled=stagePending||stageDirty||!managed;
  const automatic=managed&&!stageDirty&&!selectedStage.legacy_history&&selectedStage.definition.mode!=='replace';
  $('stage-legacy-notice').hidden=!managed||!selectedStage.legacy_history;
  $('stage-schedule-area').hidden=!managed;
@@ -655,15 +703,15 @@ function stageControls(){
 }
 function resetStageUI(){
  if(!$('stages-area'))return;
- ++stageEpoch;stageEntries=[];selectedStage=null;stageFiles=[];stagePending=false;stageDirty=false;stageRunId=null;
+ ++stageEpoch;stageEntries=[];selectedStage=null;stageFiles=[];stagePending=false;stageDirty=false;stageRunId=null;stageExportRunId=null;
  $('stages-area').hidden=currentRole!=='admin';$('stage-form').reset();$('stage-schedule-minutes').value='60';$('stage-schedule-enabled').checked=false;$('stage-schedule-state').replaceChildren();$('stage-files').replaceChildren();$('stage-file').replaceChildren();$('stages-list').replaceChildren();$('stage-view-run').hidden=true;message('stage-error','');invalidateStagePreview();stageControls();
- ui($('stage-state'),'Choose or save a stage.');
+ clearStageExports(true);ui($('stage-state'),'Choose or save a stage.');
  if(currentRole==='admin'&&typeof activeTab!=='undefined'&&activeTab==='ingestion')loadStages();
 }
 async function stageTask(label,task){
  if(stagePending||currentRole!=='admin')return;
  const epoch=stageEpoch;stagePending=true;message('stage-error','');ui($('stage-state'),label);stageControls();
- try{await task(epoch);}catch(error){if(stageCurrent(epoch)){message('stage-error',error.message);ui($('stage-state'),'Refresh failed');}}
+ try{await task(epoch);}catch(error){if(stageCurrent(epoch)){message('stage-error',t(error.message));ui($('stage-state'),'Operation failed.');}}
  finally{if(stageCurrent(epoch)){stagePending=false;stageControls();}pruneUIBindings();}
 }
 function renderStages(){
@@ -671,13 +719,13 @@ function renderStages(){
  table($('stages-list'),['Stage name','Target table','Mode','Owner','Actions'],stageEntries.map(entry=>[entry.name,entry.definition.table,t(entry.definition.mode),entry.owner,'']));
  $('stages-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=stageEntries[index];ui(row.cells[2],entry.definition.mode);if(entry.can_manage)row.lastElementChild.append(actionButton('Select stage',()=>selectStage(entry)));else ui(row.lastElementChild,'Read-only definition');});
 }
-async function loadStages(){await stageTask('Loading stages…',async epoch=>{const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];renderStages();ui($('stage-state'),'Choose or save a stage.');});}
+async function loadStages(){await stageTask('Loading stages…',async epoch=>{const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];if(selectedStage){const fresh=stageEntries.find(entry=>entry.name===selectedStage.name);if(!fresh||fresh.updated_at!==selectedStage.updated_at||!fresh.can_manage)editStage(fresh||null);}renderStages();ui($('stage-state'),'Choose or save a stage.');});}
 function stageDefinition(){
  const definition={};for(const key of ['name','directory','table','mode','format'])definition[key]=$('stage-'+key).value.trim();
  if($('stage-key').value.trim())definition.key=$('stage-key').value.trim();return definition;
 }
 function editStage(entry){
- selectedStage=entry;stageDirty=false;stageFiles=[];stageRunId=null;$('stage-view-run').hidden=true;$('stage-file').replaceChildren();$('stage-files').replaceChildren();invalidateStagePreview();
+ selectedStage=entry;clearStageExports(true);stageDirty=false;stageFiles=[];stageRunId=null;stageExportRunId=null;$('stage-view-run').hidden=true;$('stage-file').replaceChildren();$('stage-files').replaceChildren();invalidateStagePreview();
  const definition=entry?.definition||{mode:'append',format:'auto'};for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
  $('stage-schedule-minutes').value=entry?.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=entry?.schedule?.enabled===true;renderStageSchedule();stageControls();
 }
@@ -685,14 +733,14 @@ async function refreshStageSchedule(epoch){
  const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];
  const entry=stageEntries.find(entry=>entry.name===selectedStage?.name);if(entry){
   if(entry.updated_at!==selectedStage.updated_at){
-   invalidateStagePreview();stageDirty=false;
+   invalidateStagePreview();stageDirty=false;selectedStage=entry;clearStageExports(true);
    for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=entry.definition[key]||'';
   }
   selectedStage=entry;$('stage-schedule-minutes').value=entry.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=entry.schedule?.enabled===true;
- }renderStages();renderStageSchedule();
+ }else if(selectedStage)editStage(null);renderStages();renderStageSchedule();
 }
 async function fetchStageFiles(epoch){
- await refreshStageSchedule(epoch);if(!stageCurrent(epoch))return;
+ await refreshStageSchedule(epoch);if(!stageCurrent(epoch)||!selectedStage?.can_manage)return;
  const data=await api('/api/stages/files',{name:selectedStage.name});if(!stageCurrent(epoch))return;
  stageFiles=data.files||[];invalidateStagePreview();$('stage-file').replaceChildren();
  const placeholder=document.createElement('option');placeholder.value='';ui(placeholder,'Choose a file');$('stage-file').append(placeholder);
@@ -704,7 +752,7 @@ async function fetchStageFiles(epoch){
 async function selectStage(entry){if(stagePending||currentRole!=='admin')return;++stageEpoch;editStage(entry);await stageTask('Loading files…',fetchStageFiles);}
 $('stages-refresh').onclick=loadStages;
 $('stage-new').onclick=()=>{if(stagePending||currentRole!=='admin')return;++stageEpoch;editStage(null);ui($('stage-state'),'Choose or save a stage.');$('stage-name').focus();};
-$('stage-form').oninput=()=>{stageDirty=true;invalidateStagePreview();ui($('stage-state'),'Save changes before previewing.');stageControls();};
+$('stage-form').oninput=()=>{stageDirty=true;invalidateStagePreview();clearStageExports();ui($('stage-state'),'Save changes before previewing.');stageControls();};
 $('stage-form').onchange=$('stage-form').oninput;
 $('stage-form').onsubmit=event=>{event.preventDefault();stageTask('Working…',async epoch=>{
  const data=await api('/api/stages/save',stageDefinition());if(!stageCurrent(epoch))return;
@@ -716,7 +764,7 @@ $('stage-preview-button').onclick=()=>stageTask('Previewing file…',async epoch
  invalidateStagePreview();const file=stageFiles.find(file=>file.name===$('stage-file').value);if(!file||file.available===false)return;
  const selection={name:selectedStage.name,file:file.name,version:file.version};const result=await api('/api/stages/preview',selection);if(!stageCurrent(epoch))return;
  const definition=result.stage;if(!definition||definition.name!==selection.name||!definition.table||!definition.mode)throw Error(t('Stage preview did not include its saved settings.'));
- selectedStage={...selectedStage,definition};stageEntries=stageEntries.map(entry=>entry.name===selection.name?selectedStage:entry);renderStages();
+ selectedStage={...selectedStage,definition};clearStageExports();stageEntries=stageEntries.map(entry=>entry.name===selection.name?selectedStage:entry);renderStages();
  for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
  stagePreview={...selection,ingestion_status:result.ingestion_status||file.ingestion_status||'new'};ui($('stage-file-status'),stageIngestionStatus(stagePreview.ingestion_status));const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';
  table(schema,['Column','Inferred type'],result.columns.map(column=>[column.name,column.type]));table(rows,result.columns,result.sample_rows,false);$('stage-preview').replaceChildren(schema,rows);
@@ -739,6 +787,14 @@ $('stage-schedule-stop').onclick=()=>{if(!selectedStage?.can_manage||!selectedSt
 });};
 $('stage-scan').onclick=()=>{if(stageDirty||!selectedStage?.can_manage||selectedStage.legacy_history||selectedStage.definition.mode==='replace')return;return stageTask('Submitting scan…',async epoch=>{
  const data=await api('/api/stages/scan',{name:selectedStage.name,version:selectedStage.updated_at});if(!stageCurrent(epoch))return;stageRunId=data.run.id;$('stage-view-run').hidden=false;await fetchStageFiles(epoch);if(stageCurrent(epoch))ui($('stage-state'),'Scan queued.');
+});};
+$('stage-export-format').onchange=()=>{const field=$('stage-export-file');field.value=field.value.replace(/\.(csv|jsonl|parquet)$/i,'')+'.'+$('stage-export-format').value;};
+$('stage-exports-refresh').onclick=()=>{if(stageDirty||!selectedStage?.can_manage)return;return stageTask('Loading outputs…',fetchStageExports);};
+$('stage-export-form').onsubmit=event=>{event.preventDefault();if(stagePending||stageDirty||currentRole!=='admin'||!selectedStage?.can_manage)return;return stageTask('Submitting export…',async epoch=>{
+ const format=$('stage-export-format').value,file=$('stage-export-file').value.trim();if(!file.endsWith('.'+format))throw Error(t('Filename must end with .{format}.',{format}));
+ const payload={name:selectedStage.name,table:$('stage-export-table').value.trim(),format,file,version:selectedStage.updated_at};
+ const data=await api('/api/stages/export',payload);if(!stageCurrent(epoch))return;
+ stageRunId=data.run.id;stageExportRunId=data.run.id;$('stage-view-run').hidden=false;clearStageExports();ui($('stage-state'),'Export queued.');
 });};
 $('stage-view-run').onclick=()=>{if(!stageRunId||currentRole!=='admin')return;selectedRunId=stageRunId;activate($('tab-jobs'));};
 
@@ -844,7 +900,8 @@ let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,s
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
 const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
-const jobActionLabels={sql:'Run SQL',alert:'Evaluate alert',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',stage_import:'Stage import',stage_scan:'Scan stage',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
+const jobActionLabels={sql:'Run SQL',alert:'Evaluate alert',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',stage_import:'Stage import',stage_export:'Stage export',stage_scan:'Scan stage',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
+function jobTrigger(run){return run.trigger==='stage'?((run.steps||[]).some(step=>step.action==='stage_export')?'Stage export':'Stage import'):run.trigger==='schedule'?'Scheduled':'Manual';}
 function jobSummary(step){
  const summary=step.summary;if(!summary||typeof summary!=='object')return '\u2014';
  const parts=[],count=summary.rows_ingested??summary.row_count,models=summary.model_count??(Array.isArray(summary.models)?summary.models.length:undefined);
@@ -1001,8 +1058,8 @@ async function refreshJobRuns(){
  const runs=data.runs||[];
  if(!runs.length)jobEmpty('job-runs','No runs yet.');
  else{
- table($('job-runs'),['Run ID','Job','Status','Trigger','Scheduled for (UTC)','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),t(run.trigger==='stage'?'Stage import':run.trigger==='schedule'?'Scheduled':'Manual'),run.scheduled_for||'\u2014',run.actor,run.started_at||run.created_at||'\u2014',jobDuration(run),'']));
- $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{ui(row.cells[2],jobStatuses[runs[index].status]||'Unknown');ui(row.cells[3],runs[index].trigger==='stage'?'Stage import':runs[index].trigger==='schedule'?'Scheduled':'Manual');row.lastElementChild.append(actionButton('Inspect run',()=>showJobRun(runs[index].id)));});
+ table($('job-runs'),['Run ID','Job','Status','Trigger','Scheduled for (UTC)','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),t(jobTrigger(run)),run.scheduled_for||'\u2014',run.actor,run.started_at||run.created_at||'\u2014',jobDuration(run),'']));
+ $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{ui(row.cells[2],jobStatuses[runs[index].status]||'Unknown');ui(row.cells[3],jobTrigger(runs[index]));row.lastElementChild.append(actionButton('Inspect run',()=>showJobRun(runs[index].id)));});
  }
  if(selectedRunId)await showJobRun(selectedRunId);
  await loadJobAlerts(true);
@@ -1018,6 +1075,7 @@ async function showJobRun(id){
  const unknown=['unknown','interrupted'].includes(run.status),failed=(run.steps||[]).find(step=>['failed','unknown','interrupted'].includes(step.status));
  message('job-failure',unknown?t('Outcome unknown. Check the target before running again.')+(failed?'\n'+(failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1))+(failed.error?': '+failed.error:''):''):failed?t('Failed step: {step}',{step:failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1)})+(failed.error?'\n'+failed.error:''):run.error||'');
  const steps=run.steps||[];
+ if(run.id===stageExportRunId&&!liveJobStates.has(run.status)&&currentRole==='admin'&&!stageDirty&&!stagePending){stageExportRunId=null;await stageTask('Loading outputs…',fetchStageExports);}
  if(!steps.length)jobEmpty('job-run-detail','No steps recorded.');
  else{table($('job-run-detail'),['Steps','Step type','Status','Duration (ms)','Summary'],steps.map((step,index)=>[step.name||String(index+1),step.action||run.definition?.steps?.[index]?.action||'',jobStatus(step.status),jobDuration(step),step.error||jobSummary(step)]));$('job-run-detail').querySelectorAll('tbody tr').forEach((row,index)=>{const step=steps[index];ui(row.cells[1],jobActionLabels[step.action||run.definition?.steps?.[index]?.action]||'Unknown');ui(row.cells[2],jobStatuses[step.status]||'Unknown');if(!step.error)ui(row.cells[4],'{summary}',()=>({summary:jobSummary(step)}));});}
 }
