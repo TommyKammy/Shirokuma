@@ -193,6 +193,7 @@ details>summary::marker{color:var(--muted)}
 .explorer{position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto;margin:0;padding:10px}
 .explorer>summary{padding:2px 2px 6px;font-size:13px}
 .explorer label{margin-top:4px}
+.explorer-hint{margin:0 0 8px}
 #worksheet-tree,#catalog-tree{margin-top:8px}
 #worksheet-tree details,#catalog-tree details{padding:2px 0}
 #worksheet-tree summary,#catalog-tree summary{padding:3px 2px;font-size:12px;color:var(--ink-2)}
@@ -369,7 +370,7 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 
 /* Responsive */
 @media(max-width:1180px){.detail-grid{grid-template-columns:1fr}.detail-grid>*+*{border-left:0;border-top:1px solid var(--line)}}
-@media(max-width:1024px){.layout{grid-template-columns:184px minmax(0,1fr)}main{padding:16px 16px 40px}.sql-layout,.catalog-grid,.model-layout,.bear-layout{grid-template-columns:1fr}.explorer{position:static;max-height:none}.sql-main{order:-1}#worksheet-tree{max-height:260px;overflow:auto}#catalog-tree{max-height:300px}.environment{display:none}}
+@media(max-width:1024px){.layout{grid-template-columns:184px minmax(0,1fr)}main{padding:16px 16px 40px}.sql-layout,.catalog-grid,.model-layout,.bear-layout{grid-template-columns:1fr}.explorer{position:static;max-height:none}.sql-main{display:contents}.sql-main .panel{margin-bottom:0}.editor-panel{order:1}.explorer{order:2}.results-panel{order:3}#worksheet-tree{max-height:260px;overflow:auto}#catalog-tree{max-height:300px}.environment{display:none}}
 @media(max-width:760px){
 .app-header{position:static;padding:8px 12px}.app-header .divider{display:none}.header-spacer{flex-basis:100%;order:1;height:0}
 .header-group,#role-controls,#lang-switcher,#ai-settings-button{order:2}
@@ -378,6 +379,9 @@ nav{position:static;height:auto;flex-direction:row;align-items:center;gap:2px;pa
 nav button{width:auto;flex:none;white-space:nowrap}nav button[aria-selected=true]::after{left:8px;right:8px;top:auto;bottom:-6px;width:auto;height:2px}
 .nav-category,.nav-note{display:none}
 main{padding:14px 12px 32px}
+.editor{min-height:112px;height:clamp(112px,20vh,220px)}
+.query-footer .run-group{order:-1;width:100%;justify-content:space-between}
+.sql-layout{gap:10px}
 .results-tools input[type=search],.filters input[type=search]{width:100%}
 #quick-status-error{max-width:100%}
 }
@@ -426,7 +430,7 @@ main{padding:14px 12px 32px}
 <div class="warehouse-strip" aria-label="Warehouse status"><strong>Trino / LOCAL</strong><span id="warehouse-state" class="badge">Loading…</span><span id="replicas" class="muted">Replicas —</span><details><summary>Components</summary><div id="components" class="components"></div></details><button id="chill" class="small">Chill</button><button id="wake" class="small">Wake</button><button id="refresh-status" class="small">Refresh</button></div></div>
 <div id="status-error" class="error" role="status" hidden></div>
 <div class="sql-layout">
-<details id="worksheet-explorer" class="panel explorer" open><summary>Database Object Explorer</summary><label for="worksheet-tree-filter">Find schema or table</label><input id="worksheet-tree-filter" type="search" placeholder="Search objects"><div id="worksheet-tree" aria-live="polite">Loading catalog…</div><p class="help">Select a table to insert its name at the cursor.</p>
+<details id="worksheet-explorer" class="panel explorer" open><summary>Database Object Explorer</summary><p class="help explorer-hint">Select a table to insert its name at the cursor.</p><label for="worksheet-tree-filter">Find schema or table</label><input id="worksheet-tree-filter" type="search" placeholder="Search objects"><div id="worksheet-tree" aria-live="polite">Loading catalog…</div>
 <div class="samples"><h3>Sample queries</h3><button data-sample="orders">Recent orders</button><button data-sample="revenue">TPC-H Revenue by Nation</button><button data-sample="customers">Customers</button></div></details>
 <div class="sql-main">
 <div class="panel editor-panel">
@@ -589,7 +593,7 @@ main{padding:14px 12px 32px}
 </div>
 </div>
 <div id="jobs-runs" role="tabpanel" aria-labelledby="jobs-view-runs" hidden>
-<div class="panel"><div class="panel-head"><h2>Run history</h2><div class="toolbar"><label for="job-runs-filter" class="muted">Job</label><select id="job-runs-filter"><option value="">All jobs</option></select><button id="job-runs-refresh" type="button">Refresh runs</button></div></div><div id="job-runs" class="table-wrap list"><div class="empty">No runs loaded.</div></div></div>
+<div class="panel"><div class="panel-head"><div><h2>Run history</h2><small>Shows the latest 100 runs you can see.</small></div><div class="toolbar"><label for="job-runs-filter" class="muted">Job</label><select id="job-runs-filter"><option value="">All jobs</option></select><button id="job-runs-refresh" type="button">Refresh runs</button></div></div><div id="job-runs" class="table-wrap list"><div class="empty">No runs loaded.</div></div></div>
 <div class="panel" id="job-step-panel"><div class="panel-head"><h2>Step history</h2><span id="job-detail-state" class="state" role="status" aria-live="polite">Choose a run to inspect its steps.</span></div><div id="job-failure" class="error" role="alert" hidden></div><div id="job-run-detail" class="table-wrap list"></div></div>
 </div>
 <div id="jobs-alerts" role="tabpanel" aria-labelledby="jobs-view-alerts" hidden>
@@ -598,7 +602,7 @@ main{padding:14px 12px 32px}
 </section>
 <section id="catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
 <div class="page-head"><div class="page-title"><h1>Database Explorer</h1><p>Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.</p></div><div class="page-actions"><button id="refresh-catalog">Refresh catalog</button></div></div>
-<div id="catalog-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2></div><div class="panel-body" style="padding-bottom:0"><label for="catalog-filter" style="margin-top:0">Find schema or table</label><input id="catalog-filter" type="search" placeholder="Search catalog"></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table Inspector</h2><div class="toolbar"><button id="open-table-sql" class="small" disabled>Open in Worksheet</button><button id="clone-table-btn" class="small" disabled>Clone to Sandbox</button><select id="export-table-format" aria-label="Export format"><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="parquet">Parquet</option></select><button id="export-table-btn" class="small" disabled>Export Table</button><button id="drop-table-btn" class="small danger" hidden>Drop Table</button></div></div>
+<div id="catalog-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2></div><div class="panel-body" style="padding-bottom:0"><label for="catalog-filter" style="margin-top:0">Find schema or table</label><input id="catalog-filter" type="search" placeholder="Search catalog"><p class="help">Select a table to inspect its columns, data and history.</p></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table Inspector</h2><div class="toolbar"><button id="open-table-sql" class="small" disabled>Open in Worksheet</button><button id="clone-table-btn" class="small" disabled>Clone to Sandbox</button><select id="export-table-format" aria-label="Export format"><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="parquet">Parquet</option></select><button id="export-table-btn" class="small" disabled>Export Table</button><button id="drop-table-btn" class="small danger" hidden>Drop Table</button></div></div>
 <div id="inspector-tabs" role="tablist" aria-label="Table Inspector">
 <button id="inspect-tab-columns" role="tab" aria-selected="true" aria-controls="inspect-columns" data-inspect="columns">Columns</button>
 <button id="inspect-tab-preview" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-preview" data-inspect="preview">Data Preview</button>
@@ -656,12 +660,27 @@ const i18n = {ja: {
 'Last status: {status}':'前回の状態: {status}',
 'Save ordered steps, run them now, or schedule them.':'順序付きの処理を保存し、すぐに実行するかスケジュールを設定します。',
 'Jobs views':'ジョブの表示', 'Select a job to edit, run or schedule it.':'ジョブを選ぶと、定義の編集・実行・スケジュール設定ができます。',
-'Open':'開く', 'Discard unsaved changes to the job definition?':'ジョブ定義の未保存の変更を破棄しますか？', 'Never run':'未実行', 'Last run':'前回の実行', '1 step':'1 ステップ', '{count} steps':'{count} ステップ',
+'Open':'開く', 'Discard unsaved changes to the job definition?':'ジョブ定義の未保存の変更を破棄しますか？', 'Last run':'前回の実行', '1 step':'1 ステップ', '{count} steps':'{count} ステップ',
 'No saved jobs yet. Choose New job to create the first one.':'ジョブはまだありません。「ジョブを登録」から作成してください。',
 'Save the job before running or scheduling it.':'実行やスケジュール設定の前にジョブを保存してください。',
 'Save the definition before running. Runs always use the saved version.':'実行前に定義を保存してください。実行には常に保存済みの版を使います。',
-'All jobs':'すべてのジョブ', 'No runs for this job yet.':'このジョブの実行履歴はまだありません。',
-'No runs yet. Run a saved job to see its history here.':'実行履歴はまだありません。保存したジョブを実行するとここに表示されます。',
+'All jobs':'すべてのジョブ',
+'SELECT SQL (optional; used instead of the description)':'SELECT 文（任意。入力すると説明より優先）', 'SELECT SQL (optional; empty uses the saved SQL)':'SELECT 文（任意。空欄なら保存済みの SQL を使用）',
+'Describe the data you need':'必要なデータの説明', 'Sandbox table name (e.g. nation_summary)':'サンドボックスのテーブル名（例: nation_summary）',
+'Sandbox table to publish to marts':'marts に公開するサンドボックスのテーブル', 'Saved WAP model to refresh':'更新する保存済み WAP モデル',
+'Table to roll back (e.g. marts.nation_summary)':'戻すテーブル（例: marts.nation_summary）', 'Snapshot ID (digits only)':'スナップショット ID（数字のみ）',
+'Stage and audit':'ステージングして検証', 'Publish table':'テーブルを公開', 'Refresh table':'テーブルを更新', 'Roll back to snapshot':'指定スナップショットへ戻す',
+'Writes SQL from your description, or checks the SQL you enter. No tables change.':'説明から SQL を作成するか、入力した SQL を確認します。テーブルは変更しません。',
+'Builds a sandbox table from the description or SQL, then audits it. Marts do not change.':'説明または SQL からサンドボックスのテーブルを作成し、品質を確認します。marts は変更しません。',
+'Copies an audited sandbox table to marts after the quality and regression checks. Registered refresh targets are refreshed from Transformation.':'品質確認と退行チェックを通過したサンドボックスのテーブルを marts に公開します。登録済みの更新対象は「データ変換」から更新してください。',
+'Rebuilds a saved WAP model and publishes it after the audit. Empty SQL uses the saved SQL. Registered refresh targets are refreshed from Transformation.':'保存済みの WAP モデルを再作成し、品質確認後に公開します。SQL が空欄なら保存済みの SQL を使います。登録済みの更新対象は「データ変換」から更新してください。',
+'Restores the table to an earlier snapshot. This changes table data.':'テーブルを以前のスナップショットに戻します。テーブルのデータが変わります。',
+'Select a table to inspect its columns, data and history.':'テーブルを選ぶと、カラム・データ・履歴を確認できます。', 'Choose a WAP action.':'WAP 操作を選択してください。', 'Describe the data you need or enter SQL.':'必要なデータの説明か SQL を入力してください。',
+'Enter the table name.':'テーブル名を入力してください。', 'Snapshot ID must contain digits only.':'スナップショット ID は数字のみで入力してください。', 'Check inputs':'入力を確認', 'Shows the latest 100 runs you can see.':'閲覧できる直近100件の実行を表示します。',
+'Not in the latest 100 runs':'直近100件に履歴なし', 'History unavailable':'履歴を取得できません',
+'This job has no runs among the latest 100 runs.':'取得した直近100件に、このジョブの実行はありません。',
+'No runs among the latest 100 runs. Run a saved job to see its history here.':'取得した直近100件に実行はありません。保存したジョブを実行するとここに表示されます。',
+'Loading run {id}…':'実行 {id} を読み込み中…', 'Run {id} details unavailable: {error}':'実行 {id} の詳細を取得できません: {error}',
 'Stop schedule':'スケジュールを停止', 'Save or select a stage to import files, schedule automatic ingestion, or export a table.':'ステージを保存または選択すると、ファイル取込・自動取込の設定・テーブル出力ができます。', 'Schedule stopped.':'スケジュールを停止しました。',
 'State':'状態', 'Components ready':'稼働中のコンポーネント', 'Raw status':'取得した状態（JSON）',
 'Auto-Chill':'自動休止', 'Chill the warehouse after it has been idle for the selected time.':'指定した時間アイドル状態が続くとウェアハウスを休止します。',
@@ -986,6 +1005,7 @@ function applyRole() {
  $('query-schema').disabled=viewer;if(viewer)$('query-schema').value='marts';
  for(const option of $('bear-data-action').options){option.disabled=viewer?option.value!=='generate':engineer&&['publish','refresh','rollback'].includes(option.value);}
  const action=$('bear-data-action');if(action.selectedOptions[0]?.disabled)action.value='generate';
+ if(typeof updateDataBearForm==='function')updateDataBearForm();
 }
 $('role-selector').onchange=()=>{currentRole=$('role-selector').value;applyRole();};
 async function api(path, body) {
@@ -1146,10 +1166,40 @@ $('refresh-catalog').onclick=()=>busy($('refresh-catalog'),loadCatalog);
 const bears=[
  {key:'sre',name:'SRE Bear',description:'Inspect workload readiness, recent errors, and runtime metrics.',fields:[]},
  {key:'query',name:'Query Doctor Bear',description:'Explain SQL or inspect a recent query for performance advice.',fields:[['target','Query target','latest'],['sql','SQL to explain (optional)','',true]]},
- {key:'data',name:'Data Engineer Bear',description:'Generate SQL, stage and audit a sandbox table, publish to marts, refresh a saved model, or restore a snapshot. Publish, refresh, and rollback change table data.',fields:[['action','WAP Action',['generate','stage','publish','rollback','refresh']],['request','Describe the data you need (for generate/stage)','',true],['sql','Explicit SELECT SQL (optional override)','',true],['stage_table','Target table name (e.g. nation_summary)',''],['snapshot_id','Snapshot ID (for rollback)','']]},
+ {key:'data',name:'Data Engineer Bear',description:'Generate SQL, stage and audit a sandbox table, publish to marts, refresh a saved model, or restore a snapshot. Publish, refresh, and rollback change table data.',fields:[['action','WAP Action',['generate','stage','publish','rollback','refresh']],['request','Describe the data you need','',true],['publish','Sandbox table to publish to marts',''],['refresh','Saved WAP model to refresh',''],['rollback','Table to roll back (e.g. marts.nation_summary)',''],['snapshot_id','Snapshot ID (digits only)',''],['sql','SELECT SQL (optional; used instead of the description)','',true],['stage_table','Sandbox table name (e.g. nation_summary)','']]},
  {key:'catalog',name:'Catalog Curator Bear',description:'Search tables or inspect a table’s columns and dependencies.',fields:[['action','Action',['search','describe','lineage']],['table','Table (for describe or lineage)','']]},
  {key:'policy',name:'Policy Gatekeeper Bear',description:'Review the resident workload baseline or check a local manifest.',fields:[['action','Action',['baseline','check']],['manifest','Local manifest path (for check)','']]}
 ];
+// Each Data Engineer Bear action shows and sends only the inputs its server branch reads.
+// The server routes on publish/refresh/rollback/stage_table, so stale values must never be sent.
+const dataBearActions={
+ generate:{fields:['request','sql'],button:'Generate SQL',help:'Writes SQL from your description, or checks the SQL you enter. No tables change.'},
+ stage:{fields:['request','sql','stage_table'],target:'stage_table',button:'Stage and audit',help:'Builds a sandbox table from the description or SQL, then audits it. Marts do not change.'},
+ publish:{fields:['publish'],target:'publish',button:'Publish table',help:'Copies an audited sandbox table to marts after the quality and regression checks. Registered refresh targets are refreshed from Transformation.'},
+ refresh:{fields:['refresh','sql'],target:'refresh',button:'Refresh table',help:'Rebuilds a saved WAP model and publishes it after the audit. Empty SQL uses the saved SQL. Registered refresh targets are refreshed from Transformation.'},
+ rollback:{fields:['rollback','snapshot_id'],target:'rollback',button:'Roll back to snapshot',help:'Restores the table to an earlier snapshot. This changes table data.'}};
+function dataBearPayload(action,values){
+ const spec=dataBearActions[action];if(!spec)throw Error(t('Choose a WAP action.'));
+ const payload={bear:'data',action};
+ for(const key of spec.fields){const value=String(values[key]??'').trim();if(value)payload[key]=value;}
+ if(['generate','stage'].includes(action)&&!payload.request&&!payload.sql)throw Error(t('Describe the data you need or enter SQL.'));
+ if(spec.target&&!payload[spec.target])throw Error(t('Enter the table name.'));
+ // Snapshot IDs stay strings: 64-bit IDs lose digits as JavaScript numbers.
+ if(action==='rollback'&&!/^[0-9]+$/.test(payload.snapshot_id||''))throw Error(t('Snapshot ID must contain digits only.'));
+ return payload;
+}
+function updateDataBearForm(){
+ const select=$('bear-data-action');if(!select)return;const spec=dataBearActions[select.value]||dataBearActions.generate;
+ for(const key of ['request','sql','stage_table','publish','refresh','rollback','snapshot_id']){
+  // Label and input hide together; hidden inputs are disabled so focus and validation skip them. Drafts stay.
+  const input=$('bear-data-'+key),show=spec.fields.includes(key);input.parentElement.hidden=!show;input.disabled=!show;
+  input.required=show&&(key===spec.target||key==='snapshot_id');
+ }
+ $('bear-data-snapshot_id').pattern='[0-9]+';$('bear-data-snapshot_id').inputMode='numeric';
+ ui($('bear-data-sql').labels[0],select.value==='refresh'?'SELECT SQL (optional; empty uses the saved SQL)':'SELECT SQL (optional; used instead of the description)');
+ ui($('bear-data-run'),spec.button);ui($('bear-data-help'),spec.help);
+ $('bear-data-help').className='callout '+(['publish','refresh','rollback'].includes(select.value)?'warn':'info');
+}
 // One list of specialists and one working area: choose a Bear, then fill only its inputs.
 const bearList=document.createElement('div'),bearPanels=document.createElement('div');
 bearList.className='panel bear-list';bearList.setAttribute('role','tablist');bearList.setAttribute('aria-orientation','vertical');
@@ -1160,11 +1210,19 @@ for(const bear of bears){
  ui(tabName,bear.name);tabState.className='badge';tab.append(tabName,tabState);bearList.append(tab);
  const card=document.createElement('article');card.className='panel bear-panel';card.id='bear-panel-'+bear.key;card.setAttribute('role','tabpanel');card.setAttribute('aria-labelledby',tab.id);
  const content=document.createElement('div');content.className='panel-body';const title=document.createElement('h2');ui(title,bear.name);const description=document.createElement('p');ui(description,bear.description);content.append(title,description);
- for(const [key,label,value,multiline] of bear.fields){const id=`bear-${bear.key}-${key}`,l=document.createElement('label');l.htmlFor=id;ui(l,label);const input=document.createElement(Array.isArray(value)?'select':multiline?'textarea':'input');input.id=id;if(Array.isArray(value))value.forEach(v=>{const option=new Option(v,v);ui(option,v);input.add(option);});else input.value=value;content.append(l,input);}
- const footer=document.createElement('div');footer.className='bear-footer';const button=document.createElement('button');button.className='primary run';ui(button,'Run Bear');const state=document.createElement('span');state.className='badge';ui(state,'Ready');state.setAttribute('role','status');const output=document.createElement('pre');output.hidden=true;uiAttributes.push({node:output,attribute:'aria-label',key:'{bear} response',values:()=>({bear:t(bear.name)})});footer.append(button,state);content.append(footer,output);card.append(content);bearPanels.append(card);
+ for(const [key,label,value,multiline] of bear.fields){const id=`bear-${bear.key}-${key}`,field=document.createElement('div'),l=document.createElement('label');l.htmlFor=id;ui(l,label);const input=document.createElement(Array.isArray(value)?'select':multiline?'textarea':'input');input.id=id;if(Array.isArray(value))value.forEach(v=>{const option=new Option(v,v);ui(option,v);input.add(option);});else input.value=value;field.className='bear-field';field.append(l,input);content.append(field);}
+ if(bear.key==='data'){const help=document.createElement('p');help.id='bear-data-help';help.className='callout info';content.querySelector('.bear-field').after(help);}
+ const footer=document.createElement('div');footer.className='bear-footer';const button=document.createElement('button');button.className='primary run';button.id='bear-'+bear.key+'-run';ui(button,'Run Bear');const state=document.createElement('span');state.className='badge';ui(state,'Ready');state.setAttribute('role','status');const output=document.createElement('pre');output.hidden=true;uiAttributes.push({node:output,attribute:'aria-label',key:'{bear} response',values:()=>({bear:t(bear.name)})});footer.append(button,state);content.append(footer,output);card.append(content);bearPanels.append(card);
  const show=(label,tone)=>{for(const node of [state,tabState]){ui(node,label);node.className='badge '+tone;}};
- button.onclick=()=>busy(button,async()=>{show('Running','tone-run');output.hidden=true;const payload={bear:bear.key};bear.fields.forEach(([key])=>{const v=$(`bear-${bear.key}-${key}`).value;if(v)payload[key]=v;});if(bear.key==='data'&&payload.action==='rollback')payload.rollback=payload.stage_table;try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';show(warning?'Findings to review':'Complete',warning?'tone-warn':'tone-ok');}catch(e){show('Failed','tone-bad');output.textContent=e.message;}output.hidden=false;});
+ button.onclick=()=>{
+ const invalid=[...content.querySelectorAll('input,textarea,select')].find(input=>!input.disabled&&!input.checkValidity());if(invalid){invalid.reportValidity();return;}
+ let payload={bear:bear.key};
+ try{if(bear.key==='data')payload=dataBearPayload($('bear-data-action').value,Object.fromEntries(bear.fields.map(([key])=>[key,$('bear-data-'+key).value])));
+  else bear.fields.forEach(([key])=>{const v=$(`bear-${bear.key}-${key}`).value;if(v)payload[key]=v;});}
+ catch(error){show('Check inputs','tone-warn');output.textContent=error.message;output.hidden=false;return;}
+ return busy(button,async()=>{show('Running','tone-run');output.hidden=true;try{const result=await api('/api/bears/run',payload);output.textContent=JSON.stringify(result,null,2);const warning=result.status==='degraded'||result.valid===false||result.advisory==='deny';show(warning?'Findings to review':'Complete',warning?'tone-warn':'tone-ok');}catch(e){show('Failed','tone-bad');output.textContent=e.message;}output.hidden=false;});};
 }
+$('bear-data-action').onchange=updateDataBearForm;updateDataBearForm();
 // wireTabs is declared later as a function, so it is available here.
 const bearTabs=[...bearList.children];
 wireTabs(bearTabs,selected=>bearTabs.forEach(b=>{const active=b===selected;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;$('bear-panel-'+b.dataset.bear).hidden=!active;}));
@@ -1217,6 +1275,7 @@ function addWorksheet(sql=samples.orders){saveWorksheet();const w={id:crypto.ran
 function openWorksheet(sql){addWorksheet(sql);activate($('tab-warehouse'));$('sql').focus();}
 $('sql').addEventListener('input',saveWorksheet);$('add-worksheet-tab').onclick=()=>addWorksheet();
 $('sql').value=worksheets.find(w=>w.id===worksheetId).sql;renderWorksheets();
+if(matchMedia('(max-width: 1024px)').matches)$('worksheet-explorer').open=false;
 let history=readStorage(historyKey,[]);history=Array.isArray(history)?history.filter(q=>q&&typeof q.sql==='string'&&typeof q.at==='string').slice(0,50):[];
 function historyPlaceholder(){const option=new Option('','');ui(option,'Restore a past query…');return option;}
 function renderHistory(){$('query-history').replaceChildren(historyPlaceholder());history.forEach((q,i)=>$('query-history').add(new Option(`${new Date(q.at).toLocaleString()} · ${q.sql.slice(0,100)}`,String(i))));}
@@ -1676,7 +1735,7 @@ async function loadRuntimeHistory(){
 $('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
 
 // Jobs are manually admitted by the server; this page never schedules or retries work.
-let jobEntries=[],jobRunCache=[],jobDirty=false,jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;
+let jobEntries=[],jobRunCache=[],jobRunState='loading',jobSelectionEpoch=0,jobDetailRequest=0,jobDirty=false,jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
 const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
@@ -1804,10 +1863,12 @@ function updateJobRunControls(){
  $('job-run-help').className=dirty?'callout warn':'help';
 }
 function confirmDiscardJob(){return !jobDirty||confirm(t('Discard unsaved changes to the job definition?'));}
-function openJob(entry){editJob(entry);selectJob(entry);renderJobList();}
+// A manual-run result belongs to the job and selection it was submitted from.
+function clearManualRun(){++jobSelectionEpoch;const open=$('job-run-open');open.hidden=true;delete open.dataset.run;delete open.dataset.job;$('job-run-state').textContent='';}
+function openJob(entry){clearManualRun();editJob(entry);selectJob(entry);renderJobList();}
 function clearSelectedJob(){
  selectedJob=null;ui($('job-run-name'),'Choose a saved job.');jobEmpty('job-run-arguments','Save the job before running or scheduling it.');
- $('job-run-open').hidden=true;$('job-run-state').textContent='';updateJobRunControls();renderJobSchedule();if(jobEntries.length)renderJobList();
+ clearManualRun();updateJobRunControls();renderJobSchedule();if(jobEntries.length)renderJobList();
 }
 function updateRunFilter(){
  const filter=$('job-runs-filter'),value=filter.value,names=[...new Set([...jobEntries.map(entry=>entry.name),...jobRunCache.map(run=>run.job_name)])].filter(Boolean).sort();
@@ -1816,6 +1877,9 @@ function updateRunFilter(){
 }
 function renderJobList(runs){
  if(runs)jobRunCache=runs;updateRunFilter();
+ // Keep the manual-run status current from history even while another run's steps are open.
+ const manual=jobRunCache.find(run=>run.id===$('job-run-open').dataset.run);
+ if(manual){ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:manual.id,status:jobStatus(manual.status)}));$('job-run-state').className='state status-line '+statusTone(manual.status);}
  if(!jobEntries.length){jobEmpty('jobs-list','No saved jobs yet. Choose New job to create the first one.');return;}
  table($('jobs-list'),['Job name','Description','Owner','Schedule','Last run','Actions'],jobEntries.map(entry=>[entry.name,entry.definition.description||'',entry.owner,'','','']));
  $('jobs-list').querySelectorAll('tbody tr').forEach((row,index)=>{
@@ -1826,7 +1890,7 @@ function renderJobList(runs){
   const state=document.createElement('span');state.className='badge '+(schedule?.enabled?'tone-ok':'');ui(state,schedule?.enabled?'Enabled':'Disabled');row.cells[3].append(state);
   if(schedule?.enabled){const next=document.createElement('small');ui(next,'Next run: {time}',()=>({time:scheduleNextTime(schedule)}));row.cells[3].append(next);}
   if(run){const status=document.createElement('span');status.className='badge '+statusTone(run.status);ui(status,jobStatuses[run.status]||'Unknown');row.cells[4].append(status,jobAlertTimestamp(run.started_at||run.created_at));}
-  else ui(row.cells[4],'Never run');
+  else ui(row.cells[4],jobRunState==='loading'?'Loading…':jobRunState==='failed'?'History unavailable':'Not in the latest 100 runs');
   row.lastElementChild.append(actionButton('Open',async()=>{if(!confirmDiscardJob())return;openJob(entry);$('job-name').focus();}),actionButton('Run history',async()=>{$('job-runs-filter').value=entry.name;renderJobRuns();showView('jobs-view-runs');}));
  });
 }
@@ -1844,7 +1908,6 @@ function selectJob(entry){
  wrap.append(label,input);$('job-run-arguments').append(wrap);
  }
  if(!Object.keys(parameters).length)jobEmpty('job-run-arguments','No arguments required.');
- if($('job-run-open').dataset.job!==entry.name){$('job-run-open').hidden=true;$('job-run-state').textContent='';}
  updateJobRunControls();
  renderJobSchedule();
 }
@@ -1865,7 +1928,7 @@ async function refreshJobRuns(){
  const current=()=>request===jobsRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
  try{
  const data=await api('/api/jobs/runs');if(!current())return;
- const runs=data.runs||[];jobRunCache=runs;renderJobRuns();
+ const runs=data.runs||[];jobRunCache=runs;jobRunState='ready';renderJobRuns();
  if(typeof renderJobList==='function')renderJobList(runs);
  if(selectedRunId)await showJobRun(selectedRunId);
  if(!current())return;
@@ -1874,24 +1937,35 @@ async function refreshJobRuns(){
  await loadJobSchedules(true);
  if(!current())return;
  scheduleJobsPolling(runs);
- }catch(error){if(current()){message('jobs-error',error.message);stopJobsPolling();}}
+ }catch(error){if(current()){if(jobRunState!=='ready')jobRunState='failed';message('jobs-error',error.message);stopJobsPolling();if(typeof renderJobList==='function')renderJobList();}}
  finally{pruneUIBindings();}
 }
 function renderJobRuns(){
  const filter=$('job-runs-filter').value,runs=filter?jobRunCache.filter(run=>run.job_name===filter):jobRunCache;
- if(!runs.length){jobEmpty('job-runs',filter?'No runs for this job yet.':'No runs yet. Run a saved job to see its history here.');return;}
+ if(!runs.length){jobEmpty('job-runs',filter?'This job has no runs among the latest 100 runs.':'No runs among the latest 100 runs. Run a saved job to see its history here.');return;}
  table($('job-runs'),['Run ID','Job','Status','Trigger','Scheduled for (UTC)','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),t(jobTrigger(run)),run.scheduled_for||'\u2014',run.actor,'',jobDuration(run),'']));
  $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{const run=runs[index];ui(row.cells[2],jobStatuses[run.status]||'Unknown');
   // Short IDs keep the table readable; the full value stays available on hover and in Step history.
   row.cells[0].title=run.id;row.cells[0].textContent=String(run.id).slice(0,8);
   if(run.scheduled_for){row.cells[4].title=run.scheduled_for;row.cells[4].textContent=String(run.scheduled_for).slice(0,16).replace('T',' ');}row.cells[2].className=statusTone(run.status);ui(row.cells[3],jobTrigger(run));
   if(run.started_at||run.created_at)row.cells[6].append(jobAlertTimestamp(run.started_at||run.created_at));else row.cells[6].textContent='\u2014';
+  if(run.id===selectedRunId)row.setAttribute('aria-current','true');
   row.lastElementChild.append(actionButton('Inspect run',async()=>{await showJobRun(run.id);$('job-step-panel').scrollIntoView({block:'nearest'});}));});
 }
 async function showJobRun(id){
- const data=await api('/api/jobs/detail',{run_id:id});if(!jobsVisible())return;
- selectedRunId=id;const run=data.run||data;
- if(run.job_name===undefined||run.job_name===selectedJob?.name){ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-run-state').className='state status-line '+statusTone(run.status);}
+ const request=++jobDetailRequest,role=currentRole,epoch=stageEpoch;
+ const current=()=>request===jobDetailRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
+ if(selectedRunId!==id){
+  // A newly chosen run never keeps the previous run's steps on screen while it loads or if it fails.
+  selectedRunId=id;ui($('job-detail-state'),'Loading run {id}…',{id});$('job-detail-state').className='state status-line tone-run';
+  message('job-failure','');$('job-run-detail').replaceChildren();renderJobRuns();
+ }
+ let data;
+ try{data=await api('/api/jobs/detail',{run_id:id});}
+ catch(error){if(current()&&selectedRunId===id){ui($('job-detail-state'),'Run {id} details unavailable: {error}',{id,error:error.message});$('job-detail-state').className='state status-line tone-bad';$('job-run-detail').replaceChildren();message('job-failure','');}return;}
+ if(!current()||selectedRunId!==id)return;
+ const run=data.run||data;
+ if(run.id===$('job-run-open').dataset.run){ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-run-state').className='state status-line '+statusTone(run.status);}
  ui($('job-detail-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-detail-state').className='state status-line '+statusTone(run.status);
  const unknown=['unknown','interrupted'].includes(run.status),failed=(run.steps||[]).find(step=>['failed','unknown','interrupted'].includes(step.status));
  $('job-failure').className=unknown?'callout warn':'error';
@@ -1974,7 +2048,11 @@ $('job-new').onclick=()=>{if(!confirmDiscardJob())return;editJob(null);clearSele
 $('job-add-step').onclick=()=>{syncJobSteps();jobSteps.push({action:'sql',sql:'SELECT 1',mode:'read-only',schema:'marts'});renderJobSteps();markJobDirty();};
 $('job-form').oninput=$('job-form').onchange=()=>{if(!editingJob||editingJob.can_manage)markJobDirty();};
 $('job-runs-filter').onchange=renderJobRuns;
-$('job-run-open').onclick=()=>showView('jobs-view-runs');
+$('job-run-open').onclick=()=>{
+ const id=$('job-run-open').dataset.run,job=$('job-run-open').dataset.job;if(!id)return;
+ const filter=$('job-runs-filter');if(filter.value&&filter.value!==job)filter.value=[...filter.options].some(option=>option.value===job)?job:'';
+ showView('jobs-view-runs');return showJobRun(id);
+};
 $('jobs-refresh').onclick=()=>busy($('jobs-refresh'),loadJobs);
 $('job-runs-refresh').onclick=()=>busy($('job-runs-refresh'),refreshJobRuns);
 $('job-form').onsubmit=event=>{event.preventDefault();busy($('job-save'),async()=>{
@@ -1985,12 +2063,19 @@ $('job-form').onsubmit=event=>{event.preventDefault();busy($('job-save'),async()
  await api('/api/jobs/save',definition);await loadJobs();const entry=jobEntries.find(entry=>entry.name===definition.name);if(entry)openJob(entry);ui($('job-save-state'),'Job saved.');
  }catch(error){ui($('job-save-state'),'Save failed: {error}',{error:error.message});}
  });};
-$('job-run-form').onsubmit=event=>{event.preventDefault();if(!selectedJob?.can_manage||$('job-run').disabled)return;busy($('job-run'),async()=>{
- try{
- const values=readJobArguments();
- const data=await api('/api/jobs/run',{name:selectedJob.name,arguments:values});selectedRunId=data.run.id;ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:data.run.id,status:jobStatus(data.run.status)}));$('job-run-state').className='state status-line '+statusTone(data.run.status);
- $('job-run-open').dataset.job=selectedJob.name;$('job-run-open').hidden=false;await refreshJobRuns();
- }catch(error){ui($('job-run-state'),'Run failed: {error}',{error:error.message});$('job-run-state').className='state status-line tone-bad';}
+$('job-run-form').onsubmit=event=>{event.preventDefault();if(!selectedJob?.can_manage||$('job-run').disabled)return;
+ const job=selectedJob.name,selection=jobSelectionEpoch,role=currentRole,epoch=stageEpoch;
+ const current=()=>selection===jobSelectionEpoch&&role===currentRole&&epoch===stageEpoch&&selectedJob?.name===job;
+ return busy($('job-run'),async()=>{
+ let run;
+ try{run=(await api('/api/jobs/run',{name:job,arguments:readJobArguments()})).run;}
+ catch(error){if(current()){ui($('job-run-state'),'Run failed: {error}',{error:error.message});$('job-run-state').className='state status-line tone-bad';}return;}
+ // The server accepted the run. A later selection or role change only stops this view from claiming it.
+ if(current()){
+  const open=$('job-run-open');open.dataset.run=run.id;open.dataset.job=job;open.hidden=false;selectedRunId=run.id;
+  ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-run-state').className='state status-line '+statusTone(run.status);
+ }
+ await refreshJobRuns();
  }).finally(updateJobRunControls);};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMartsPolling();else if(martsVisible())loadMarts();});
 window.addEventListener('pagehide',stopMartsPolling);

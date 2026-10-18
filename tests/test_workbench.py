@@ -1012,12 +1012,12 @@ $('query-mode').options=['read-only','sandbox-write','admin-write'].map(value=>(
 $('bear-data-action').options=['generate','stage','publish','refresh','rollback'].map(value=>({value}));
 $('bear-data-action').selectedOptions=[$('bear-data-action').options[2]];
 const calls=[];const fetch=async(path,options)=>{calls.push({path,...options});return {ok:true,json:async()=>({})};};
-let currentRole='admin';
+let currentRole='admin',synced=[];function updateDataBearForm(){synced.push($('bear-data-action').value);}
 eval(HANDLERS+`
 (async()=>{
  await api('/api/status');assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'admin');
- $('role-selector').value='bi_viewer';$('role-selector').onchange();
- assert.equal(document.documentElement.dataset.role,'bi_viewer');
+ $('bear-data-action').value='publish';$('role-selector').value='bi_viewer';$('role-selector').onchange();
+ assert.equal(document.documentElement.dataset.role,'bi_viewer');assert.equal(synced.at(-1),'generate','form follows the corrected action');
  assert.equal($('query-mode').value,'read-only');assert.equal($('query-mode').disabled,true);
  assert.equal($('query-schema').value,'marts');assert.equal($('role-indicator').hidden,false);
  assert.equal($('ai-settings').open,false);
@@ -1036,6 +1036,41 @@ eval(HANDLERS+`
 """
         result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness],
                                 capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_data_bear_sends_only_the_current_action_inputs(self):
+        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        dictionary = script[script.index('const i18n'):script.index('function ui(')]
+        helpers = script[script.index('const dataBearActions='):script.index('// One list of specialists')]
+        harness = r'''
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={id,value:'',disabled:false,required:false,parentElement:{hidden:false},labels:[{}]};
+const ui=(node,key)=>{node.text=t(key);};
+const values={request:'revenue by nation',sql:'SELECT 1',stage_table:'stage_t',publish:'pub_t',refresh:'ref_t',rollback:'marts.roll_t',snapshot_id:'9223372036854775807'};
+const expected={generate:{request:'revenue by nation',sql:'SELECT 1'},stage:{request:'revenue by nation',sql:'SELECT 1',stage_table:'stage_t'},
+ publish:{publish:'pub_t'},refresh:{refresh:'ref_t',sql:'SELECT 1'},rollback:{rollback:'marts.roll_t',snapshot_id:'9223372036854775807'}};
+for(const [action,fields] of Object.entries(expected))assert.deepEqual(dataBearPayload(action,values),{bear:'data',action,...fields},action);
+assert.equal(typeof dataBearPayload('rollback',values).snapshot_id,'string');
+assert.deepEqual(dataBearPayload('refresh',{...values,sql:'  '}),{bear:'data',action:'refresh',refresh:'ref_t'},'empty SQL uses the saved SQL');
+for(const [action,bad,message] of [['generate',{},/description|SQL/],['stage',{request:'x'},/table name/],['publish',{stage_table:'x'},/table name/],
+ ['rollback',{rollback:'marts.t',snapshot_id:'12a'},/digits only/],['rollback',{rollback:'marts.t',snapshot_id:'1e3'},/digits only/],['other',values,/WAP action/]])
+ assert.throws(()=>dataBearPayload(action,bad),message,action);
+// Visible inputs follow the action; hidden ones are disabled and keep their drafts.
+for(const key of Object.keys(values))$('bear-data-'+key).value=values[key];
+const visible=()=>Object.keys(values).filter(key=>!$('bear-data-'+key).parentElement.hidden);
+for(const [action,spec] of Object.entries(dataBearActions)){
+ $('bear-data-action').value=action;updateDataBearForm();
+ assert.deepEqual(visible(),Object.keys(values).filter(key=>spec.fields.includes(key)),action);
+ for(const key of Object.keys(values))assert.equal($('bear-data-'+key).disabled,!spec.fields.includes(key),key);
+ assert.equal($('bear-data-run').text,spec.button);assert.equal($('bear-data-help').text,spec.help);
+ if(spec.target)assert.equal($('bear-data-'+spec.target).required,true);assert.equal($('bear-data-request').required,false);
+}
+assert.equal($('bear-data-publish').value,'pub_t','drafts survive action changes');
+language='ja';$('bear-data-action').value='rollback';updateDataBearForm();assert.equal($('bear-data-run').text,'指定スナップショットへ戻す');
+$('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-data-sql').labels[0].text,/保存済み/);
+'''
+        result = subprocess.run(['node', '-e', dictionary + ';\n' + helpers + '\n' + harness], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @patch.object(wb.bears_resident, 'load_ai_config')

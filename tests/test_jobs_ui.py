@@ -327,6 +327,125 @@ const stateText=()=>$('job-schedule-state').children.map(child=>child.textConten
                         'scheduleNextTime', 'scheduleSummary', 'jobTrigger', 'statusTone',
                         'jobAlertTime', 'jobAlertTimestamp')
 
+    def handler(self, start, end):
+        begin = SCRIPT.index(start)
+        return SCRIPT[begin:SCRIPT.index(end, begin) + len(end)]
+
+    def test_manual_run_response_stays_bound_to_its_submission(self):
+        submit = self.handler("$('job-run-form').onsubmit=", "}).finally(updateJobRunControls);};")
+        self.javascript('const SUBMIT=' + json.dumps(submit) + ';' + r"""
+const assert=require('node:assert/strict');
+class Node{constructor(){this.dataset={};this.hidden=true;this.disabled=false;this.attrs={};this.textContent='';this.className='';}
+ getAttribute(k){return this.attrs[k]??null;}setAttribute(k,v){this.attrs[k]=String(v);}removeAttribute(k){delete this.attrs[k];}}
+const nodes={},$=id=>nodes[id]??=new Node();
+const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
+const jobStatus=status=>status;
+let selectedJob=null,selectedRunId=null,jobSelectionEpoch=0,refreshes=0,controls=0,calls=[],pending=[];
+const readJobArguments=()=>({n:1}),updateJobRunControls=()=>{controls++;},refreshJobRuns=async()=>{refreshes++;};
+const busy=async(button,task)=>{if(button.disabled)return;button.disabled=true;button.setAttribute('aria-busy','true');
+ try{await task();}finally{button.disabled=false;button.removeAttribute('aria-busy');}};
+const api=(path,body)=>{calls.push({path,body});return new Promise((resolve,reject)=>pending.push({resolve,reject}));};
+eval(SUBMIT);
+const submit=()=>$('job-run-form').onsubmit({preventDefault(){}});
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+const A={name:'job_a',can_manage:true},B={name:'job_b',can_manage:true};
+const reset=job=>{clearManualRun();selectedJob=job;refreshes=0;controls=0;calls=[];pending=[];};
+(async()=>{
+ // Accepted: the result, its run ID and the history refresh follow; the button is restored once.
+ reset(A);let run=submit();submit();submit();await settle();
+ assert.equal(calls.length,1,'no duplicate submission while pending');assert.deepEqual(calls[0].body,{name:'job_a',arguments:{n:1}});
+ assert.equal($('job-run').disabled,true);pending[0].resolve({run:{id:'run-a',status:'queued'}});await run;
+ assert.equal($('job-run-open').dataset.run,'run-a');assert.equal($('job-run-open').dataset.job,'job_a');assert.equal($('job-run-open').hidden,false);
+ assert.match($('job-run-state').textContent,/run-a/);assert.equal(selectedRunId,'run-a');assert.equal(refreshes,1);
+ assert.equal($('job-run').disabled,false);assert.equal($('job-run').getAttribute('aria-busy'),null);assert.equal(controls,1);
+ // Rejected: shown as a failure for the same selection, without history refresh.
+ reset(A);run=submit();await settle();pending[0].reject(Error('server busy'));await run;
+ assert.match($('job-run-state').textContent,/Run failed: server busy/);assert.equal($('job-run-open').hidden,true);assert.equal(refreshes,0);assert.equal(controls,1);
+ // New job while pending: no exception, no false failure, history still refreshed.
+ reset(A);selectedRunId='before';run=submit();await settle();clearManualRun();selectedJob=null;
+ pending[0].resolve({run:{id:'run-new',status:'queued'}});await run;
+ assert.equal($('job-run-state').textContent,'');assert.equal($('job-run-open').hidden,true);assert.equal($('job-run-open').dataset.run,undefined);
+ assert.equal(selectedRunId,'before');assert.equal(refreshes,1);assert.equal($('job-run').disabled,false);
+ // Another job while pending: A's run is not attached to B.
+ reset(A);run=submit();await settle();clearManualRun();selectedJob=B;pending[0].resolve({run:{id:'run-a2',status:'queued'}});await run;
+ assert.equal($('job-run-open').dataset.run,undefined);assert.equal($('job-run-state').textContent,'');
+ // A -> B -> A: the earlier submission is still stale for the new selection of A.
+ reset(A);run=submit();await settle();clearManualRun();selectedJob=B;clearManualRun();selectedJob=A;
+ pending[0].resolve({run:{id:'run-a3',status:'queued'}});await run;assert.equal($('job-run-open').dataset.run,undefined);assert.equal($('job-run-state').textContent,'');
+ // Role reset and return: stale even though the job and role look the same again.
+ reset(A);run=submit();await settle();currentRole='bi_viewer';++stageEpoch;currentRole='admin';
+ pending[0].resolve({run:{id:'run-a4',status:'queued'}});await run;assert.equal($('job-run-open').dataset.run,undefined);
+ // A rejection after switching does not paint a failure on the new selection.
+ reset(A);run=submit();await settle();clearManualRun();selectedJob=B;pending[0].reject(Error('late'));await run;assert.equal($('job-run-state').textContent,'');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""", 'clearManualRun', 'statusTone')
+
+    def test_inspect_button_opens_the_reported_run(self):
+        click = self.handler("$('job-run-open').onclick=", "\n};")
+        self.javascript('const CLICK=' + json.dumps(click) + ';' + r"""
+const assert=require('node:assert/strict');
+class Node{constructor(){this.dataset={};this.hidden=false;this.textContent='';this.className='';this.children=[];this.value='';this.options=[];}
+ replaceChildren(...c){this.children=c;this.textContent='';}querySelectorAll(){return [];}}
+const nodes={},$=id=>nodes[id]??=new Node();
+const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
+const message=(id,text)=>{$(id).textContent=text;$(id).hidden=!text;},jobEmpty=(id,key)=>{$(id).textContent=key;};
+let rendered=[];const table=(container,columns,rows)=>{container.rows=rows;};
+const jobsVisible=()=>true,jobStatus=s=>s,jobStatuses={},liveJobStates=new Set(['queued','running']),jobDuration=()=>0,jobSummary=()=>'',jobActionLabels={};
+let selectedJob={name:'job_a'},selectedRunId='run-b',stageExportRunId=null,stageDirty=false,stagePending=false,views=[],renders=0,jobDetailRequest=0;
+const showView=id=>views.push(id),renderJobRuns=()=>{renders++;};
+let pending={};const api=(path,body)=>new Promise((resolve,reject)=>{pending[body.run_id]={resolve,reject};});
+eval(CLICK);
+$('job-runs-filter').options=[{value:''},{value:'job_a'},{value:'job_b'}];
+const detail=id=>({run:{id,job_name:id==='run-b'?'job_b':'job_a',status:'success',steps:[{name:'s',status:'success'}]}});
+(async()=>{
+ // B's steps are on screen; A's button must load A even with history filtered to B.
+ $('job-detail-state').textContent='Run run-b · success';$('job-run-detail').rows=[['b-step']];$('job-runs-filter').value='job_b';
+ $('job-run-open').dataset.run='run-a';$('job-run-open').dataset.job='job_a';
+ let opened=$('job-run-open').onclick();
+ assert.deepEqual(views,['jobs-view-runs']);assert.equal(selectedRunId,'run-a');assert.ok(pending['run-a'],'details requested for run-a');
+ assert.equal($('job-runs-filter').value,'job_a');assert.match($('job-detail-state').textContent,/run-a/);assert.deepEqual($('job-run-detail').children,[]);
+ pending['run-a'].resolve(detail('run-a'));await opened;
+ assert.match($('job-detail-state').textContent,/Run run-a/);assert.deepEqual($('job-run-detail').rows.map(r=>r[0]),['s']);
+ // A failed fetch never leaves another run's steps as the target's details.
+ selectedRunId='run-b';$('job-run-detail').rows=[['b-step']];opened=$('job-run-open').onclick();pending['run-a'].reject(Error('gone'));await opened;
+ assert.match($('job-detail-state').textContent,/run-a details unavailable: gone/);assert.deepEqual($('job-run-detail').children,[]);
+ // Out-of-order responses: the later choice wins.
+ const first=showJobRun('run-c'),second=showJobRun('run-d');pending['run-d'].resolve(detail('run-d'));await second;
+ pending['run-c'].resolve(detail('run-c'));await first;assert.match($('job-detail-state').textContent,/run-d/);assert.equal(selectedRunId,'run-d');
+ // A role reset while loading drops the response.
+ const late=showJobRun('run-e');currentRole='bi_viewer';++stageEpoch;currentRole='admin';pending['run-e'].resolve(detail('run-e'));await late;
+ assert.doesNotMatch($('job-detail-state').textContent,/Run run-e ·/);
+ // Without a reported run the button does nothing.
+ delete $('job-run-open').dataset.run;views=[];assert.equal($('job-run-open').onclick(),undefined);assert.deepEqual(views,[]);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""", 'showJobRun', 'statusTone')
+
+    def test_runs_outside_the_loaded_window_are_not_called_never_run(self):
+        self.javascript(r"""
+const assert=require('node:assert/strict');
+class Node{constructor(tag){this.tag=tag;this.children=[];this.textContent='';this.className='';this.value='';this.attrs={};this.dataset={};}
+ append(...c){this.children.push(...c);}setAttribute(k,v){this.attrs[k]=v;}}
+const nodes={},$=id=>nodes[id]??=new Node('div'),document={createElement:tag=>new Node(tag)};
+const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
+let rows=[];const table=(container,columns,values)=>{rows=values.map(v=>({cells:v.map(()=>new Node('td')),setAttribute(){}}));rows.forEach(r=>r.lastElementChild=r.cells.at(-1));container.text='table';};
+$('jobs-list').querySelectorAll=()=>rows;$('job-runs').querySelectorAll=()=>rows;
+const jobEmpty=(id,key)=>{$(id).text=t(key);},actionButton=()=>new Node('button'),updateRunFilter=()=>{};
+const jobStatuses={success:'Succeeded'},jobStatus=s=>s,jobTrigger=()=>'Manual',jobDuration=()=>0;
+let jobEntries=[{name:'old_job',owner:'me',can_manage:true,definition:{steps:[{}]}}],jobSchedules=[],selectedJob=null,editingJob=null,selectedRunId=null;
+let jobRunCache=[],jobRunState='loading';
+const lastRun=()=>rows[0].cells[4];
+renderJobList();assert.equal(lastRun().textContent,'Loading…');
+jobRunState='failed';renderJobList();assert.equal(lastRun().textContent,'History unavailable');
+// 100 newer runs of another job push old_job out of the loaded window.
+jobRunState='ready';renderJobList(Array.from({length:100},(_,i)=>({id:'r'+i,job_name:'busy_job',status:'success',started_at:'2026-10-18T10:00:00Z'})));
+assert.equal(lastRun().textContent,'Not in the latest 100 runs');assert.doesNotMatch(lastRun().textContent,/Never/);
+$('job-runs-filter').value='old_job';renderJobRuns();assert.match($('job-runs').text,/latest 100 runs/);assert.doesNotMatch($('job-runs').text,/yet|never/i);
+language='ja';renderJobList();assert.equal(lastRun().textContent,'直近100件に履歴なし');renderJobRuns();assert.match($('job-runs').text,/直近100件/);language='en';
+// When the job is in the window, its latest result is shown as before.
+renderJobList([{id:'x',job_name:'old_job',status:'success',started_at:'2026-10-18T10:00:00Z'}]);
+assert.equal(lastRun().children[0].textContent,'Succeeded');assert.equal(lastRun().children[1].tag,'time');
+""", 'renderJobList', 'renderJobRuns', 'statusTone', 'jobAlertTime', 'jobAlertTimestamp', 'scheduleNextTime')
+
     def test_javascript_parses(self):
         result = subprocess.run(['node', '--check'], input=SCRIPT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
