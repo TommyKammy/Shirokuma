@@ -255,7 +255,7 @@ const arg={value:'3',dataset:{argument:'limit',type:'integer'}};
 $('job-run-arguments').querySelectorAll=()=>[arg];
 const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
 const pruneUIBindings=()=>{},message=(id,text)=>{$(id).textContent=text;},jobEmpty=(id,text)=>{$(id).textContent=text;};
-let jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false,selectedRunId=null,visible=true,pollRuns=[],jobRunCache=[];
+let jobsRequest=0,jobDetailRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false,selectedRunId=null,visible=true,pollRuns=[],jobRunCache=[];
 let selectedJob={name:'orders',can_manage:true};
 let jobSchedules=[{name:'orders',kind:'once',date:'2030-01-01',time:'09:00',timezone:'UTC',enabled:true,next_run_at:'2030-01-01T09:00:00Z',arguments:{limit:3}}];
 const scheduleFields=['kind','minutes','time','timezone','date','day',...Array.from({length:7},(_,i)=>'weekday-'+(i+1))];

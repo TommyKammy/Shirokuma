@@ -71,9 +71,10 @@ def ai_config_input(body):
     return config
 
 
-def components():
+def components(items=None):
     """One inventory request, without log collection or waking the warehouse."""
-    items = json.loads(warehouse_resident.kubectl("get", "deploy,sts", "-o", "json"))["items"]
+    if items is None:
+        items = json.loads(warehouse_resident.kubectl("get", "deploy,sts", "-o", "json"))["items"]
     return {item["metadata"]["name"]: {
         "replicas": item.get("spec", {}).get("replicas", 1),
         "ready_replicas": item.get("status", {}).get("readyReplicas", 0),
@@ -198,15 +199,25 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 report = {"status": "healthy", "warehouse": None, "components": {}}
                 report['auto_chill'] = warehouse_resident.auto_chill_status()
                 try:
-                    report["warehouse"] = warehouse_resident.status("LOCAL")
+                    items = json.loads(warehouse_resident.kubectl("get", "deploy,sts", "-o", "json"))["items"]
                 except Exception as exc:
-                    report.update(status="degraded", warehouse={"error": str(exc)})
-                try:
-                    report["components"] = components()
-                    if any(v["ready_replicas"] < v["replicas"] for v in report["components"].values()):
-                        report["status"] = "degraded"
-                except Exception as exc:
-                    report.update(status="degraded", components={"error": str(exc)})
+                    report.update(status="degraded", components={"error": str(exc)},
+                                  warehouse={"error": str(exc)})
+                else:
+                    try:
+                        trino = next((item for item in items if item.get('kind') == 'Deployment'
+                                      and item['metadata']['name'] == 'trino-local'), None)
+                        if trino is None:
+                            raise ValueError('trino-local deployment not found')
+                        report['warehouse'] = warehouse_resident.status_from_deployment('LOCAL', trino)
+                    except Exception as exc:
+                        report.update(status="degraded", warehouse={"error": str(exc)})
+                    try:
+                        report['components'] = components(items)
+                        if any(v['ready_replicas'] < v['replicas'] for v in report['components'].values()):
+                            report['status'] = 'degraded'
+                    except Exception as exc:
+                        report.update(status="degraded", components={"error": str(exc)})
                 self.respond(report)
             elif url.path in ("/api/catalog", "/api/lineage"):
                 params = parse_qs(url.query, keep_blank_values=True)

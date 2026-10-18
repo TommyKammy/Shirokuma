@@ -1013,9 +1013,10 @@ $('bear-data-action').options=['generate','stage','publish','refresh','rollback'
 $('bear-data-action').selectedOptions=[$('bear-data-action').options[2]];
 const calls=[];const fetch=async(path,options)=>{calls.push({path,...options});return {ok:true,json:async()=>({})};};
 let currentRole='admin',synced=[];function updateDataBearForm(){synced.push($('bear-data-action').value);}
-// Catalog cache behavior has a separate harness; isolate the role/header contract here.
+// Catalog cache and status invalidation have separate harnesses; isolate the role/header contract here.
 let catalogGeneration=0;function catalogMutation(){return false;}function catalogIdentity(){return currentRole;}
 function invalidateCatalogDetails(){}function observeCatalogRuns(){}function resetCatalogIdentity(){}
+function invalidateStatus(){}
 function loadCatalog(){}
 eval(HANDLERS+`
 (async()=>{
@@ -1846,25 +1847,44 @@ const run=eval(HANDLER);
                 self.assertIn(b"AgentHouse Pawprints", body)
 
     @patch.object(wb.warehouse_resident, "kubectl")
-    @patch.object(wb.warehouse_resident, "status")
-    def test_status(self, status, kubectl):
-        status.return_value = {"state": "chilled", "replicas": 0, "ready_replicas": 0}
-        kubectl.return_value = json.dumps({"items": [{"metadata": {"name": "polaris"},
-            "spec": {"replicas": 1}, "status": {"readyReplicas": 1}}]})
-        code, result = self.json_request("/api/status")
-        self.assertEqual(code, 200)
-        self.assertEqual(result["status"], "healthy")
-        self.assertEqual(result["warehouse"]["state"], "chilled")
-        self.assertEqual(result["components"]["polaris"]["ready_replicas"], 1)
-        status.assert_called_once_with("LOCAL")
+    def test_status(self, kubectl):
+        for replicas, ready, state in [(0, 0, 'chilled'), (1, 0, 'starting'), (1, 1, 'active')]:
+            for component_ready in (0, 1):
+                with self.subTest(state=state, component_ready=component_ready):
+                    kubectl.reset_mock()
+                    kubectl.return_value = json.dumps({'items': [
+                        {'kind': 'Deployment', 'metadata': {'name': 'trino-local'},
+                         'spec': {'replicas': replicas}, 'status': {'readyReplicas': ready}},
+                        {'kind': 'StatefulSet', 'metadata': {'name': 'polaris'},
+                         'spec': {'replicas': 1}, 'status': {'readyReplicas': component_ready}}]})
+                    code, result = self.json_request('/api/status')
+                    self.assertEqual(code, 200)
+                    self.assertEqual(result['status'], 'degraded' if ready < replicas or not component_ready else 'healthy')
+                    self.assertEqual(result['warehouse']['state'], state)
+                    self.assertEqual(result['components']['polaris']['ready_replicas'], component_ready)
+                    kubectl.assert_called_once_with('get', 'deploy,sts', '-o', 'json')
 
-    @patch.object(wb, "components", side_effect=OSError("cluster unavailable"))
-    @patch.object(wb.warehouse_resident, "status", side_effect=OSError("no cluster"))
+    @patch.object(wb.warehouse_resident, "kubectl", side_effect=OSError("no cluster"))
     def test_status_unavailable(self, *_):
         code, result = self.json_request("/api/status")
         self.assertEqual(code, 200)
         self.assertEqual(result["status"], "degraded")
         self.assertIn("error", result["warehouse"])
+        self.assertEqual(result['components'], {'error': 'no cluster'})
+
+    @patch.object(wb.warehouse_resident, 'kubectl')
+    def test_status_missing_trino_and_component_failure(self, kubectl):
+        kubectl.return_value = json.dumps({'items': [{'kind': 'StatefulSet', 'metadata': {'name': 'polaris'}}]})
+        _, result = self.json_request('/api/status')
+        self.assertEqual(result['status'], 'degraded')
+        self.assertIn('not found', result['warehouse']['error'])
+        self.assertEqual(result['components']['polaris'], {'replicas': 1, 'ready_replicas': 0})
+        kubectl.return_value = json.dumps({'items': [{'kind': 'Deployment', 'metadata': {'name': 'trino-local'}}]})
+        with patch.object(wb, 'components', side_effect=ValueError('bad component')):
+            _, result = self.json_request('/api/status')
+        self.assertEqual(result['status'], 'degraded')
+        self.assertEqual(result['warehouse']['state'], 'starting')
+        self.assertEqual(result['components'], {'error': 'bad component'})
 
     @patch.object(wb.warehouse_resident, "transition")
     def test_chill_wake(self, transition):

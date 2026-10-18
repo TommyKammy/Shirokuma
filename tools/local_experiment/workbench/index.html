@@ -988,6 +988,7 @@ const samples = {
 };
 let currentRole = 'admin';
 function applyRole() {
+ invalidateStatus();
  resetCatalogIdentity();
  document.documentElement.dataset.role=currentRole;
  if(typeof resetAdminViews==='function')resetAdminViews();
@@ -1093,10 +1094,17 @@ function table(container, columns, rows, localizeHeaders=true) {
  rows.forEach(row=>{const tr=body.insertRow();row.forEach(value=>{const td=tr.insertCell();if(value===null)td.className='null';td.textContent=value===null?'NULL':typeof value==='object'?JSON.stringify(value):String(value);});});
  container.append(element);
 }
-async function refreshStatus(){
+let statusEpoch=0,statusPending=null;
+function invalidateStatus(){++statusEpoch;statusPending=null;}
+function refreshStatus({force=false}={}){
+ if(force)invalidateStatus();
+ const epoch=statusEpoch,role=currentRole,session=catalogSession;
+ if(statusPending?.epoch===epoch&&statusPending.role===role&&statusPending.session===session)return statusPending.promise;
+ const current=()=>epoch===statusEpoch&&role===currentRole&&session===catalogSession;
+ const promise=(async()=>{
  message('status-error','');
  try{
-  const data=await api('/api/status'),w=data.warehouse;
+  const data=await api('/api/status');if(!current())return;const w=data.warehouse;
   if(data.auto_chill)updateAutoChill(data.auto_chill);
   const state=w.error?'Unavailable':({active:'Running',chilled:'Chilled',starting:'Starting'}[w.state]||w.state);
   const tone=w.error?'tone-bad':w.state==='active'?'tone-ok':w.state==='starting'?'tone-run':'';
@@ -1110,8 +1118,10 @@ async function refreshStatus(){
   $('components').replaceChildren();
   Object.entries(data.components).forEach(([name,c])=>{const pill=document.createElement('span');pill.className='badge';if(name==='error')ui(pill,'Readiness unavailable: {error}',{error:c});else pill.textContent=`${name}: ${c.ready_replicas}/${c.replicas}`;$('components').append(pill);});
   if(w.error)message('status-error',w.error);
- }catch(error){ui($('warehouse-state'),'Unavailable');ui($('quick-warehouse-state'),'Warehouse: {state}',()=>({state:t('Unavailable')}));for(const id of ['warehouse-state','quick-warehouse-state'])$(id).className='badge tone-bad';message('quick-status-error',error.message);$('quick-status-error').title=error.message;message('status-error',error.message);}
- finally {pruneUIBindings();}
+ }catch(error){if(!current())return;ui($('warehouse-state'),'Unavailable');ui($('quick-warehouse-state'),'Warehouse: {state}',()=>({state:t('Unavailable')}));for(const id of ['warehouse-state','quick-warehouse-state'])$(id).className='badge tone-bad';message('quick-status-error',error.message);$('quick-status-error').title=error.message;message('status-error',error.message);}
+ finally {if(current())pruneUIBindings();}
+ })().finally(()=>{if(statusPending?.promise===promise)statusPending=null;});
+ statusPending={epoch,role,session,promise};return promise;
 }
 function renderComputeSummary(w,state,components){
  const known=Object.values(components||{}).filter(c=>c&&typeof c==='object');
@@ -1119,7 +1129,7 @@ function renderComputeSummary(w,state,components){
  $('compute-summary').replaceChildren(...facts.map(([label,value])=>{const item=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,label);ui(dd,value);item.append(dt,dd);return item;}));
 }
 $('refresh-status').onclick=()=>busy($('refresh-status'),refreshStatus);
-for(const action of ['chill','wake'])$(action).onclick=()=>busy($(action),async()=>{try{await api('/api/warehouse/'+action,{});await refreshStatus();}catch(e){message('status-error',e.message);}});
+for(const action of ['chill','wake'])$(action).onclick=()=>busy($(action),async()=>{try{invalidateStatus();await api('/api/warehouse/'+action,{});await refreshStatus({force:true});}catch(e){message('status-error',e.message);}});
 document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{setSQL(samples[b.dataset.sample]);$('sql').focus();});
 $('run-query').onclick=()=>busy($('run-query'),async()=>{
  message('query-error','');ui($('query-meta'),'Executing…');$('query-meta').className='status-line tone-run';
@@ -1626,7 +1636,7 @@ $('stage-form').oninput=()=>{stageDirty=true;invalidateStagePreview();clearStage
 $('stage-form').onchange=$('stage-form').oninput;
 $('stage-form').onsubmit=event=>{event.preventDefault();stageTask('Working…',async epoch=>{
  const data=await api('/api/stages/save',stageDefinition());if(!stageCurrent(epoch))return;
- editStage(data.stage);const list=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=list.stages||[];renderStages();await fetchStageFiles(epoch);if(stageCurrent(epoch))ui($('stage-state'),'Stage saved.');
+ editStage(data.stage);await fetchStageFiles(epoch);if(stageCurrent(epoch))ui($('stage-state'),'Stage saved.');
  });};
 $('stage-files-refresh').onclick=()=>stageTask('Loading files…',fetchStageFiles);
 $('stage-file').onchange=()=>{invalidateStagePreview();stageControls();};
@@ -1790,7 +1800,7 @@ let pawprintRows=[];
 $('pawprint-filter').oninput=renderPawprints;$('pawprint-status-filter').onchange=renderPawprints;
 function addPawprintStatus(status){const option=new Option(status,status);ui(option,status);$('pawprint-status-filter').add(option);}
 function renderPawprints(){const term=$('pawprint-filter').value.toLowerCase(),status=$('pawprint-status-filter').value;for(const r of pawprintRows)if(r.status&&![...$('pawprint-status-filter').options].some(o=>o.value===r.status))addPawprintStatus(r.status);const rows=pawprintRows.filter(r=>(!status||r.status===status)&&JSON.stringify(r).toLowerCase().includes(term));table($('pawprint-results'),['Timestamp (UTC)','Action / Bear','Latency (ms)','Status','Details'],rows.map(r=>[r.timestamp,r.action_type||r.agent_id,r.duration_ms,r.status,[r.target_system,r.model_name?`${r.model_name} · tokens ${r.prompt_tokens??'—'} prompt / ${r.completion_tokens??'—'} completion`:null,`trace ${r.trace_id}`].filter(Boolean).join(' · ')]));$('pawprint-results').querySelectorAll('tbody tr').forEach((tr,i)=>{ui(tr.cells[3],rows[i].status||'');tr.cells[3].className=statusTone(rows[i].status);const r=rows[i];tr.cells[4].className='details-cell';if(r.model_name)ui(tr.cells[4],'{target}{model} · tokens {prompt} prompt / {completion} · trace {trace}',{target:r.target_system?r.target_system+' · ':'',model:r.model_name,prompt:r.prompt_tokens??'—',completion:r.completion_tokens??'—',trace:r.trace_id});});ui($('pawprint-meta'),'{visible} / {total} events',{visible:rows.length,total:pawprintRows.length});}
-for(const action of ['wake','chill'])$('quick-'+action).onclick=()=>busy($('quick-'+action),async()=>{try{await api('/api/warehouse/'+action,{});await refreshStatus();}catch(e){message('quick-status-error',e.message);}});
+for(const action of ['wake','chill'])$('quick-'+action).onclick=()=>busy($('quick-'+action),async()=>{try{invalidateStatus();await api('/api/warehouse/'+action,{});await refreshStatus({force:true});}catch(e){message('quick-status-error',e.message);}});
 $('compute-refresh').onclick=()=>busy($('compute-refresh'),refreshStatus);
 for(const [id,bear] of [['compute-sre-check','sre'],['compute-policy-check','policy']])$(id).onclick=()=>busy($(id),async()=>{try{const result=await api('/api/bears/run',bear==='policy'?{bear,action:'baseline'}:{bear});message('compute-check-result',JSON.stringify(result,null,2));}catch(e){message('compute-check-result',e.message);}});
 
@@ -1860,7 +1870,7 @@ function updateAutoChill(data){
  }
  ui($('auto-chill-state'),auto_chill_minutes>0?'Auto-Chill: {minutes}m':'Auto-Chill: Off',{minutes:auto_chill_minutes});
 }
-$('save-auto-chill').onclick=()=>busy($('save-auto-chill'),async()=>{try{updateAutoChill(await api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)}));}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}});
+$('save-auto-chill').onclick=()=>busy($('save-auto-chill'),async()=>{try{invalidateStatus();updateAutoChill(await api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)}));await refreshStatus({force:true});}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}});
 async function loadRuntimeHistory(){
  message('history-error','');
  try{
@@ -1882,7 +1892,7 @@ async function loadRuntimeHistory(){
 $('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
 
 // Jobs are manually admitted by the server; this page never schedules or retries work.
-let jobEntries=[],jobRunCache=[],jobRunState='loading',jobSelectionEpoch=0,jobDetailRequest=0,jobDirty=false,jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;
+let jobEntries=[],jobRunCache=[],jobRunState='loading',jobSelectionEpoch=0,jobDetailRequest=0,jobDirty=false,jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobListRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
 const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
@@ -2060,28 +2070,33 @@ function selectJob(entry){
 }
 async function loadJobs(){
  if(!jobsVisible())return;
+ const request=++jobListRequest,role=currentRole,epoch=stageEpoch;
+ let selection=jobSelectionEpoch;
+ const current=()=>request===jobListRequest&&role===currentRole&&epoch===stageEpoch&&selection===jobSelectionEpoch&&jobsVisible();
  message('jobs-error','');try{
- const data=await api('/api/jobs');jobEntries=data.jobs||[];
+ const data=await api('/api/jobs');if(!current())return;jobEntries=data.jobs||[];
  if(selectedJob){const updated=jobEntries.find(entry=>entry.name===selectedJob.name);if(updated)selectJob(updated);else clearSelectedJob();}
+ selection=jobSelectionEpoch;
  renderJobList();
- await loadJobSchedules();
- await refreshJobRuns();
- }catch(error){message('jobs-error',error.message);stopJobsPolling();}
+ await loadJobSchedules();if(!current())return;
+ await refreshJobRuns(false);
+ }catch(error){if(current()){message('jobs-error',error.message);stopJobsPolling();}}
  finally{pruneUIBindings();}
 }
-async function refreshJobRuns(){
+async function refreshJobRuns(refreshSchedules=true){
  if(!jobsVisible())return;
  const request=++jobsRequest,role=currentRole,epoch=stageEpoch;
  const current=()=>request===jobsRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
+ const selection=selectedRunId,detailRequest=jobDetailRequest;
  try{
  const data=await api('/api/jobs/runs');if(!current())return;
  const runs=data.runs||[];jobRunCache=runs;jobRunState='ready';renderJobRuns();
  if(typeof renderJobList==='function')renderJobList(runs);
- if(selectedRunId)await showJobRun(selectedRunId);
+ if(selection&&selection===selectedRunId&&detailRequest===jobDetailRequest)await showJobRun(selection,runs.find(run=>run.id===selection));
  if(!current())return;
  await loadJobAlerts(true);
  if(!current())return;
- await loadJobSchedules(true);
+ if(refreshSchedules)await loadJobSchedules(true);
  if(!current())return;
  scheduleJobsPolling(runs);
  }catch(error){if(current()){if(jobRunState!=='ready')jobRunState='failed';message('jobs-error',error.message);stopJobsPolling();if(typeof renderJobList==='function')renderJobList();}}
@@ -2099,7 +2114,7 @@ function renderJobRuns(){
   if(run.id===selectedRunId)row.setAttribute('aria-current','true');
   row.lastElementChild.append(actionButton('Inspect run',async()=>{await showJobRun(run.id);$('job-step-panel').scrollIntoView({block:'nearest'});}));});
 }
-async function showJobRun(id){
+async function showJobRun(id,freshRun){
  const request=++jobDetailRequest,role=currentRole,epoch=stageEpoch;
  const current=()=>request===jobDetailRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
  if(selectedRunId!==id){
@@ -2108,7 +2123,7 @@ async function showJobRun(id){
   message('job-failure','');$('job-run-detail').replaceChildren();renderJobRuns();
  }
  let data;
- try{data=await api('/api/jobs/detail',{run_id:id});}
+ try{data=freshRun||await api('/api/jobs/detail',{run_id:id});}
  catch(error){if(current()&&selectedRunId===id){ui($('job-detail-state'),'Run {id} details unavailable: {error}',{id,error:error.message});$('job-detail-state').className='state status-line tone-bad';$('job-run-detail').replaceChildren();message('job-failure','');}return;}
  if(!current()||selectedRunId!==id)return;
  const run=data.run||data;
@@ -2119,6 +2134,7 @@ async function showJobRun(id){
  message('job-failure',unknown?t('Outcome unknown. Check the target before running again.')+(failed?'\n'+(failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1))+(failed.error?': '+failed.error:''):''):failed?t('Failed step: {step}',{step:failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1)})+(failed.error?'\n'+failed.error:''):run.error||'');
  const steps=run.steps||[];
  if(run.id===stageExportRunId&&!liveJobStates.has(run.status)&&currentRole==='admin'&&!stageDirty&&!stagePending){stageExportRunId=null;await stageTask('Loading outputs…',fetchStageExports);}
+ if(!current()||selectedRunId!==id)return;
  if(!steps.length)jobEmpty('job-run-detail','No steps recorded.');
  else{table($('job-run-detail'),['Steps','Step type','Status','Duration (ms)','Summary'],steps.map((step,index)=>[step.name||String(index+1),step.action||run.definition?.steps?.[index]?.action||'',jobStatus(step.status),jobDuration(step),step.error||jobSummary(step)]));$('job-run-detail').querySelectorAll('tbody tr').forEach((row,index)=>{const step=steps[index];ui(row.cells[1],jobActionLabels[step.action||run.definition?.steps?.[index]?.action]||'Unknown');ui(row.cells[2],jobStatuses[step.status]||'Unknown');row.cells[2].className=statusTone(step.status);if(step.error)row.cells[4].className='details-cell';else ui(row.cells[4],'{summary}',()=>({summary:jobSummary(step)}));});}
 }

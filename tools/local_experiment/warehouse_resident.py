@@ -274,7 +274,12 @@ def deployment():
 
 def status(size):
     size = warehouse(size)
-    obj = deployment()
+    return status_from_deployment(size, deployment())
+
+
+def status_from_deployment(size, obj):
+    """Calculate warehouse state from an already acquired deployment."""
+    size = warehouse(size)
     replicas = obj.get("spec", {}).get("replicas", 1)
     ready = obj.get("status", {}).get("readyReplicas", 0)
     state = "chilled" if replicas == 0 else "active" if ready >= 1 else "starting"
