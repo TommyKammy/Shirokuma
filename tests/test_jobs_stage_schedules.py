@@ -101,6 +101,89 @@ class StageSchedulesTests(unittest.TestCase):
         self.file.rename(self.file.with_suffix('.tsv'))
         self.assertEqual(self.status('data.tsv')['ingestion_status'], 'new')
 
+    def test_alias_uses_resolved_dialect_for_manual_and_automatic_dedup(self):
+        target = self.file.with_suffix('.tsv')
+        self.file.rename(target)
+        target.write_text('id\tvalue\n1\thello\n2\tworld\n')
+        self.file.symlink_to(target)
+        self.stable(target)
+        saved = self.schedule(enabled=True)
+        with patch.object(lake_ingest, 'ingest', return_value={}) as ingest:
+            run = self.done(stages.submit_import('incoming', 'data.tsv', self.version('data.tsv'), 'alice', 'admin')['id'])
+            alias = self.status()
+            self.assertEqual(alias['ingestion_status'], 'success')
+            self.assertEqual(alias['last_run_id'], run['id'])
+            preview = stages.preview_file('incoming', 'data.csv', alias['version'], 'alice', 'admin')
+            self.assertEqual(preview['file'], 'data.csv')
+            self.assertEqual(preview['ingestion_status'], 'success')
+            self.assertEqual(preview['sample_rows'], [['1', 'hello'], ['2', 'world']])
+            with self.assertRaises(jobs.JobConflict):
+                self.submit()
+            result = jobs.tick(datetime.fromisoformat(saved['next_run_at']))
+            self.assertEqual(self.done(result['started'][0])['steps'][0]['action'], 'stage_scan_empty')
+            self.assertEqual(ingest.call_count, 1)
+
+    def test_alias_cannot_expose_unsupported_or_unsettled_target(self):
+        for filename in ('bad.txt', 'bad.partial.csv', '.hidden.csv', 'bad.tmp.csv'):
+            target = self.input / filename
+            target.write_text('id\n3\n')
+            (self.input / (filename.replace('.', '_') + '.csv')).symlink_to(target)
+            self.stable(target)
+        files = stages.list_files('incoming', 'alice', 'admin')['files']
+        self.assertEqual([item['name'] for item in files], ['data.csv'])
+        for filename in ('bad.txt', 'bad.partial.csv', '.hidden.csv', 'bad.tmp.csv'):
+            alias = filename.replace('.', '_') + '.csv'
+            with self.subTest(alias=alias), self.assertRaises(ValueError):
+                stages.preview_file('incoming', alias, files[0]['version'], 'alice', 'admin')
+        self.stable()
+        saved = self.schedule(enabled=True)
+        self._healthy_due_schedule(saved['next_run_at'])
+        with patch.object(lake_ingest, 'ingest', return_value={}), patch.object(jobs.wr, 'query', return_value={}), \
+                patch.object(jobs, '_start_worker', side_effect=jobs._worker):
+            result = jobs.tick(datetime.fromisoformat(saved['next_run_at']))
+            self.assertEqual(len(result['started']), 2)
+            self.assertTrue(all(self.done(run_id)['status'] == 'success' for run_id in result['started']))
+
+    def _healthy_due_schedule(self, due):
+        jobs.save_job(dict(name='zhealthy', steps=[dict(action='sql', sql='SELECT 1', mode='read-only')]), 'alice', 'admin')
+        jobs.save_schedule(dict(name='zhealthy', kind='interval', every_minutes=1, enabled=True), 'alice', 'admin')
+        with jobs._db() as connection:
+            connection.execute('UPDATE schedules SET next_run_at=? WHERE name=?', (due, 'zhealthy'))
+
+    def test_admission_conflict_rolls_back_partial_claims_and_continues_tick(self):
+        with patch.object(lake_ingest, 'ingest', return_value={}):
+            original = self.done(self.submit()['id'])
+        fresh = self.input / 'fresh.csv'
+        fresh.write_text('id\n3\n')
+        definition = stages._owned('incoming', 'alice')
+        steps = [stages._step(definition, 'fresh.csv', self.version('fresh.csv')),
+                 stages._step(definition, 'data.csv', self.version())]
+        saved = self.schedule(enabled=True)
+        self._healthy_due_schedule(saved['next_run_at'])
+        scheduled = stages._scheduled
+        def conflict(name, actor, role, preflight=False, connection=None):
+            if preflight:
+                return dict(name='stage:incoming', stage=definition, steps=steps), steps
+            return scheduled(name, actor, role, preflight=preflight, connection=connection)
+        with patch.object(stages, '_scheduled', side_effect=conflict), patch.object(jobs.wr, 'query', return_value={}), \
+                patch.object(jobs, '_start_worker', side_effect=jobs._worker):
+            result = jobs.tick(datetime.fromisoformat(saved['next_run_at']))
+            self.assertEqual(len(result['skipped']), 1)
+            self.assertEqual(len(result['started']), 1)
+            self.assertEqual(self.done(result['started'][0])['status'], 'success')
+        skipped = jobs.get_run(result['skipped'][0], 'alice', 'admin')
+        self.assertIn('admission conflict', skipped['error'])
+        self.assertTrue(all(step['status'] == 'skipped' for step in skipped['steps']))
+        self.assertEqual(self.status()['last_run_id'], original['id'])
+        self.assertEqual(self.status()['ingestion_status'], 'success')
+        self.assertEqual(self.status('fresh.csv')['ingestion_status'], 'new')
+        schedule = stages.list_stages('alice', 'admin')[0]['schedule']
+        self.assertTrue(schedule['enabled'])
+        self.assertGreater(schedule['next_run_at'], saved['next_run_at'])
+        with jobs._db() as connection:
+            self.assertEqual(connection.execute('SELECT COUNT(*) FROM runs').fetchone()[0], 3)
+            self.assertEqual(connection.execute('SELECT COUNT(*) FROM stage_files').fetchone()[0], 1)
+
     def test_scheduled_scan_dedups_consumes_once_and_preserves_cadence(self):
         self.stable()
         saved = self.schedule(enabled=True)

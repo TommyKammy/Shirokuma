@@ -719,7 +719,21 @@ function renderStages(){
  table($('stages-list'),['Stage name','Target table','Mode','Owner','Actions'],stageEntries.map(entry=>[entry.name,entry.definition.table,t(entry.definition.mode),entry.owner,'']));
  $('stages-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=stageEntries[index];ui(row.cells[2],entry.definition.mode);if(entry.can_manage)row.lastElementChild.append(actionButton('Select stage',()=>selectStage(entry)));else ui(row.lastElementChild,'Read-only definition');});
 }
-async function loadStages(){await stageTask('Loading stages…',async epoch=>{const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];if(selectedStage){const fresh=stageEntries.find(entry=>entry.name===selectedStage.name);if(!fresh||fresh.updated_at!==selectedStage.updated_at||!fresh.can_manage)editStage(fresh||null);}renderStages();ui($('stage-state'),'Choose or save a stage.');});}
+async function loadStages(){await stageTask('Loading stages…',async epoch=>{
+ const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];
+ if(selectedStage){
+  const fresh=stageEntries.find(entry=>entry.name===selectedStage.name);
+  if(!fresh||fresh.updated_at!==selectedStage.updated_at||!fresh.can_manage)editStage(fresh||null);
+  else{
+   const previousSchedule=selectedStage.schedule;selectedStage=fresh;
+   if(fresh.schedule?.enabled!==previousSchedule?.enabled||fresh.schedule?.every_minutes!==previousSchedule?.every_minutes){
+    $('stage-schedule-minutes').value=fresh.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=fresh.schedule?.enabled===true;
+   }
+   renderStageSchedule();
+  }
+ }
+ renderStages();ui($('stage-state'),'Choose or save a stage.');
+});}
 function stageDefinition(){
  const definition={};for(const key of ['name','directory','table','mode','format'])definition[key]=$('stage-'+key).value.trim();
  if($('stage-key').value.trim())definition.key=$('stage-key').value.trim();return definition;
@@ -733,7 +747,7 @@ async function refreshStageSchedule(epoch){
  const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];
  const entry=stageEntries.find(entry=>entry.name===selectedStage?.name);if(entry){
   if(entry.updated_at!==selectedStage.updated_at){
-   invalidateStagePreview();stageDirty=false;selectedStage=entry;clearStageExports(true);
+   invalidateStagePreview();stageFiles=[];$('stage-file').replaceChildren();$('stage-files').replaceChildren();stageDirty=false;selectedStage=entry;clearStageExports(true);
    for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=entry.definition[key]||'';
   }
   selectedStage=entry;$('stage-schedule-minutes').value=entry.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=entry.schedule?.enabled===true;

@@ -225,9 +225,19 @@ def _tick(now, stop=None, refresh_clock=False):
                         reason = 'Scheduled time missed by at least 60 seconds; no catch-up'
                     status = 'skipped' if reason else 'queued'
                     next_run = None if paused else _next(schedule, current, previous=due).isoformat()
-                    run_id = jobs._insert_run(connection, definition, arguments,
-                        prepared if prepared is not None else definition.get('steps', []), row['owner'], row['role'],
-                        trigger='schedule', scheduled_for=due.isoformat(), status=status, error=reason)
+                    steps = prepared if prepared is not None else definition.get('steps', [])
+                    connection.execute('SAVEPOINT schedule_admission')
+                    try:
+                        run_id = jobs._insert_run(connection, definition, arguments, steps, row['owner'], row['role'],
+                            trigger='schedule', scheduled_for=due.isoformat(), status=status, error=reason)
+                    except jobs.JobConflict:
+                        # Undo both the run and any earlier claims in this admission.
+                        connection.execute('ROLLBACK TO schedule_admission')
+                        status, reason = 'skipped', 'Scheduled run admission conflict; skipped without a queue'
+                        run_id = jobs._insert_run(connection, definition, arguments, steps, row['owner'], row['role'],
+                            trigger='schedule', scheduled_for=due.isoformat(), status=status, error=reason)
+                    finally:
+                        connection.execute('RELEASE schedule_admission')
                     connection.execute('UPDATE schedules SET enabled=?,next_run_at=?,last_status=?,last_run_id=?,last_scheduled_for=? WHERE name=?',
                         (0 if paused else 1, next_run, status, run_id, due.isoformat(), name))
                 if paused:

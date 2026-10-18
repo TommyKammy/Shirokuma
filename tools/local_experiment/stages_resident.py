@@ -116,6 +116,8 @@ def _file(definition, name, version=None):
     path = (directory / name).resolve()
     if path.parent != directory or not path.is_file():
         raise ValueError('stage file is unavailable or outside its directory')
+    if not _filename(path.name):
+        raise ValueError('select a direct, supported stage filename')
     stat = path.stat()
     metadata = dict(name=name, size=stat.st_size,
                     modified_at=datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
@@ -147,7 +149,7 @@ def list_files(name, actor, role, *, _definition=None, _connection=None):
             if not _filename(path.name):
                 continue
             try:
-                _, metadata = _file(definition, path.name)
+                resolved, metadata = _file(definition, path.name)
             except (OSError, ValueError):
                 continue
             metadata['available'] = metadata['size'] <= MAX_FILE_BYTES
@@ -157,7 +159,7 @@ def list_files(name, actor, role, *, _definition=None, _connection=None):
                 hashed_bytes += metadata['size']
                 if hashed_bytes > MAX_SCAN_BYTES:
                     raise ValueError('stage directory exceeds the 250 MiB content inspection budget; use a smaller directory')
-                metadata.update(_status(definition, path, _connection))
+                metadata.update(_status(definition, resolved, _connection))
             else:
                 metadata.update(ingestion_status='new', last_run_id=None)
             files.append(metadata)

@@ -395,6 +395,65 @@ eval(HANDLERS+`
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('stage behavioral checks complete', result.stdout)
 
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_stage_refresh_reconciles_schedule_without_discarding_work(self):
+        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
+        harness = r"""
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],children:[],querySelectorAll(){return [];},replaceChildren(...children){this.children=children;this.textContent='';if(this===nodes['stage-file'])this.value='';},setAttribute(){},reset(){},append(...children){this.children.push(...children);},focus(){}};
+const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
+let currentRole='admin',activeTab='warehouse',selectedRunId=null;
+let respond;const calls=[];const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
+const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;const jobStatuses={success:'Succeeded'};
+const document={createElement:()=>({append(){}})};
+eval(HANDLERS+`
+(async()=>{
+ const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',directory:'/host/orders',table:'raw.orders',mode:'append'},schedule:{enabled:false,every_minutes:7}};
+ editStage(entry);stageFiles=[{name:'orders.csv',available:true}];$('stage-file').value='orders.csv';
+ const preview={name:'orders',file:'orders.csv',version:'file-v1',ingestion_status:'new'};stagePreview=preview;
+ $('stage-preview').replaceChildren('preview');$('stage-exports').replaceChildren('output-list');
+ $('stage-export-table').value='raw.custom';$('stage-export-file').value='custom.csv';stageRunId='keep-history';$('stage-view-run').hidden=false;
+ // A second browser can enable or pause without changing the definition revision.
+ for(const enabled of [true,false]){
+  const fresh={...entry,schedule:{enabled,every_minutes:9,last_status:'success'}};
+  const pending=$('stages-refresh').onclick();respond({stages:[fresh]});await pending;
+  assert.equal(selectedStage.schedule.enabled,enabled);assert.equal($('stage-schedule-enabled').checked,enabled);
+  assert.equal($('stage-schedule-minutes').value,9);assert.equal($('stage-schedule-stop').disabled,!enabled);
+  assert.equal($('stage-schedule-state').children[0].textContent,enabled?'Enabled':'Automatic ingestion is off.');
+  assert.equal(stagePreview,preview);assert.deepEqual($('stage-preview').children,['preview']);assert.equal($('stage-import').disabled,false);
+  assert.equal($('stage-file').value,'orders.csv');assert.deepEqual($('stage-exports').children,['output-list']);
+  assert.equal($('stage-export-table').value,'raw.custom');assert.equal($('stage-export-file').value,'custom.csv');assert.equal(stageRunId,'keep-history');
+ }
+ // Unchanged server schedule values do not overwrite an unsaved interval or checkbox.
+ $('stage-schedule-minutes').value='13';$('stage-schedule-enabled').checked=true;
+ let pending=$('stages-refresh').onclick();respond({stages:[{...selectedStage,schedule:{...selectedStage.schedule,last_status:'skipped'}}]});await pending;
+ assert.equal($('stage-schedule-minutes').value,'13');assert.equal($('stage-schedule-enabled').checked,true);assert.equal(selectedStage.schedule.enabled,false);
+ // Schedule-only changes preserve dirty definition fields while updating the pause control.
+ $('stage-table').value='raw.unsaved';$('stage-form').oninput();
+ pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{enabled:true,every_minutes:11}}]});await pending;
+ assert.equal(stageDirty,true);assert.equal($('stage-table').value,'raw.unsaved');assert.equal($('stage-schedule-stop').disabled,false);
+ assert.equal($('stage-schedule-save').disabled,true);assert.equal(stageRunId,'keep-history');
+ // Adopting a new directory revision invalidates all previous input/output choices, retaining run history.
+ stageFiles=[{name:'old.csv'}];$('stage-file').value='old.csv';$('stage-file').replaceChildren('old-option');$('stage-file').value='old.csv';$('stage-files').replaceChildren('old-list');
+ $('stage-exports').replaceChildren('old-output');stagePreview=preview;
+ const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,directory:'/host/new',table:'raw.new'}};
+ pending=refreshStageSchedule(stageEpoch);respond({stages:[revised]});await pending;
+ assert.equal(selectedStage.updated_at,'revision-2');assert.equal(stageDirty,false);assert.equal($('stage-directory').value,'/host/new');
+ assert.deepEqual(stageFiles,[]);assert.equal($('stage-file').value,'');assert.deepEqual($('stage-file').children,[]);assert.deepEqual($('stage-files').children,[]);
+ assert.equal(stagePreview,null);assert.deepEqual($('stage-preview').children,[]);assert.deepEqual($('stage-exports').children,[]);
+ assert.equal($('stage-export-directory').textContent,'/host/new/exports');assert.equal(stageRunId,'keep-history');assert.equal($('stage-view-run').hidden,false);
+ // A refresh issued under an earlier admin epoch cannot restore selection after a role reset.
+ pending=$('stages-refresh').onclick();currentRole='bi_viewer';resetStageUI();currentRole='admin';resetStageUI();respond({stages:[entry]});await pending;
+ assert.equal(selectedStage,null);assert.deepEqual(stageEntries,[]);assert.equal(stagePending,false);assert.equal($('stage-schedule-enabled').checked,false);
+ assert.ok(calls.every(call=>call.path==='/api/stages'));
+ console.log('stage refresh behavioral checks complete');
+})().catch(error=>{console.error(error);process.exitCode=1;});`);
+"""
+        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('stage refresh behavioral checks complete', result.stdout)
+
     def test_invalid_roles_rejected_on_get_and_post(self):
         with patch.object(wb.bears_resident, 'load_ai_config') as load, \
              patch.object(wb.warehouse_resident, 'transition') as transition:

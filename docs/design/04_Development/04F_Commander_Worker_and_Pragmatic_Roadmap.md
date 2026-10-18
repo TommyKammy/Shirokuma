@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-18
-version: "1.10"
+version: "1.11"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -255,3 +255,10 @@ SQLite・取込処理・Workbenchを再利用し、追加サービスやライ�
 CSV・JSONL・Parquet、最大100,000行・25 MiBを対象にする。
 追加サービスや依存ライブラリ、出力スケジュール、双方向同期は導入しない。
 構成と形式の制約は [ローカルステージガイド](../../guides/local_stages.md) に記録する。
+
+### Phase 18: 最終レビュー・統合検証【2026-10-18】
+
+手動取込・定期取込・出力の連携、重複防止、権限、再起動の確認を完了した。
+ファイル別名の重複判定、予定受付競合の分離、別画面からの予定・設定変更の表示反映を修正した。
+`make verify` と実機23件が成功し、通常Workbenchの既存状態保持と `healthy` を確認した。
+修正と検証範囲は [Phase 18最終レビュー](../../guides/phase18_integration_review.md) に記録する。
