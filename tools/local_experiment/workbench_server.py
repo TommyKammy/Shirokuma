@@ -14,6 +14,7 @@ import bears_resident
 import lake_ingest
 import jobs_resident
 import alerts_resident
+import stages_resident
 import warehouse_resident
 import request_auth
 from agenthouse import manage
@@ -25,6 +26,7 @@ GET_ROUTES = {path: ALL_ROLES for path in (
     '/', '/index.html', '/api/session', '/api/status', '/api/catalog', '/api/lineage',
     '/api/history', '/api/models', '/api/pawprints')}
 GET_ROUTES['/api/ai/config'] = {'admin'}
+GET_ROUTES['/api/stages'] = {'admin'}
 GET_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs', '/api/jobs/runs', '/api/jobs/schedules', '/api/alerts')})
 POST_ROUTES = {path: EDIT_ROLES for path in (
     '/api/warehouse/chill', '/api/warehouse/autochill', '/api/lake/ingest',
@@ -33,6 +35,7 @@ POST_ROUTES = {path: EDIT_ROLES for path in (
 POST_ROUTES.update({path: ALL_ROLES for path in (
     '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
 POST_ROUTES.update({path: {'admin'} for path in ('/api/ai/config', '/api/ai/test')})
+POST_ROUTES.update({path: {'admin'} for path in ('/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import')})
 POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail', '/api/jobs/schedule', '/api/alerts/ack')})
 
 
@@ -229,6 +232,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.respond(bears_resident.models_inventory())
             elif url.path == '/api/jobs':
                 self.respond({'jobs': jobs_resident.list_jobs(self.authenticated_user or 'local', role)})
+            elif url.path == '/api/stages':
+                self.respond({'stages': stages_resident.list_stages(self.authenticated_user or 'local', role)})
             elif url.path == '/api/jobs/runs':
                 self.respond({'runs': jobs_resident.list_runs(self.authenticated_user or 'local', role)})
             elif url.path == '/api/jobs/schedules':
@@ -280,7 +285,24 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 result = warehouse_resident.transition(path.rsplit("/", 1)[1], "LOCAL")
             else:
                 body = self.body()
-                if path == '/api/jobs/save':
+                if path == '/api/stages/save':
+                    if not {'name', 'directory', 'table', 'mode', 'format'} <= set(body) or set(body) - {'name', 'directory', 'table', 'mode', 'format', 'key'}:
+                        raise ValueError('invalid stage definition fields')
+                    result = {'stage': stages_resident.save_stage(body, self.authenticated_user or 'local', role)}
+                elif path in {'/api/stages/files', '/api/stages/preview', '/api/stages/import'}:
+                    fields = {'name'} if path.endswith('/files') else {'name', 'file', 'version'}
+                    if set(body) != fields or any(not isinstance(body[key], str) or not body[key] for key in fields):
+                        raise ValueError('invalid stage request fields')
+                    actor = self.authenticated_user or 'local'
+                    if path.endswith('/files'):
+                        result = stages_resident.list_files(body['name'], actor, role)
+                    elif path.endswith('/preview'):
+                        result = stages_resident.preview_file(body['name'], body['file'], body['version'], actor, role)
+                    else:
+                        result = {'run': stages_resident.submit_import(body['name'], body['file'], body['version'], actor, role)}
+                        self.respond(result, 202)
+                        return
+                elif path == '/api/jobs/save':
                     result = {'job': jobs_resident.save_job(body, self.authenticated_user or 'local', role)}
                 elif path == '/api/jobs/schedule':
                     result = {'schedule': jobs_resident.save_schedule(body, self.authenticated_user or 'local', role)}

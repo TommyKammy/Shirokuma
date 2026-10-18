@@ -65,6 +65,9 @@ def _db():
             CREATE TABLE IF NOT EXISTS jobs (
                 name TEXT PRIMARY KEY, owner TEXT NOT NULL, definition TEXT NOT NULL,
                 created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS stages (
+                name TEXT PRIMARY KEY, owner TEXT NOT NULL, definition TEXT NOT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS runs (
                 id TEXT PRIMARY KEY, job_name TEXT NOT NULL, actor TEXT NOT NULL,
                 role TEXT NOT NULL, definition TEXT NOT NULL, arguments TEXT NOT NULL,
@@ -466,6 +469,9 @@ def _execute_step(step):
                 raise StepUnknown('dbt timed out; outcome unknown')
             raise ValueError('dbt reported failure')
         return report
+    if action == 'stage_import':
+        import stages_resident
+        return stages_resident._execute_import(step)
     if action == 'ingest':
         import lake_ingest
         return lake_ingest.ingest(step['file'], table=step['table'], mode=step['mode'],

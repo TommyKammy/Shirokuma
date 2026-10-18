@@ -25,6 +25,7 @@
 dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px;width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#0007}dialog h2{font-size:18px}dialog .toolbar{margin-top:20px}dialog .badge{white-space:normal;overflow-wrap:anywhere}
 </style>
 <style>
+#stages-area,#stages-area .panel-body,#stages-area .job-fields>div,#stage-files-area,#stage-preview{min-width:0;max-width:100%}#stages-area p,#stages-area .error{overflow-wrap:anywhere}#stages-area input,#stages-area select{min-width:0;max-width:100%}#stages-area .table-wrap{max-width:100%;overflow:auto}#stages-list table,#stage-files table{table-layout:fixed;min-width:520px}#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}#stages-area button{max-width:100%;white-space:normal}
 #jobs-alert-count{margin-left:6px}
 #job-alerts table{table-layout:fixed;min-width:960px}#job-alerts th,#job-alerts td{padding:10px;white-space:normal;overflow-wrap:anywhere}#job-alerts th:nth-child(1){width:8%}#job-alerts th:nth-child(2){width:31%}#job-alerts th:nth-child(3){width:13%}#job-alerts th:nth-child(4){width:14%}#job-alerts th:nth-child(5){width:6%}#job-alerts th:nth-child(6){width:15%}#job-alerts th:nth-child(7){width:13%}#job-alerts button{max-width:100%;white-space:normal}#job-alerts small{display:block;margin-top:5px}#job-alerts .alert-main{font-family:system-ui,sans-serif}#job-alerts details{padding:5px 0 0;border:0;font-size:12px}#job-alerts summary{font-weight:500;color:var(--muted)}
 .job-enable-label{display:flex;align-items:center;gap:8px}.job-enable-label input{width:auto}#job-schedule-state{margin-top:16px;overflow-wrap:anywhere}#job-schedule-state span{white-space:normal}
@@ -71,6 +72,25 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <small id="ingest-key-help">Use input column names, separated by commas for a composite key.</small>
 <div class="bear-footer"><button id="preview-ingest" type="button">Preview Schema &amp; Sample Rows</button><button id="run-ingest" type="submit">Ingest File</button><span id="ingest-state" role="status">Ready</span></div></form><div id="ingest-preview" aria-live="polite"></div>
 <div id="ingest-error" class="error" role="alert" hidden></div><pre id="ingest-result" aria-label="Ingestion audit summary" hidden></pre>
+</div></div>
+<div id="stages-area" class="panel" hidden aria-labelledby="stages-title"><div class="panel-head"><h2 id="stages-title">Local stages</h2><div class="toolbar"><button id="stages-refresh" type="button">Refresh stages</button><button id="stage-new" type="button">New stage</button></div></div><div class="panel-body">
+<p class="muted">A stage uses a folder on the Workbench server host. It does not upload a browser folder. Files are imported only when you choose Import.</p>
+<p class="muted">CSV, JSONL and Parquet files up to 25 MiB. No automatic watching or duplicate detection.</p>
+<div id="stages-list" class="table-wrap" aria-live="polite">No stages loaded.</div>
+<h3>Stage definition</h3><form id="stage-form"><div class="job-fields">
+<div><label for="stage-name">Stage name</label><input id="stage-name" required maxlength="48" pattern="[a-z][a-z0-9_-]{0,47}" placeholder="sales-files"></div>
+<div><label for="stage-directory">Host folder (absolute path)</label><input id="stage-directory" required placeholder="/absolute/path/to/files"></div>
+<div><label for="stage-table">Target table</label><input id="stage-table" required placeholder="raw.sales_events"></div>
+<div><label for="stage-mode">Mode</label><select id="stage-mode"><option value="append">append</option><option value="replace">replace</option><option value="upsert">upsert</option></select></div>
+<div><label for="stage-format">File format</label><select id="stage-format"><option value="auto">Automatic</option><option value="csv">csv</option><option value="jsonl">jsonl</option><option value="parquet">parquet</option></select></div>
+<div><label for="stage-key">Upsert key columns (required for upsert)</label><input id="stage-key" placeholder="order_id" aria-describedby="ingest-key-help"></div>
+</div><button id="stage-save" type="submit">Save stage</button></form>
+<p id="stage-state" role="status" aria-live="polite">Choose or save a stage.</p><div id="stage-error" class="error" role="alert" hidden></div>
+<div id="stage-files-area" hidden><h3 id="stage-files-title">Stage files</h3><button id="stage-files-refresh" type="button">Refresh files</button><div id="stage-files" class="table-wrap" aria-live="polite"></div>
+<label for="stage-file">File to import</label><select id="stage-file" aria-describedby="stage-confirmation"><option value="">Choose a file</option></select>
+<div class="toolbar"><button id="stage-preview-button" type="button" disabled>Preview file</button><button id="stage-import" type="button" class="primary" disabled>Import</button></div>
+<p id="stage-confirmation" role="status" aria-live="polite">Preview a file before importing.</p><p id="stage-append-notice" class="muted" hidden>Each manual append imports the rows again, including files imported earlier.</p><div id="stage-preview" aria-live="polite"></div></div>
+<button id="stage-view-run" type="button" hidden>View run history</button>
 </div></div>
 </section>
 <section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden><div class="page-title"><h1>Transformation · dbt &amp; WAP</h1><p class="muted">Inspect model definitions and dependencies, then build or refresh.</p><div class="toolbar"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build">Run dbt Build</button><button id="run-dbt-test">Run dbt Test</button></div></div><pre id="models-state" role="status" hidden></pre><div class="catalog-grid"><div><h2>Persistent dbt Models</h2><div id="dbt-models" class="panel panel-body"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models" class="panel panel-body"></div></div><div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div></section>
@@ -137,6 +157,47 @@ const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+ 'Local stages':'ローカルステージ', 'Automatic':'自動判定',
+ 'Refresh stages':'ステージを更新',
+ 'New stage':'ステージを登録',
+ 'A stage uses a folder on the Workbench server host. It does not upload a browser folder. Files are imported only when you choose Import.':'Workbench サーバーが動くホスト上のフォルダーを登録します。ブラウザからのフォルダーアップロードではありません。「取り込む」を押すと取込を開始します。',
+ 'CSV, JSONL and Parquet files up to 25 MiB. No automatic watching or duplicate detection.':'25 MiB 以下の CSV・JSONL・Parquet が対象です。自動監視や重複判定は行いません。',
+ 'No stages loaded.':'ステージはまだ読み込まれていません。',
+ 'Stage definition':'ステージの設定',
+ 'Stage name':'ステージ名',
+ 'Host folder (absolute path)':'ホスト上のフォルダー（絶対パス）',
+ 'File format':'ファイル形式',
+ 'Save stage':'ステージを保存',
+ 'Choose or save a stage.':'ステージを選択するか、設定を保存してください。',
+ 'Stage files':'ステージのファイル',
+ 'Refresh files':'ファイルを更新',
+ 'File to import':'取り込むファイル',
+ 'Choose a file':'ファイルを選択',
+ 'Preview file':'ファイルをプレビュー',
+ 'Import':'取り込む',
+ 'Preview a file before importing.':'取込前にファイルをプレビューしてください。',
+ 'Each manual append imports the rows again, including files imported earlier.':'追加モードは実行のたびに行を追加します。以前取り込んだファイルを再実行すると、同じ行が再び追加されます。',
+ 'View run history':'実行履歴を見る',
+ 'No saved stages.':'登録されたステージはありません。',
+ 'No files available.':'対象のファイルはありません。',
+ 'Stage saved.':'ステージを保存しました。', 'Stage preview did not include its saved settings.':'プレビューの保存済み設定を取得できませんでした。',
+ 'Save changes before previewing.':'変更を保存してからプレビューしてください。',
+ 'Loading stages…':'ステージを読み込み中…',
+ 'Loading files…':'ファイルを読み込み中…',
+ 'Previewing file…':'ファイルをプレビュー中…',
+ 'Submitting import…':'取込を受け付け中…',
+ 'Import queued.':'取込を受け付けました。',
+ 'Select stage':'ステージを選択',
+ 'Owner':'所有者',
+ 'File name':'ファイル名',
+ 'Size (bytes)':'サイズ（バイト）',
+ 'Modified':'更新日時',
+ 'Availability':'取込可否',
+ 'Available':'取込可能',
+ 'Unavailable':'取込不可',
+ 'Stage import':'ステージ取込',
+ '{file} → {table} · {mode} · {count} rows':'{file} → {table}・{mode}・{count}行',
+
  'Importance':'重要度', 'Acknowledged':'確認済み', 'Times use your browser timezone: {timezone}':'日時はブラウザのタイムゾーンで表示します: {timezone}', '{time}':'{time}', 'Job: {job} · Step: {step} · Owner: {owner}':'ジョブ: {job}・ステップ: {step}・所有者: {owner}',
  'Evaluate alert':'アラート判定', 'Alert message':'通知メッセージ', 'Severity':'重要度', 'warning':'警告', 'critical':'重大',
  'Read-only evaluation. Return exactly one row and one boolean column: true opens a notification; false clears it.':'読み取り専用で判定します。1行1列の boolean を返してください。true は異常、false は正常です。',
@@ -287,6 +348,7 @@ const samples = {
 let currentRole = 'admin';
 function applyRole() {
  document.documentElement.dataset.role=currentRole;
+ if(typeof resetStageUI==='function')resetStageUI();
  $('tab-jobs').hidden=currentRole==='bi_viewer';
  if(currentRole==='bi_viewer')$('jobs-alert-count').hidden=true;
  if(currentRole==='bi_viewer'&&typeof activeTab!=='undefined'&&activeTab==='jobs')activate($('tab-warehouse'));
@@ -473,7 +535,7 @@ async function loadPawprints(){
 }
 $('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
 let activeTab='warehouse';
-function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='jobs')loadJobs();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation')$('refresh-models').click();if(activeTab==='compute')$('compute-refresh').click();}
+function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='jobs')loadJobs();if(activeTab==='ingestion'&&currentRole==='admin')loadStages();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation')$('refresh-models').click();if(activeTab==='compute')$('compute-refresh').click();}
 const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach(button=>{button.onclick=()=>activate(button);button.onkeydown=e=>{const available=tabs.filter(tab=>!tab.hidden&&!tab.disabled),i=available.indexOf(button);let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%available.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();available[n].focus();activate(available[n]);}};});
 setInterval(async()=>{if(document.hidden)return;if(currentRole!=='bi_viewer')loadJobAlerts(jobsVisible());await refreshStatus();if(auto_chill_minutes>0){try{updateAutoChill(await api('/api/warehouse/autochill',{check:true}));}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}}if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
@@ -526,6 +588,86 @@ $('ingest-upload-input').onchange=e=>selectUpload(e.target.files[0]);$('clear-up
 const dropzone=$('ingest-dropzone');for(const event of ['dragenter','dragover'])dropzone.addEventListener(event,e=>{e.preventDefault();dropzone.classList.add('dragging');});for(const event of ['dragleave','drop'])dropzone.addEventListener(event,e=>{e.preventDefault();dropzone.classList.remove('dragging');if(event==='drop'&&e.dataTransfer.files.length)selectUpload(e.dataTransfer.files[0]);});
 async function ingestionPayload(){const file=browserFile;if(!file){const path=$('ingest-file').value.trim();if(!path)throw new Error(t('Choose a browser file or enter a local file path.'));return {file:path};}const binary=/\.parquet$/i.test(file.name);const content=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error(t('Could not read {name}',{name:file.name})));reader.onabort=()=>reject(new Error(t('File reading cancelled')));reader.onload=()=>resolve(binary?String(reader.result).split(',')[1]:reader.result);if(binary)reader.readAsDataURL(file);else reader.readAsText(file);});return {filename:file.name,[binary?'content_base64':'content']:content};}
 $('preview-ingest').onclick=()=>busy($('preview-ingest'),async()=>{message('ingest-error','');ui($('ingest-preview'),'Reading file…');try{const result=await api('/api/lake/preview',await ingestionPayload());const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';table(schema,['Column','Inferred type'],result.columns.map(c=>[c.name,c.type]));table(rows,result.columns,result.sample_rows,false);const title=document.createElement('p');ui(title,'{rows} file rows · {samples} sample rows',{rows:result.row_count,samples:result.sample_rows.length});$('ingest-preview').replaceChildren(title,schema,rows);}catch(e){$('ingest-preview').replaceChildren();message('ingest-error',e.message);}});
+
+
+let stageEntries=[],selectedStage=null,stageFiles=[],stagePreview=null,stageEpoch=0,stagePending=false,stageDirty=false,stageRunId=null;
+function stageCurrent(epoch){return currentRole==='admin'&&epoch===stageEpoch;}
+function invalidateStagePreview(){stagePreview=null;$('stage-preview').replaceChildren();ui($('stage-confirmation'),'Preview a file before importing.');$('stage-import').disabled=true;}
+function stageControls(){
+ const editable=currentRole==='admin'&&(!selectedStage||selectedStage.can_manage);
+ for(const element of $('stage-form').elements)element.disabled=!editable||stagePending;
+ $('stage-name').readOnly=!!selectedStage;$('stage-key').required=$('stage-mode').value==='upsert';
+ $('stage-files-area').hidden=!selectedStage?.can_manage||stageDirty;
+ for(const id of ['stages-refresh','stage-new','stage-files-refresh','stage-file'])$(id).disabled=stagePending||currentRole!=='admin';
+ const file=stageFiles.find(file=>file.name===$('stage-file').value);
+ $('stage-preview-button').disabled=stagePending||stageDirty||!selectedStage?.can_manage||!file||file.available===false;
+ $('stage-import').disabled=stagePending||stageDirty||!stagePreview;
+ $('stage-append-notice').hidden=!selectedStage?.can_manage||selectedStage.definition.mode!=='append';
+ $('stages-area').setAttribute('aria-busy',String(stagePending));
+}
+function resetStageUI(){
+ if(!$('stages-area'))return;
+ ++stageEpoch;stageEntries=[];selectedStage=null;stageFiles=[];stagePending=false;stageDirty=false;stageRunId=null;
+ $('stages-area').hidden=currentRole!=='admin';$('stage-form').reset();$('stage-files').replaceChildren();$('stage-file').replaceChildren();$('stages-list').replaceChildren();$('stage-view-run').hidden=true;message('stage-error','');invalidateStagePreview();stageControls();
+ ui($('stage-state'),'Choose or save a stage.');
+ if(currentRole==='admin'&&typeof activeTab!=='undefined'&&activeTab==='ingestion')loadStages();
+}
+async function stageTask(label,task){
+ if(stagePending||currentRole!=='admin')return;
+ const epoch=stageEpoch;stagePending=true;message('stage-error','');ui($('stage-state'),label);stageControls();
+ try{await task(epoch);}catch(error){if(stageCurrent(epoch)){message('stage-error',error.message);ui($('stage-state'),'Refresh failed');}}
+ finally{if(stageCurrent(epoch)){stagePending=false;stageControls();}pruneUIBindings();}
+}
+function renderStages(){
+ if(!stageEntries.length){ui($('stages-list'),'No saved stages.');return;}
+ table($('stages-list'),['Stage name','Target table','Mode','Owner','Actions'],stageEntries.map(entry=>[entry.name,entry.definition.table,t(entry.definition.mode),entry.owner,'']));
+ $('stages-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=stageEntries[index];ui(row.cells[2],entry.definition.mode);if(entry.can_manage)row.lastElementChild.append(actionButton('Select stage',()=>selectStage(entry)));else ui(row.lastElementChild,'Read-only definition');});
+}
+async function loadStages(){await stageTask('Loading stages…',async epoch=>{const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];renderStages();ui($('stage-state'),'Choose or save a stage.');});}
+function stageDefinition(){
+ const definition={};for(const key of ['name','directory','table','mode','format'])definition[key]=$('stage-'+key).value.trim();
+ if($('stage-key').value.trim())definition.key=$('stage-key').value.trim();return definition;
+}
+function editStage(entry){
+ selectedStage=entry;stageDirty=false;stageFiles=[];stageRunId=null;$('stage-view-run').hidden=true;$('stage-file').replaceChildren();$('stage-files').replaceChildren();invalidateStagePreview();
+ const definition=entry?.definition||{mode:'append',format:'auto'};for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
+ stageControls();
+}
+async function fetchStageFiles(epoch){
+ const data=await api('/api/stages/files',{name:selectedStage.name});if(!stageCurrent(epoch))return;
+ stageFiles=data.files||[];invalidateStagePreview();$('stage-file').replaceChildren();
+ const placeholder=document.createElement('option');placeholder.value='';ui(placeholder,'Choose a file');$('stage-file').append(placeholder);
+ for(const file of stageFiles){const option=document.createElement('option');option.value=file.name;option.textContent=file.name;option.disabled=file.available===false;$('stage-file').append(option);}
+ if(!stageFiles.length)ui($('stage-files'),'No files available.');
+ else{table($('stage-files'),['File name','Size (bytes)','Modified','Availability'],stageFiles.map(file=>[file.name,file.size,'','']));$('stage-files').querySelectorAll('tbody tr').forEach((row,index)=>{const file=stageFiles[index];if(file.modified_at)row.cells[2].append(jobAlertTimestamp(file.modified_at));else row.cells[2].textContent='\u2014';ui(row.lastElementChild,file.available===false?'Unavailable':'Available');if(file.error)row.lastElementChild.title=file.error;});}
+ ui($('stage-state'),'Stage files');
+}
+async function selectStage(entry){if(stagePending)return;editStage(entry);await stageTask('Loading files…',fetchStageFiles);}
+$('stages-refresh').onclick=loadStages;
+$('stage-new').onclick=()=>{if(stagePending)return;editStage(null);ui($('stage-state'),'Choose or save a stage.');$('stage-name').focus();};
+$('stage-form').oninput=()=>{stageDirty=true;invalidateStagePreview();ui($('stage-state'),'Save changes before previewing.');stageControls();};
+$('stage-form').onchange=$('stage-form').oninput;
+$('stage-form').onsubmit=event=>{event.preventDefault();stageTask('Working…',async epoch=>{
+ const data=await api('/api/stages/save',stageDefinition());if(!stageCurrent(epoch))return;
+ editStage(data.stage);const list=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=list.stages||[];renderStages();await fetchStageFiles(epoch);if(stageCurrent(epoch))ui($('stage-state'),'Stage saved.');
+ });};
+$('stage-files-refresh').onclick=()=>stageTask('Loading files…',fetchStageFiles);
+$('stage-file').onchange=()=>{invalidateStagePreview();stageControls();};
+$('stage-preview-button').onclick=()=>stageTask('Previewing file…',async epoch=>{
+ invalidateStagePreview();const file=stageFiles.find(file=>file.name===$('stage-file').value);if(!file||file.available===false)return;
+ const selection={name:selectedStage.name,file:file.name,version:file.version};const result=await api('/api/stages/preview',selection);if(!stageCurrent(epoch))return;
+ const definition=result.stage;if(!definition||definition.name!==selection.name||!definition.table||!definition.mode)throw Error(t('Stage preview did not include its saved settings.'));
+ selectedStage={...selectedStage,definition};stageEntries=stageEntries.map(entry=>entry.name===selection.name?selectedStage:entry);renderStages();
+ for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
+ stagePreview={...selection};const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';
+ table(schema,['Column','Inferred type'],result.columns.map(column=>[column.name,column.type]));table(rows,result.columns,result.sample_rows,false);$('stage-preview').replaceChildren(schema,rows);
+ ui($('stage-confirmation'),'{file} → {table} · {mode} · {count} rows',()=>({file:selection.file,table:definition.table,mode:t(definition.mode),count:result.row_count}));ui($('stage-state'),'Ready');
+});
+$('stage-import').onclick=()=>{if(!stagePreview)return;stageTask('Submitting import…',async epoch=>{
+ const selection={...stagePreview};invalidateStagePreview();const data=await api('/api/stages/import',selection);if(!stageCurrent(epoch))return;
+ stageRunId=data.run.id;$('stage-view-run').hidden=false;ui($('stage-state'),'Import queued.');
+});};
+$('stage-view-run').onclick=()=>{if(!stageRunId||currentRole!=='admin')return;selectedRunId=stageRunId;activate($('tab-jobs'));};
 
 let selectedModel=null;
 function selectModel(model){selectedModel=model;$('model-title').textContent=model.layer+' · '+model.name;model.sql?$('model-sql-preview').textContent=model.sql:ui($('model-sql-preview'),'No SQL recorded');renderLineage($('model-lineage'),model.sources||[],model.name,model.downstream||[]);$('open-model-sql').disabled=!model.sql;$('refresh-wap-model').hidden=model.layer!=='wap';}
@@ -629,7 +771,7 @@ let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,s
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
 const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
-const jobActionLabels={sql:'Run SQL',alert:'Evaluate alert',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
+const jobActionLabels={sql:'Run SQL',alert:'Evaluate alert',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',stage_import:'Stage import',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
 function jobSummary(step){
  const summary=step.summary;if(!summary||typeof summary!=='object')return '\u2014';
  const parts=[],count=summary.rows_ingested??summary.row_count,models=summary.model_count??(Array.isArray(summary.models)?summary.models.length:undefined);
@@ -638,7 +780,7 @@ function jobSummary(step){
  if(typeof summary.condition_met==='boolean')parts.push(t(summary.condition_met?'Condition met':'Condition clear'));
  if(statuses[summary.alert_status])parts.push(t(statuses[summary.alert_status]));
  if(summary.alert_id)parts.push(t('Notification {id}',{id:String(summary.alert_id).slice(0,8)}));
- }else if(step.action==='ingest'&&count!==undefined)parts.push(t('{count} rows ingested',{count}));
+ }else if(['ingest','stage_import'].includes(step.action)&&count!==undefined)parts.push(t('{count} rows ingested',{count}));
  else if(models!==undefined)parts.push(t(models===1?'1 model':'{count} models',{count:models}));
  else if(count!==undefined)parts.push(t(count===1?'1 result row':'{count} result rows',{count}));
  if(summary.table)parts.push(t('Target table {table}',{table:summary.table}));
@@ -786,8 +928,8 @@ async function refreshJobRuns(){
  const runs=data.runs||[];
  if(!runs.length)jobEmpty('job-runs','No runs yet.');
  else{
- table($('job-runs'),['Run ID','Job','Status','Trigger','Scheduled for (UTC)','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),t(run.trigger==='schedule'?'Scheduled':'Manual'),run.scheduled_for||'\u2014',run.actor,run.started_at||run.created_at||'\u2014',jobDuration(run),'']));
- $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{ui(row.cells[2],jobStatuses[runs[index].status]||'Unknown');ui(row.cells[3],runs[index].trigger==='schedule'?'Scheduled':'Manual');row.lastElementChild.append(actionButton('Inspect run',()=>showJobRun(runs[index].id)));});
+ table($('job-runs'),['Run ID','Job','Status','Trigger','Scheduled for (UTC)','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),t(run.trigger==='stage'?'Stage import':run.trigger==='schedule'?'Scheduled':'Manual'),run.scheduled_for||'\u2014',run.actor,run.started_at||run.created_at||'\u2014',jobDuration(run),'']));
+ $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{ui(row.cells[2],jobStatuses[runs[index].status]||'Unknown');ui(row.cells[3],runs[index].trigger==='stage'?'Stage import':runs[index].trigger==='schedule'?'Scheduled':'Manual');row.lastElementChild.append(actionButton('Inspect run',()=>showJobRun(runs[index].id)));});
  }
  if(selectedRunId)await showJobRun(selectedRunId);
  await loadJobAlerts(true);

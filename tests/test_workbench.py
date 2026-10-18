@@ -52,6 +52,137 @@ class WorkbenchHTML(HTMLParser):
 
 
 class WorkbenchTests(unittest.TestCase):
+    def test_stage_routes_dispatch_authenticated_identity(self):
+        definition = dict(name='orders', directory='/host/orders', table='raw.orders', mode='append', format='auto')
+        selection = dict(name='orders', file='orders.csv', version='version-1')
+        cases = [('/api/stages', None, 'list_stages', ('alice', 'admin'), {'stages': []}, []),
+                 ('/api/stages/save', definition, 'save_stage', (definition, 'alice', 'admin'), {'stage': definition}, definition),
+                 ('/api/stages/files', {'name': 'orders'}, 'list_files', ('orders', 'alice', 'admin'), {'files': []}, {'files': []}),
+                 ('/api/stages/preview', selection, 'preview_file', ('orders', 'orders.csv', 'version-1', 'alice', 'admin'), {'row_count': 3}, {'row_count': 3}),
+                 ('/api/stages/import', selection, 'submit_import', ('orders', 'orders.csv', 'version-1', 'alice', 'admin'), {'run': {'id': 'run-1'}}, {'id': 'run-1'})]
+        with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')):
+            for path, body, method, args, expected, backend in cases:
+                with self.subTest(path=path), patch.object(wb.stages_resident, method, return_value=backend) as call:
+                    self.assertEqual(self.json_request(path, body), (202 if path.endswith('/import') else 200, expected))
+                    call.assert_called_once_with(*args)
+
+    def test_stage_routes_reject_non_admin_before_backend(self):
+        for role in ('data_engineer', 'bi_viewer'):
+            with patch.object(wb.request_auth, 'authenticate', return_value=('alice', role)):
+                for path in ('/api/stages', '/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import'):
+                    with self.subTest(role=role, path=path), patch.object(wb, 'stages_resident') as stages:
+                        self.assertEqual(self.json_request(path, None if path == '/api/stages' else {})[0], 403)
+                        self.assertEqual(stages.mock_calls, [])
+        with patch.object(wb.request_auth, 'authenticate', side_effect=wb.request_auth.AuthenticationError('credentials required')):
+            self.assertEqual(self.json_request('/api/stages')[0], 401)
+
+    def test_stage_routes_reject_payload_overrides_before_backend(self):
+        definition = dict(name='orders', directory='/host/orders', table='raw.orders', mode='append', format='csv')
+        selection = dict(name='orders', file='orders.csv', version='v1')
+        with patch.object(wb, 'stages_resident') as stages:
+            for path in ('/api/stages/files', '/api/stages/preview', '/api/stages/import'):
+                valid = {'name': 'orders'} if path.endswith('/files') else selection
+                invalid = [{}, {**valid, 'actor': 'other'}, {**valid, 'directory': '/other'}, {**valid, 'table': 'raw.other'}, {**valid, 'path': '/other'}, {**valid, 'role': 'admin'}]
+                invalid += [{**valid, key: value} for key in valid for value in ('', None, 1, [])]
+                for body in invalid:
+                    with self.subTest(path=path, body=body):
+                        self.assertEqual(self.json_request(path, body)[0], 400)
+            for body in ({}, {**definition, 'actor': 'other'}, {**definition, 'path': '/other'}, {**definition, 'target': 'raw.other'}):
+                self.assertEqual(self.json_request('/api/stages/save', body)[0], 400)
+            self.assertEqual(stages.mock_calls, [])
+
+    def test_stage_http_errors(self):
+        for error, code in [(wb.jobs_resident.JobNotFound('missing'), 404), (wb.jobs_resident.JobConflict('busy'), 409), (ValueError('changed file'), 400), (PermissionError('owner only'), 403)]:
+            with self.subTest(code=code), patch.object(wb.stages_resident, 'list_files', side_effect=error):
+                self.assertEqual(self.json_request('/api/stages/files', {'name': 'orders'})[0], code)
+
+    def test_stage_ui_stays_in_ingestion_and_requires_preview(self):
+        doc = self.workbench_document()
+        area = doc.by_id('stages-area')
+        self.assertIn(doc.by_id('ingestion'), area['ancestors'])
+        self.assertIn('hidden', area)
+        self.assertEqual(doc.by_id('stage-form')['tag'], 'form')
+        self.assertEqual(doc.by_id('stage-error')['role'], 'alert')
+        self.assertEqual(doc.by_id('stage-state')['role'], 'status')
+        self.assertIn('disabled', doc.by_id('stage-import'))
+        for identifier in ('stage-name', 'stage-directory', 'stage-table', 'stage-mode', 'stage-format', 'stage-key', 'stage-file'):
+            self.assertTrue(any(node.get('for') == identifier for node in doc.nodes))
+        script = next(node['text'] for node in doc.nodes if node['tag'] == 'script')
+        for text in ("epoch===stageEpoch", "stageEpoch", "invalidateStagePreview()", "if(!stagePreview)return", "stageDirty||!stagePreview", "'/api/stages/preview'", "'/api/stages/import'", "selectedRunId=stageRunId;activate($('tab-jobs'))", "stage_import:'Stage import'", "'Stage import':'ステージ取込'", "'View run history':'実行履歴を見る'"):
+            self.assertIn(text, script)
+
+    def test_stage_localized_display_and_contained_tables(self):
+        html = wb.INDEX.read_text()
+        doc = self.workbench_document()
+        script = next(node['text'] for node in doc.nodes if node['tag'] == 'script')
+        for text in ("ui(row.cells[2],entry.definition.mode)", "jobAlertTimestamp(file.modified_at)", "mode:t(definition.mode)", "'Automatic':'自動判定'", '追加モードは実行のたびに行を追加します。'):
+            self.assertIn(text, script)
+        format_control = doc.by_id('stage-format')
+        automatic = next(node for node in doc.nodes if node.get('value') == 'auto' and format_control in node['ancestors'])
+        self.assertEqual(automatic['text'], 'Automatic')
+        self.assertIn('#stages-area .table-wrap{max-width:100%;overflow:auto}', html)
+        self.assertIn('#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}', html)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_stage_preview_invalidation_and_role_change_pending_guard(self):
+        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        handlers = script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
+        handlers = 'let stageEntries=' + handlers
+        harness = r"""
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={value:'',hidden:false,disabled:false,elements:[],replaceChildren(){this.children=[];},setAttribute(){},reset(){},append(){},focus(){}};
+const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};
+let currentRole='admin',activeTab='ingestion',selectedRunId=null;
+const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
+const activate=()=>{};const table=()=>{throw Error('Stale response must not render a table');};
+const document={createElement:()=>({append(){}})};
+eval(HANDLERS+`
+(async()=>{
+ selectedStage={name:'orders',can_manage:true,definition:{mode:'append',table:'raw.orders'}};
+ stageFiles=[{name:'orders.csv',version:'v1',available:true}];$('stage-file').value='orders.csv';
+ stagePreview={name:'orders',file:'orders.csv',version:'v1'};stageControls();assert.equal($('stage-import').disabled,false);
+ $('stage-form').oninput();assert.equal(stagePreview,null);assert.equal($('stage-import').disabled,true);assert.equal(stageDirty,true);
+ stageDirty=false;stageControls();
+ const pending=$('stage-preview-button').onclick();assert.equal(stagePending,true);assert.equal($('stage-file').disabled,true);
+ currentRole='data_engineer';resetStageUI();assert.equal($('stages-area').hidden,true);assert.equal(selectedStage,null);
+ respond({columns:[{name:'secret'}],sample_rows:[['secret']],row_count:1});await pending;
+ assert.equal(stagePreview,null);assert.equal($('stage-import').disabled,true);assert.equal(stagePending,false);
+ assert.equal(calls.length,1);assert.deepEqual(calls[0].body,{name:'orders',file:'orders.csv',version:'v1'});
+})().catch(error=>{console.error(error);process.exitCode=1;});`);
+"""
+        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_stage_preview_uses_current_server_settings_after_external_edit(self):
+        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
+        harness = r"""
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={value:'',hidden:false,disabled:false,elements:[],replaceChildren(){},setAttribute(){},append(){}};
+const ui=(node,text,values)=>{node.textContent=text;node.values=typeof values==='function'?values():values;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
+let currentRole='admin',activeTab='ingestion',selectedRunId=null;
+const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
+const activate=()=>{};const table=()=>{};const document={createElement:()=>({append(){}})};
+eval(HANDLERS+`
+(async()=>{
+ selectedStage={name:'orders',can_manage:true,definition:{name:'orders',mode:'append',table:'raw.old_target'}};
+ stageFiles=[{name:'orders.csv',version:'revision-2-file-token',available:true}];$('stage-file').value='orders.csv';
+ const pending=$('stage-preview-button').onclick();
+ const authoritative={name:'orders',directory:'/host/new',table:'raw.new_target',mode:'replace',format:'csv'};
+ respond({stage:authoritative,columns:[{name:'id',type:'bigint'}],sample_rows:[[1]],row_count:1});await pending;
+ assert.deepEqual($('stage-confirmation').values,{file:'orders.csv',table:'raw.new_target',mode:'replace',count:1});
+ assert.equal(selectedStage.definition.table,'raw.new_target');assert.equal($('stage-table').value,'raw.new_target');assert.equal($('stage-mode').value,'replace');
+ assert.equal($('stage-append-notice').hidden,true);assert.equal($('stage-import').disabled,false);
+ const importing=$('stage-import').onclick();assert.equal(calls.at(-1).path,'/api/stages/import');
+ assert.deepEqual(calls.at(-1).body,{name:'orders',file:'orders.csv',version:'revision-2-file-token'});
+ respond({run:{id:'run-new-settings'}});await importing;
+ assert.equal(stageRunId,'run-new-settings');assert.equal(stagePreview,null);
+})().catch(error=>{console.error(error);process.exitCode=1;});`);
+"""
+        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_invalid_roles_rejected_on_get_and_post(self):
         with patch.object(wb.bears_resident, 'load_ai_config') as load, \
              patch.object(wb.warehouse_resident, 'transition') as transition:
