@@ -335,9 +335,25 @@ class MartScheduleTests(unittest.TestCase):
                 self.assertEqual(self.done(marts.submit_refresh('orders', 1, 'alice', 'admin')['id'])['status'], 'failed')
             with self.assertRaises(ValueError):
                 self.enable()
-            # A newer skipped row must not hide unknown.
+            # Routine checks, failed manual attempts and newer skipped rows do not
+            # hide unknown or expand the rows inspected by the recovery gate.
             with jobs._db() as connection:
+                step = dict(name='Check orders', action='mart_refresh')
+                definition = dict(name='mart:orders', steps=[step])
+                for _ in range(50):
+                    check_id = jobs._insert_run(connection, definition, {}, [step], 'alice', 'admin',
+                                                status='success', trigger='schedule')
+                    connection.execute("UPDATE steps SET status='success',summary=? WHERE run_id=?",
+                                       (json.dumps(dict(result='unchanged')), check_id))
                 jobs._insert_run(connection, dict(name='mart:orders', steps=[]), {}, [], 'alice', 'admin', status='skipped')
+                statements = []
+                connection.set_trace_callback(statements.append)
+                self.assertTrue(marts._requires_manual('orders', connection))
+                connection.set_trace_callback(None)
+                query = next(sql for sql in statements if 'FROM runs WHERE' in sql)
+                candidates = connection.execute(query).fetchall()
+                self.assertEqual(len(candidates), 1)
+                self.assertEqual(candidates[0]['status'], 'unknown')
             self.assertTrue(marts.list_targets('alice', 'admin')[0]['requires_manual_refresh'])
             self.done(marts.submit_refresh('orders', 1, 'alice', 'admin')['id'])
             self.assertFalse(marts.list_targets('alice', 'admin')[0]['requires_manual_refresh'])

@@ -88,6 +88,130 @@ class RuntimeMartsTests(unittest.TestCase):
         child = self.start_workbench()
         return child, self.wait_next_run(name, previous)
 
+    def test_manual_baseline_auto_change_force_and_revoked_owner(self):
+        self.sql('CREATE TABLE ' + self.table + ' AS SELECT 1 id, 20 amount')
+        name, target = self.prefix + '_bridge', 'iceberg.marts.' + self.prefix + '_bridge'
+        child = self.start_workbench()
+        definition = dict(name=name, sql='SELECT id, amount FROM ' + self.table,
+                          min_rows=1, not_null=['id'], watch_tables=[self.table])
+        saved = self.request('/api/marts/save', definition)['mart']
+        run_body = dict(name=name, version=saved['version'])
+        manual = self.wait_run(self.request('/api/marts/run', run_body, expected=202)['run']['id'])
+        self.assertEqual(manual['status'], 'success', manual)
+        baseline = self.baseline(name)
+        self.assertEqual(baseline['snapshots'], {self.table: self.snapshot(self.table)})
+        schedule = dict(**run_body, kind='interval', every_minutes=60, enabled=True)
+        self.request('/api/marts/schedule', schedule)
+        original = self.snapshot(target)
+        child, unchanged = self.check_after_restart(child, name)
+        self.assertEqual(unchanged['steps'][0]['summary']['result'], 'unchanged', unchanged)
+        self.assertEqual(self.snapshot(target), original)
+        self.sql('UPDATE ' + self.table + ' SET amount = 45 WHERE id = 1')
+        child, changed = self.check_after_restart(child, name)
+        self.assertEqual(changed['status'], 'success', changed)
+        self.assertEqual(changed['steps'][0]['summary']['result'], 'refreshed')
+        self.assertEqual(self.sql('SELECT id, amount FROM ' + target)['rows'], [[1, 45]])
+        automatic = self.snapshot(target)
+        forced = self.wait_run(self.request('/api/marts/run', run_body, expected=202)['run']['id'])
+        self.assertEqual(forced['status'], 'success', forced)
+        self.assertEqual(forced['steps'][0]['summary']['result'], 'refreshed')
+        self.assertNotEqual(self.snapshot(target), automatic)
+        stable = (self.snapshot(target), self.baseline(name), self.mart(name)['last_success_at'])
+        child, unchanged = self.check_after_restart(child, name)
+        self.assertEqual(unchanged['steps'][0]['summary']['result'], 'unchanged', unchanged)
+        self.assertEqual((self.snapshot(target), self.baseline(name), self.mart(name)['last_success_at']), stable)
+
+        # Revoke the saved owner before a due slot; the scheduler must re-read
+        # shared authentication rather than use its originally admitted role.
+        self.stop_workbench(child)
+        accounts = json.loads(self.accounts.read_text())
+        accounts['alice']['role'] = 'bi_viewer'
+        self.accounts.write_text(json.dumps(accounts))
+        due = (datetime.now(timezone.utc) + timedelta(seconds=2)).isoformat()
+        with sqlite3.connect(self.directory / 'state/jobs.sqlite3') as connection:
+            connection.execute('UPDATE schedules SET next_run_at=? WHERE name=?', (due, 'mart:' + name))
+        self.start_workbench()
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            mart = next(item for item in self.request('/api/marts', user='bob')['marts'] if item['name'] == name)
+            if not mart['schedule']['enabled']:
+                break
+            time.sleep(.2)
+        else:
+            self.fail('Revoked owner schedule was not paused')
+        self.assertEqual(mart['last_run']['status'], 'skipped', mart)
+        self.assertEqual(mart['last_run']['scheduled_for'], due)
+        self.assertIsNone(mart['schedule']['next_run_at'])
+        self.request('/api/marts/run', run_body, expected=403)
+        self.assertEqual((self.snapshot(target), self.baseline(name), mart['last_success_at']), stable)
+
+    def test_real_publication_interruption_pause_duplicates_and_manual_reconcile(self):
+        self.sql('CREATE TABLE ' + self.table + ' AS SELECT 1 id, 20 amount')
+        name, target = self.prefix + '_crash', 'iceberg.marts.' + self.prefix + '_crash'
+        child = self.start_workbench()
+        definition = dict(name=name, sql='SELECT id, amount FROM ' + self.table,
+                          min_rows=1, not_null=['id'], watch_tables=[self.table])
+        saved = self.request('/api/marts/save', definition)['mart']
+        run_body = dict(name=name, version=saved['version'])
+        schedule = dict(**run_body, kind='interval', every_minutes=60, enabled=True)
+        self.request('/api/marts/schedule', schedule)
+        self.stop_workbench(child)
+
+        # Test-only fault injection in the isolated child: actual TLS/Iceberg
+        # publication completes, then hold before baseline/terminal bookkeeping.
+        # Killing this process exercises genuine restart recovery, not a forged
+        # running ledger or a claimed network failure.
+        marker = self.directory / 'published'
+        server = Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench_server.py'
+        launcher = self.directory / 'interrupt-after-publish.py'
+        launcher.write_text(
+            'import sys, runpy, time\nfrom pathlib import Path\n'
+            'sys.path.insert(0, ' + repr(str(server.parent)) + ')\n'
+            'import marts_resident\noriginal = marts_resident._publish_refresh\n'
+            'def hold_after_publish(step):\n'
+            '    report = original(step)\n'
+            '    Path(' + repr(str(marker)) + ').write_text("published")\n'
+            '    while True: time.sleep(.1)\n'
+            'marts_resident._publish_refresh = hold_after_publish\n'
+            'sys.argv = [' + repr(str(server)) + ', "--port", "0"]\n'
+            'runpy.run_path(' + repr(str(server)) + ', run_name="__main__")\n')
+        original_popen = _harness.subprocess.Popen
+        def launch_interrupted(command, **kwargs):
+            return original_popen([command[0], str(launcher)], **kwargs)
+        with patch.object(_harness.subprocess, 'Popen', side_effect=launch_interrupted):
+            child = self.start_workbench()
+        admitted = self.request('/api/marts/run', run_body, expected=202)['run']
+        deadline = time.monotonic() + 120
+        while not marker.exists() and time.monotonic() < deadline:
+            self.assertIsNone(child.poll(), 'Injected Workbench exited before real publication')
+            time.sleep(.2)
+        self.assertTrue(marker.exists(), 'Real publication did not reach interruption boundary')
+        self.assertEqual(self.sql('SELECT id, amount FROM ' + target)['rows'], [[1, 20]])
+        published_snapshot = self.snapshot(target)
+        self.assertIsNone(self.baseline(name))
+        self.request('/api/marts/run', run_body, expected=409)
+        self.request('/api/marts/save', {**definition, 'version': saved['version']}, expected=409)
+        paused = self.request('/api/marts/schedule', dict(name=name, enabled=False))['schedule']
+        self.assertFalse(paused['enabled'])
+        self.assertEqual(self.request('/api/jobs/detail', {'run_id': admitted['id']})['run']['status'], 'running')
+        child.kill()
+        child.wait(timeout=10)
+        self.start_workbench()
+        recovered = self.request('/api/jobs/detail', {'run_id': admitted['id']})['run']
+        self.assertEqual(recovered['status'], 'unknown', recovered)
+        self.assertTrue(self.mart(name)['requires_manual_refresh'])
+        self.assertFalse(self.mart(name)['schedule']['enabled'])
+        self.request('/api/marts/schedule', schedule, expected=400)
+        history = self.request('/api/jobs/runs')['runs']
+        self.assertEqual(len(history), 1)
+        self.assert_no_replay(history)
+        self.assertEqual(self.snapshot(target), published_snapshot)
+        repaired = self.wait_run(self.request('/api/marts/run', run_body, expected=202)['run']['id'])
+        self.assertEqual(repaired['status'], 'success', repaired)
+        self.assertFalse(self.mart(name)['requires_manual_refresh'])
+        self.assertEqual(self.baseline(name)['snapshots'], {self.table: self.snapshot(self.table)})
+        self.assertTrue(self.request('/api/marts/schedule', schedule)['schedule']['enabled'])
+
     def test_scheduled_mart_real_snapshots_quality_repair_restart_and_restore(self):
         self.sql('CREATE TABLE ' + _warehouse.identifier(self.table) + ' (id BIGINT, amount BIGINT)')
         self.sql('INSERT INTO ' + _warehouse.identifier(self.table) + ' VALUES (1, 20), (2, 30)')

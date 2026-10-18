@@ -182,7 +182,9 @@ def _get_schedule(name, actor, connection):
 
 def _requires_manual(name, connection):
     # Skipped and unchanged checks cannot hide an unresolved publication outcome.
-    for row in connection.execute('SELECT * FROM runs WHERE job_name=? ORDER BY created_at DESC,rowid DESC', ('mart:' + name,)):
+    for row in connection.execute(
+            "SELECT * FROM runs WHERE job_name=? AND (status='unknown' OR (status='success' AND trigger='manual')) "
+            'ORDER BY created_at DESC,rowid DESC', ('mart:' + name,)):
         if row['status'] == 'unknown':
             return True
         if row['status'] == 'success' and row['trigger'] == 'manual':
