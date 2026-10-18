@@ -9,6 +9,9 @@ import tempfile
 import time
 from urllib.parse import urlsplit
 
+import request_auth
+import trino_auth
+
 SPEC = importlib.util.spec_from_file_location(
     "warehouse_resident", Path(__file__).resolve().with_name("warehouse_resident.py"))
 warehouse_resident = importlib.util.module_from_spec(SPEC)
@@ -34,7 +37,18 @@ def run_dbt(action, url):
                 }},
             },
         }
-        (output / "profiles.yml").write_text(json.dumps(profile))
+        if trino_auth.password_mode():
+            trino_auth.validate_backend_url(url)
+            trino_auth.backend_ssl_context()
+            credential = trino_auth.load_credentials()[request_auth.current_role()]
+            target = profile['shirokuma_lake_marts']['outputs']['local']
+            # Installed dbt-trino's ldap method uses HTTP Basic over HTTPS;
+            # cert is passed directly to the Trino client's TLS verify option.
+            target.update(method='ldap', user=credential['username'],
+                          password=credential['password'], http_scheme='https',
+                          cert=os.environ['SHIROKUMA_TRINO_CA_FILE'], port=endpoint.port or 443)
+        with os.fdopen(os.open(output / 'profiles.yml', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as stream:
+            stream.write(json.dumps(profile))
         env = {key: value for key, value in os.environ.items()
                if not key.upper().startswith("DBT_") and not key.upper().endswith("_PROXY")}
         completed = subprocess.run(

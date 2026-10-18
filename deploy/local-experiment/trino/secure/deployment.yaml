@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-local
+spec:
+  template:
+    spec:
+      containers:
+        - name: trino
+          ports:
+            - name: https
+              containerPort: 8443
+          env:
+            - name: TRINO_INTERNAL_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: trino-local-auth
+                  key: shared-secret
+          volumeMounts:
+            - name: auth
+              mountPath: /etc/trino-auth
+              readOnly: true
+      volumes:
+        - name: auth
+          secret:
+            secretName: trino-local-auth
+            defaultMode: 0440
+        - name: config
+          configMap:
+            name: trino-local-config
+            items:
+              - key: config.properties
+                path: config.properties
+              - key: node.properties
+                path: node.properties
+              - key: jvm.config
+                path: jvm.config
+              - key: log.properties
+                path: log.properties
+              - key: iceberg.properties
+                path: catalog/iceberg.properties
+              - key: tpch.properties
+                path: catalog/tpch.properties
+              - key: password-authenticator.properties
+                path: password-authenticator.properties
+              - key: access-control.properties
+                path: access-control.properties
+              - key: rules.json
+                path: rules.json

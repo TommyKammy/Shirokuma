@@ -1,6 +1,8 @@
 """Resident Trino warehouse control for the dedicated local lab."""
 import argparse
 from contextlib import contextmanager
+import fcntl
+import errno
 import http.client
 import http.server
 import json
@@ -34,6 +36,7 @@ _ACTIVITY_LOCK = threading.Lock()
 _AUTO_CHILL_THREAD = None
 _AUTO_CHILL_STOP = threading.Event()
 _AUTO_CHILL_LOCK = threading.Lock()
+_WAREHOUSE_GATE = threading.local()
 
 
 def start_auto_chill_daemon(interval=15):
@@ -70,6 +73,50 @@ def stop_auto_chill_daemon():
 def activity_path():
     root = Path(__file__).resolve().parents[2]
     return Path(os.environ.get('SHIROKUMA_STATE_DIR', root / 'var/shirokuma')) / 'runtime' / 'last_activity.json'
+
+
+@contextmanager
+def _warehouse_gate(exclusive=False):
+    """Coordinate accepted work and warehouse transitions across local processes."""
+    held = getattr(_WAREHOUSE_GATE, 'mode', None)
+    if held:
+        if exclusive and held != 'exclusive':
+            raise RuntimeError('cannot stop a warehouse inside an active request')
+        yield
+        return
+    path = activity_path().parent.parent / 'warehouse.lock'
+    if not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        lock = path.open('a')
+    except OSError as exc:
+        if exc.errno not in (None, errno.EACCES, errno.EPERM, errno.EROFS):
+            raise
+        # flock does not write file contents. An existing readable lock remains
+        # usable when the state volume has become read-only.
+        lock = path.open('r')
+    with lock:
+        fcntl.flock(lock, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+        _WAREHOUSE_GATE.mode = 'exclusive' if exclusive else 'shared'
+        try:
+            yield
+        finally:
+            _WAREHOUSE_GATE.mode = None
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+@contextmanager
+def warehouse_activity():
+    """Keep accepted work ahead of stop, or wait for stop before accepting it."""
+    nested = getattr(_WAREHOUSE_GATE, 'mode', None)
+    with _warehouse_gate():
+        if not nested:
+            touch_activity()
+        try:
+            yield
+        finally:
+            if not nested:
+                touch_activity()
 
 
 def touch_activity():
@@ -114,7 +161,7 @@ def configure_auto_chill(minutes: int):
         raise ValueError('minutes must be an integer between 0 and 1440')
     path = activity_path().with_name('auto_chill.json')
     temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
-    with _ACTIVITY_LOCK:
+    with _warehouse_gate(exclusive=True), _ACTIVITY_LOCK:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_text(json.dumps({'auto_chill_minutes': minutes}), encoding='utf-8')
@@ -160,9 +207,19 @@ def check_auto_chill(size='LOCAL'):
     _AUTO_CHILL_MINUTES = _load_auto_chill_minutes(_AUTO_CHILL_MINUTES)
     chilled = False
     last_activity = read_last_activity()
-    if (_AUTO_CHILL_MINUTES > 0 and
-            time.time() - last_activity >= _AUTO_CHILL_MINUTES * 60 and
-            status(size)['replicas'] > 0):
+    if not (_AUTO_CHILL_MINUTES > 0 and
+            time.time() - last_activity >= _AUTO_CHILL_MINUTES * 60):
+        return dict(chilled=False, **auto_chill_status())
+    # Hold the same gate used by request admission through the actual scale.
+    # The runtime query poll must occur under this gate too: a request that
+    # finished submission before we acquired it can still be running in Trino.
+    with _warehouse_gate(exclusive=True):
+        _AUTO_CHILL_MINUTES = _load_auto_chill_minutes(_AUTO_CHILL_MINUTES)
+        last_activity = read_last_activity()
+        if (_AUTO_CHILL_MINUTES == 0 or
+                time.time() - last_activity < _AUTO_CHILL_MINUTES * 60 or
+                status(size)['replicas'] == 0):
+            return dict(chilled=False, **auto_chill_status())
         with trino() as url:
             count = execute(url,
                 "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'WAITING_FOR_RESOURCES', 'DISPATCHING', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
@@ -225,11 +282,12 @@ def wait_for(check):
     raise TimeoutError("resident warehouse readiness timed out")
 
 
-def http_json(url, data=None, headers=None, timeout=30):
+def http_json(url, data=None, headers=None, timeout=30, *, context=None):
     parsed = urllib.parse.urlsplit(url)
     if urllib.request.urlopen is not _DEFAULT_URLOPEN or parsed.scheme != "http" or not parsed.hostname:
         request = urllib.request.Request(url, data=data, headers=headers or {})
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        options = {'context': context} if context is not None else {}
+        with urllib.request.urlopen(request, timeout=timeout, **options) as response:
             return json.load(response)
     conns = getattr(_HTTP_POOL, "conns", None)
     if conns is None:
@@ -261,21 +319,33 @@ def http_json(url, data=None, headers=None, timeout=30):
                 raise
 
 
+def trino_http_json(url, data=None, headers=None, timeout=30):
+    """Apply warehouse credentials only on explicitly Trino-owned requests."""
+    import request_auth
+    import trino_auth
+    headers = trino_auth.backend_headers(headers, role=request_auth.current_role())
+    trino_auth.validate_backend_url(url)
+    options = {'context': trino_auth.backend_ssl_context()} if url.startswith('https:') else {}
+    return http_json(url, data, headers, timeout, **options)
+
+
 @contextmanager
 def _trino_connection():
+    import trino_auth
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     process = subprocess.Popen(KUBECTL + ["port-forward", "--address", "127.0.0.1",
                                         "svc/trino-local", f"{port}:8080"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    url = f"http://127.0.0.1:{port}"
+    scheme = 'https' if trino_auth.password_mode() else 'http'
+    url = f"{scheme}://127.0.0.1:{port}"
     try:
         def ready():
             if process.poll() is not None:
                 raise RuntimeError("Trino port-forward exited")
             try:
-                return http_json(url + "/v1/info").get("starting") is False
+                return trino_http_json(url + "/v1/info").get("starting") is False
             except (OSError, urllib.error.URLError):
                 return False
         wait_for(ready)
@@ -336,6 +406,11 @@ def finish(report, started):
 
 
 def transition(action, size):
+    with _warehouse_gate(exclusive=action == 'chill'):
+        return _transition(action, size)
+
+
+def _transition(action, size):
     started = time.monotonic()
     before = status(size)
     chilled = action == "chill"
@@ -363,8 +438,16 @@ def transition(action, size):
 
 
 def execute(url, sql, headers, max_rows=1000):
+    with warehouse_activity():
+        return _execute(url, sql, headers, max_rows)
+
+
+def _execute(url, sql, headers, max_rows=1000):
+    import request_auth
+    import trino_auth
+    headers = trino_auth.backend_headers(headers, role=request_auth.current_role())
     rows, columns, query_id, truncated = [], [], None, False
-    page = http_json(url + "/v1/statement", sql.encode("utf-8"), headers)
+    page = trino_http_json(url + "/v1/statement", sql.encode("utf-8"), headers)
     while True:
         if page.get("error"):
             raise RuntimeError("Trino query failed: " + page["error"].get("message", "unknown error"))
@@ -377,15 +460,17 @@ def execute(url, sql, headers, max_rows=1000):
         if truncated:
             if next_uri:
                 try:
+                    trino_auth.validate_backend_url(next_uri)
                     request = urllib.request.Request(next_uri, headers=headers, method="DELETE")
-                    with urllib.request.urlopen(request, timeout=30):
+                    options = {'context': trino_auth.backend_ssl_context()} if next_uri.startswith('https:') else {}
+                    with urllib.request.urlopen(request, timeout=30, **options):
                         pass
                 except Exception:
                     pass
             break
         if not next_uri:
             break
-        page = http_json(next_uri, headers=headers)
+        page = trino_http_json(next_uri, headers=headers)
     return dict(query_id=query_id, columns=columns, rows=rows, truncated=truncated)
 
 
@@ -561,29 +646,62 @@ def _check_bi_schemas(sql):
                  parts[1] in {'information_schema', 'sys'} or
                  (parts[0] == 'system' and parts[1] in {'runtime', 'metadata', 'jdbc'})))
 
-    # Inspect relation names, including comma joins and nested FROM clauses,
-    # while leaving column aliases (t.column) and literals alone.
+    # Consume names and aliases in relation position before interpreting clause
+    # words. Trino permits non-reserved names such as `limit` in both positions.
     depth, from_depths = 0, set()
-    skip_alias = False
+    consumed, relation_groups = set(), set()
+    clauses = {'where', 'group', 'order', 'having', 'union', 'except', 'intersect',
+               'window', 'join', 'left', 'right', 'full', 'inner', 'cross', 'on',
+               'using', 'natural', 'tablesample', 'for'}
+
+    def identifier_token(index):
+        return index < len(tokens) and (raw_tokens[index].startswith('"') or
+                bool(re.fullmatch(r'[a-z_][a-z_0-9$]*', tokens[index])))
+
+    def clause_at(index):
+        if index >= len(tokens) or raw_tokens[index].startswith('"'):
+            return False
+        if tokens[index - 1:index] == ['.'] or tokens[index + 1:index + 2] == ['.']:
+            return False
+        word = tokens[index]
+        following = tokens[index + 1:index + 2]
+        if word in {'where', 'having', 'union', 'except', 'intersect'}:
+            return True
+        if word in {'group', 'order'}:
+            return following == ['by']
+        if word in {'limit', 'offset'}:
+            return bool(following and (following[0].isdigit() or following[0] in {'all', '?'}))
+        if word == 'fetch':
+            return bool(following and following[0] in {'first', 'next'})
+        if word == 'window':
+            return identifier_token(index + 1) and tokens[index + 2:index + 3] == ['as']
+        return False
+
+    def alias_after(index):
+        if tokens[index:index + 1] == ['as']:
+            consumed.add(index)
+            if not identifier_token(index + 1):
+                reject()
+            consumed.add(index + 1)
+            return
+        if identifier_token(index) and (raw_tokens[index].startswith('"') or
+                (tokens[index] not in clauses - {'window', 'group', 'order'} and not clause_at(index))):
+            consumed.add(index)
+
     for i, token in enumerate(tokens):
-        if skip_alias:
-            skip_alias = False
-            continue
-        # Quoted identifiers retain their names for schema comparisons, but
-        # never change the parser's clause state or introduce a relation.
-        if raw_tokens[i].startswith(('"', "'")):
-            continue
-        if token == 'as' and i + 1 < len(tokens) and (
-                raw_tokens[i + 1].startswith('"') or
-                re.fullmatch(r'[a-z_][a-z_0-9$]*', tokens[i + 1])):
-            skip_alias = True
+        if i in consumed or raw_tokens[i].startswith(('"', "'")):
             continue
         if token == '(':
             depth += 1
         elif token == ')':
             from_depths.discard(depth)
+            if depth in relation_groups:
+                relation_groups.discard(depth)
+                alias_after(i + 1)
             depth -= 1
-        elif token in {'where', 'group', 'order', 'having', 'limit', 'union', 'except', 'intersect'}:
+            if depth < 0:
+                reject()
+        elif clause_at(i):
             from_depths.discard(depth)
         if token == 'from':
             from_depths.add(depth)
@@ -592,18 +710,24 @@ def _check_bi_schemas(sql):
         if not reference:
             continue
         j = i + 1
-        # Parenthesized relations and TABLE(catalog.schema.function(...))
-        # must obey the same schema policy as ordinary table references.
         while tokens[j:j + 1] == ['(']:
+            relation_groups.add(depth + j - i)
             j += 1
-        if j >= len(tokens) or not (raw_tokens[j].startswith('"') or
-                                    re.fullmatch(r'[a-z_][a-z_0-9$]*', tokens[j])):
-            continue
+        if tokens[j:j + 1] in (['select'], ['with'], ['values']):
+            continue  # Nested FROM clauses are checked by the same traversal.
+        if not identifier_token(j):
+            reject()
         parts = [tokens[j]]
-        while j + 2 < len(tokens) and tokens[j + 1] == '.':
+        consumed.add(j)
+        while j + 1 < len(tokens) and tokens[j + 1] == '.':
+            if not identifier_token(j + 2):
+                reject()
+            consumed.update((j + 1, j + 2))
             parts.append(tokens[j + 2])
             j += 2
-        # SHOW TABLES FROM takes a schema, SHOW SCHEMAS FROM takes a catalog.
+        if tokens[j + 1:j + 2] == ['(']:
+            reject()  # Table functions require separate authorization semantics.
+        alias_after(j + 1)
         prefix = [t.lower() for t in raw_tokens[:2]]
         if prefix == ['show', 'tables'] and token in {'from', 'in'}:
             if not allowed(parts + ['_table']):
@@ -613,11 +737,13 @@ def _check_bi_schemas(sql):
                 reject()
         elif not allowed(parts):
             reject()
+    if depth:
+        reject()
 
 
-def check_bi_policy(sql: str, user: str) -> str:
+def check_bi_policy(sql: str, user: str, role=None) -> str:
     _check_dynamic_sql(sql)
-    if not _is_bi_user(user):
+    if (role or resolve_role(user)) != 'bi_viewer':
         return normalize_trino_sql(sql.rstrip().rstrip('; \t\r\n'))
     statement = check_sql_policy(sql, mode='read-only')
     clean = re.sub(r'--[^\n]*|/\*[\s\S]*?\*/', ' ', statement).lstrip()
@@ -629,6 +755,14 @@ def check_bi_policy(sql: str, user: str) -> str:
 
 def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
     """Serve Trino's client protocol, keeping result/cancel URLs on this endpoint."""
+    import request_auth
+    import trino_auth
+    from contextlib import nullcontext
+    import collections
+    import threading
+    request_auth.validate_bind(bind)
+    continuation_owners = collections.OrderedDict()
+    owner_lock = threading.Lock()
     size = globals()['warehouse'](warehouse)
     initialize_auto_chill()
     hop_headers = {'connection', 'keep-alive', 'proxy-authenticate',
@@ -642,6 +776,8 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
         def error_json(self, code, message):
             data = json.dumps({'error': {'message': message}}).encode()
             self.send_response(code)
+            if code == 401:
+                self.send_header('WWW-Authenticate', 'Basic realm="Shirokuma", charset="UTF-8"')
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(data)))
             self.end_headers()
@@ -661,11 +797,23 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                 if length < 0:
                     raise ValueError('invalid Content-Length')
                 body = self.rfile.read(length) if length else None
-                user = self.headers.get('X-Trino-User', '')
+                principal = request_auth.authenticate(self.headers)
+                user = principal[0] if principal else self.headers.get('X-Trino-User', '')
+                role = (request_auth.select_role(principal[1], self.headers.get_all('X-Shirokuma-Role', []))
+                        if principal else resolve_role(user, self.headers.get('X-Shirokuma-Role')))
+                if principal and path.startswith('/v1/statement/'):
+                    with owner_lock:
+                        if continuation_owners.get(path) != user:
+                            self.error_json(403, 'Query continuation does not belong to this identity')
+                            return
+                if principal and any(self.headers.get_all(name, []) for name in
+                                     ('X-Trino-Role', 'X-Trino-Session', 'X-Trino-Original-User')):
+                    self.error_json(403, 'Client role and session overrides are not permitted')
+                    return
                 try:
                     for header in self.headers.get_all('X-Trino-Prepared-Statement', []):
-                        if _is_bi_user(user):
-                            raise ValueError('SQL policy violation: BI prepared statements are not allowed')
+                        if role != 'admin':
+                            raise ValueError('SQL policy violation: restricted prepared statements are not allowed')
                         for entry in header.split(','):
                             name, separator, prepared = entry.partition('=')
                             if not separator or not name.strip() or not prepared.strip():
@@ -675,10 +823,11 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                     self.error_json(403, str(exc))
                     return
                 if statement:
-                    user = self.headers.get('X-Trino-User', '')
                     try:
-                        sql = check_bi_policy((body or b'').decode('utf-8'), user)
-                        if _is_bi_user(user):
+                        source_sql = (body or b'').decode('utf-8')
+                        sql = (check_sql_policy(source_sql, mode='sandbox-write' if role == 'data_engineer' else 'read-only', role=role) if role != 'admin'
+                               else check_bi_policy(source_sql, user, role=role))
+                        if role == 'bi_viewer':
                             catalog = self.headers.get('X-Trino-Catalog', '')
                             _check_bi_schemas(sql)
                             schema = self.headers.get('X-Trino-Schema', '')
@@ -691,29 +840,38 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                         self.error_json(403, str(exc))
                         return
                     body = sql.encode('utf-8')
-                    touch_activity()
-                    if status(size)['replicas'] == 0:
+                with warehouse_activity() if path != '/v1/info' else nullcontext():
+                    if statement and status(size)['replicas'] == 0:
                         transition('wake', size)
-                elif path.startswith('/v1/statement/'):
-                    touch_activity()
-                excluded = hop_headers | {h.strip().lower() for h in self.headers.get('Connection', '').split(',')}
-                headers = {k: v for k, v in self.headers.items() if k.lower() not in excluded}
-                # Request uncompressed JSON so continuation URLs can be rewritten.
-                headers['Accept-Encoding'] = 'identity'
-                with trino() as url:
-                    backend = urllib.parse.urlsplit(url)
-                    conn = http.client.HTTPConnection(backend.hostname, backend.port or 80, timeout=TIMEOUT)
-                    try:
-                        parsed_path = urllib.parse.urlsplit(self.path)
-                        target = urllib.parse.urlunsplit(('', '', parsed_path.path, parsed_path.query, ''))
-                        conn.request(self.command, target, body=body, headers=headers)
-                        response = conn.getresponse()
-                        data = response.read()
-                        response_headers = response.getheaders()
-                    finally:
-                        conn.close()
-                if response.status < 400:
-                    touch_activity()
+                    excluded = hop_headers | {h.strip().lower() for h in self.headers.get('Connection', '').split(',')}
+                    headers = {k: v for k, v in self.headers.items() if k.lower() not in excluded}
+                    # Request uncompressed JSON so continuation URLs can be rewritten.
+                    if principal:
+                        headers = {k: v for k, v in headers.items() if k.lower() not in
+                                   {'authorization', 'x-trino-user', 'x-shirokuma-role'}}
+                        headers['X-Trino-User'] = user
+                    if role == 'bi_viewer':
+                        headers['X-Trino-Catalog'] = 'iceberg'
+                        headers['X-Trino-Schema'] = 'marts'
+                    headers['Accept-Encoding'] = 'identity'
+                    headers = trino_auth.backend_headers(headers, role=role)
+                    with trino() as url:
+                        trino_auth.validate_backend_url(url)
+                        backend = urllib.parse.urlsplit(url)
+                        if backend.scheme == 'https':
+                            conn = http.client.HTTPSConnection(backend.hostname, backend.port or 443,
+                                timeout=TIMEOUT, context=trino_auth.backend_ssl_context())
+                        else:
+                            conn = http.client.HTTPConnection(backend.hostname, backend.port or 80, timeout=TIMEOUT)
+                        try:
+                            parsed_path = urllib.parse.urlsplit(self.path)
+                            target = urllib.parse.urlunsplit(('', '', parsed_path.path, parsed_path.query, ''))
+                            conn.request(self.command, target, body=body, headers=headers)
+                            response = conn.getresponse()
+                            data = response.read()
+                            response_headers = response.getheaders()
+                        finally:
+                            conn.close()
                 host, actual_port = self.server.server_address[:2]
                 endpoint = os.environ.get('TRINO_ADVERTISED_URL')
                 if not endpoint:
@@ -737,6 +895,13 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                     except (ValueError, UnicodeError):
                         page = None
                     if isinstance(page, dict):
+                        if principal:
+                            with owner_lock:
+                                for key in ('nextUri', 'partialCancelUri'):
+                                    if isinstance(page.get(key), str):
+                                        continuation_owners[urllib.parse.urlsplit(page[key]).path] = user
+                                while len(continuation_owners) > 4096:
+                                    continuation_owners.popitem(last=False)
                         for key in ('nextUri', 'partialCancelUri', 'infoUri'):
                             if isinstance(page.get(key), str):
                                 page[key] = local_uri(page[key])
@@ -749,6 +914,10 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                 self.send_header('Content-Length', str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
+            except request_auth.AuthenticationError as exc:
+                self.error_json(401, str(exc))
+            except PermissionError as exc:
+                self.error_json(403, str(exc))
             except ValueError as exc:
                 self.error_json(400, str(exc))
             except (OSError, RuntimeError, http.client.HTTPException, subprocess.SubprocessError) as exc:
@@ -767,6 +936,11 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
 
 
 def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000, mode='read-only'):
+    with warehouse_activity():
+        return _query(size, sql, catalog, schema, no_auto_wake, max_rows, mode)
+
+
+def _query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000, mode='read-only'):
     size = warehouse(size)
     if not sql or not sql.strip():
         raise ValueError("query requires non-empty SQL")

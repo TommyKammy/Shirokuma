@@ -3,8 +3,8 @@ import argparse
 import base64
 import csv
 from contextlib import contextmanager
-from datetime import date
-from decimal import Decimal, localcontext, ROUND_HALF_UP
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_UP
 import json
 import io
 import logging
@@ -48,7 +48,7 @@ def read_file(path, format='auto', schema_hints=None, encoding=None):
         raise ValueError('schema_hints must be a column-to-type dictionary')
     for sql_type in schema_hints.values():
         if not isinstance(sql_type, str) or not re.fullmatch(
-                r'(?:VARCHAR|INTEGER|INT|SMALLINT|TINYINT|BIGINT|DOUBLE|BOOLEAN|DATE|TIMESTAMP|DECIMAL(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)',
+                r'(?:VARCHAR|INTEGER|INT|SMALLINT|TINYINT|BIGINT|DOUBLE|BOOLEAN|DATE|TIMESTAMP(?:\([0-6]\))?|DECIMAL(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)',
                 sql_type, re.IGNORECASE):
             raise ValueError('unsupported schema hint type: ' + str(sql_type))
     detected = FORMATS.get(path.suffix.lower()) if format == 'auto' else format
@@ -164,8 +164,42 @@ def json_text(value):
     return json.dumps(value, ensure_ascii=False)
 
 
+def integer_value(value, sql_type):
+    """Convert integers exactly, with the same bounds in every ingestion path."""
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError('invalid ' + sql_type + ' value') from exc
+    bits = {'TINYINT': 8, 'SMALLINT': 16, 'INTEGER': 32, 'INT': 32, 'BIGINT': 64}[sql_type.upper()]
+    if (not number.is_finite() or number != number.to_integral_value()
+            or not -(2**(bits - 1)) <= number < 2**(bits - 1)):
+        raise ValueError('invalid ' + sql_type + ' value')
+    return int(number)
+
+
+def timestamp_value(value, sql_type):
+    """Preserve fractional digits; reject nonzero digits beyond target precision."""
+    match = re.fullmatch(r'TIMESTAMP(?:\((\d+)\))?', sql_type.upper())
+    if not match or match[1] is not None and not 0 <= int(match[1]) <= 6:
+        raise ValueError('unsupported timestamp type: ' + sql_type)
+    # Iceberg stores microseconds. Reject finer values instead of rounding them.
+    precision = int(match[1]) if match[1] is not None else 6
+    text = str(value).replace('T', ' ')
+    parts = re.fullmatch(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.(\d{1,12}))?', text)
+    if not parts:
+        raise ValueError('timestamp must be timezone naive ISO date and time')
+    datetime.fromisoformat(parts[1])
+    fraction = parts[2] or ''
+    if any(d != '0' for d in fraction[precision:]):
+        raise ValueError('timestamp does not fit ' + sql_type)
+    fraction = fraction[:precision]
+    return parts[1] + ('.' + fraction if fraction else '')
+
+
 def literal(value, sql_type):
     sql_type = sql_type.upper()
+    if sql_type == 'TIMESTAMP':
+        sql_type = 'TIMESTAMP(6)'
     if is_null(value) or sql_type != 'VARCHAR' and value == '':
         return f'CAST(NULL AS {sql_type})'
     if sql_type == 'BOOLEAN':
@@ -173,7 +207,7 @@ def literal(value, sql_type):
     # Explicit casts keep CTAS types stable even when the first batch contains
     # only small integers or decimal-looking floats.
     if sql_type in INTEGER_TYPES:
-        return f'CAST({int(value)} AS {sql_type})'
+        return f'CAST({integer_value(value, sql_type)} AS {sql_type})'
     if sql_type == 'DOUBLE':
         return f'CAST({float(value)!r} AS DOUBLE)'
     text = json_text(value) if isinstance(value, (dict, list)) else str(value)
@@ -188,13 +222,18 @@ def literal(value, sql_type):
     quoted = wr.literal(text)
     if sql_type.startswith('DECIMAL'):
         return f'CAST({quoted} AS {sql_type})'
-    if sql_type == 'TIMESTAMP':
-        return 'TIMESTAMP ' + quoted
+    if sql_type.startswith('TIMESTAMP'):
+        value = 'TIMESTAMP ' + wr.literal(timestamp_value(value, sql_type))
+        return f'CAST({value} AS {sql_type})' if '(' in sql_type else value
     return 'DATE ' + quoted if sql_type == 'DATE' else quoted
 
 
 def key_value(value, sql_type):
     """Compare keys after the same decimal scale conversion used by Trino."""
+    if sql_type.upper().startswith('TIMESTAMP') and value not in (None, ''):
+        value = timestamp_value(value, sql_type)
+        if '.' in value:
+            value = value.rstrip('0').rstrip('.')
     if sql_type.upper().startswith('DECIMAL') and value not in (None, ''):
         parameters = [int(n) for n in re.findall(r'\d+', sql_type)]
         scale = parameters[1] if len(parameters) > 1 else 0
@@ -243,6 +282,7 @@ def upsert_from_stage(execute, sql_target, sql_stage, schema, key_cols, has_rows
     existing_names = {name for name, _ in existing}
     if any(c not in existing_names for c in key_cols):
         raise ValueError('upsert keys must exist in the target table')
+    validate_upsert_keys(execute, sql_target, key_cols)
     merged_schema = existing + [(c, t) for c, t in schema if c not in existing_names]
     def quoted_column(column):
         return '"' + column.replace('"', '""') + '"'
@@ -264,6 +304,16 @@ def upsert_from_stage(execute, sql_target, sql_stage, schema, key_cols, has_rows
             f'SELECT {updated} FROM incoming t LEFT JOIN {sql_target} old ON {match} '
             f'UNION ALL SELECT {retained} FROM {sql_target} old '
             f'WHERE NOT EXISTS (SELECT 1 FROM incoming t WHERE {match})')
+
+
+def validate_upsert_keys(execute, sql_target, key_cols):
+    """An existing upsert target must have unique, non-null (possibly composite) keys."""
+    keys = ['"' + c.replace('"', '""') + '"' for c in key_cols]
+    result = execute('SELECT ' + ', '.join(keys) + ' FROM ' + sql_target +
+                     ' GROUP BY ' + ', '.join(keys) + ' HAVING COUNT(*) > 1 OR ' +
+                     ' OR '.join(c + ' IS NULL' for c in keys) + ' LIMIT 1')
+    if result.get('truncated') or result.get('rows'):
+        raise ValueError('upsert target keys must be unique and non-null')
 
 
 def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500, key=None,
@@ -295,17 +345,27 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
         with wr.trino() as url:
             def execute(statement):
                 return bears.sql(url, wr.check_sql_policy(statement, mode=guardrail))
-            if mode == 'upsert':
+            if mode in {'upsert', 'append'}:
                 # Read the prior contract before literalization can round values.
                 existing = execute('SELECT column_name, data_type FROM iceberg.information_schema.columns '
                     'WHERE table_schema = ' + wr.literal(target.split('.')[1]) +
                     ' AND table_name = ' + wr.literal(target.split('.')[2]))
                 target_types = dict(existing.get('rows', []))
                 schema = [(c, target_types.get(c, t)) for c, t in schema]
+            # Validate every value before CREATE/INSERT, including later batches.
+            for row in rows:
+                for value, (_, kind) in zip(row, schema):
+                    literal(value, kind)
+            if mode == 'upsert':
+                if target_types:
+                    validate_upsert_keys(execute, sql_target, key_cols)
                 key_indices = [names.index(c) for c in key_cols]
                 # Last row wins, including collisions introduced by target casts.
                 unique = {}
                 for row in reversed(rows):
+                    if any(row[i] is None or row[i] == '' and schema[i][1].upper() != 'VARCHAR'
+                           for i in key_indices):
+                        raise ValueError('upsert input keys must be non-null')
                     row_key = tuple(key_value(row[i], schema[i][1]) for i in key_indices)
                     if row_key not in unique:
                         unique[row_key] = row

@@ -18,6 +18,10 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 
 ## 1. 開発体制：Commander–Worker 分担モデル
 
+2026-10-18、所有者の指示により開発の司令塔を Antigravity から Codex に引き継いだ。
+以下の分担モデルとローカル開発の範囲を維持し、Codex が作業分割・統合・レビューを担当する。
+Phase 15 の残件対応と受入証拠は `docs/guides/phase16_remediation.md` に記録する。
+
 従来の無人500セッション連続実行ループ（`autonomous_runner.py` および各種 `*_supervisor.py`）は廃止し、設計・判断と実装を明確に分離した **2階層体制** で開発を進める。
 
 ```mermaid

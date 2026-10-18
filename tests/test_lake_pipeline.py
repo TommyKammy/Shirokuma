@@ -1,11 +1,16 @@
 import importlib.util
 import io
 import json
+import os
 from contextlib import ExitStack, nullcontext
 from pathlib import Path
 import subprocess
+import stat
+import sys
 import unittest
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 
 SPEC = importlib.util.spec_from_file_location(
     "lake_pipeline", Path(__file__).resolve().parents[1] / "tools/local_experiment/lake_pipeline.py")
@@ -25,6 +30,7 @@ class LakePipelineTests(unittest.TestCase):
         self.sql = stack.enter_context(patch.object(w, "execute", return_value={"rows": [[42]]}))
         self.telemetry = stack.enter_context(patch.object(w, "telemetry", return_value="recorded"))
         self.process = stack.enter_context(patch.object(lake.subprocess, "run", side_effect=self.dbt))
+        stack.enter_context(patch.object(lake.trino_auth, 'password_mode', return_value=False))
 
     def dbt(self, command, **kwargs):
         self.assertEqual(command[0], str(lake.DBT))
@@ -34,6 +40,8 @@ class LakePipelineTests(unittest.TestCase):
         self.profile_dir = Path(command[command.index("--profiles-dir") + 1])
         profile = json.loads((self.profile_dir / "profiles.yml").read_text())
         target = profile["shirokuma_lake_marts"]["outputs"]["local"]
+        self.captured_target = target
+        self.assertEqual(stat.S_IMODE((self.profile_dir / 'profiles.yml').stat().st_mode), 0o600)
         self.assertEqual((target["host"], target["port"]), ("127.0.0.1", 18080))
         self.assertEqual((target["database"], target["schema"]), ("iceberg", "marts"))
         output = Path(command[command.index("--target-path") + 1])
@@ -66,6 +74,43 @@ class LakePipelineTests(unittest.TestCase):
         self.kubectl.assert_not_called()
         self.telemetry.assert_called_once_with("test", report["duration_ms"], "success",
                                                prefix="lake.pipeline.")
+        self.assertEqual(self.captured_target['method'], 'none')
+        self.assertEqual(self.captured_target['http_scheme'], 'http')
+        self.assertNotIn('password', self.captured_target)
+
+    def test_password_profiles_use_current_role_and_private_ca_without_disclosing_password(self):
+        credentials = {role: dict(username=user, password='synthetic-' + role + '-secret')
+                       for role, user in lake.trino_auth.SERVICE_USERS.items()}
+        for role in credentials:
+            for action in ('build', 'test'):
+                with self.subTest(role=role, action=action), \
+                     patch.object(lake.trino_auth, 'password_mode', return_value=True), \
+                     patch.object(lake.trino_auth, 'load_credentials', return_value=credentials), \
+                     patch.object(lake.trino_auth, 'backend_ssl_context') as tls, \
+                     patch.dict(os.environ, {'SHIROKUMA_TRINO_CA_FILE': '/private/synthetic-ca.pem'}), \
+                     patch.object(w, 'trino', return_value=nullcontext('https://127.0.0.1:18080')), \
+                     lake.request_auth.effective_role(role):
+                    report = lake.run(action)
+                self.assertEqual(report['result'], 'success')
+                self.assertEqual(self.captured_target['method'], 'ldap')
+                self.assertEqual(self.captured_target['http_scheme'], 'https')
+                self.assertEqual(self.captured_target['cert'], '/private/synthetic-ca.pem')
+                self.assertEqual(self.captured_target['user'], credentials[role]['username'])
+                self.assertEqual(self.captured_target['password'], credentials[role]['password'])
+                tls.assert_called_once()
+                self.assertNotIn(credentials[role]['password'], json.dumps(report))
+                command = self.process.call_args.args[0]
+                self.assertFalse(any(credentials[role]['password'] in arg for arg in command))
+                self.assertFalse(any(credentials[role]['password'] in value
+                                     for value in self.process.call_args.kwargs['env'].values()))
+                self.assertFalse(self.profile_dir.exists())
+
+    def test_password_profile_rejects_insecure_backend_before_subprocess(self):
+        with patch.object(lake.trino_auth, 'password_mode', return_value=True):
+            report = lake.run('test')
+        self.assertEqual(report['result'], 'failed')
+        self.assertIn('HTTPS', report['error'])
+        self.process.assert_not_called()
 
     def test_status_requires_both_marts_nonempty(self):
         self.assertEqual(lake.run("status")["result"], "success")

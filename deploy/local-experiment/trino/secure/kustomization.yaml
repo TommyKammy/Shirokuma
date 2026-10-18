@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: shirokuma-dev
+images:
+  - name: shirokuma.local/trino
+    newName: shirokuma.local/trino
+    digest: sha256:7347d14eb3a3017c351c0220c811d50b556e5c8596564d8b6195276600064670
+resources:
+  - ../deployment.yaml
+  - ../service.yaml
+  - ../networkpolicy.yaml
+configMapGenerator:
+  - name: trino-local-config
+    files:
+      - config.properties
+      - ../node.properties
+      - ../jvm.config
+      - ../log.properties
+      - ../iceberg.properties
+      - ../tpch.properties
+      - password-authenticator.properties
+      - access-control.properties
+      - rules.json
+patches:
+  - path: deployment.yaml
+  - target:
+      kind: Service
+      name: trino-local
+    patch: |-
+      - op: replace
+        path: /spec/ports/0/targetPort
+        value: https
+  - target:
+      kind: NetworkPolicy
+      name: trino-local
+    patch: |-
+      - op: replace
+        path: /spec/ingress
+        value: []

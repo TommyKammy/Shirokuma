@@ -4,8 +4,8 @@ doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
 status: accepted
 created: 2026-07-05
-updated: 2026-10-16
-version: "0.8.0"
+updated: 2026-10-18
+version: "0.9.0"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
@@ -26,7 +26,11 @@ and `docs/design/04_Development/04B_Autonomous_Local_Development.md`).
 
 ### Commander–Worker Division of Labor
 
-- **Commander / Architect / Reviewer (`Antigravity`)**:
+The owner handed development back to Codex on 2026-10-18. Codex now owns
+coordination and review; ADR-0036's bounded worker model and local-only scope
+remain in effect. Historical Antigravity references describe the prior owner.
+
+- **Commander / Architect / Reviewer (`Codex`)**:
   - Owns architecture, roadmap prioritization, Work Package scoping, and
     repository/Vault documentation alignment.
   - Crafts bounded task prompts for the worker with explicit anti-over-engineering

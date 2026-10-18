@@ -12,6 +12,8 @@ from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
+
 SPEC = importlib.util.spec_from_file_location(
     "warehouse_resident", Path(__file__).resolve().parents[1] / "tools/local_experiment/warehouse_resident.py")
 w = importlib.util.module_from_spec(SPEC)

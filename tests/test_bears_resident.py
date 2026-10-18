@@ -1,10 +1,12 @@
 import contextlib
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import importlib.util
 import io
 import json
 from pathlib import Path
 import sys
 import tempfile
+import threading
 from types import SimpleNamespace as Args
 import unittest
 from unittest.mock import patch
@@ -694,6 +696,61 @@ class BearsResidentTests(unittest.TestCase):
              patch.object(b.wr, 'http_json', return_value=completion) as http:
             b.test_ai_connection({'model': 'other'})
             self.assertEqual(http.call_args.args[2]['Authorization'], 'Bearer saved-secret')
+
+    def test_generation_override_credentials_stay_with_endpoint(self):
+        requests = []
+
+        class CompletionHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                requests.append((self.path, self.headers.get('Authorization'), body))
+                response = json.dumps(dict(choices=[dict(message=dict(content='SELECT 1'))])).encode()
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(('127.0.0.1', 0), CompletionHandler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(worker.join)
+        self.addCleanup(server.shutdown)
+        endpoint = 'http://127.0.0.1:' + str(server.server_port)
+        base = dict(provider='openai', model='old-model', api_url=endpoint + '/old',
+                    api_key='', api_key_env='', timeout=5, temperature=0, max_tokens=10)
+        credentials = ({'api_key': 'saved-secret'}, {'api_key_env': 'OPENAI_API_KEY'},
+                       {'api_key_env': 'BEAR_API_KEY'})
+        functions = (lambda config: b.generate_data_sql('trino', 'one', config=config),
+                     lambda config: b.generate_data_sql_retry('trino', 'one', [],
+                         'SELECT broken', 'unknown column', config=config))
+        environment = {'OPENAI_API_KEY': 'openai-secret', 'BEAR_API_KEY': 'bear-secret',
+                       'NEW_KEY': 'new-env-secret'}
+        with patch.dict(b.os.environ, environment, clear=True), \
+             patch.object(b, 'sql', return_value={'rows': []}):
+            for credential in credentials:
+                active = {**base, **credential}
+                old_key = credential.get('api_key') or environment[credential['api_key_env']]
+                for generate in functions:
+                    for change in ({'api_url': endpoint + '/new'}, {'provider': 'custom'},
+                                   {'api_url': endpoint + '/new', 'provider': 'custom'}):
+                        for supplied, expected in (({}, None), ({'api_key': '********'}, None),
+                                ({'api_key': ''}, None), ({'api_key': 'new-secret'}, 'new-secret'),
+                                ({'api_key_env': 'NEW_KEY'}, 'new-env-secret')):
+                            with self.subTest(credential=credential, change=change, supplied=supplied), \
+                                 patch.object(b, 'load_ai_config', return_value=dict(active)):
+                                self.assertEqual(generate({**change, **supplied}), 'SELECT 1')
+                                path, authorization, _ = requests[-1]
+                                self.assertEqual(path, change.get('api_url', base['api_url'])
+                                                 .removeprefix(endpoint) + '/chat/completions')
+                                self.assertEqual(authorization, 'Bearer ' + expected if expected else None)
+                    with patch.object(b, 'load_ai_config', return_value=dict(active)):
+                        self.assertEqual(generate({'model': 'new-model'}), 'SELECT 1')
+                        self.assertEqual(requests[-1][1], 'Bearer ' + old_key)
+                        self.assertEqual(requests[-1][2]['model'], 'new-model')
 
     def test_ai_connection_success_and_failure(self):
         completion = dict(choices=[dict(message=dict(content='2'))], usage=dict(prompt_tokens=4))

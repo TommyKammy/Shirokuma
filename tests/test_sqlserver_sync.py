@@ -40,21 +40,27 @@ class SqlServerSyncTests(unittest.TestCase):
         return stack, execute
 
     @contextlib.contextmanager
-    def typed_target(self, kind):
+    def typed_target(self, kind, created=False):
         """Execute emitted merge and aggregate SQL against a typed SQLite table."""
         with sqlite3.connect(':memory:') as db:
             db.execute(f'CREATE TABLE orders (id {kind}, amount BIGINT)')
             db.executemany('INSERT INTO orders VALUES (?, ?)', [(1, 10), (2, 20)])
+            if created:
+                db.execute('ALTER TABLE orders ADD COLUMN created TIMESTAMP(6)')
             statements = []
             def execute(url, sql, *args, **kwargs):
                 statements.append(sql)
                 if 'information_schema.columns' in sql:
-                    return dict(rows=[['id', kind], ['amount', 'BIGINT']])
+                    schema = [['id', kind], ['amount', 'BIGINT']] + ([['created', 'timestamp(6)']] if created else [])
+                    return dict(rows=schema if "table_name = 'orders'" in sql else [])
                 sql = re.sub(r'"iceberg"\."raw"\."(\w+)"', r'"\1"', sql)
+                sql = re.sub(r"CAST\(TIMESTAMP ('[^']*') AS TIMESTAMP\(6\)\)", r'\1', sql)
+                sql = re.sub(r'CAST\((t\."created") AS timestamp\(6\)\)', r'\1', sql, flags=re.I)
                 if sql.startswith('CREATE SCHEMA'):
                     return {}
                 if sql.startswith('DESCRIBE '):
-                    return dict(rows=[[r[1], r[2]] for r in db.execute('PRAGMA table_info(' + sql[9:] + ')')])
+                    return dict(rows=[[r[1], 'timestamp(6)' if created and r[1] == 'created' else r[2]]
+                                      for r in db.execute('PRAGMA table_info(' + sql[9:] + ')')])
                 values = re.fullmatch(r'(CREATE TABLE .+ AS )SELECT \* FROM \(VALUES (.*)\) AS t\((.*)\)', sql)
                 if values:
                     sql = values[1] + f'WITH t({values[3]}) AS (VALUES {values[2]}) SELECT * FROM t'
@@ -72,6 +78,78 @@ class SqlServerSyncTests(unittest.TestCase):
                  patch.object(sync.lake_ingest.bears, 'audit_table', return_value={}), \
                  patch.object(sync.wr, 'telemetry', return_value={}):
                 yield db, statements
+
+    def test_existing_duplicate_or_null_keys_block_sync_and_direct_ingest(self):
+        self.columns = [dict(name='id', type='BIGINT'), dict(name='amount', type='BIGINT')]
+        self.rows = [dict(id=1, amount=7)]
+        self.write()
+        for extra in ((1, 20), (None, 20)):
+            for direct in (False, True):
+                with self.subTest(extra=extra, direct=direct), self.typed_target('BIGINT') as (db, statements):
+                    db.execute('INSERT INTO orders VALUES (?, ?)', extra)
+                    before = db.execute('SELECT * FROM orders').fetchall()
+                    with self.assertRaisesRegex(ValueError, 'unique and non-null'):
+                        if direct:
+                            sync.lake_ingest.ingest(filename='orders.jsonl', content='{"id":1,"amount":7}',
+                                                    mode='upsert', key='id')
+                        else:
+                            sync.sync(**self.options, mode='upsert', key='id', amount_col='amount')
+                    self.assertEqual(db.execute('SELECT * FROM orders').fetchall(), before)
+                    self.assertFalse(any(s.startswith(('CREATE', 'INSERT')) for s in statements))
+
+    def test_direct_fractional_json_keys_preserve_existing_typed_table(self):
+        for kind in ('INTEGER', 'INT', 'SMALLINT', 'TINYINT', 'BIGINT'):
+            for mode in ('append', 'upsert'):
+                with self.subTest(kind=kind, mode=mode), self.typed_target(kind) as (db, statements):
+                    before = db.execute('SELECT * FROM orders').fetchall()
+                    with self.assertRaisesRegex(ValueError, 'invalid ' + kind):
+                        sync.lake_ingest.ingest(filename='orders.jsonl',
+                            content='{"id":1.1,"amount":4}\n{"id":1.9,"amount":7}',
+                            mode=mode, key='id', batch_size=1)
+                    self.assertEqual(db.execute('SELECT * FROM orders').fetchall(), before)
+                    self.assertFalse(any(s.startswith(('CREATE', 'INSERT')) for s in statements))
+
+    def test_existing_timestamp_precision_supports_repeated_real_sync_extraction(self):
+        self.columns = [dict(name='id', type='BIGINT'), dict(name='amount', type='BIGINT'),
+                        dict(name='created', type='DATETIME2')]
+        stamp = '2026-10-17 12:34:56.123456'
+        self.rows = [dict(id=1, amount=7, created=stamp)]
+        self.write()
+        for mode in ('append', 'upsert'):
+            with self.subTest(mode=mode), self.typed_target('BIGINT', created=True) as (db, statements):
+                for _ in range(2):
+                    report = sync.sync(**self.options, mode=mode, key='id', amount_col='amount')
+                    self.assertEqual(report['status'], 'matched')
+                self.assertEqual(db.execute('SELECT created FROM orders WHERE created IS NOT NULL').fetchall(),
+                                 [(stamp,)] * (2 if mode == 'append' else 1))
+                self.assertTrue(any('AS TIMESTAMP(6)' in sql for sql in statements))
+        self.rows[0]['created'] = stamp + '7'
+        self.write()
+        for mode in ('append', 'upsert'):
+            with self.subTest(mode=mode), self.typed_target('BIGINT', created=True) as (db, statements):
+                before = db.execute('SELECT * FROM orders').fetchall()
+                with self.assertRaisesRegex(ValueError, 'timestamp does not fit'):
+                    sync.sync(**self.options, mode=mode, key='id', amount_col='amount')
+                self.assertEqual(db.execute('SELECT * FROM orders').fetchall(), before)
+                self.assertFalse(any(s.startswith(('CREATE', 'INSERT')) for s in statements))
+
+    def test_null_incoming_upsert_key_blocks_before_ingestion(self):
+        with patch.object(sync.lake_ingest, 'ingest') as ingest, self.assertRaisesRegex(ValueError, 'non-null'):
+            sync.extract(**self.options, mode='upsert', key='id')
+        ingest.assert_not_called()
+
+    def test_datetime2_precision_contract_precedes_ingestion(self):
+        for kind in ('DATETIME', 'DATETIME2', 'DATETIME2(7)'):
+            self.columns = [dict(name='id', type='BIGINT'), dict(name='created', type=kind)]
+            self.rows = [dict(id=1, created=None), dict(id=2, created='2026-10-17 12:34:56.1234567')]
+            self.write()
+            with self.subTest(kind=kind), patch.object(sync.lake_ingest, 'ingest') as ingest:
+                with self.assertRaisesRegex(ValueError, 'timestamp does not fit'):
+                    sync.extract(**self.options, batch_size=1)
+                ingest.assert_not_called()
+            self.assertEqual(sync.type_hint(dict(type=kind)), 'TIMESTAMP(6)')
+        self.assertEqual(sync.convert('2026-10-17 12:34:56.1234560', 'TIMESTAMP(6)'),
+                         '2026-10-17 12:34:56.123456')
 
     def test_sync_target_integer_keys_and_candidate_metrics(self):
         self.columns = [dict(name='id', type='VARCHAR'), dict(name='amount', type='BIGINT')]
@@ -126,7 +204,7 @@ class SqlServerSyncTests(unittest.TestCase):
         self.assertEqual(sync.type_hint(dict(type='MONEY')), 'DECIMAL(19,4)')
         self.assertEqual(sync.type_hint(dict(type='SMALLMONEY')), 'DECIMAL(10,4)')
         for kind in ('DATETIME', 'DATETIME2'):
-            self.assertEqual(sync.type_hint(dict(type=kind)), 'TIMESTAMP')
+            self.assertEqual(sync.type_hint(dict(type=kind)), 'TIMESTAMP(6)')
         for col in (dict(type='FLOAT'), dict(type='DECIMAL(39,2)'), dict(type='DECIMAL(2,3)')):
             with self.assertRaises(ValueError):
                 sync.type_hint(col)
@@ -145,8 +223,8 @@ class SqlServerSyncTests(unittest.TestCase):
         self.assertIsNone(batches[1][0]['amount'])
         self.assertEqual(sync.convert(date(2026, 10, 17), 'DATE'), '2026-10-17')
         self.assertEqual(sync.convert(datetime(2026, 10, 17), 'TIMESTAMP'), '2026-10-17 00:00:00')
-        self.assertEqual(sync.convert('2026-10-17T12:34:56.1234567', 'TIMESTAMP'),
-                         '2026-10-17 12:34:56.1234567')
+        with self.assertRaisesRegex(ValueError, 'timestamp does not fit'):
+            sync.convert('2026-10-17T12:34:56.1234567', 'TIMESTAMP')
 
     def test_invalid_values_fail_closed(self):
         for value, hint in [(1.2, 'DECIMAL(9,2)'), ('1.001', 'DECIMAL(9,2)'),
@@ -160,13 +238,13 @@ class SqlServerSyncTests(unittest.TestCase):
         def ingest(path, **kwargs):
             detected, schema, rows = sync.lake_ingest.read_file(path, schema_hints=kwargs['schema_hints'])
             self.assertEqual(dict(schema)['amount'], 'DECIMAL(38,2)')
-            self.assertEqual(dict(schema)['created'], 'TIMESTAMP')
+            self.assertEqual(dict(schema)['created'], 'TIMESTAMP(6)')
             if rows:
                 self.assertEqual(rows[0][1], '1250.50')
                 self.assertEqual(rows[0][2], '000123雪')
             return dict(rows_ingested=len(rows))
         with patch.object(sync.lake_ingest, 'ingest', side_effect=ingest) as load:
-            for mode in ('replace', 'append', 'upsert'):
+            for mode in ('replace', 'append'):
                 result = sync.extract(**self.options, mode=mode, key='id', batch_size=1)
                 self.assertEqual(result['row_count'], 2)
                 self.assertEqual(result['metrics'], dict(row_count=2, distinct_keys=1,
@@ -286,7 +364,7 @@ class SqlServerSyncTests(unittest.TestCase):
                 return {'status': 'matched'}
             def execute(url, sql):
                 events.append(sql)
-                return {'rows': [['id', 'BIGINT']]}
+                return {'rows': [] if 'HAVING COUNT(*) > 1' in sql else [['id', 'BIGINT']]}
             with self.subTest(mode=mode), \
                  patch.object(sync.wr, 'trino', return_value=contextlib.nullcontext('url')), \
                  patch.object(sync.lake_ingest.bears, 'sql', side_effect=execute), \

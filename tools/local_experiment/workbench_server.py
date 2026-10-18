@@ -13,13 +13,14 @@ from urllib.parse import parse_qs, urlsplit
 import bears_resident
 import lake_ingest
 import warehouse_resident
+import request_auth
 from agenthouse import manage
 
 INDEX = Path(__file__).parent / "workbench" / "index.html"
 ALL_ROLES = {'admin', 'data_engineer', 'bi_viewer'}
 EDIT_ROLES = {'admin', 'data_engineer'}
 GET_ROUTES = {path: ALL_ROLES for path in (
-    '/', '/index.html', '/api/status', '/api/catalog', '/api/lineage',
+    '/', '/index.html', '/api/session', '/api/status', '/api/catalog', '/api/lineage',
     '/api/history', '/api/models', '/api/pawprints')}
 GET_ROUTES['/api/ai/config'] = {'admin'}
 POST_ROUTES = {path: EDIT_ROLES for path in (
@@ -104,6 +105,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
     def respond(self, value, status=200):
         data = json.dumps(value, default=str).encode("utf-8")
         self.send_response(status)
+        if status == 401:
+            self.send_header('WWW-Authenticate', 'Basic realm="Shirokuma", charset="UTF-8"')
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -119,14 +122,19 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         if params.keys() - {'role', 'table', 'detail', 'snapshot_id'}:
             raise PermissionError('Unknown query parameter')
         roles = self.headers.get_all('X-Shirokuma-Role', []) + params.get('role', [])
+        principal = request_auth.authenticate(self.headers)
+        self.authenticated_user = principal[0] if principal else None
+        self.maximum_role = principal[1] if principal else warehouse_resident.resolve_role(self.headers.get('X-Trino-User', ''))
+        if principal:
+            self.authenticated_user = principal[0]
+            return request_auth.set_role(request_auth.select_role(principal[1], roles))
         try:
-            # Validate every supplied selector, even one shadowed by a header.
             for role in roles:
                 if not role.strip():
                     raise ValueError('Invalid role: ' + role)
                 warehouse_resident.resolve_role(self.headers.get('X-Trino-User', ''), role)
-            return warehouse_resident.resolve_role(
-                self.headers.get('X-Trino-User', ''), roles[0] if roles else None)
+            return request_auth.set_role(warehouse_resident.resolve_role(
+                self.headers.get('X-Trino-User', ''), roles[0] if roles else None))
         except ValueError as exc:
             raise PermissionError(str(exc)) from exc
 
@@ -139,13 +147,19 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             raise PermissionError('Forbidden for role: ' + role)
         return role
 
+    @request_auth.role_scope
     def do_GET(self):
         try:
             url = urlsplit(self.path)
             role = self.authorize(GET_ROUTES, url.path)
             if role is None:
                 return
-            if url.path in ("/", "/index.html"):
+            if url.path == '/api/session':
+                self.respond({'username': self.authenticated_user, 'role': role,
+                              'maximum_role': self.maximum_role,
+                              'authenticated': self.authenticated_user is not None})
+                return
+            elif url.path in ("/", "/index.html"):
                 data = INDEX.read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -200,6 +214,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.respond(json.loads(result)["data"])
             else:
                 self.respond({"error": "route not found"}, 404)
+        except request_auth.AuthenticationError as exc:
+            self.respond({'error': str(exc)}, 401)
         except PermissionError as exc:
             self.respond({'error': str(exc)}, 403)
         except (ValueError, UnicodeError) as exc:
@@ -218,6 +234,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             raise ValueError("JSON body must be an object")
         return value
 
+    @request_auth.role_scope
     def do_POST(self):
         origin = self.headers.get("Origin")
         if origin and origin != "http://" + self.headers.get("Host", ""):
@@ -380,6 +397,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     fields["target"] = fields["target"] or "latest"
                     result = bears_resident.run(SimpleNamespace(bear=bear, action=action, **fields))
             self.respond(result)
+        except request_auth.AuthenticationError as exc:
+            self.respond({'error': str(exc)}, 401)
         except PermissionError as exc:
             self.respond({'error': str(exc)}, 403)
         except (ValueError, UnicodeError) as exc:
@@ -393,6 +412,7 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=8888)
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args(argv)
+    request_auth.validate_bind(args.host)
     with HTTPServer((args.host, args.port), WorkbenchHandler) as server:
         warehouse_resident.initialize_auto_chill()
         print(f"Shirokuma Workbench: http://{args.host}:{server.server_port}", flush=True)

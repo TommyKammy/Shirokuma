@@ -18,6 +18,46 @@ import lake_ingest as lake
 
 
 class LakeIngestTests(unittest.TestCase):
+    def test_invalid_integer_values_never_create_stage_or_modify_target(self):
+        bounds = {'TINYINT': 8, 'SMALLINT': 16, 'INTEGER': 32, 'INT': 32, 'BIGINT': 64}
+        for kind, bits in bounds.items():
+            for value in ('1.1', '1.9', 'NaN', 'Infinity', str(2**(bits - 1)), str(-2**(bits - 1) - 1)):
+                for mode in ('replace', 'append', 'upsert'):
+                    self.execute.reset_mock()
+                    self.execute.side_effect = lambda url, sql: dict(rows=[['id', kind]]) if 'information_schema.columns' in sql else {}
+                    with self.subTest(kind=kind, value=value, mode=mode), self.assertRaises(ValueError):
+                        lake.ingest(filename='orders.jsonl', content='{"id": 1}\n{"id": ' + value + '}',
+                                    mode=mode, key='id', batch_size=1,
+                                    schema_hints={'id': kind} if mode == 'replace' else None)
+                    self.assertFalse(any(s.startswith(('CREATE', 'INSERT')) for s in self.statements()))
+            for value in (-2**(bits - 1), 2**(bits - 1) - 1, Decimal('1.00')):
+                self.assertEqual(lake.integer_value(value, kind), int(value))
+
+    def test_null_upsert_keys_fail_before_writes(self):
+        for content in ('{"id": null}', '{"id": 1}\n{"id": null}'):
+            self.execute.reset_mock()
+            with self.assertRaisesRegex(ValueError, 'non-null'):
+                lake.ingest(filename='orders.jsonl', content=content, mode='upsert', key='id', batch_size=1)
+            self.assertFalse(any(s.startswith(('CREATE', 'INSERT')) for s in self.statements()))
+
+    def test_timestamp_precision_is_preserved_or_rejected_before_writes(self):
+        value = '2026-10-17 12:34:56.123456789012'
+        self.assertIn(value[:26], lake.literal(value[:26], 'timestamp(6)'))
+        with self.assertRaises(ValueError):
+            lake.literal(value, 'timestamp(12)')
+        self.assertEqual(lake.literal(None, 'TIMESTAMP'), 'CAST(NULL AS TIMESTAMP(6))')
+        self.assertEqual(lake.key_value(value[:26], 'timestamp(6)'),
+                         lake.key_value(value[:26] + '000', 'timestamp(6)'))
+        self.assertEqual(lake.key_value('2026-10-17 12:34:56.1', 'timestamp(6)'),
+                         lake.key_value('2026-10-17 12:34:56.100000', 'timestamp(6)'))
+        self.assertEqual(lake.timestamp_value(value[:26] + '0', 'TIMESTAMP(6)'), value[:26])
+        for mode in ('replace', 'append', 'upsert'):
+            self.execute.reset_mock()
+            with self.assertRaisesRegex(ValueError, 'timestamp does not fit'):
+                lake.ingest(filename='orders.jsonl', content=json.dumps({'id': 1, 'created': value}),
+                            mode=mode, key='id', schema_hints={'created': 'TIMESTAMP(6)'})
+            self.assertFalse(any(s.startswith(('CREATE', 'INSERT')) for s in self.statements()))
+
     def test_integer_key_types_normalize_before_staging_and_repeat_upsert(self):
         for kind in ('INTEGER', 'INT', 'SMALLINT', 'TINYINT', 'BIGINT'):
             with self.subTest(kind=kind), sqlite3.connect(':memory:') as db:
@@ -94,7 +134,7 @@ class LakeIngestTests(unittest.TestCase):
             with self.subTest(suffix=suffix):
                 self.execute.reset_mock()
                 lake.ingest(filename='orders.' + suffix, content=content, mode='upsert', key='id')
-                stage = self.statements()[2]
+                stage = next(s for s in self.statements() if s.startswith('CREATE TABLE') and 'AS SELECT *' in s)
                 self.assertIn("CAST('9007199254740993.25' AS DECIMAL(20,2))", stage)
                 self.assertNotIn('DOUBLE', stage)
 
@@ -111,8 +151,9 @@ class LakeIngestTests(unittest.TestCase):
                     content=f'id,name\n{first},discard\n{last},keep\n',
                     mode='upsert', key='id', batch_size=1)
                 self.assertEqual(report['rows_ingested'], 1)
-                self.assertNotIn("'discard'", self.statements()[2])
-                self.assertIn("'keep'", self.statements()[2])
+                stage = next(s for s in self.statements() if s.startswith('CREATE TABLE') and 'AS SELECT *' in s)
+                self.assertNotIn("'discard'", stage)
+                self.assertIn("'keep'", stage)
 
     def test_prior_type_lookup_failure_blocks_stage_creation(self):
         self.execute.side_effect = RuntimeError('target schema unavailable')
@@ -413,8 +454,8 @@ class LakeIngestTests(unittest.TestCase):
             self.execute.reset_mock()
             result = lake.ingest(path, table=f'{schema}.custom', mode='append', batch_size=1)
             self.assertEqual(result['table'], f'iceberg.{schema}.custom')
-            self.assertEqual(self.statements()[1], f'CREATE TABLE IF NOT EXISTS "iceberg"."{schema}"."custom" ("b" BIGINT, "a" BIGINT)')
-            self.assertIn('("b", "a") VALUES', self.statements()[2])
+            self.assertEqual(self.statements()[2], f'CREATE TABLE IF NOT EXISTS "iceberg"."{schema}"."custom" ("b" BIGINT, "a" BIGINT)')
+            self.assertIn('("b", "a") VALUES', self.statements()[3])
 
     def test_json_formats_union_columns_and_sanitization(self):
         rows = [{'1st col': 1, 'a-b': 'hello', 'a b': True, 'a_b_2': {}},
@@ -444,6 +485,7 @@ class LakeIngestTests(unittest.TestCase):
                 "(CAST(4 AS BIGINT), 'fourth'), (CAST(2 AS BIGINT), 'latest')"]):
             self.assertIn(values, statement)
             self.assertIn(stage, statement)
+        self.assertIn('HAVING COUNT(*) > 1', statements.pop(5))
         self.assertEqual(statements[5],
                 f'CREATE OR REPLACE TABLE {target} AS WITH incoming AS (SELECT CAST(t."id" AS BIGINT) AS "id", '
                 f'CAST(t."name" AS VARCHAR) AS "name" FROM {stage} t) '
@@ -580,8 +622,7 @@ class LakeIngestTests(unittest.TestCase):
             with self.subTest(batch_size=batch_size), sqlite3.connect(':memory:') as db:
                 db.execute('CREATE TABLE target (id BIGINT, name VARCHAR, extra VARCHAR, score BIGINT)')
                 db.executemany('INSERT INTO target VALUES (?, ?, ?, ?)',
-                               [(1, 'before', 'keep', 7), (2, 'untouched', 'stay', 8),
-                                (None, 'null-before', 'null-key', 9)])
+                               [(1, 'before', 'keep', 7), (2, 'untouched', 'stay', 8)])
                 def execute(url, statement):
                     statement = statement.replace('"iceberg"."raw"."orders__stage_abcd1234"', 'stage')
                     if statement.startswith('CREATE TABLE stage AS SELECT * FROM (VALUES'):
@@ -602,13 +643,13 @@ class LakeIngestTests(unittest.TestCase):
                 self.execute.side_effect = execute
                 content = '\n'.join(json.dumps(row) for row in [
                     {'name': 'discard', 'id': '01'}, {'name': '', 'id': '1'},
-                    {'name': 'new', 'id': 3}, {'name': None, 'id': None}])
-                expected = [(None, None, 'null-key', 9), (1, '', 'keep', 7),
+                    {'name': 'new', 'id': 3}])
+                expected = [(1, '', 'keep', 7),
                             (2, 'untouched', 'stay', 8), (3, 'new', None, None)]
                 for _ in range(2):
                     report = lake.ingest(filename='orders.jsonl', content=content,
                                          mode='upsert', key='id', batch_size=batch_size)
-                    self.assertEqual(report['rows_ingested'], 3)
+                    self.assertEqual(report['rows_ingested'], 2)
                     self.assertEqual(db.execute('SELECT * FROM target ORDER BY id').fetchall(), expected)
 
     def test_ingest_cli_schema_hints_and_encoding(self):
@@ -635,7 +676,7 @@ class LakeIngestTests(unittest.TestCase):
             self.execute.reset_mock()
             report = lake.ingest(path, mode=mode)
             self.assertEqual((report['rows_ingested'], report['batches']), (0, 0))
-            self.assertEqual(len(self.statements()), 4 if mode == 'replace' else 2)
+            self.assertEqual(len(self.statements()), 4 if mode == 'replace' else 3)
             if mode == 'replace':
                 self.assertIn('CAST(NULL AS VARCHAR) AS "id"', self.statements()[1])
                 self.assertTrue(self.statements()[1].endswith('WHERE FALSE'))

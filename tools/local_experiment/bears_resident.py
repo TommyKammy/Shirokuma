@@ -156,7 +156,7 @@ def query(args):
                 raise ValueError("query not found in resident runtime history")
             row = dict(zip([c["name"] for c in stats["columns"]], stats["rows"][0]))
             query_id, statement = row["query_id"], row["query"]
-            stats["execution"] = attempt(lambda: wr.http_json(url + "/v1/query/" + quote(query_id, safe="")))
+            stats["execution"] = attempt(lambda: wr.trino_http_json(url + "/v1/query/" + quote(query_id, safe="")))
         plan = sql(url, "EXPLAIN (TYPE DISTRIBUTED) " + statement)
     text = "\n".join(str(row[0]) for row in plan["rows"])
     recommendations = []
@@ -208,8 +208,7 @@ def _ai_completion(config, body):
 
 
 def _complete_data_sql(context, llm_usage=None, config=None):
-    active = load_ai_config()
-    active.update(config or {})
+    active = merged_ai_config(config or {})
     body = {"model": active['model'], "temperature": active['temperature'],
             "max_tokens": active['max_tokens'],
             "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML. Use Trino ANSI SQL only (no QUALIFY; wrap window functions in a CTE and filter with WHERE). Correct failed_sql using error_message when supplied. Business semantic definitions (apply only to supplied columns): Completed sales require status = 'COMPLETED'; exclude 'CANCELLED' and 'REFUNDED'. Revenue uses total_amount at order grain, or quantity * extended_price * (1 - discount) at item grain. Time-grain aggregations use date_trunc('month', order_date), or the requested day/year grain. Grain-safe joins: avoid duplicate row multiplication when joining orders, order_items, or customers; aggregate items to order grain before summing order totals and use unique customer keys."},

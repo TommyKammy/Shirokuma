@@ -1,0 +1,43 @@
+{
+  "catalogs": [
+    {"user": "shirokuma_admin", "allow": "all"},
+    {"user": "shirokuma_engineer", "catalog": "iceberg", "allow": "all"},
+    {"user": "shirokuma_viewer", "catalog": "iceberg", "allow": "read-only"},
+    {"user": "shirokuma_(engineer|viewer)", "catalog": "system", "allow": "read-only"},
+    {"allow": "none"}
+  ],
+  "schemas": [
+    {"user": "shirokuma_admin", "owner": true},
+    {"user": "shirokuma_engineer", "catalog": "iceberg", "schema": "raw|sandbox", "owner": true}
+  ],
+  "tables": [
+    {"user": "shirokuma_admin", "privileges": ["SELECT", "INSERT", "DELETE", "UPDATE", "OWNERSHIP", "GRANT_SELECT"]},
+    {"user": "shirokuma_engineer", "catalog": "iceberg", "schema": "raw|sandbox", "privileges": ["SELECT", "INSERT", "DELETE", "UPDATE", "OWNERSHIP"]},
+    {"user": "shirokuma_engineer", "catalog": "iceberg", "schema": "marts|tpch_tiny", "privileges": ["SELECT"]},
+    {"user": "shirokuma_viewer", "catalog": "iceberg", "schema": "marts", "privileges": ["SELECT"]},
+    {"user": "shirokuma_(engineer|viewer)", "catalog": "system", "schema": "runtime", "table": "nodes", "privileges": ["SELECT"]}
+  ],
+  "queries": [
+    {"user": "shirokuma_admin", "allow": ["execute", "view", "kill"]},
+    {"user": "shirokuma_(engineer|viewer)", "allow": ["execute"]}
+  ],
+  "impersonation": [],
+  "system_information": [
+    {"user": "shirokuma_admin", "allow": ["read", "write"]}
+  ],
+  "functions": [
+    {"user": "shirokuma_admin", "privileges": ["EXECUTE", "GRANT_EXECUTE", "OWNERSHIP"]}
+  ],
+  "procedures": [
+    {"user": "shirokuma_admin", "privileges": ["EXECUTE", "GRANT_EXECUTE"]}
+  ],
+  "system_session_properties": [
+    {"user": "shirokuma_admin", "allow": true}
+  ],
+  "catalog_session_properties": [
+    {"user": "shirokuma_admin", "allow": true}
+  ],
+  "authorization": [
+    {"original_user": "shirokuma_admin", "new_user": ".*", "allow": true}
+  ]
+}

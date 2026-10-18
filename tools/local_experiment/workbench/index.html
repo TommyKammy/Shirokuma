@@ -559,7 +559,19 @@ $('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }
 setLanguage(['en','ja'].includes(initialLanguage) ? initialLanguage : navigator.language?.toLowerCase().startsWith('ja') ? 'ja' : 'en');
-refreshStatus();loadCatalog();
+async function initializeSession() {
+ // Read the authenticated role before sending any role-selected API request.
+ const response=await fetch('/api/session');
+ const session=await response.json();
+ if(!response.ok)throw new Error(session.error||`HTTP ${response.status}`);
+ const ranks={bi_viewer:0,data_engineer:1,admin:2};
+ currentRole=session.maximum_role;
+ for(const option of $('role-selector').options)option.disabled=ranks[option.value]>ranks[currentRole];
+ $('role-selector').value=currentRole;
+ applyRole();
+ refreshStatus();loadCatalog();
+}
+initializeSession().catch(error=>message('status-error',error.message));
 </script>
 </body>
 </html>

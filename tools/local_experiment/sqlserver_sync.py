@@ -6,11 +6,14 @@ Offline JSON format: {"columns": [{"name": "id", "type": "INT"},
 Decimals must be strings in JSON. SQLite mocks use declared column types;
 store exact decimals as TEXT (SQLite numeric affinity can round decimals).
 Reconciliation compares whole tables, including for append/upsert syncs.
+DATETIME/DATETIME2 inputs must be timezone-naive and exactly representable at
+microsecond precision. Supply strings to detect and reject nonzero seventh
+digits; Python datetime drivers have already reduced values to microseconds.
 """
 import argparse
 from contextlib import contextmanager
 import csv
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal, localcontext
 import importlib
 import json
@@ -58,7 +61,7 @@ def type_hint(column):
     if kind == 'DATE':
         return 'DATE'
     if kind in {'DATETIME', 'DATETIME2'}:
-        return 'TIMESTAMP'
+        return 'TIMESTAMP(6)'
     if kind == 'BIT':
         return 'BOOLEAN'
     raise ValueError('unsupported source type: ' + declared)
@@ -79,29 +82,15 @@ def convert(value, hint):
                 raise ValueError('decimal does not fit ' + hint)
         return format(number, 'f')
     if hint in lake_ingest.INTEGER_TYPES:
-        number = Decimal(str(value))
-        bits = {'TINYINT': 8, 'SMALLINT': 16, 'INTEGER': 32, 'INT': 32, 'BIGINT': 64}[hint]
-        if (not number.is_finite() or number != number.to_integral_value()
-                or not -(2**(bits - 1)) <= number < 2**(bits - 1)):
-            raise ValueError('invalid ' + hint + ' value')
-        return int(number)
+        return lake_ingest.integer_value(value, hint)
     if hint == 'BOOLEAN':
         if str(value).lower() not in {'true', 'false', '0', '1'}:
             raise ValueError('invalid BIT value')
         return str(value).lower() in {'true', '1'}
     if hint == 'DATE':
         return date.fromisoformat(str(value)).isoformat()
-    if hint == 'TIMESTAMP':
-        high_precision = isinstance(value, str) and re.fullmatch(
-            r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}\.\d{7}', value)
-        timestamp = datetime.fromisoformat(value[:-1] if high_precision else str(value))
-        if timestamp.tzinfo is not None:
-            raise ValueError('SQL Server DATETIME must be timezone naive')
-        # datetime only retains microseconds; DATETIME2 strings can carry a
-        # seventh fractional digit. Keep it for Trino's timestamp literal.
-        if high_precision:
-            return value.replace('T', ' ')
-        return timestamp.isoformat(sep=' ')
+    if hint.startswith('TIMESTAMP'):
+        return lake_ingest.timestamp_value(value, hint)
     return str(value)
 
 
@@ -273,7 +262,7 @@ def extract(source_table, target_table, *, mode='replace', key=None, amount_col=
             if column not in hints:
                 continue
             kind = kind.upper().strip()
-            if not re.fullmatch(r'(?:VARCHAR|INTEGER|INT|SMALLINT|TINYINT|BIGINT|BOOLEAN|DATE|TIMESTAMP|DECIMAL\(\d+,\s*\d+\))', kind):
+            if not re.fullmatch(r'(?:VARCHAR|INTEGER|INT|SMALLINT|TINYINT|BIGINT|BOOLEAN|DATE|TIMESTAMP(?:\([0-6]\))?|DECIMAL\(\d+,\s*\d+\))', kind):
                 raise ValueError('unsupported target type for ' + column + ': ' + kind)
             hints[column] = kind
         extraction = BatchMetrics(source.hints, key, amount_col)
@@ -289,6 +278,8 @@ def extract(source_table, target_table, *, mode='replace', key=None, amount_col=
                     extraction.add(row)
                     row = {c: convert(v, hints[c]) for c, v in row.items()}
                     if mode == 'upsert':
+                        if row[key.lower()] is None:
+                            raise ValueError('upsert input keys must be non-null')
                         unique[lake_ingest.key_value(row[key.lower()], hints[key.lower()])] = row
                     else:
                         manifest.add(row)
@@ -402,6 +393,8 @@ def sync(source_table, target_table, *, mode='replace', key=None, amount_col=Non
                     'WHERE table_schema = ' + wr.literal(target.split('.')[1]) +
                     ' AND table_name = ' + wr.literal(target.split('.')[2]))
                 target_types = dict(metadata['rows'])
+                if mode == 'upsert' and target_types:
+                    lake_ingest.validate_upsert_keys(execute, sql_target, [lake_ingest.sanitize(key)])
             extracted = extract(source_table, stage, mode='upsert' if mode == 'upsert' else 'replace',
                                 key=key, amount_col=amount_col, target_types=target_types, **connection)
             report = reconcile(source_table, stage, key=key, amount_col=amount_col,
