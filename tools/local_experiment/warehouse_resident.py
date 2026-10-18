@@ -129,18 +129,24 @@ def configure_auto_chill(minutes: int):
         stop_auto_chill_daemon()
     return auto_chill_status()
 
-def initialize_auto_chill():
-    """Load the saved setting and resume idle checks when a server starts."""
-    global _AUTO_CHILL_MINUTES
+def _load_auto_chill_minutes(default=0):
+    """Read the shared setting without starting or joining the monitor thread."""
     try:
         minutes = json.loads(activity_path().with_name('auto_chill.json').read_text())['auto_chill_minutes']
         if type(minutes) is not int or not 0 <= minutes <= 1440:
             raise ValueError('invalid auto-chill minutes')
     except FileNotFoundError:
-        minutes = 0
+        minutes = default
     except (OSError, ValueError, KeyError, TypeError):
         logging.getLogger(__name__).warning('Unable to load auto-chill setting; disabling auto-chill')
         minutes = 0
+    return minutes
+
+
+def initialize_auto_chill():
+    """Load the saved setting and resume idle checks when a server starts."""
+    global _AUTO_CHILL_MINUTES
+    minutes = _load_auto_chill_minutes()
     with _ACTIVITY_LOCK:
         _AUTO_CHILL_MINUTES = minutes
     if minutes > 0:
@@ -150,6 +156,8 @@ def initialize_auto_chill():
 
 
 def check_auto_chill(size='LOCAL'):
+    global _AUTO_CHILL_MINUTES
+    _AUTO_CHILL_MINUTES = _load_auto_chill_minutes(_AUTO_CHILL_MINUTES)
     chilled = False
     last_activity = read_last_activity()
     if (_AUTO_CHILL_MINUTES > 0 and
@@ -164,6 +172,8 @@ def check_auto_chill(size='LOCAL'):
             touch_activity()
             return dict(chilled=False, active_queries=count, **auto_chill_status())
         with _ACTIVITY_LOCK:
+            # Another process may have turned chilling off during the Trino poll.
+            _AUTO_CHILL_MINUTES = _load_auto_chill_minutes(_AUTO_CHILL_MINUTES)
             latest = read_last_activity()
             if (_AUTO_CHILL_MINUTES > 0 and latest == last_activity and
                     time.time() - latest >= _AUTO_CHILL_MINUTES * 60):
@@ -681,8 +691,11 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                         self.error_json(403, str(exc))
                         return
                     body = sql.encode('utf-8')
+                    touch_activity()
                     if status(size)['replicas'] == 0:
                         transition('wake', size)
+                elif path.startswith('/v1/statement/'):
+                    touch_activity()
                 excluded = hop_headers | {h.strip().lower() for h in self.headers.get('Connection', '').split(',')}
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in excluded}
                 # Request uncompressed JSON so continuation URLs can be rewritten.
@@ -705,8 +718,8 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                 endpoint = os.environ.get('TRINO_ADVERTISED_URL')
                 if not endpoint:
                     authority = self.headers.get('Host')
-                    trust_forwarded = (not authority or os.environ.get(
-                        'TRINO_TRUST_FORWARDED_HEADERS', '').lower() in {'1', 'true', 'yes', 'on'})
+                    trust_forwarded = os.environ.get(
+                        'TRINO_TRUST_FORWARDED_HEADERS', '').lower() in {'1', 'true', 'yes', 'on'}
                     proto = 'http'
                     if trust_forwarded:
                         authority = self.headers.get('X-Forwarded-Host') or authority
@@ -760,6 +773,7 @@ def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=100
     if max_rows < 1:
         raise ValueError("max-rows must be >= 1")
     sql = check_sql_policy(sql, mode)
+    touch_activity()
     started = time.monotonic()
     auto_woken = status(size)["replicas"] == 0
     try:

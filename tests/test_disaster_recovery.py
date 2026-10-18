@@ -147,6 +147,62 @@ class DisasterRecoveryTests(unittest.TestCase):
         self.assertIn('CAST(json_parse(\'["ok", 4]\') AS row(label varchar, count bigint))', insert)
         self.assertIn('CAST(ARRAY[] AS array(bigint)), NULL)', insert)
 
+    def test_temporal_row_and_map_restore_rejected_before_any_writes(self):
+        types = [
+            'row(day date)', 'row(created timestamp(6))',
+            'ROW(created TIMESTAMP(3) WITH TIME ZONE)',
+            'map(varchar, date)', 'map(date, varchar)',
+            'map(varchar, timestamp)',
+            'array(row(nested map(varchar, array(timestamp(9)))))',
+            'row("day" date, "label" varchar)',
+            'map(varchar, row("created" timestamp(6) without time zone))',
+        ]
+        for sql_type in types:
+            for rows in ([], [[None]], [[{}]]):
+                for dry_run in (False, True):
+                    with self.subTest(sql_type=sql_type, rows=rows, dry_run=dry_run):
+                        files = {
+                            'catalog/raw/schema.sql': b'CREATE SCHEMA iceberg.raw',
+                            'safe.sql': b'CREATE TABLE iceberg.raw.safe (id bigint)',
+                            'safe.json': dr._json(dict(columns=[dict(name='id', type='bigint')],
+                                                       rows=[[1]])),
+                            'bad.sql': ('CREATE TABLE iceberg.raw.bad (payload ' + sql_type + ')').encode(),
+                            'bad.json': dr._json(dict(columns=[dict(name='payload', type=sql_type)],
+                                                      rows=rows)),
+                            'state/ai_config.json': b'changed',
+                            'models/nested/orders.sql': b'changed',
+                        }
+                        manifest = {'tables': [dict(catalog='iceberg', schema='raw', table=name,
+                                                   type='BASE TABLE', ddl=name + '.sql',
+                                                   data=name + '.json') for name in ('safe', 'bad')]}
+                        self.execute.reset_mock()
+                        with patch.object(dr, '_validated_files', return_value=(files, manifest)), \
+                             patch.object(dr.warehouse, 'trino') as trino, \
+                             self.assertRaisesRegex(dr.BackupError,
+                                 r'Unsupported recovery type for .*bad.*payload.*Trino 483') as error:
+                            dr.restore(self.archive, dry_run=dry_run, restore_warehouse=True)
+                        self.assertIn(sql_type, str(error.exception))
+                        trino.assert_not_called()
+                        self.execute.assert_not_called()
+                        self.assertEqual((self.state / 'ai_config.json').read_bytes(),
+                                         self.original['ai_config.json'])
+                        self.assertEqual((self.models / 'nested/orders.sql').read_bytes(),
+                                         b'SELECT 42 AS answer\n')
+
+    def test_supported_temporal_arrays_and_temporal_field_names(self):
+        for sql_type in ('date', 'timestamp(6)', 'array(date)',
+                         'array(array(timestamp(3) with time zone))',
+                         'row(date varchar, timestamp bigint)',
+                         'row("date" varchar, "timestamp" bigint)',
+                         'map(varchar, row("a"" timestamp" varchar))'):
+            with self.subTest(sql_type=sql_type):
+                dr._validate_restore_type(sql_type, 'table', 'column')
+        self.assertEqual(dr._data_literal(['2026-10-18', None], 'array(date)'),
+                         "CAST(ARRAY[CAST('2026-10-18' AS date), NULL] AS array(date))")
+        self.assertEqual(dr._data_literal(['2026-10-18 12:00:00.123'], 'array(timestamp(3))'),
+                         "CAST(ARRAY[CAST('2026-10-18 12:00:00.123' AS timestamp(3))] "
+                         'AS array(timestamp(3)))')
+
     def test_view_dependencies_retry_until_resolved(self):
         files = {name + '.sql': ('CREATE VIEW ' + name + ' AS SELECT 1').encode()
                  for name in ('third', 'second', 'first')}

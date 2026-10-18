@@ -202,7 +202,8 @@ class ResidentWarehouseTests(unittest.TestCase):
             self.assertEqual(w.check_sql_policy(sql, role='bi_viewer'), sql)
 
     def endpoint_request(self, method, path, sql=None, headers=None, replicas=1,
-                         backend_status=200, payload=None, failure=None, location=None):
+                         backend_status=200, payload=None, failure=None, location=None,
+                         omit_host=False):
         server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
         client = http.client.HTTPConnection(*server.server_address, timeout=5)
         backend = Mock()
@@ -228,7 +229,16 @@ class ResidentWarehouseTests(unittest.TestCase):
             thread = threading.Thread(target=w.serve_endpoint, kwargs={'port': server.server_port, 'once': True})
             thread.start()
             try:
-                client.request(method, path, body=sql, headers=headers or {})
+                if omit_host:
+                    client.putrequest(method, path, skip_host=True)
+                    for name, value in (headers or {}).items():
+                        client.putheader(name, value)
+                    body = sql.encode() if sql is not None else None
+                    if body is not None:
+                        client.putheader('Content-Length', str(len(body)))
+                    client.endheaders(body)
+                else:
+                    client.request(method, path, body=sql, headers=headers or {})
                 result = client.getresponse()
                 code, result_headers, data = result.status, dict(result.getheaders()), result.read()
             finally:
@@ -247,7 +257,7 @@ class ResidentWarehouseTests(unittest.TestCase):
                  ({'Host': 'internal:8080', 'X-Forwarded-Host': 'proxy.example:443',
                    'X-Forwarded-Proto': 'https'}, '', 'true', 'https://proxy.example:443'),
                  ({'Host': '', 'X-Forwarded-Host': 'proxy.example:443',
-                   'X-Forwarded-Proto': 'https'}, '', '', 'https://proxy.example:443'),
+                   'X-Forwarded-Proto': 'https'}, '', 'true', 'https://proxy.example:443'),
                  ({'Host': 'localhost:18080', 'X-Forwarded-Host': 'proxy.example'},
                   'https://trino.example/trino/', 'true', 'https://trino.example/trino')]
         for headers, advertised, trust, base in cases:
@@ -259,6 +269,31 @@ class ResidentWarehouseTests(unittest.TestCase):
                 expected = base + '/v1/statement/q/1?token=abc#fragment'
                 self.assertEqual(page, dict.fromkeys(payload, expected))
                 self.assertEqual(response_headers['Location'], expected)
+
+    def test_endpoint_missing_host_does_not_imply_forwarded_trust(self):
+        uri = 'http://backend:8080/v1/statement/q/1?token=abc'
+        payload = dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), uri)
+        for host in (None, ''):
+            for trust in ('', 'false', '0', 'true'):
+                with self.subTest(host=host, trust=trust), patch.dict(w.os.environ, {
+                        'TRINO_TRUST_FORWARDED_HEADERS': trust}):
+                    headers = {'X-Forwarded-Host': 'untrusted.example:443',
+                               'X-Forwarded-Proto': 'https'}
+                    if host is not None:
+                        headers['Host'] = host
+                    code, response_headers, page, *_ = self.endpoint_request(
+                        'POST', '/v1/statement', 'SELECT 1', headers, payload=payload,
+                        location=uri, omit_host=True)
+                    self.assertEqual(code, 200)
+                    parsed = w.urllib.parse.urlsplit(page['nextUri'])
+                    self.assertEqual(parsed.scheme, 'https' if trust == 'true' else 'http')
+                    self.assertEqual(parsed.hostname,
+                                     'untrusted.example' if trust == 'true' else '127.0.0.1')
+                    self.assertGreater(parsed.port, 0)
+                    self.assertEqual(parsed.path, '/v1/statement/q/1')
+                    self.assertEqual(parsed.query, 'token=abc')
+                    self.assertEqual(page, dict.fromkeys(payload, page['nextUri']))
+                    self.assertEqual(response_headers['Location'], page['nextUri'])
 
     def test_endpoint_uses_threading_http_server(self):
         with patch.object(w.http.server, 'ThreadingHTTPServer') as server:
@@ -305,7 +340,12 @@ class ResidentWarehouseTests(unittest.TestCase):
         with patch.object(w.http.server, 'ThreadingHTTPServer', side_effect=factory), \
              patch.object(w.http.client, 'HTTPConnection', side_effect=connection), \
              patch.object(w, 'trino', return_value=nullcontext('http://localhost:1234')), \
-             patch.object(w, 'status', return_value={'replicas': 1}):
+             patch.object(w, 'status', return_value={'replicas': 1}), \
+             patch.object(w, 'initialize_auto_chill'), \
+             patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
+             patch.object(w.time, 'time', return_value=100), \
+             patch.object(w, 'execute', return_value={'rows': [[0]]}), \
+             patch.object(w, 'transition') as transition:
             endpoint = threading.Thread(target=w.serve_endpoint, kwargs={'port': 0})
             endpoint.start()
             statement = None
@@ -314,6 +354,9 @@ class ResidentWarehouseTests(unittest.TestCase):
                 statement = threading.Thread(target=send, args=('POST', '/v1/statement'))
                 statement.start()
                 self.assertTrue(running.wait(2))
+                self.assertEqual(w.read_last_activity(), 100)
+                self.assertFalse(w.check_auto_chill()['chilled'])
+                transition.assert_not_called()
                 send('GET', '/v1/statement/q/1')
                 send('DELETE', '/v1/statement/q/1')
                 self.assertEqual(outcomes, [('GET', 200), ('DELETE', 200)])
@@ -544,6 +587,77 @@ class ResidentWarehouseTests(unittest.TestCase):
                 w.initialize_auto_chill()
                 self.assertEqual(w._AUTO_CHILL_MINUTES, 0)
 
+    def test_auto_chill_monitor_reloads_external_settings(self):
+        path = w.activity_path().with_name('auto_chill.json')
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        def update(minutes):
+            subprocess.run([sys.executable, '-c',
+                            'import json, pathlib, sys; '
+                            'pathlib.Path(sys.argv[1]).write_text(json.dumps('
+                            '{"auto_chill_minutes": int(sys.argv[2])}))',
+                            str(path), str(minutes)], check=True, timeout=10)
+
+        def tick(interval):
+            # Each interval sees a write from a separate process, without restart.
+            minutes = next(settings)
+            if minutes is None:
+                return True
+            update(minutes)
+            return False
+
+        settings = iter((5, 1, 0, None))
+        with patch.object(w, '_AUTO_CHILL_THREAD', None), \
+             patch.object(w, '_AUTO_CHILL_STOP') as stop, \
+             patch.object(w.threading, 'Thread') as thread, \
+             patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
+             patch.object(w.time, 'time', return_value=100), \
+             patch.object(w, 'status', return_value={'replicas': 1}) as status, \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', return_value={'rows': [[0]]}), \
+             patch.object(w, 'transition') as transition:
+            stop.wait.side_effect = tick
+            w.start_auto_chill_daemon(interval=3)
+            thread.call_args.kwargs['target']()
+            self.assertEqual(w._AUTO_CHILL_MINUTES, 0)
+            status.assert_called_once_with('LOCAL')
+            transition.assert_called_once_with('chill', 'LOCAL')
+            w.stop_auto_chill_daemon()
+
+    def test_auto_chill_reload_off_during_poll_aborts_chill(self):
+        path = w.activity_path().with_name('auto_chill.json')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"auto_chill_minutes": 1}')
+
+        def poll(*args):
+            path.write_text('{"auto_chill_minutes": 0}')
+            return {'rows': [[0]]}
+
+        with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
+             patch.object(w.time, 'time', return_value=100), \
+             patch.object(w, 'status', return_value={'replicas': 1}), \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', side_effect=poll), \
+             patch.object(w, 'transition') as transition:
+            self.assertEqual(w.check_auto_chill(),
+                             dict(chilled=False, auto_chill_minutes=0, idle_seconds=100))
+            transition.assert_not_called()
+
+    def test_query_records_activity_before_initial_execution(self):
+        def execute(*args):
+            self.assertEqual(w.read_last_activity(), 100)
+            self.assertFalse(w.check_auto_chill()['chilled'])
+            return {'rows': []}
+
+        with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
+             patch.object(w.time, 'time', return_value=100), \
+             patch.object(w, 'status', return_value={'replicas': 1}), \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', side_effect=execute), \
+             patch.object(w, 'transition') as transition, patch.object(w, 'telemetry'):
+            w.query('LOCAL', 'SELECT 1')
+            transition.assert_not_called()
+
     def test_cross_process_activity_and_idle_seconds(self):
         with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100):
             w.touch_activity()
@@ -625,7 +739,7 @@ class ResidentWarehouseTests(unittest.TestCase):
             stop.set.assert_called_once_with()
             thread.return_value.join.assert_called_once_with()
 
-    def test_activity_updated_only_for_successful_query_or_wake(self):
+    def test_activity_updated_for_accepted_query_or_successful_wake(self):
         with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=50), \
              patch.object(w, 'status', return_value={'replicas': 1, 'state': 'active'}), \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
@@ -637,7 +751,7 @@ class ResidentWarehouseTests(unittest.TestCase):
             execute.side_effect = RuntimeError('failed')
             with self.assertRaises(RuntimeError):
                 w.query('LOCAL', 'SELECT 1')
-            self.assertEqual(w._LAST_ACTIVITY, 0)
+            self.assertEqual(w._LAST_ACTIVITY, 50)
             w.transition('wake', 'LOCAL')
             self.assertEqual(w._LAST_ACTIVITY, 50)
             w._LAST_ACTIVITY = 0

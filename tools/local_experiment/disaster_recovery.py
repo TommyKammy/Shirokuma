@@ -152,6 +152,18 @@ def _validated_files(archive_path):
         raise BackupError('Invalid backup archive or manifest') from exc
 
 
+def _validate_restore_type(sql_type, table, column):
+    """Reject temporal JSON casts before any recovery statements are executed."""
+    # Quoted field names are identifiers, even when named "date" or "timestamp".
+    types = re.sub(r'"(?:[^"]|"")*"', '_field', sql_type)
+    if (re.search(r'\b(?:row|map)\s*\(', types, re.I) and
+            re.search(r'\b(?:date|timestamp)\s*(?=[,)]|$|\(\s*\d|with\b|without\b)', types, re.I)):
+        raise BackupError(
+            f'Unsupported recovery type for {table}.{column}: {sql_type}. '
+            'Trino 483 cannot cast JSON to ROW/MAP containing DATE or TIMESTAMP; '
+            'restore was stopped before executing SQL.')
+
+
 def _data_literal(value, sql_type):
     """Render Trino JSON result values with their original column type."""
     if value is None:
@@ -194,6 +206,8 @@ def _warehouse_plan(files, manifest):
         payload = json.loads(files[entry['data']])
         columns, rows = payload['columns'], payload['rows']
         table = _identifier(entry['catalog'], entry['schema'], entry['table'])
+        for column in columns:
+            _validate_restore_type(column['type'], table, column['name'])
         data.append(dict(table='.'.join((entry['catalog'], entry['schema'], entry['table'])),
                          file=entry['data'], rows=len(rows)))
         column_sql = ', '.join(_identifier(c['name']) for c in columns)
