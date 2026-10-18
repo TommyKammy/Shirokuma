@@ -73,8 +73,34 @@ class WorkbenchTests(unittest.TestCase):
             for user, expected in (('admin', 200), ('root', 200), ('powerbi', 403), ('bi_reader', 403)):
                 self.assertEqual(self.request('/api/ai/config', headers={'X-Trino-User': user})[0], expected)
             self.assertEqual(self.request('/api/ai/config', headers={
-                'X-Trino-User': 'bi_reader', 'X-Shirokuma-Role': 'admin'})[0], 200)
+                'X-Trino-User': 'bi_reader', 'X-Shirokuma-Role': 'admin'})[0], 403)
             self.assertEqual(self.json_request('/api/ai/config?role=admin')[0], 200)
+
+    def test_role_typos_escalation_and_catalog_boundaries(self):
+        with patch.object(wb.bears_resident, 'catalog', return_value={}) as catalog:
+            for user in ('bi_reader', 'powerbi', 'bi_team'):
+                for role in ('admin', 'data_engineer', 'editor'):
+                    self.assertEqual(self.request('/api/catalog?role=' + role,
+                                     headers={'X-Trino-User': user})[0], 403)
+            for selector in ('roel=admin', 'Role=admin', 'roles=admin'):
+                self.assertEqual(self.json_request('/api/catalog?' + selector)[0], 403)
+            for schema in ('raw', 'staging', 'sandbox'):
+                for prefix in ('', 'iceberg.'):
+                    self.assertEqual(self.json_request(
+                        '/api/catalog?role=bi_viewer&detail=full&table=' + prefix + schema + '.orders')[0], 403)
+            catalog.assert_not_called()
+            self.assertEqual(self.json_request('/api/catalog?role=bi_viewer&table=marts.orders')[0], 200)
+
+    def test_decimal_json_preview_serializes_exactly(self):
+        for extension, content in (
+                ('json', '[{"amount":12.34},{"amount":9007199254740993.25}]'),
+                ('jsonl', '{"amount":12.34}\n{"amount":9007199254740993.25}')):
+            with self.subTest(extension=extension):
+                code, result = self.json_request('/api/lake/preview', {
+                    'filename': 'orders.' + extension, 'content': content})
+                self.assertEqual(code, 200, result)
+                self.assertIn('12.34', json.dumps(result))
+                self.assertIn('9007199254740993.25', json.dumps(result))
 
     def test_ai_routes_are_admin_only(self):
         with patch.object(wb.bears_resident, 'load_ai_config', return_value={}) as load, \
@@ -350,6 +376,13 @@ eval('function aiStatus('+HANDLERS);
  assert.equal($('ai-config-status').label,'Connected {latency}ms');
  assert.equal($('ai-config-status').values.latency,32);
  assert.equal(calls.at(-1)[1].api_key,undefined);
+ for(const id of ['ai-url','ai-provider']){
+  $('ai-key').value='previous-endpoint-secret';
+  $('ai-settings-form').oninput({target:{id}});
+  assert.equal($('ai-key').value,'');
+  await $('ai-test').onclick();
+  assert.equal(calls.at(-1)[1].api_key,undefined);
+ }
  $('ai-key').value='new-key';
  await $('ai-settings-form').onsubmit({preventDefault(){}});
  assert.equal(calls.at(-1)[0],'/api/ai/config');assert.equal(calls.at(-1)[1].api_key,'new-key');

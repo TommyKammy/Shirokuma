@@ -102,7 +102,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         super().end_headers()
 
     def respond(self, value, status=200):
-        data = json.dumps(value).encode("utf-8")
+        data = json.dumps(value, default=str).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
@@ -116,13 +116,15 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 
     def request_role(self):
         params = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+        if params.keys() - {'role', 'table', 'detail', 'snapshot_id'}:
+            raise PermissionError('Unknown query parameter')
         roles = self.headers.get_all('X-Shirokuma-Role', []) + params.get('role', [])
         try:
             # Validate every supplied selector, even one shadowed by a header.
             for role in roles:
                 if not role.strip():
                     raise ValueError('Invalid role: ' + role)
-                warehouse_resident.resolve_role('', role)
+                warehouse_resident.resolve_role(self.headers.get('X-Trino-User', ''), role)
             return warehouse_resident.resolve_role(
                 self.headers.get('X-Trino-User', ''), roles[0] if roles else None)
         except ValueError as exc:
@@ -140,7 +142,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             url = urlsplit(self.path)
-            if self.authorize(GET_ROUTES, url.path) is None:
+            role = self.authorize(GET_ROUTES, url.path)
+            if role is None:
                 return
             if url.path in ("/", "/index.html"):
                 data = INDEX.read_bytes()
@@ -167,6 +170,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             elif url.path in ("/api/catalog", "/api/lineage"):
                 params = parse_qs(url.query, keep_blank_values=True)
                 table = params.get('table', [None])[0]
+                if role == 'bi_viewer' and table:
+                    qualified = bears_resident.qualified_table(table)
+                    if qualified.split('.')[1].lower() != 'marts':
+                        raise PermissionError('BI Viewer is restricted to marts tables')
                 options = {key: params[key][0] for key in ('detail', 'snapshot_id') if key in params}
                 if 'snapshot_id' in options and not table:
                     raise ValueError('table is required for snapshot_id')

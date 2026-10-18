@@ -626,7 +626,9 @@ class BearsResidentTests(unittest.TestCase):
         with patch.dict(b.os.environ, {'CUSTOM_KEY': 'env-secret', 'OPENAI_API_KEY': 'openai-secret'}):
             self.assertEqual(b.resolve_api_key(dict(api_key='direct', api_key_env='CUSTOM_KEY')), 'direct')
             self.assertEqual(b.resolve_api_key(dict(api_key='', api_key_env='CUSTOM_KEY')), 'env-secret')
-            self.assertEqual(b.resolve_api_key(b.load_ai_config()), 'openai-secret')
+            self.assertIsNone(b.resolve_api_key(b.load_ai_config()))
+            self.assertEqual(b.resolve_api_key(dict(provider='openai', api_key_env='OPENAI_API_KEY')),
+                             'openai-secret')
             self.assertIsNone(b.resolve_api_key(dict(api_key_env='MISSING')))
 
     def test_extract_sql_formats(self):
@@ -665,6 +667,32 @@ class BearsResidentTests(unittest.TestCase):
                                      ('requested', 83, 0.4))
                     self.assertEqual('enable_thinking' in body, provider == 'local-openai')
                     self.assertEqual(usage['model_provider'], provider)
+
+    def test_connection_credentials_stay_with_endpoint(self):
+        active = dict(provider='openai', model='ping', api_url='https://old.example/v1',
+                      api_key='saved-secret', api_key_env='OPENAI_API_KEY',
+                      timeout=5, temperature=0, max_tokens=10)
+        completion = dict(choices=[dict(message=dict(content='2'))])
+        for change in ({'api_url': 'https://new.example/v1', 'provider': 'custom'},
+                       {'api_url': 'https://new.example/v1'}, {'provider': 'custom'}):
+            for key in (None, '********', '', 'new-secret'):
+                supplied = {**change, **({'api_key': key} if key is not None else {})}
+                with self.subTest(change=change, key=key), \
+                     patch.object(b, 'load_ai_config', return_value=dict(active)), \
+                     patch.dict(b.os.environ, {}, clear=True), \
+                     patch.object(b.wr, 'http_json', return_value=completion) as http:
+                    self.assertEqual(b.test_ai_connection(supplied)['status'], 'connected')
+                    self.assertEqual(http.call_args.args[2].get('Authorization'),
+                                     'Bearer new-secret' if key == 'new-secret' else None)
+        with patch.dict(b.os.environ, {'OPENAI_API_KEY': 'environment-secret'}):
+            for provider in ('custom', 'local-openai'):
+                config = dict(provider=provider, api_key_env='OPENAI_API_KEY')
+                self.assertIsNone(b.resolve_api_key(config))
+                self.assertEqual(b.resolve_api_key({**config, 'api_key': 'explicit'}), 'explicit')
+        with patch.object(b, 'load_ai_config', return_value=dict(active)), \
+             patch.object(b.wr, 'http_json', return_value=completion) as http:
+            b.test_ai_connection({'model': 'other'})
+            self.assertEqual(http.call_args.args[2]['Authorization'], 'Bearer saved-secret')
 
     def test_ai_connection_success_and_failure(self):
         completion = dict(choices=[dict(message=dict(content='2'))], usage=dict(prompt_tokens=4))

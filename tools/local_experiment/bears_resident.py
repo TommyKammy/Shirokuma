@@ -40,8 +40,8 @@ def load_ai_config():
     return config
 
 
-def save_ai_config(config):
-    """Activate settings only after they have been persisted successfully."""
+def merged_ai_config(config):
+    """Merge settings without carrying credentials to another endpoint."""
     active = load_ai_config()
     config = dict(config)
     if config.get('api_key') == '********':
@@ -50,6 +50,12 @@ def save_ai_config(config):
         if not config.get('api_key'):
             active['api_key'] = ''
     active.update(config)
+    return active
+
+
+def save_ai_config(config):
+    """Activate settings only after they have been persisted successfully."""
+    active = merged_ai_config(config)
     try:
         wap.persist_json(AI_CONFIG_PATH, active)
     except OSError as err:
@@ -59,7 +65,12 @@ def save_ai_config(config):
 
 
 def resolve_api_key(config):
-    return config.get('api_key') or os.environ.get(config.get('api_key_env') or 'BEAR_API_KEY')
+    if config.get('api_key'):
+        return config['api_key']
+    key_env = config.get('api_key_env') or 'BEAR_API_KEY'
+    if config.get('provider') in {'custom', 'local-openai'} and key_env == 'OPENAI_API_KEY':
+        return None
+    return os.environ.get(key_env)
 
 
 class _BearsRuntime:
@@ -219,8 +230,7 @@ def _complete_data_sql(context, llm_usage=None, config=None):
 def test_ai_connection(config=None) -> dict:
     started = time.monotonic()
     try:
-        active = load_ai_config()
-        active.update(config or {})
+        active = merged_ai_config(config or {})
         completion = _ai_completion(active, dict(model=active['model'],
             temperature=active['temperature'], max_tokens=active['max_tokens'],
             messages=[dict(role='user', content='What is 1+1?')]))

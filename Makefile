@@ -5,6 +5,7 @@ PYTHON ?= python3
 verify-core: test-resident-core verify-go verify-design-context check-newlines check-trailing-whitespace check-no-secret-filenames
 
 test-resident-core:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_wap_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_disaster_recovery.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_agenthouse_manage.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lab_lifecycle.py'

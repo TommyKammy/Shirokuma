@@ -78,13 +78,18 @@ def touch_activity():
     with _ACTIVITY_LOCK:
         _LAST_ACTIVITY = time.time()
         path = activity_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_text(json.dumps({'last_activity': _LAST_ACTIVITY}), encoding='utf-8')
             temporary.replace(path)
+        except OSError as exc:
+            logging.getLogger(__name__).warning('Unable to record warehouse activity: %s', exc)
         finally:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError as exc:
+                logging.getLogger(__name__).warning('Unable to clean up activity file: %s', exc)
 
 
 def read_last_activity():
@@ -378,11 +383,14 @@ def normalize_trino_sql(sql: str) -> str:
 def resolve_role(user: str, role: str = None) -> str:
     aliases = {'admin': 'admin', 'data_engineer': 'data_engineer', 'editor': 'data_engineer',
                'bi_viewer': 'bi_viewer', 'viewer': 'bi_viewer', 'bi_reader': 'bi_viewer'}
+    user = (user or '').strip().lower()
     if role:
         if role.strip().lower() not in aliases:
             raise ValueError(f'Invalid role: {role}')
-        return aliases[role.strip().lower()]
-    user = (user or '').strip().lower()
+        resolved = aliases[role.strip().lower()]
+        if _is_bi_user(user) and resolved != 'bi_viewer':
+            raise ValueError('BI user cannot assume role: ' + role)
+        return resolved
     if user in ('admin', 'root'):
         return 'admin'
     if user in ('bi_reader', 'powerbi') or user.startswith('bi_'):
@@ -396,10 +404,12 @@ def resolve_role(user: str, role: str = None) -> str:
 def _check_dynamic_sql(sql):
     pattern = r"--[^\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|[A-Za-z_][A-Za-z_0-9]*|[^\s]"
     tokens = [t.upper() for t in re.findall(pattern, sql) if not t.startswith(('--', '/*'))]
+    ident = r'(?:[A-Z_][A-Z_0-9]*|"(?:[^"]|"")+")'
+    rollback = re.fullmatch(
+        rf'ALTER TABLE {ident}(?: \. {ident}){{2}} EXECUTE ROLLBACK_TO_SNAPSHOT \( [0-9 ]+ \)(?: ;)?',
+        ' '.join(tokens), re.S)
     if (set(tokens) & {'PREPARE', 'DEALLOCATE'} or
-            any(t == 'EXECUTE' and (i == 0 or tokens[i - 1] == ';')
-                for i, t in enumerate(tokens)) or
-            any(a == 'EXECUTE' and b == 'IMMEDIATE' for a, b in zip(tokens, tokens[1:]))):
+            ('EXECUTE' in tokens and not rollback)):
         raise ValueError('SQL policy violation: dynamic SQL and prepared statements are not allowed')
 
 
@@ -492,6 +502,10 @@ def _check_bi_schemas(sql):
     # while leaving column aliases (t.column) and literals alone.
     depth, from_depths = 0, set()
     for i, token in enumerate(tokens):
+        # Quoted identifiers retain their names for schema comparisons, but
+        # never change the parser's clause state or introduce a relation.
+        if raw_tokens[i].startswith(('"', "'")):
+            continue
         if token == '(':
             depth += 1
         elif token == ')':
@@ -501,7 +515,7 @@ def _check_bi_schemas(sql):
             from_depths.discard(depth)
         if token == 'from':
             from_depths.add(depth)
-        show_context = tokens[:1] == ['show'] and token in {'in', 'for'}
+        show_context = raw_tokens[0].lower() == 'show' and token in {'in', 'for'}
         reference = token in {'from', 'join', 'describe', 'table'} or show_context or (token == ',' and depth in from_depths)
         if not reference:
             continue
@@ -518,10 +532,11 @@ def _check_bi_schemas(sql):
             parts.append(tokens[j + 2])
             j += 2
         # SHOW TABLES FROM takes a schema, SHOW SCHEMAS FROM takes a catalog.
-        if tokens[:2] == ['show', 'tables'] and token in {'from', 'in'}:
+        prefix = [t.lower() for t in raw_tokens[:2]]
+        if prefix == ['show', 'tables'] and token in {'from', 'in'}:
             if not allowed(parts + ['_table']):
                 reject()
-        elif tokens[:2] == ['show', 'schemas'] and token in {'from', 'in'}:
+        elif prefix == ['show', 'schemas'] and token in {'from', 'in'}:
             if parts not in (['iceberg'], ['system']):
                 reject()
         elif not allowed(parts):
@@ -573,6 +588,19 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                 if length < 0:
                     raise ValueError('invalid Content-Length')
                 body = self.rfile.read(length) if length else None
+                user = self.headers.get('X-Trino-User', '')
+                try:
+                    for header in self.headers.get_all('X-Trino-Prepared-Statement', []):
+                        if _is_bi_user(user):
+                            raise ValueError('SQL policy violation: BI prepared statements are not allowed')
+                        for entry in header.split(','):
+                            name, separator, prepared = entry.partition('=')
+                            if not separator or not name.strip() or not prepared.strip():
+                                raise ValueError('SQL policy violation: invalid prepared statement header')
+                            check_sql_policy(urllib.parse.unquote(prepared))
+                except ValueError as exc:
+                    self.error_json(403, str(exc))
+                    return
                 if statement:
                     user = self.headers.get('X-Trino-User', '')
                     try:

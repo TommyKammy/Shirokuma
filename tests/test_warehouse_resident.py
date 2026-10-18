@@ -34,8 +34,9 @@ class ResidentWarehouseTests(unittest.TestCase):
         for user in ('bi_reader', 'powerbi', 'bi_team', 'POWERBI'):
             for role in (None, ''):
                 self.assertEqual(w.resolve_role(user, role), 'bi_viewer')
-            self.assertEqual(w.resolve_role(user, 'admin'), 'admin')
-            self.assertEqual(w.resolve_role(user, 'editor'), 'data_engineer')
+            for role in ('admin', 'editor', 'data_engineer'):
+                with self.assertRaises(ValueError):
+                    w.resolve_role(user, role)
         for role in ('bi_viewer', 'viewer', 'bi_reader'):
             self.assertEqual(w.resolve_role('person', role), 'bi_viewer')
         for role in ('data_engineer', 'editor'):
@@ -53,6 +54,50 @@ class ResidentWarehouseTests(unittest.TestCase):
         with patch.dict(w.os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'admn'}):
             with self.assertRaisesRegex(ValueError, 'Invalid role:'):
                 w.resolve_role('person')
+
+    def test_quoted_keywords_and_dynamic_sql_boundaries(self):
+        for keyword in ('where', 'group', 'order', 'having', 'limit', 'union', 'except', 'intersect'):
+            with self.subTest(keyword=keyword), self.assertRaises(ValueError):
+                w.check_bi_policy(f'SELECT * FROM iceberg.marts.t AS "{keyword}", iceberg.raw.secret', 'bi_reader')
+        sql = 'SELECT "from", a.b FROM iceberg.marts.t a'
+        self.assertEqual(w.check_bi_policy(sql, 'bi_reader'), sql)
+        for sql in ('EXPLAIN EXECUTE p', 'EXPLAIN ANALYZE EXECUTE p', 'EXECUTE p',
+                    'SELECT 1; EXECUTE p', 'EXECUTE IMMEDIATE \'SELECT 1\''):
+            for mode in ('read-only', 'sandbox-write', 'admin-write'):
+                with self.subTest(sql=sql, mode=mode), self.assertRaises(ValueError):
+                    w.check_sql_policy(sql, mode)
+        self.assertEqual(w.check_sql_policy('SELECT "execute" FROM iceberg.marts.t'),
+                         'SELECT "execute" FROM iceberg.marts.t')
+        rollback = 'ALTER TABLE iceberg.marts.t EXECUTE rollback_to_snapshot(123)'
+        self.assertEqual(w.check_sql_policy(rollback, 'admin-write'), rollback)
+
+    def test_prepared_headers_are_checked_before_backend_access(self):
+        for user, definition in (('bi_reader', 'SELECT 1'), ('powerbi', 'SELECT 1'),
+                                 ('admin', 'DROP TABLE iceberg.raw.orders'),
+                                 ('admin', 'EXPLAIN EXECUTE hidden'), ('admin', 'PREPARE hidden FROM SELECT 1')):
+            headers = {'X-Trino-User': user,
+                       'X-Trino-Prepared-Statement': 'p=' + w.urllib.parse.quote(definition, safe='')}
+            for method, path in (('POST', '/v1/statement'), ('GET', '/v1/statement/q/1')):
+                with self.subTest(user=user, definition=definition, method=method):
+                    code, _, _, backend, wake, status, trino, _ = self.endpoint_request(
+                        method, path, 'SELECT 1' if method == 'POST' else None, headers)
+                    self.assertEqual(code, 403)
+                    for mock in (backend.request, wake, status, trino):
+                        mock.assert_not_called()
+        self.assertEqual(self.endpoint_request('POST', '/v1/statement', 'SELECT 1', {
+            'X-Trino-User': 'admin', 'X-Trino-Prepared-Statement': 'p=SELECT%201'})[0], 200)
+
+    def test_activity_io_failure_preserves_successful_query(self):
+        for operation in ('mkdir', 'write_text', 'replace', 'unlink'):
+            with self.subTest(operation=operation), \
+                 patch.object(Path, operation, side_effect=PermissionError('read-only state')), \
+                 self.assertLogs(w.__name__, level='WARNING'), \
+                 patch.object(w, 'status', return_value={'replicas': 1}), \
+                 patch.object(w, 'trino', return_value=nullcontext('url')), \
+                 patch.object(w, 'execute', return_value={'rows': [[1]]}), \
+                 patch.object(w, 'telemetry'):
+                self.assertEqual(w.query('LOCAL', 'SELECT 1')['rows'], [[1]])
+                self.assertEqual(self.endpoint_request('GET', '/v1/statement/q/1')[0], 200)
 
     def test_role_sql_permissions(self):
         self.assertEqual(w.check_sql_policy('SELECT * FROM marts.t', role='bi_viewer'), 'SELECT * FROM marts.t')

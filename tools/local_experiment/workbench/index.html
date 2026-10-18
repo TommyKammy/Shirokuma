@@ -270,7 +270,10 @@ function aiPayload() {
 }
 const aiFields=['ai-provider','ai-model','ai-url','ai-key','ai-timeout'];
 let aiRevision=0;
-$('ai-settings-form').oninput=()=>{aiRevision++;aiStatus('Settings changed; test again.');};
+$('ai-settings-form').oninput=event=>{
+ if(['ai-provider','ai-url'].includes(event.target.id))$('ai-key').value='';
+ aiRevision++;aiStatus('Settings changed; test again.');
+};
 $('ai-settings-button').onclick=()=>busy($('ai-settings-button'),async()=>{
  $('ai-config-status').hidden=true;$('ai-key').value='';$('ai-settings').showModal();
  for(const id of [...aiFields,'ai-test','ai-save'])$(id).disabled=true;
