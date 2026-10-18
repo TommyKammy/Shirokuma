@@ -260,20 +260,24 @@ def _tick(now, stop=None, refresh_clock=False):
                         jobs._lost(connection)
                     schedule = dict(row)
                     is_stage = name.startswith('stage:')
+                    is_mart = name.startswith('mart:')
                     job = connection.execute('SELECT * FROM jobs WHERE name=?', (name,)).fetchone()
                     definition = json.loads(job['definition']) if job else dict(name=name, steps=[])
                     arguments = json.loads(row['arguments'])
                     reason = None
                     try:
                         _authorize(schedule)
-                        if is_stage:
+                        if is_mart:
+                            import marts_resident
+                            definition, prepared = marts_resident._scheduled(name[5:], row['owner'], row['role'], connection=connection)
+                        elif is_stage:
                             import stages_resident
                             definition, prepared = stages_resident._scheduled(name[6:], row['owner'], row['role'], connection=connection)
                         else:
                             if job is None or job['owner'] != row['owner']:
                                 raise PermissionError('Job ownership unavailable; schedule paused')
                             arguments, prepared = jobs._validate(definition, row['role'], arguments)
-                    except (ValueError, PermissionError, OSError) as exc:
+                    except (ValueError, PermissionError, OSError, jobs.JobConflict, jobs.JobNotFound) as exc:
                         paused, reason = True, 'Schedule validation failed (' + type(exc).__name__ + '); paused'
                     if reason is None and (current - due).total_seconds() >= 60:
                         reason = 'Scheduled time missed by at least 60 seconds; no catch-up'
@@ -281,12 +285,14 @@ def _tick(now, stop=None, refresh_clock=False):
                         reason = 'Another job is active; scheduled run skipped without a queue'
                     if reason is None:
                         try:
-                            if is_stage:
+                            if is_mart:
+                                definition, prepared = marts_resident._scheduled(name[5:], row['owner'], row['role'], preflight=True, connection=connection)
+                            elif is_stage:
                                 definition, prepared = stages_resident._scheduled(name[6:], row['owner'], row['role'], preflight=True, connection=connection)
                             else:
                                 arguments, prepared = jobs._validate(definition, row['role'], arguments, preflight=True)
                             _authorize(schedule)
-                        except (ValueError, PermissionError, OSError) as exc:
+                        except (ValueError, PermissionError, OSError, jobs.JobConflict, jobs.JobNotFound) as exc:
                             paused, reason = True, 'Schedule input preflight failed (' + type(exc).__name__ + '); paused'
                     current = _utc() if refresh_clock else now
                     if due > current:

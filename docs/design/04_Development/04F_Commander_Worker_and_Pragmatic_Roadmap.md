@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-18
-version: "1.14"
+version: "1.15"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -281,3 +281,10 @@ Transformation画面でSELECTと品質条件を登録し、既存WAP・ジョブ
 所有者・版・排他を検証し、品質不合格では公開済みテーブルを保持し、中断時の自動再実行を行わない。
 `make verify`、実機9件、日英画面、再起動・復元、通常Workbenchの状態保持を確認した。
 操作・構成・検証範囲は [登録マートの手動更新](../../guides/managed_marts.md) に記録する。
+
+### Phase 19.2: 定期確認・変更検知・自動更新【2026-10-18】
+
+明示したraw/stagingテーブルのスナップショットを定期確認し、変更時だけ既存WAPで全件更新する。
+共通予定計算・ジョブ排他・履歴を再利用し、失敗時停止、結果不明の手動復旧、定義変更時の停止を確認した。
+`make verify`、実機10件、日英画面の実時刻3回、再起動・復元、通常Workbenchの状態保持が成功した。
+操作・検知範囲・検証記録は [登録マートの定期確認・自動更新](../../guides/scheduled_marts.md) を参照する。

@@ -26,6 +26,7 @@ dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);b
 </style>
 <style>
 #stages-area,#stages-area .panel-body,#stages-area .job-fields>div,#stage-files-area,#stage-preview{min-width:0;max-width:100%}#stages-area p,#stages-area .error{overflow-wrap:anywhere}#stages-area input,#stages-area select{min-width:0;max-width:100%}#stages-area .table-wrap{max-width:100%;overflow:auto}#stage-export-directory,#stage-exports th,#stage-exports td{white-space:normal;overflow-wrap:anywhere}#stages-list table,#stage-files table{table-layout:fixed;min-width:520px}#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}#stages-area button{max-width:100%;white-space:normal}
+#marts-admin,#marts-admin .catalog-grid>*{min-width:0}#mart-form{margin-bottom:16px}#marts-admin .error,#mart-schedule-state{overflow-wrap:anywhere}#marts-admin input{min-width:0}#mart-schedule-state{margin-top:16px}
 #jobs-alert-count{margin-left:6px}
 #job-alerts table{table-layout:fixed;min-width:960px}#job-alerts th,#job-alerts td{padding:10px;white-space:normal;overflow-wrap:anywhere}#job-alerts th:nth-child(1){width:8%}#job-alerts th:nth-child(2){width:31%}#job-alerts th:nth-child(3){width:13%}#job-alerts th:nth-child(4){width:14%}#job-alerts th:nth-child(5){width:6%}#job-alerts th:nth-child(6){width:15%}#job-alerts th:nth-child(7){width:13%}#job-alerts button{max-width:100%;white-space:normal}#job-alerts small{display:block;margin-top:5px}#job-alerts .alert-main{font-family:system-ui,sans-serif}#job-alerts details{padding:5px 0 0;border:0;font-size:12px}#job-alerts summary{font-weight:500;color:var(--muted)}
 .job-enable-label{display:flex;align-items:center;gap:8px}.job-enable-label input{width:auto}#job-schedule-state{margin-top:16px;overflow-wrap:anywhere}#job-schedule-state span{white-space:normal}
@@ -121,9 +122,20 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden><div class="page-title"><h1>Transformation · dbt &amp; WAP</h1><p class="muted">Inspect model definitions and dependencies, then build or refresh.</p><div class="toolbar"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build">Run dbt Build</button><button id="run-dbt-test">Run dbt Test</button></div></div><section id="marts-admin" hidden aria-labelledby="marts-title"><div class="panel-head"><h2 id="marts-title">Registered refresh targets</h2><div class="toolbar"><button id="marts-reload" type="button">Reload targets</button><button id="mart-new" type="button">New target</button></div></div>
 <p class="muted">Save a SELECT definition without executing it. Refresh builds, audits, and publishes the saved definition to iceberg.marts.</p>
 <div id="mart-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div id="marts-list" class="table-wrap"><p class="empty">Load targets to select a saved definition.</p></div>
-<form id="mart-form" class="panel panel-body"><h3>Refresh target definition</h3><label for="mart-name">Mart name</label><input id="mart-name" required pattern="[a-z][a-z0-9_]*" placeholder="sales_summary"><p class="muted">Bare name only. Target schema: iceberg.marts.</p>
+<div><form id="mart-form" class="panel panel-body"><h3>Refresh target definition</h3><label for="mart-name">Mart name</label><input id="mart-name" required pattern="[a-z][a-z0-9_]*" placeholder="sales_summary"><p class="muted">Bare name only. Target schema: iceberg.marts.</p>
 <label for="mart-sql">SELECT definition</label><textarea id="mart-sql" rows="6" spellcheck="false" required></textarea><div class="form-grid"><div><label for="mart-min-rows">Minimum rows</label><input id="mart-min-rows" type="number" min="1" step="1" value="1" required></div><div><label for="mart-not-null">Not-null columns (comma-separated, optional)</label><input id="mart-not-null"></div></div>
-<p id="mart-definition-state" class="muted" role="status">Choose a target or save a new definition.</p><div class="toolbar"><button id="mart-save" type="submit">Save target</button><button id="mart-run" type="button" disabled>Refresh target</button><button id="mart-view-run" type="button" hidden>Inspect run in Jobs</button></div><p id="mart-state" role="status" aria-live="polite"></p></form></div></section><pre id="models-state" role="status" hidden></pre><div class="catalog-grid"><div><h2>Persistent dbt Models</h2><div id="dbt-models" class="panel panel-body"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models" class="panel panel-body"></div></div><div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div></section>
+<label for="mart-watch-tables">Watched source tables (comma-separated, optional for manual refresh)</label><input id="mart-watch-tables" aria-describedby="mart-watch-help" placeholder="iceberg.raw.orders, iceberg.staging.customers"><p id="mart-watch-help" class="muted">Explicit watched sources only: Iceberg base tables in raw or staging. Dependencies are not inferred; time-dependent SQL and undeclared changes are not detected.</p>
+<p id="mart-definition-state" class="muted" role="status">Choose a target or save a new definition.</p><div class="toolbar"><button id="mart-save" type="submit">Save target</button><button id="mart-run" type="button" disabled>Refresh target</button><button id="mart-view-run" type="button" hidden>Inspect run in Jobs</button></div><p id="mart-state" role="status" aria-live="polite"></p></form><div class="panel panel-body"><h3>Automatic refresh</h3><p class="muted">Keep Workbench active. Missed slots and overlapping runs are skipped. Each check refreshes only when a watched source changed.</p><form id="mart-schedule-form" novalidate><div class="job-fields"><div><label for="mart-schedule-kind">Frequency</label><select id="mart-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="once">Once</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+<div id="mart-schedule-interval"><label for="mart-schedule-minutes">Interval (minutes)</label><input id="mart-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled></div>
+<div id="mart-schedule-daily" hidden><label for="mart-schedule-time">Local time</label><input id="mart-schedule-time" type="time" step="60" value="09:00" required disabled><label for="mart-schedule-timezone">Timezone (IANA)</label><input id="mart-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div>
+<div id="mart-schedule-once" hidden><label for="mart-schedule-date">Local date</label><input id="mart-schedule-date" type="date" required disabled></div>
+<fieldset class="schedule-weekdays" id="mart-schedule-weekly" hidden><legend>Days of the week</legend><div class="toolbar"><label class="job-enable-label" for="mart-schedule-weekday-1"><input id="mart-schedule-weekday-1" type="checkbox" disabled> Monday</label><label class="job-enable-label" for="mart-schedule-weekday-2"><input id="mart-schedule-weekday-2" type="checkbox" disabled> Tuesday</label><label class="job-enable-label" for="mart-schedule-weekday-3"><input id="mart-schedule-weekday-3" type="checkbox" disabled> Wednesday</label><label class="job-enable-label" for="mart-schedule-weekday-4"><input id="mart-schedule-weekday-4" type="checkbox" disabled> Thursday</label><label class="job-enable-label" for="mart-schedule-weekday-5"><input id="mart-schedule-weekday-5" type="checkbox" disabled> Friday</label><label class="job-enable-label" for="mart-schedule-weekday-6"><input id="mart-schedule-weekday-6" type="checkbox" disabled> Saturday</label><label class="job-enable-label" for="mart-schedule-weekday-7"><input id="mart-schedule-weekday-7" type="checkbox" disabled> Sunday</label></div></fieldset>
+<div id="mart-schedule-monthly" hidden><label for="mart-schedule-day">Day of the month</label><select id="mart-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div></div>
+<p id="mart-schedule-once-help" class="muted" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
+<p id="mart-schedule-calendar-help" class="muted" hidden>Calendar times use the specified timezone.</p>
+<p id="mart-schedule-monthly-help" class="muted" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
+<label class="job-enable-label" for="mart-schedule-enabled"><input id="mart-schedule-enabled" type="checkbox" disabled> Enable automatic refresh</label>
+<div class="toolbar"><button id="mart-schedule-save" type="submit" disabled>Save schedule</button><button id="mart-schedule-stop" type="button" disabled>Stop automatic refresh</button></div></form><p id="mart-schedule-state" role="status" aria-live="polite"></p><p id="mart-schedule-help" class="muted"></p></div></div></div></section><pre id="models-state" role="status" hidden></pre><div class="catalog-grid"><div><h2>Persistent dbt Models</h2><div id="dbt-models" class="panel panel-body"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models" class="panel panel-body"></div></div><div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div></section>
 <section id="jobs" role="tabpanel" aria-labelledby="tab-jobs" hidden>
 <div class="page-title"><h1>Jobs</h1><p class="muted">Save ordered steps and run them manually with typed arguments.</p></div>
 <div class="panel"><div class="panel-head"><h2>Notifications</h2><button id="job-alerts-refresh" type="button">Refresh notifications</button></div><div class="panel-body"><small>Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.</small><br><small>Up to 100 notifications, unacknowledged first.</small><br><small id="job-alerts-timezone"></small><div id="job-alerts-error" class="error" role="alert" hidden></div></div><div id="job-alerts" class="table-wrap"><div class="empty">No notifications loaded.</div></div></div>
@@ -195,6 +207,21 @@ const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+"Automatic refresh":"自動更新",
+"Enable automatic refresh":"自動更新を有効にする",
+"Stop automatic refresh":"自動更新を停止",
+"Watched source tables (comma-separated, optional for manual refresh)":"監視元テーブル（カンマ区切り、手動更新では任意）",
+"Explicit watched sources only: Iceberg base tables in raw or staging. Dependencies are not inferred; time-dependent SQL and undeclared changes are not detected.":"明示した raw または staging の Iceberg 基底テーブルのみを監視します。依存関係は推測しません。時刻依存の SQL や未指定の変更は検知しません。",
+"Keep Workbench active. Missed slots and overlapping runs are skipped. Each check refreshes only when a watched source changed.":"Workbench を起動しておいてください。過去の実行枠と重複実行はスキップします。監視元に変更がある場合のみ更新します。",
+"Check unchanged":"変更なしを確認",
+"Check unchanged · {time}":"変更なしを確認 · {time}",
+"Last check / refresh":"前回の確認・更新",
+"Run time":"実行時刻",
+"{enabled} · Next run: {time} · Last status: {status}":"{enabled} · 次回: {time} · 前回の状態: {status}",
+"Outcome unknown. Complete a successful manual refresh before enabling automatic refresh.":"結果が不明です。手動更新の成功を確認してから自動更新を有効にしてください。",
+"Save at least one watched source table before enabling automatic refresh.":"監視元テーブルを1つ以上保存してから自動更新を有効にしてください。",
+"Failure pauses automatic refresh. Saving a definition pauses its schedule and resets its source baseline.":"失敗すると自動更新を停止します。定義を保存すると予定を停止し、監視元の基準をリセットします。",
+
 'Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.':'1回のみの予定を有効にするには未来の日付と時刻が必要です。夏時間で存在しない時刻は拒否し、重複する時刻は最初の時刻を使います。スキップや失敗の場合も予定時刻の処理後に無効になります。',
 'Months without the selected day are skipped. Choose Last day for month-end.':'指定日が存在しない月はスキップします。毎月末に実行する場合は「月末」を選択してください。',
 'Calendar times use the specified timezone.':'日付と時刻は指定タイムゾーンに従います。',
@@ -941,51 +968,53 @@ $('stage-export-form').onsubmit=event=>{event.preventDefault();if(stagePending||
 $('stage-view-run').onclick=()=>{if(!stageRunId||currentRole!=='admin')return;selectedRunId=stageRunId;activate($('tab-jobs'));};
 
 // Registered refresh targets use saved, versioned definitions and the Jobs executor.
-let martEntries=[],selectedMart=null,martDirty=false,martPending=false,martEpoch=0,martRequest=0,martPoll=null,martRunId=null,martStale=false;
+let martEntries=[],selectedMart=null,martDirty=false,martPending=false,martEpoch=0,martRequest=0,martPoll=null,martRunId=null,martStale=false,martScheduleDirty=false;
 function martsVisible(){return currentRole==='admin'&&activeTab==='transformation'&&!document.hidden;}
 function stopMartsPolling(){clearTimeout(martPoll);martPoll=null;}
 function martCurrent(epoch){return epoch===martEpoch&&currentRole==='admin';}
 function resetMartsUI(){
- martEpoch++;martRequest++;stopMartsPolling();martEntries=[];selectedMart=null;martRunId=null;martDirty=false;martPending=false;martStale=false;
- $('marts-admin').hidden=currentRole!=='admin';$('marts-list').replaceChildren();$('mart-form').reset();message('mart-error','');ui($('mart-state'),'');updateMartControls();
+ martEpoch++;martRequest++;stopMartsPolling();martEntries=[];selectedMart=null;martRunId=null;martDirty=false;martPending=false;martStale=false;martScheduleDirty=false;
+ $('marts-admin').hidden=currentRole!=='admin';$('marts-list').replaceChildren();$('mart-form').reset();$('mart-watch-tables').value='';fillScheduleFields('mart-schedule',null);message('mart-error','');ui($('mart-state'),'');updateMartControls();
  if(typeof activeTab!=='undefined'&&activeTab==='transformation'&&currentRole==='admin')loadMarts();
 }
 function readMartDefinition(){
  const minRows=Number($('mart-min-rows').value);
  if($('mart-min-rows').value===''||!Number.isSafeInteger(minRows)||minRows<1)throw Error(t('Minimum rows must be a positive integer.'));
- return {name:$('mart-name').value.trim().toLowerCase(),sql:$('mart-sql').value.trim(),min_rows:minRows,not_null:$('mart-not-null').value.split(',').map(x=>x.trim()).filter(Boolean)};
+ return {name:$('mart-name').value.trim().toLowerCase(),sql:$('mart-sql').value.trim(),min_rows:minRows,not_null:$('mart-not-null').value.split(',').map(x=>x.trim()).filter(Boolean),watch_tables:$('mart-watch-tables').value.split(',').map(x=>x.trim()).filter(Boolean)};
 }
 function updateMartControls(){
  const writable=currentRole==='admin'&&(!selectedMart||selectedMart.can_manage),active=selectedMart&&liveJobStates.has(selectedMart.last_run?.status);
- for(const id of ['mart-name','mart-sql','mart-min-rows','mart-not-null'])$(id).disabled=!writable||martPending||(id==='mart-name'&&!!selectedMart);
- $('mart-save').disabled=!writable||martPending||martStale;
+ for(const id of ['mart-name','mart-sql','mart-min-rows','mart-not-null','mart-watch-tables'])$(id).disabled=!writable||martPending||(id==='mart-name'&&!!selectedMart);
+ $('mart-save').disabled=!writable||martPending||martStale||active;
  $('mart-run').disabled=!writable||martPending||!selectedMart||martDirty||martStale||active;
  $('mart-new').disabled=martPending;$('marts-reload').disabled=martPending;
  $('mart-view-run').hidden=!martRunId||currentRole!=='admin';
+ renderMartSchedule(true);
  ui($('mart-definition-state'),martStale?'Saved definition changed. Select the target again to load its latest version.':martDirty?'Unsaved changes. Save the definition before refreshing.':selectedMart?'Saved version {version} · Owner: {owner}':'Choose a target or save a new definition.',selectedMart?{version:selectedMart.version,owner:selectedMart.owner}:{});
 }
 function selectMart(entry,internal=false){
  if((martPending&&!internal)||currentRole!=='admin')return;
- selectedMart=entry;martDirty=false;martStale=false;martRunId=entry?.last_run?.id||null;
+ selectedMart=entry;martDirty=false;martStale=false;martScheduleDirty=false;martRunId=entry?.last_run?.id||null;
  $('mart-name').value=entry?.name||'';$('mart-sql').value=entry?.sql||'';$('mart-min-rows').value=entry?.min_rows??1;$('mart-not-null').value=(entry?.not_null||[]).join(', ');
+ $('mart-watch-tables').value=(entry?.watch_tables||[]).join(', ');fillScheduleFields('mart-schedule',entry?.schedule);
  message('mart-error','');renderMartRun();updateMartControls();
 }
 function renderMartRun(){
  const run=selectedMart?.last_run;
- if(run)ui($('mart-state'),'Refresh {status} · {time}',()=>({status:jobStatus(run.status),time:run.finished_at||run.started_at||run.created_at||'—'}));
+ if(run)ui($('mart-state'),martUnchanged(run)?'Check unchanged · {time}':'Refresh {status} · {time}',()=>({status:jobStatus(run.status),time:run.finished_at||run.started_at||run.created_at||'—'}));
  else ui($('mart-state'),selectedMart?'Never refreshed':'');
 }
 function renderMarts(){
  if(!martEntries.length){ui($('marts-list'),'No refresh targets registered. Save a SELECT definition to begin.');return;}
- table($('marts-list'),['Mart name','User','Last refresh','Refresh time','Last successful refresh','Actions'],martEntries.map(entry=>[entry.table||'iceberg.marts.'+entry.name,entry.owner,entry.last_run?jobStatus(entry.last_run.status):t('Never refreshed'),entry.last_run?.finished_at||entry.last_run?.started_at||entry.last_run?.created_at||'—',entry.last_success_at||'—','']));
- $('marts-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=martEntries[index];ui(row.cells[2],entry.last_run?jobStatuses[entry.last_run.status]||'Unknown':'Never refreshed');const button=actionButton('Select target',()=>selectMart(entry));button.disabled=martPending;row.lastElementChild.append(button);});
+ table($('marts-list'),['Mart name','User','Last check / refresh','Run time','Last successful refresh','Actions'],martEntries.map(entry=>[entry.table||'iceberg.marts.'+entry.name,entry.owner,entry.last_run?martRunLabel(entry.last_run):t('Never refreshed'),entry.last_run?.finished_at||entry.last_run?.started_at||entry.last_run?.created_at||'—',entry.last_success_at||'—','']));
+ $('marts-list').querySelectorAll('tbody tr').forEach((row,index)=>{const entry=martEntries[index];ui(row.cells[2],entry.last_run?martUnchanged(entry.last_run)?'Check unchanged':jobStatuses[entry.last_run.status]||'Unknown':'Never refreshed');const button=actionButton('Select target',()=>selectMart(entry));button.disabled=martPending;row.lastElementChild.append(button);});
 }
 async function loadMarts(){
  if(!martsVisible())return;const epoch=martEpoch,request=++martRequest;stopMartsPolling();
  const current=()=>martCurrent(epoch)&&request===martRequest&&martsVisible();
  try{const data=await api('/api/marts');if(!current())return;martEntries=data.marts||[];renderMarts();
- if(selectedMart){const latest=martEntries.find(entry=>entry.name===selectedMart.name);if(!latest||latest.version!==selectedMart.version)martStale=true;else{selectedMart=latest;martRunId=latest.last_run?.id||martRunId;renderMartRun();}updateMartControls();}
- if(martEntries.some(entry=>liveJobStates.has(entry.last_run?.status)))martPoll=setTimeout(loadMarts,2000);
+ if(selectedMart){const latest=martEntries.find(entry=>entry.name===selectedMart.name);if(!latest||latest.version!==selectedMart.version)martStale=true;else{selectedMart=latest;martRunId=latest.last_run?.id||martRunId;if(!martScheduleDirty)fillScheduleFields('mart-schedule',latest.schedule);renderMartRun();}updateMartControls();}
+ if(martEntries.some(entry=>entry.schedule?.enabled||liveJobStates.has(entry.last_run?.status)))martPoll=setTimeout(loadMarts,2000);
  }catch(error){if(current())message('mart-error',error.message);}finally{pruneUIBindings();}
 }
 async function martTask(action){
@@ -993,6 +1022,35 @@ async function martTask(action){
  try{await action(epoch);}catch(error){if(martCurrent(epoch))message('mart-error',error.message);}
  finally{if(martCurrent(epoch)){martPending=false;renderMarts();updateMartControls();}}
 }
+function martUnchanged(run){return run?.status==='success'&&run.steps?.[0]?.summary?.result==='unchanged';}
+function martRunLabel(run){return martUnchanged(run)?t('Check unchanged'):jobStatus(run.status);}
+function martScheduleCanEnable(){return currentRole==='admin'&&!!selectedMart?.can_manage&&!martPending&&!martDirty&&!martStale&&!selectedMart.requires_manual_refresh&&!!selectedMart.watch_tables?.length&&!liveJobStates.has(selectedMart.last_run?.status);}
+function renderMartSchedule(){
+ const saved=selectedMart?.schedule,owner=currentRole==='admin'&&!!selectedMart?.can_manage,editable=owner&&!martPending;
+ updateScheduleKind('mart-schedule',editable);
+ $('mart-schedule-enabled').disabled=!martScheduleCanEnable();
+ $('mart-schedule-save').disabled=!martScheduleCanEnable();
+ $('mart-schedule-stop').disabled=!editable||!saved?.enabled;
+ ui($('mart-schedule-state'),'{enabled} · Next run: {time} · Last status: {status}',()=>({enabled:t(saved?.enabled?'Enabled':'Disabled'),time:scheduleNextTime(saved),status:selectedMart?.last_run?martRunLabel(selectedMart.last_run):t('Never refreshed')}));
+ ui($('mart-schedule-help'),selectedMart?.requires_manual_refresh?'Outcome unknown. Complete a successful manual refresh before enabling automatic refresh.':martStale?'Saved definition changed. Select the target again to load its latest version.':martDirty?'Unsaved changes. Save the definition before refreshing.':!selectedMart?.watch_tables?.length?'Save at least one watched source table before enabling automatic refresh.':'Failure pauses automatic refresh. Saving a definition pauses its schedule and resets its source baseline.');
+}
+function martSchedulePayload(entry,fields){return {name:entry.name,version:entry.version,...schedulePayload(fields)};}
+function saveMartSchedule(stop=false){
+ if(stop?$('mart-schedule-stop').disabled:$('mart-schedule-save').disabled)return;
+ return martTask(async epoch=>{
+ const name=selectedMart.name,preserveDraft=stop&&martScheduleDirty,payload=stop?{name,enabled:false}:martSchedulePayload(selectedMart,readScheduleFields('mart-schedule'));
+ const data=await api('/api/marts/schedule',payload);if(!martCurrent(epoch)||selectedMart?.name!==name)return;
+ selectedMart={...selectedMart,schedule:data.schedule};
+ if(preserveDraft)$('mart-schedule-enabled').checked=false;
+ else{martScheduleDirty=false;fillScheduleFields('mart-schedule',data.schedule);}
+ await loadMarts();
+ });
+}
+$('mart-schedule-kind').onchange=()=>{martScheduleDirty=true;renderMartSchedule();};
+$('mart-schedule-form').oninput=()=>{martScheduleDirty=true;};
+$('mart-schedule-form').onchange=()=>{martScheduleDirty=true;};
+$('mart-schedule-form').onsubmit=event=>{event.preventDefault();saveMartSchedule();};
+$('mart-schedule-stop').onclick=()=>saveMartSchedule(true);
 $('marts-reload').onclick=loadMarts;$('mart-new').onclick=()=>selectMart(null);
 $('mart-form').oninput=()=>{martDirty=true;updateMartControls();};
 $('mart-form').onsubmit=event=>{event.preventDefault();if(!$('mart-form').reportValidity()||$('mart-save').disabled)return;martTask(async epoch=>{
@@ -1366,6 +1424,8 @@ $('job-run-form').onsubmit=event=>{event.preventDefault();if(!selectedJob?.can_m
  const data=await api('/api/jobs/run',{name:selectedJob.name,arguments:values});selectedRunId=data.run.id;ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:data.run.id,status:jobStatus(data.run.status)}));await refreshJobRuns();
  }catch(error){ui($('job-run-state'),'Run failed: {error}',{error:error.message});}
  });};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMartsPolling();else if(martsVisible())loadMarts();});
+window.addEventListener('pagehide',stopMartsPolling);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopJobsPolling();else if(jobsVisible())refreshJobRuns();});
 window.addEventListener('pagehide',stopJobsPolling);
 editJob(null);

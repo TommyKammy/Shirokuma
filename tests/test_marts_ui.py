@@ -28,7 +28,7 @@ class MartsUITests(unittest.TestCase):
         document = Document(source)
         ids = [node.get("id") for node in document.nodes if node.get("id")]
         self.assertEqual(len(ids), len(set(ids)))
-        for identifier in ["mart-name", "mart-sql", "mart-min-rows", "mart-not-null"]:
+        for identifier in ["mart-name", "mart-sql", "mart-min-rows", "mart-not-null", "mart-watch-tables"]:
             self.assertTrue(any(node.get("for") == identifier for node in document.nodes))
         self.assertIn('id="marts-admin" hidden', source)
         script = re.search(r"<script>(.*?)</script>", source, re.S)[1]
@@ -37,7 +37,7 @@ class MartsUITests(unittest.TestCase):
         result = subprocess.run(["node", "-e", "new Function(" + json.dumps(script) + ");" + dictionary + "console.log(JSON.stringify(i18n))"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         translations = json.loads(result.stdout)
-        for key in ["Registered refresh targets", "Save target", "Refresh target", "Last successful refresh", "Inspect run in Jobs", "Minimum rows", "SELECT definition"]:
+        for key in ["Registered refresh targets", "Save target", "Refresh target", "Last successful refresh", "Inspect run in Jobs", "Minimum rows", "SELECT definition", "Watched source tables (comma-separated, optional for manual refresh)", "Automatic refresh", "Check unchanged"]:
             self.assertIn(key, translations["en"])
             self.assertIn(key, translations["ja"])
             self.assertNotEqual(translations["ja"][key], key)
@@ -59,7 +59,8 @@ selectedModel={name:'legacy_sales',layer:'dbt'};updateLegacyRefresh();assert.equ
 
     def test_actual_handlers_preserve_drafts_and_gate_execution(self):
         script = re.search(r"<script>(.*?)</script>", HTML.read_text(), re.S)[1]
-        handlers = "let martEntries=" + script.split("let martEntries=", 1)[1].split("let selectedModel=null;", 1)[0]
+        common = "const scheduleFields=" + script.split("const scheduleFields=", 1)[1].split("function stageCurrent", 1)[0]
+        handlers = common + "let martEntries=" + script.split("let martEntries=", 1)[1].split("let selectedModel=null;", 1)[0]
         harness = r'''
 const assert=require('node:assert/strict');
 const nodes={};const $=id=>nodes[id]??={value:'',hidden:false,disabled:false,textContent:'',replaceChildren(){this.textContent='';},querySelectorAll(){return [];},reset(){for(const id of ['mart-name','mart-sql','mart-not-null'])$(id).value='';$('mart-min-rows').value=1;},reportValidity(){return true;}};
@@ -67,16 +68,17 @@ const t=(key,values={})=>key.replace(/\{(\w+)\}/g,(_,k)=>values[k]??'');
 const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
 const message=(id,text)=>{$(id).hidden=!text;$(id).textContent=text;};
 const table=()=>{};const actionButton=()=>({});const pruneUIBindings=()=>{};
-let currentRole='admin',activeTab='transformation',selectedRunId=null,selectedModel=null;const document={hidden:false};
+let currentRole='admin',activeTab='transformation',selectedRunId=null,selectedModel=null;const document={hidden:false,addEventListener(){}};const window={addEventListener(){}};
 const liveJobStates=new Set(['queued','running']);const jobStatuses={success:'Success',failed:'Failed',unknown:'Unknown',queued:'Queued',running:'Running'};const jobStatus=status=>jobStatuses[status]||'Unknown';
-const activate=()=>{};
+const activate=()=>{};const language='en';let timers=[];const setTimeout=fn=>{timers.push(fn);return timers.length;};const clearTimeout=()=>{};
 let calls=[],reply={marts:[]},resolveReply=null,apiOverride=null;
 const api=async(path,body)=>{calls.push({path,body});if(apiOverride)return apiOverride(path,body);if(resolveReply==='defer')return new Promise(resolve=>{resolveReply=resolve;});return reply;};
 const entry={name:'sales',table:'iceberg.marts.sales',sql:'SELECT 1 AS id',min_rows:1,not_null:['id'],version:4,owner:'operator',can_manage:true,last_run:null};
 (async()=>{
- eval(HANDLERS+`;globalThis.handlers={loadMarts,resetMartsUI,selectMart,readMartDefinition,getSelected:()=>selectedMart,getDirty:()=>martDirty};`);
+ eval(HANDLERS+`;globalThis.handlers={loadMarts,resetMartsUI,selectMart,readMartDefinition,martSchedulePayload,martScheduleCanEnable,saveMartSchedule,getScheduleDirty:()=>martScheduleDirty,getSelected:()=>selectedMart,getDirty:()=>martDirty};`);
  const h=globalThis.handlers;
  h.selectMart(entry);assert.equal($('mart-run').disabled,false);
+ $('mart-watch-tables').value='iceberg.raw.orders, iceberg.staging.customers, ';assert.deepEqual(h.readMartDefinition().watch_tables,['iceberg.raw.orders','iceberg.staging.customers']);
  $('mart-sql').value='SELECT 2 AS id';$('mart-form').oninput();assert.equal($('mart-run').disabled,true);
  reply={marts:[{...entry,last_run:{id:'r1',status:'success'}}]};await h.loadMarts();assert.equal($('mart-sql').value,'SELECT 2 AS id');assert.equal(h.getDirty(),true);
  reply={marts:[{...entry,version:5}]};await h.loadMarts();assert.equal($('mart-save').disabled,true);assert.equal($('mart-run').disabled,true);
@@ -100,6 +102,31 @@ const entry={name:'sales',table:'iceberg.marts.sales',sql:'SELECT 1 AS id',min_r
  let finishRun;apiOverride=async path=>path==='/api/marts/run'?new Promise(resolve=>{finishRun=resolve;}):{marts:[{...entry,version:5,last_run:{id:'held-run',status:'queued'}}]};
  $('mart-run').onclick();await new Promise(resolve=>setImmediate(resolve));h.selectMart({...entry,name:'other'});assert.equal(h.getSelected().name,'sales');
  finishRun({run:{id:'held-run',status:'queued'}});await new Promise(resolve=>setImmediate(resolve));assert.equal(h.getSelected().name,'sales');assert.equal(h.getSelected().last_run.id,'held-run');apiOverride=null;
+ // All calendar kinds use the common validator and payload, including sorted weekdays.
+ const fields={enabled:true,every_minutes:'15',time:'09:15',timezone:'Asia/Tokyo',date:'2030-01-02',weekdays:[5,1],day_of_month:'last'};
+ for(const kind of ['interval','once','daily','weekly','monthly']){const payload=h.martSchedulePayload(entry,{...fields,kind});assert.equal(payload.name,'sales');assert.equal(payload.version,4);assert.equal(payload.kind,kind);assert.equal(payload.enabled,true);if(kind==='weekly')assert.deepEqual(payload.weekdays,[1,5]);if(kind==='monthly')assert.equal(payload.day_of_month,'last');}
+ h.selectMart({...entry,watch_tables:['iceberg.raw.orders'],schedule:{kind:'interval',every_minutes:60,enabled:true}});assert.equal(h.martScheduleCanEnable(),true);
+ $('mart-schedule-minutes').value='17';$('mart-schedule-form').oninput();$('mart-schedule-enabled').checked=false;
+ reply={marts:[{...entry,watch_tables:['iceberg.raw.orders'],schedule:{kind:'interval',every_minutes:90,enabled:true},last_run:{id:'check',status:'success',finished_at:'today',steps:[{summary:{result:'unchanged'}}]}}]};
+ timers=[];await h.loadMarts();assert.equal($('mart-schedule-minutes').value,'17');assert.equal($('mart-schedule-enabled').checked,false);assert.match($('mart-state').textContent,/Check unchanged/);assert.ok(timers.length>0);
+ $('mart-sql').value='SELECT 2';$('mart-form').oninput();assert.equal($('mart-schedule-save').disabled,true);assert.equal($('mart-schedule-stop').disabled,false);
+ calls=[];reply={schedule:{enabled:false},marts:[]};await h.saveMartSchedule(true);assert.deepEqual(calls[0],{path:'/api/marts/schedule',body:{name:'sales',enabled:false}});
+ // Stopping pauses the persisted schedule while retaining unsaved calendar fields.
+ const scheduled={...entry,watch_tables:['iceberg.raw.orders'],schedule:{kind:'interval',every_minutes:1,enabled:true}};
+ h.selectMart(scheduled);$('mart-schedule-kind').value='monthly';$('mart-schedule-day').value='last';$('mart-schedule-time').value='18:30';$('mart-schedule-kind').onchange();
+ const stopped={...scheduled,schedule:{...scheduled.schedule,enabled:false}};reply={schedule:stopped.schedule,marts:[stopped]};calls=[];
+ await h.saveMartSchedule(true);assert.deepEqual(calls[0].body,{name:'sales',enabled:false});assert.equal($('mart-schedule-kind').value,'monthly');assert.equal($('mart-schedule-day').value,'last');assert.equal($('mart-schedule-time').value,'18:30');assert.equal($('mart-schedule-enabled').checked,false);assert.equal(h.getScheduleDirty(),true);assert.equal(h.getSelected().schedule.enabled,false);assert.equal($('mart-schedule-stop').disabled,true);assert.match($('mart-schedule-state').textContent,/Disabled/);
+ await h.loadMarts();assert.equal($('mart-schedule-kind').value,'monthly');assert.equal($('mart-schedule-day').value,'last');assert.equal(h.getScheduleDirty(),true);
+ h.selectMart(scheduled);reply={schedule:stopped.schedule,marts:[stopped]};await h.saveMartSchedule(true);assert.equal($('mart-schedule-kind').value,'interval');assert.equal(h.getScheduleDirty(),false);
+ // A delayed stop response also cannot restore drafts after a role reset.
+ h.selectMart(scheduled);$('mart-schedule-kind').value='monthly';$('mart-schedule-day').value='last';$('mart-schedule-kind').onchange();let finishStop;apiOverride=async()=>new Promise(resolve=>{finishStop=resolve;});
+ const stopping=h.saveMartSchedule(true);await new Promise(resolve=>setImmediate(resolve));currentRole='bi_viewer';h.resetMartsUI();finishStop({schedule:stopped.schedule});await stopping;assert.equal(h.getSelected(),null);assert.equal(h.getScheduleDirty(),false);assert.equal($('mart-schedule-kind').value,'interval');assert.equal($('mart-schedule-enabled').checked,false);apiOverride=null;currentRole='admin';
+ h.selectMart({...entry,watch_tables:['iceberg.raw.orders'],requires_manual_refresh:true});assert.equal($('mart-schedule-enabled').disabled,true);assert.match($('mart-schedule-help').textContent,/successful manual refresh/);
+ h.selectMart({...entry,watch_tables:[]});assert.equal($('mart-schedule-save').disabled,true);
+ h.selectMart({...entry,watch_tables:['iceberg.raw.orders']});$('mart-schedule-minutes').value='22';$('mart-schedule-form').oninput();h.selectMart({...entry,name:'other',schedule:{kind:'daily',time:'13:00',timezone:'UTC'}});assert.equal($('mart-schedule-kind').value,'daily');assert.equal($('mart-schedule-time').value,'13:00');
+ // A delayed schedule response cannot restore admin state after a role change.
+ h.selectMart({...entry,watch_tables:['iceberg.raw.orders']});let finishSchedule;apiOverride=async()=>new Promise(resolve=>{finishSchedule=resolve;});
+ const scheduleSave=h.saveMartSchedule();await new Promise(resolve=>setImmediate(resolve));currentRole='bi_viewer';h.resetMartsUI();finishSchedule({schedule:{enabled:true}});await scheduleSave;assert.equal(h.getSelected(),null);assert.equal($('mart-schedule-enabled').checked,false);apiOverride=null;currentRole='admin';
  h.resetMartsUI();h.selectMart(entry);resolveReply='defer';const pending=h.loadMarts();const resolve=resolveReply;
  currentRole='bi_viewer';h.resetMartsUI();resolve({marts:[entry]});await pending;assert.equal(h.getSelected(),null);assert.equal($('marts-admin').hidden,true);assert.equal($('marts-list').textContent,'');
  const before=calls.length;await h.loadMarts();assert.equal(calls.length,before);

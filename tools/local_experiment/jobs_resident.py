@@ -301,6 +301,8 @@ def _lock():
 
 def _lost(connection):
     now = _now()
+    connection.execute("UPDATE schedules SET enabled=0,next_run_at=NULL WHERE name IN "
+                       "(SELECT job_name FROM runs WHERE status IN ('queued','running') AND job_name LIKE 'mart:%')")
     connection.execute("UPDATE stage_files SET status='unknown' WHERE status IN ('queued','running') "
                        "AND last_run_id IN (SELECT id FROM runs WHERE status IN ('queued','running'))")
     connection.execute("UPDATE steps SET status='unknown',finished_at=?,error='Worker lost; outcome unknown' "
@@ -528,7 +530,7 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                     if step['action'] in {'stage_import', 'stage_export', 'mart_refresh'} and not shared:
                         wr.resolve_role(actor, role)
                     report = _execute_step(step)
-                    summary = {key: report[key] for key in ('action', 'table', 'rows_ingested', 'row_count', 'result', 'valid', 'duration_ms', 'file', 'format', 'size') if key in report}
+                    summary = {key: report[key] for key in ('action', 'table', 'rows_ingested', 'row_count', 'result', 'valid', 'duration_ms', 'file', 'format', 'size', 'changed') if key in report}
                     if step['action'] in {'dbt_build', 'dbt_test'}:
                         summary['model_count'] = len(report.get('models', []))
                     with _db() as connection:
@@ -566,6 +568,8 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         connection.execute('UPDATE steps SET status=?,finished_at=?,error=?,summary=? WHERE run_id=? AND position=?',
                                            (status, now, error, json.dumps(summary) if summary is not None else None, run_id, position))
                         connection.execute("UPDATE steps SET status='skipped',finished_at=? WHERE run_id=? AND status='pending'", (now, run_id))
+                        if step['action'] == 'mart_refresh':
+                            connection.execute('UPDATE schedules SET enabled=0,next_run_at=NULL WHERE name=?', (job_name,))
                         connection.execute('UPDATE runs SET status=?,finished_at=?,error=? WHERE id=?', (status, now, error, run_id))
                     final_status = status
                     return

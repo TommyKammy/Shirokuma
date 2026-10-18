@@ -40,7 +40,7 @@ POST_ROUTES.update({path: ALL_ROLES for path in (
     '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
 POST_ROUTES.update({path: {'admin'} for path in ('/api/ai/config', '/api/ai/test')})
 POST_ROUTES.update({path: {'admin'} for path in ('/api/stages/export', '/api/stages/exports', '/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import', '/api/stages/schedule', '/api/stages/scan')})
-POST_ROUTES.update({path: {'admin'} for path in ('/api/marts/save', '/api/marts/run')})
+POST_ROUTES.update({path: {'admin'} for path in ('/api/marts/save', '/api/marts/run', '/api/marts/schedule')})
 POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail', '/api/jobs/schedule', '/api/alerts/ack')})
 
 
@@ -294,9 +294,20 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 body = self.body()
                 if path == '/api/marts/save':
                     fields = {'name', 'sql'}
-                    if not fields <= set(body) or set(body) - fields - {'min_rows', 'not_null', 'version'}:
+                    if not fields <= set(body) or set(body) - fields - {'min_rows', 'not_null', 'version', 'watch_tables'}:
                         raise ValueError('invalid mart definition fields')
                     result = {'mart': marts_resident.save_target(body, self.authenticated_user or 'local', role)}
+                elif path == '/api/marts/schedule':
+                    fields = {'name', 'enabled'}
+                    if (not fields <= set(body) or set(body) - fields - schedule_resident.SCHEDULE_FIELDS - {'version'}
+                            or not isinstance(body.get('name'), str) or not body['name']
+                            or type(body.get('enabled')) is not bool
+                            or (body['enabled'] and (type(body.get('version')) is not int or body['version'] < 1))
+                            or ('version' in body and (type(body['version']) is not int or body['version'] < 1))):
+                        raise ValueError('invalid mart schedule fields')
+                    if set(body) != fields or body['enabled']:
+                        schedule_resident._validate_schedule({'kind': 'interval', **body}, schedule_resident._utc())
+                    result = {'schedule': marts_resident.save_schedule(body, self.authenticated_user or 'local', role)}
                 elif path == '/api/marts/run':
                     if (set(body) != {'name', 'version'} or not isinstance(body['name'], str) or not body['name']
                             or type(body['version']) is not int or body['version'] < 1):

@@ -74,3 +74,5 @@ SQLは読取用SELECTまたはWITH、品質条件は最低行数とNULLを許さ
 ローカル証跡は `tmp/phase19-verify.log`、`tmp/phase19-runtime-final.log`、
 `tmp/phase19-ui/managed-mart.png`。検証用テーブルと専用プロセス・トンネルは後片付け済み。
 自動更新・変更検知は後続フェーズで扱う。
+
+Phase 19.2で追加した監視元テーブルと予定の設定は、[定期確認・自動更新](scheduled_marts.md)を参照する。

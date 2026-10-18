@@ -108,7 +108,7 @@ def save_wap_entry(b, name: str, **fields) -> dict:
                    for key, value in registry.items()):
                 raise PermissionError('Model name collides with a registered mart')
             old = registry.get(name) or {}
-            if old.get('owner') and any(key in fields for key in ('sql', 'owner', 'version', 'min_rows', 'not_null')):
+            if old.get('owner') and any(key in fields for key in ('sql', 'owner', 'version', 'min_rows', 'not_null', 'watch_tables', 'watch_baseline')):
                 raise PermissionError('Registered mart definitions must be edited through Marts')
             entry = dict(registry.get(name) or {}, **fields)
             registry[name] = entry
@@ -136,6 +136,18 @@ def latest_snapshot(b, url, table):
     except Exception as exc:
         raise RuntimeError('current active snapshot unavailable: ' + table) from exc
     raise RuntimeError('current active snapshot unavailable: ' + table)
+
+
+def current_snapshot(b, url, table):
+    """Read the active main reference, including rollbacks, never the largest ID."""
+    try:
+        rows = b.sql(url, 'SELECT snapshot_id FROM ' + b.identifier(table + '$refs') +
+                     " WHERE name = 'main'")['rows']
+    except Exception:
+        rows = [[latest_snapshot(b, url, table)]]
+    if len(rows) != 1 or type(rows[0][0]) is not int or rows[0][0] <= 0:
+        raise RuntimeError('current active snapshot unavailable: ' + table)
+    return rows[0][0]
 
 
 def audit_table(b, url, full_table_name, snapshot_id=None):

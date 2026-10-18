@@ -66,7 +66,7 @@ class WorkbenchTests(unittest.TestCase):
                     call.assert_called_once_with(*args)
 
     def test_mart_routes_reject_role_auth_and_payload_spoofing(self):
-        paths = ('/api/marts', '/api/marts/save', '/api/marts/run')
+        paths = ('/api/marts', '/api/marts/save', '/api/marts/run', '/api/marts/schedule')
         for role in ('data_engineer', 'bi_viewer'):
             with patch.object(wb.request_auth, 'authenticate', return_value=('alice', role)), patch.object(wb, 'marts_resident') as backend:
                 for path in paths:
@@ -77,7 +77,8 @@ class WorkbenchTests(unittest.TestCase):
                 self.assertEqual(self.json_request(path, None if path == paths[0] else {})[0], 401)
         definition = dict(name='orders', sql='SELECT 1', min_rows=0, not_null=[])
         with patch.object(wb, 'marts_resident') as backend:
-            for path, valid in [('/api/marts/save', definition), ('/api/marts/run', dict(name='orders', version=1))]:
+            for path, valid in [('/api/marts/save', definition), ('/api/marts/run', dict(name='orders', version=1)),
+                                ('/api/marts/schedule', dict(name='orders', enabled=False))]:
                 for key in ('actor', 'owner', 'role', 'table', 'auth_mode'):
                     self.assertEqual(self.json_request(path, {**valid, key: 'bob'})[0], 400)
             for body in ({}, {'name': 'orders'}, {'name': 'orders', 'version': ''}, {'name': [], 'version': 1}):
@@ -118,12 +119,72 @@ class WorkbenchTests(unittest.TestCase):
         definition = dict(name='orders', sql='SELECT 1', min_rows=0, not_null=[])
         for path, body, method in [('/api/marts', None, 'list_targets'),
                 ('/api/marts/save', definition, 'save_target'),
-                ('/api/marts/run', dict(name='orders', version=1), 'submit_refresh')]:
+                ('/api/marts/run', dict(name='orders', version=1), 'submit_refresh'),
+                ('/api/marts/schedule', dict(name='orders', enabled=False), 'save_schedule')]:
             for error, code in [(PermissionError('owner mismatch'), 403),
                     (wb.jobs_resident.JobNotFound('absent'), 404),
                     (wb.jobs_resident.JobConflict('stale version'), 409), (ValueError('invalid'), 400)]:
                 with self.subTest(path=path, error=error), patch.object(wb.marts_resident, method, side_effect=error):
                     self.assertEqual(self.json_request(path, body), (code, {'error': str(error)}))
+
+    def test_mart_schedule_calendar_dispatch_and_strict_fields(self):
+        calendars = [dict(kind='interval', every_minutes=1),
+                     dict(kind='daily', time='12:30', timezone='Asia/Tokyo'),
+                     dict(kind='once', date='2099-01-01', time='12:30', timezone='UTC'),
+                     dict(kind='weekly', weekdays=[1, 5], time='12:30', timezone='UTC'),
+                     dict(kind='monthly', day_of_month='last', time='12:30', timezone='UTC')]
+        with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')):
+            with patch.object(wb.marts_resident, 'save_schedule', return_value={'enabled': True}) as save:
+                for calendar in calendars:
+                    payload = dict(name='orders', version=1, enabled=True, **calendar)
+                    self.assertEqual(self.json_request('/api/marts/schedule', payload), (200, {'schedule': {'enabled': True}}))
+                    save.assert_called_with(payload, 'alice', 'admin')
+                self.assertEqual(self.json_request('/api/marts/schedule', dict(name='orders', enabled=False))[0], 200)
+            with patch.object(wb.marts_resident, 'save_schedule') as save:
+                valid = dict(name='orders', version=1, enabled=True, kind='interval', every_minutes=1)
+                invalid = [{}, dict(name='orders'), dict(name='orders', enabled=True),
+                           {**valid, 'version': True}, {**valid, 'version': '1'},
+                           {**valid, 'version': 0}, {**valid, 'enabled': 1},
+                           {**valid, 'name': []}, {**valid, 'every_minutes': 0},
+                           {**valid, 'kind': 'once'}, {**valid, 'unknown': 1},
+                           {**valid, 'time': '12:00'}]
+                for payload in invalid:
+                    with self.subTest(payload=payload):
+                        self.assertEqual(self.json_request('/api/marts/schedule', payload)[0], 400)
+                save.assert_not_called()
+        self.assertEqual(self.json_request('/api/marts/check', {'name': 'orders'})[0], 404)
+
+    def test_mart_schedule_owner_version_and_watch_tables_without_execution(self):
+        definition = dict(name='watched', sql='SELECT * FROM iceberg.raw.orders',
+                          watch_tables=['ICEBERG.RAW.ORDERS', 'iceberg.raw.orders'])
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ,
+                SHIROKUMA_STATE_DIR=temporary, SHIROKUMA_AUTH_MODE='local', SHIROKUMA_AUTH_FILE=''), \
+                patch.object(wb.bears_resident, 'WAP_REGISTRY', Path(temporary) / 'wap_models.json'), \
+                patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')), \
+                patch.object(wb.warehouse_resident, 'execute') as execute:
+            code, saved = self.json_request('/api/marts/save', definition)
+            self.assertEqual(code, 200, saved)
+            mart = saved['mart']
+            self.assertEqual(mart['watch_tables'], ['iceberg.raw.orders'])
+            payload = dict(name='watched', version=mart['version'], enabled=True, every_minutes=1)
+            self.assertEqual(self.json_request('/api/marts/schedule', {**payload, 'version': 999999})[0], 409)
+            with patch.object(wb.request_auth, 'authenticate', return_value=('bob', 'admin')):
+                self.assertEqual(self.json_request('/api/marts/schedule', payload)[0], 403)
+                self.assertEqual(self.json_request('/api/marts/schedule', dict(name='watched', enabled=False))[0], 403)
+            code, result = self.json_request('/api/marts/schedule', payload)
+            self.assertEqual(code, 200, result)
+            self.assertTrue(result['schedule']['enabled'])
+            code, result = self.json_request('/api/marts/schedule', dict(name='watched', enabled=False))
+            self.assertEqual(code, 200, result)
+            self.assertFalse(result['schedule']['enabled'])
+            for watch in ('iceberg.raw.orders', ['iceberg.marts.orders'], ['iceberg.raw.orders; DROP TABLE x'], [1]):
+                self.assertEqual(self.json_request('/api/marts/save', {**definition, 'name': 'invalid', 'watch_tables': watch})[0], 400)
+            code, manual = self.json_request('/api/marts/save', dict(name='manual_only', sql='SELECT 1 AS id'))
+            self.assertEqual(code, 200, manual)
+            self.assertEqual(manual['mart']['watch_tables'], [])
+            self.assertEqual(self.json_request('/api/marts/schedule', dict(name='manual_only', enabled=True,
+                version=manual['mart']['version'], every_minutes=1))[0], 400)
+            execute.assert_not_called()
 
     def test_stage_export_routes_and_strict_payloads(self):
         payload = dict(name='orders', table='iceberg.raw.orders', format='csv', file='orders.csv', version='revision-1')
