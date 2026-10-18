@@ -112,7 +112,16 @@ def configure_auto_chill(minutes: int):
     global _AUTO_CHILL_MINUTES
     if type(minutes) is not int or not 0 <= minutes <= 1440:
         raise ValueError('minutes must be an integer between 0 and 1440')
-    _AUTO_CHILL_MINUTES = minutes
+    path = activity_path().with_name('auto_chill.json')
+    temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
+    with _ACTIVITY_LOCK:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text(json.dumps({'auto_chill_minutes': minutes}), encoding='utf-8')
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        _AUTO_CHILL_MINUTES = minutes
     touch_activity()
     if minutes > 0:
         start_auto_chill_daemon()
@@ -120,22 +129,46 @@ def configure_auto_chill(minutes: int):
         stop_auto_chill_daemon()
     return auto_chill_status()
 
+def initialize_auto_chill():
+    """Load the saved setting and resume idle checks when a server starts."""
+    global _AUTO_CHILL_MINUTES
+    try:
+        minutes = json.loads(activity_path().with_name('auto_chill.json').read_text())['auto_chill_minutes']
+        if type(minutes) is not int or not 0 <= minutes <= 1440:
+            raise ValueError('invalid auto-chill minutes')
+    except FileNotFoundError:
+        minutes = 0
+    except (OSError, ValueError, KeyError, TypeError):
+        logging.getLogger(__name__).warning('Unable to load auto-chill setting; disabling auto-chill')
+        minutes = 0
+    with _ACTIVITY_LOCK:
+        _AUTO_CHILL_MINUTES = minutes
+    if minutes > 0:
+        start_auto_chill_daemon()
+    else:
+        stop_auto_chill_daemon()
+
 
 def check_auto_chill(size='LOCAL'):
     chilled = False
+    last_activity = read_last_activity()
     if (_AUTO_CHILL_MINUTES > 0 and
-            time.time() - read_last_activity() >= _AUTO_CHILL_MINUTES * 60 and
+            time.time() - last_activity >= _AUTO_CHILL_MINUTES * 60 and
             status(size)['replicas'] > 0):
         with trino() as url:
             count = execute(url,
-                "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
+                "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'WAITING_FOR_RESOURCES', 'DISPATCHING', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
                 "AND query NOT LIKE '%system.runtime.queries%'",
                 {'X-Trino-User': 'shirokuma-warehouse'})['rows'][0][0]
         if count > 0:
             touch_activity()
             return dict(chilled=False, active_queries=count, **auto_chill_status())
-        transition('chill', size)
-        chilled = True
+        with _ACTIVITY_LOCK:
+            latest = read_last_activity()
+            if (_AUTO_CHILL_MINUTES > 0 and latest == last_activity and
+                    time.time() - latest >= _AUTO_CHILL_MINUTES * 60):
+                transition('chill', size)
+                chilled = True
     return dict(chilled=chilled, **auto_chill_status())
 
 
@@ -558,6 +591,7 @@ def check_bi_policy(sql: str, user: str) -> str:
 def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
     """Serve Trino's client protocol, keeping result/cancel URLs on this endpoint."""
     size = globals()['warehouse'](warehouse)
+    initialize_auto_chill()
     hop_headers = {'connection', 'keep-alive', 'proxy-authenticate',
                    'proxy-authorization', 'te', 'trailer', 'transfer-encoding',
                    'upgrade', 'host', 'content-length'}
@@ -641,8 +675,13 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                 host, actual_port = self.server.server_address[:2]
                 endpoint = os.environ.get('TRINO_ADVERTISED_URL')
                 if not endpoint:
-                    authority = self.headers.get('X-Forwarded-Host') or self.headers.get('Host')
-                    proto = self.headers.get('X-Forwarded-Proto', 'http')
+                    authority = self.headers.get('Host')
+                    trust_forwarded = (not authority or os.environ.get(
+                        'TRINO_TRUST_FORWARDED_HEADERS', '').lower() in {'1', 'true', 'yes', 'on'})
+                    proto = 'http'
+                    if trust_forwarded:
+                        authority = self.headers.get('X-Forwarded-Host') or authority
+                        proto = self.headers.get('X-Forwarded-Proto', 'http')
                     endpoint = f'{proto}://{authority}' if authority else f'http://{host}:{actual_port}'
                 endpoint = endpoint.rstrip('/')
 

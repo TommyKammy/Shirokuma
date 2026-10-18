@@ -394,6 +394,7 @@ def main(argv=None):
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args(argv)
     with HTTPServer((args.host, args.port), WorkbenchHandler) as server:
+        warehouse_resident.initialize_auto_chill()
         print(f"Shirokuma Workbench: http://{args.host}:{server.server_port}", flush=True)
         try:
             with contextlib.ExitStack() as stack:
@@ -404,6 +405,8 @@ def main(argv=None):
                 server.serve_forever()
         except KeyboardInterrupt:
             pass
+        finally:
+            warehouse_resident.stop_auto_chill_daemon()
 
 
 if __name__ == "__main__":

@@ -87,7 +87,9 @@ def backup(output_path=None, include_tables=True):
         source = state_dir() / name
         if source.exists():
             files['state/' + name] = source.read_bytes()
-    for source in sorted(MODELS_DIR.rglob('*.sql')):
+    for source in sorted(MODELS_DIR.rglob('*')):
+        if not source.is_file() or source.suffix not in {'.sql', '.yml', '.yaml'}:
+            continue
         files['models/' + source.relative_to(MODELS_DIR).as_posix()] = source.read_bytes()
     catalog, tables = _catalog(include_tables)
     files.update(catalog)
@@ -150,6 +152,27 @@ def _validated_files(archive_path):
         raise BackupError('Invalid backup archive or manifest') from exc
 
 
+def _data_literal(value, sql_type):
+    """Render Trino JSON result values with their original column type."""
+    if value is None:
+        return 'NULL'
+    if isinstance(value, bool):
+        return 'TRUE' if value else 'FALSE'
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return 'CAST(' + warehouse.literal(value) + ' AS ' + sql_type + ')'
+    if isinstance(value, list) and sql_type.lower().startswith('array('):
+        element_type = sql_type[6:-1]
+        elements = ', '.join(_data_literal(item, element_type) for item in value)
+        return 'CAST(ARRAY[' + elements + '] AS ' + sql_type + ')'
+    if isinstance(value, (list, dict)):
+        # Trino supports casting JSON arrays/objects to typed MAP and ROW values.
+        return ('CAST(json_parse(' + warehouse.literal(json.dumps(value, ensure_ascii=False)) +
+                ') AS ' + sql_type + ')')
+    raise BackupError('Unsupported data value for type: ' + sql_type)
+
+
 def _warehouse_plan(files, manifest):
     """Prepare SQL before any writes, using manifest names rather than filenames."""
     schemas, tables, data, statements = [], [], [], []
@@ -181,17 +204,7 @@ def _warehouse_plan(files, manifest):
                     raise BackupError('Data column count mismatch: ' + entry['data'])
                 cells = []
                 for value, column in zip(row, columns):
-                    if value is None:
-                        cell = 'NULL'
-                    elif isinstance(value, bool):
-                        cell = 'TRUE' if value else 'FALSE'
-                    elif isinstance(value, (int, float)):
-                        cell = str(value)
-                    elif isinstance(value, str):
-                        cell = 'CAST(' + warehouse.literal(value) + ' AS ' + column['type'] + ')'
-                    else:
-                        raise BackupError('Unsupported data value: ' + entry['data'])
-                    cells.append(cell)
+                    cells.append(_data_literal(value, column['type']))
                 values.append('(' + ', '.join(cells) + ')')
             statements.append('INSERT INTO ' + table + ' (' + column_sql + ') VALUES ' + ', '.join(values))
     return schemas, tables, data, statements
@@ -224,8 +237,23 @@ def restore(archive_path, target_state_dir=None, dry_run=False, restore_warehous
     if not dry_run:
         if restore_warehouse:
             with warehouse.trino() as url:
+                views = []
                 for statement in statements:
+                    if re.match(r'^CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\b', statement, re.I):
+                        views.append(statement)
+                        continue
                     warehouse.execute(url, statement, {'X-Trino-User': 'shirokuma-restore'})
+                while views:
+                    pending, failure = [], None
+                    for statement in views:
+                        try:
+                            warehouse.execute(url, statement, {'X-Trino-User': 'shirokuma-restore'})
+                        except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+                            pending.append(statement)
+                            failure = exc
+                    if len(pending) == len(views):
+                        raise BackupError('Unable to restore dependent views: ' + str(failure)) from failure
+                    views = pending
         for destination, data in restored:
             destination.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:

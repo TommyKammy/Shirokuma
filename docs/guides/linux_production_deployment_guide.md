@@ -169,7 +169,8 @@ python3 tools/local_experiment/disaster_recovery.py backup --output /var/lib/shi
 The default creates a uniquely timestamped `.tar.gz` under
 `$SHIROKUMA_STATE_DIR/backups`. Archives contain `manifest.json`, SHA256 checksums
 for every payload file, existing `wap_models.json` and `ai_config.json` in
-`state/`, recursive dbt SQL models in `models/`, schema/table/view DDL in
+`state/`, recursive dbt SQL models and YAML schemas/tests (`*.sql`, `*.yml`,
+`*.yaml`) in `models/`, schema/table/view DDL in
 `catalog/`, and optional full table results in `data/`. The manifest maps table
 names to DDL/data paths; data JSON retains Trino column metadata and row values.
 `--no-tables` omits rows while retaining definitions. Missing application state
@@ -213,20 +214,35 @@ corruption, not malicious replacement; protect archive provenance separately.
 3. Run the same command without `--dry-run`. Every archive member and checksum
    is validated before any writes. Corruption, missing/extra files, duplicate
    members, links or traversal paths fail closed. State is restored into the
-   target directory; model SQL is restored into the checkout's
+   target directory; model SQL and YAML are restored into the checkout's
    `tools/local_experiment/dataops/dbt_persistent/models`, including nested paths.
    The service user needs write permission there during recovery. Existing
    matching files are replaced; unrelated files are retained. Omit
    `--target-dir` to use `SHIROKUMA_STATE_DIR` (default `var/shirokuma`).
-4. Catalog DDL and data remain in the validated archive; the restore command
-   does not execute SQL or insert rows. If native storage/catalog backups were
-   restored together, verify existing tables instead of recreating them. For
-   logical recovery into a new catalog, read `manifest.tables`, review the
-   `catalog/*/schema.sql` location properties for the new storage, apply schemas
-   then base table DDL, load each table's `data` JSON using a type-aware Trino
-   client and explicit column types, and finally create dependent views. Review
-   original table locations before DDL replay to avoid writing into old data.
-   JSON exports are logical row copies, not Iceberg metadata replacements.
+4. For full logical warehouse recovery into an empty catalog, add
+   `--restore-warehouse` to both the dry run and the actual restore:
+
+   ```sh
+   python3 tools/local_experiment/disaster_recovery.py restore --input /secure/backup.tar.gz --target-dir /var/lib/shirokuma --restore-warehouse --dry-run
+   python3 tools/local_experiment/disaster_recovery.py restore --input /secure/backup.tar.gz --target-dir /var/lib/shirokuma --restore-warehouse
+   ```
+
+   Trino must be awake and reachable using the service environment's
+   `KUBE_CONTEXT`, `KUBE_NAMESPACE` and kubeconfig. The `iceberg` catalog, Polaris
+   and object storage must be configured and writable, and `shirokuma-restore`
+   must have schema/table/view creation and insert permissions. Review archived
+   schema/table location properties before replay to avoid writing into old data.
+   A full data recovery requires a backup made without `--no-tables`.
+   The dry run validates and prepares SQL without connecting or writing.
+   Actual recovery validates the bundle, creates schemas and base tables, inserts
+   logical rows in batches using column types (including ARRAY, MAP and ROW), then
+   creates views in repeated passes to resolve view-on-view dependencies. It
+   finally restores application state and dbt SQL/YAML files. Unresolved views
+   fail recovery. SQL replay is not transactional: inspect partial results before
+   retrying, since existing table DDL or duplicate inserts can prevent safe replay.
+   Without `--restore-warehouse`, only state/model files are restored. If native
+   storage/catalog backups were restored together, verify existing tables instead
+   of replaying DDL/data. Logical row copies do not recover Iceberg snapshot history.
 5. Compare row counts, representative values, models and WAP state with the
    source recovery point. Restart services, run `shirokuma doctor` with the
    replacement kubeconfig, run SQL read/write smoke checks and verify AgentHouse

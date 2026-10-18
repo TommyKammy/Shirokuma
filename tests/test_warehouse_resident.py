@@ -28,6 +28,7 @@ class ResidentWarehouseTests(unittest.TestCase):
         advertised = patch.dict(w.os.environ)
         advertised.start()
         w.os.environ.pop('TRINO_ADVERTISED_URL', None)
+        w.os.environ.pop('TRINO_TRUST_FORWARDED_HEADERS', None)
         self.addCleanup(advertised.stop)
 
     def test_three_tier_role_resolution(self):
@@ -226,13 +227,18 @@ class ResidentWarehouseTests(unittest.TestCase):
     def test_endpoint_host_and_advertised_url_rewriting(self):
         uri = 'http://backend:8080/v1/statement/q/1?token=abc#fragment'
         payload = dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), uri)
-        cases = [({'Host': 'localhost:18080'}, '', 'http://localhost:18080'),
+        cases = [({'Host': 'localhost:18080'}, '', '', 'http://localhost:18080'),
                  ({'Host': 'internal:8080', 'X-Forwarded-Host': 'proxy.example:443',
-                   'X-Forwarded-Proto': 'https'}, '', 'https://proxy.example:443'),
+                   'X-Forwarded-Proto': 'https'}, '', '', 'http://internal:8080'),
+                 ({'Host': 'internal:8080', 'X-Forwarded-Host': 'proxy.example:443',
+                   'X-Forwarded-Proto': 'https'}, '', 'true', 'https://proxy.example:443'),
+                 ({'Host': '', 'X-Forwarded-Host': 'proxy.example:443',
+                   'X-Forwarded-Proto': 'https'}, '', '', 'https://proxy.example:443'),
                  ({'Host': 'localhost:18080', 'X-Forwarded-Host': 'proxy.example'},
-                  'https://trino.example/trino/', 'https://trino.example/trino')]
-        for headers, advertised, base in cases:
-            with self.subTest(base=base), patch.dict(w.os.environ, {'TRINO_ADVERTISED_URL': advertised}):
+                  'https://trino.example/trino/', 'true', 'https://trino.example/trino')]
+        for headers, advertised, trust, base in cases:
+            with self.subTest(base=base), patch.dict(w.os.environ, {
+                    'TRINO_ADVERTISED_URL': advertised, 'TRINO_TRUST_FORWARDED_HEADERS': trust}):
                 code, response_headers, page, *_ = self.endpoint_request(
                     'POST', '/v1/statement', 'SELECT 1', headers, payload=payload, location=uri)
                 self.assertEqual(code, 200)
@@ -473,11 +479,11 @@ class ResidentWarehouseTests(unittest.TestCase):
                 self.assertEqual(w._LAST_ACTIVITY, 100)
                 transition.assert_not_called()
                 self.assertEqual(execute.call_args.args[1],
-                    "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
+                    "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'WAITING_FOR_RESOURCES', 'DISPATCHING', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
                     "AND query NOT LIKE '%system.runtime.queries%'")
 
     def test_auto_chill_protects_all_active_states(self):
-        for state in ('QUEUED', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING'):
+        for state in ('QUEUED', 'WAITING_FOR_RESOURCES', 'DISPATCHING', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING'):
             w.activity_path().unlink(missing_ok=True)
             def active_count(url, sql, headers):
                 # Emulate a runtime table containing one query in this state.
@@ -491,6 +497,38 @@ class ResidentWarehouseTests(unittest.TestCase):
                  patch.object(w, 'transition') as transition:
                 self.assertEqual(w.check_auto_chill()['active_queries'], 1)
                 transition.assert_not_called()
+
+    def test_auto_chill_activity_during_poll_aborts_chill(self):
+        def poll(*args):
+            # A CLI or endpoint request completes while Trino is being polled.
+            w.touch_activity()
+            return {'rows': [[0]]}
+        with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
+             patch.object(w.time, 'time', return_value=100), \
+             patch.object(w, 'status', return_value={'replicas': 1}), \
+             patch.object(w, 'trino', return_value=nullcontext('url')), \
+             patch.object(w, 'execute', side_effect=poll), \
+             patch.object(w, 'transition') as transition:
+            self.assertFalse(w.check_auto_chill()['chilled'])
+            transition.assert_not_called()
+
+    def test_auto_chill_settings_survive_initialization(self):
+        with patch.object(w, '_AUTO_CHILL_MINUTES', 0), \
+             patch.object(w, 'start_auto_chill_daemon') as start, \
+             patch.object(w, 'stop_auto_chill_daemon') as stop:
+            for minutes in (17, 0):
+                w.configure_auto_chill(minutes)
+                w._AUTO_CHILL_MINUTES = 999
+                start.reset_mock()
+                stop.reset_mock()
+                w.initialize_auto_chill()
+                self.assertEqual(w.auto_chill_status()['auto_chill_minutes'], minutes)
+                (start if minutes else stop).assert_called_once_with()
+            path = w.activity_path().with_name('auto_chill.json')
+            for invalid in ('invalid json', '{"auto_chill_minutes": true}', '{"auto_chill_minutes": -1}'):
+                path.write_text(invalid)
+                w.initialize_auto_chill()
+                self.assertEqual(w._AUTO_CHILL_MINUTES, 0)
 
     def test_cross_process_activity_and_idle_seconds(self):
         with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100):

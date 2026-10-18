@@ -113,6 +113,64 @@ class DisasterRecoveryTests(unittest.TestCase):
         self.assertNotIn('state/ai_config.json', result['files'])
         self.assertFalse(any(c.args[1].startswith('SELECT *') for c in self.execute.call_args_list))
 
+    def test_dbt_yaml_round_trip(self):
+        contents = {'nested/schema.yml': b'version: 2\nmodels: []\n',
+                    'sources.yaml': b'version: 2\nsources: []\n'}
+        for name, data in contents.items():
+            (self.models / name).write_bytes(data)
+        result = self.create()
+        for name in contents:
+            self.assertIn('models/' + name, result['files'])
+            (self.models / name).unlink()
+        dr.restore(self.archive)
+        for name, data in contents.items():
+            self.assertEqual((self.models / name).read_bytes(), data)
+
+    def test_complex_data_restore(self):
+        types = ['array(bigint)', 'array(array(varchar))', 'map(varchar, array(bigint))',
+                 'row(label varchar, count bigint)', 'array(bigint)', 'array(bigint)']
+        row = [[1, None, 3], [["it's"], []], {'items': [2, None]}, ['ok', 4], [], None]
+        payload = dr._json(dict(columns=[dict(name='c' + str(i), type=t)
+                                        for i, t in enumerate(types)], rows=[row]))
+        files = {'table.sql': b'CREATE TABLE iceberg.raw.complex (c0 array(bigint))',
+                 'data.json': payload}
+        manifest = {'tables': [dict(catalog='iceberg', schema='raw', table='complex',
+                                   type='BASE TABLE', ddl='table.sql', data='data.json')]}
+        with patch.object(dr, '_validated_files', return_value=(files, manifest)):
+            result = dr.restore(self.archive, restore_warehouse=True)
+        self.assertEqual(result['rows_restored'], 1)
+        insert = self.execute.call_args.args[1]
+        self.assertIn('CAST(ARRAY[1, NULL, 3] AS array(bigint))', insert)
+        self.assertIn("CAST(ARRAY[CAST(ARRAY[CAST('it''s' AS varchar)] AS array(varchar)), "
+                      'CAST(ARRAY[] AS array(varchar))] AS array(array(varchar)))', insert)
+        self.assertIn('CAST(json_parse(\'{"items": [2, null]}\') AS map(varchar, array(bigint)))', insert)
+        self.assertIn('CAST(json_parse(\'["ok", 4]\') AS row(label varchar, count bigint))', insert)
+        self.assertIn('CAST(ARRAY[] AS array(bigint)), NULL)', insert)
+
+    def test_view_dependencies_retry_until_resolved(self):
+        files = {name + '.sql': ('CREATE VIEW ' + name + ' AS SELECT 1').encode()
+                 for name in ('third', 'second', 'first')}
+        manifest = {'tables': [dict(catalog='iceberg', schema='raw', table=name,
+                                   type='VIEW', ddl=name + '.sql')
+                               for name in ('third', 'second', 'first')]}
+        created = []
+        def execute(url, sql, headers):
+            name = sql.split()[2]
+            dependency = {'third': 'second', 'second': 'first'}.get(name)
+            if dependency and dependency not in created:
+                raise RuntimeError('View not found: ' + dependency)
+            created.append(name)
+        self.execute.side_effect = execute
+        with patch.object(dr, '_validated_files', return_value=(files, manifest)):
+            dr.restore(self.archive, restore_warehouse=True)
+        self.assertEqual(created, ['first', 'second', 'third'])
+        self.execute.side_effect = RuntimeError('Missing dependency')
+        self.execute.reset_mock()
+        with patch.object(dr, '_validated_files', return_value=(files, manifest)), \
+             self.assertRaisesRegex(dr.BackupError, 'Unable to restore dependent views'):
+            dr.restore(self.archive, restore_warehouse=True)
+        self.assertEqual(self.execute.call_count, 3)
+
     def test_restore_warehouse_ddl_and_data(self):
         self.create()
         self.execute.reset_mock()
