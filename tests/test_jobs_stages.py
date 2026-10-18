@@ -157,7 +157,7 @@ class StagesTests(unittest.TestCase):
             self.assertEqual(self.done(run['id'])['status'], 'success')
         self.assertEqual(ingest.call_args.kwargs['table'], 'iceberg.marts.new_target')
 
-    def test_worker_snapshot_no_saved_jobs_and_repeat_is_intentional(self):
+    def test_worker_snapshot_no_saved_jobs_and_semantic_change_allows_new_import(self):
         entered, release = threading.Event(), threading.Event()
         def ingest(*args, **kwargs):
             entered.set()

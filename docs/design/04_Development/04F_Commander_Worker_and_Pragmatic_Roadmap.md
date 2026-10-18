@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-18
-version: "1.8"
+version: "1.9"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -236,3 +236,12 @@ L0〜L6 に分散していた「局所的な実験スクリプト群」を整理
 構成、操作、API、検証結果は [ローカルステージガイド](../../guides/local_stages.md) を参照する。
 SQLite・取込処理・Workbenchを再利用し、追加サービスやライブラリは導入しない。
 定期確認・処理済みファイルの自動除外はPhase 18.2、ファイル出力はPhase 18.3の対象とする。
+
+### Phase 18.2: ステージの定期確認・自動取込・重複取込防止【2026-10-18】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P18-002** | 定期確認・内容単位の取込台帳 | 既存スケジューラで未処理ファイルを最大10件ずつ取り込み、成功済み・結果不明の自動再取込を防ぐ。権限・設定変更・再起動・復元・実機連携を検証する。 | **Completed (2026-10-18)** |
+
+ステージ設定・取込台帳・予定は既存SQLiteに置き、追加サービスや依存ライブラリは導入しない。
+構成と運用上の境界は [ローカルステージガイド](../../guides/local_stages.md) に記録する。

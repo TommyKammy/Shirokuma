@@ -35,7 +35,7 @@ POST_ROUTES = {path: EDIT_ROLES for path in (
 POST_ROUTES.update({path: ALL_ROLES for path in (
     '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
 POST_ROUTES.update({path: {'admin'} for path in ('/api/ai/config', '/api/ai/test')})
-POST_ROUTES.update({path: {'admin'} for path in ('/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import')})
+POST_ROUTES.update({path: {'admin'} for path in ('/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import', '/api/stages/schedule', '/api/stages/scan')})
 POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail', '/api/jobs/schedule', '/api/alerts/ack')})
 
 
@@ -289,9 +289,27 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     if not {'name', 'directory', 'table', 'mode', 'format'} <= set(body) or set(body) - {'name', 'directory', 'table', 'mode', 'format', 'key'}:
                         raise ValueError('invalid stage definition fields')
                     result = {'stage': stages_resident.save_stage(body, self.authenticated_user or 'local', role)}
+                elif path == '/api/stages/schedule':
+                    fields = {'name', 'enabled'}
+                    if (not fields <= set(body) or set(body) - fields - {'every_minutes', 'version'}
+                            or not isinstance(body.get('name'), str) or not body['name']
+                            or type(body.get('enabled')) is not bool
+                            or (body['enabled'] and ('every_minutes' not in body or not isinstance(body.get('version'), str) or not body['version']))
+                            or ('version' in body and (not isinstance(body['version'], str) or not body['version']))
+                            or ('every_minutes' in body and (type(body['every_minutes']) is not int or not 1 <= body['every_minutes'] <= 10080))):
+                        raise ValueError('invalid stage schedule fields')
+                    result = {'schedule': stages_resident.save_schedule(body, self.authenticated_user or 'local', role)}
+                elif path == '/api/stages/scan':
+                    if set(body) != {'name', 'version'} or any(not isinstance(body[key], str) or not body[key] for key in ('name', 'version')):
+                        raise ValueError('invalid stage scan fields')
+                    self.respond({'run': stages_resident.submit_scan(body['name'], self.authenticated_user or 'local', role, body['version'])}, 202)
+                    return
                 elif path in {'/api/stages/files', '/api/stages/preview', '/api/stages/import'}:
                     fields = {'name'} if path.endswith('/files') else {'name', 'file', 'version'}
-                    if set(body) != fields or any(not isinstance(body[key], str) or not body[key] for key in fields):
+                    optional = {'retry'} if path.endswith('/import') else set()
+                    if (not fields <= set(body) or set(body) - fields - optional
+                            or any(not isinstance(body[key], str) or not body[key] for key in fields)
+                            or ('retry' in body and type(body['retry']) is not bool)):
                         raise ValueError('invalid stage request fields')
                     actor = self.authenticated_user or 'local'
                     if path.endswith('/files'):
@@ -299,7 +317,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     elif path.endswith('/preview'):
                         result = stages_resident.preview_file(body['name'], body['file'], body['version'], actor, role)
                     else:
-                        result = {'run': stages_resident.submit_import(body['name'], body['file'], body['version'], actor, role)}
+                        retry = {'retry': body['retry']} if 'retry' in body else {}
+                        result = {'run': stages_resident.submit_import(body['name'], body['file'], body['version'], actor, role, **retry)}
                         self.respond(result, 202)
                         return
                 elif path == '/api/jobs/save':

@@ -74,8 +74,8 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <div id="ingest-error" class="error" role="alert" hidden></div><pre id="ingest-result" aria-label="Ingestion audit summary" hidden></pre>
 </div></div>
 <div id="stages-area" class="panel" hidden aria-labelledby="stages-title"><div class="panel-head"><h2 id="stages-title">Local stages</h2><div class="toolbar"><button id="stages-refresh" type="button">Refresh stages</button><button id="stage-new" type="button">New stage</button></div></div><div class="panel-body">
-<p class="muted">A stage uses a folder on the Workbench server host. It does not upload a browser folder. Files are imported only when you choose Import.</p>
-<p class="muted">CSV, JSONL and Parquet files up to 25 MiB. No automatic watching or duplicate detection.</p>
+<p class="muted">A stage uses a folder on the Workbench server host. Automatic ingestion starts disabled.</p>
+<p class="muted">Files up to 25 MiB must remain unchanged for 30 seconds. Each scan imports at most 10 unseen files. Scheduled checks require the Workbench server to be running.</p>
 <div id="stages-list" class="table-wrap" aria-live="polite">No stages loaded.</div>
 <h3>Stage definition</h3><form id="stage-form"><div class="job-fields">
 <div><label for="stage-name">Stage name</label><input id="stage-name" required maxlength="48" pattern="[a-z][a-z0-9_-]{0,47}" placeholder="sales-files"></div>
@@ -86,10 +86,16 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <div><label for="stage-key">Upsert key columns (required for upsert)</label><input id="stage-key" placeholder="order_id" aria-describedby="ingest-key-help"></div>
 </div><button id="stage-save" type="submit">Save stage</button></form>
 <p id="stage-state" role="status" aria-live="polite">Choose or save a stage.</p><div id="stage-error" class="error" role="alert" hidden></div>
+<p id="stage-legacy-notice" class="muted" hidden>Earlier imports have no duplicate-detection record. Check imported files, move them out of the source folder, then register a new stage name.</p><div id="stage-schedule-area" hidden><h3>Automatic ingestion</h3>
+<p class="muted">Automatic ingestion supports append and upsert. Replace is available through single-file import.</p>
+<form id="stage-schedule-form" novalidate><label for="stage-schedule-minutes">Interval (minutes)</label><input id="stage-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled>
+<label class="job-enable-label" for="stage-schedule-enabled"><input id="stage-schedule-enabled" type="checkbox" disabled> Enable automatic ingestion</label>
+<div class="toolbar"><button id="stage-schedule-save" type="submit" disabled>Save schedule</button><button id="stage-schedule-stop" type="button" disabled>Stop automatic ingestion</button><button id="stage-scan" type="button" disabled>Check and ingest now</button></div></form>
+<div id="stage-schedule-state" role="status" aria-live="polite"></div></div>
 <div id="stage-files-area" hidden><h3 id="stage-files-title">Stage files</h3><button id="stage-files-refresh" type="button">Refresh files</button><div id="stage-files" class="table-wrap" aria-live="polite"></div>
 <label for="stage-file">File to import</label><select id="stage-file" aria-describedby="stage-confirmation"><option value="">Choose a file</option></select>
 <div class="toolbar"><button id="stage-preview-button" type="button" disabled>Preview file</button><button id="stage-import" type="button" class="primary" disabled>Import</button></div>
-<p id="stage-confirmation" role="status" aria-live="polite">Preview a file before importing.</p><p id="stage-append-notice" class="muted" hidden>Each manual append imports the rows again, including files imported earlier.</p><div id="stage-preview" aria-live="polite"></div></div>
+<p id="stage-confirmation" role="status" aria-live="polite">Preview a file before importing.</p><p id="stage-append-notice" class="muted" hidden>Successfully imported content is skipped, even after a file is renamed. Failed or uncertain imports need explicit confirmation before retry.</p><p id="stage-file-status" role="status" aria-live="polite"></p><label id="stage-retry-area" class="job-enable-label" hidden for="stage-retry"><input id="stage-retry" type="checkbox"> The target may already contain these rows. I checked the destination and want to retry this file.</label><div id="stage-preview" aria-live="polite"></div></div>
 <button id="stage-view-run" type="button" hidden>View run history</button>
 </div></div>
 </section>
@@ -157,11 +163,33 @@ const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+ 'Earlier imports have no duplicate-detection record. Check imported files, move them out of the source folder, then register a new stage name.':'以前の取込履歴には重複判定情報がありません。取込済みファイルを確認して対象フォルダから移し、新しいステージ名で登録してください。',
+ 'Automatic ingestion':'自動取込',
+ 'Automatic ingestion supports append and upsert. Replace is available through single-file import.':'自動取込は追加・更新に対応します。全件置換はファイルを 1 件ずつ確認して実行してください。',
+ 'Enable automatic ingestion':'自動取込を有効にする',
+ 'Stop automatic ingestion':'自動取込を停止',
+ 'Check and ingest now':'今すぐ確認・取込',
+ 'The target may already contain these rows. I checked the destination and want to retry this file.':'取込先にすでに行が存在する可能性があります。取込先を確認したうえで、このファイルを再実行します。',
+ 'Ingestion status':'取込状態',
+ 'Not imported':'未取込',
+ 'Already imported':'取込済み',
+ 'Outcome unknown':'結果不明',
+ 'Schedule saved.':'定期確認の設定を保存しました。',
+ 'Automatic ingestion stopped.':'自動取込を停止しました。',
+ 'Scan queued.':'確認・取込を受け付けました。',
+ 'Interval must be an integer from 1 to 10080 minutes.':'間隔には 1〜10080 分の整数を入力してください。',
+ 'Next check':'次回確認',
+ 'Last check':'前回の確認',
+ 'Automatic ingestion is off.':'自動取込は無効です。',
+ 'Waiting for next check':'次回確認を待機中',
+ 'Submitting scan…':'確認・取込を受け付け中…',
+ 'Retry file':'ファイルを再実行',
+ 'Scan stage':'ステージを確認・取込',
  'Local stages':'ローカルステージ', 'Automatic':'自動判定',
  'Refresh stages':'ステージを更新',
  'New stage':'ステージを登録',
- 'A stage uses a folder on the Workbench server host. It does not upload a browser folder. Files are imported only when you choose Import.':'Workbench サーバーが動くホスト上のフォルダーを登録します。ブラウザからのフォルダーアップロードではありません。「取り込む」を押すと取込を開始します。',
- 'CSV, JSONL and Parquet files up to 25 MiB. No automatic watching or duplicate detection.':'25 MiB 以下の CSV・JSONL・Parquet が対象です。自動監視や重複判定は行いません。',
+ 'A stage uses a folder on the Workbench server host. Automatic ingestion starts disabled.':'Workbench サーバーが動くホスト上のフォルダーを登録します。自動取込は初期状態では無効です。',
+ 'Files up to 25 MiB must remain unchanged for 30 seconds. Each scan imports at most 10 unseen files. Scheduled checks require the Workbench server to be running.':'25 MiB 以下で、30 秒間変更されていないファイルが対象です。1 回の確認で未取込ファイルを最大 10 件取り込みます。定期確認には Workbench サーバーの稼働が必要です。',
  'No stages loaded.':'ステージはまだ読み込まれていません。',
  'Stage definition':'ステージの設定',
  'Stage name':'ステージ名',
@@ -176,7 +204,7 @@ const i18n = {ja: {
  'Preview file':'ファイルをプレビュー',
  'Import':'取り込む',
  'Preview a file before importing.':'取込前にファイルをプレビューしてください。',
- 'Each manual append imports the rows again, including files imported earlier.':'追加モードは実行のたびに行を追加します。以前取り込んだファイルを再実行すると、同じ行が再び追加されます。',
+ 'Successfully imported content is skipped, even after a file is renamed. Failed or uncertain imports need explicit confirmation before retry.':'取込済みの内容はファイル名を変更しても除外します。失敗・結果不明の取込を再実行するには明示的な確認が必要です。',
  'View run history':'実行履歴を見る',
  'No saved stages.':'登録されたステージはありません。',
  'No files available.':'対象のファイルはありません。',
@@ -592,7 +620,19 @@ $('preview-ingest').onclick=()=>busy($('preview-ingest'),async()=>{message('inge
 
 let stageEntries=[],selectedStage=null,stageFiles=[],stagePreview=null,stageEpoch=0,stagePending=false,stageDirty=false,stageRunId=null;
 function stageCurrent(epoch){return currentRole==='admin'&&epoch===stageEpoch;}
-function invalidateStagePreview(){stagePreview=null;$('stage-preview').replaceChildren();ui($('stage-confirmation'),'Preview a file before importing.');$('stage-import').disabled=true;}
+function invalidateStagePreview(){stagePreview=null;$('stage-retry').checked=false;$('stage-retry-area').hidden=true;$('stage-file-status').replaceChildren();$('stage-preview').replaceChildren();ui($('stage-confirmation'),'Preview a file before importing.');$('stage-import').disabled=true;}
+function stageIngestionStatus(status){return ({new:'Not imported',queued:'Queued',running:'Running',success:'Already imported',failed:'Failed',unknown:'Outcome unknown'})[status]||status||'Not imported';}
+function stageNeedsRetry(){return ['failed','unknown'].includes(stagePreview?.ingestion_status);}
+function stageImportAllowed(){return !selectedStage?.legacy_history&&!!stagePreview&&!['success','queued','running'].includes(stagePreview.ingestion_status)&&(!stageNeedsRetry()||$('stage-retry').checked===true);}
+function renderStageSchedule(){
+ const schedule=selectedStage?.schedule;const area=$('stage-schedule-state');area.replaceChildren();
+ const state=document.createElement('p');ui(state,schedule?.enabled?'Enabled':'Automatic ingestion is off.');area.append(state);
+ for(const [label,value] of [['Next check',schedule?.next_run_at],['Last check',schedule?.last_status]]){
+  const line=document.createElement('p'),title=document.createElement('span');ui(title,label);line.append(title,': ');
+  if(label==='Next check'&&value)line.append(jobAlertTimestamp(value));else{const text=document.createElement('span');ui(text,value?(jobStatuses[value]||'Unknown'):'None recorded');line.append(text);}area.append(line);
+ }
+ if(schedule?.last_run_id){const button=actionButton('View run history',()=>{if(currentRole!=='admin')return;selectedRunId=schedule.last_run_id;activate($('tab-jobs'));});area.append(button);}
+}
 function stageControls(){
  const editable=currentRole==='admin'&&(!selectedStage||selectedStage.can_manage);
  for(const element of $('stage-form').elements)element.disabled=!editable||stagePending;
@@ -601,14 +641,22 @@ function stageControls(){
  for(const id of ['stages-refresh','stage-new','stage-files-refresh','stage-file'])$(id).disabled=stagePending||currentRole!=='admin';
  const file=stageFiles.find(file=>file.name===$('stage-file').value);
  $('stage-preview-button').disabled=stagePending||stageDirty||!selectedStage?.can_manage||!file||file.available===false;
- $('stage-import').disabled=stagePending||stageDirty||!stagePreview;
+ $('stage-import').disabled=stagePending||stageDirty||!stageImportAllowed();
+ ui($('stage-import'),stageNeedsRetry()?'Retry file':'Import');
+ $('stage-retry-area').hidden=!stageNeedsRetry();$('stage-retry').disabled=stagePending;
+ const managed=currentRole==='admin'&&selectedStage?.can_manage;
+ const automatic=managed&&!stageDirty&&!selectedStage.legacy_history&&selectedStage.definition.mode!=='replace';
+ $('stage-legacy-notice').hidden=!managed||!selectedStage.legacy_history;
+ $('stage-schedule-area').hidden=!managed;
+ for(const id of ['stage-schedule-minutes','stage-schedule-enabled','stage-schedule-save','stage-scan'])$(id).disabled=stagePending||!automatic;
+ $('stage-schedule-stop').disabled=stagePending||!managed||!selectedStage.schedule?.enabled;
  $('stage-append-notice').hidden=!selectedStage?.can_manage||selectedStage.definition.mode!=='append';
  $('stages-area').setAttribute('aria-busy',String(stagePending));
 }
 function resetStageUI(){
  if(!$('stages-area'))return;
  ++stageEpoch;stageEntries=[];selectedStage=null;stageFiles=[];stagePending=false;stageDirty=false;stageRunId=null;
- $('stages-area').hidden=currentRole!=='admin';$('stage-form').reset();$('stage-files').replaceChildren();$('stage-file').replaceChildren();$('stages-list').replaceChildren();$('stage-view-run').hidden=true;message('stage-error','');invalidateStagePreview();stageControls();
+ $('stages-area').hidden=currentRole!=='admin';$('stage-form').reset();$('stage-schedule-minutes').value='60';$('stage-schedule-enabled').checked=false;$('stage-schedule-state').replaceChildren();$('stage-files').replaceChildren();$('stage-file').replaceChildren();$('stages-list').replaceChildren();$('stage-view-run').hidden=true;message('stage-error','');invalidateStagePreview();stageControls();
  ui($('stage-state'),'Choose or save a stage.');
  if(currentRole==='admin'&&typeof activeTab!=='undefined'&&activeTab==='ingestion')loadStages();
 }
@@ -631,20 +679,31 @@ function stageDefinition(){
 function editStage(entry){
  selectedStage=entry;stageDirty=false;stageFiles=[];stageRunId=null;$('stage-view-run').hidden=true;$('stage-file').replaceChildren();$('stage-files').replaceChildren();invalidateStagePreview();
  const definition=entry?.definition||{mode:'append',format:'auto'};for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
- stageControls();
+ $('stage-schedule-minutes').value=entry?.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=entry?.schedule?.enabled===true;renderStageSchedule();stageControls();
+}
+async function refreshStageSchedule(epoch){
+ const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];
+ const entry=stageEntries.find(entry=>entry.name===selectedStage?.name);if(entry){
+  if(entry.updated_at!==selectedStage.updated_at){
+   invalidateStagePreview();stageDirty=false;
+   for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=entry.definition[key]||'';
+  }
+  selectedStage=entry;$('stage-schedule-minutes').value=entry.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=entry.schedule?.enabled===true;
+ }renderStages();renderStageSchedule();
 }
 async function fetchStageFiles(epoch){
+ await refreshStageSchedule(epoch);if(!stageCurrent(epoch))return;
  const data=await api('/api/stages/files',{name:selectedStage.name});if(!stageCurrent(epoch))return;
  stageFiles=data.files||[];invalidateStagePreview();$('stage-file').replaceChildren();
  const placeholder=document.createElement('option');placeholder.value='';ui(placeholder,'Choose a file');$('stage-file').append(placeholder);
  for(const file of stageFiles){const option=document.createElement('option');option.value=file.name;option.textContent=file.name;option.disabled=file.available===false;$('stage-file').append(option);}
  if(!stageFiles.length)ui($('stage-files'),'No files available.');
- else{table($('stage-files'),['File name','Size (bytes)','Modified','Availability'],stageFiles.map(file=>[file.name,file.size,'','']));$('stage-files').querySelectorAll('tbody tr').forEach((row,index)=>{const file=stageFiles[index];if(file.modified_at)row.cells[2].append(jobAlertTimestamp(file.modified_at));else row.cells[2].textContent='\u2014';ui(row.lastElementChild,file.available===false?'Unavailable':'Available');if(file.error)row.lastElementChild.title=file.error;});}
+ else{table($('stage-files'),['File name','Size (bytes)','Modified','Availability','Ingestion status','Actions'],stageFiles.map(file=>[file.name,file.size,'','','','']));$('stage-files').querySelectorAll('tbody tr').forEach((row,index)=>{const file=stageFiles[index];if(file.modified_at)row.cells[2].append(jobAlertTimestamp(file.modified_at));else row.cells[2].textContent='\u2014';ui(row.cells[3],file.available===false?'Unavailable':'Available');if(file.error)row.cells[3].title=file.error;ui(row.cells[4],stageIngestionStatus(file.ingestion_status));if(file.last_run_id)row.lastElementChild.append(actionButton('View run history',()=>{if(currentRole!=='admin')return;selectedRunId=file.last_run_id;activate($('tab-jobs'));}));});}
  ui($('stage-state'),'Stage files');
 }
-async function selectStage(entry){if(stagePending)return;editStage(entry);await stageTask('Loading files…',fetchStageFiles);}
+async function selectStage(entry){if(stagePending||currentRole!=='admin')return;++stageEpoch;editStage(entry);await stageTask('Loading files…',fetchStageFiles);}
 $('stages-refresh').onclick=loadStages;
-$('stage-new').onclick=()=>{if(stagePending)return;editStage(null);ui($('stage-state'),'Choose or save a stage.');$('stage-name').focus();};
+$('stage-new').onclick=()=>{if(stagePending||currentRole!=='admin')return;++stageEpoch;editStage(null);ui($('stage-state'),'Choose or save a stage.');$('stage-name').focus();};
 $('stage-form').oninput=()=>{stageDirty=true;invalidateStagePreview();ui($('stage-state'),'Save changes before previewing.');stageControls();};
 $('stage-form').onchange=$('stage-form').oninput;
 $('stage-form').onsubmit=event=>{event.preventDefault();stageTask('Working…',async epoch=>{
@@ -659,13 +718,27 @@ $('stage-preview-button').onclick=()=>stageTask('Previewing file…',async epoch
  const definition=result.stage;if(!definition||definition.name!==selection.name||!definition.table||!definition.mode)throw Error(t('Stage preview did not include its saved settings.'));
  selectedStage={...selectedStage,definition};stageEntries=stageEntries.map(entry=>entry.name===selection.name?selectedStage:entry);renderStages();
  for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
- stagePreview={...selection};const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';
+ stagePreview={...selection,ingestion_status:result.ingestion_status||file.ingestion_status||'new'};ui($('stage-file-status'),stageIngestionStatus(stagePreview.ingestion_status));const schema=document.createElement('div'),rows=document.createElement('div');schema.className=rows.className='table-wrap';
  table(schema,['Column','Inferred type'],result.columns.map(column=>[column.name,column.type]));table(rows,result.columns,result.sample_rows,false);$('stage-preview').replaceChildren(schema,rows);
  ui($('stage-confirmation'),'{file} → {table} · {mode} · {count} rows',()=>({file:selection.file,table:definition.table,mode:t(definition.mode),count:result.row_count}));ui($('stage-state'),'Ready');
 });
-$('stage-import').onclick=()=>{if(!stagePreview)return;stageTask('Submitting import…',async epoch=>{
- const selection={...stagePreview};invalidateStagePreview();const data=await api('/api/stages/import',selection);if(!stageCurrent(epoch))return;
- stageRunId=data.run.id;$('stage-view-run').hidden=false;ui($('stage-state'),'Import queued.');
+$('stage-retry').onchange=stageControls;
+$('stage-import').onclick=()=>{if(!stagePreview)return;if(stagePending||stageDirty||!stageImportAllowed())return;stageTask('Submitting import…',async epoch=>{
+ const selection={name:stagePreview.name,file:stagePreview.file,version:stagePreview.version};if(stageNeedsRetry())selection.retry=true;invalidateStagePreview();const data=await api('/api/stages/import',selection);if(!stageCurrent(epoch))return;
+ stageRunId=data.run.id;$('stage-view-run').hidden=false;for(const file of stageFiles)if(file.name===selection.file)file.ingestion_status='queued';ui($('stage-state'),'Import queued.');
+});};
+$('stage-schedule-form').onsubmit=event=>{event.preventDefault();if(stagePending||stageDirty||!selectedStage?.can_manage||selectedStage.legacy_history||selectedStage.definition.mode==='replace')return;return stageTask('Working…',async epoch=>{
+ const minutes=Number($('stage-schedule-minutes').value);if(!Number.isInteger(minutes)||minutes<1||minutes>10080)throw Error(t('Interval must be an integer from 1 to 10080 minutes.'));
+ const payload={name:selectedStage.name,every_minutes:minutes,enabled:$('stage-schedule-enabled').checked===true};if(payload.enabled)payload.version=selectedStage.updated_at;
+ const data=await api('/api/stages/schedule',payload);if(!stageCurrent(epoch))return;
+ selectedStage={...selectedStage,schedule:data.schedule};renderStageSchedule();ui($('stage-state'),'Schedule saved.');
+});};
+$('stage-schedule-stop').onclick=()=>{if(!selectedStage?.can_manage||!selectedStage.schedule?.enabled)return;return stageTask('Working…',async epoch=>{
+ const data=await api('/api/stages/schedule',{name:selectedStage.name,enabled:false});if(!stageCurrent(epoch))return;
+ selectedStage={...selectedStage,schedule:data.schedule};$('stage-schedule-enabled').checked=false;renderStageSchedule();ui($('stage-state'),'Automatic ingestion stopped.');
+});};
+$('stage-scan').onclick=()=>{if(stageDirty||!selectedStage?.can_manage||selectedStage.legacy_history||selectedStage.definition.mode==='replace')return;return stageTask('Submitting scan…',async epoch=>{
+ const data=await api('/api/stages/scan',{name:selectedStage.name,version:selectedStage.updated_at});if(!stageCurrent(epoch))return;stageRunId=data.run.id;$('stage-view-run').hidden=false;await fetchStageFiles(epoch);if(stageCurrent(epoch))ui($('stage-state'),'Scan queued.');
 });};
 $('stage-view-run').onclick=()=>{if(!stageRunId||currentRole!=='admin')return;selectedRunId=stageRunId;activate($('tab-jobs'));};
 
@@ -771,7 +844,7 @@ let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,s
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
 const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
-const jobActionLabels={sql:'Run SQL',alert:'Evaluate alert',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',stage_import:'Stage import',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
+const jobActionLabels={sql:'Run SQL',alert:'Evaluate alert',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',stage_import:'Stage import',stage_scan:'Scan stage',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
 function jobSummary(step){
  const summary=step.summary;if(!summary||typeof summary!=='object')return '\u2014';
  const parts=[],count=summary.rows_ingested??summary.row_count,models=summary.model_count??(Array.isArray(summary.models)?summary.models.length:undefined);
@@ -780,7 +853,7 @@ function jobSummary(step){
  if(typeof summary.condition_met==='boolean')parts.push(t(summary.condition_met?'Condition met':'Condition clear'));
  if(statuses[summary.alert_status])parts.push(t(statuses[summary.alert_status]));
  if(summary.alert_id)parts.push(t('Notification {id}',{id:String(summary.alert_id).slice(0,8)}));
- }else if(['ingest','stage_import'].includes(step.action)&&count!==undefined)parts.push(t('{count} rows ingested',{count}));
+ }else if(['ingest','stage_import','stage_scan'].includes(step.action)&&count!==undefined)parts.push(t('{count} rows ingested',{count}));
  else if(models!==undefined)parts.push(t(models===1?'1 model':'{count} models',{count:models}));
  else if(count!==undefined)parts.push(t(count===1?'1 result row':'{count} result rows',{count}));
  if(summary.table)parts.push(t('Target table {table}',{table:summary.table}));

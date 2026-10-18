@@ -59,17 +59,20 @@ class WorkbenchTests(unittest.TestCase):
                  ('/api/stages/save', definition, 'save_stage', (definition, 'alice', 'admin'), {'stage': definition}, definition),
                  ('/api/stages/files', {'name': 'orders'}, 'list_files', ('orders', 'alice', 'admin'), {'files': []}, {'files': []}),
                  ('/api/stages/preview', selection, 'preview_file', ('orders', 'orders.csv', 'version-1', 'alice', 'admin'), {'row_count': 3}, {'row_count': 3}),
-                 ('/api/stages/import', selection, 'submit_import', ('orders', 'orders.csv', 'version-1', 'alice', 'admin'), {'run': {'id': 'run-1'}}, {'id': 'run-1'})]
+                 ('/api/stages/import', selection, 'submit_import', ('orders', 'orders.csv', 'version-1', 'alice', 'admin'), {'run': {'id': 'run-1'}}, {'id': 'run-1'}),
+                 ('/api/stages/schedule', {'name':'orders','every_minutes':5,'enabled':True,'version':'revision-1'}, 'save_schedule', ({'name':'orders','every_minutes':5,'enabled':True,'version':'revision-1'}, 'alice', 'admin'), {'schedule':{}}, {}),
+                 ('/api/stages/schedule', {'name':'orders','enabled':False}, 'save_schedule', ({'name':'orders','enabled':False}, 'alice', 'admin'), {'schedule':{}}, {}),
+                 ('/api/stages/scan', {'name':'orders','version':'revision-1'}, 'submit_scan', ('orders','alice','admin','revision-1'), {'run':{'id':'scan-1'}}, {'id':'scan-1'})]
         with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')):
             for path, body, method, args, expected, backend in cases:
                 with self.subTest(path=path), patch.object(wb.stages_resident, method, return_value=backend) as call:
-                    self.assertEqual(self.json_request(path, body), (202 if path.endswith('/import') else 200, expected))
+                    self.assertEqual(self.json_request(path, body), (202 if path.endswith(('/import','/scan')) else 200, expected))
                     call.assert_called_once_with(*args)
 
     def test_stage_routes_reject_non_admin_before_backend(self):
         for role in ('data_engineer', 'bi_viewer'):
             with patch.object(wb.request_auth, 'authenticate', return_value=('alice', role)):
-                for path in ('/api/stages', '/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import'):
+                for path in ('/api/stages', '/api/stages/save', '/api/stages/files', '/api/stages/preview', '/api/stages/import', '/api/stages/schedule', '/api/stages/scan'):
                     with self.subTest(role=role, path=path), patch.object(wb, 'stages_resident') as stages:
                         self.assertEqual(self.json_request(path, None if path == '/api/stages' else {})[0], 403)
                         self.assertEqual(stages.mock_calls, [])
@@ -91,6 +94,26 @@ class WorkbenchTests(unittest.TestCase):
                 self.assertEqual(self.json_request('/api/stages/save', body)[0], 400)
             self.assertEqual(stages.mock_calls, [])
 
+    def test_stage_schedule_scan_retry_validation(self):
+        selection = dict(name='orders', file='orders.csv', version='v1')
+        invalid = {
+            '/api/stages/schedule': [{}, {'name':'orders','enabled':True}, {'name':'orders','enabled':True,'every_minutes':5}, {'name':'orders','enabled':True,'every_minutes':5,'version':False}, {'name':'orders','enabled':0}, {'name':'orders','enabled':False,'actor':'other'}] +
+                [{'name':'orders','enabled':True,'every_minutes':n} for n in (0,10081,True,1.5,'5',None)],
+            '/api/stages/scan': [{}, {'name':''}, {'name':'orders'}, {'name':'orders','version':''}, {'name':'orders','version':True}, {'name':'orders','version':'r1','role':'admin'}, {'name':'orders','version':'r1','table':'raw.other'}],
+            '/api/stages/import': [{**selection,'retry':value} for value in (1,'true',None,[],{})],
+            '/api/stages/preview': [{**selection,'retry':True}],
+        }
+        with patch.object(wb, 'stages_resident') as stages:
+            for path, bodies in invalid.items():
+                for body in bodies:
+                    with self.subTest(path=path, body=body):
+                        self.assertEqual(self.json_request(path, body)[0], 400)
+            self.assertEqual(stages.mock_calls, [])
+        with patch.object(wb.stages_resident, 'submit_import', return_value={'id':'retry'}) as submit:
+            for retry in (True,False):
+                self.assertEqual(self.json_request('/api/stages/import', {**selection,'retry':retry})[0], 202)
+                submit.assert_called_with('orders','orders.csv','v1','local','admin',retry=retry)
+
     def test_stage_http_errors(self):
         for error, code in [(wb.jobs_resident.JobNotFound('missing'), 404), (wb.jobs_resident.JobConflict('busy'), 409), (ValueError('changed file'), 400), (PermissionError('owner only'), 403)]:
             with self.subTest(code=code), patch.object(wb.stages_resident, 'list_files', side_effect=error):
@@ -108,14 +131,14 @@ class WorkbenchTests(unittest.TestCase):
         for identifier in ('stage-name', 'stage-directory', 'stage-table', 'stage-mode', 'stage-format', 'stage-key', 'stage-file'):
             self.assertTrue(any(node.get('for') == identifier for node in doc.nodes))
         script = next(node['text'] for node in doc.nodes if node['tag'] == 'script')
-        for text in ("epoch===stageEpoch", "stageEpoch", "invalidateStagePreview()", "if(!stagePreview)return", "stageDirty||!stagePreview", "'/api/stages/preview'", "'/api/stages/import'", "selectedRunId=stageRunId;activate($('tab-jobs'))", "stage_import:'Stage import'", "'Stage import':'ステージ取込'", "'View run history':'実行履歴を見る'"):
+        for text in ("epoch===stageEpoch", "stageEpoch", "invalidateStagePreview()", "if(!stagePreview)return", "stageDirty||!stageImportAllowed()", "'/api/stages/preview'", "'/api/stages/import'", "selectedRunId=stageRunId;activate($('tab-jobs'))", "stage_import:'Stage import'", "'Stage import':'ステージ取込'", "'View run history':'実行履歴を見る'"):
             self.assertIn(text, script)
 
     def test_stage_localized_display_and_contained_tables(self):
         html = wb.INDEX.read_text()
         doc = self.workbench_document()
         script = next(node['text'] for node in doc.nodes if node['tag'] == 'script')
-        for text in ("ui(row.cells[2],entry.definition.mode)", "jobAlertTimestamp(file.modified_at)", "mode:t(definition.mode)", "'Automatic':'自動判定'", '追加モードは実行のたびに行を追加します。'):
+        for text in ("ui(row.cells[2],entry.definition.mode)", "jobAlertTimestamp(file.modified_at)", "mode:t(definition.mode)", "'Automatic':'自動判定'", '取込済みの内容はファイル名を変更しても除外します。'):
             self.assertIn(text, script)
         format_control = doc.by_id('stage-format')
         automatic = next(node for node in doc.nodes if node.get('value') == 'auto' and format_control in node['ancestors'])
@@ -182,6 +205,87 @@ eval(HANDLERS+`
 """
         result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_stage_schedule_stop_retry_and_stale_async_behavior(self):
+        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
+        handlers += '\nconst jobStatuses=' + script.split('const jobStatuses=', 1)[1].split(';', 1)[0] + ';'
+        harness = r"""
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],querySelectorAll(){return [];},replaceChildren(){},setAttribute(){},reset(){},append(){},focus(){}};
+const uiTexts=[];const ui=(node,text)=>{uiTexts.push(text);node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
+let currentRole='admin',activeTab='warehouse',selectedRunId=null;
+const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
+const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;
+const document={createElement:()=>({append(){}})};
+eval(HANDLERS+`
+(async()=>{
+ const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',mode:'append',table:'raw.orders'},schedule:null};
+ editStage(entry);assert.equal($('stage-schedule-enabled').checked,false);
+ $('stage-schedule-minutes').value='7';$('stage-schedule-enabled').checked=true;
+ let pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
+ assert.deepEqual(calls.at(-1),{path:'/api/stages/schedule',body:{name:'orders',every_minutes:7,enabled:true,version:'revision-1'}});
+ respond({schedule:{name:'orders',enabled:true,every_minutes:7}});await pending;
+ assert.equal(selectedStage.schedule.enabled,true);assert.equal(stagePending,false);
+ // A completed check is successful even when it imports no files.
+ for(const [status,label] of [['success','Succeeded'],['failed','Failed'],['skipped','Skipped'],['unknown','Unknown outcome']]){
+  selectedStage.schedule.last_status=status;uiTexts.length=0;renderStageSchedule();assert.ok(uiTexts.includes(label));assert.ok(!uiTexts.includes('Already imported'));
+ }
+ assert.equal(stageIngestionStatus('success'),'Already imported');
+ // Stopping ignores invalid interval and unsaved definition fields.
+ $('stage-schedule-minutes').value='bad';$('stage-form').oninput();assert.equal($('stage-schedule-stop').disabled,false);
+ pending=$('stage-schedule-stop').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',enabled:false});
+ respond({schedule:{name:'orders',enabled:false,every_minutes:7}});await pending;assert.equal(selectedStage.schedule.enabled,false);
+ stageDirty=false;let count=calls.length;
+ await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
+ // Successful/inflight content cannot be imported even by invoking the handler directly.
+ for(const status of ['success','queued','running']){stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:status};stageControls();assert.equal($('stage-import').disabled,true);$('stage-import').onclick();assert.equal(calls.length,count);}
+ for(const status of ['failed','unknown']){
+  stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:status};$('stage-retry').checked=false;stageControls();
+  assert.equal($('stage-import').disabled,true);$('stage-import').onclick();assert.equal(calls.length,count);
+  $('stage-retry').checked=true;$('stage-retry').onchange();assert.equal($('stage-import').disabled,false);
+  $('stage-import').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',file:'a.csv',version:'v1',retry:true});
+  respond({run:{id:'retry-run'}});await new Promise(resolve=>setImmediate(resolve));count=calls.length;
+  assert.equal($('stage-retry').checked,false);assert.equal(stagePreview,null);
+ }
+ // Refreshing an externally edited stage updates the visible definition and its revision together.
+ stageRunId='keep-history';$('stage-view-run').hidden=false;
+ stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:'new'};
+ const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,table:'raw.new_destination',mode:'upsert',key:'id'},schedule:{enabled:false,every_minutes:9}};
+ pending=fetchStageFiles(stageEpoch);respond({stages:[revised]});await new Promise(resolve=>setImmediate(resolve));respond({files:[]});await pending;
+ assert.equal(selectedStage.updated_at,'revision-2');assert.equal(selectedStage.definition.table,'raw.new_destination');
+ assert.equal($('stage-table').value,'raw.new_destination');assert.equal($('stage-mode').value,'upsert');assert.equal($('stage-key').value,'id');
+ assert.equal(stagePreview,null);assert.equal(stageRunId,'keep-history');assert.equal($('stage-view-run').hidden,false);
+ $('stage-schedule-enabled').checked=true;pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
+ assert.deepEqual(calls.at(-1).body,{name:'orders',every_minutes:9,enabled:true,version:'revision-2'});
+ respond({schedule:{enabled:true,every_minutes:9}});await pending;
+ pending=$('stage-scan').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',version:'revision-2'});
+ respond({run:{id:'new-scan'}});await new Promise(resolve=>setImmediate(resolve));respond({stages:[revised]});await new Promise(resolve=>setImmediate(resolve));respond({files:[]});await pending;
+ assert.equal(stageRunId,'new-scan');assert.equal($('stage-view-run').hidden,false);
+ // A late schedule response cannot restore state after role changes, even if admin returns.
+ $('stage-schedule-minutes').value='5';pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
+ currentRole='bi_viewer';resetStageUI();currentRole='admin';resetStageUI();respond({schedule:{enabled:true}});await pending;
+ assert.equal(selectedStage,null);assert.equal($('stage-schedule-enabled').checked,false);assert.equal(stagePending,false);
+ // Legacy imports remain inspectable and pausable but cannot bypass missing dedup records.
+ editStage({...entry,legacy_history:true,schedule:{enabled:true}});stageControls();
+ assert.equal($('stage-legacy-notice').hidden,false);assert.equal($('stage-scan').disabled,true);assert.equal($('stage-schedule-stop').disabled,false);
+ stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:'new'};stageControls();assert.equal($('stage-import').disabled,true);
+ count=calls.length;$('stage-import').onclick();await $('stage-scan').onclick();await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
+ // Replace allows pausing an existing schedule but cannot scan or save an enabled schedule.
+ editStage({...entry,definition:{...entry.definition,mode:'replace'},schedule:{enabled:true}});stageControls();
+ assert.equal($('stage-scan').disabled,true);assert.equal($('stage-schedule-enabled').disabled,true);assert.equal($('stage-schedule-stop').disabled,false);
+ count=calls.length;await $('stage-scan').onclick();await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
+ // Scan is stage-only. A stale response after losing admin cannot show a history link.
+ editStage(entry);pending=$('stage-scan').onclick();assert.deepEqual(calls.at(-1),{path:'/api/stages/scan',body:{name:'orders',version:'revision-1'}});
+ currentRole='data_engineer';resetStageUI();respond({run:{id:'late-scan'}});await pending;
+ assert.equal(stageRunId,null);assert.equal($('stage-view-run').hidden,true);assert.equal($('stages-area').hidden,true);
+ console.log('stage behavioral checks complete');
+})().catch(error=>{console.error(error);process.exitCode=1;});`);
+"""
+        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('stage behavioral checks complete', result.stdout)
 
     def test_invalid_roles_rejected_on_get_and_post(self):
         with patch.object(wb.bears_resident, 'load_ai_config') as load, \

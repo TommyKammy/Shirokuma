@@ -189,15 +189,20 @@ def _tick(now, stop=None, refresh_clock=False):
                     if active is not None:
                         jobs._lost(connection)
                     schedule = dict(row)
+                    is_stage = name.startswith('stage:')
                     job = connection.execute('SELECT * FROM jobs WHERE name=?', (name,)).fetchone()
                     definition = json.loads(job['definition']) if job else dict(name=name, steps=[])
                     arguments = json.loads(row['arguments'])
                     reason = None
                     try:
                         _authorize(schedule)
-                        if job is None or job['owner'] != row['owner']:
-                            raise PermissionError('Job ownership unavailable; schedule paused')
-                        arguments, prepared = jobs._validate(definition, row['role'], arguments)
+                        if is_stage:
+                            import stages_resident
+                            definition, prepared = stages_resident._scheduled(name[6:], row['owner'], row['role'], connection=connection)
+                        else:
+                            if job is None or job['owner'] != row['owner']:
+                                raise PermissionError('Job ownership unavailable; schedule paused')
+                            arguments, prepared = jobs._validate(definition, row['role'], arguments)
                     except (ValueError, PermissionError, OSError) as exc:
                         paused, reason = True, 'Schedule validation failed (' + type(exc).__name__ + '); paused'
                     if reason is None and (current - due).total_seconds() >= 60:
@@ -206,7 +211,10 @@ def _tick(now, stop=None, refresh_clock=False):
                         reason = 'Another job is active; scheduled run skipped without a queue'
                     if reason is None:
                         try:
-                            arguments, prepared = jobs._validate(definition, row['role'], arguments, preflight=True)
+                            if is_stage:
+                                definition, prepared = stages_resident._scheduled(name[6:], row['owner'], row['role'], preflight=True, connection=connection)
+                            else:
+                                arguments, prepared = jobs._validate(definition, row['role'], arguments, preflight=True)
                             _authorize(schedule)
                         except (ValueError, PermissionError, OSError) as exc:
                             paused, reason = True, 'Schedule input preflight failed (' + type(exc).__name__ + '); paused'

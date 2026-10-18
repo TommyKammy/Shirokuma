@@ -68,6 +68,10 @@ def _db():
             CREATE TABLE IF NOT EXISTS stages (
                 name TEXT PRIMARY KEY, owner TEXT NOT NULL, definition TEXT NOT NULL,
                 created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS stage_files (
+                stage_name TEXT NOT NULL, content_key TEXT NOT NULL, status TEXT NOT NULL,
+                last_run_id TEXT NOT NULL, position INTEGER NOT NULL,
+                PRIMARY KEY(stage_name,content_key));
             CREATE TABLE IF NOT EXISTS runs (
                 id TEXT PRIMARY KEY, job_name TEXT NOT NULL, actor TEXT NOT NULL,
                 role TEXT NOT NULL, definition TEXT NOT NULL, arguments TEXT NOT NULL,
@@ -293,6 +297,8 @@ def _lock():
 
 def _lost(connection):
     now = _now()
+    connection.execute("UPDATE stage_files SET status='unknown' WHERE status IN ('queued','running') "
+                       "AND last_run_id IN (SELECT id FROM runs WHERE status IN ('queued','running'))")
     connection.execute("UPDATE steps SET status='unknown',finished_at=?,error='Worker lost; outcome unknown' "
                        "WHERE status='running' AND run_id IN (SELECT id FROM runs WHERE status IN ('queued','running'))", (now,))
     connection.execute("UPDATE steps SET status='skipped',finished_at=? WHERE status='pending' "
@@ -379,6 +385,9 @@ def _insert_run(connection, definition, arguments, steps, actor, role, *,
     connection.executemany('INSERT INTO steps(run_id,position,name,action,status,finished_at) VALUES (?,?,?,?,?,?)',
         [(run_id, i, step.get('name') or 'Step ' + str(i), step['action'],
           'pending' if status in ACTIVE else 'skipped', finished) for i, step in enumerate(steps, 1)])
+    if status in ACTIVE:
+        import stages_resident
+        stages_resident._claim(connection, run_id, steps)
     return run_id
 
 
@@ -469,6 +478,8 @@ def _execute_step(step):
                 raise StepUnknown('dbt timed out; outcome unknown')
             raise ValueError('dbt reported failure')
         return report
+    if action == 'stage_scan_empty':
+        return {'result': 'success', 'rows_ingested': 0}
     if action == 'stage_import':
         import stages_resident
         return stages_resident._execute_import(step)
@@ -502,6 +513,8 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         raise ValueError('Job budget exceeded between steps; no further steps started')
                     with _db() as connection:
                         connection.execute("UPDATE steps SET status='running',started_at=? WHERE run_id=? AND position=?", (_now(), run_id, position))
+                    if step['action'] == 'stage_import' and not shared:
+                        wr.resolve_role(actor, role)
                     report = _execute_step(step)
                     summary = {key: report[key] for key in ('action', 'table', 'rows_ingested', 'row_count', 'result', 'valid', 'duration_ms') if key in report}
                     if step['action'] in {'dbt_build', 'dbt_test'}:
@@ -513,10 +526,16 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                             summary.update(alerts_resident.record(connection, job_name, position,
                                 step.get('name') or 'Step ' + str(position), actor, step, arguments,
                                 run_id, report['condition_met']))
+                        if step['action'] == 'stage_import':
+                            connection.execute("UPDATE stage_files SET status='success' WHERE last_run_id=? AND position=?", (run_id, position))
                         connection.execute("UPDATE steps SET status='success',finished_at=?,summary=? WHERE run_id=? AND position=?",
                                            (_now(), json.dumps(summary), run_id, position))
                 except Exception as exc:
                     uncertain = isinstance(exc, (OSError, subprocess.TimeoutExpired, StepUnknown)) and not isinstance(exc, PermissionError)
+                    if step['action'] == 'stage_import':
+                        with _db() as connection:
+                            claim = connection.execute('SELECT status FROM stage_files WHERE last_run_id=? AND position=?', (run_id, position)).fetchone()
+                            uncertain = uncertain or (claim is not None and claim['status'] == 'running')
                     status = 'unknown' if uncertain else 'failed'
                     # Provider/driver exception messages may contain credentials or rows.
                     if isinstance(exc, wr.TrinoQueryError):
@@ -525,6 +544,9 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         error = str(exc) if isinstance(exc, (ValueError, PermissionError, StepUnknown)) else 'Step operation failed (' + type(exc).__name__ + ')'
                     now = _now()
                     with _db() as connection:
+                        if step['action'] == 'stage_import':
+                            connection.execute("UPDATE stage_files SET status=? WHERE last_run_id=? AND position=?", (status, run_id, position))
+                            connection.execute("DELETE FROM stage_files WHERE last_run_id=? AND status='queued'", (run_id,))
                         connection.execute('UPDATE steps SET status=?,finished_at=?,error=? WHERE run_id=? AND position=?', (status, now, error, run_id, position))
                         connection.execute("UPDATE steps SET status='skipped',finished_at=? WHERE run_id=? AND status='pending'", (now, run_id))
                         connection.execute('UPDATE runs SET status=?,finished_at=?,error=? WHERE id=?', (status, now, error, run_id))
