@@ -8,12 +8,14 @@ from pathlib import Path
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 import request_auth as auth
 import jobs_resident as jobs
+import alerts_resident as alerts
 import workbench_server as wb
 
 
@@ -69,6 +71,7 @@ class JobsAPITests(unittest.TestCase):
 
     def test_authentication_and_viewer_denied_on_every_route(self):
         routes = [('/api/jobs', None), ('/api/jobs/runs', None),
+                  ('/api/alerts', None), ('/api/alerts/ack', {'alert_id': 'missing'}),
                   ('/api/jobs/schedules', None), ('/api/jobs/schedule', self.schedule()),
                   ('/api/jobs/save', self.definition()),
                   ('/api/jobs/run', {'name': 'daily_check'}),
@@ -87,6 +90,61 @@ class JobsAPITests(unittest.TestCase):
             self.assertEqual(code, 202)
             self.assertEqual(body['run']['id'], 'accepted')
             submit.assert_called_once_with('daily_check', {'value': 7}, 'alice', 'data_engineer')
+
+    def open_alert(self):
+        definition = dict(name='quality_check', steps=[dict(action='alert',
+                          sql='SELECT TRUE', message='データを確認してください')])
+        self.assertEqual(self.request('/api/jobs/save', definition)[0], 200)
+        with patch.object(jobs.wr, 'query', return_value=dict(result='verified', rows=[[True]],
+                columns=[dict(name='condition', type='boolean')], truncated=False)), \
+             patch.object(jobs.wr, 'telemetry', return_value='skipped'):
+            code, response = self.request('/api/jobs/run', {'name': 'quality_check'})
+            self.assertEqual(code, 202)
+            for _ in range(500):
+                run = jobs.get_run(response['run']['id'], 'emily', 'data_engineer')
+                if run['status'] not in ('queued', 'running'):
+                    for thread in threading.enumerate():
+                        if thread.name == 'job-' + run['id'][:8]:
+                            thread.join(2)
+                    break
+                time.sleep(.01)
+            self.assertEqual(run['status'], 'success', run)
+        return self.request('/api/alerts')[1]['alerts'][0]
+
+    def test_alert_visibility_and_owner_only_idempotent_acknowledgement(self):
+        alert = self.open_alert()
+        self.assertEqual(alert['owner'], 'emily')
+        self.assertEqual(self.request('/api/alerts')[1]['unacknowledged_count'], 1)
+        self.assertEqual(self.request('/api/alerts', user='oscar')[1],
+                         {'alerts': [], 'unacknowledged_count': 0})
+        admin_view = self.request('/api/alerts', user='alice')[1]
+        self.assertEqual(admin_view['unacknowledged_count'], 1)
+        self.assertFalse(admin_view['alerts'][0]['can_manage'])
+        for user in ('oscar', 'alice'):
+            self.assertIn(self.request('/api/alerts/ack', {'alert_id': alert['id']}, user=user)[0], (403, 404))
+        code, response = self.request('/api/alerts/ack', {'alert_id': alert['id']})
+        self.assertEqual(code, 200)
+        self.assertEqual(response['alert']['acknowledged_by'], 'emily')
+        self.assertIsNone(response['alert']['resolved_at'])
+        self.assertEqual(self.request('/api/alerts')[1]['unacknowledged_count'], 0)
+        self.assertEqual(self.request('/api/alerts/ack', {'alert_id': alert['id']})[1], response)
+        self.assertEqual(self.request('/api/alerts/ack', {'alert_id': 'missing'})[0], 404)
+
+    def test_alert_ack_uses_authenticated_identity_and_selected_role(self):
+        with patch.object(alerts, 'acknowledge', return_value={'id': 'a'}) as acknowledge:
+            code, body = self.request('/api/alerts/ack', {'alert_id': 'a'}, user='alice',
+                                      headers={'X-Shirokuma-Role': 'data_engineer'})
+        self.assertEqual((code, body), (200, {'alert': {'id': 'a'}}))
+        acknowledge.assert_called_once_with('a', 'alice', 'data_engineer')
+
+    def test_alert_ack_rejects_identity_fields_invalid_input_and_cross_origin(self):
+        with patch.object(alerts, 'acknowledge') as acknowledge:
+            for body in ({}, {'alert_id': 1}, {'alert_id': ''}, {'alert_id': 'a', 'owner': 'alice'},
+                         {'alert_id': 'a', 'actor': 'alice'}, {'alert_id': 'a', 'role': 'admin'}):
+                self.assertEqual(self.request('/api/alerts/ack', body)[0], 400)
+            self.assertEqual(self.request('/api/alerts/ack', {'alert_id': 'a'},
+                                         headers={'Origin': 'https://example.invalid'})[0], 403)
+            acknowledge.assert_not_called()
 
     def test_job_definitions_are_isolated_by_owner(self):
         code, _ = self.request('/api/jobs/save', self.definition())

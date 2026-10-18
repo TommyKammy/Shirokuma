@@ -80,6 +80,15 @@ def _db():
                 every_minutes INTEGER, time TEXT, timezone TEXT, arguments TEXT NOT NULL,
                 enabled INTEGER NOT NULL, role TEXT NOT NULL, auth_mode TEXT NOT NULL,
                 next_run_at TEXT, last_status TEXT, last_run_id TEXT, last_scheduled_for TEXT);
+            CREATE TABLE IF NOT EXISTS alerts (
+                id TEXT PRIMARY KEY, job_name TEXT NOT NULL, step_position INTEGER NOT NULL,
+                step_name TEXT NOT NULL, owner TEXT NOT NULL, severity TEXT NOT NULL,
+                message TEXT NOT NULL, first_run_id TEXT NOT NULL, last_run_id TEXT NOT NULL,
+                first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, occurrences INTEGER NOT NULL,
+                acknowledged_at TEXT, acknowledged_by TEXT, resolved_at TEXT, resolution TEXT,
+                rule_key TEXT NOT NULL, arguments_key TEXT NOT NULL);
+            CREATE UNIQUE INDEX IF NOT EXISTS one_open_alert ON alerts
+                (job_name,step_position,owner,rule_key,arguments_key) WHERE resolved_at IS NULL;
         ''')
         connection.execute('BEGIN IMMEDIATE')
         columns = {row['name'] for row in connection.execute('PRAGMA table_info(runs)')}
@@ -207,21 +216,30 @@ def _validate(definition, role, arguments=None, preflight=False):
             raise ValueError('invalid step')
         action = step.get('action')
         fields = {'sql': {'sql', 'mode', 'schema'}, 'ingest': {'file', 'table', 'mode', 'format', 'key'},
-                  'dbt_build': set(), 'dbt_test': set(), 'wap_refresh': {'table'}, 'wap_publish': {'table'}}
+                  'dbt_build': set(), 'dbt_test': set(), 'wap_refresh': {'table'}, 'wap_publish': {'table'},
+                  'alert': {'sql', 'schema', 'message', 'severity'}}
         if not isinstance(action, str) or action not in fields or step.keys() - fields[action] - {'name', 'action'}:
             raise ValueError('unsupported step action or field')
-        if action != 'sql' and role != 'admin':
+        if action not in {'sql', 'alert'} and role != 'admin':
             raise PermissionError('Only admin can run dbt, ingestion, and WAP steps')
         normalized = dict(step)
-        if action == 'sql':
+        if action in {'sql', 'alert'}:
             if not isinstance(step.get('sql'), str) or not step['sql'].strip():
                 raise ValueError('SQL step requires sql')
-            if (not isinstance(step.get('mode'), str) or step['mode'] not in {'read-only', 'sandbox-write', 'admin-write'} or
+            mode = 'read-only' if action == 'alert' else step.get('mode')
+            if (not isinstance(mode, str) or mode not in {'read-only', 'sandbox-write', 'admin-write'} or
                     not isinstance(step.get('schema', 'marts'), str) or step.get('schema', 'marts') not in SCHEMAS):
                 raise ValueError('invalid SQL mode or schema')
             sql, names = _render(step['sql'], parameters, values)
             used.update(names)
-            normalized['sql'] = wr.check_sql_policy(sql, step['mode'], role=role)
+            normalized['sql'] = wr.check_sql_policy(sql, mode, role=role)
+            if action == 'alert':
+                import alerts_resident
+                if (not isinstance(step.get('message'), str) or not step['message'].strip()
+                        or len(step['message']) > 500 or not isinstance(step.get('severity', 'warning'), str)
+                        or step.get('severity', 'warning') not in {'warning', 'critical'}):
+                    raise ValueError('alert requires a message of 1..500 characters and warning or critical severity')
+                normalized['_rule_key'] = alerts_resident.rule_key(step, parameters)
         elif action == 'ingest':
             import lake_ingest
             path = step.get('file')
@@ -309,6 +327,8 @@ def save_job(definition, actor, role):
         connection.execute('INSERT INTO jobs VALUES (?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET '
                            'definition=excluded.definition,updated_at=excluded.updated_at',
                            (name, actor, json.dumps(definition), now, now))
+        import alerts_resident
+        alerts_resident.retire_changed(connection, definition, actor)
         return _job(connection.execute('SELECT * FROM jobs WHERE name=?', (name,)).fetchone(), actor)
 
 
@@ -383,6 +403,16 @@ def stop_scheduler():
     return schedule_resident.stop_scheduler()
 
 
+def list_alerts(actor, role):
+    import alerts_resident
+    return alerts_resident.list_alerts(actor, role)
+
+
+def acknowledge(alert_id, actor, role):
+    import alerts_resident
+    return alerts_resident.acknowledge(alert_id, actor, role)
+
+
 def _run(row, connection):
     result = dict(row)
     result['definition'] = json.loads(result['definition'])
@@ -418,6 +448,9 @@ def _execute_step(step):
     if action == 'sql':
         return wr.query('LOCAL', step['sql'], catalog='iceberg', schema=step.get('schema', 'marts'),
                         mode=step['mode'], max_rows=None)
+    if action == 'alert':
+        import alerts_resident
+        return alerts_resident.evaluate(step)
     if action in {'dbt_build', 'dbt_test'}:
         import lake_pipeline
         report = lake_pipeline.run('build' if action == 'dbt_build' else 'test')
@@ -445,6 +478,7 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
     try:
         with request_auth.effective_role(role):
             with _db() as connection:
+                arguments = json.loads(connection.execute('SELECT arguments FROM runs WHERE id=?', (run_id,)).fetchone()[0])
                 connection.execute("UPDATE runs SET status='running',started_at=? WHERE id=?", (_now(), run_id))
             for position, step in enumerate(steps, 1):
                 try:
@@ -460,6 +494,12 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                     if step['action'] in {'dbt_build', 'dbt_test'}:
                         summary['model_count'] = len(report.get('models', []))
                     with _db() as connection:
+                        connection.execute('BEGIN IMMEDIATE')
+                        if step['action'] == 'alert':
+                            import alerts_resident
+                            summary.update(alerts_resident.record(connection, job_name, position,
+                                step.get('name') or 'Step ' + str(position), actor, step, arguments,
+                                run_id, report['condition_met']))
                         connection.execute("UPDATE steps SET status='success',finished_at=?,summary=? WHERE run_id=? AND position=?",
                                            (_now(), json.dumps(summary), run_id, position))
                 except Exception as exc:

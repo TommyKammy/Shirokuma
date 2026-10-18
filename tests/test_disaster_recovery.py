@@ -9,6 +9,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -152,6 +154,37 @@ class DisasterRecoveryTests(unittest.TestCase):
             self.assertIsNone(restored['next_run_at'])
             self.assertTrue(all(not values for values in jobs.tick().values()))
             self.assertEqual(jobs.list_runs('local', 'admin'), [])
+
+    def test_alert_ledger_round_trip_preserves_acknowledgement_and_identity(self):
+        import jobs_resident as jobs
+        import alerts_resident as alerts
+        with patch.dict(os.environ, SHIROKUMA_AUTH_MODE='local', SHIROKUMA_AUTH_FILE=''), \
+             patch.object(jobs.wr, 'query', return_value=dict(result='verified', rows=[[True]],
+                 columns=[dict(name='condition', type='boolean')], truncated=False)), \
+             patch.object(jobs.wr, 'telemetry', return_value='skipped'):
+            jobs.save_job(dict(name='quality_check', steps=[dict(action='alert', sql='SELECT TRUE',
+                message='要確認', severity='critical')]), 'local', 'admin')
+            run = jobs.submit_run('quality_check', {}, 'local', 'admin')
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                run = jobs.get_run(run['id'], 'local', 'admin')
+                if run['status'] not in jobs.ACTIVE:
+                    break
+                time.sleep(.01)
+            for thread in threading.enumerate():
+                if thread.name == 'job-' + run['id'][:8]:
+                    thread.join(2)
+            self.assertEqual(run['status'], 'success', run)
+            alert = alerts.list_alerts('local', 'admin')['alerts'][0]
+            alerts.acknowledge(alert['id'], 'local', 'admin')
+            before = alerts.list_alerts('local', 'admin')
+            self.assertEqual(before['unacknowledged_count'], 0)
+            self.create(include_tables=False)
+            target = self.root / 'restored_alerts'
+            dr.restore(self.archive, target_state_dir=target)
+            with patch.dict(os.environ, SHIROKUMA_STATE_DIR=str(target)):
+                self.assertEqual(alerts.list_alerts('local', 'admin'), before)
+                self.assertEqual(jobs.get_run(run['id'], 'local', 'admin')['steps'][0]['summary']['alert_id'], alert['id'])
 
     def test_invalid_job_ledger_is_rejected_before_any_restore_writes(self):
         # Use a checksummed archive to exercise restore validation, not backup.

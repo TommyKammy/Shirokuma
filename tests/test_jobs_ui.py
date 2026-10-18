@@ -125,6 +125,79 @@ language='ja';if(t('Skipped')!==String.fromCodePoint(0x30b9,0x30ad,0x30c3,0x30d7
         self.assertIn("run.scheduled_for||", SCRIPT)
         self.assertIn("runs[index].trigger==='schedule'?'Scheduled':'Manual'", SCRIPT)
 
+    def test_alert_confirmation_and_resolution_are_independent(self):
+        self.javascript(r"""
+const active={can_manage:true,acknowledged_at:null,resolved_at:null,resolution:null};
+if(!jobAlertCanAcknowledge(active)||jobAlertResolution(active)!=='Active condition')throw Error('active alert');
+const confirmed={...active,acknowledged_at:'2026-10-18T10:00:00Z'};
+if(jobAlertCanAcknowledge(confirmed)||jobAlertResolution(confirmed)!=='Active condition')throw Error('ack must not resolve');
+const resolved={...active,resolved_at:'2026-10-18T10:00:00Z',resolution:'condition_cleared'};
+if(!jobAlertCanAcknowledge(resolved)||jobAlertResolution(resolved)!=='Condition cleared')throw Error('resolve must not acknowledge');
+if(jobAlertResolution({...resolved,resolution:'definition_changed'})!=='Definition changed')throw Error('definition change');
+if(jobAlertCanAcknowledge({...active,can_manage:false}))throw Error('other owner');
+currentRole='data_engineer';if(!jobAlertCanAcknowledge(active))throw Error('engineer owner');
+currentRole='bi_viewer';if(jobAlertCanAcknowledge(active))throw Error('viewer');
+""", 'jobAlertCanAcknowledge', 'jobAlertResolution')
+
+    def test_alert_summary_and_language_contract(self):
+        self.javascript(r"""
+language='ja';
+const opened=jobSummary({action:'alert',summary:{condition_met:true,alert_status:'opened',alert_id:'123456789abcdef'}});
+if(!opened.includes(t('Condition met'))||!opened.includes(t('New notification'))||!opened.includes('12345678')||opened.includes('condition_met'))throw Error('readable alert summary');
+const changed=jobSummary({action:'alert',summary:{condition_met:true,alert_status:'definition_changed'}});
+if(!changed.includes(t('Closed after rule change'))||changed.includes(t('Condition clear')))throw Error('old snapshot must not claim recovery');
+language='en';const clear=jobSummary({action:'alert',summary:{condition_met:false,alert_status:'clear'}});
+if(!clear.includes('Condition clear')||!clear.includes('No active notification'))throw Error('English clear summary');
+for(const key of ['Evaluate alert','Alert message','Severity','warning','critical','Notifications','Acknowledgement','Resolution','Acknowledge','Up to 100 notifications, unacknowledged first.'])if(!i18n.ja[key]||!i18n.en[key]||i18n.ja[key]===i18n.en[key])throw Error('alert translation');
+""", 'jobSummary')
+
+    def test_alert_badge_uses_total_and_never_requests_as_viewer(self):
+        start = SCRIPT.index('async function loadJobAlerts(')
+        end = SCRIPT.index("\n$('job-alerts-refresh')", start)
+        source = SCRIPT[start:end]
+        self.javascript(r"""
+const badge={hidden:true};let calls=0,display;
+const $=()=>badge,jobsVisible=()=>false,api=async()=>{calls++;return {alerts:[{id:'one'}],unacknowledged_count:107};};
+const ui=(node,key,values)=>{display=values.count;},pruneUIBindings=()=>{};
+""" + source + r"""
+(async()=>{
+ await loadJobAlerts(false);if(calls!==1||display!==107||badge.hidden)throw Error('must use total count rather than list length');
+ currentRole='bi_viewer';await loadJobAlerts(false);if(calls!==1||!badge.hidden)throw Error('viewer request forbidden');
+})().catch(error=>{console.error(error.message);process.exitCode=1;});
+""")
+
+    def test_alert_editor_has_no_mode_and_preserves_sql_parameters(self):
+        source = function('renderJobSteps')
+        self.assertIn("!['sql','alert'].includes(option.value)", source)
+        alert = source.split(" }else{\n const note=", 1)[1].split(" }\n jobField(options,'Schema'", 1)[0]
+        self.assertNotIn("'mode'", alert)
+        self.assertIn("message.required=true;message.maxLength=500", alert)
+        self.assertIn("step.severity||'warning'", alert)
+        self.assertIn("step.schema||'marts'", source)
+        self.assertIn("{{name}}", HTML)
+        self.assertIn('id="jobs-alert-count"', HTML)
+        self.assertIn('id="job-alerts"', HTML)
+
+    def test_alert_table_is_compact_and_preserves_exact_timestamps(self):
+        self.javascript(r"""
+class Element{constructor(tag='div'){this.tag=tag;this.children=[];this.textContent='';}append(...nodes){this.children.push(...nodes);}}
+const document={createElement:tag=>new Element(tag)},root=new Element(),zone=new Element();let rows=[],headers=[];
+const $=id=>id==='job-alerts-timezone'?zone:root;
+root.querySelectorAll=()=>rows;
+const table=(container,columns,values)=>{headers=columns;rows=values.map(values=>{const cells=values.map(value=>{const node=new Element('td');node.textContent=String(value);return node;});return {cells,lastElementChild:cells[cells.length-1]};});};
+const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
+const actionButton=(key,callback)=>{const node=new Element('button');node.textContent=t(key);node.callback=callback;return node;};
+const exact='2026-10-18T10:11:12.123Z';
+renderJobAlerts([{severity:'critical',message:'Check inventory',job_name:'inventory',step_name:'stock',owner:'alice',occurrences:3,first_seen_at:exact,last_seen_at:exact,acknowledged_at:null,resolved_at:null,can_manage:true}]);
+if(headers.length!==7||headers.join('|')!=='Importance|Notification|Acknowledgement|Resolution|Occurrences|Last seen|Actions')throw Error('compact alert columns');
+if(rows[0].cells[6].children.length!==1||rows[0].cells[6].children[0].tag!=='button')throw Error('acknowledgement action must remain visible');
+if(!rows[0].cells[1].children[1].textContent.includes('inventory')||!rows[0].cells[1].children[1].textContent.includes('alice'))throw Error('notification context');
+const timestamp=rows[0].cells[5].children[0];if(timestamp.dateTime!==exact||timestamp.title!==exact||timestamp.textContent===exact)throw Error('localized visible time, exact accessible timestamp');
+if(!zone.textContent.includes(Intl.DateTimeFormat().resolvedOptions().timeZone))throw Error('timezone note');
+if(rows[0].cells[2].children[0].textContent!==t('Unacknowledged')||rows[0].cells[3].textContent!==t('Active condition'))throw Error('separate states');
+language='ja';if(!jobAlertTime(exact).includes('2026'))throw Error('localized date');
+""", 'jobAlertCanAcknowledge', 'jobAlertResolution', 'jobAlertTime', 'jobAlertTimestamp', 'renderJobAlerts')
+
     def test_javascript_parses(self):
         result = subprocess.run(['node', '--check'], input=SCRIPT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)

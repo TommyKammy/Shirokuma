@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import bears_resident
 import lake_ingest
 import jobs_resident
+import alerts_resident
 import warehouse_resident
 import request_auth
 from agenthouse import manage
@@ -24,7 +25,7 @@ GET_ROUTES = {path: ALL_ROLES for path in (
     '/', '/index.html', '/api/session', '/api/status', '/api/catalog', '/api/lineage',
     '/api/history', '/api/models', '/api/pawprints')}
 GET_ROUTES['/api/ai/config'] = {'admin'}
-GET_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs', '/api/jobs/runs', '/api/jobs/schedules')})
+GET_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs', '/api/jobs/runs', '/api/jobs/schedules', '/api/alerts')})
 POST_ROUTES = {path: EDIT_ROLES for path in (
     '/api/warehouse/chill', '/api/warehouse/autochill', '/api/lake/ingest',
     '/api/lake/preview', '/api/lake/export', '/api/catalog/drop',
@@ -32,7 +33,7 @@ POST_ROUTES = {path: EDIT_ROLES for path in (
 POST_ROUTES.update({path: ALL_ROLES for path in (
     '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
 POST_ROUTES.update({path: {'admin'} for path in ('/api/ai/config', '/api/ai/test')})
-POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail', '/api/jobs/schedule')})
+POST_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs/save', '/api/jobs/run', '/api/jobs/detail', '/api/jobs/schedule', '/api/alerts/ack')})
 
 
 def masked_ai_config(config):
@@ -217,6 +218,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.respond({'runs': jobs_resident.list_runs(self.authenticated_user or 'local', role)})
             elif url.path == '/api/jobs/schedules':
                 self.respond({'schedules': jobs_resident.list_schedules(self.authenticated_user or 'local', role)})
+            elif url.path == '/api/alerts':
+                self.respond(alerts_resident.list_alerts(self.authenticated_user or 'local', role))
             elif url.path == "/api/pawprints":
                 result = manage.Client().query(
                     "SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON")
@@ -277,6 +280,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     if set(body) != {'run_id'} or not isinstance(body['run_id'], str):
                         raise ValueError('run_id must be a string')
                     result = {'run': jobs_resident.get_run(body['run_id'], self.authenticated_user or 'local', role)}
+                elif path == '/api/alerts/ack':
+                    if set(body) != {'alert_id'} or not isinstance(body['alert_id'], str) or not body['alert_id']:
+                        raise ValueError('alert_id must be a non-empty string')
+                    result = {'alert': alerts_resident.acknowledge(body['alert_id'], self.authenticated_user or 'local', role)}
                 elif path == '/api/ai/config':
                     result = masked_ai_config(bears_resident.save_ai_config(ai_config_input(body)))
                 elif path == '/api/ai/test':

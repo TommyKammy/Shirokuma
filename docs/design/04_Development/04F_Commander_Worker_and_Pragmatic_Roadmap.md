@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-18
-version: "1.5"
+version: "1.6"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -214,3 +214,11 @@ L0〜L6 に分散していた「局所的な実験スクリプト群」を整理
 | **WP-P17-002** | 一定間隔・日次スケジュール | 登録ジョブの予定をSQLiteに保存し、Workbench内で実行する。保存時の利用者・権限を再検証し、予定消費の原子性、競合・遅延時のスキップ、停止操作、復旧時の無効化を確認する。 | **Completed (2026-10-18)** |
 
 設定、時刻・停止・復旧の扱いと検証記録は [スケジュール実行ガイド](../../guides/scheduled_jobs.md) を参照する。
+
+### Phase 17.3: アラート【2026-10-18】
+
+| WP ID | タスク名 | 完了条件 (Definition of Done) | 状態 |
+|---|---|---|---|
+| **WP-P17-003** | SQL条件のアラート判定・通知・確認 | 既存ジョブとスケジュールで読取専用条件を判定し、通知の集約・確認・解消・再発をSQLiteに保存する。所有者境界、定義変更、判定失敗時の既存通知保持と実機動作を検証する。 | **Completed (2026-10-18)** |
+
+構成、使い方、状態遷移と検証結果は [アラートガイド](../../guides/alerts.md) に記録する。

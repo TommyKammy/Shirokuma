@@ -25,6 +25,8 @@
 dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px;width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#0007}dialog h2{font-size:18px}dialog .toolbar{margin-top:20px}dialog .badge{white-space:normal;overflow-wrap:anywhere}
 </style>
 <style>
+#jobs-alert-count{margin-left:6px}
+#job-alerts table{table-layout:fixed;min-width:960px}#job-alerts th,#job-alerts td{padding:10px;white-space:normal;overflow-wrap:anywhere}#job-alerts th:nth-child(1){width:8%}#job-alerts th:nth-child(2){width:31%}#job-alerts th:nth-child(3){width:13%}#job-alerts th:nth-child(4){width:14%}#job-alerts th:nth-child(5){width:6%}#job-alerts th:nth-child(6){width:15%}#job-alerts th:nth-child(7){width:13%}#job-alerts button{max-width:100%;white-space:normal}#job-alerts small{display:block;margin-top:5px}#job-alerts .alert-main{font-family:system-ui,sans-serif}#job-alerts details{padding:5px 0 0;border:0;font-size:12px}#job-alerts summary{font-weight:500;color:var(--muted)}
 .job-enable-label{display:flex;align-items:center;gap:8px}.job-enable-label input{width:auto}#job-schedule-state{margin-top:16px;overflow-wrap:anywhere}#job-schedule-state span{white-space:normal}
 .job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:0 18px;min-width:0}.job-step{margin:18px 0;padding:16px 0;border:0;border-top:1px solid var(--line);min-width:0}.job-step legend{font-weight:650;padding-right:8px}.job-step .toolbar{justify-content:space-between}.job-step textarea{min-height:100px}.job-step small{display:block;margin:6px 0}.job-step-heading{margin-top:20px}#job-run-state{margin-left:12px}#job-steps label{font-size:13px}
 #role-controls{display:inline-flex;align-items:center;gap:8px}#role-controls label{margin:0}#role-selector{width:auto}
@@ -39,7 +41,7 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <button id="tab-warehouse" role="tab" aria-controls="warehouse" aria-selected="true" data-tab="warehouse">SQL Worksheets · Warehouse &amp; SQL</button>
 <button id="tab-ingestion" role="tab" aria-controls="ingestion" aria-selected="false" tabindex="-1" data-tab="ingestion">Ingestion · File Upload</button>
 <button id="tab-transformation" role="tab" aria-controls="transformation" aria-selected="false" tabindex="-1" data-tab="transformation">Transformation · dbt &amp; WAP</button>
-<button id="tab-jobs" role="tab" aria-controls="jobs" aria-selected="false" tabindex="-1" data-tab="jobs" data-role-write="engineer">Jobs</button>
+<button id="tab-jobs" role="tab" aria-controls="jobs" aria-selected="false" tabindex="-1" data-tab="jobs" data-role-write="engineer">Jobs<span id="jobs-alert-count" class="badge" role="status" hidden></span></button>
 <button id="tab-bears" role="tab" aria-controls="bears" aria-selected="false" tabindex="-1" data-tab="bears">Autonomous Bears</button>
 <h2 class="nav-category">Catalog</h2>
 <button id="tab-catalog" role="tab" aria-controls="catalog" aria-selected="false" tabindex="-1" data-tab="catalog">Database Explorer · Catalog</button>
@@ -74,6 +76,7 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden><div class="page-title"><h1>Transformation · dbt &amp; WAP</h1><p class="muted">Inspect model definitions and dependencies, then build or refresh.</p><div class="toolbar"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build">Run dbt Build</button><button id="run-dbt-test">Run dbt Test</button></div></div><pre id="models-state" role="status" hidden></pre><div class="catalog-grid"><div><h2>Persistent dbt Models</h2><div id="dbt-models" class="panel panel-body"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models" class="panel panel-body"></div></div><div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div></section>
 <section id="jobs" role="tabpanel" aria-labelledby="tab-jobs" hidden>
 <div class="page-title"><h1>Jobs</h1><p class="muted">Save ordered steps and run them manually with typed arguments.</p></div>
+<div class="panel"><div class="panel-head"><h2>Notifications</h2><button id="job-alerts-refresh" type="button">Refresh notifications</button></div><div class="panel-body"><small>Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.</small><br><small>Up to 100 notifications, unacknowledged first.</small><br><small id="job-alerts-timezone"></small><div id="job-alerts-error" class="error" role="alert" hidden></div></div><div id="job-alerts" class="table-wrap"><div class="empty">No notifications loaded.</div></div></div>
 <div id="jobs-error" class="error" role="alert" hidden></div>
 <div class="panel"><div class="panel-head"><h2>Saved jobs</h2><div class="toolbar"><button id="jobs-refresh" type="button">Refresh jobs</button><button id="job-new" type="button">New job</button></div></div><div id="jobs-list" class="table-wrap"><div class="empty">No jobs loaded.</div></div></div>
 <div class="panel"><div class="panel-head"><h2>Job definition</h2><small id="job-editor-state" role="status">New definition</small></div><form id="job-form" class="panel-body">
@@ -134,6 +137,16 @@ const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+ 'Importance':'重要度', 'Acknowledged':'確認済み', 'Times use your browser timezone: {timezone}':'日時はブラウザのタイムゾーンで表示します: {timezone}', '{time}':'{time}', 'Job: {job} · Step: {step} · Owner: {owner}':'ジョブ: {job}・ステップ: {step}・所有者: {owner}',
+ 'Evaluate alert':'アラート判定', 'Alert message':'通知メッセージ', 'Severity':'重要度', 'warning':'警告', 'critical':'重大',
+ 'Read-only evaluation. Return exactly one row and one boolean column: true opens a notification; false clears it.':'読み取り専用で判定します。1行1列の boolean を返してください。true は異常、false は正常です。',
+ 'Notifications':'通知', 'Refresh notifications':'通知を更新', 'No notifications loaded.':'通知はまだ読み込まれていません。', 'No notifications.':'通知はありません。',
+ 'Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.':'同じ異常の継続は1件に集約します。確認済みにしても異常が解消されたことにはなりません。',
+ 'Up to 100 notifications, unacknowledged first.':'未確認の通知を優先して最大100件表示します。',
+ '{count} unacknowledged':'未確認{count}件', 'Notification':'通知', 'First seen':'初回検知', 'Last seen':'最終検知', 'Occurrences':'検知回数', 'Acknowledgement':'確認', 'Resolution':'解消',
+ 'Unacknowledged':'未確認', 'Acknowledged {time}':'確認済み {time}', 'Active condition':'異常継続', 'Condition cleared':'正常化により解消', 'Definition changed':'定義変更により終了', 'Resolved':'解消済み', 'Acknowledge':'確認済みにする',
+ 'Notification failed: {error}':'通知を取得・更新できませんでした: {error}', 'Condition met':'異常あり', 'Condition clear':'異常なし', 'New notification':'新しい通知', 'Ongoing notification':'異常継続', 'Notification resolved':'通知を解消', 'No active notification':'異常継続なし', 'Notification {id}':'通知 {id}',
+ 'Closed after rule change':'定義変更により終了',
  'Schedule':'スケジュール', 'Frequency':'実行間隔', 'Every N minutes':'一定の間隔で実行', 'Daily':'毎日', 'Interval (minutes)':'実行間隔（分）', 'Local time':'現地の実行時刻', 'Timezone (IANA)':'タイムゾーン（IANA）',
  'Enable schedule':'スケジュールを有効にする', 'Save schedule':'スケジュールを保存', 'Schedule saved.':'スケジュールを保存しました。', 'Schedule failed: {error}':'スケジュールを保存できませんでした: {error}',
  'Runs only while the service is running. Occurrences at least 60 seconds late or blocked by another job are skipped. No catch-up or automatic retry.':'サービスの起動中にのみ実行します。60秒以上遅れた予定や他のジョブと競合した予定はスキップします。後追い実行や自動再試行は行いません。',
@@ -275,6 +288,7 @@ let currentRole = 'admin';
 function applyRole() {
  document.documentElement.dataset.role=currentRole;
  $('tab-jobs').hidden=currentRole==='bi_viewer';
+ if(currentRole==='bi_viewer')$('jobs-alert-count').hidden=true;
  if(currentRole==='bi_viewer'&&typeof activeTab!=='undefined'&&activeTab==='jobs')activate($('tab-warehouse'));
  if(typeof renderJobSteps==='function')renderJobSteps();
  if(typeof activeTab!=='undefined'&&activeTab==='jobs')loadJobs();
@@ -461,7 +475,7 @@ $('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
 let activeTab='warehouse';
 function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='jobs')loadJobs();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation')$('refresh-models').click();if(activeTab==='compute')$('compute-refresh').click();}
 const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach(button=>{button.onclick=()=>activate(button);button.onkeydown=e=>{const available=tabs.filter(tab=>!tab.hidden&&!tab.disabled),i=available.indexOf(button);let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%available.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();available[n].focus();activate(available[n]);}};});
-setInterval(async()=>{if(document.hidden)return;await refreshStatus();if(auto_chill_minutes>0){try{updateAutoChill(await api('/api/warehouse/autochill',{check:true}));}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}}if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
+setInterval(async()=>{if(document.hidden)return;if(currentRole!=='bi_viewer')loadJobAlerts(jobsVisible());await refreshStatus();if(auto_chill_minutes>0){try{updateAutoChill(await api('/api/warehouse/autochill',{check:true}));}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}}if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
 function actionButton(label,task){const b=document.createElement('button');ui(b,label);if(label==='Rollback')b.dataset.roleWrite='admin';if(label==='Clone Snapshot')b.dataset.roleWrite='engineer';b.onclick=()=>busy(b,task);return b;}
 function renderData(container,data){if(data?.error){container.textContent=data.error;return;}table(container,data?.columns||[],(data?.rows||[]).slice(0,50),false);}
@@ -614,12 +628,17 @@ $('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
 let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0;
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
-const jobActions=['sql','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
-const jobActionLabels={sql:'Run SQL',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
+const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
+const jobActionLabels={sql:'Run SQL',alert:'Evaluate alert',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
 function jobSummary(step){
  const summary=step.summary;if(!summary||typeof summary!=='object')return '\u2014';
  const parts=[],count=summary.rows_ingested??summary.row_count,models=summary.model_count??(Array.isArray(summary.models)?summary.models.length:undefined);
- if(step.action==='ingest'&&count!==undefined)parts.push(t('{count} rows ingested',{count}));
+ if(step.action==='alert'){
+ const statuses={opened:'New notification',ongoing:'Ongoing notification',resolved:'Notification resolved',clear:'No active notification',definition_changed:'Closed after rule change'};
+ if(typeof summary.condition_met==='boolean')parts.push(t(summary.condition_met?'Condition met':'Condition clear'));
+ if(statuses[summary.alert_status])parts.push(t(statuses[summary.alert_status]));
+ if(summary.alert_id)parts.push(t('Notification {id}',{id:String(summary.alert_id).slice(0,8)}));
+ }else if(step.action==='ingest'&&count!==undefined)parts.push(t('{count} rows ingested',{count}));
  else if(models!==undefined)parts.push(t(models===1?'1 model':'{count} models',{count:models}));
  else if(count!==undefined)parts.push(t(count===1?'1 result row':'{count} result rows',{count}));
  if(summary.table)parts.push(t('Target table {table}',{table:summary.table}));
@@ -627,6 +646,44 @@ function jobSummary(step){
  return parts.join(language==='ja'?'・':' · ')||'\u2014';
 }
 function jobEmpty(id,key){$(id).replaceChildren();const node=document.createElement('div');node.className='empty';ui(node,key);$(id).append(node);}
+function jobAlertCanAcknowledge(alert){return currentRole!=='bi_viewer'&&alert.can_manage===true&&!alert.acknowledged_at;}
+function jobAlertResolution(alert){return alert.resolution==='condition_cleared'?'Condition cleared':alert.resolution==='definition_changed'?'Definition changed':alert.resolved_at?'Resolved':'Active condition';}
+function jobAlertTime(value){
+ if(!value)return '\u2014';const date=new Date(value);if(!Number.isFinite(date.getTime()))return value;
+ return new Intl.DateTimeFormat(language==='ja'?'ja-JP':'en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}).format(date);
+}
+function jobAlertTimestamp(value){
+ const time=document.createElement('time');time.dateTime=value;time.title=value;ui(time,'{time}',()=>({time:jobAlertTime(value)}));return time;
+}
+function renderJobAlerts(alerts){
+ ui($('job-alerts-timezone'),'Times use your browser timezone: {timezone}',{timezone:Intl.DateTimeFormat().resolvedOptions().timeZone});
+ if(!alerts.length){jobEmpty('job-alerts','No notifications.');return;}
+ table($('job-alerts'),['Importance','Notification','Acknowledgement','Resolution','Occurrences','Last seen','Actions'],alerts.map(alert=>[alert.severity,'','','',alert.occurrences,'','']));
+ $('job-alerts').querySelectorAll('tbody tr').forEach((row,index)=>{
+ const alert=alerts[index];ui(row.cells[0],alert.severity==='critical'?'critical':'warning');
+ const notification=document.createElement('div');notification.className='alert-main';notification.textContent=alert.message;row.cells[1].append(notification);
+ const context=document.createElement('small');ui(context,'Job: {job} \u00b7 Step: {step} \u00b7 Owner: {owner}',{job:alert.job_name,step:alert.step_name||String(alert.step_position),owner:alert.owner});row.cells[1].append(context);
+ if(alert.first_seen_at){const detail=document.createElement('details'),label=document.createElement('summary');ui(label,'First seen');detail.append(label,jobAlertTimestamp(alert.first_seen_at));row.cells[1].append(detail);}
+ const acknowledgement=document.createElement('span');ui(acknowledgement,alert.acknowledged_at?'Acknowledged':'Unacknowledged');row.cells[2].append(acknowledgement);
+ if(alert.acknowledged_at){const stamp=document.createElement('small');stamp.append(jobAlertTimestamp(alert.acknowledged_at));if(alert.acknowledged_by)stamp.title=alert.acknowledged_by;row.cells[2].append(stamp);}
+ ui(row.cells[3],jobAlertResolution(alert));if(alert.resolved_at)row.cells[3].title=alert.resolved_at;
+ if(alert.last_seen_at)row.cells[5].append(jobAlertTimestamp(alert.last_seen_at));
+ if(jobAlertCanAcknowledge(alert))row.lastElementChild.append(actionButton('Acknowledge',async()=>{
+ try{await api('/api/alerts/ack',{alert_id:alert.id});await loadJobAlerts(true);}catch(error){ui($('job-alerts-error'),'Notification failed: {error}',{error:error.message});$('job-alerts-error').hidden=false;}
+ }));
+ });
+}
+
+async function loadJobAlerts(render=jobsVisible()){
+ const role=currentRole;if(role==='bi_viewer'){$('jobs-alert-count').hidden=true;return;}
+ try{
+ const data=await api('/api/alerts');if(currentRole!==role)return;
+ const count=Math.max(0,Number(data.unacknowledged_count)||0);ui($('jobs-alert-count'),'{count} unacknowledged',{count});$('jobs-alert-count').hidden=count===0;
+ if(render&&jobsVisible()){message('job-alerts-error','');renderJobAlerts(data.alerts||[]);}
+ }catch(error){if(render&&jobsVisible()){ui($('job-alerts-error'),'Notification failed: {error}',{error:error.message});$('job-alerts-error').hidden=false;}}
+ finally{pruneUIBindings();}
+}
+$('job-alerts-refresh').onclick=()=>busy($('job-alerts-refresh'),()=>loadJobAlerts(true));
 function jobStatus(status){return t(jobStatuses[status]||'Unknown');}
 function jobDuration(item){if(item.duration_ms!==undefined)return item.duration_ms;const start=Date.parse(item.started_at),end=item.finished_at?Date.parse(item.finished_at):Date.now();return Number.isFinite(start)&&Number.isFinite(end)?Math.max(0,end-start):'\u2014';}
 function stopJobsPolling(){clearTimeout(jobsPoll);jobsPoll=null;}
@@ -652,13 +709,19 @@ function renderJobSteps(){
  const row=document.createElement('div');row.className='job-fields';fieldset.append(row);
  jobField(row,'Step name','name',step.name||'');
  const action=jobField(row,'Step type','action',step.action||'sql',jobActions);
- for(const option of action.options)option.disabled=currentRole!=='admin'&&option.value!=='sql';
+ for(const option of action.options)option.disabled=currentRole!=='admin'&&!['sql','alert'].includes(option.value);
  action.onchange=()=>{syncJobSteps();const name=jobSteps[index].name;jobSteps[index]={name,action:action.value};$('job-steps').replaceChildren();renderJobSteps();};
- if(step.action==='sql'){
- jobField(fieldset,'SQL text','sql',step.sql||'SELECT 1');
+ if(['sql','alert'].includes(step.action)){
+ const sql=jobField(fieldset,'SQL text','sql',step.sql||(step.action==='alert'?'SELECT false AS triggered':'SELECT 1'));sql.required=true;
  const options=document.createElement('div');options.className='job-fields';fieldset.append(options);
+ if(step.action==='sql'){
  const mode=jobField(options,'Mode','mode',step.mode||'read-only',['read-only','sandbox-write','admin-write']);
  for(const option of mode.options)option.disabled=currentRole!=='admin'&&option.value==='admin-write';
+ }else{
+ const note=document.createElement('small');ui(note,'Read-only evaluation. Return exactly one row and one boolean column: true opens a notification; false clears it.');fieldset.append(note);
+ const message=jobField(fieldset,'Alert message','message',step.message||'');message.required=true;message.maxLength=500;
+ jobField(options,'Severity','severity',step.severity||'warning',['warning','critical']);
+ }
  jobField(options,'Schema','schema',step.schema||'marts',['marts','raw','sandbox','staging','tpch_tiny','smoke']);
  }else if(step.action==='ingest'){
  jobField(fieldset,'Server file path','file',step.file||'');jobField(fieldset,'Target table','table',step.table||'raw.events');
@@ -727,6 +790,7 @@ async function refreshJobRuns(){
  $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{ui(row.cells[2],jobStatuses[runs[index].status]||'Unknown');ui(row.cells[3],runs[index].trigger==='schedule'?'Scheduled':'Manual');row.lastElementChild.append(actionButton('Inspect run',()=>showJobRun(runs[index].id)));});
  }
  if(selectedRunId)await showJobRun(selectedRunId);
+ await loadJobAlerts(true);
  scheduleJobsPolling(runs);
  }catch(error){message('jobs-error',error.message);stopJobsPolling();}
  finally{pruneUIBindings();}
@@ -842,6 +906,7 @@ async function initializeSession() {
  $('role-selector').value=currentRole;
  applyRole();
  refreshStatus();loadCatalog();
+ if(currentRole!=='bi_viewer')loadJobAlerts(false);
 }
 initializeSession().catch(error=>message('status-error',error.message));
 </script>

@@ -78,6 +78,9 @@ class RuntimeJobsTests(unittest.TestCase):
     def run_job(self, steps, arguments=None, parameters=None, role='admin'):
         name = 'job_' + uuid.uuid4().hex[:16]
         self.jobs.save_job(dict(name=name, parameters=parameters or {}, steps=steps), 'local', role)
+        return self.run_saved_job(name, arguments, role)
+
+    def run_saved_job(self, name, arguments=None, role='admin'):
         run = self.jobs.submit_run(name, arguments or {}, 'local', role)
         # Always wait before table/state cleanup, including assertion failures.
         self.addCleanup(self.wait_terminal, run['id'])
@@ -148,10 +151,82 @@ class RuntimeJobsTests(unittest.TestCase):
         self.assertEqual(run['steps'][0]['status'], 'success')
         self.assertEqual(run['steps'][0]['summary']['model_count'], 7)
 
+    def test_alert_true_acknowledge_resolve_and_retrigger(self):
+        self.sql('CREATE TABLE ' + warehouse.identifier(self.raw) + ' AS SELECT TRUE AS triggered')
+        name = 'alert_' + uuid.uuid4().hex[:16]
+        self.jobs.save_job(dict(name=name, steps=[dict(action='alert',
+            sql='SELECT triggered FROM ' + warehouse.identifier(self.raw),
+            message='Synthetic condition requires attention', severity='warning')]), 'local', 'data_engineer')
+        for _ in range(2):
+            self.assertEqual(self.run_saved_job(name, role='data_engineer')['status'], 'success')
+        notifications = self.jobs.list_alerts('local', 'data_engineer')
+        self.assertEqual(len(notifications['alerts']), 1)
+        first = notifications['alerts'][0]
+        self.assertEqual(notifications['unacknowledged_count'], 1)
+        self.jobs.acknowledge(first['id'], 'local', 'data_engineer')
+        self.assertEqual(self.run_saved_job(name, role='data_engineer')['status'], 'success')
+        notifications = self.jobs.list_alerts('local', 'data_engineer')
+        self.assertEqual(len(notifications['alerts']), 1)
+        self.assertTrue(notifications['alerts'][0]['acknowledged_at'])
+        self.assertIsNone(notifications['alerts'][0]['resolved_at'])
+        self.assertEqual(notifications['unacknowledged_count'], 0)
+        self.sql('UPDATE ' + warehouse.identifier(self.raw) + ' SET triggered = FALSE')
+        self.assertEqual(self.run_saved_job(name, role='data_engineer')['status'], 'success')
+        self.assertTrue(self.jobs.list_alerts('local', 'data_engineer')['alerts'][0]['resolved_at'])
+        self.sql('UPDATE ' + warehouse.identifier(self.raw) + ' SET triggered = TRUE')
+        self.assertEqual(self.run_saved_job(name, role='data_engineer')['status'], 'success')
+        notifications = self.jobs.list_alerts('local', 'data_engineer')
+        self.assertEqual(len(notifications['alerts']), 2)
+        active = next(alert for alert in notifications['alerts'] if alert['resolved_at'] is None)
+        self.assertNotEqual(active['id'], first['id'])
+        self.assertIsNone(active['acknowledged_at'])
+        self.assertEqual(notifications['unacknowledged_count'], 1)
+        # Resolution does not acknowledge an unread notification.
+        self.sql('UPDATE ' + warehouse.identifier(self.raw) + ' SET triggered = FALSE')
+        self.assertEqual(self.run_saved_job(name, role='data_engineer')['status'], 'success')
+        notifications = self.jobs.list_alerts('local', 'data_engineer')
+        self.assertEqual(notifications['unacknowledged_count'], 1)
+        self.assertTrue(all(alert['resolved_at'] for alert in notifications['alerts']))
+        self.jobs.acknowledge(active['id'], 'local', 'data_engineer')
+        self.assertEqual(self.jobs.list_alerts('local', 'data_engineer')['unacknowledged_count'], 0)
+
+    def test_invalid_alert_results_preserve_notification_and_engineer_boundary(self):
+        self.sql('CREATE TABLE ' + warehouse.identifier(self.raw) + ' AS SELECT TRUE AS triggered')
+        self.sql('CREATE TABLE ' + warehouse.identifier(self.sandbox) + ' (id BIGINT)')
+        name = 'alert_invalid_' + uuid.uuid4().hex[:16]
+        self.jobs.save_job(dict(name=name, steps=[
+            dict(action='alert', sql='SELECT triggered FROM ' + warehouse.identifier(self.raw),
+                 message='Synthetic condition'),
+            dict(action='sql', sql='INSERT INTO ' + warehouse.identifier(self.sandbox) +
+                 ' VALUES (99)', mode='sandbox-write'),
+        ]), 'local', 'data_engineer')
+        first_run = self.run_saved_job(name, role='data_engineer')
+        self.assertEqual(first_run['status'], 'success')
+        self.sql('DELETE FROM ' + warehouse.identifier(self.sandbox))
+        first = self.jobs.list_alerts('local', 'data_engineer')['alerts'][0]
+        for values in ('SELECT 1 AS triggered',
+                       'SELECT triggered FROM (VALUES TRUE, FALSE) AS t(triggered)'):
+            self.sql('CREATE OR REPLACE TABLE ' + warehouse.identifier(self.raw) + ' AS ' + values)
+            run = self.run_saved_job(name, role='data_engineer')
+            self.assertEqual(run['status'], 'failed')
+            self.assertEqual([step['status'] for step in run['steps']], ['failed', 'skipped'])
+            notifications = self.jobs.list_alerts('local', 'data_engineer')['alerts']
+            self.assertEqual(len(notifications), 1)
+            self.assertEqual(notifications[0]['id'], first['id'])
+            self.assertEqual(notifications[0]['last_run_id'], first_run['id'])
+            self.assertIsNone(notifications[0]['resolved_at'])
+            self.assertEqual(self.sql('SELECT count(*) FROM ' + warehouse.identifier(self.sandbox))['rows'], [[0]])
+        denied = self.run_job([dict(action='alert',
+            sql='SELECT count(*) > 0 FROM system.runtime.queries',
+            message='Must remain inaccessible')], role='data_engineer')
+        self.assertEqual(denied['status'], 'failed')
+        self.assertEqual(len(self.jobs.list_alerts('local', 'data_engineer')['alerts']), 1)
+
     def test_interval_scheduler_fires_once_and_retains_engineer_role(self):
         self.sql('CREATE TABLE ' + warehouse.identifier(self.raw) + ' (id BIGINT)')
         name = 'scheduled_' + uuid.uuid4().hex[:16]
         definition = dict(name=name, parameters={'id': {'type': 'integer', 'required': True}}, steps=[
+            dict(action='alert', sql='SELECT TRUE', message='Synthetic scheduled condition'),
             dict(action='sql', sql='INSERT INTO ' + warehouse.identifier(self.raw) +
                  ' VALUES ({{id}})', mode='sandbox-write', schema='raw'),
             # A default-admin worker would wrongly succeed here.
@@ -180,8 +255,12 @@ class RuntimeJobsTests(unittest.TestCase):
         self.assertTrue(run['scheduled_for'])
         self.assertEqual(run['role'], 'data_engineer')
         self.assertEqual(run['status'], 'failed')
-        self.assertEqual([step['status'] for step in run['steps']], ['success', 'failed', 'skipped'])
+        self.assertEqual([step['status'] for step in run['steps']], ['success', 'success', 'failed', 'skipped'])
         self.assertEqual(self.sql('SELECT id FROM ' + warehouse.identifier(self.raw))['rows'], [[7]])
+        notifications = self.jobs.list_alerts('local', 'data_engineer')
+        self.assertEqual(len(notifications['alerts']), 1)
+        self.assertEqual(notifications['alerts'][0]['first_run_id'], run['id'])
+        self.assertEqual(notifications['unacknowledged_count'], 1)
         self.jobs.save_schedule({**schedule, 'enabled': False}, 'local', 'data_engineer')
         self.jobs.tick()
         self.jobs.tick()
