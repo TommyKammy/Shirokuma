@@ -213,6 +213,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 table = params.get('table', [None])[0]
                 bears_resident.check_catalog_access(role, table)
                 options = {key: params[key][0] for key in ('detail', 'snapshot_id') if key in params}
+                bears_resident.validate_catalog_detail(options.get('detail'), table)
                 if 'snapshot_id' in options and not table:
                     raise ValueError('table is required for snapshot_id')
                 action = "lineage" if url.path.endswith("lineage") else "describe" if table else "search"

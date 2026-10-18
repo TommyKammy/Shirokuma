@@ -604,7 +604,7 @@ main{padding:14px 12px 32px}
 </section>
 <section id="catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
 <div class="page-head"><div class="page-title"><h1>Database Explorer</h1><p>Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.</p></div><div class="page-actions"><button id="refresh-catalog">Refresh catalog</button></div></div>
-<div id="catalog-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2></div><div class="panel-body" style="padding-bottom:0"><label for="catalog-filter" style="margin-top:0">Find schema or table</label><input id="catalog-filter" type="search" placeholder="Search catalog"><p class="help">Select a table to inspect its columns, data and history.</p></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table Inspector</h2><div class="toolbar"><button id="open-table-sql" class="small" disabled>Open in Worksheet</button><button id="clone-table-btn" class="small" disabled>Clone to Sandbox</button><select id="export-table-format" aria-label="Export format"><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="parquet">Parquet</option></select><button id="export-table-btn" class="small" disabled>Export Table</button><button id="drop-table-btn" class="small danger" hidden>Drop Table</button></div></div>
+<div id="catalog-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2></div><div class="panel-body" style="padding-bottom:0"><label for="catalog-filter" style="margin-top:0">Find schema or table</label><input id="catalog-filter" type="search" placeholder="Search catalog"><p class="help">Select a table to inspect its columns, data and history.</p></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table Inspector</h2><div class="toolbar"><button id="refresh-table-details" class="small" disabled>Refresh details</button><button id="open-table-sql" class="small" disabled>Open in Worksheet</button><button id="clone-table-btn" class="small" disabled>Clone to Sandbox</button><select id="export-table-format" aria-label="Export format"><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="parquet">Parquet</option></select><button id="export-table-btn" class="small" disabled>Export Table</button><button id="drop-table-btn" class="small danger" hidden>Drop Table</button></div></div>
 <div id="inspector-tabs" role="tablist" aria-label="Table Inspector">
 <button id="inspect-tab-columns" role="tab" aria-selected="true" aria-controls="inspect-columns" data-inspect="columns">Columns</button>
 <button id="inspect-tab-preview" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-preview" data-inspect="preview">Data Preview</button>
@@ -612,7 +612,7 @@ main{padding:14px 12px 32px}
 <button id="inspect-tab-ddl" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-ddl" data-inspect="ddl">DDL</button>
 <button id="inspect-tab-snapshots" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-snapshots" data-inspect="snapshots">Snapshots &amp; Time Travel</button>
 <button id="inspect-tab-lineage" role="tab" aria-selected="false" tabindex="-1" aria-controls="inspect-lineage" data-inspect="lineage">Table Lineage</button></div>
-<div id="inspect-columns" role="tabpanel" aria-labelledby="inspect-tab-columns"><div id="table-columns" class="table-wrap"><div class="empty">Choose a table to see its columns and types.</div></div><h3>Iceberg snapshots</h3><div id="column-snapshots" class="table-wrap"></div></div>
+<div id="inspect-columns" role="tabpanel" aria-labelledby="inspect-tab-columns"><div id="table-columns" class="table-wrap"><div class="empty">Choose a table to see its columns and types.</div></div></div>
 <div id="inspect-preview" role="tabpanel" aria-labelledby="inspect-tab-preview" hidden><div id="table-preview" class="table-wrap"></div></div>
 <div id="inspect-profile" role="tabpanel" aria-labelledby="inspect-tab-profile" class="panel-body" hidden></div>
 <div id="inspect-ddl" role="tabpanel" aria-labelledby="inspect-tab-ddl" hidden><pre id="table-ddl"></pre></div>
@@ -913,7 +913,7 @@ const i18n = {ja: {
  'replace':'置換', 'append':'追加', 'upsert':'更新・追加', 'Upsert key columns (required for upsert)':'更新キーのカラム（更新・追加では必須）', 'Upsert key columns, e.g. order_id':'更新キーのカラム（例: order_id）', 'Use input column names, separated by commas for a composite key.':'入力ファイルのカラム名を指定します。複合キーはカンマで区切ってください。',
  'Preview Schema & Sample Rows':'スキーマとサンプル行を確認', 'Ingest File':'ファイルを取り込む', 'Ready':'準備完了', 'Ingestion audit summary':'取り込み監査の概要',
  'Inspect model definitions and dependencies, then build or refresh.':'モデル定義と依存関係を確認し、ビルドや更新を実行します。', 'Refresh Models':'モデル一覧を更新', 'Run dbt Build':'dbt ビルドを実行', 'Run dbt Test':'dbt テストを実行', 'Persistent dbt Models':'永続 dbt モデル', 'Registered Dynamic WAP Models':'登録済み動的 WAP モデル', 'Choose a model':'モデルを選択', 'Open SQL in Worksheet':'SQL をワークシートで開く', 'Refresh WAP Model':'WAP モデルを更新', 'Choose a model to inspect its SQL.':'モデルを選択して SQL を確認してください。',
- 'Catalog & Lineage':'カタログ & リネージ', 'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Iceberg スキーマやカラムを確認し、dbt モデルの依存関係をたどります。', 'Refresh catalog':'カタログを更新', 'Iceberg tables':'Iceberg テーブル', 'Search catalog':'カタログを検索', 'Load the catalog to browse tables.':'カタログを読み込んでテーブルを探索してください。', 'Table Inspector':'テーブルインスペクター', 'Open in Worksheet':'ワークシートで開く', 'Drop Table':'テーブルを削除', 'Choose a table to see its columns and types.':'テーブルを選択してカラムと型を確認してください。', 'Iceberg snapshots':'Iceberg スナップショット', 'dbt model lineage':'dbt モデルのリネージ', 'Local model definitions':'ローカルのモデル定義', 'Loading dependencies…':'依存関係を読み込み中…',
+ 'Catalog & Lineage':'カタログ & リネージ', 'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Iceberg スキーマやカラムを確認し、dbt モデルの依存関係をたどります。', 'Catalog access changed. Refresh the page to sign in or reload permissions.':'カタログへのアクセス権が変更されました。ページを再読み込みしてサインインまたは権限を更新してください。', 'Details changed. Refresh details to continue.':'詳細が変更されました。詳細を更新して続行してください。', 'Refresh details':'詳細を更新', 'Refresh catalog':'カタログを更新', 'Iceberg tables':'Iceberg テーブル', 'Search catalog':'カタログを検索', 'Load the catalog to browse tables.':'カタログを読み込んでテーブルを探索してください。', 'Table Inspector':'テーブルインスペクター', 'Open in Worksheet':'ワークシートで開く', 'Drop Table':'テーブルを削除', 'Choose a table to see its columns and types.':'テーブルを選択してカラムと型を確認してください。', 'Iceberg snapshots':'Iceberg スナップショット', 'dbt model lineage':'dbt モデルのリネージ', 'Local model definitions':'ローカルのモデル定義', 'Loading dependencies…':'依存関係を読み込み中…',
  'Autonomous Bears Cockpit':'自律 AI Bears コックピット', 'Run the five resident specialists. Inspect their findings, recommendations, and telemetry.':'5 体の常駐スペシャリストを実行し、検出結果、推奨事項、実行記録を確認します。',
  'Recent warehouse and Bear activity, recorded in ClickHouse.':'ClickHouse に記録された最近のウェアハウスと Bear の操作履歴です。', 'Recent telemetry':'最近の実行記録', 'Latest 100 events':'最新 100 件のイベント', 'Search Pawprints':'監査ログを検索', 'Action, Bear, trace, or model':'操作、Bear、トレース、モデルを検索', 'Status':'状態', 'All statuses':'すべての状態', 'Refresh to load recent Pawprints.':'更新して最近の監査ログを読み込んでください。',
  'Virtual warehouse readiness and resident cluster checks.':'仮想ウェアハウスの稼働状態と常駐クラスターを確認します。', 'Refresh status':'状態を更新', 'SRE Cluster Health Check':'SRE クラスター稼働チェック', 'Policy Gatekeeper Audit':'Policy Gatekeeper 監査', 'Virtual warehouse status':'仮想ウェアハウスの状態', 'Component readiness':'コンポーネントの稼働状態',
@@ -988,6 +988,7 @@ const samples = {
 };
 let currentRole = 'admin';
 function applyRole() {
+ resetCatalogIdentity();
  document.documentElement.dataset.role=currentRole;
  if(typeof resetAdminViews==='function')resetAdminViews();
  if(typeof resetStageUI==='function')resetStageUI();
@@ -1011,13 +1012,19 @@ function applyRole() {
  const action=$('bear-data-action');if(action.selectedOptions[0]?.disabled)action.value='generate';
  if(typeof updateDataBearForm==='function')updateDataBearForm();
 }
-$('role-selector').onchange=()=>{currentRole=$('role-selector').value;applyRole();};
+$('role-selector').onchange=()=>{currentRole=$('role-selector').value;applyRole();loadCatalog();};
 async function api(path, body) {
+ const mutation=catalogMutation(path,body),identity=catalogIdentity(),generation=catalogGeneration;
+ if(mutation)invalidateCatalogDetails();
+ try{
  const headers={'X-Shirokuma-Role':currentRole};
  const response = await fetch(path, body === undefined ? {headers} : {method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ if(path.split('?')[0]==='/api/catalog'&&[401,403].includes(response.status)&&identity===catalogIdentity()&&generation===catalogGeneration){resetCatalogIdentity();message('catalog-error',t('Catalog access changed. Refresh the page to sign in or reload permissions.'));}
  const data = await response.json();
  if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
+ if(identity===catalogIdentity())observeCatalogRuns(path,body,data);
  return data;
+ }finally{if(mutation)invalidateCatalogDetails();}
 }
 function message(id, text) {
  const key = text in i18n.en ? text : Object.keys(i18n.ja).find(key => i18n.ja[key] === text);
@@ -1128,44 +1135,150 @@ $('ingest-form').onsubmit=e=>{e.preventDefault();busy($('run-ingest'),async()=>{
  catch(error){message('ingest-error',error.message);ui($('ingest-state'),'Ingestion failed');$('ingest-state').className='status-line tone-bad';}
  });};
 let columnRequest=0;
+let catalogSession='',catalogGeneration=0,catalogListRequest=0,activeInspector='columns',catalogSessionValidation=null,snapshotPreviewRequest=0;
+const catalogCache=new Map(),catalogPending=new Map(),catalogRunStates=new Map();
+const inspectorTargets={columns:'table-columns',preview:'table-preview',profile:'inspect-profile',ddl:'table-ddl',snapshots:'table-snapshots',lineage:'table-lineage'};
+function catalogIdentity(){return JSON.stringify([catalogSession,currentRole]);}
+function catalogKey(selected,section){return JSON.stringify([catalogIdentity(),selected,section]);}
+function cachedCatalogDetail(key){
+ const entry=catalogCache.get(key);if(!entry)return;
+ if(Date.now()-entry.at>=15000){catalogCache.delete(key);return;}
+ return entry.data;
+}
+function invalidateCatalogDetails(){
+ ++catalogGeneration;++snapshotPreviewRequest;catalogCache.clear();catalogPending.clear();catalogSessionValidation=null;
+ for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
+ if(selectedTable){
+  ui($(inspectorTargets[activeInspector]),'Details changed. Refresh details to continue.');
+  for(const id of ['open-table-sql','clone-table-btn','export-table-btn','drop-table-btn'])$(id).disabled=true;
+  $('refresh-table-details').disabled=false;
+ }
+ message('catalog-error','');
+}
+function resetCatalogIdentity(){
+ selectedTable=null;
+ invalidateCatalogDetails();++columnRequest;++catalogListRequest;catalogRunStates.clear();
+ catalogMetadata={};selectedTable=null;renderCatalogTrees();$('lineage').replaceChildren();
+ ui($('table-title'),'Table Inspector');
+ for(const id of ['open-table-sql','clone-table-btn','export-table-btn','refresh-table-details'])$(id).disabled=true;
+ $('drop-table-btn').hidden=true;
+}
+function validateCatalogSession(){
+ const identity=catalogIdentity(),generation=catalogGeneration;
+ if(catalogSessionValidation?.identity===identity&&catalogSessionValidation.generation===generation)return catalogSessionValidation.promise;
+ const current=()=>identity===catalogIdentity()&&generation===catalogGeneration;
+ const promise=(async()=>{
+  const response=await fetch('/api/session');
+  if(!current())return false;
+  if([401,403].includes(response.status)){resetCatalogIdentity();message('catalog-error',t('Catalog access changed. Refresh the page to sign in or reload permissions.'));return false;}
+  const session=await response.json();if(!current())return false;
+  if(!response.ok)throw Error(session.error||`HTTP ${response.status}`);
+  const next=JSON.stringify([session.username,session.authenticated,session.maximum_role]);
+  if(next!==catalogSession){
+   catalogSession=next;
+   const ranks={bi_viewer:0,data_engineer:1,admin:2},maximum=session.maximum_role in ranks?session.maximum_role:'bi_viewer';
+   if(!(currentRole in ranks)||ranks[currentRole]>ranks[maximum])currentRole=maximum;
+   for(const option of $('role-selector').options)option.disabled=ranks[option.value]>ranks[maximum];
+   $('role-selector').value=currentRole;
+   applyRole();await loadCatalog();return false;
+  }
+  return true;
+ })().finally(()=>{if(catalogSessionValidation?.promise===promise)catalogSessionValidation=null;});
+ catalogSessionValidation={identity,generation,promise};return promise;
+}
+function catalogMutation(path,body){
+ if(body===undefined)return false;
+ if(['/api/warehouse/query','/api/lake/ingest','/api/catalog/clone','/api/catalog/drop','/api/jobs/run','/api/marts/run','/api/stages/import','/api/stages/scan','/api/stages/export'].includes(path))return true;
+ if(path==='/api/models/build')return body.action==='build';
+ return path==='/api/bears/run'&&body.bear==='data'&&(['stage','publish','refresh','rollback'].includes(body.action)||!!(body.stage_table||body.publish||body.refresh||body.rollback));
+}
+function observeCatalogRuns(path,body,data){
+ let states;
+ if(path==='/api/jobs/runs')states=(data.runs||[]).map(r=>[r.id,r.status]);
+ if(path==='/api/marts')states=(data.marts||[]).filter(m=>m.last_run).map(m=>[m.last_run.id,m.last_run.status]);
+ if(path==='/api/stages/files')states=(data.files||[]).filter(f=>f.last_run_id).map(f=>[f.last_run_id,f.ingestion_status]);
+ if(!states)return;
+ const key=JSON.stringify([path,body?.name]),signature=JSON.stringify(states.sort((a,b)=>String(a[0]).localeCompare(String(b[0]))));
+ if(catalogRunStates.get(key)!==signature&&(catalogRunStates.has(key)||states.length))invalidateCatalogDetails();
+ catalogRunStates.set(key,signature);
+}
+function fetchCatalogDetail(selected,section){
+ const key=catalogKey(selected,section),cached=cachedCatalogDetail(key);
+ if(cached)return validateCatalogSession().then(valid=>valid?cachedCatalogDetail(key):undefined);
+ if(catalogPending.has(key))return catalogPending.get(key);
+ const generation=catalogGeneration,identity=catalogIdentity();
+ const pending=api('/api/catalog?table='+encodeURIComponent(selected)+'&detail='+section).then(data=>{
+  const metadataKey={ddl:'definition',lineage:'lineage_detail'}[section]||section;
+  if(data.metadata?.[metadataKey]?.error)throw Error(data.metadata[metadataKey].error);
+  if(generation===catalogGeneration&&identity===catalogIdentity()){
+   for(const [k,entry] of catalogCache)if(Date.now()-entry.at>=15000)catalogCache.delete(k);
+   catalogCache.delete(key);catalogCache.set(key,{at:Date.now(),data});
+   if(catalogCache.size>64)catalogCache.delete(catalogCache.keys().next().value);
+  }
+  return data;
+ }).finally(()=>{if(catalogPending.get(key)===pending)catalogPending.delete(key);});
+ catalogPending.set(key,pending);return pending;
+}
 async function describeTable(schema,name){
+ ++snapshotPreviewRequest;
  const request=++columnRequest,selected=schema+'.'+name;selectedTable=selected;
- $('clone-table-btn').disabled=false;$('export-table-btn').disabled=false;
+ const section=activeInspector,generation=catalogGeneration,identity=catalogIdentity();
+ const current=()=>request===columnRequest&&generation===catalogGeneration&&identity===catalogIdentity()&&selectedTable===selected&&activeInspector===section;
+ for(const id of ['clone-table-btn','export-table-btn','drop-table-btn'])$(id).disabled=true;
+ $('refresh-table-details').disabled=false;
  $('table-title').textContent=selected;$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;
- for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])ui($(id),'Loading…');
+ for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
+ message('catalog-error','');
  try{
-  const data=await api('/api/catalog?table='+encodeURIComponent(selected)+'&detail=full');if(request!==columnRequest)return;
+  if(!cachedCatalogDetail(catalogKey(selected,section)))ui($(inspectorTargets[section]),'Loading…');
+  let data=await fetchCatalogDetail(selected,section);
+  if(!current())return;
+  if(!data)data=await fetchCatalogDetail(selected,section);
+  if(!current()||!data)return;
   const m=data.metadata,snapshots=m.snapshots?.rows||[];
-  table($('table-columns'),['Column','Type','Extra','Comment'],m.columns||[]);
-  table($('column-snapshots'),['Snapshot ID','Parent ID','Committed at'],snapshots);
-  renderData($('table-preview'),m.preview);
+  if(section==='columns')table($('table-columns'),['Column','Type','Extra','Comment'],m.columns||[]);
+  if(section==='preview')renderData($('table-preview'),m.preview);
+  if(section==='profile'){
   const profile=m.profile||{};$('inspect-profile').replaceChildren();
   const stats=document.createElement('p');if(profile.error)stats.textContent=profile.error;else ui(stats,'Rows: {rows} · Columns: {columns}',{rows:profile.row_count??'—',columns:profile.column_count??'—'});
   const badge=document.createElement('span');badge.className='badge '+(profile.quality_passed===true?'good':'');ui(badge,'Quality: {state}',()=>({state:t(profile.quality_passed===true?'Passed':profile.quality_passed===false?'Needs review':'Unavailable')}));
   const nulls=document.createElement('div');nulls.className='table-wrap';
   table(nulls,['Column','NULL count','NULL %'],Object.entries(profile.null_counts||{}).map(([column,count])=>[column,count,profile.row_count>0?(100*count/profile.row_count).toFixed(2)+'%':'—']));$('inspect-profile').append(stats,badge,nulls);
-  const definition=m.definition?.error|| (m.definition||[]).map(r=>r[0]).join('\n');if(definition)$('table-ddl').textContent=definition;else ui($('table-ddl'),'Definition unavailable');
-  renderLineage($('table-lineage'),m.lineage_detail?.upstream||[],selected,m.lineage_detail?.downstream||[]);
+  }
+  if(section==='ddl'){const definition=m.definition?.error|| (m.definition||[]).map(r=>r[0]).join('\n');if(definition)$('table-ddl').textContent=definition;else ui($('table-ddl'),'Definition unavailable');}
+  if(section==='lineage')renderLineage($('table-lineage'),m.lineage_detail?.upstream||[],selected,m.lineage_detail?.downstream||[]);
   if(m.lineage_detail?.wap_sql){const sql=document.createElement('pre');sql.textContent=m.lineage_detail.wap_sql;$('table-lineage').append(sql);}
-  table($('table-snapshots'),['Snapshot ID','Parent ID','Committed at','Actions'],snapshots.map(r=>[...r.slice(0,3),'']));
+  if(section==='snapshots')table($('table-snapshots'),['Snapshot ID','Parent ID','Committed at','Actions'],snapshots.map(r=>[...r.slice(0,3),'']));
   if(m.snapshots?.error)$('table-snapshots').textContent=m.snapshots.error;
   $('snapshot-preview').replaceChildren();
   $('table-snapshots').querySelectorAll('tbody tr').forEach((row,i)=>{
    const snapshot=String(snapshots[i][0]);
-   const preview=actionButton('Preview Snapshot',async()=>{try{const data=await api('/api/catalog?table='+encodeURIComponent(selected)+'&snapshot_id='+encodeURIComponent(snapshot));if(request!==columnRequest)return;const heading=document.createElement('p');ui(heading,'Snapshot {snapshot} · Historical rows: {rows} · Current rows: {current} · Delta: {delta}',()=>({snapshot,rows:data.row_count,current:data.current_row_count??t('unavailable'),delta:data.current_row_count==null?t('unavailable'):data.row_count-data.current_row_count}));const grid=document.createElement('div');grid.className='table-wrap';renderData(grid,data.preview);$('snapshot-preview').replaceChildren(heading,grid);}catch(e){if(request===columnRequest)$('snapshot-preview').textContent=e.message;}});
-   const rollback=actionButton('Rollback',async()=>{if(!confirm(t('Rollback {table} to snapshot {snapshot}?',{table:selected,snapshot})))return;try{const result=await api('/api/bears/run',{bear:'data',action:'rollback',rollback:selected,snapshot_id:snapshot});if(request!==columnRequest)return;if(result.valid===false)throw new Error(t('Rollback audit needs review'));await describeTable(schema,name);}catch(e){if(request===columnRequest)ui($('snapshot-preview'),'Rollback failed: {error}',{error:e.message});}});
+   const preview=actionButton('Preview Snapshot',async()=>{const previewRequest=++snapshotPreviewRequest;try{const data=await api('/api/catalog?table='+encodeURIComponent(selected)+'&snapshot_id='+encodeURIComponent(snapshot));if(!current()||previewRequest!==snapshotPreviewRequest)return;const heading=document.createElement('p');ui(heading,'Snapshot {snapshot} · Historical rows: {rows} · Current rows: {current} · Delta: {delta}',()=>({snapshot,rows:data.row_count,current:data.current_row_count??t('unavailable'),delta:data.current_row_count==null?t('unavailable'):data.row_count-data.current_row_count}));const grid=document.createElement('div');grid.className='table-wrap';renderData(grid,data.preview);$('snapshot-preview').replaceChildren(heading,grid);}catch(e){if(current()&&previewRequest===snapshotPreviewRequest)$('snapshot-preview').textContent=e.message;}});
+   const rollback=actionButton('Rollback',async()=>{if(!current()||!confirm(t('Rollback {table} to snapshot {snapshot}?',{table:selected,snapshot})))return;try{const result=await api('/api/bears/run',{bear:'data',action:'rollback',rollback:selected,snapshot_id:snapshot});if(request!==columnRequest||identity!==catalogIdentity())return;if(result.valid===false)throw new Error(t('Rollback audit needs review'));await describeTable(schema,name);}catch(e){if(request===columnRequest&&identity===catalogIdentity())ui($('snapshot-preview'),'Rollback failed: {error}',{error:e.message});}});
    const clone=actionButton('Clone Snapshot',()=>cloneTable(selected,snapshot,request));
    row.lastElementChild.append(preview,rollback,clone);
   });
+  $('clone-table-btn').disabled=currentRole==='bi_viewer';$('export-table-btn').disabled=false;
+  $('drop-table-btn').disabled=currentRole==='bi_viewer';
   $('open-table-sql').disabled=false;$('drop-table-btn').hidden=!['raw','sandbox','staging','scratch'].includes(schema);
- }catch(e){if(request===columnRequest){for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])ui($(id),'Details unavailable');message('catalog-error',e.message);}}
+ }catch(e){if(current()){ui($(inspectorTargets[section]),'Details unavailable');message('catalog-error',e.message);}}
 }
 async function loadCatalog(){
+ invalidateCatalogDetails();const request=++catalogListRequest,identity=catalogIdentity(),generation=catalogGeneration;
+ const current=()=>request===catalogListRequest&&identity===catalogIdentity()&&generation===catalogGeneration;
  message('catalog-error','');ui($('catalog-tree'),'Loading tables…');
- try{const data=await api('/api/catalog');catalogMetadata=data.metadata;renderCatalogTrees();
- }catch(e){message('catalog-error',e.message);ui($('catalog-tree'),'Catalog unavailable. Check warehouse readiness and refresh.');ui($('worksheet-tree'),'Catalog unavailable. Use Refresh catalog in Database Explorer.');}
- try{const data=await api('/api/lineage');$('lineage').replaceChildren();Object.entries(data.metadata.lineage).forEach(([model,parents])=>{if(!parents.length)return;const row=document.createElement('div');row.className='lineage-row';for(const name of [parents.join(' + '),'→',model]){const node=document.createElement('span');node.className=name==='→'?'arrow':'node';node.textContent=name;row.append(node);}$('lineage').append(row);});if(!$('lineage').childElementCount)ui($('lineage'),'No model dependencies recorded.');}catch(e){$('lineage').textContent=e.message;}
+ try{const data=await api('/api/catalog');if(!current())return;catalogMetadata=data.metadata;renderCatalogTrees();
+  if(selectedTable){const [schema,name]=selectedTable.split('.');if(catalogMetadata[schema]?.some(row=>row[0]===name))await describeTable(schema,name);else{resetCatalogSelection();}}
+ }catch(e){if(!current())return;message('catalog-error',e.message);ui($('catalog-tree'),'Catalog unavailable. Check warehouse readiness and refresh.');ui($('worksheet-tree'),'Catalog unavailable. Use Refresh catalog in Database Explorer.');}
+ if(!current())return;
+ try{const data=await api('/api/lineage');if(!current())return;$('lineage').replaceChildren();Object.entries(data.metadata.lineage).forEach(([model,parents])=>{if(!parents.length)return;const row=document.createElement('div');row.className='lineage-row';for(const name of [parents.join(' + '),'→',model]){const node=document.createElement('span');node.className=name==='→'?'arrow':'node';node.textContent=name;row.append(node);}$('lineage').append(row);});if(!$('lineage').childElementCount)ui($('lineage'),'No model dependencies recorded.');}catch(e){if(current())$('lineage').textContent=e.message;}
 }
+function resetCatalogSelection(){
+ ++columnRequest;selectedTable=null;ui($('table-title'),'Table Inspector');
+ for(const id of ['open-table-sql','clone-table-btn','export-table-btn','refresh-table-details'])$(id).disabled=true;
+ $('drop-table-btn').hidden=true;
+}
+$('refresh-table-details').onclick=()=>busy($('refresh-table-details'),loadCatalog).finally(()=>{$('refresh-table-details').disabled=!selectedTable;});
 $('refresh-catalog').onclick=()=>busy($('refresh-catalog'),loadCatalog);
 const bears=[
  {key:'sre',name:'SRE Bear',description:'Inspect workload readiness, recent errors, and runtime metrics.',fields:[]},
@@ -1248,7 +1361,7 @@ let catalogMetadata={},selectedTable=null;
 function renderCatalogTrees(){for(const [target,filter,insert] of [['catalog-tree','catalog-filter',false],['worksheet-tree','worksheet-tree-filter',true]]){const container=$(target),term=$(filter).value.toLowerCase();container.replaceChildren();container.className='';for(const [schema,rows] of Object.entries(catalogMetadata)){if(!Array.isArray(rows))continue;const matches=rows.filter(row=>(schema+'.'+row[0]).toLowerCase().includes(term));if(!matches.length)continue;const group=document.createElement('details'),title=document.createElement('summary');group.open=true;title.textContent=`${schema} (${matches.length})`;group.append(title);for(const row of matches){const name=row[0],b=document.createElement('button');b.className='table-link';b.textContent=name;b.onclick=()=>{if(insert){const editor=$('sql'),start=editor.selectionStart,end=editor.selectionEnd;editor.setRangeText(schema+'.'+name,start,end,'end');saveWorksheet();editor.focus();}else describeTable(schema,name);};group.append(b);}container.append(group);}if(!container.childElementCount)ui(container,'No matching tables.');}}
 $('catalog-filter').oninput=renderCatalogTrees;$('worksheet-tree-filter').oninput=renderCatalogTrees;
 $('open-table-sql').onclick=()=>openWorksheet('SELECT * FROM '+selectedTable+' LIMIT 50');
-$('drop-table-btn').onclick=()=>busy($('drop-table-btn'),async()=>{const selected=selectedTable;if(!selected||!confirm(t('Drop {table}? This deletes the table.',{table:selected})))return;try{await api('/api/catalog/drop',{table:selected});if(selectedTable===selected){++columnRequest;selectedTable=null;$('clone-table-btn').disabled=true;$('export-table-btn').disabled=true;ui($('table-title'),'Table dropped');$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;for(const id of ['table-columns','column-snapshots','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).replaceChildren();}await loadCatalog();}catch(e){message('catalog-error',e.message);}});
+$('drop-table-btn').onclick=()=>busy($('drop-table-btn'),async()=>{const selected=selectedTable;if(!selected||!confirm(t('Drop {table}? This deletes the table.',{table:selected})))return;try{await api('/api/catalog/drop',{table:selected});if(selectedTable===selected){++columnRequest;selectedTable=null;$('refresh-table-details').disabled=true;$('clone-table-btn').disabled=true;$('export-table-btn').disabled=true;ui($('table-title'),'Table dropped');$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;for(const id of ['table-columns','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).replaceChildren();}await loadCatalog();}catch(e){message('catalog-error',e.message);}});
 function wireTabs(buttons,select){buttons.forEach((b,i)=>{b.onclick=()=>select(b);b.onkeydown=e=>{let n;if(['ArrowRight','ArrowDown'].includes(e.key))n=(i+1)%buttons.length;else if(['ArrowLeft','ArrowUp'].includes(e.key))n=(i+buttons.length-1)%buttons.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=buttons.length-1;if(n!==undefined){e.preventDefault();select(buttons[n]);buttons[n].focus();}};});}
 // Views inside a page (for example Jobs → Run history) share the same tab behaviour.
 function showView(id){const button=$(id);if(button&&!button.hidden)button.click();}
@@ -1262,7 +1375,12 @@ for(const group of new Set([...document.querySelectorAll('[data-view]')].map(b=>
  const buttons=[...document.querySelectorAll(`[data-view="${group}"]`)];
  wireTabs(buttons,button=>{if(button.hasAttribute('data-admin-view')&&currentRole!=='admin')return;selectView(button);});
 }
-const inspectorTabs=[...document.querySelectorAll('[data-inspect]')];wireTabs(inspectorTabs,button=>inspectorTabs.forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$('inspect-'+b.dataset.inspect).hidden=!selected;}));
+const inspectorTabs=[...document.querySelectorAll('[data-inspect]')];wireTabs(inspectorTabs,selectInspector);
+function selectInspector(button){
+ activeInspector=button.dataset.inspect;
+ inspectorTabs.forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$('inspect-'+b.dataset.inspect).hidden=!selected;});
+ if(selectedTable){const [schema,name]=selectedTable.split('.');return describeTable(schema,name);}
+}
 
 // Storage is optional (private browsing, quotas, or damaged records must not block SQL).
 const worksheetKey='shirokuma.worksheets.v1',historyKey='shirokuma.query_history.v1';
@@ -1708,12 +1826,16 @@ for(const view of ['table','chart'])$('result-view-'+view).onclick=()=>{for(cons
 for(const id of ['chart-type','chart-x-col','chart-y-col'])$(id).onchange=renderChart;
 async function cloneTable(source,snapshot,request=columnRequest){
  if(!source)return;
+ const identity=catalogIdentity();let refreshRequest=request;
  try{const payload={source_table:source};if(snapshot!==undefined)payload.snapshot_id=snapshot;
  const result=await api('/api/catalog/clone',payload);
+ if(request!==columnRequest||identity!==catalogIdentity())return;
+ // Catalog refresh reloads the selected inspector once, advancing its request.
+ refreshRequest=request+1;
  await loadCatalog();
- if(request!==columnRequest)return;
+ if(refreshRequest!==columnRequest||identity!==catalogIdentity()||selectedTable!==source)return;
  ui($('catalog-error'),result.audit?.quality_passed===false?'Clone audit needs review':'Cloned {source} to {table}.',{source,table:result.table});$('catalog-error').hidden=false;
- }catch(e){if(request===columnRequest){ui($('catalog-error'),'Clone failed: {error}',{error:e.message});$('catalog-error').hidden=false;}}
+ }catch(e){if((request===columnRequest||refreshRequest===columnRequest)&&identity===catalogIdentity()){ui($('catalog-error'),'Clone failed: {error}',{error:e.message});$('catalog-error').hidden=false;}}
 }
 $('clone-table-btn').onclick=()=>busy($('clone-table-btn'),()=>cloneTable(selectedTable));
 function downloadFile(content,filename,type){
@@ -2116,6 +2238,7 @@ async function initializeSession() {
  const response=await fetch('/api/session');
  const session=await response.json();
  if(!response.ok)throw new Error(session.error||`HTTP ${response.status}`);
+ catalogSession=JSON.stringify([session.username,session.authenticated,session.maximum_role]);
  const ranks={bi_viewer:0,data_engineer:1,admin:2};
  currentRole=session.maximum_role;
  for(const option of $('role-selector').options)option.disabled=ranks[option.value]>ranks[currentRole];

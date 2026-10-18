@@ -139,6 +139,203 @@ class BearsResidentTests(unittest.TestCase):
                 self.assertEqual(metadata['profile']['row_count'], 3)
                 self.assertEqual(metadata['definition'], [['value']])
 
+    def test_catalog_sections_execute_only_requested_query(self):
+        quoted = '"iceberg"."custom"."orders"'
+        cases = [
+            ('columns', 'columns', 'SHOW COLUMNS FROM ' + quoted, True),
+            ('preview', 'preview', 'SELECT * FROM ' + quoted + ' LIMIT 50', False),
+            ('ddl', 'definition', 'SHOW CREATE TABLE ' + quoted, True),
+            ('snapshots', 'snapshots', 'SELECT snapshot_id, parent_id, committed_at FROM '
+             '"iceberg"."custom"."orders$snapshots" ORDER BY committed_at DESC', False),
+        ]
+        response = {'rows': [['id', 'bigint', '', 'identifier']], 'query_id': 'query-1'}
+        for detail, key, statement, rows_only in cases:
+            # Even the CLI default include_config=True must not add other sections.
+            with self.subTest(detail=detail), patch.object(b, 'sql', return_value=response) as sql, \
+                 patch.object(b, 'audit_table') as audit, patch.object(b, '_table_lineage') as lineage, \
+                 patch.object(b.wr, 'kubectl') as kubectl:
+                result = b.catalog(Args(action='describe', table='custom.orders', detail=detail))
+            self.assertEqual(result, dict(action='describe', catalog='iceberg',
+                metadata={key: response['rows'] if rows_only else response}))
+            sql.assert_called_once_with('http://trino', statement)
+            audit.assert_not_called()
+            lineage.assert_not_called()
+            kubectl.assert_not_called()
+
+    def test_catalog_snapshot_preview_keeps_precedence_over_valid_detail(self):
+        snapshot = '9007199254740993'
+        for detail in ('full', 'columns', 'preview', 'profile', 'ddl', 'snapshots', 'lineage'):
+            with self.subTest(detail=detail), patch.object(b, 'sql', side_effect=[
+                    {'rows': [[1]]}, {'rows': [[2]]}, {'rows': [[3]]}]) as sql, \
+                 patch.object(b, 'audit_table') as audit, patch.object(b, '_table_lineage') as lineage:
+                report = b.catalog(Args(action='describe', table='marts.orders', detail=detail, snapshot_id=snapshot))
+            self.assertEqual(report, dict(action='snapshot_preview', catalog='iceberg', table='iceberg.marts.orders',
+                snapshot_id=snapshot, row_count=2, current_row_count=3, preview={'rows': [[1]]}))
+            table = '"iceberg"."marts"."orders"'
+            self.assertEqual([call.args[1] for call in sql.call_args_list], [
+                f'SELECT * FROM {table} FOR VERSION AS OF {snapshot} LIMIT 50',
+                f'SELECT COUNT(*) FROM {table} FOR VERSION AS OF {snapshot}', f'SELECT COUNT(*) FROM {table}'])
+            audit.assert_not_called()
+            lineage.assert_not_called()
+
+    def test_catalog_section_failures_stay_with_requested_section(self):
+        for detail, key in [('preview', 'preview'), ('profile', 'profile'), ('ddl', 'definition'),
+                            ('snapshots', 'snapshots')]:
+            with self.subTest(detail=detail), patch.object(b, 'sql', side_effect=RuntimeError('unavailable')) as sql:
+                metadata = b.catalog(Args(action='describe', table='orders', detail=detail))['metadata']
+            self.assertEqual(metadata, {key: {'error': 'unavailable'}})
+            self.assertEqual(sql.call_count, 1)
+
+    def test_catalog_lineage_uses_only_local_metadata(self):
+        registry = {'orders': dict(table='iceberg.marts.orders', sources=['raw.orders'], sql='SELECT 1'),
+                    'summary': dict(table='iceberg.marts.summary', sources=['marts.orders'])}
+        with patch.object(b, 'load_wap_registry', return_value=registry), \
+             patch.object(b.wr, 'trino') as trino, patch.object(b, 'sql') as sql, \
+             patch.object(b.wr, 'kubectl') as kubectl:
+            result = b.catalog(Args(action='describe', table='orders', detail='lineage'))
+        self.assertEqual(result['metadata'], {'lineage_detail': dict(upstream=['raw.orders'],
+            downstream=['iceberg.marts.summary'], layer='wap', wap_sql='SELECT 1')})
+        trino.assert_not_called()
+        sql.assert_not_called()
+        kubectl.assert_not_called()
+
+    def test_catalog_invalid_detail_fails_before_queries(self):
+        with patch.object(b.wr, 'trino') as trino, patch.object(b, 'sql') as sql, \
+             patch.object(b, '_table_lineage') as lineage:
+            for detail in ('', 'unknown', 'FULL', 0, [], {}):
+                for snapshot in (None, '9007199254740993'):
+                    with self.subTest(detail=detail, snapshot=snapshot), \
+                         self.assertRaisesRegex(ValueError, 'invalid catalog detail'):
+                        b.catalog(Args(action='describe', table='marts.orders', detail=detail, snapshot_id=snapshot))
+            for detail in ('columns', 'preview', 'profile', 'ddl', 'snapshots', 'lineage', 'full'):
+                with self.subTest(detail=detail), self.assertRaisesRegex(ValueError, 'table is required for detail'):
+                    b.catalog(Args(action='search', table=None, detail=detail))
+        trino.assert_not_called()
+        sql.assert_not_called()
+        lineage.assert_not_called()
+
+    def test_catalog_access_applies_to_every_section(self):
+        with patch.object(b.wr, 'trino') as trino, patch.object(b, 'sql') as sql, \
+             patch.object(b, '_table_lineage') as lineage:
+            for detail in (None, 'full', 'columns', 'preview', 'profile', 'ddl', 'snapshots', 'lineage'):
+                with self.subTest(detail=detail), self.assertRaises(PermissionError):
+                    b.catalog(Args(action='describe', table='raw.orders', detail=detail, role='bi_viewer'))
+        trino.assert_not_called()
+        sql.assert_not_called()
+        lineage.assert_not_called()
+
+    def test_catalog_full_reuses_columns_and_preserves_profile(self):
+        table = '"iceberg"."marts"."orders"'
+        columns = [['order id', 'bigint', '', 'key'], ['amount', 'decimal(12,2)'], ['a"b', 'varchar']]
+        active, newest = 9007199254740993, 9223372036854775806
+        show_columns = 'SHOW COLUMNS FROM ' + table
+        aggregates = ('SELECT COUNT(*), COUNT(*) - COUNT("order id"), COUNT(*) - COUNT("amount"), '
+                      'COUNT(*) - COUNT("a""b") FROM ' + table)
+        sample = 'SELECT * FROM ' + table + ' LIMIT 5'
+        history = 'SELECT snapshot_id FROM "iceberg"."marts"."orders$history" ORDER BY made_current_at DESC LIMIT 1'
+        snapshots = ('SELECT snapshot_id, parent_id, committed_at FROM "iceberg"."marts"."orders$snapshots" '
+                     'ORDER BY committed_at DESC')
+        preview = 'SELECT * FROM ' + table + ' LIMIT 50'
+        ddl = 'SHOW CREATE TABLE ' + table
+        replies = {show_columns: {'rows': columns}, aggregates: {'rows': [[7, 0, 2, 1]]},
+                   sample: {'rows': [[1, '2.50', None]]}, history: {'rows': [[active]]},
+                   snapshots: {'rows': [[newest, active, 'newest'], [active, None, 'active']]},
+                   preview: {'rows': [[1, '2.50', None]]}, ddl: {'rows': [['CREATE TABLE orders (...)']]}}
+        profiles = []
+        for detail in ('full', 'profile'):
+            with self.subTest(detail=detail), patch.object(b, 'sql', side_effect=lambda url, sql: replies[sql]) as sql, \
+                 patch.object(b, '_table_lineage', return_value={'upstream': [], 'downstream': []}), \
+                 patch.object(b.wr, 'kubectl') as kubectl:
+                metadata = b.catalog(Args(action='describe', table='orders', detail=detail,
+                                          include_config=False))['metadata']
+            profiles.append(metadata['profile'])
+            expected = ([show_columns, snapshots, preview, aggregates, sample, history, ddl]
+                        if detail == 'full' else [show_columns, aggregates, sample, history])
+            self.assertEqual([call.args[1] for call in sql.call_args_list], expected)
+            self.assertEqual(set(metadata), {'columns', 'snapshots', 'preview', 'profile', 'definition', 'lineage_detail'}
+                             if detail == 'full' else {'profile'})
+            kubectl.assert_not_called()
+        self.assertEqual(profiles[0], profiles[1])
+        self.assertEqual(profiles[0], dict(table='iceberg.marts.orders', row_count=7, column_count=3,
+            columns=[dict(name=row[0], type=row[1]) for row in columns],
+            null_counts={'order id': 0, 'amount': 2, 'a"b': 1}, sample_rows=[[1, '2.50', None]],
+            snapshot_id=active, quality_passed=True))
+
+    def test_catalog_omitted_detail_preserves_existing_response(self):
+        for include_config in (False, True):
+            with self.subTest(include_config=include_config), \
+                 patch.object(b, 'sql', return_value={'rows': [['metadata']]}) as sql, \
+                 patch.object(b, 'audit_table') as audit, patch.object(b, '_table_lineage') as lineage, \
+                 patch.object(b.wr, 'kubectl', return_value='config') as kubectl:
+                result = b.catalog(Args(action='describe', table='orders', include_config=include_config))
+            expected = {'columns': [['metadata']], 'snapshots': {'rows': [['metadata']]}}
+            statements = ['SHOW COLUMNS FROM "iceberg"."marts"."orders"']
+            if include_config:
+                expected.update(definition=[['metadata']], catalog_config='config')
+                statements.append('SHOW CREATE TABLE "iceberg"."marts"."orders"')
+            statements.append('SELECT snapshot_id, parent_id, committed_at FROM '
+                              '"iceberg"."marts"."orders$snapshots" ORDER BY committed_at DESC')
+            self.assertEqual(result, dict(action='describe', catalog='iceberg', metadata=expected))
+            self.assertEqual([call.args[1] for call in sql.call_args_list], statements)
+            self.assertEqual(kubectl.call_count, int(include_config))
+            audit.assert_not_called()
+            lineage.assert_not_called()
+
+    def test_catalog_http_sections_preserve_authenticated_role_and_large_ids(self):
+        from email.message import Message
+        import workbench_server as server
+        active = 9007199254740993
+        original_role = server.request_auth.current_role()
+
+        def execute(url, statement, headers):
+            self.assertEqual(server.request_auth.current_role(), 'bi_viewer')
+            if statement.startswith('SHOW COLUMNS'):
+                return {'rows': [['id', 'bigint']]}
+            if '$snapshots' in statement:
+                return {'rows': [[active, active - 1, 'timestamp']]}
+            if '$history' in statement:
+                return {'rows': [[active]]}
+            if statement.startswith('SELECT COUNT'):
+                return {'rows': [[2, 0]]}
+            return {'rows': [[1]]}
+
+        for detail, key in [('columns', 'columns'), ('preview', 'preview'), ('profile', 'profile'),
+                            ('ddl', 'definition'), ('snapshots', 'snapshots'), ('lineage', 'lineage_detail')]:
+            handler = object.__new__(server.WorkbenchHandler)
+            handler.path = '/api/catalog?table=marts.orders&detail=' + detail
+            handler.headers = Message()
+            with self.subTest(detail=detail), patch.object(server, 'bears_resident', b), \
+                 patch.object(server.request_auth, 'authenticate', return_value=('reader', 'bi_viewer')), \
+                 patch.object(b.wr, 'execute', side_effect=execute) as sql, \
+                 patch.object(b, '_table_lineage', return_value={'upstream': [], 'downstream': []}), \
+                 patch.object(handler, 'respond') as respond:
+                handler.do_GET()
+            self.assertEqual(handler.authenticated_user, 'reader')
+            metadata = respond.call_args.args[0]['metadata']
+            self.assertEqual(set(metadata), {key})
+            if detail == 'snapshots':
+                self.assertEqual(metadata[key]['rows'][0], [str(active), str(active - 1), 'timestamp'])
+            elif detail == 'profile':
+                self.assertEqual(metadata[key]['snapshot_id'], str(active))
+            elif detail == 'lineage':
+                sql.assert_not_called()
+            self.assertEqual(server.request_auth.current_role(), original_role)
+
+    def test_catalog_http_rejects_invalid_detail_before_backend(self):
+        from email.message import Message
+        import workbench_server as server
+        for query in ('table=marts.orders&detail=', 'table=marts.orders&detail=bad',
+                      'detail=columns', 'detail=full'):
+            handler = object.__new__(server.WorkbenchHandler)
+            handler.path = '/api/catalog?' + query
+            handler.headers = Message()
+            with self.subTest(query=query), patch.object(server, 'bears_resident', b), \
+                 patch.object(server.request_auth, 'authenticate', return_value=('reader', 'bi_viewer')), \
+                 patch.object(b, 'catalog') as catalog, patch.object(handler, 'respond') as respond:
+                handler.do_GET()
+            self.assertEqual(respond.call_args.args[1], 400)
+            catalog.assert_not_called()
+
     def test_drop_restrictions_and_telemetry(self):
         for schema in ('raw', 'sandbox', 'staging', 'marts', 'scratch'):
             with patch.object(b, 'sql') as sql, patch.object(b.wr, 'telemetry', return_value='recorded') as telemetry:

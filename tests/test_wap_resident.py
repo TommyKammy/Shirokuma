@@ -96,6 +96,28 @@ class WapResidentTests(unittest.TestCase):
         for call in sql.call_args_list[1:]:
             self.assertIn('FOR VERSION AS OF 11', call.args[1])
 
+    def test_audit_reuses_columns_without_changing_snapshot_or_empty_table_semantics(self):
+        for columns in ([['a"b', 'bigint', '', 'comment'], ['amount', 'decimal(12,2)']], []):
+            for snapshot in (None, 9007199254740993):
+                with self.subTest(columns=columns, snapshot=snapshot):
+                    responses = [{'rows': [[0, 0, 0] if columns else [0]]}, {'rows': []}]
+                    with patch.object(b, 'sql', side_effect=responses) as sql, \
+                         patch.object(b, 'latest_snapshot', return_value=11) as latest:
+                        audit = b.audit_table('url', 'iceberg.sandbox.t', snapshot_id=snapshot, columns=columns)
+                    relation = '"iceberg"."sandbox"."t"'
+                    if snapshot is not None:
+                        relation += f' FOR VERSION AS OF {snapshot}'
+                        latest.assert_not_called()
+                    else:
+                        latest.assert_called_once_with('url', 'iceberg.sandbox.t')
+                    aggregates = 'COUNT(*), COUNT(*) - COUNT("a""b"), COUNT(*) - COUNT("amount")' if columns else 'COUNT(*)'
+                    self.assertEqual([call.args[1] for call in sql.call_args_list],
+                        ['SELECT ' + aggregates + ' FROM ' + relation, 'SELECT * FROM ' + relation + ' LIMIT 5'])
+                    self.assertEqual(audit, dict(table='iceberg.sandbox.t', row_count=0, column_count=len(columns),
+                        columns=[dict(name=row[0], type=row[1]) for row in columns],
+                        null_counts={'a"b': 0, 'amount': 0} if columns else {}, sample_rows=[],
+                        snapshot_id=snapshot if snapshot is not None else 11, quality_passed=False))
+
     def test_existing_target_fails_closed_on_snapshot_and_baseline_errors(self):
         for failure in ('snapshot', 'empty_snapshot', 'count', 'columns'):
             with self.subTest(failure=failure):

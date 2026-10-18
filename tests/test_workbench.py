@@ -1013,6 +1013,10 @@ $('bear-data-action').options=['generate','stage','publish','refresh','rollback'
 $('bear-data-action').selectedOptions=[$('bear-data-action').options[2]];
 const calls=[];const fetch=async(path,options)=>{calls.push({path,...options});return {ok:true,json:async()=>({})};};
 let currentRole='admin',synced=[];function updateDataBearForm(){synced.push($('bear-data-action').value);}
+// Catalog cache behavior has a separate harness; isolate the role/header contract here.
+let catalogGeneration=0;function catalogMutation(){return false;}function catalogIdentity(){return currentRole;}
+function invalidateCatalogDetails(){}function observeCatalogRuns(){}function resetCatalogIdentity(){}
+function loadCatalog(){}
 eval(HANDLERS+`
 (async()=>{
  await api('/api/status');assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'admin');
@@ -1879,6 +1883,57 @@ const run=eval(HANDLER);
         code, result = self.json_request("/api/warehouse/query", {"sql": "SELECT 42", "warehouse": "xs", "max_rows": 1})
         self.assertEqual((code, result), (200, report))
         query.assert_called_once_with("XS", "SELECT 42", catalog="iceberg", schema="marts", max_rows=1)
+
+    def test_catalog_sections_keep_role_and_table_boundary(self):
+        sections = ('columns', 'preview', 'profile', 'ddl', 'snapshots', 'lineage')
+        for role in ('admin', 'data_engineer', 'bi_viewer'):
+            with patch.object(wb.request_auth, 'authenticate', return_value=('alice', role)):
+                for section in sections:
+                    with self.subTest(role=role, section=section):
+                        def describe(args):
+                            self.assertEqual(args.role, role)
+                            self.assertEqual(wb.request_auth.current_role(), role)
+                            self.assertEqual(args.table, 'marts.orders')
+                            self.assertEqual(args.detail, section)
+                            self.assertFalse(args.include_config)
+                            return {'metadata': {}}
+                        with patch.object(wb.bears_resident, 'catalog', side_effect=describe) as catalog:
+                            self.assertEqual(self.json_request(
+                                '/api/catalog?table=marts.orders&detail=' + section)[0], 200)
+                            catalog.assert_called_once()
+                        if role == 'bi_viewer':
+                            with patch.object(wb.bears_resident, 'catalog') as catalog:
+                                for schema in ('raw', 'sandbox', 'staging', 'tpch_tiny'):
+                                    self.assertEqual(self.json_request(
+                                        '/api/catalog?table=' + schema + '.orders&detail=' + section)[0], 403)
+                                catalog.assert_not_called()
+
+    def test_catalog_section_session_revalidation_observes_revocation(self):
+        with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')) as auth, \
+             patch.object(wb.bears_resident, 'catalog', return_value={'metadata': {'columns': []}}) as catalog:
+            self.assertEqual(self.json_request('/api/catalog?table=raw.orders&detail=columns')[0], 200)
+            self.assertEqual(self.json_request('/api/session')[1]['maximum_role'], 'admin')
+            auth.return_value = ('alice', 'bi_viewer')
+            self.assertEqual(self.json_request('/api/session')[1]['maximum_role'], 'bi_viewer')
+            self.assertEqual(self.json_request('/api/catalog?table=raw.orders&detail=columns')[0], 403)
+            self.assertEqual(self.request('/api/session', headers={'X-Shirokuma-Role': 'admin'})[0], 403)
+            auth.side_effect = wb.request_auth.AuthenticationError('credentials revoked')
+            self.assertEqual(self.json_request('/api/session')[0], 401)
+            self.assertEqual(self.json_request('/api/catalog?table=marts.orders&detail=columns')[0], 401)
+            catalog.assert_called_once()
+
+    def test_catalog_section_validation_and_snapshot_digits(self):
+        with patch.object(wb.bears_resident, 'catalog') as catalog:
+            for query in ('detail=unknown&table=marts.orders', 'detail=columns',
+                          'detail=&table=marts.orders', 'detail=snapshots'):
+                self.assertEqual(self.json_request('/api/catalog?' + query)[0], 400)
+            catalog.assert_not_called()
+            catalog.return_value = {'metadata': {'snapshots': {'rows': [
+                [9007199254740993, 9007199254740995, '2026-10-19']]}}}
+            code, result = self.json_request('/api/catalog?table=marts.orders&detail=snapshots')
+            self.assertEqual(code, 200)
+            self.assertEqual(result['metadata']['snapshots']['rows'][0][:2],
+                             ['9007199254740993', '9007199254740995'])
 
     @patch.object(wb.bears_resident, "catalog")
     def test_catalog_lineage_and_columns(self, catalog):

@@ -377,8 +377,17 @@ def check_catalog_access(role, table):
             raise PermissionError('BI Viewer is restricted to marts tables')
 
 
+def validate_catalog_detail(detail, table):
+    if detail not in (None, 'full', 'columns', 'preview', 'profile', 'ddl', 'snapshots', 'lineage'):
+        raise ValueError('invalid catalog detail')
+    if detail is not None and not table:
+        raise ValueError('table is required for detail')
+
+
 def catalog(args):
     check_catalog_access(getattr(args, 'role', 'admin'), getattr(args, 'table', None))
+    detail = getattr(args, 'detail', None)
+    validate_catalog_detail(detail, getattr(args, 'table', None))
     metadata = {}
     if getattr(args, 'snapshot_id', None) is not None:
         if not getattr(args, 'table', None):
@@ -397,6 +406,26 @@ def catalog(args):
                     snapshot_id=str(args.snapshot_id), row_count=count,
                     current_row_count=None if isinstance(current_count, dict) else current_count,
                     preview=preview)
+    if detail not in (None, 'full'):
+        table = args.table
+        if not table.startswith('iceberg.'):
+            table = 'iceberg.' + table if '.' in table else 'iceberg.marts.' + table
+        quoted = identifier(table)
+        if detail == 'lineage':
+            metadata['lineage_detail'] = _table_lineage(table)
+        else:
+            with wr.trino() as url:
+                if detail == 'columns':
+                    metadata['columns'] = sql(url, 'SHOW COLUMNS FROM ' + quoted)['rows']
+                elif detail == 'snapshots':
+                    metadata['snapshots'] = attempt(lambda: sql(url, 'SELECT snapshot_id, parent_id, committed_at FROM ' + identifier(table + '$snapshots') + ' ORDER BY committed_at DESC'))
+                elif detail == 'preview':
+                    metadata['preview'] = attempt(lambda: sql(url, 'SELECT * FROM ' + quoted + ' LIMIT 50'))
+                elif detail == 'ddl':
+                    metadata['definition'] = attempt(lambda: sql(url, 'SHOW CREATE TABLE ' + quoted)['rows'])
+                elif detail == 'profile':
+                    metadata['profile'] = attempt(lambda: audit_table(url, table))
+        return dict(action=args.action, catalog='iceberg', metadata=metadata)
     if args.action == "lineage" and not args.table:
         models = Path(__file__).parent / "dataops" / "dbt_persistent" / "models"
         lineage = {p.stem: sorted(set(re.findall(r"ref\(\s*['\"]([\w]+)['\"]\s*\)", p.read_text())))
@@ -438,12 +467,12 @@ def catalog(args):
             if not table.startswith("iceberg."):
                 table = "iceberg." + table if "." in table else "iceberg.marts." + table
             metadata["columns"] = sql(url, "SHOW COLUMNS FROM " + identifier(table))["rows"]
-            if include_config and getattr(args, 'detail', None) != 'full':
+            if include_config and detail != 'full':
                 metadata["definition"] = sql(url, "SHOW CREATE TABLE " + identifier(table))["rows"]
             metadata["snapshots"] = attempt(lambda: sql(url, "SELECT snapshot_id, parent_id, committed_at FROM " + identifier(table + "$snapshots") + " ORDER BY committed_at DESC"))
-            if getattr(args, 'detail', None) == 'full':
+            if detail == 'full':
                 metadata['preview'] = attempt(lambda: sql(url, 'SELECT * FROM ' + identifier(table) + ' LIMIT 50'))
-                metadata['profile'] = attempt(lambda: audit_table(url, table))
+                metadata['profile'] = attempt(lambda: audit_table(url, table, columns=metadata['columns']))
                 metadata['definition'] = attempt(lambda: sql(url, 'SHOW CREATE TABLE ' + identifier(table))['rows'])
                 metadata['lineage_detail'] = _table_lineage(table)
             if args.action == "lineage":

@@ -150,10 +150,12 @@ def current_snapshot(b, url, table):
     return rows[0][0]
 
 
-def audit_table(b, url, full_table_name, snapshot_id=None):
+def audit_table(b, url, full_table_name, snapshot_id=None, columns=None):
+    """Audit a table, optionally reusing already fetched SHOW COLUMNS rows."""
     table = b.identifier(full_table_name)
-    columns = [dict(name=row[0], type=row[1]) for row in
-               b.sql(url, 'SHOW COLUMNS FROM ' + table)['rows']]
+    if columns is None:
+        columns = b.sql(url, 'SHOW COLUMNS FROM ' + table)['rows']
+    columns = [dict(name=row[0], type=row[1]) for row in columns]
     relation = table + (f' FOR VERSION AS OF {int(snapshot_id)}' if snapshot_id is not None else '')
     aggregates = ['COUNT(*)'] + [
         'COUNT(*) - COUNT("' + c['name'].replace('"', '""') + '")' for c in columns]
