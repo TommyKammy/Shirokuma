@@ -105,6 +105,10 @@ def _db():
             connection.execute("ALTER TABLE runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'")
         if 'scheduled_for' not in columns:
             connection.execute('ALTER TABLE runs ADD COLUMN scheduled_for TEXT')
+        schedule_columns = {row['name'] for row in connection.execute('PRAGMA table_info(schedules)')}
+        for column in ('date', 'weekdays', 'day_of_month'):
+            if column not in schedule_columns:
+                connection.execute(f'ALTER TABLE schedules ADD COLUMN {column} TEXT')
         connection.commit()
         yield connection
         connection.commit()

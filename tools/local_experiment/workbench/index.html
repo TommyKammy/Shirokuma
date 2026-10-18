@@ -29,7 +29,7 @@ dialog{color:var(--ink);background:var(--surface);border:1px solid var(--line);b
 #jobs-alert-count{margin-left:6px}
 #job-alerts table{table-layout:fixed;min-width:960px}#job-alerts th,#job-alerts td{padding:10px;white-space:normal;overflow-wrap:anywhere}#job-alerts th:nth-child(1){width:8%}#job-alerts th:nth-child(2){width:31%}#job-alerts th:nth-child(3){width:13%}#job-alerts th:nth-child(4){width:14%}#job-alerts th:nth-child(5){width:6%}#job-alerts th:nth-child(6){width:15%}#job-alerts th:nth-child(7){width:13%}#job-alerts button{max-width:100%;white-space:normal}#job-alerts small{display:block;margin-top:5px}#job-alerts .alert-main{font-family:system-ui,sans-serif}#job-alerts details{padding:5px 0 0;border:0;font-size:12px}#job-alerts summary{font-weight:500;color:var(--muted)}
 .job-enable-label{display:flex;align-items:center;gap:8px}.job-enable-label input{width:auto}#job-schedule-state{margin-top:16px;overflow-wrap:anywhere}#job-schedule-state span{white-space:normal}
-.job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:0 18px;min-width:0}.job-step{margin:18px 0;padding:16px 0;border:0;border-top:1px solid var(--line);min-width:0}.job-step legend{font-weight:650;padding-right:8px}.job-step .toolbar{justify-content:space-between}.job-step textarea{min-height:100px}.job-step small{display:block;margin:6px 0}.job-step-heading{margin-top:20px}#job-run-state{margin-left:12px}#job-steps label{font-size:13px}
+.schedule-weekdays{border:0;padding:0;margin:12px 0 0;min-width:0}.schedule-weekdays legend{font-weight:600}.schedule-weekdays label{font-weight:400;margin:5px 0}.job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:0 18px;min-width:0}.job-step{margin:18px 0;padding:16px 0;border:0;border-top:1px solid var(--line);min-width:0}.job-step legend{font-weight:650;padding-right:8px}.job-step .toolbar{justify-content:space-between}.job-step textarea{min-height:100px}.job-step small{display:block;margin:6px 0}.job-step-heading{margin-top:20px}#job-run-state{margin-left:12px}#job-steps label{font-size:13px}
 #role-controls{display:inline-flex;align-items:center;gap:8px}#role-controls label{margin:0}#role-selector{width:auto}
 html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#run-ingest,#ai-settings-button,#clone-table-btn,#copilot-stage,#copilot-publish,#refresh-wap-model,[data-role-write="admin"],[data-role-write="engineer"]),html[data-role="data_engineer"] :is(#ai-settings-button,#copilot-publish,#refresh-wap-model,[data-role-write="admin"]){display:none!important}
 </style>
@@ -88,7 +88,15 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <p id="stage-state" role="status" aria-live="polite">Choose or save a stage.</p><div id="stage-error" class="error" role="alert" hidden></div>
 <p id="stage-legacy-notice" class="muted" hidden>Earlier imports have no duplicate-detection record. Check imported files, move them out of the source folder, then register a new stage name.</p><div id="stage-schedule-area" hidden><h3>Automatic ingestion</h3>
 <p class="muted">Automatic ingestion supports append and upsert. Replace is available through single-file import.</p>
-<form id="stage-schedule-form" novalidate><label for="stage-schedule-minutes">Interval (minutes)</label><input id="stage-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled>
+<form id="stage-schedule-form" novalidate><div class="job-fields"><div><label for="stage-schedule-kind">Frequency</label><select id="stage-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="once">Once</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+<div id="stage-schedule-interval"><label for="stage-schedule-minutes">Interval (minutes)</label><input id="stage-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled></div>
+<div id="stage-schedule-daily" hidden><label for="stage-schedule-time">Local time</label><input id="stage-schedule-time" type="time" step="60" value="09:00" required disabled><label for="stage-schedule-timezone">Timezone (IANA)</label><input id="stage-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div>
+<div id="stage-schedule-once" hidden><label for="stage-schedule-date">Local date</label><input id="stage-schedule-date" type="date" required disabled></div>
+<fieldset class="schedule-weekdays" id="stage-schedule-weekly" hidden><legend>Days of the week</legend><div class="toolbar"><label class="job-enable-label" for="stage-schedule-weekday-1"><input id="stage-schedule-weekday-1" type="checkbox" disabled> Monday</label><label class="job-enable-label" for="stage-schedule-weekday-2"><input id="stage-schedule-weekday-2" type="checkbox" disabled> Tuesday</label><label class="job-enable-label" for="stage-schedule-weekday-3"><input id="stage-schedule-weekday-3" type="checkbox" disabled> Wednesday</label><label class="job-enable-label" for="stage-schedule-weekday-4"><input id="stage-schedule-weekday-4" type="checkbox" disabled> Thursday</label><label class="job-enable-label" for="stage-schedule-weekday-5"><input id="stage-schedule-weekday-5" type="checkbox" disabled> Friday</label><label class="job-enable-label" for="stage-schedule-weekday-6"><input id="stage-schedule-weekday-6" type="checkbox" disabled> Saturday</label><label class="job-enable-label" for="stage-schedule-weekday-7"><input id="stage-schedule-weekday-7" type="checkbox" disabled> Sunday</label></div></fieldset>
+<div id="stage-schedule-monthly" hidden><label for="stage-schedule-day">Day of the month</label><select id="stage-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div></div>
+<p id="stage-schedule-once-help" class="muted" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
+<p id="stage-schedule-calendar-help" class="muted" hidden>Calendar times use the specified timezone.</p>
+<p id="stage-schedule-monthly-help" class="muted" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
 <label class="job-enable-label" for="stage-schedule-enabled"><input id="stage-schedule-enabled" type="checkbox" disabled> Enable automatic ingestion</label>
 <div class="toolbar"><button id="stage-schedule-save" type="submit" disabled>Save schedule</button><button id="stage-schedule-stop" type="button" disabled>Stop automatic ingestion</button><button id="stage-scan" type="button" disabled>Check and ingest now</button></div></form>
 <div id="stage-schedule-state" role="status" aria-live="polite"></div></div>
@@ -124,7 +132,15 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 <div class="panel"><div class="panel-head"><h2>Manual run</h2><span id="job-run-name" class="muted">Choose a saved job.</span></div><form id="job-run-form" class="panel-body"><div id="job-run-arguments" class="job-fields"></div><p id="job-run-help" class="muted">Runs use your authenticated role. Steps stop at the first failure.</p><button id="job-run" class="primary" type="submit" disabled>Run job</button><span id="job-run-state" role="status" aria-live="polite"></span></form></div>
 <div class="panel"><div class="panel-head"><h2>Schedule</h2><span id="job-schedule-name" class="muted">Choose a saved job.</span></div><form id="job-schedule-form" class="panel-body" novalidate>
 <p class="muted">Runs only while the service is running. Occurrences at least 60 seconds late or blocked by another job are skipped. No catch-up or automatic retry.</p>
-<div class="job-fields"><div><label for="job-schedule-kind">Frequency</label><select id="job-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option></select></div><div id="job-schedule-interval"><label for="job-schedule-minutes">Interval (minutes)</label><input id="job-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled></div><div id="job-schedule-daily" hidden><label for="job-schedule-time">Local time</label><input id="job-schedule-time" type="time" step="60" value="09:00" required disabled><label for="job-schedule-timezone">Timezone (IANA)</label><input id="job-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div></div>
+<div class="job-fields"><div><label for="job-schedule-kind">Frequency</label><select id="job-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="once">Once</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+<div id="job-schedule-interval"><label for="job-schedule-minutes">Interval (minutes)</label><input id="job-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled></div>
+<div id="job-schedule-daily" hidden><label for="job-schedule-time">Local time</label><input id="job-schedule-time" type="time" step="60" value="09:00" required disabled><label for="job-schedule-timezone">Timezone (IANA)</label><input id="job-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div>
+<div id="job-schedule-once" hidden><label for="job-schedule-date">Local date</label><input id="job-schedule-date" type="date" required disabled></div>
+<fieldset class="schedule-weekdays" id="job-schedule-weekly" hidden><legend>Days of the week</legend><div class="toolbar"><label class="job-enable-label" for="job-schedule-weekday-1"><input id="job-schedule-weekday-1" type="checkbox" disabled> Monday</label><label class="job-enable-label" for="job-schedule-weekday-2"><input id="job-schedule-weekday-2" type="checkbox" disabled> Tuesday</label><label class="job-enable-label" for="job-schedule-weekday-3"><input id="job-schedule-weekday-3" type="checkbox" disabled> Wednesday</label><label class="job-enable-label" for="job-schedule-weekday-4"><input id="job-schedule-weekday-4" type="checkbox" disabled> Thursday</label><label class="job-enable-label" for="job-schedule-weekday-5"><input id="job-schedule-weekday-5" type="checkbox" disabled> Friday</label><label class="job-enable-label" for="job-schedule-weekday-6"><input id="job-schedule-weekday-6" type="checkbox" disabled> Saturday</label><label class="job-enable-label" for="job-schedule-weekday-7"><input id="job-schedule-weekday-7" type="checkbox" disabled> Sunday</label></div></fieldset>
+<div id="job-schedule-monthly" hidden><label for="job-schedule-day">Day of the month</label><select id="job-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div></div>
+<p id="job-schedule-once-help" class="muted" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
+<p id="job-schedule-calendar-help" class="muted" hidden>Calendar times use the specified timezone.</p>
+<p id="job-schedule-monthly-help" class="muted" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
 <label class="job-enable-label" for="job-schedule-enabled"><input id="job-schedule-enabled" type="checkbox" disabled> Enable schedule</label>
 <p class="muted">Uses the argument values entered above. Saving captures your current authenticated role.</p>
 <div class="toolbar"><button id="job-schedule-save" type="submit" disabled>Save schedule</button><span id="job-schedule-message" role="status" aria-live="polite"></span></div>
@@ -173,6 +189,32 @@ const $ = id => document.getElementById(id);
 // English source strings are stable translation keys. SQL, identifiers and backend
 // payloads remain data; only explicitly registered UI text is translated.
 const i18n = {ja: {
+'Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.':'1回のみの予定を有効にするには未来の日付と時刻が必要です。夏時間で存在しない時刻は拒否し、重複する時刻は最初の時刻を使います。スキップや失敗の場合も予定時刻の処理後に無効になります。',
+'Months without the selected day are skipped. Choose Last day for month-end.':'指定日が存在しない月はスキップします。毎月末に実行する場合は「月末」を選択してください。',
+'Calendar times use the specified timezone.':'日付と時刻は指定タイムゾーンに従います。',
+
+'Once':'1回のみ',
+'Weekly':'毎週',
+'Monthly':'毎月',
+'Local date':'日付（指定タイムゾーン）',
+'Days of the week':'曜日',
+'Day of the month':'月の日付',
+'Last day':'月末',
+'Monday':'月曜日',
+'Tuesday':'火曜日',
+'Wednesday':'水曜日',
+'Thursday':'木曜日',
+'Friday':'金曜日',
+'Saturday':'土曜日',
+'Sunday':'日曜日',
+'Choose a schedule frequency.':'実行頻度を選択してください。',
+'Enter a valid local date.':'有効な日付を入力してください。',
+'Choose at least one weekday.':'曜日を1つ以上選択してください。',
+'Choose a day from 1 to 31 or the last day.':'1〜31日または月末を選択してください。',
+'Every {minutes} minutes':'{minutes}分ごと',
+'Next run: {time}':'次回実行: {time}',
+'{summary}':'{summary}',
+
  'Earlier imports have no duplicate-detection record. Check imported files, move them out of the source folder, then register a new stage name.':'以前の取込履歴には重複判定情報がありません。取込済みファイルを確認して対象フォルダから移し、新しいステージ名で登録してください。',
  'Automatic ingestion':'自動取込',
  'Automatic ingestion supports append and upsert. Replace is available through single-file import.':'自動取込は追加・更新に対応します。全件置換はファイルを 1 件ずつ確認して実行してください。',
@@ -269,7 +311,7 @@ const i18n = {ja: {
  'Unacknowledged':'未確認', 'Acknowledged {time}':'確認済み {time}', 'Active condition':'異常継続', 'Condition cleared':'正常化により解消', 'Definition changed':'定義変更により終了', 'Resolved':'解消済み', 'Acknowledge':'確認済みにする',
  'Notification failed: {error}':'通知を取得・更新できませんでした: {error}', 'Condition met':'異常あり', 'Condition clear':'異常なし', 'New notification':'新しい通知', 'Ongoing notification':'異常継続', 'Notification resolved':'通知を解消', 'No active notification':'異常継続なし', 'Notification {id}':'通知 {id}',
  'Closed after rule change':'定義変更により終了',
- 'Schedule':'スケジュール', 'Frequency':'実行間隔', 'Every N minutes':'一定の間隔で実行', 'Daily':'毎日', 'Interval (minutes)':'実行間隔（分）', 'Local time':'現地の実行時刻', 'Timezone (IANA)':'タイムゾーン（IANA）',
+ 'Schedule':'スケジュール', 'Frequency':'実行タイミング', 'Every N minutes':'一定の間隔で実行', 'Daily':'毎日', 'Interval (minutes)':'実行間隔（分）', 'Local time':'現地の実行時刻', 'Timezone (IANA)':'タイムゾーン（IANA）',
  'Enable schedule':'スケジュールを有効にする', 'Save schedule':'スケジュールを保存', 'Schedule saved.':'スケジュールを保存しました。', 'Schedule failed: {error}':'スケジュールを保存できませんでした: {error}',
  'Runs only while the service is running. Occurrences at least 60 seconds late or blocked by another job are skipped. No catch-up or automatic retry.':'サービスの起動中にのみ実行します。60秒以上遅れた予定や他のジョブと競合した予定はスキップします。後追い実行や自動再試行は行いません。',
  'Uses the argument values entered above. Saving captures your current authenticated role.':'上の実行引数を使用します。保存時の認証済みロールで実行します。',
@@ -652,6 +694,55 @@ $('preview-ingest').onclick=()=>busy($('preview-ingest'),async()=>{message('inge
 
 
 let stageEntries=[],selectedStage=null,stageFiles=[],stagePreview=null,stageEpoch=0,stagePending=false,stageDirty=false,stageRunId=null,stageExportRunId=null;
+const scheduleFields=['kind','minutes','time','timezone','date','day',...Array.from({length:7},(_,i)=>'weekday-'+(i+1))];
+function readScheduleFields(prefix){
+ return {kind:$(prefix+'-kind').value,every_minutes:$(prefix+'-minutes').value,time:$(prefix+'-time').value,timezone:$(prefix+'-timezone').value,date:$(prefix+'-date').value,day_of_month:$(prefix+'-day').value,weekdays:Array.from({length:7},(_,i)=>i+1).filter(day=>$(prefix+'-weekday-'+day).checked),enabled:$(prefix+'-enabled').checked===true};
+}
+function fillScheduleFields(prefix,saved){
+ $(prefix+'-kind').value=saved?.kind||'interval';$(prefix+'-minutes').value=saved?.every_minutes??60;
+ $(prefix+'-time').value=saved?.time||'09:00';$(prefix+'-timezone').value=saved?.timezone||'Asia/Tokyo';
+ $(prefix+'-date').value=saved?.date||'';$(prefix+'-day').value=saved?.day_of_month??1;
+ for(let day=1;day<=7;day++)$(prefix+'-weekday-'+day).checked=(saved?.weekdays||[]).includes(day);
+ $(prefix+'-enabled').checked=saved?.enabled===true;
+}
+function updateScheduleKind(prefix,editable){
+ const kind=$(prefix+'-kind').value;
+ $(prefix+'-once-help').hidden=kind!=='once';$(prefix+'-monthly-help').hidden=kind!=='monthly';$(prefix+'-calendar-help').hidden=kind==='interval';
+ for(const [group,active] of [['interval',kind==='interval'],['daily',kind!=='interval'],['once',kind==='once'],['weekly',kind==='weekly'],['monthly',kind==='monthly']])$(prefix+'-'+group).hidden=!active;
+ for(const field of scheduleFields){const active=field==='kind'||(field==='minutes'?kind==='interval':['time','timezone'].includes(field)?kind!=='interval':field==='date'?kind==='once':field==='day'?kind==='monthly':kind==='weekly');$(prefix+'-'+field).disabled=!editable||!active;}
+}
+function scheduleConfiguration(saved){return JSON.stringify(['kind','every_minutes','time','timezone','date','weekdays','day_of_month','enabled'].map(key=>saved?.[key]??null));}
+function schedulePayload(fields){
+ const payload={kind:fields.kind,enabled:fields.enabled===true};
+ if(fields.kind==='interval'){
+  const minutes=Number(fields.every_minutes);if(!Number.isInteger(minutes)||minutes<1||minutes>10080)throw Error(t('Interval must be an integer from 1 to 10080.'));payload.every_minutes=minutes;
+ }else{
+  if(!['daily','once','weekly','monthly'].includes(fields.kind))throw Error(t('Choose a schedule frequency.'));
+  const zone=fields.timezone.trim();if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(fields.time)||!zone)throw Error(t('Enter a valid time and IANA timezone.'));
+  try{new Intl.DateTimeFormat('en',{timeZone:zone});}catch{throw Error(t('Enter a valid time and IANA timezone.'));}
+  payload.time=fields.time;payload.timezone=zone;
+  if(fields.kind==='once'){
+   const date=new Date(fields.date+'T00:00:00Z');if(!/^\d{4}-\d{2}-\d{2}$/.test(fields.date)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==fields.date)throw Error(t('Enter a valid local date.'));payload.date=fields.date;
+  }else if(fields.kind==='weekly'){
+   const days=fields.weekdays;if(!Array.isArray(days)||!days.length||days.some(day=>!Number.isInteger(day)||day<1||day>7)||new Set(days).size!==days.length)throw Error(t('Choose at least one weekday.'));payload.weekdays=[...days].sort((a,b)=>a-b);
+  }else if(fields.kind==='monthly'){
+   const day=fields.day_of_month==='last'?'last':Number(fields.day_of_month);if(day!=='last'&&(!Number.isInteger(day)||day<1||day>31))throw Error(t('Choose a day from 1 to 31 or the last day.'));payload.day_of_month=day;
+  }
+ }return payload;
+}
+function scheduleSummary(saved){
+ if(!saved)return '';
+ if((saved.kind||'interval')==='interval')return t('Every {minutes} minutes',{minutes:saved.every_minutes});
+ const kind=t(({once:'Once',daily:'Daily',weekly:'Weekly',monthly:'Monthly'})[saved.kind]||'Daily');
+ const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+ const detail=saved.kind==='once'?saved.date:saved.kind==='weekly'?(saved.weekdays||[]).map(day=>t(days[day-1])).join(', '):saved.kind==='monthly'?(saved.day_of_month==='last'?t('Last day'):String(saved.day_of_month)):'';
+ return [kind,detail,saved.time,saved.timezone].filter(Boolean).join(' · ');
+}
+function scheduleNextTime(saved){
+ if(!saved?.next_run_at)return '\u2014';const zone=saved.timezone||'UTC',date=new Date(saved.next_run_at);
+ if(!Number.isFinite(date.getTime()))return saved.next_run_at;
+ return new Intl.DateTimeFormat(language==='ja'?'ja-JP':'en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:zone}).format(date)+' ('+zone+')';
+}
 function stageCurrent(epoch){return currentRole==='admin'&&epoch===stageEpoch;}
 function invalidateStagePreview(){stagePreview=null;$('stage-retry').checked=false;$('stage-retry-area').hidden=true;$('stage-file-status').replaceChildren();$('stage-preview').replaceChildren();ui($('stage-confirmation'),'Preview a file before importing.');$('stage-import').disabled=true;}
 function stageIngestionStatus(status){return ({new:'Not imported',queued:'Queued',running:'Running',success:'Already imported',failed:'Failed',unknown:'Outcome unknown'})[status]||status||'Not imported';}
@@ -662,8 +753,9 @@ function renderStageSchedule(){
  const state=document.createElement('p');ui(state,schedule?.enabled?'Enabled':'Automatic ingestion is off.');area.append(state);
  for(const [label,value] of [['Next check',schedule?.next_run_at],['Last check',schedule?.last_status]]){
   const line=document.createElement('p'),title=document.createElement('span');ui(title,label);line.append(title,': ');
-  if(label==='Next check'&&value)line.append(jobAlertTimestamp(value));else{const text=document.createElement('span');ui(text,value?(jobStatuses[value]||'Unknown'):'None recorded');line.append(text);}area.append(line);
+  if(label==='Next check'&&value){const time=document.createElement('span');ui(time,'{time}',()=>({time:scheduleNextTime(schedule)}));line.append(time);}else{const text=document.createElement('span');ui(text,value?(jobStatuses[value]||'Unknown'):'None recorded');line.append(text);}area.append(line);
  }
+ if(schedule){const summary=document.createElement('p');ui(summary,'{summary}',()=>({summary:scheduleSummary(schedule)}));area.append(summary);}
  if(schedule?.last_run_id){const button=actionButton('View run history',()=>{if(currentRole!=='admin')return;selectedRunId=schedule.last_run_id;activate($('tab-jobs'));});area.append(button);}
 }
 function clearStageExports(resetInputs=false){
@@ -696,7 +788,8 @@ function stageControls(){
  const automatic=managed&&!stageDirty&&!selectedStage.legacy_history&&selectedStage.definition.mode!=='replace';
  $('stage-legacy-notice').hidden=!managed||!selectedStage.legacy_history;
  $('stage-schedule-area').hidden=!managed;
- for(const id of ['stage-schedule-minutes','stage-schedule-enabled','stage-schedule-save','stage-scan'])$(id).disabled=stagePending||!automatic;
+ updateScheduleKind('stage-schedule',automatic&&!stagePending);
+ for(const id of ['stage-schedule-enabled','stage-schedule-save','stage-scan'])$(id).disabled=stagePending||!automatic;
  $('stage-schedule-stop').disabled=stagePending||!managed||!selectedStage.schedule?.enabled;
  $('stage-append-notice').hidden=!selectedStage?.can_manage||selectedStage.definition.mode!=='append';
  $('stages-area').setAttribute('aria-busy',String(stagePending));
@@ -704,7 +797,7 @@ function stageControls(){
 function resetStageUI(){
  if(!$('stages-area'))return;
  ++stageEpoch;stageEntries=[];selectedStage=null;stageFiles=[];stagePending=false;stageDirty=false;stageRunId=null;stageExportRunId=null;
- $('stages-area').hidden=currentRole!=='admin';$('stage-form').reset();$('stage-schedule-minutes').value='60';$('stage-schedule-enabled').checked=false;$('stage-schedule-state').replaceChildren();$('stage-files').replaceChildren();$('stage-file').replaceChildren();$('stages-list').replaceChildren();$('stage-view-run').hidden=true;message('stage-error','');invalidateStagePreview();stageControls();
+ $('stages-area').hidden=currentRole!=='admin';$('stage-form').reset();fillScheduleFields('stage-schedule',null);$('stage-schedule-state').replaceChildren();$('stage-files').replaceChildren();$('stage-file').replaceChildren();$('stages-list').replaceChildren();$('stage-view-run').hidden=true;message('stage-error','');invalidateStagePreview();stageControls();
  clearStageExports(true);ui($('stage-state'),'Choose or save a stage.');
  if(currentRole==='admin'&&typeof activeTab!=='undefined'&&activeTab==='ingestion')loadStages();
 }
@@ -726,8 +819,8 @@ async function loadStages(){await stageTask('Loading stages…',async epoch=>{
   if(!fresh||fresh.updated_at!==selectedStage.updated_at||!fresh.can_manage)editStage(fresh||null);
   else{
    const previousSchedule=selectedStage.schedule;selectedStage=fresh;
-   if(fresh.schedule?.enabled!==previousSchedule?.enabled||fresh.schedule?.every_minutes!==previousSchedule?.every_minutes){
-    $('stage-schedule-minutes').value=fresh.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=fresh.schedule?.enabled===true;
+   if(scheduleConfiguration(fresh.schedule)!==scheduleConfiguration(previousSchedule)){
+    fillScheduleFields('stage-schedule',fresh.schedule);
    }
    renderStageSchedule();
   }
@@ -741,7 +834,7 @@ function stageDefinition(){
 function editStage(entry){
  selectedStage=entry;clearStageExports(true);stageDirty=false;stageFiles=[];stageRunId=null;stageExportRunId=null;$('stage-view-run').hidden=true;$('stage-file').replaceChildren();$('stage-files').replaceChildren();invalidateStagePreview();
  const definition=entry?.definition||{mode:'append',format:'auto'};for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=definition[key]||'';
- $('stage-schedule-minutes').value=entry?.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=entry?.schedule?.enabled===true;renderStageSchedule();stageControls();
+ fillScheduleFields('stage-schedule',entry?.schedule);renderStageSchedule();stageControls();
 }
 async function refreshStageSchedule(epoch){
  const data=await api('/api/stages');if(!stageCurrent(epoch))return;stageEntries=data.stages||[];
@@ -750,7 +843,7 @@ async function refreshStageSchedule(epoch){
    invalidateStagePreview();stageFiles=[];$('stage-file').replaceChildren();$('stage-files').replaceChildren();stageDirty=false;selectedStage=entry;clearStageExports(true);
    for(const key of ['name','directory','table','mode','format','key'])$('stage-'+key).value=entry.definition[key]||'';
   }
-  selectedStage=entry;$('stage-schedule-minutes').value=entry.schedule?.every_minutes||60;$('stage-schedule-enabled').checked=entry.schedule?.enabled===true;
+  selectedStage=entry;fillScheduleFields('stage-schedule',entry.schedule);
  }else if(selectedStage)editStage(null);renderStages();renderStageSchedule();
 }
 async function fetchStageFiles(epoch){
@@ -789,11 +882,11 @@ $('stage-import').onclick=()=>{if(!stagePreview)return;if(stagePending||stageDir
  const selection={name:stagePreview.name,file:stagePreview.file,version:stagePreview.version};if(stageNeedsRetry())selection.retry=true;invalidateStagePreview();const data=await api('/api/stages/import',selection);if(!stageCurrent(epoch))return;
  stageRunId=data.run.id;$('stage-view-run').hidden=false;for(const file of stageFiles)if(file.name===selection.file)file.ingestion_status='queued';ui($('stage-state'),'Import queued.');
 });};
+$('stage-schedule-kind').onchange=()=>stageControls();
 $('stage-schedule-form').onsubmit=event=>{event.preventDefault();if(stagePending||stageDirty||!selectedStage?.can_manage||selectedStage.legacy_history||selectedStage.definition.mode==='replace')return;return stageTask('Working…',async epoch=>{
- const minutes=Number($('stage-schedule-minutes').value);if(!Number.isInteger(minutes)||minutes<1||minutes>10080)throw Error(t('Interval must be an integer from 1 to 10080 minutes.'));
- const payload={name:selectedStage.name,every_minutes:minutes,enabled:$('stage-schedule-enabled').checked===true};if(payload.enabled)payload.version=selectedStage.updated_at;
+ const payload={name:selectedStage.name,...schedulePayload(readScheduleFields('stage-schedule'))};if(payload.enabled)payload.version=selectedStage.updated_at;
  const data=await api('/api/stages/schedule',payload);if(!stageCurrent(epoch))return;
- selectedStage={...selectedStage,schedule:data.schedule};renderStageSchedule();ui($('stage-state'),'Schedule saved.');
+ selectedStage={...selectedStage,schedule:data.schedule};fillScheduleFields('stage-schedule',data.schedule);renderStageSchedule();ui($('stage-state'),'Schedule saved.');
 });};
 $('stage-schedule-stop').onclick=()=>{if(!selectedStage?.can_manage||!selectedStage.schedule?.enabled)return;return stageTask('Working…',async epoch=>{
  const data=await api('/api/stages/schedule',{name:selectedStage.name,enabled:false});if(!stageCurrent(epoch))return;
@@ -910,7 +1003,7 @@ async function loadRuntimeHistory(){
 $('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
 
 // Jobs are manually admitted by the server; this page never schedules or retries work.
-let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0;
+let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobScheduleRequest=0;
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
 const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
@@ -1101,38 +1194,19 @@ function readJobArguments(){
  values[input.dataset.argument]=value;
  }return values;
 }
-function jobSchedulePayload(name,fields,argumentsValue){
- const payload={name,kind:fields.kind,arguments:argumentsValue,enabled:fields.enabled===true};
- if(fields.kind==='interval'){
- const minutes=Number(fields.every_minutes);if(!Number.isInteger(minutes)||minutes<1||minutes>10080)throw Error(t('Interval must be an integer from 1 to 10080.'));
- payload.every_minutes=minutes;
- }else if(fields.kind==='daily'){
- const zone=fields.timezone.trim();
- if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(fields.time)||!zone)throw Error(t('Enter a valid time and IANA timezone.'));
- try{new Intl.DateTimeFormat('en',{timeZone:zone});}catch{throw Error(t('Enter a valid time and IANA timezone.'));}
- payload.time=fields.time;payload.timezone=zone;
- }else throw Error(t('Enter a valid time and IANA timezone.'));
- return payload;
-}
+function jobSchedulePayload(name,fields,argumentsValue){return {name,...schedulePayload(fields),arguments:argumentsValue};}
 function jobScheduleEditable(entry){return !!entry?.can_manage&&currentRole!=='bi_viewer';}
-function updateJobScheduleKind(){
- const daily=$('job-schedule-kind').value==='daily',editable=jobScheduleEditable(selectedJob);
- $('job-schedule-interval').hidden=daily;$('job-schedule-daily').hidden=!daily;
- $('job-schedule-minutes').disabled=!editable||daily;
- $('job-schedule-time').disabled=!editable||!daily;$('job-schedule-timezone').disabled=!editable||!daily;
-}
+function updateJobScheduleKind(){updateScheduleKind('job-schedule',jobScheduleEditable(selectedJob));}
 function renderJobSchedule(){
  const saved=selectedJob?jobSchedules.find(schedule=>schedule.name===selectedJob.name):null,editable=jobScheduleEditable(selectedJob);
  if(selectedJob)$('job-schedule-name').textContent=selectedJob.name;else ui($('job-schedule-name'),'Choose a saved job.');
- $('job-schedule-kind').value=saved?.kind||'interval';$('job-schedule-minutes').value=saved?.every_minutes??60;
- $('job-schedule-time').value=saved?.time||'09:00';$('job-schedule-timezone').value=saved?.timezone||'Asia/Tokyo';
- $('job-schedule-enabled').checked=saved?.enabled===true;
+ fillScheduleFields('job-schedule',saved);
  for(const control of $('job-schedule-form').querySelectorAll('input,select,button'))control.disabled=!editable;
  updateJobScheduleKind();$('job-schedule-state').replaceChildren();
  const badge=document.createElement('span');badge.className='badge';ui(badge,saved?.enabled?'Enabled':'Disabled');$('job-schedule-state').append(badge);
  if(saved){
  const labels={admin:'Admin',data_engineer:'Data Engineer',bi_viewer:'BI Viewer'};
- for(const [key,values] of [['Saved role: {role}',()=>({role:t(labels[saved.role]||'Unknown')})],['Authentication: {mode}',{mode:saved.auth_mode}],['Next run (UTC): {time}',{time:saved.next_run_at||'\u2014'}]]){
+ for(const [key,values] of [['Saved role: {role}',()=>({role:t(labels[saved.role]||'Unknown')})],['Authentication: {mode}',{mode:saved.auth_mode}],['Next run: {time}',()=>({time:scheduleNextTime(saved)})],['{summary}',()=>({summary:scheduleSummary(saved)})]]){
  const text=document.createElement('span');ui(text,key,values);$('job-schedule-state').append(text);
  }
  for(const input of $('job-run-arguments').querySelectorAll('[data-argument]'))if(Object.hasOwn(saved.arguments||{},input.dataset.argument))input.value=saved.arguments[input.dataset.argument]===null?'':String(saved.arguments[input.dataset.argument]);
@@ -1143,15 +1217,18 @@ function saveJobSchedule(){
  if(!jobScheduleEditable(selectedJob))return;
  const pause=jobSchedules.some(schedule=>schedule.name===selectedJob.name&&schedule.enabled===true)&&!$('job-schedule-enabled').checked;
  if(!pause&&!$('job-run-form').reportValidity())return;
+ const name=selectedJob.name,role=currentRole,epoch=stageEpoch;
+ const current=()=>currentRole===role&&stageEpoch===epoch&&selectedJob?.name===name;
  return busy($('job-schedule-save'),async()=>{
  try{
- const payload=pause?{name:selectedJob.name,enabled:false}:jobSchedulePayload(selectedJob.name,{kind:$('job-schedule-kind').value,every_minutes:$('job-schedule-minutes').value,time:$('job-schedule-time').value,timezone:$('job-schedule-timezone').value,enabled:$('job-schedule-enabled').checked},readJobArguments());
- await api('/api/jobs/schedule',payload);await loadJobSchedules();ui($('job-schedule-message'),'Schedule saved.');
- }catch(error){ui($('job-schedule-message'),'Schedule failed: {error}',{error:error.message});}
- });
+ const payload=pause?{name:selectedJob.name,enabled:false}:jobSchedulePayload(selectedJob.name,readScheduleFields('job-schedule'),readJobArguments());
+ await api('/api/jobs/schedule',payload);if(!current())return;await loadJobSchedules();if(current())ui($('job-schedule-message'),'Schedule saved.');
+ }catch(error){if(current())ui($('job-schedule-message'),'Schedule failed: {error}',{error:error.message});}
+ }).finally(()=>{$('job-schedule-save').disabled=!jobScheduleEditable(selectedJob);});
 }
 async function loadJobSchedules(){
- const data=await api('/api/jobs/schedules');jobSchedules=data.schedules||[];renderJobSchedule();
+ const request=++jobScheduleRequest,role=currentRole,epoch=stageEpoch;
+ const data=await api('/api/jobs/schedules');if(request!==jobScheduleRequest||role!==currentRole||epoch!==stageEpoch)return;jobSchedules=data.schedules||[];renderJobSchedule();
 }
 $('job-schedule-kind').onchange=updateJobScheduleKind;
 $('job-schedule-form').onsubmit=event=>{event.preventDefault();saveJobSchedule();};

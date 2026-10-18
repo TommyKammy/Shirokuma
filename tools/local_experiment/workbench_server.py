@@ -15,6 +15,7 @@ import lake_ingest
 import jobs_resident
 import alerts_resident
 import stages_resident
+import schedule_resident
 import stage_exports
 import warehouse_resident
 import request_auth
@@ -292,13 +293,14 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     result = {'stage': stages_resident.save_stage(body, self.authenticated_user or 'local', role)}
                 elif path == '/api/stages/schedule':
                     fields = {'name', 'enabled'}
-                    if (not fields <= set(body) or set(body) - fields - {'every_minutes', 'version'}
+                    if (not fields <= set(body) or set(body) - fields - schedule_resident.SCHEDULE_FIELDS - {'version'}
                             or not isinstance(body.get('name'), str) or not body['name']
                             or type(body.get('enabled')) is not bool
-                            or (body['enabled'] and ('every_minutes' not in body or not isinstance(body.get('version'), str) or not body['version']))
-                            or ('version' in body and (not isinstance(body['version'], str) or not body['version']))
-                            or ('every_minutes' in body and (type(body['every_minutes']) is not int or not 1 <= body['every_minutes'] <= 10080))):
+                            or (body['enabled'] and (not isinstance(body.get('version'), str) or not body['version']))
+                            or ('version' in body and (not isinstance(body['version'], str) or not body['version']))):
                         raise ValueError('invalid stage schedule fields')
+                    if set(body) != fields or body['enabled']:
+                        schedule_resident._validate_schedule({'kind': 'interval', **body}, schedule_resident._utc())
                     result = {'schedule': stages_resident.save_schedule(body, self.authenticated_user or 'local', role)}
                 elif path == '/api/stages/scan':
                     if set(body) != {'name', 'version'} or any(not isinstance(body[key], str) or not body[key] for key in ('name', 'version')):

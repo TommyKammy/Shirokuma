@@ -202,6 +202,68 @@ eval(HANDLERS+`
                 self.assertEqual(self.json_request('/api/stages/save', body)[0], 400)
             self.assertEqual(stages.mock_calls, [])
 
+    def test_calendar_schedule_http_roundtrip_validation_and_permissions(self):
+        from datetime import datetime, timezone
+        now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+        cases = [dict(kind='interval', every_minutes=5), dict(kind='daily', time='09:01'),
+                 dict(kind='once', date='2026-10-19', time='09:01'),
+                 dict(kind='weekly', weekdays=[7, 1], time='09:01'),
+                 dict(kind='monthly', day_of_month='last', time='09:01')]
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ,
+                SHIROKUMA_STATE_DIR=str(Path(temporary) / 'state'), SHIROKUMA_AUTH_MODE='local',
+                SHIROKUMA_AUTH_FILE='', SHIROKUMA_DEFAULT_ROLE='admin'), \
+                patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')), \
+                patch.object(wb.schedule_resident, '_utc', return_value=now):
+            wb.jobs_resident.save_job(dict(name='orders', steps=[dict(action='sql', sql='SELECT 1', mode='read-only')]), 'alice', 'admin')
+            stage = wb.stages_resident.save_stage(dict(name='orders', directory=str(Path(temporary).resolve()), table='raw.orders', mode='append', format='csv'), 'alice', 'admin')
+            for path in ('/api/jobs/schedule', '/api/stages/schedule'):
+                extras = {'version': stage['updated_at']} if '/stages/' in path else {'arguments': {}}
+                for options in cases:
+                    with self.subTest(path=path, options=options):
+                        payload = dict(name='orders', enabled=True, **extras, **options)
+                        code, result = self.json_request(path, payload)
+                        self.assertEqual(code, 200, result)
+                        saved = result['schedule']
+                        self.assertEqual(saved['kind'], options['kind'])
+                        self.assertEqual(saved['auth_mode'], 'local')
+                        self.assertEqual(saved['weekdays'], sorted(options.get('weekdays', [])))
+                        self.assertEqual(saved['day_of_month'], options.get('day_of_month'))
+                        self.assertEqual(saved['date'], options.get('date'))
+                        self.assertIsNotNone(saved['next_run_at'])
+                        read_path = '/api/stages' if '/stages/' in path else '/api/jobs/schedules'
+                        status, data = self.json_request(read_path)
+                        persisted = data['stages'][0]['schedule'] if '/stages/' in path else data['schedules'][0]
+                        self.assertEqual(persisted['next_run_at'], saved['next_run_at'])
+                        if '/stages/' in path:
+                            self.assertEqual(self.json_request(path, {**payload, 'version': 'stale'})[0], 400)
+                        invalid = [{**payload, 'owner': 'bob'}, {**payload, 'role': 'admin'},
+                                   {**payload, 'auth_mode': 'local'}, {**payload, 'weekdays': []},
+                                   {**payload, 'day_of_month': True}, {**payload, 'date': '2026-02-30'}]
+                        for body in invalid:
+                            self.assertEqual(self.json_request(path, body)[0], 400)
+                        self.assertEqual(self.json_request(path, {'name': 'orders', 'enabled': False})[1]['schedule']['enabled'], False)
+                for role in ('data_engineer', 'bi_viewer'):
+                    with patch.object(wb.request_auth, 'authenticate', return_value=('alice', role)):
+                        self.assertEqual(self.json_request(path, dict(name='orders', enabled=True, **extras, **cases[2]))[0], 403 if '/stages/' in path or role == 'bi_viewer' else 200)
+                with patch.object(wb.request_auth, 'authenticate', return_value=('bob', 'admin')):
+                    self.assertEqual(self.json_request(path, dict(name='orders', enabled=True, **extras, **cases[3]))[0], 404 if '/stages/' in path else 403)
+                with patch.object(wb.request_auth, 'authenticate', side_effect=wb.request_auth.AuthenticationError('credentials required')):
+                    self.assertEqual(self.json_request(path, dict(name='orders', enabled=True, **extras, **cases[3]))[0], 401)
+            # Old stage clients may omit kind; interval saving and minimal pause remain valid.
+            legacy = dict(name='orders', every_minutes=3, enabled=True, version=stage['updated_at'])
+            self.assertEqual(self.json_request('/api/stages/schedule', legacy)[1]['schedule']['kind'], 'interval')
+            accounts = Path(temporary) / 'accounts.json'
+            accounts.write_text(json.dumps({'alice': {'role': 'admin'}}))
+            with patch.dict(os.environ, SHIROKUMA_AUTH_MODE='shared', SHIROKUMA_AUTH_FILE=str(accounts)):
+                for path in ('/api/jobs/schedule', '/api/stages/schedule'):
+                    extras = {'version': stage['updated_at']} if '/stages/' in path else {}
+                    code, result = self.json_request(path, dict(name='orders', enabled=True, **extras, **cases[3]))
+                    self.assertEqual(code, 200, result)
+                    self.assertEqual(result['schedule']['auth_mode'], 'shared')
+                    accounts.write_text('{}')
+                    self.assertEqual(self.json_request(path, {'name': 'orders', 'enabled': False})[0], 403)
+                    accounts.write_text(json.dumps({'alice': {'role': 'admin'}}))
+
     def test_stage_schedule_scan_retry_validation(self):
         selection = dict(name='orders', file='orders.csv', version='v1')
         invalid = {
@@ -226,6 +288,85 @@ eval(HANDLERS+`
         for error, code in [(wb.jobs_resident.JobNotFound('missing'), 404), (wb.jobs_resident.JobConflict('busy'), 409), (ValueError('changed file'), 400), (PermissionError('owner only'), 403)]:
             with self.subTest(code=code), patch.object(wb.stages_resident, 'list_files', side_effect=error):
                 self.assertEqual(self.json_request('/api/stages/files', {'name': 'orders'})[0], code)
+
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_calendar_schedule_controls_payloads_readback_and_async_permissions(self):
+        doc = self.workbench_document()
+        script = next(node['text'] for node in doc.nodes if node['tag'] == 'script')
+        shared = 'const scheduleFields=' + script.split('const scheduleFields=', 1)[1].split('function stageCurrent(', 1)[0]
+        jobs = 'function jobSchedulePayload(' + script.split('function jobSchedulePayload(', 1)[1].split("$('job-parameter-example')", 1)[0]
+        for prefix in ('job-schedule', 'stage-schedule'):
+            for field in ('kind', 'minutes', 'time', 'timezone', 'date', 'day', *('weekday-' + str(day) for day in range(1, 8))):
+                self.assertTrue(any(node.get('for') == prefix + '-' + field for node in doc.nodes))
+            kind = doc.by_id(prefix + '-kind')
+            self.assertEqual([node['value'] for node in doc.nodes if node['tag'] == 'option' and kind in node['ancestors']],
+                             ['interval', 'daily', 'once', 'weekly', 'monthly'])
+        busy_handler = 'async function busy(' + script.split('async function busy(', 1)[1].split('function aiStatus(', 1)[0]
+        harness = r"""
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={value:'',checked:false,disabled:false,hidden:false,children:[],querySelectorAll(){return [];},replaceChildren(...items){this.children=items;},append(...items){this.children.push(...items);},reportValidity(){return true;},setAttribute(){},removeAttribute(){}};
+let language='en',currentRole='admin',stageEpoch=1,jobScheduleRequest=0;
+let selectedJob={name:'orders',can_manage:true},jobSchedules=[];
+const t=(key,values={})=>key.replace(/\{(\w+)\}/g,(_,name)=>values[name]??'');
+const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
+const pruneUIBindings=()=>{},readJobArguments=()=>({limit:3}),uiBindings=new Map();
+const busy=eval('('+BUSY+')');
+const document={createElement:()=>({append(){}})};
+let respond;const calls=[];const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>respond=resolve);};
+eval(SHARED+JOBS+`
+(async()=>{
+ const base={kind:'daily',time:'08:30',timezone:'Asia/Tokyo',enabled:true};
+ for(const [fields,expected] of [
+  [{kind:'interval',every_minutes:'7',enabled:true},{kind:'interval',every_minutes:7,enabled:true}],
+  [base,base],
+  [{...base,kind:'once',date:'2030-02-28'},{...base,kind:'once',date:'2030-02-28'}],
+  [{...base,kind:'weekly',weekdays:[7,1,3]},{...base,kind:'weekly',weekdays:[1,3,7]}],
+  [{...base,kind:'monthly',day_of_month:'31'},{...base,kind:'monthly',day_of_month:31}],
+  [{...base,kind:'monthly',day_of_month:'last'},{...base,kind:'monthly',day_of_month:'last'}]
+ ]){
+  assert.deepEqual(jobSchedulePayload('orders',fields,{limit:3}),{name:'orders',...expected,arguments:{limit:3}});
+  for(const prefix of ['job-schedule','stage-schedule']){
+   fillScheduleFields(prefix,expected);updateScheduleKind(prefix,true);
+   assert.deepEqual(schedulePayload(readScheduleFields(prefix)),expected);
+   assert.equal($(prefix+'-interval').hidden,fields.kind!=='interval');
+   assert.equal($(prefix+'-daily').hidden,fields.kind==='interval');
+   for(const kind of ['once','weekly','monthly'])assert.equal($(prefix+'-'+kind).hidden,fields.kind!==kind);
+   assert.equal($(prefix+'-date').disabled,fields.kind!=='once');
+   assert.equal($(prefix+'-weekday-1').disabled,fields.kind!=='weekly');
+   assert.equal($(prefix+'-day').disabled,fields.kind!=='monthly');
+   updateScheduleKind(prefix,false);for(const field of scheduleFields)assert.equal($(prefix+'-'+field).disabled,true);
+  }
+ }
+ for(const invalid of [{...base,kind:'once',date:'2030-02-30'},{...base,kind:'weekly',weekdays:[]},{...base,kind:'weekly',weekdays:[1,1]},{...base,kind:'monthly',day_of_month:'32'},{...base,time:'25:00'},{...base,timezone:'Invalid/Zone'},{kind:'interval',every_minutes:0}])assert.throws(()=>schedulePayload(invalid));
+ const saved={name:'orders',...base,kind:'weekly',weekdays:[1,5],next_run_at:'2030-01-07T23:30:00Z'};
+ jobSchedules=[saved];renderJobSchedule();assert.equal($('job-schedule-kind').value,'weekly');
+ assert.equal($('job-schedule-weekday-5').checked,true);assert.equal($('job-schedule-weekday-2').checked,false);
+ assert.ok(scheduleNextTime(saved).includes('08:30'));assert.ok(scheduleNextTime(saved).includes('Asia/Tokyo'));
+ assert.ok(scheduleSummary(saved).includes('Monday'));assert.ok(scheduleSummary({...saved,kind:'monthly',day_of_month:'last'}).includes('Last day'));
+ // Save sends the calendar fields and arguments, then reads the authoritative persisted schedule.
+ $('job-schedule-kind').value='monthly';$('job-schedule-day').value='last';
+ let pending=saveJobSchedule();assert.deepEqual(calls.at(-1),{path:'/api/jobs/schedule',body:{name:'orders',kind:'monthly',day_of_month:'last',time:'08:30',timezone:'Asia/Tokyo',enabled:true,arguments:{limit:3}}});
+ respond({});await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.at(-1).path,'/api/jobs/schedules');
+ respond({schedules:[{...saved,kind:'monthly',day_of_month:'last'}]});await pending;assert.equal($('job-schedule-day').value,'last');
+ // Pause bypasses malformed edited time/date fields, as before.
+ $('job-schedule-enabled').checked=false;$('job-schedule-time').value='bad';
+ pending=saveJobSchedule();assert.deepEqual(calls.at(-1).body,{name:'orders',enabled:false});
+ respond({});await new Promise(resolve=>setImmediate(resolve));respond({schedules:[{...saved,enabled:false}]});await pending;
+ let count=calls.length;currentRole='bi_viewer';await saveJobSchedule();assert.equal(calls.length,count);updateJobScheduleKind();assert.equal($('job-schedule-kind').disabled,true);
+ currentRole='admin';selectedJob.can_manage=false;await saveJobSchedule();assert.equal(calls.length,count);
+ selectedJob.can_manage=true;fillScheduleFields('job-schedule',saved);pending=saveJobSchedule();
+ currentRole='bi_viewer';++stageEpoch;respond({});await pending;assert.equal(calls.length,count+1);assert.equal($('job-schedule-save').disabled,true);
+ // The real busy finalizer also respects switching to a definition owned by someone else.
+ currentRole='admin';renderJobSchedule();pending=saveJobSchedule();selectedJob={name:'other',can_manage:false};respond({});await pending;assert.equal($('job-schedule-save').disabled,true);
+ // A late refresh cannot populate schedules after a role reset, including switching back.
+ currentRole='admin';pending=loadJobSchedules();const previous=jobSchedules;currentRole='bi_viewer';++stageEpoch;currentRole='admin';respond({schedules:[{...saved,name:'late'}]});await pending;assert.equal(jobSchedules,previous);
+ console.log('calendar schedule behavior complete');
+})().catch(error=>{console.error(error);process.exitCode=1;});`);
+"""
+        source = 'const SHARED=' + json.dumps(shared) + ';const JOBS=' + json.dumps(jobs) + ';const BUSY=' + json.dumps(busy_handler) + ';' + harness
+        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('calendar schedule behavior complete', result.stdout)
 
     def test_stage_ui_stays_in_ingestion_and_requires_preview(self):
         doc = self.workbench_document()
@@ -333,9 +474,22 @@ eval(HANDLERS+`
  editStage(entry);assert.equal($('stage-schedule-enabled').checked,false);
  $('stage-schedule-minutes').value='7';$('stage-schedule-enabled').checked=true;
  let pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
- assert.deepEqual(calls.at(-1),{path:'/api/stages/schedule',body:{name:'orders',every_minutes:7,enabled:true,version:'revision-1'}});
+ assert.deepEqual(calls.at(-1),{path:'/api/stages/schedule',body:{name:'orders',kind:'interval',every_minutes:7,enabled:true,version:'revision-1'}});
  respond({schedule:{name:'orders',enabled:true,every_minutes:7}});await pending;
  assert.equal(selectedStage.schedule.enabled,true);assert.equal(stagePending,false);
+ // Each calendar kind is saved explicitly and read back without losing the stage revision.
+ for(const calendar of [
+  {kind:'daily',time:'09:45',timezone:'Asia/Tokyo',enabled:true},
+  {kind:'once',date:'2030-04-21',time:'12:00',timezone:'Europe/London',enabled:true},
+  {kind:'weekly',weekdays:[2,6],time:'16:10',timezone:'America/New_York',enabled:true},
+  {kind:'monthly',day_of_month:'last',time:'23:00',timezone:'Asia/Tokyo',enabled:true}
+ ]){
+  fillScheduleFields('stage-schedule',calendar);pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
+  assert.deepEqual(calls.at(-1),{path:'/api/stages/schedule',body:{name:'orders',...calendar,version:'revision-1'}});
+  respond({schedule:{name:'orders',...calendar}});await pending;
+  assert.deepEqual(schedulePayload(readScheduleFields('stage-schedule')),calendar);assert.equal(selectedStage.updated_at,'revision-1');
+ }
+ fillScheduleFields('stage-schedule',{kind:'interval',every_minutes:7,enabled:true});
  // A completed check is successful even when it imports no files.
  for(const [status,label] of [['success','Succeeded'],['failed','Failed'],['skipped','Skipped'],['unknown','Unknown outcome']]){
   selectedStage.schedule.last_status=status;uiTexts.length=0;renderStageSchedule();assert.ok(uiTexts.includes(label));assert.ok(!uiTexts.includes('Already imported'));
@@ -366,7 +520,7 @@ eval(HANDLERS+`
  assert.equal($('stage-table').value,'raw.new_destination');assert.equal($('stage-mode').value,'upsert');assert.equal($('stage-key').value,'id');
  assert.equal(stagePreview,null);assert.equal(stageRunId,'keep-history');assert.equal($('stage-view-run').hidden,false);
  $('stage-schedule-enabled').checked=true;pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
- assert.deepEqual(calls.at(-1).body,{name:'orders',every_minutes:9,enabled:true,version:'revision-2'});
+ assert.deepEqual(calls.at(-1).body,{name:'orders',kind:'interval',every_minutes:9,enabled:true,version:'revision-2'});
  respond({schedule:{enabled:true,every_minutes:9}});await pending;
  pending=$('stage-scan').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',version:'revision-2'});
  respond({run:{id:'new-scan'}});await new Promise(resolve=>setImmediate(resolve));respond({stages:[revised]});await new Promise(resolve=>setImmediate(resolve));respond({files:[]});await pending;
@@ -425,9 +579,14 @@ eval(HANDLERS+`
   assert.equal($('stage-file').value,'orders.csv');assert.deepEqual($('stage-exports').children,['output-list']);
   assert.equal($('stage-export-table').value,'raw.custom');assert.equal($('stage-export-file').value,'custom.csv');assert.equal(stageRunId,'keep-history');
  }
+ // A calendar-only edit from another tab replaces all visible schedule fields and retains the preview.
+ let pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{kind:'weekly',enabled:true,time:'11:20',timezone:'Europe/London',weekdays:[2,4]}}]});await pending;
+ assert.equal($('stage-schedule-kind').value,'weekly');assert.equal($('stage-schedule-time').value,'11:20');assert.equal($('stage-schedule-timezone').value,'Europe/London');
+ assert.equal($('stage-schedule-weekday-2').checked,true);assert.equal($('stage-schedule-weekday-1').checked,false);assert.equal(stagePreview,preview);
+ pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{enabled:false,every_minutes:9}}]});await pending;
  // Unchanged server schedule values do not overwrite an unsaved interval or checkbox.
  $('stage-schedule-minutes').value='13';$('stage-schedule-enabled').checked=true;
- let pending=$('stages-refresh').onclick();respond({stages:[{...selectedStage,schedule:{...selectedStage.schedule,last_status:'skipped'}}]});await pending;
+ pending=$('stages-refresh').onclick();respond({stages:[{...selectedStage,schedule:{...selectedStage.schedule,last_status:'skipped'}}]});await pending;
  assert.equal($('stage-schedule-minutes').value,'13');assert.equal($('stage-schedule-enabled').checked,true);assert.equal(selectedStage.schedule.enabled,false);
  // Schedule-only changes preserve dirty definition fields while updating the pause control.
  $('stage-table').value='raw.unsaved';$('stage-form').oninput();

@@ -34,7 +34,7 @@ class Elements(HTMLParser):
 class JobsUIContracts(unittest.TestCase):
     def javascript(self, body, *names):
         definitions = SCRIPT[SCRIPT.index('const i18n'):SCRIPT.index('function ui(')]
-        source = definitions + '\nlet currentRole="admin";\n' + '\n'.join(function(name) for name in names) + '\n' + body
+        source = definitions + '\nlet currentRole="admin",stageEpoch=0;\n' + '\n'.join(function(name) for name in names) + '\n' + body
         result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -64,7 +64,7 @@ for(const time of ['00:00','23:59']){const p=jobSchedulePayload('job',{kind:'dai
 for(const fields of [{time:'24:00',timezone:'Asia/Tokyo'},{time:'2:00',timezone:'Asia/Tokyo'},{time:'09:00',timezone:'Invalid/Zone'},{time:'09:00',timezone:''}]){
  let rejected=false;try{jobSchedulePayload('job',{kind:'daily',...fields},{});}catch{rejected=true;}check(rejected,'invalid daily');
 }
-""", 'jobSchedulePayload')
+""", 'schedulePayload', 'jobSchedulePayload')
 
     def test_schedule_permission_and_shared_typed_arguments(self):
         self.javascript(r"""
@@ -111,9 +111,9 @@ const busy=async(button,task)=>task(),api=async(path,payload)=>{submitted.push(p
 (async()=>{
  await saveJobSchedule();
  if(validated!==1||read!==1||submitted.length!==1)throw Error('disabled edit not fully validated');
- if(JSON.stringify(submitted[0])!==JSON.stringify({name:'job',kind:'interval',arguments:{n:7},enabled:false,every_minutes:1}))throw Error('disabled full payload');
+ require('node:assert/strict').deepEqual(submitted[0],{name:'job',kind:'interval',arguments:{n:7},enabled:false,every_minutes:1},'disabled full payload');
 })().catch(error=>{console.error(error.message);process.exitCode=1;});
-""", 'jobSchedulePayload', 'jobScheduleEditable', 'saveJobSchedule')
+""", 'readScheduleFields', 'schedulePayload', 'jobSchedulePayload', 'jobScheduleEditable', 'saveJobSchedule')
 
     def test_schedule_and_history_are_localized(self):
         self.javascript(r"""

@@ -1,5 +1,7 @@
 """Synthetic scheduler checks: cadence, authorization, DST and process claims."""
 from datetime import datetime, timedelta, timezone
+from contextlib import ExitStack
+import importlib
 import csv
 import json
 import os
@@ -44,7 +46,7 @@ class SchedulerTests(unittest.TestCase):
     def schedule(self, name='scheduled', actor='local', role='admin', now=BASE, **options):
         payload = dict(name=name, kind='interval', every_minutes=1, enabled=True, arguments={})
         payload.update(options)
-        if payload['kind'] == 'daily':
+        if payload['kind'] != 'interval':
             payload.pop('every_minutes', None)
         with patch.object(scheduler, '_utc', return_value=now):
             return jobs.save_schedule(payload, actor, role)
@@ -60,6 +62,164 @@ class SchedulerTests(unittest.TestCase):
                 return result
             time.sleep(.01)
         self.fail('scheduled worker did not finish')
+
+    def test_calendar_normalization_roundtrip_and_kind_changes(self):
+        self.job()
+        cases = [
+            dict(kind='once', date='2026-10-19', time='09:00'),
+            dict(kind='weekly', weekdays=[7, 1, 3], time='09:00'),
+            dict(kind='monthly', day_of_month=31, time='09:00'),
+            dict(kind='monthly', day_of_month='last', time='09:00'),
+        ]
+        for options in cases:
+            with self.subTest(options=options):
+                saved = self.schedule(**options)
+                self.assertEqual(saved['timezone'], 'Asia/Tokyo')
+                self.assertEqual(saved['date'], options.get('date'))
+                self.assertEqual(saved['weekdays'], sorted(options.get('weekdays', [])))
+                self.assertEqual(saved['day_of_month'], options.get('day_of_month'))
+                self.assertEqual(jobs.list_schedules('local', 'admin')[0]['next_run_at'], saved['next_run_at'])
+        cleared = self.schedule()
+        self.assertEqual((cleared['date'], cleared['weekdays'], cleared['day_of_month']), (None, [], None))
+
+    def test_recurring_calendar_tick_decodes_fields_and_advances_without_duplicate(self):
+        self.job()
+        for options, expected in [
+                (dict(kind='weekly', weekdays=[1, 7], time='09:01'), '2026-10-19T00:01:00+00:00'),
+                (dict(kind='monthly', day_of_month=31, time='09:01'), '2026-12-31T00:01:00+00:00'),
+                (dict(kind='monthly', day_of_month='last', time='09:01'), '2026-11-30T00:01:00+00:00')]:
+            with self.subTest(options=options):
+                saved = self.schedule(**options)
+                due = datetime.fromisoformat(saved['next_run_at'])
+                with patch.object(jobs, '_execute_step', return_value={}) as execute:
+                    result = jobs.tick(due)
+                    self.assertEqual(self.terminal(result['started'][0])['status'], 'success')
+                    self.assertEqual(jobs.tick(due), dict(started=[], skipped=[], paused=[], unknown=[]))
+                    self.assertEqual(execute.call_count, 1)
+                persisted = jobs.list_schedules('local', 'admin')[0]
+                self.assertTrue(persisted['enabled'])
+                self.assertEqual(persisted['next_run_at'], expected)
+                self.assertGreater(datetime.fromisoformat(persisted['next_run_at']), due)
+
+    def test_calendar_invalid_fields_and_once_draft_future_rules(self):
+        self.job()
+        cases = [
+            dict(kind='weekly', weekdays=[]), dict(kind='weekly', weekdays=[1, 1]),
+            dict(kind='weekly', weekdays=[True]), dict(kind='weekly', weekdays=[0]),
+            dict(kind='weekly', weekdays='1'), dict(kind='weekly', weekdays=[1.0]),
+            dict(kind='monthly', day_of_month=True), dict(kind='monthly', day_of_month=0),
+            dict(kind='monthly', day_of_month=32), dict(kind='monthly', day_of_month='31'),
+            dict(kind='once', date='2026-02-29'),
+            dict(kind='once', date='0001-01-01'),
+            dict(kind='once', date='9999-12-31', time='23:30', timezone='America/New_York'), dict(kind='once', date='2026-1-01'),
+            dict(kind='once', date='2026-03-08', time='02:30', timezone='America/New_York'),
+            dict(kind='daily', weekdays=[1]), dict(kind='interval', date=None),
+            dict(kind='weekly', weekdays=[1], day_of_month=None),
+        ]
+        for case in cases:
+            payload = dict(name='scheduled', time='09:00', **{key: value for key, value in case.items() if key != 'time'})
+            payload['time'] = case.get('time', '09:00')
+            with self.subTest(case=case), self.assertRaises(ValueError):
+                jobs.save_schedule(payload, 'local', 'admin')
+        draft = self.schedule(kind='once', date='2026-10-17', time='09:00', enabled=False)
+        self.assertFalse(draft['enabled'])
+        with self.assertRaises(ValueError):
+            self.schedule(kind='once', date='2026-10-18', time='09:00')
+
+    def test_calendar_week_month_leap_and_dst_boundaries(self):
+        cases = [
+            (dict(kind='weekly', weekdays=[1], time='09:00'), '2026-10-18T00:00:00+00:00', '2026-10-19T00:00:00+00:00'),
+            (dict(kind='weekly', weekdays=[1], time='09:00'), '2026-10-19T00:00:00+00:00', '2026-10-26T00:00:00+00:00'),
+            (dict(kind='monthly', day_of_month=31, time='09:00'), '2026-04-01T00:00:00+00:00', '2026-05-31T00:00:00+00:00'),
+            (dict(kind='monthly', day_of_month='last', time='09:00'), '2028-02-01T00:00:00+00:00', '2028-02-29T00:00:00+00:00'),
+            (dict(kind='monthly', day_of_month='last', time='09:00'), '2026-02-01T00:00:00+00:00', '2026-02-28T00:00:00+00:00'),
+            (dict(kind='monthly', day_of_month=29, time='09:00'), '2026-02-01T00:00:00+00:00', '2026-03-29T00:00:00+00:00'),
+            (dict(kind='weekly', weekdays=[7], time='02:30', timezone='America/New_York'), '2026-03-07T12:00:00+00:00', '2026-03-15T06:30:00+00:00'),
+            (dict(kind='monthly', day_of_month=8, time='02:30', timezone='America/New_York'), '2026-03-07T12:00:00+00:00', '2026-04-08T06:30:00+00:00'),
+            (dict(kind='weekly', weekdays=[7], time='01:30', timezone='America/New_York'), '2026-11-01T05:45:00+00:00', '2026-11-08T06:30:00+00:00'),
+            (dict(kind='monthly', day_of_month=1, time='01:30', timezone='America/New_York'), '2026-10-31T12:00:00+00:00', '2026-11-01T05:30:00+00:00'),
+        ]
+        for payload, start, expected in cases:
+            with self.subTest(payload=payload, start=start):
+                now = datetime.fromisoformat(start)
+                normalized = scheduler._validate_schedule(payload, now)
+                self.assertEqual(scheduler._next(normalized, now).isoformat(), expected)
+        once = scheduler._validate_schedule(dict(kind='once', date='2026-11-01', time='01:30', timezone='America/New_York'), BASE)
+        self.assertEqual(scheduler._next(once, BASE).isoformat(), '2026-11-01T05:30:00+00:00')
+        self.assertIsNone(scheduler._next(once, datetime(2026, 11, 1, 5, 30, tzinfo=timezone.utc)))
+
+    def test_once_consumed_on_success_skip_start_failure_and_auth_pause(self):
+        self.job()
+        for outcome in ('success', 'missed', 'start_failure', 'paused'):
+            with self.subTest(outcome=outcome):
+                saved = self.schedule(kind='once', date='2026-10-18', time='09:01')
+                due = datetime.fromisoformat(saved['next_run_at'])
+                importlib.reload(scheduler)
+                self.assertEqual(jobs.list_schedules('local', 'admin')[0]['next_run_at'], saved['next_run_at'])
+                with ExitStack() as patches:
+                    patches.enter_context(patch.object(jobs, '_execute_step', return_value={}))
+                    if outcome == 'start_failure':
+                        patches.enter_context(patch.object(jobs, '_start_worker', side_effect=RuntimeError('unavailable')))
+                    elif outcome == 'paused':
+                        patches.enter_context(patch.object(scheduler, '_authorize', side_effect=PermissionError('revoked')))
+                    result = jobs.tick(due + timedelta(seconds=60 if outcome == 'missed' else 0))
+                    if outcome == 'success':
+                        self.assertEqual(self.terminal(result['started'][0])['status'], 'success')
+                    else:
+                        self.assertEqual(len(result['unknown'] if outcome == 'start_failure' else result['skipped']), 1)
+                saved = jobs.list_schedules('local', 'admin')[0]
+                self.assertFalse(saved['enabled'])
+                self.assertIsNone(saved['next_run_at'])
+                self.assertEqual(jobs.tick(due + timedelta(days=1)), dict(started=[], skipped=[], paused=[], unknown=[]))
+
+    def test_once_concurrent_ticks_claim_only_one_run(self):
+        self.job()
+        saved = self.schedule(kind='once', date='2026-10-18', time='09:01')
+        due = datetime.fromisoformat(saved['next_run_at'])
+        ready = threading.Barrier(2)
+        results = []
+        def tick():
+            ready.wait()
+            results.append(jobs.tick(due))
+        with patch.object(jobs, '_execute_step', return_value={}):
+            threads = [threading.Thread(target=tick) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(3)
+                self.assertFalse(thread.is_alive())
+            started = [run for result in results for run in result['started']]
+            self.assertEqual(len(started), 1)
+            self.terminal(started[0])
+        self.assertFalse(jobs.list_schedules('local', 'admin')[0]['enabled'])
+        self.assertEqual(len(jobs.list_runs('local', 'admin')), 1)
+
+    def test_invalid_calendar_does_not_starve_independent_due_work(self):
+        self.job(name='a_bad')
+        bad = self.schedule(name='a_bad', kind='weekly', weekdays=[1], time='09:00')
+        self.job(name='z_good')
+        self.schedule(name='z_good')
+        due = BASE + timedelta(minutes=1)
+        with jobs._db() as connection:
+            connection.execute("UPDATE schedules SET next_run_at=?,timezone='Bad/Zone' WHERE name='a_bad'", (due.isoformat(),))
+        with patch.object(jobs, '_execute_step', return_value={}):
+            result = jobs.tick(due)
+            self.assertEqual(self.terminal(result['started'][0])['status'], 'success')
+        self.assertEqual(result['paused'], ['a_bad'])
+        self.assertEqual(len(result['skipped']), 1)
+
+    def test_legacy_schedule_migration_preserves_rows_and_is_idempotent(self):
+        database = self.directory / 'jobs.sqlite3'
+        with sqlite3.connect(database) as connection:
+            connection.execute('CREATE TABLE schedules(name TEXT PRIMARY KEY, owner TEXT, kind TEXT, every_minutes INTEGER, time TEXT, timezone TEXT, arguments TEXT, enabled INTEGER, role TEXT, auth_mode TEXT,next_run_at TEXT,last_status TEXT,last_run_id TEXT,last_scheduled_for TEXT)')
+            connection.execute('INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', ('old', 'local', 'interval', 5, None, None, '{}', 1, 'admin', 'local', (BASE + timedelta(minutes=5)).isoformat(), 'success', 'previous-run', BASE.isoformat()))
+        for _ in range(2):
+            saved = jobs.list_schedules('local', 'admin')[0]
+            self.assertEqual(saved['every_minutes'], 5)
+            self.assertEqual((saved['last_status'], saved['last_run_id'], saved['last_scheduled_for']), ('success', 'previous-run', BASE.isoformat()))
+            self.assertTrue(saved['enabled'])
+            self.assertEqual(saved['next_run_at'], (BASE + timedelta(minutes=5)).isoformat())
+            self.assertEqual((saved['date'], saved['weekdays'], saved['day_of_month']), (None, [], None))
 
     def test_schedule_saves_future_utc_and_defaults_disabled(self):
         self.job()

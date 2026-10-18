@@ -40,6 +40,83 @@ class StageSchedulesTests(unittest.TestCase):
     def scan(self, version=None):
         return stages.submit_scan('incoming', 'alice', 'admin', version or stages.list_stages('alice', 'admin')[0]['updated_at'])
 
+    def test_calendar_stage_kinds_preserve_revision_owner_and_modes(self):
+        now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+        version = stages.list_stages('alice', 'admin')[0]['updated_at']
+        cases = [
+            dict(kind='once', date='2026-10-18', time='09:01'),
+            dict(kind='daily', time='09:01'),
+            dict(kind='weekly', weekdays=[7, 1], time='09:01'),
+            dict(kind='monthly', day_of_month='last', time='09:01'),
+        ]
+        for options in cases:
+            with self.subTest(options=options), patch.object(scheduler, '_utc', return_value=now):
+                payload = dict(name='incoming', enabled=True, version=version, **options)
+                saved = stages.save_schedule(payload, 'alice', 'admin')
+                self.assertEqual(saved['kind'], options['kind'])
+                self.assertEqual(saved['weekdays'], sorted(options.get('weekdays', [])))
+                self.assertEqual(stages.list_stages('alice', 'admin')[0]['schedule']['next_run_at'], saved['next_run_at'])
+                with self.assertRaises(ValueError):
+                    stages.save_schedule({**payload, 'version': 'stale'}, 'alice', 'admin')
+                with self.assertRaises(PermissionError):
+                    stages.save_schedule(payload, 'alice', 'data_engineer')
+                with self.assertRaises(jobs.JobNotFound):
+                    stages.save_schedule(payload, 'bob', 'admin')
+        stages.save_stage(self.definition(mode='replace'), 'alice', 'admin')
+        version = stages.list_stages('alice', 'admin')[0]['updated_at']
+        with self.assertRaises(ValueError):
+            stages.save_schedule(dict(name='incoming', kind='weekly', weekdays=[1], time='09:00', enabled=True, version=version), 'alice', 'admin')
+
+    def test_weekly_monthly_ticks_advance_and_preserve_ingestion_dedup(self):
+        now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+        self.stable()
+        version = stages.list_stages('alice', 'admin')[0]['updated_at']
+        cases = [
+            (dict(kind='weekly', weekdays=[7, 1], time='09:01'), '2026-10-19T00:01:00+00:00'),
+            (dict(kind='monthly', day_of_month=31, time='09:01'), '2026-12-31T00:01:00+00:00'),
+            (dict(kind='monthly', day_of_month='last', time='09:01'), '2026-11-30T00:01:00+00:00'),
+        ]
+        with patch.object(lake_ingest, 'ingest', return_value=dict(rows_ingested=2)) as ingest:
+            for options, expected in cases:
+                with self.subTest(options=options):
+                    with patch.object(scheduler, '_utc', return_value=now):
+                        saved = stages.save_schedule(dict(name='incoming', enabled=True, version=version, **options), 'alice', 'admin')
+                    due = datetime.fromisoformat(saved['next_run_at'])
+                    result = scheduler.tick(due)
+                    self.assertEqual(self.done(result['started'][0])['status'], 'success')
+                    self.assertEqual(scheduler.tick(due), dict(started=[], skipped=[], paused=[], unknown=[]))
+                    schedule = stages.list_stages('alice', 'admin')[0]['schedule']
+                    self.assertTrue(schedule['enabled'])
+                    self.assertEqual(schedule['next_run_at'], expected)
+                    self.assertGreater(datetime.fromisoformat(schedule['next_run_at']), due)
+                    self.assertEqual(self.status()['ingestion_status'], 'success')
+            self.assertEqual(ingest.call_count, 1)
+
+    def test_once_stage_scan_consumes_slot_and_preserves_content_dedup(self):
+        now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+        self.stable()
+        payload = dict(name='incoming', kind='once', date='2026-10-18', time='09:01', enabled=True,
+                       version=stages.list_stages('alice', 'admin')[0]['updated_at'])
+        with patch.object(scheduler, '_utc', return_value=now):
+            saved = stages.save_schedule(payload, 'alice', 'admin')
+        due = datetime.fromisoformat(saved['next_run_at'])
+        with patch.object(lake_ingest, 'ingest', return_value=dict(rows_ingested=2)) as ingest:
+            result = scheduler.tick(due)
+            self.assertEqual(self.done(result['started'][0])['status'], 'success')
+            self.assertEqual(self.status()['ingestion_status'], 'success')
+            self.assertEqual(scheduler.tick(due + timedelta(days=1))['started'], [])
+            importlib.reload(stages)
+            self.assertFalse(stages.list_stages('alice', 'admin')[0]['schedule']['enabled'])
+            self.assertEqual(self.done(self.scan()['id'])['status'], 'success')
+            self.assertEqual(ingest.call_count, 1)
+        with patch.object(scheduler, '_utc', return_value=now):
+            stages.save_schedule(payload, 'alice', 'admin')
+        data = recovery._pause_restored_schedules((jobs._root() / 'jobs.sqlite3').read_bytes())
+        restored = jobs._root() / 'restored-calendar.sqlite3'
+        restored.write_bytes(data)
+        with sqlite3.connect(restored) as connection:
+            self.assertEqual(connection.execute('SELECT enabled,next_run_at,kind,date FROM schedules').fetchone(), (0, None, 'once', '2026-10-18'))
+
     def test_defaults_restart_pause_and_no_saved_job(self):
         self.assertIsNone(stages.list_stages('alice', 'admin')[0]['schedule'])
         saved = self.schedule()

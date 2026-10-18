@@ -348,15 +348,15 @@ def _get_schedule(name, actor):
 def save_schedule(payload, actor, role):
     import schedule_resident as scheduler
     _identity(actor, role)
-    if not isinstance(payload, dict) or payload.keys() - {'name', 'every_minutes', 'enabled', 'version'}:
+    if not isinstance(payload, dict) or payload.keys() - (scheduler.SCHEDULE_FIELDS | {'name', 'enabled', 'version'}):
         raise ValueError('invalid stage schedule fields')
     name = payload.get('name')
     definition = _owned(name, actor)
     pause = payload.keys() == {'name', 'enabled'} and payload['enabled'] is False
     if not pause:
-        minutes, enabled = payload.get('every_minutes'), payload.get('enabled', False)
-        if type(minutes) is not int or not 1 <= minutes <= 10080 or type(enabled) is not bool:
-            raise ValueError('interval requires every_minutes between 1 and 10080 and boolean enabled')
+        now = scheduler._utc()
+        schedule = scheduler._validate_schedule({'kind': 'interval', **payload}, now)
+        enabled = payload.get('enabled', False)
         if enabled:
             _revision(definition, payload.get('version'))
             _require_fingerprints(name)
@@ -376,14 +376,7 @@ def save_schedule(payload, actor, role):
                 raise PermissionError('Only the schedule owner can pause it')
             connection.execute('UPDATE schedules SET enabled=0,next_run_at=NULL WHERE name=?', ('stage:' + name,))
         else:
-            schedule = dict(kind='interval', every_minutes=minutes)
-            next_run = scheduler._next(schedule, scheduler._utc()).isoformat() if enabled else None
-            connection.execute("""INSERT INTO schedules
-                (name,owner,kind,every_minutes,arguments,enabled,role,auth_mode,next_run_at)
-                VALUES (?,?,'interval',?,'{}',?,?,?,?) ON CONFLICT(name) DO UPDATE SET
-                every_minutes=excluded.every_minutes,enabled=excluded.enabled,role=excluded.role,
-                auth_mode=excluded.auth_mode,next_run_at=excluded.next_run_at""",
-                ('stage:' + name, actor, minutes, int(enabled), role, scheduler._mode(), next_run))
+            scheduler._persist(connection, 'stage:' + name, actor, role, schedule, {}, enabled, now)
     return _get_schedule(name, actor)
 
 
