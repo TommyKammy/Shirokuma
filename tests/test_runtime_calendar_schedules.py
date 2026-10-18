@@ -1,6 +1,7 @@
 """Opt-in calendar acceptance through disposable shared HTTP/TLS state.
 
 Real upcoming wall-clock slots exercise the resident scheduler after restart.
+Valid overdue ledger slots exercise restart admission after modeled downtime.
 Only temporary state, files, and uniquely named Iceberg tables are written.
 """
 import calendar
@@ -9,6 +10,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import sqlite3
 import time
 import unittest
 from unittest.mock import patch
@@ -74,6 +76,114 @@ class RuntimeCalendarSchedulesTests(unittest.TestCase):
         while time.monotonic() < deadline:
             self.assertEqual(self.request('/api/jobs/runs')['runs'], history)
             time.sleep(.5)
+
+    def test_missed_calendars_after_stopped_process_restart_do_not_catch_up(self):
+        self.sql('CREATE TABLE ' + _warehouse.identifier(self.table) + ' (id BIGINT)')
+        source = self.directory / 'missed-incoming'
+        source.mkdir()
+        self.stable_file(source, 'pending.csv', 'id\n19\n')
+        child = self.start_workbench()
+        zone = ZoneInfo('Asia/Tokyo')
+        base = datetime.now(zone)
+        tomorrow = base.date() + timedelta(days=1)
+        # Even at month end, keep the initial monthly occurrence clear of setup.
+        monthly_time = (base + timedelta(hours=2)).strftime('%H:%M')
+        specs = {
+            'once': dict(kind='once', date=tomorrow.isoformat(), time='12:34'),
+            'weekly': dict(kind='weekly', weekdays=[tomorrow.isoweekday()], time='12:34'),
+            'monthly': dict(kind='monthly', day_of_month='last', time=monthly_time),
+        }
+        saved = {}
+        for kind, spec in specs.items():
+            job_name, stage_name = 'missed_' + kind, 'missed_stage_' + kind
+            self.request('/api/jobs/save', dict(name=job_name, steps=[dict(action='sql',
+                sql='INSERT INTO ' + _warehouse.identifier(self.table) + ' VALUES (7)',
+                mode='sandbox-write', schema='raw')]))
+            saved[job_name] = self.request('/api/jobs/schedule', dict(spec,
+                name=job_name, timezone=zone.key, enabled=True))['schedule']
+            stage = self.request('/api/stages/save', dict(name=stage_name,
+                directory=str(source), table=self.table, mode='append', format='auto'))['stage']
+            saved['stage:' + stage_name] = self.request('/api/stages/schedule', dict(spec,
+                name=stage_name, version=stage['updated_at'], timezone=zone.key,
+                enabled=True))['schedule']
+        self.assertEqual(self.request('/api/jobs/runs')['runs'], [])
+        self.stop_workbench(child)
+
+        # Wall-clock time is unchanged. While this dedicated process is stopped,
+        # inject valid overdue calendar occurrences into only its temporary ledger.
+        # This verifies real restart admission after modeled downtime, without
+        # claiming to wait a week/month or adding a production clock hook.
+        now = base
+        previous_month_last = now.date().replace(day=1) - timedelta(days=1)
+        overdue = {
+            'once': datetime.combine(now.date() - timedelta(days=1),
+                                     datetime.strptime('12:34', '%H:%M').time(), zone),
+            'weekly': datetime.combine(tomorrow - timedelta(days=7),
+                                       datetime.strptime('12:34', '%H:%M').time(), zone),
+            'monthly': datetime.combine(previous_month_last,
+                                        datetime.strptime(monthly_time, '%H:%M').time(), zone),
+        }
+        due_by_name = {}
+        with sqlite3.connect(self.directory / 'state' / 'jobs.sqlite3') as connection:
+            for name, schedule in saved.items():
+                due = overdue[schedule['kind']]
+                self.assertGreaterEqual((now - due).total_seconds(), 60)
+                due_by_name[name] = due.astimezone(timezone.utc).isoformat()
+                if schedule['kind'] == 'once':
+                    connection.execute('UPDATE schedules SET date=? WHERE name=?',
+                                       (due.date().isoformat(), name))
+                changed = connection.execute('UPDATE schedules SET next_run_at=? WHERE name=?',
+                                             (due_by_name[name], name))
+                self.assertEqual(changed.rowcount, 1)
+        child = self.start_workbench()
+        runs = {name: self.wait_scheduled(name, datetime.fromisoformat(due))
+                for name, due in due_by_name.items()}
+        self.assertEqual(len(self.request('/api/jobs/runs')['runs']), 6)
+        schedules = self.jobs_schedules()
+        for name, run in runs.items():
+            self.assertEqual((run['status'], run['actor'], run['role']),
+                             ('skipped', 'alice', 'admin'), run)
+            self.assertEqual(run['scheduled_for'], due_by_name[name])
+            self.assertEqual(run['error'],
+                             'Scheduled time missed by at least 60 seconds; no catch-up')
+            self.assertGreaterEqual((datetime.fromisoformat(run['created_at']) -
+                                     datetime.fromisoformat(run['scheduled_for'])).total_seconds(), 60)
+            schedule = schedules[name]
+            self.assertEqual(schedule['last_run_id'], run['id'])
+            if schedule['kind'] == 'once':
+                self.assert_consumed(schedule, run)
+                self.assertEqual(schedule['date'], overdue['once'].date().isoformat())
+            else:
+                self.assertTrue(schedule['enabled'], schedule)
+                next_due = datetime.fromisoformat(schedule['next_run_at']).astimezone(zone)
+                self.assertGreater(next_due, datetime.now(zone))
+                self.assertEqual(next_due.strftime('%H:%M'), schedule['time'])
+                if schedule['kind'] == 'weekly':
+                    self.assertIn(next_due.isoweekday(), schedule['weekdays'])
+                else:
+                    self.assertEqual(next_due.day, calendar.monthrange(next_due.year, next_due.month)[1])
+            if name.startswith('stage:'):
+                self.assertEqual(self.stage(name[6:])['schedule'], dict(schedule, name=name[6:]))
+                files = self.request('/api/stages/files', {'name': name[6:]})['files']
+                self.assertEqual([(item['ingestion_status'], item['last_run_id']) for item in files],
+                                 [('new', None)])
+        self.assertEqual(self.sql('SELECT count(*) FROM ' + _warehouse.identifier(self.table))['rows'], [[0]])
+        history = self.request('/api/jobs/runs')['runs']
+        self.stop_workbench(child)
+        child = self.start_workbench()
+        self.assert_no_replay(history)
+        self.assertEqual(self.jobs_schedules(), schedules)
+        self.assertEqual(self.sql('SELECT count(*) FROM ' + _warehouse.identifier(self.table))['rows'], [[0]])
+        for name, schedule in schedules.items():
+            if schedule['kind'] != 'once':
+                path = '/api/stages/schedule' if name.startswith('stage:') else '/api/jobs/schedule'
+                paused = self.request(path, dict(name=name[6:] if name.startswith('stage:') else name,
+                                                enabled=False))['schedule']
+                self.assertFalse(paused['enabled'])
+                self.assertIsNone(paused['next_run_at'])
+                for field in ('kind', 'time', 'timezone', 'weekdays', 'day_of_month'):
+                    self.assertEqual(paused[field], schedule[field])
+        self.stop_workbench(child)
 
     def test_job_once_restart_revocation_recurring_readback_and_restore(self):
         self.sql('CREATE TABLE ' + _warehouse.identifier(self.table) + ' (id BIGINT)')

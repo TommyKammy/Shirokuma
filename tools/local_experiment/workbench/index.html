@@ -1003,7 +1003,7 @@ async function loadRuntimeHistory(){
 $('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
 
 // Jobs are manually admitted by the server; this page never schedules or retries work.
-let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobScheduleRequest=0;
+let jobEntries=[],jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
 const liveJobStates=new Set(['queued','running']);
 const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
@@ -1159,9 +1159,10 @@ async function loadJobs(){
 }
 async function refreshJobRuns(){
  if(!jobsVisible())return;
- const request=++jobsRequest;
+ const request=++jobsRequest,role=currentRole,epoch=stageEpoch;
+ const current=()=>request===jobsRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
  try{
- const data=await api('/api/jobs/runs');if(request!==jobsRequest||!jobsVisible())return;
+ const data=await api('/api/jobs/runs');if(!current())return;
  const runs=data.runs||[];
  if(!runs.length)jobEmpty('job-runs','No runs yet.');
  else{
@@ -1169,9 +1170,13 @@ async function refreshJobRuns(){
  $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{ui(row.cells[2],jobStatuses[runs[index].status]||'Unknown');ui(row.cells[3],jobTrigger(runs[index]));row.lastElementChild.append(actionButton('Inspect run',()=>showJobRun(runs[index].id)));});
  }
  if(selectedRunId)await showJobRun(selectedRunId);
+ if(!current())return;
  await loadJobAlerts(true);
+ if(!current())return;
+ await loadJobSchedules(true);
+ if(!current())return;
  scheduleJobsPolling(runs);
- }catch(error){message('jobs-error',error.message);stopJobsPolling();}
+ }catch(error){if(current()){message('jobs-error',error.message);stopJobsPolling();}}
  finally{pruneUIBindings();}
 }
 async function showJobRun(id){
@@ -1197,10 +1202,10 @@ function readJobArguments(){
 function jobSchedulePayload(name,fields,argumentsValue){return {name,...schedulePayload(fields),arguments:argumentsValue};}
 function jobScheduleEditable(entry){return !!entry?.can_manage&&currentRole!=='bi_viewer';}
 function updateJobScheduleKind(){updateScheduleKind('job-schedule',jobScheduleEditable(selectedJob));}
-function renderJobSchedule(){
+function renderJobSchedule(preserveInputs=false){
  const saved=selectedJob?jobSchedules.find(schedule=>schedule.name===selectedJob.name):null,editable=jobScheduleEditable(selectedJob);
  if(selectedJob)$('job-schedule-name').textContent=selectedJob.name;else ui($('job-schedule-name'),'Choose a saved job.');
- fillScheduleFields('job-schedule',saved);
+ if(!preserveInputs){fillScheduleFields('job-schedule',saved);jobScheduleEnabledDirty=false;}
  for(const control of $('job-schedule-form').querySelectorAll('input,select,button'))control.disabled=!editable;
  updateJobScheduleKind();$('job-schedule-state').replaceChildren();
  const badge=document.createElement('span');badge.className='badge';ui(badge,saved?.enabled?'Enabled':'Disabled');$('job-schedule-state').append(badge);
@@ -1209,7 +1214,7 @@ function renderJobSchedule(){
  for(const [key,values] of [['Saved role: {role}',()=>({role:t(labels[saved.role]||'Unknown')})],['Authentication: {mode}',{mode:saved.auth_mode}],['Next run: {time}',()=>({time:scheduleNextTime(saved)})],['{summary}',()=>({summary:scheduleSummary(saved)})]]){
  const text=document.createElement('span');ui(text,key,values);$('job-schedule-state').append(text);
  }
- for(const input of $('job-run-arguments').querySelectorAll('[data-argument]'))if(Object.hasOwn(saved.arguments||{},input.dataset.argument))input.value=saved.arguments[input.dataset.argument]===null?'':String(saved.arguments[input.dataset.argument]);
+ if(!preserveInputs)for(const input of $('job-run-arguments').querySelectorAll('[data-argument]'))if(Object.hasOwn(saved.arguments||{},input.dataset.argument))input.value=saved.arguments[input.dataset.argument]===null?'':String(saved.arguments[input.dataset.argument]);
  }else{const text=document.createElement('span');ui(text,'No saved schedule.');$('job-schedule-state').append(text);}
  pruneUIBindings();
 }
@@ -1226,11 +1231,17 @@ function saveJobSchedule(){
  }catch(error){if(current())ui($('job-schedule-message'),'Schedule failed: {error}',{error:error.message});}
  }).finally(()=>{$('job-schedule-save').disabled=!jobScheduleEditable(selectedJob);});
 }
-async function loadJobSchedules(){
- const request=++jobScheduleRequest,role=currentRole,epoch=stageEpoch;
- const data=await api('/api/jobs/schedules');if(request!==jobScheduleRequest||role!==currentRole||epoch!==stageEpoch)return;jobSchedules=data.schedules||[];renderJobSchedule();
+async function loadJobSchedules(preserveInputs=false){
+ const request=++jobScheduleRequest,role=currentRole,epoch=stageEpoch,name=selectedJob?.name;
+ const data=await api('/api/jobs/schedules');if(request!==jobScheduleRequest||role!==currentRole||epoch!==stageEpoch||name!==selectedJob?.name)return;
+ jobSchedules=data.schedules||[];
+ // Passive history refreshes keep calendar/argument drafts, including an
+ // explicitly edited checkbox across repeated server-side state changes.
+ if(preserveInputs&&!jobScheduleEnabledDirty)$('job-schedule-enabled').checked=jobSchedules.some(schedule=>schedule.name===name&&schedule.enabled===true);
+ renderJobSchedule(preserveInputs);
 }
 $('job-schedule-kind').onchange=updateJobScheduleKind;
+$('job-schedule-enabled').onchange=()=>{jobScheduleEnabledDirty=true;};
 $('job-schedule-form').onsubmit=event=>{event.preventDefault();saveJobSchedule();};
 renderJobSchedule();
 $('job-parameter-example').textContent=JSON.stringify({start_date:{type:'date',required:true},limit:{type:'integer',default:100}},null,2)+'\n\nSELECT * FROM marts.fct_orders WHERE order_date >= {{start_date}} LIMIT {{limit}}';

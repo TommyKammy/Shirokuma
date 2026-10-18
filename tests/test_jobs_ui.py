@@ -12,8 +12,11 @@ SCRIPT = re.search(r'<script>([\s\S]*?)</script>', HTML)[1]
 
 def function(name):
     start = SCRIPT.index('function ' + name + '(')
+    if SCRIPT[max(0, start - 6):start] == 'async ':
+        start -= 6
     match = re.search(r'\n(?:async )?function ', SCRIPT[start + 1:])
-    return SCRIPT[start:start + 1 + match.start()] if match else SCRIPT[start:]
+    source = SCRIPT[start:start + 1 + match.start()] if match else SCRIPT[start:]
+    return source.split("\n$('", 1)[0]
 
 
 class Elements(HTMLParser):
@@ -202,6 +205,93 @@ if(!zone.textContent.includes(Intl.DateTimeFormat().resolvedOptions().timeZone))
 if(rows[0].cells[2].children[0].textContent!==t('Unacknowledged')||rows[0].cells[3].textContent!==t('Active condition'))throw Error('separate states');
 language='ja';if(!jobAlertTime(exact).includes('2026'))throw Error('localized date');
 """, 'jobAlertCanAcknowledge', 'jobAlertResolution', 'jobAlertTime', 'jobAlertTimestamp', 'renderJobAlerts')
+
+    def test_history_refresh_updates_schedule_state_without_discarding_drafts(self):
+        enabled_handler = next(line for line in SCRIPT.splitlines() if line.startswith("$('job-schedule-enabled').onchange="))
+        self.javascript('const ENABLED_HANDLER=' + json.dumps(enabled_handler) + ';' + r"""
+const assert=require('node:assert/strict');
+class Element {
+ constructor(){this.value='';this.checked=false;this.disabled=false;this.children=[];this.textContent='';}
+ append(...items){this.children.push(...items);}
+ replaceChildren(...items){this.children=items;}
+ querySelectorAll(selector){return [];}
+}
+const nodes={},$=id=>nodes[id]??=new Element(),document={createElement:()=>new Element()};
+eval(ENABLED_HANDLER);
+const arg={value:'3',dataset:{argument:'limit',type:'integer'}};
+$('job-run-arguments').querySelectorAll=()=>[arg];
+const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
+const pruneUIBindings=()=>{},message=(id,text)=>{$(id).textContent=text;},jobEmpty=(id,text)=>{$(id).textContent=text;};
+let jobsRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false,selectedRunId=null,visible=true,pollRuns=[];
+let selectedJob={name:'orders',can_manage:true};
+let jobSchedules=[{name:'orders',kind:'once',date:'2030-01-01',time:'09:00',timezone:'UTC',enabled:true,next_run_at:'2030-01-01T09:00:00Z',arguments:{limit:3}}];
+const scheduleFields=['kind','minutes','time','timezone','date','day',...Array.from({length:7},(_,i)=>'weekday-'+(i+1))];
+const jobsVisible=()=>visible,stopJobsPolling=()=>{},scheduleJobsPolling=runs=>{pollRuns=runs;},loadJobAlerts=async()=>{},showJobRun=async()=>{};
+const runs=[{id:'run',job_name:'orders',status:'succeeded',trigger:'schedule'}];
+let tableRows=[];
+const table=(container,columns,values)=>{tableRows=values.map(()=>({cells:Array.from({length:columns.length},()=>new Element()),lastElementChild:new Element()}));};
+$('job-runs').querySelectorAll=()=>tableRows;
+const actionButton=()=>new Element(),jobStatus=status=>status,jobDuration=()=>0,jobStatuses={succeeded:'Succeeded'};
+let serverSchedules=[{...jobSchedules[0],enabled:false,next_run_at:null}],pendingSchedule=null,pendingRuns=null,scheduleReads=0;
+const api=async path=>{
+ if(path==='/api/jobs/runs')return pendingRuns?new Promise(resolve=>pendingRuns.resolve=resolve):{runs};
+ if(path==='/api/jobs/schedules'){scheduleReads++;return pendingSchedule?new Promise(resolve=>pendingSchedule.resolve=resolve):{schedules:serverSchedules};}
+ throw Error('unexpected request '+path);
+};
+const stateText=()=>$('job-schedule-state').children.map(child=>child.textContent).join('|');
+(async()=>{
+ renderJobSchedule();assert.equal($('job-schedule-enabled').checked,true);
+ await refreshJobRuns();
+ assert.equal(jobSchedules[0].enabled,false,'history refresh must fetch auto-disabled once state');
+ assert.equal($('job-schedule-enabled').checked,false,'unchanged enable control must reflect once consumption');
+ assert.ok(stateText().includes('Disabled'));assert.ok(stateText().includes(scheduleNextTime(serverSchedules[0])));
+ assert.equal(pollRuns[0].status,'succeeded');
+ // A recurring schedule advances even when its configuration has not changed.
+ serverSchedules=[{...serverSchedules[0],kind:'weekly',weekdays:[1,5],enabled:true,next_run_at:'2030-01-04T09:00:00Z'}];
+ await loadJobSchedules();
+ $('job-schedule-kind').value='monthly';$('job-schedule-day').value='last';$('job-schedule-time').value='17:45';arg.value='19';
+ serverSchedules=[{...serverSchedules[0],next_run_at:'2030-01-07T09:00:00Z'}];
+ await refreshJobRuns();
+ assert.ok(stateText().includes(scheduleNextTime(serverSchedules[0])),'recurring next time must advance');
+ assert.equal($('job-schedule-kind').value,'monthly');assert.equal($('job-schedule-day').value,'last');
+ assert.equal($('job-schedule-time').value,'17:45');assert.equal(arg.value,'19');
+ // Consumption while calendar fields are edited updates only saved status and the untouched checkbox.
+ serverSchedules=[{...serverSchedules[0],enabled:false,next_run_at:null}];
+ await refreshJobRuns();assert.equal($('job-schedule-enabled').checked,false);assert.equal(arg.value,'19');assert.equal($('job-schedule-time').value,'17:45');
+ // An explicitly edited enable checkbox also remains a draft.
+ $('job-schedule-enabled').checked=true;$('job-schedule-enabled').onchange();await refreshJobRuns();assert.equal($('job-schedule-enabled').checked,true);assert.ok(stateText().includes('Disabled'));
+ // Keep the same user pause draft even if another tab disables and then reenables.
+ serverSchedules=[{...serverSchedules[0],enabled:true}];await loadJobSchedules();
+ assert.equal(jobScheduleEnabledDirty,false,'full refresh resets checkbox draft tracking');
+ $('job-schedule-enabled').checked=false;$('job-schedule-enabled').onchange();
+ serverSchedules=[{...serverSchedules[0],enabled:false}];await refreshJobRuns();
+ assert.equal($('job-schedule-enabled').checked,false);
+ serverSchedules=[{...serverSchedules[0],enabled:true}];await refreshJobRuns();
+ assert.equal($('job-schedule-enabled').checked,false,'repeated server transitions must not erase pause draft');assert.ok(stateText().includes('Enabled'));
+ await loadJobSchedules();assert.equal(jobScheduleEnabledDirty,false);assert.equal($('job-schedule-enabled').checked,true);
+ // In-flight results must not repaint another selection, even under the same role.
+ pendingSchedule={};let pending=loadJobSchedules(true);const previous=jobSchedules;
+ selectedJob={name:'other',can_manage:true};renderJobSchedule();arg.value='new job draft';
+ pendingSchedule.resolve({schedules:serverSchedules});await pending;
+ assert.equal(jobSchedules,previous);assert.equal($('job-schedule-name').textContent,'other');assert.equal(arg.value,'new job draft');
+ // Switching role away and back still invalidates the response through the epoch.
+ pendingSchedule={};pending=loadJobSchedules(true);currentRole='bi_viewer';++stageEpoch;currentRole='admin';
+ pendingSchedule.resolve({schedules:[]});await pending;assert.equal(jobSchedules,previous);
+ // A newer explicit schedule refresh takes precedence over an older passive response.
+ pendingSchedule={};pending=loadJobSchedules(true);const oldResponse=pendingSchedule;
+ pendingSchedule=null;serverSchedules=[];await loadJobSchedules();
+ oldResponse.resolve({schedules:previous});await pending;assert.deepEqual(jobSchedules,[]);
+ // A history response from before a role reset cannot start a new schedule read.
+ pendingRuns={};pending=refreshJobRuns();const reads=scheduleReads;
+ currentRole='bi_viewer';++stageEpoch;currentRole='admin';pendingRuns.resolve({runs});await pending;
+ assert.equal(scheduleReads,reads);
+ // Likewise an older history request cannot override the newer refresh.
+ pendingRuns={};pending=refreshJobRuns();const oldRuns=pendingRuns;pendingRuns=null;
+ await refreshJobRuns();const freshReads=scheduleReads;oldRuns.resolve({runs});await pending;assert.equal(scheduleReads,freshReads);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""", 'refreshJobRuns', 'loadJobSchedules', 'renderJobSchedule', 'jobScheduleEditable',
+                        'updateJobScheduleKind', 'fillScheduleFields', 'updateScheduleKind',
+                        'scheduleNextTime', 'scheduleSummary', 'jobTrigger')
 
     def test_javascript_parses(self):
         result = subprocess.run(['node', '--check'], input=SCRIPT, capture_output=True, text=True)
