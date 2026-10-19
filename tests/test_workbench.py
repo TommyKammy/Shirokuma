@@ -52,6 +52,70 @@ class WorkbenchHTML(HTMLParser):
         return next(n for n in self.nodes if n.get('id') == identifier)
 
 
+class HistoryHandlerTests(unittest.TestCase):
+    """Run authorization and GET dispatch together without opening a socket."""
+
+    def get(self, path, headers=None):
+        handler = object.__new__(wb.WorkbenchHandler)
+        handler.path = path
+        handler.headers = Message()
+        for key, value in (headers or {}).items():
+            handler.headers[key] = value
+        replies = []
+        handler.respond = lambda value, status=200: replies.append((status, value))
+        handler.do_GET()
+        self.assertEqual(len(replies), 1)
+        return replies[0]
+
+    def test_runtime_and_default_history_through_role_authorization(self):
+        report = dict(runtime_queries={'rows': []}, query_history=[], load_history=[])
+        with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')), \
+             patch.object(wb.bears_resident, 'activity_history', return_value=report) as history:
+            for role in ('admin', 'data_engineer', 'bi_viewer'):
+                for headers, suffix in (({'X-Shirokuma-Role': role}, ''), ({}, '&role=' + role)):
+                    with self.subTest(role=role, headers=headers):
+                        history.reset_mock()
+                        self.assertEqual(self.get('/api/history?mode=runtime' + suffix, headers), (200, report))
+                        history.assert_called_once_with(mode='runtime')
+                history.reset_mock()
+                self.assertEqual(self.get('/api/history?role=' + role), (200, report))
+                history.assert_called_once_with()
+
+    def test_invalid_mode_and_route_parameters_precede_backend(self):
+        with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')), \
+             patch.object(wb.bears_resident, 'activity_history') as history, \
+             patch.object(wb.bears_resident, 'models_inventory') as models:
+            for query in ('mode=', 'mode', 'mode=all', 'mode=true', 'mode=runtime&mode=runtime',
+                          'mode=runtime&mode=', 'mode=runtime%ZZ'):
+                with self.subTest(query=query):
+                    self.assertEqual(self.get('/api/history?' + query)[0], 400)
+            for path in ('/api/history?mode=runtime&unknown=x', '/api/history?unknown=x',
+                         '/api/models?mode=runtime', '/api/catalog?mode=runtime',
+                         '/api/session?mode=runtime'):
+                with self.subTest(path=path):
+                    self.assertEqual(self.get(path), (403, {'error': 'Unknown query parameter'}))
+            history.assert_not_called()
+            models.assert_not_called()
+
+    def test_runtime_mode_preserves_authentication_and_role_limits(self):
+        with patch.object(wb.bears_resident, 'activity_history', return_value={}) as history:
+            with patch.object(wb.request_auth, 'authenticate', side_effect=wb.request_auth.AuthenticationError('sign in')):
+                self.assertEqual(self.get('/api/history?mode=runtime')[0], 401)
+            with patch.object(wb.request_auth, 'authenticate', return_value=('reader', 'bi_viewer')):
+                for role in ('admin', 'data_engineer', '', 'unknown'):
+                    self.assertEqual(self.get('/api/history?mode=runtime&role=' + role)[0], 403)
+                history.assert_not_called()
+                self.assertEqual(self.get('/api/history?mode=runtime&role=bi_viewer')[0], 200)
+                history.assert_called_once_with(mode='runtime')
+            history.reset_mock()
+            with patch.object(wb.request_auth, 'authenticate', return_value=None), \
+                 patch.dict(os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'bi_viewer'}):
+                self.assertEqual(self.get('/api/history?mode=runtime&role=admin')[0], 403)
+                history.assert_not_called()
+                self.assertEqual(self.get('/api/history?mode=runtime')[0], 200)
+                history.assert_called_once_with(mode='runtime')
+
+
 class WorkbenchTests(unittest.TestCase):
     def test_mart_routes_authenticated_dispatch_and_admission(self):
         definition = dict(name='orders', sql='SELECT 1 AS id', min_rows=1, not_null=['id'])
@@ -1458,10 +1522,9 @@ const run=eval(HANDLER);
             'downloadFile(content,result.filename', 'link.download=filename',
             'row_count:result.row_count,total_rows:result.total_rows',
             "if(data.auto_chill)updateAutoChill(data.auto_chill)",
-            "document.activeElement!==select", "if(auto_chill_minutes>0)",
-            "api('/api/warehouse/autochill',{check:true})",
+            "document.activeElement!==select",
             "api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})",
-            "api('/api/history')", "$('refresh-history').onclick",
+            "api('/api/history?mode=runtime')", "$('refresh-history').onclick",
             "if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}",
             "actionButton('Open in Worksheet',()=>openWorksheet(rows[i][sqlIndex]))",
         ):
@@ -1554,6 +1617,16 @@ const run=eval(HANDLER);
             history.assert_called_once_with()
             history.side_effect = RuntimeError('unavailable')
             self.assertEqual(self.json_request('/api/history')[0], 502)
+
+    def test_history_runtime_mode_validated_for_all_roles(self):
+        with patch.object(wb.bears_resident, 'activity_history', return_value={'runtime_queries': {}}) as history:
+            for role in ('admin', 'data_engineer', 'bi_viewer'):
+                self.assertEqual(self.json_request('/api/history?mode=runtime&role=' + role)[0], 200)
+                history.assert_called_with(mode='runtime')
+            history.reset_mock()
+            for query in ('mode=', 'mode=all', 'mode=true', 'mode=runtime&mode=runtime', 'mode=runtime&mode=', 'mode=runtime%ZZ'):
+                self.assertEqual(self.json_request('/api/history?' + query)[0], 400)
+            history.assert_not_called()
 
     def workbench_document(self):
         status, _, body = self.request('/')
@@ -2126,14 +2199,18 @@ const run=eval(HANDLER);
             def serve():
                 self.assertEqual(events, [] if unavailable else ['open'])
                 start_schedule.assert_called_once_with()
+                initialize.assert_called_once_with()
                 raise KeyboardInterrupt()
             server.return_value.__enter__.return_value.serve_forever.side_effect = serve
             with self.subTest(unavailable=unavailable), patch.object(wb.warehouse_resident, 'persistent_trino', tunnel), \
                  patch.object(wb.jobs_resident, 'start_scheduler') as start_schedule, \
                  patch.object(wb.jobs_resident, 'stop_scheduler') as stop_schedule, \
+                 patch.object(wb.warehouse_resident, 'initialize_auto_chill') as initialize, \
+                 patch.object(wb.warehouse_resident, 'stop_auto_chill_daemon') as stop_chill, \
                  patch('builtins.print'):
                 wb.main(['--port', '0'])
                 stop_schedule.assert_called_once_with()
+                stop_chill.assert_called_once_with()
             self.assertEqual(events, [] if unavailable else ['open', 'close'])
 
 

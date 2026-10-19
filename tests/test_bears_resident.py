@@ -95,6 +95,19 @@ class BearsResidentTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 b.activity_history(limit)
 
+    def test_runtime_history_skips_agenthouse_and_validates_before_backends(self):
+        with patch.object(b.wr, 'trino', return_value=contextlib.nullcontext('url')) as trino, \
+             patch.object(b, 'sql', return_value={'rows': []}), \
+             patch('agenthouse.manage.Client') as client:
+            self.assertEqual(b.activity_history(mode='runtime'), {'runtime_queries': {'rows': []}})
+            client.assert_not_called()
+            trino.reset_mock()
+            for mode in ('', 'all', True, []):
+                with self.assertRaises(ValueError):
+                    b.activity_history(mode=mode)
+            trino.assert_not_called()
+            client.assert_not_called()
+
     def test_sql_honors_export_limits_without_changing_default_calls(self):
         with patch.object(b.wr, 'execute', return_value={'rows': []}) as execute:
             b.sql('url', 'SELECT * FROM "iceberg"."raw"."orders" LIMIT 10000')

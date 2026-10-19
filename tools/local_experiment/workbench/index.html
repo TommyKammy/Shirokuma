@@ -1012,6 +1012,7 @@ function applyRole() {
  for(const option of $('bear-data-action').options){option.disabled=viewer?option.value!=='generate':engineer&&['publish','refresh','rollback'].includes(option.value);}
  const action=$('bear-data-action');if(action.selectedOptions[0]?.disabled)action.value='generate';
  if(typeof updateDataBearForm==='function')updateDataBearForm();
+ if(typeof activeTab!=='undefined'&&activeTab==='pawprints'){loadPawprints();loadRuntimeHistory();}
 }
 $('role-selector').onchange=()=>{currentRole=$('role-selector').value;applyRole();loadCatalog();};
 async function api(path, body) {
@@ -1166,6 +1167,7 @@ function invalidateCatalogDetails(){
  message('catalog-error','');
 }
 function resetCatalogIdentity(){
+ if(typeof resetAuditIdentity==='function')resetAuditIdentity();
  selectedTable=null;
  invalidateCatalogDetails();++columnRequest;++catalogListRequest;catalogRunStates.clear();
  catalogMetadata={};selectedTable=null;renderCatalogTrees();$('lineage').replaceChildren();
@@ -1354,15 +1356,29 @@ $('bear-data-action').onchange=updateDataBearForm;updateDataBearForm();
 const bearTabs=[...bearList.children];
 wireTabs(bearTabs,selected=>bearTabs.forEach(b=>{const active=b===selected;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;$('bear-panel-'+b.dataset.bear).hidden=!active;}));
 bearTabs[0].click();
-async function loadPawprints(){
+let auditEpoch=0,pawprintsPending=null,runtimePending=null;
+function resetAuditIdentity(){
+ ++auditEpoch;pawprintsPending=null;runtimePending=null;pawprintRows=[];
+ for(const id of ['pawprint-results','load-history-results','runtime-queries-results'])$(id).replaceChildren();
+ message('pawprint-error','');message('history-error','');ui($('pawprint-meta'),'');
+}
+function loadPawprints(){
+ const epoch=auditEpoch,identity=catalogIdentity();
+ if(pawprintsPending?.epoch===epoch&&pawprintsPending.identity===identity)return pawprintsPending.promise;
+ const current=()=>epoch===auditEpoch&&identity===catalogIdentity();
  message('pawprint-error','');
- try{pawprintRows=await api('/api/pawprints');renderPawprints();}catch(e){message('pawprint-error',e.message);ui($('pawprint-meta'),'Refresh failed');}
+ const promise=(async()=>{
+ try{const rows=await api('/api/pawprints');if(!current())return;pawprintRows=rows;renderPawprints();renderLoadHistory(rows);}
+ catch(e){if(!current())return;message('pawprint-error',e.message);ui($('pawprint-meta'),'Refresh failed');message('load-history-results',e.message);}
+ finally{if(current())pruneUIBindings();}
+ })().finally(()=>{if(pawprintsPending?.promise===promise)pawprintsPending=null;});
+ pawprintsPending={epoch,identity,promise};return promise;
 }
 $('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
 let activeTab='warehouse';
 function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='jobs')loadJobs();if(activeTab==='ingestion'&&currentRole==='admin')loadStages();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation'){$('refresh-models').click();loadMarts();}if(activeTab==='compute')$('compute-refresh').click();}
 const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach(button=>{button.onclick=()=>activate(button);button.onkeydown=e=>{const available=tabs.filter(tab=>!tab.hidden&&!tab.disabled),i=available.indexOf(button);let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%available.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();available[n].focus();activate(available[n]);}};});
-setInterval(async()=>{if(document.hidden)return;if(currentRole!=='bi_viewer')loadJobAlerts(jobsVisible());await refreshStatus();if(auto_chill_minutes>0){try{updateAutoChill(await api('/api/warehouse/autochill',{check:true}));}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}}if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
+setInterval(async()=>{if(document.hidden)return;if(currentRole!=='bi_viewer')loadJobAlerts(jobsVisible());await refreshStatus();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
 function actionButton(label,task){const b=document.createElement('button');ui(b,label);if(label==='Rollback')b.dataset.roleWrite='admin';if(label==='Clone Snapshot')b.dataset.roleWrite='engineer';b.onclick=()=>busy(b,task);return b;}
 function renderData(container,data){if(data?.error){container.textContent=data.error;return;}table(container,data?.columns||[],(data?.rows||[]).slice(0,50),false);}
@@ -1734,7 +1750,8 @@ async function loadMarts(){
  const current=()=>martCurrent(epoch)&&request===martRequest&&martsVisible();
  try{const data=await api('/api/marts');if(!current())return;martEntries=data.marts||[];renderMarts();
  if(selectedMart){const latest=martEntries.find(entry=>entry.name===selectedMart.name);if(!latest||latest.version!==selectedMart.version)martStale=true;else{selectedMart=latest;martRunId=latest.last_run?.id||martRunId;if(!martScheduleDirty)fillScheduleFields('mart-schedule',latest.schedule);renderMartRun();}updateMartControls();}
- if(martEntries.some(entry=>entry.schedule?.enabled||liveJobStates.has(entry.last_run?.status)))martPoll=setTimeout(loadMarts,2000);
+ const delay=martEntries.some(entry=>liveJobStates.has(entry.last_run?.status))?2000:martEntries.some(entry=>entry.schedule?.enabled)?15000:0;
+ if(delay)martPoll=setTimeout(loadMarts,delay);
  }catch(error){if(current())message('mart-error',error.message);}finally{pruneUIBindings();}
 }
 async function martTask(action){
@@ -1871,10 +1888,19 @@ function updateAutoChill(data){
  ui($('auto-chill-state'),auto_chill_minutes>0?'Auto-Chill: {minutes}m':'Auto-Chill: Off',{minutes:auto_chill_minutes});
 }
 $('save-auto-chill').onclick=()=>busy($('save-auto-chill'),async()=>{try{invalidateStatus();updateAutoChill(await api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)}));await refreshStatus({force:true});}catch(e){ui($('auto-chill-state'),'Auto-Chill failed: {error}',{error:e.message});}});
-async function loadRuntimeHistory(){
+function renderLoadHistory(events){
+ const actions=['lake.ingest','lake.export','catalog.clone','catalog.drop','bear.data_engineer'];
+ const rows=events.filter(row=>actions.includes(row.action_type));
+ table($('load-history-results'),['Timestamp (UTC)','Action / Bear','Target','Status','Latency (ms)'],rows.map(row=>[row.timestamp,row.action_type,row.target_system,row.status,row.duration_ms]));$('load-history-results').querySelectorAll('tbody tr').forEach((tr,i)=>{ui(tr.cells[3],rows[i].status||'');tr.cells[3].className=statusTone(rows[i].status);});
+}
+function loadRuntimeHistory(){
+ const epoch=auditEpoch,identity=catalogIdentity();
+ if(runtimePending?.epoch===epoch&&runtimePending.identity===identity)return runtimePending.promise;
+ const current=()=>epoch===auditEpoch&&identity===catalogIdentity();
  message('history-error','');
+ const promise=(async()=>{
  try{
- const data=await api('/api/history'),runtime=data.runtime_queries;
+ const data=await api('/api/history?mode=runtime');if(!current())return;const runtime=data.runtime_queries;
  const columns=runtime?.columns||[],columnNames=columns.map(c=>typeof c==='string'?c:c.name);
  if(runtime?.error)message('runtime-queries-results',runtime.error);
  else{
@@ -1883,13 +1909,12 @@ async function loadRuntimeHistory(){
  const stateIndex=columnNames.indexOf('state');
  $('runtime-queries-results').querySelectorAll('tbody tr').forEach((tr,i)=>{if(stateIndex>=0)tr.cells[stateIndex].className=statusTone(String(rows[i][stateIndex]).toLowerCase());if(sqlIndex>=0&&typeof rows[i][sqlIndex]==='string')tr.lastElementChild.append(actionButton('Open in Worksheet',()=>openWorksheet(rows[i][sqlIndex])));});
  }
- const loads=data.load_history,actions=['lake.ingest','lake.export','catalog.clone','catalog.drop','bear.data_engineer'];
- if(loads?.error)message('load-history-results',loads.error);
- else{const rows=(Array.isArray(loads)?loads:[]).filter(row=>actions.includes(row.action_type));table($('load-history-results'),['Timestamp (UTC)','Action / Bear','Target','Status','Latency (ms)'],rows.map(row=>[row.timestamp,row.action_type,row.target_system,row.status,row.duration_ms]));$('load-history-results').querySelectorAll('tbody tr').forEach((tr,i)=>{ui(tr.cells[3],rows[i].status||'');tr.cells[3].className=statusTone(rows[i].status);});}
- }catch(e){$('runtime-queries-results').replaceChildren();$('load-history-results').replaceChildren();ui($('history-error'),'History failed: {error}',{error:e.message});$('history-error').hidden=false;}
- finally{pruneUIBindings();}
+ }catch(e){if(!current())return;$('runtime-queries-results').replaceChildren();ui($('history-error'),'History failed: {error}',{error:e.message});$('history-error').hidden=false;}
+ finally{if(current())pruneUIBindings();}
+ })().finally(()=>{if(runtimePending?.promise===promise)runtimePending=null;});
+ runtimePending={epoch,identity,promise};return promise;
 }
-$('refresh-history').onclick=()=>busy($('refresh-history'),loadRuntimeHistory);
+$('refresh-history').onclick=()=>busy($('refresh-history'),()=>Promise.all([loadRuntimeHistory(),loadPawprints()]));
 
 // Jobs are manually admitted by the server; this page never schedules or retries work.
 let jobEntries=[],jobRunCache=[],jobRunState='loading',jobSelectionEpoch=0,jobDetailRequest=0,jobDirty=false,jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobListRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;

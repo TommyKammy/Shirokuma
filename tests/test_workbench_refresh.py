@@ -1,5 +1,7 @@
 """Focused refresh request contracts, executed in Node without browser/services."""
 import json
+from pathlib import Path
+import re
 import subprocess
 import unittest
 
@@ -197,3 +199,123 @@ original({preventDefault(){}});await settle();
 assert.deepEqual(calls.map(c=>c.path),['/api/stages/save','/api/stages','/api/stages/files']);
 assert.equal(selectedStage.updated_at,3);assert.equal($('stage-table').value,'latest');
 ''', 'refreshStageSchedule', 'fetchStageFiles', prelude="let currentRole='admin',stageEpoch=1;")
+
+
+HTML = Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench/index.html'
+
+
+class AuditRefreshTests(unittest.TestCase):
+    def test_apply_role_and_session_reload_audit_without_old_busy_buttons(self):
+        handlers = '\n'.join(function(name) for name in (
+            'applyRole', 'resetCatalogIdentity', 'validateCatalogSession', 'catalogIdentity',
+            'resetAuditIdentity', 'loadPawprints', 'renderLoadHistory', 'loadRuntimeHistory'))
+        harness = r'''
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={value:'',disabled:false,hidden:false,textContent:'',options:[],selectedOptions:[],replaceChildren(){this.textContent='';this.rows=[];},querySelectorAll(){return [];},click(){throw Error('old busy button clicked');}};
+const document={documentElement:{dataset:{}}};
+const message=(id,text)=>{$(id).textContent=text;};const ui=(node,key)=>{node.textContent=key;};
+const table=(node,columns,rows)=>{node.textContent='table';node.rows=rows;};
+const pruneUIBindings=()=>{},statusTone=()=>'',invalidateStatus=()=>{},renderCatalogTrees=()=>{};
+let currentRole='admin',activeTab='pawprints',selectedTable=null,columnRequest=0,catalogListRequest=0,catalogMetadata={};
+let catalogSession='old',catalogGeneration=0,catalogSessionValidation=null;
+const catalogRunStates=new Map();const invalidateCatalogDetails=()=>{catalogGeneration++;catalogSessionValidation=null;};
+const loadCatalog=async()=>{};
+let auditEpoch=0,pawprintsPending=null,runtimePending=null,pawprintRows=[];
+const renderPawprints=()=>table($('pawprint-results'),[],pawprintRows);
+const requests=[];const api=path=>new Promise((resolve,reject)=>requests.push({path,role:currentRole,session:catalogSession,resolve,reject}));
+const fetch=async path=>{assert.equal(path,'/api/session');return {ok:true,status:200,json:async()=>({username:'new-user',authenticated:true,maximum_role:'admin'})};};
+HANDLERS
+(async()=>{
+ const oldEvents=loadPawprints(),oldRuntime=loadRuntimeHistory();
+ $('refresh-pawprints').disabled=$('refresh-history').disabled=true;
+ for(const id of ['pawprint-results','load-history-results','runtime-queries-results'])$(id).textContent='old data';
+ currentRole='bi_viewer';applyRole();
+ assert.equal(requests.length,4,'role application immediately starts both new-context requests');
+ assert.deepEqual(requests.slice(2).map(r=>[r.path,r.role]),[['/api/pawprints','bi_viewer'],['/api/history?mode=runtime','bi_viewer']]);
+ for(const id of ['pawprint-results','load-history-results','runtime-queries-results'])assert.equal($(id).textContent,'');
+ const freshEvents=loadPawprints(),freshRuntime=loadRuntimeHistory();assert.equal(requests.length,4);
+ requests[2].resolve([{action_type:'lake.ingest',target_system:'fresh'}]);requests[3].resolve({runtime_queries:{rows:[['fresh']]}});await Promise.all([freshEvents,freshRuntime]);
+ requests[0].resolve([{action_type:'lake.export',target_system:'old secret'}]);requests[1].reject(Error('old role failure'));await Promise.all([oldEvents,oldRuntime]);
+ assert.equal(pawprintRows[0].target_system,'fresh');assert.equal($('history-error').textContent,'');
+ // A server-observed session change uses the real validation -> applyRole -> identity hook.
+ const priorEvents=loadPawprints(),priorRuntime=loadRuntimeHistory();
+ await validateCatalogSession();assert.equal(requests.length,8,'session application starts both loaders without button clicks');
+ assert.notEqual(requests[6].session,'old');assert.equal(requests[6].session,catalogSession);assert.equal(requests[7].session,catalogSession);
+ assert.deepEqual(pawprintRows,[]);const sessionEvents=loadPawprints(),sessionRuntime=loadRuntimeHistory();
+ requests[6].resolve([{action_type:'catalog.clone',target_system:'new session'}]);requests[7].resolve({runtime_queries:{rows:[['new session']]}});await Promise.all([sessionEvents,sessionRuntime]);
+ requests[4].reject(Error('old session failure'));requests[5].resolve({runtime_queries:{rows:[['old secret']]}});await Promise.all([priorEvents,priorRuntime]);
+ assert.equal(pawprintRows[0].target_system,'new session');assert.equal($('pawprint-error').textContent,'');assert.deepEqual($('runtime-queries-results').rows,[['new session','']]);
+ // Other pages clear the identity without starting audit requests.
+ activeTab='warehouse';applyRole();assert.equal(requests.length,8);assert.deepEqual(pawprintRows,[]);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+'''
+        result = subprocess.run(['node', '-e', harness.replace('HANDLERS', handlers)], capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_audit_loaders_share_only_inflight_and_ignore_old_identity(self):
+        script = re.search(r'<script>(.*?)</script>', HTML.read_text(), re.S)[1]
+        loaders = 'let auditEpoch=' + script.split('let auditEpoch=', 1)[1].split("$('refresh-pawprints').onclick", 1)[0]
+        loaders += 'function renderLoadHistory' + script.split('function renderLoadHistory', 1)[1].split('// Jobs are manually', 1)[0]
+        harness = r'''
+const assert=require('node:assert/strict');
+const nodes={};const $=id=>nodes[id]??={textContent:'',hidden:false,replaceChildren(){this.textContent='';this.rows=[];},querySelectorAll(){return [];}};
+const message=(id,text)=>{$(id).textContent=text;};const ui=(node,key,values={})=>{node.textContent=key.replace('{error}',values.error||'');};
+const table=(node,columns,rows)=>{node.textContent='table';node.rows=rows;};
+const pruneUIBindings=()=>{};const busy=(button,fn)=>fn();const actionButton=()=>{};const statusTone=()=>'';
+let currentRole='admin',session='one',pawprintRows=[],rendered=[];
+const catalogIdentity=()=>JSON.stringify([session,currentRole]);const renderPawprints=()=>{rendered=pawprintRows;};
+let requests=[];const api=path=>new Promise((resolve,reject)=>requests.push({path,resolve,reject}));
+const events=['warehouse.query','lake.ingest','lake.export','catalog.clone','catalog.drop','bear.data_engineer','bear.sre'].map((action_type,i)=>({action_type,timestamp:i,target_system:'target',status:'success',duration_ms:i}));
+LOADERS
+(async()=>{
+ const first=loadPawprints(),runtime=loadRuntimeHistory();
+ assert.strictEqual(loadPawprints(),first);assert.strictEqual(loadRuntimeHistory(),runtime);
+ // Navigation/timer/manual handlers share the same pending operations.
+ const manual=$('refresh-history').onclick();assert.equal(requests.length,2);
+ assert.deepEqual(requests.map(x=>x.path),['/api/pawprints','/api/history?mode=runtime']);
+ requests[0].resolve(events);await first;
+ assert.strictEqual(rendered,events);assert.equal($('load-history-results').rows.length,5);
+ assert.deepEqual($('load-history-results').rows.map(r=>r[1]),events.slice(1,6).map(r=>r.action_type));
+ assert.equal($('runtime-queries-results').textContent,'');
+ requests[1].reject(Error('Trino unavailable'));await Promise.all([runtime,manual]);
+ assert.match($('history-error').textContent,/Trino unavailable/);assert.equal($('load-history-results').rows.length,5);assert.strictEqual(rendered,events);
+ const retry=loadRuntimeHistory();assert.equal(requests.length,3);requests[2].resolve({runtime_queries:{columns:['query'],rows:[['SELECT 1']]}});await retry;
+ assert.deepEqual($('runtime-queries-results').rows,[['SELECT 1','']]);
+ const failed=loadPawprints();requests[3].reject(Error('AgentHouse unavailable'));await failed;
+ assert.match($('pawprint-error').textContent,/AgentHouse unavailable/);assert.match($('load-history-results').textContent,/AgentHouse unavailable/);assert.deepEqual($('runtime-queries-results').rows,[['SELECT 1','']]);
+ const recovered=loadPawprints();requests[4].resolve(events);await recovered;assert.equal($('pawprint-error').textContent,'');assert.equal($('load-history-results').rows.length,5);
+ // ABA role changes invalidate successes and failures, even on returning to admin.
+ const stale=loadPawprints(),staleRuntime=loadRuntimeHistory();currentRole='bi_viewer';resetAuditIdentity();currentRole='admin';resetAuditIdentity();
+ const fresh=loadPawprints();requests[5].resolve(events);requests[6].reject(Error('old role failure'));await Promise.all([stale,staleRuntime]);
+ assert.deepEqual(pawprintRows,[]);assert.equal($('history-error').textContent,'');assert.strictEqual(loadPawprints(),fresh);
+ requests[7].resolve([events[1]]);await fresh;assert.equal(pawprintRows.length,1);
+ const oldSession=loadPawprints(),oldRuntime=loadRuntimeHistory();session='two';resetAuditIdentity();
+ requests[8].reject(Error('old session failure'));requests[9].resolve({runtime_queries:{rows:[['secret']]}});await Promise.all([oldSession,oldRuntime]);
+ assert.equal($('pawprint-error').textContent,'');assert.equal($('runtime-queries-results').textContent,'');assert.deepEqual(pawprintRows,[]);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+'''
+        result = subprocess.run(['node', '-e', harness.replace('LOADERS', loaders)], capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_no_browser_auto_chill_checks_and_full_script_syntax(self):
+        script = re.search(r'<script>(.*?)</script>', HTML.read_text(), re.S)[1]
+        self.assertNotIn("api('/api/warehouse/autochill',{check:true})", script)
+        self.assertIn("api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})", script)
+        self.assertIn('if(data.auto_chill)updateAutoChill(data.auto_chill)', script)
+        result = subprocess.run(['node', '-e', 'new Function(' + json.dumps(script) + ')'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_enabled_browser_timer_does_not_check_auto_chill(self):
+        script = re.search(r'<script>(.*?)</script>', HTML.read_text(), re.S)[1]
+        timer = next(line for line in script.splitlines() if line.startswith('setInterval(async()=>'))
+        harness = r'''
+const assert=require('node:assert/strict');let callback,calls=[];
+const setInterval=(fn,ms)=>{assert.equal(ms,15000);callback=fn;};
+const document={hidden:false},currentRole='admin',activeTab='pawprints',auto_chill_minutes=60;
+const jobsVisible=()=>false,loadJobAlerts=()=>{},refreshStatus=async()=>calls.push('status');
+const api=async path=>{calls.push(path);};const $=id=>({click(){calls.push(id);}});
+TIMER
+(async()=>{await callback();assert.deepEqual(calls,['status','refresh-pawprints','refresh-history']);document.hidden=true;await callback();assert.equal(calls.length,3);})().catch(e=>{console.error(e);process.exitCode=1;});
+'''
+        result = subprocess.run(['node', '-e', harness.replace('TIMER', timer)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)

@@ -146,8 +146,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def request_role(self):
-        params = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
-        if params.keys() - {'role', 'table', 'detail', 'snapshot_id'}:
+        url = urlsplit(self.path)
+        params = parse_qs(url.query, keep_blank_values=True)
+        allowed = {'role', 'table', 'detail', 'snapshot_id'}
+        if url.path == '/api/history':
+            allowed.add('mode')
+        if params.keys() - allowed:
             raise PermissionError('Unknown query parameter')
         roles = self.headers.get_all('X-Shirokuma-Role', []) + params.get('role', [])
         principal = request_auth.authenticate(self.headers)
@@ -244,7 +248,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             elif url.path == '/api/ai/config':
                 self.respond(masked_ai_config(bears_resident.load_ai_config()))
             elif url.path == '/api/history':
-                self.respond(bears_resident.activity_history())
+                params = parse_qs(url.query, keep_blank_values=True)
+                mode = params.get('mode')
+                if mode is not None and mode != ['runtime']:
+                    raise ValueError('history mode must be runtime')
+                self.respond(bears_resident.activity_history(mode='runtime') if mode
+                             else bears_resident.activity_history())
             elif url.path == '/api/models':
                 self.respond(bears_resident.models_inventory())
             elif url.path == '/api/jobs':

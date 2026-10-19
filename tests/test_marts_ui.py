@@ -70,13 +70,17 @@ const message=(id,text)=>{$(id).hidden=!text;$(id).textContent=text;};
 const table=()=>{};const actionButton=()=>({});const pruneUIBindings=()=>{};
 let currentRole='admin',activeTab='transformation',selectedRunId=null,selectedModel=null;const document={hidden:false,addEventListener(){}};const window={addEventListener(){}};
 const liveJobStates=new Set(['queued','running']);const jobStatuses={success:'Success',failed:'Failed',unknown:'Unknown',queued:'Queued',running:'Running'};const jobStatus=status=>jobStatuses[status]||'Unknown';
-const activate=()=>{};const language='en';let timers=[];const setTimeout=fn=>{timers.push(fn);return timers.length;};const clearTimeout=()=>{};
+const activate=()=>{};const language='en';let timers=[];const setTimeout=(fn,delay)=>{timers.push({fn,delay});return timers.length;};const clearTimeout=()=>{};
 let calls=[],reply={marts:[]},resolveReply=null,apiOverride=null;
 const api=async(path,body)=>{calls.push({path,body});if(apiOverride)return apiOverride(path,body);if(resolveReply==='defer')return new Promise(resolve=>{resolveReply=resolve;});return reply;};
 const entry={name:'sales',table:'iceberg.marts.sales',sql:'SELECT 1 AS id',min_rows:1,not_null:['id'],version:4,owner:'operator',can_manage:true,last_run:null};
 (async()=>{
  eval(HANDLERS+`;globalThis.handlers={loadMarts,resetMartsUI,selectMart,readMartDefinition,martSchedulePayload,martScheduleCanEnable,saveMartSchedule,getScheduleDirty:()=>martScheduleDirty,getSelected:()=>selectedMart,getDirty:()=>martDirty};`);
  const h=globalThis.handlers;
+ for(const [last_run,schedule,delay] of [[null,{enabled:true,next_run_at:'2099-01-01'},15000],[{status:'queued'},null,2000],[{status:'running'},{enabled:true},2000],[{status:'success'},{enabled:false},0]]){
+  reply={marts:[{...entry,last_run,schedule}]};timers=[];await h.loadMarts();assert.deepEqual(timers.map(x=>x.delay),delay?[delay]:[]);assert.deepEqual(reply.marts[0].schedule,schedule);
+ }
+ let finishHidden;apiOverride=()=>new Promise(resolve=>finishHidden=resolve);timers=[];const hiddenLoad=h.loadMarts();document.hidden=true;finishHidden({marts:[{...entry,schedule:{enabled:true}}]});await hiddenLoad;assert.equal(timers.length,0);document.hidden=false;apiOverride=null;
  h.selectMart(entry);assert.equal($('mart-run').disabled,false);
  $('mart-watch-tables').value='iceberg.raw.orders, iceberg.staging.customers, ';assert.deepEqual(h.readMartDefinition().watch_tables,['iceberg.raw.orders','iceberg.staging.customers']);
  $('mart-sql').value='SELECT 2 AS id';$('mart-form').oninput();assert.equal($('mart-run').disabled,true);
@@ -128,7 +132,7 @@ const entry={name:'sales',table:'iceberg.marts.sales',sql:'SELECT 1 AS id',min_r
  h.selectMart({...entry,watch_tables:['iceberg.raw.orders']});let finishSchedule;apiOverride=async()=>new Promise(resolve=>{finishSchedule=resolve;});
  const scheduleSave=h.saveMartSchedule();await new Promise(resolve=>setImmediate(resolve));currentRole='bi_viewer';h.resetMartsUI();finishSchedule({schedule:{enabled:true}});await scheduleSave;assert.equal(h.getSelected(),null);assert.equal($('mart-schedule-enabled').checked,false);apiOverride=null;currentRole='admin';
  h.resetMartsUI();h.selectMart(entry);resolveReply='defer';const pending=h.loadMarts();const resolve=resolveReply;
- currentRole='bi_viewer';h.resetMartsUI();resolve({marts:[entry]});await pending;assert.equal(h.getSelected(),null);assert.equal($('marts-admin').hidden,true);assert.equal($('marts-list').textContent,'');
+ currentRole='bi_viewer';h.resetMartsUI();timers=[];resolve({marts:[{...entry,schedule:{enabled:true}}]});await pending;assert.equal(timers.length,0);assert.equal(h.getSelected(),null);assert.equal($('marts-admin').hidden,true);assert.equal($('marts-list').textContent,'');
  const before=calls.length;await h.loadMarts();assert.equal(calls.length,before);
  currentRole='admin';activeTab='warehouse';h.resetMartsUI();h.selectMart(null);$('mart-name').value='new_mart';$('mart-sql').value='SELECT 1';reply={mart:{...entry,name:'new_mart'}};resolveReply=null;calls=[];
  $('mart-form').onsubmit({preventDefault(){}});await new Promise(resolve=>setImmediate(resolve));assert.equal(Object.hasOwn(calls[0].body,'version'),false);

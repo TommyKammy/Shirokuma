@@ -327,9 +327,11 @@ def clone_table(source_table, target_table=None, snapshot_id=None):
                 audit=audit, telemetry=telemetry)
 
 
-def activity_history(limit=50):
+def activity_history(limit=50, *, mode=None):
     if type(limit) is not int or limit < 1:
         raise ValueError('limit must be a positive integer')
+    if mode not in (None, 'runtime'):
+        raise ValueError('unknown history mode')
 
     def runtime():
         with wr.trino() as url:
@@ -342,6 +344,8 @@ def activity_history(limit=50):
             'SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON'))['data']
 
     runtime_queries = attempt(runtime)
+    if mode == 'runtime':
+        return dict(runtime_queries=runtime_queries)
     events = attempt(pawprints)
     if isinstance(events, dict):
         return dict(runtime_queries=runtime_queries, query_history=events, load_history=events)
