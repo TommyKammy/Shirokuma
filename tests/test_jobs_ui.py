@@ -207,6 +207,13 @@ const ui=(node,key,values)=>{display=values.count;},pruneUIBindings=()=>{};
 })().catch(error=>{console.error(error.message);process.exitCode=1;});
 """)
 
+    def test_catalog_generation_refresh_guidance_is_translated(self):
+        self.javascript(r"""
+const key='Catalog changed. Use Refresh catalog in Database Explorer.';
+language='ja';
+if(!i18n.ja[key]||t(key)===key||!t(key).includes('カタログを更新'))throw Error('catalog refresh guidance translation');
+""")
+
     def test_alert_editor_has_no_mode_and_preserves_sql_parameters(self):
         source = function('renderJobSteps')
         self.assertIn("!['sql','alert'].includes(option.value)", source)
@@ -255,7 +262,7 @@ const arg={value:'3',dataset:{argument:'limit',type:'integer'}};
 $('job-run-arguments').querySelectorAll=()=>[arg];
 const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
 const pruneUIBindings=()=>{},message=(id,text)=>{$(id).textContent=text;},jobEmpty=(id,text)=>{$(id).textContent=text;};
-let jobsRequest=0,jobDetailRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false,selectedRunId=null,visible=true,pollRuns=[],jobRunCache=[];
+let jobsRequest=0,jobDetailRequest=0,jobScheduleRequest=0,jobSelectionEpoch=0,jobScheduleEnabledDirty=false,selectedRunId=null,visible=true,pollRuns=[],jobRunCache=[];
 let selectedJob={name:'orders',can_manage:true};
 let jobSchedules=[{name:'orders',kind:'once',date:'2030-01-01',time:'09:00',timezone:'UTC',enabled:true,next_run_at:'2030-01-01T09:00:00Z',arguments:{limit:3}}];
 const scheduleFields=['kind','minutes','time','timezone','date','day',...Array.from({length:7},(_,i)=>'weekday-'+(i+1))];
@@ -306,10 +313,11 @@ const stateText=()=>$('job-schedule-state').children.map(child=>child.textConten
  pendingSchedule={};let pending=loadJobSchedules(true);const previous=jobSchedules;
  selectedJob={name:'other',can_manage:true};renderJobSchedule();arg.value='new job draft';
  pendingSchedule.resolve({schedules:serverSchedules});await pending;
- assert.equal(jobSchedules,previous);assert.equal($('job-schedule-name').textContent,'other');assert.equal(arg.value,'new job draft');
+ assert.deepEqual(jobSchedules,serverSchedules);assert.equal($('job-schedule-name').textContent,'other');assert.equal(arg.value,'new job draft');
+ const freshSchedules=jobSchedules;
  // Switching role away and back still invalidates the response through the epoch.
  pendingSchedule={};pending=loadJobSchedules(true);currentRole='bi_viewer';++stageEpoch;currentRole='admin';
- pendingSchedule.resolve({schedules:[]});await pending;assert.equal(jobSchedules,previous);
+ pendingSchedule.resolve({schedules:[]});await pending;assert.equal(jobSchedules,freshSchedules);
  // A newer explicit schedule refresh takes precedence over an older passive response.
  pendingSchedule={};pending=loadJobSchedules(true);const oldResponse=pendingSchedule;
  pendingSchedule=null;serverSchedules=[];await loadJobSchedules();

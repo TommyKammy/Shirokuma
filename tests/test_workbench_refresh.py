@@ -14,16 +14,130 @@ class WorkbenchRefreshTests(unittest.TestCase):
 const assert=require('node:assert/strict');
 class Node {
  constructor(){this.value='';this.textContent='';this.className='';this.dataset={};this.children=[];}
- replaceChildren(...nodes){this.children=nodes;} append(...nodes){this.children.push(...nodes);}
+ replaceChildren(...nodes){this.children=nodes;this.textContent='';delete this.rows;} append(...nodes){this.children.push(...nodes);}
  querySelectorAll(){return [];}
 }
 const nodes={},$=id=>nodes[id]??=new Node(),document={createElement:()=>new Node()};
 const ui=(node,key)=>{node.textContent=key;},t=x=>x,message=(id,value)=>{$(id).textContent=value;};
-const pruneUIBindings=()=>{},table=()=>{},renderComputeSummary=()=>{};
+const pruneUIBindings=()=>{},table=(node,columns,rows)=>{node.replaceChildren();node.rows=rows;},renderComputeSummary=()=>{};
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 ''' + '\n(async()=>{\n' + '\n'.join(function(name) for name in names) + '\n' + body + '\n})().catch(e=>{console.error(e);process.exitCode=1;});'
         result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def jobs_identity_javascript(self, body):
+        state = SCRIPT[SCRIPT.index('let jobEntries='):SCRIPT.index('const jobStatuses=')]
+        self.javascript(r'''
+document.documentElement={dataset:{}};document.hidden=false;
+Node.prototype.getAttribute=()=>null;Node.prototype.reset=function(){this.value='';};
+const Option=function(text,value){this.textContent=text;this.value=value;};
+for(const id of ['query-mode','bear-data-action','role-selector']){$(id).options=[];$(id).selectedOptions=[];}
+$('job-runs-filter').options=[new Option('All jobs','')];
+const invalidateStatus=()=>{},resetCatalogIdentity=()=>{catalogGeneration++;catalogSessionValidation=null;};
+const invalidateStagePreview=()=>{},stageControls=()=>{},clearStageExports=()=>{};
+const renderJobSteps=()=>{$('job-steps').replaceChildren();$('job-steps').rows=structuredClone(jobSteps);};
+const updateScheduleKind=()=>{},scheduleNextTime=()=>'',scheduleSummary=()=>'';
+const jobStatus=x=>x,statusTone=()=>'',jobDuration=()=>0,jobSummary=()=>'';
+const liveJobStates=new Set(['queued','running']);
+const clearTimeout=()=>{},setTimeout=()=>1;
+const loadCatalog=async()=>{},requests=[],saves=[];
+const api=path=>new Promise((resolve,reject)=>requests.push({path,resolve,reject}));
+const busy=(node,task)=>{const pending=task();saves.push(pending);return pending;},syncJobSteps=()=>{};
+let sessionUser='new-user';
+const fetch=async path=>{assert.equal(path,'/api/session');return {ok:true,status:200,json:async()=>({username:sessionUser,authenticated:true,maximum_role:'admin'})};};
+const take=path=>{const index=requests.findIndex(r=>r.path===path);assert.ok(index>=0,'expected '+path);return requests.splice(index,1)[0];};
+const entry=name=>({name,can_manage:true,definition:{name,description:name,parameters:{},steps:[]}});
+const seed=async()=>{
+ jobEntries=[entry('secret')];openJob(jobEntries[0]);jobDirty=true;jobScheduleEnabledDirty=true;
+ jobSteps=[{action:'sql',sql:'secret SQL'}];renderJobSteps();$('job-run-arguments').rows=[['secret argument']];
+ jobSchedules=[{name:'secret',enabled:true}];jobRunCache=Array.from({length:7},(_,i)=>({id:'secret-'+i,job_name:'secret',status:'succeeded',steps:[]}));
+ renderJobList();renderJobRuns();await showJobRun('secret-0',{id:'secret-0',status:'succeeded',steps:[{name:'secret step',action:'sql',status:'succeeded'}]});
+ $('job-name').value='secret';$('job-description').value='secret description';$('job-parameters').value='{"secret":{}}';
+ $('job-runs-filter').value='secret';$('job-schedule-timezone').value='secret zone';$('job-schedule-enabled').checked=true;
+ for(const id of ['jobs-error','job-failure','job-alerts-error','job-schedule-message','job-save-state'])message(id,'secret error');
+ $('job-alerts').rows=[['secret alert']];$('job-alerts-timezone').textContent='secret zone';
+ for(const id of ['jobs-alert-count','jobs-alert-tab-count']){$(id).textContent='7';$(id).hidden=false;}
+ $('job-run-open').dataset={run:'secret-0',job:'secret'};jobsPoll=1;
+};
+const assertCleared=()=>{
+ assert.deepEqual(jobEntries,[]);assert.deepEqual(jobRunCache,[]);assert.deepEqual(jobSchedules,[]);
+ assert.equal(selectedJob,null);assert.equal(editingJob,null);assert.equal(selectedRunId,null);assert.equal(jobDirty,false);assert.equal(jobScheduleEnabledDirty,false);assert.equal(jobsPoll,null);
+ assert.equal($('job-name').value,'');assert.equal($('job-description').value,'');assert.equal($('job-parameters').value,'{}');
+ assert.equal(jobSteps.length,1);assert.equal(jobSteps[0].sql,'SELECT 1');assert.deepEqual($('job-steps').rows,jobSteps);
+ assert.equal($('job-schedule-timezone').value,'Asia/Tokyo');assert.equal($('job-schedule-enabled').checked,false);assert.equal($('job-runs-filter').value,'');
+ assert.equal($('job-run-detail').children.length,0);assert.equal($('job-run-detail').rows,undefined);assert.equal($('job-run-arguments').rows,undefined);
+ assert.equal($('job-detail-state').textContent,'Choose a run to inspect its steps.');assert.equal($('job-run-open').hidden,true);assert.deepEqual($('job-run-open').dataset,{});
+ assert.equal($('jobs-list').rows,undefined);assert.equal($('job-runs').rows,undefined);assert.equal($('job-alerts').rows,undefined);
+ for(const id of ['job-failure','job-alerts-error','job-schedule-message','job-save-state'])assert.equal($(id).textContent,'',id);
+ for(const id of ['jobs-alert-count','jobs-alert-tab-count']){assert.equal($(id).textContent,'');assert.equal($(id).hidden,true);}
+ assert.equal($('job-alerts-timezone').textContent,'');
+};
+const fresh=async()=>{
+ take('/api/jobs').resolve({jobs:[entry('fresh')]});await settle();
+ take('/api/jobs/schedules').resolve({schedules:[{name:'fresh',enabled:true}]});await settle();
+ take('/api/jobs/runs').resolve({runs:[{id:'fresh-run',job_name:'fresh',status:'succeeded',steps:[]}]});await settle();
+ take('/api/alerts').resolve({alerts:[],unacknowledged_count:2});await settle();
+ assert.equal(jobEntries[0].name,'fresh');assert.equal(jobSchedules[0].name,'fresh');assert.equal(jobRunCache[0].id,'fresh-run');
+ assert.equal($('jobs-list').rows[0][0],'fresh');assert.equal($('job-runs').rows[0][0],'fresh-run');assert.equal($('jobs-alert-tab-count').textContent,'2');
+};
+''' + body, 'applyRole', 'resetStageUI', 'resetJobsUI', 'editJob', 'openJob', 'selectJob',
+                        'clearSelectedJob', 'clearManualRun', 'updateJobRunControls', 'fillScheduleFields',
+                        'renderJobSchedule', 'jobScheduleEditable', 'updateJobScheduleKind', 'jobEmpty',
+                        'updateRunFilter', 'renderJobList', 'renderJobRuns', 'loadJobs', 'refreshJobRuns',
+                        'showJobRun', 'jobsVisible', 'stopJobsPolling', 'scheduleJobsPolling', 'loadJobSchedules',
+                        'loadJobAlerts', 'renderJobAlerts', 'jobTrigger', 'catalogIdentity', 'validateCatalogSession',
+                        prelude=state + """
+let currentRole='admin',activeTab='jobs',stageEpoch=0,selectedTable=null;
+let stageEntries=[],selectedStage=null,stageFiles=[],stagePending=false,stageDirty=false,stageRunId=null,stageExportRunId=null;
+let catalogSession='old-user',catalogGeneration=0,catalogSessionValidation=null;
+""")
+
+    def test_apply_role_clears_jobs_before_failed_or_delayed_reload_and_session_change(self):
+        self.jobs_identity_javascript(r'''
+await seed();assert.equal($('job-runs').rows.length,7);
+currentRole='data_engineer';applyRole();assertCleared();assert.equal(requests.length,1);
+take('/api/jobs').reject(Error('offline'));await settle();assertCleared();assert.equal($('jobs-error').textContent,'offline');
+// The real session validation applies even when the role string stays the same.
+await seed();const epoch=stageEpoch;await validateCatalogSession();assert.equal(currentRole,'data_engineer');assert.equal(stageEpoch,epoch+1);
+assertCleared();assert.equal($('jobs-error').textContent,'');assert.equal(requests.length,1);
+await fresh();
+''')
+
+    def test_old_alert_results_and_errors_cannot_reappear_after_role_aba_or_session_change(self):
+        self.jobs_identity_javascript(r'''
+for(const context of ['role ABA','session'])for(const fail of [false,true]){
+ await seed();const old=loadJobAlerts(true),request=take('/api/alerts');
+ if(context==='role ABA'){
+  currentRole='data_engineer';applyRole();const intermediate=take('/api/jobs');currentRole='admin';applyRole();
+  intermediate.reject(Error('old list error'));
+ }else{sessionUser+='x';await validateCatalogSession();}
+ assertCleared();await fresh();
+ const badge=$('jobs-alert-tab-count').textContent;
+ if(fail)request.reject(Error('old alert error'));else request.resolve({alerts:[{severity:'critical'}],unacknowledged_count:99});
+ await old;assert.equal($('jobs-alert-tab-count').textContent,badge);assert.equal($('job-alerts-error').textContent,'');assert.equal(jobEntries[0].name,'fresh');
+}
+''')
+
+    def test_old_job_save_completion_cannot_replace_new_context_form_or_message(self):
+        start = SCRIPT.index("$('job-form').onsubmit=")
+        handler = SCRIPT[start:SCRIPT.index("$('job-run-form').onsubmit=", start)]
+        self.jobs_identity_javascript('const HANDLER=' + json.dumps(handler) + r''';
+eval(HANDLER);
+for(const context of ['role ABA','session'])for(const finish of ['success','failure','list success','list failure']){
+ await seed();$('job-parameters').value='{}';$('job-form').onsubmit({preventDefault(){}});
+ const saved=take('/api/jobs/save'),task=saves.at(-1);let oldList;
+ if(finish.startsWith('list')){saved.resolve({});await settle();oldList=take('/api/jobs');}
+ if(context==='role ABA'){
+  currentRole='data_engineer';applyRole();const intermediate=take('/api/jobs');currentRole='admin';applyRole();intermediate.reject(Error('old list error'));
+ }else{sessionUser+='x';await validateCatalogSession();}
+ assertCleared();await fresh();openJob(jobEntries[0]);$('job-name').value='new context draft';$('job-save-state').textContent='new context message';
+ if(oldList){if(finish==='list failure')oldList.reject(Error('old reload failure'));else oldList.resolve({jobs:[entry('secret')]});}
+ else if(finish==='failure')saved.reject(Error('old save failure'));else saved.resolve({});
+ await settle();assert.equal(requests.length,0,'old save must not start a reload in the new context');
+ await task;assert.equal($('job-name').value,'new context draft');assert.equal($('job-save-state').textContent,'new context message');
+ assert.equal(selectedJob.name,'fresh');assert.equal(jobEntries[0].name,'fresh');assert.equal(requests.length,0,'old save must not reload in new context');
+}
+''')
 
     def test_status_inflight_context_failure_and_force(self):
         self.javascript(r'''
@@ -89,8 +203,40 @@ pendingRuns={};let task=refreshJobRuns();selectedRunId='other';pendingRuns.resol
 assert.equal(details.at(-1).id,'older','late history cannot select the previous run');pendingRuns=null;
 pendingJobs={};task=loadJobs();currentRole='bi_viewer';++stageEpoch;currentRole='admin';
 let reads=calls.length;pendingJobs.resolve({jobs:[{name:'stale'}]});await task;assert.equal(calls.length,reads);assert.equal(jobEntries[0].name,'job');
-pendingJobs={};task=loadJobs();++jobSelectionEpoch;pendingJobs.resolve({jobs:[]});await task;assert.equal(jobEntries[0].name,'job');
+pendingJobs={};task=loadJobs();++jobSelectionEpoch;pendingJobs.resolve({jobs:[]});await task;assert.deepEqual(jobEntries,[]);assert.equal(scheduleModes.at(-1),true);
 ''', 'loadJobs', 'refreshJobRuns', prelude="let currentRole='admin',stageEpoch=0,jobsRequest=0,jobListRequest=0,jobSelectionEpoch=0,jobDetailRequest=0,jobEntries=[],selectedJob=null,selectedRunId='latest',jobRunCache=[],jobRunState='loading';")
+
+    def test_jobs_reload_keeps_open_and_new_drafts_while_refreshing_data(self):
+        self.javascript(r'''
+const entry=name=>({name,can_manage:true,definition:{name,parameters:{n:{type:'integer',default:1}},steps:[]}});
+let pending=[],polls=0,listRenders=0,jobSchedules=[],jobScheduleRequest=0,jobScheduleEnabledDirty=false,jobDirty=true,editingJob=null,jobsPoll=null;
+const liveJobStates=new Set(['running']),clearTimeout=()=>{},setTimeout=(callback,delay)=>{assert.equal(delay,2000);polls++;return callback;};
+const api=path=>new Promise((resolve,reject)=>pending.push({path,resolve,reject}));
+const jobsVisible=()=>true,renderJobRuns=()=>{},loadJobAlerts=async()=>{};
+const renderJobList=()=>listRenders++,showJobRun=async()=>{},updateJobRunControls=()=>{};
+const editJob=job=>{editingJob=job;$('job-name').value=job?.name||'';};
+const selectJob=job=>{selectedJob=job;$('argument').value='saved default';renderJobSchedule();};
+const jobEmpty=(id,text)=>{$(id).textContent=text;};
+const renderJobSchedule=(preserve=false)=>{if(!preserve){$('calendar').value='server';$('argument').value='server';$('job-schedule-enabled').checked=true;}};
+const newJob=()=>{editJob(null);clearSelectedJob();};
+for(const waitAt of ['jobs','schedules'])for(const action of ['Open','New','Open same']){
+ jobEntries=[entry('a'),entry('b')];openJob(jobEntries[0]);
+ const task=loadJobs();let list=pending.shift();
+ if(waitAt==='schedules'){list.resolve({jobs:[entry('a'),entry('b'),entry('fresh')]});await settle();}
+ if(action==='New')newJob();else openJob(jobEntries[action==='Open'?1:0]);
+ $('job-name').value='dirty definition';$('calendar').value='draft calendar';$('argument').value='draft argument';
+ $('job-schedule-enabled').checked=false;jobScheduleEnabledDirty=false;
+ if(waitAt==='jobs'){list.resolve({jobs:[entry('a'),entry('b'),entry('fresh')]});await settle();}
+ assert.equal(pending[0].path,'/api/jobs/schedules');pending.shift().resolve({schedules:[{name:'a',enabled:true},{name:'b',enabled:true}]});await settle();
+ assert.equal(pending[0].path,'/api/jobs/runs');pending.shift().resolve({runs:[{id:'live',status:'running'}]});await task;
+ assert.equal(jobEntries.at(-1).name,'fresh');assert.equal(jobSchedules.length,2);assert.equal(jobRunCache[0].id,'live');
+ assert.equal(selectedJob?.name,action==='New'?undefined:action==='Open'?'b':'a');
+ assert.equal($('job-name').value,'dirty definition');assert.equal($('calendar').value,'draft calendar');assert.equal($('argument').value,'draft argument');
+ assert.equal($('job-schedule-enabled').checked,false,'selection draft checkbox survives even when not explicitly toggled');
+}
+assert.equal(polls,6);assert.equal(typeof jobsPoll,'function');assert.ok(listRenders>=12);
+''', 'loadJobs', 'loadJobSchedules', 'refreshJobRuns', 'scheduleJobsPolling', 'stopJobsPolling', 'openJob', 'clearManualRun', 'clearSelectedJob',
+                        prelude="let currentRole='admin',stageEpoch=0,jobsRequest=0,jobListRequest=0,jobSelectionEpoch=0,jobDetailRequest=0,jobEntries=[],selectedJob=null,selectedRunId=null,jobRunCache=[],jobRunState='loading';")
 
     def test_header_actions_ignore_delayed_status_before_and_during_mutation(self):
         handler = next(line for line in SCRIPT.splitlines() if line.startswith("for(const action of ['wake','chill'])"))

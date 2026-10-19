@@ -502,7 +502,8 @@ eval(HANDLERS+`
         harness = r"""
 const assert=require('node:assert/strict');
 const nodes={};const $=id=>nodes[id]??={value:'',checked:false,disabled:false,hidden:false,children:[],querySelectorAll(){return [];},replaceChildren(...items){this.children=items;},append(...items){this.children.push(...items);},reportValidity(){return true;},setAttribute(){},removeAttribute(){}};
-let language='en',currentRole='admin',stageEpoch=1,jobScheduleRequest=0;
+let language='en',currentRole='admin',stageEpoch=1,jobScheduleRequest=0,jobSelectionEpoch=0,jobScheduleEnabledDirty=false;
+const jobsVisible=()=>currentRole!=='bi_viewer';
 let selectedJob={name:'orders',can_manage:true},jobSchedules=[];
 const t=(key,values={})=>key.replace(/\{(\w+)\}/g,(_,name)=>values[name]??'');
 const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};

@@ -876,6 +876,7 @@ const i18n = {ja: {
  'No steps recorded.':'記録されたステップはありません。', 'Argument definitions must be a JSON object.':'引数定義は JSON オブジェクトで入力してください。', 'No arguments required.':'引数はありません。',
  'Started':'開始時刻', 'Duration (ms)':'実行時間（ミリ秒）', 'Summary':'概要', 'Run ID':'実行 ID', 'Job':'ジョブ', 'Required':'必須', 'Description':'説明',
  'Arguments must match their declared types.':'引数は定義した型に合わせて入力してください。', 'SQL steps only for Data Engineer.':'データ作成者は SQL ステップのみ登録できます。', 'Unknown':'不明', 'Read-only definition':'参照のみの定義',
+ 'Catalog changed. Use Refresh catalog in Database Explorer.':'カタログが変更されました。データベース探索で「カタログを更新」を実行してください。',
  'Role':'ロール', 'Admin':'管理者', 'Data Engineer':'データ作成者', 'BI Viewer':'閲覧者', 'Read-only role':'閲覧専用ロール',
  'AI Model Settings':'AI モデル設定', 'Provider':'プロバイダー', 'Model Name':'モデル名', 'API URL':'API の URL', 'API Key':'API キー', 'Timeout (seconds)':'タイムアウト（秒）',
  'Leave blank to keep the saved key or environment credential.':'空欄の場合は保存済みキーまたは環境変数の認証情報を使用します。', 'Test Connection':'接続をテスト', 'Save Settings':'設定を保存', 'Close':'閉じる',
@@ -993,6 +994,7 @@ function applyRole() {
  document.documentElement.dataset.role=currentRole;
  if(typeof resetAdminViews==='function')resetAdminViews();
  if(typeof resetStageUI==='function')resetStageUI();
+ if(typeof resetJobsUI==='function')resetJobsUI();
  if(typeof resetMartsUI==='function')resetMartsUI();
  $('tab-jobs').hidden=currentRole==='bi_viewer';
  if(currentRole==='bi_viewer')$('jobs-alert-count').hidden=$('jobs-alert-tab-count').hidden=true;
@@ -1278,10 +1280,11 @@ async function describeTable(schema,name){
 async function loadCatalog(){
  invalidateCatalogDetails();const request=++catalogListRequest,identity=catalogIdentity(),generation=catalogGeneration;
  const current=()=>request===catalogListRequest&&identity===catalogIdentity()&&generation===catalogGeneration;
+ const staleList=()=>{if(request===catalogListRequest&&identity===catalogIdentity()&&generation!==catalogGeneration)for(const id of ['catalog-tree','worksheet-tree'])ui($(id),'Catalog changed. Use Refresh catalog in Database Explorer.');};
  message('catalog-error','');ui($('catalog-tree'),'Loading tables…');
- try{const data=await api('/api/catalog');if(!current())return;catalogMetadata=data.metadata;renderCatalogTrees();
+ try{const data=await api('/api/catalog');if(!current()){staleList();return;}catalogMetadata=data.metadata;renderCatalogTrees();
   if(selectedTable){const [schema,name]=selectedTable.split('.');if(catalogMetadata[schema]?.some(row=>row[0]===name))await describeTable(schema,name);else{resetCatalogSelection();}}
- }catch(e){if(!current())return;message('catalog-error',e.message);ui($('catalog-tree'),'Catalog unavailable. Check warehouse readiness and refresh.');ui($('worksheet-tree'),'Catalog unavailable. Use Refresh catalog in Database Explorer.');}
+ }catch(e){if(!current()){staleList();return;}message('catalog-error',e.message);ui($('catalog-tree'),'Catalog unavailable. Check warehouse readiness and refresh.');ui($('worksheet-tree'),'Catalog unavailable. Use Refresh catalog in Database Explorer.');}
  if(!current())return;
  try{const data=await api('/api/lineage');if(!current())return;$('lineage').replaceChildren();Object.entries(data.metadata.lineage).forEach(([model,parents])=>{if(!parents.length)return;const row=document.createElement('div');row.className='lineage-row';for(const name of [parents.join(' + '),'→',model]){const node=document.createElement('span');node.className=name==='→'?'arrow':'node';node.textContent=name;row.append(node);}$('lineage').append(row);});if(!$('lineage').childElementCount)ui($('lineage'),'No model dependencies recorded.');}catch(e){if(current())$('lineage').textContent=e.message;}
 }
@@ -1964,13 +1967,15 @@ function renderJobAlerts(alerts){
 }
 
 async function loadJobAlerts(render=jobsVisible()){
- const role=currentRole;if(role==='bi_viewer'){$('jobs-alert-count').hidden=$('jobs-alert-tab-count').hidden=true;return;}
+ const role=currentRole,epoch=stageEpoch;
+ const current=()=>role===currentRole&&epoch===stageEpoch;
+ if(role==='bi_viewer'){$('jobs-alert-count').hidden=$('jobs-alert-tab-count').hidden=true;return;}
  try{
- const data=await api('/api/alerts');if(currentRole!==role)return;
+ const data=await api('/api/alerts');if(!current())return;
  const count=Math.max(0,Number(data.unacknowledged_count)||0);ui($('jobs-alert-count'),'{count} unacknowledged',{count});$('jobs-alert-count').hidden=count===0;
  $('jobs-alert-tab-count').textContent=String(count);$('jobs-alert-tab-count').hidden=count===0;
  if(render&&jobsVisible()){message('job-alerts-error','');renderJobAlerts(data.alerts||[]);}
- }catch(error){if(render&&jobsVisible()){ui($('job-alerts-error'),'Notification failed: {error}',{error:error.message});$('job-alerts-error').hidden=false;}}
+ }catch(error){if(current()&&render&&jobsVisible()){ui($('job-alerts-error'),'Notification failed: {error}',{error:error.message});$('job-alerts-error').hidden=false;}}
  finally{pruneUIBindings();}
 }
 $('job-alerts-refresh').onclick=()=>busy($('job-alerts-refresh'),()=>loadJobAlerts(true));
@@ -2052,6 +2057,15 @@ function clearSelectedJob(){
  selectedJob=null;ui($('job-run-name'),'Choose a saved job.');jobEmpty('job-run-arguments','Save the job before running or scheduling it.');
  clearManualRun();updateJobRunControls();renderJobSchedule();if(jobEntries.length)renderJobList();
 }
+function resetJobsUI(){
+ stopJobsPolling();jobEntries=[];jobRunCache=[];jobSchedules=[];jobRunState='loading';selectedRunId=null;
+ editJob(null);clearSelectedJob();
+ $('job-runs-filter').value='';renderJobList();renderJobRuns();
+ $('job-run-detail').replaceChildren();ui($('job-detail-state'),'Choose a run to inspect its steps.');$('job-detail-state').className='state';
+ for(const id of ['jobs-error','job-failure','job-alerts-error','job-schedule-message'])message(id,'');
+ jobEmpty('job-alerts','No notifications loaded.');$('job-alerts-timezone').textContent='';
+ for(const id of ['jobs-alert-count','jobs-alert-tab-count']){$(id).textContent='';$(id).hidden=true;}
+}
 function updateRunFilter(){
  const filter=$('job-runs-filter'),value=filter.value,names=[...new Set([...jobEntries.map(entry=>entry.name),...jobRunCache.map(run=>run.job_name)])].filter(Boolean).sort();
  if([...filter.options].slice(1).map(option=>option.value).join('\n')===names.join('\n'))return;
@@ -2096,14 +2110,14 @@ function selectJob(entry){
 async function loadJobs(){
  if(!jobsVisible())return;
  const request=++jobListRequest,role=currentRole,epoch=stageEpoch;
- let selection=jobSelectionEpoch;
- const current=()=>request===jobListRequest&&role===currentRole&&epoch===stageEpoch&&selection===jobSelectionEpoch&&jobsVisible();
+ const selection=jobSelectionEpoch;
+ const current=()=>request===jobListRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
  message('jobs-error','');try{
  const data=await api('/api/jobs');if(!current())return;jobEntries=data.jobs||[];
- if(selectedJob){const updated=jobEntries.find(entry=>entry.name===selectedJob.name);if(updated)selectJob(updated);else clearSelectedJob();}
- selection=jobSelectionEpoch;
+ const selectionChanged=selection!==jobSelectionEpoch;
+ if(!selectionChanged&&selectedJob){const updated=jobEntries.find(entry=>entry.name===selectedJob.name);if(updated)selectJob(updated);else clearSelectedJob();}
  renderJobList();
- await loadJobSchedules();if(!current())return;
+ await loadJobSchedules(selectionChanged,selectionChanged);if(!current())return;
  await refreshJobRuns(false);
  }catch(error){if(current()){message('jobs-error',error.message);stopJobsPolling();}}
  finally{pruneUIBindings();}
@@ -2216,14 +2230,15 @@ function stopJobSchedule(){
  }catch(error){if(current())ui($('job-schedule-message'),'Schedule failed: {error}',{error:error.message});}
  }).finally(()=>{$('job-schedule-stop').disabled=!jobScheduleEditable(selectedJob)||!jobSchedules.some(schedule=>schedule.name===selectedJob?.name&&schedule.enabled===true);});
 }
-async function loadJobSchedules(preserveInputs=false){
- const request=++jobScheduleRequest,role=currentRole,epoch=stageEpoch,name=selectedJob?.name;
- const data=await api('/api/jobs/schedules');if(request!==jobScheduleRequest||role!==currentRole||epoch!==stageEpoch||name!==selectedJob?.name)return;
+async function loadJobSchedules(preserveInputs=false,preserveSelection=false){
+ const request=++jobScheduleRequest,role=currentRole,epoch=stageEpoch,name=selectedJob?.name,selection=jobSelectionEpoch;
+ const data=await api('/api/jobs/schedules');if(request!==jobScheduleRequest||role!==currentRole||epoch!==stageEpoch||!jobsVisible())return;
  jobSchedules=data.schedules||[];
+ const selectionChanged=preserveSelection||selection!==jobSelectionEpoch||name!==selectedJob?.name;
  // Passive history refreshes keep calendar/argument drafts, including an
  // explicitly edited checkbox across repeated server-side state changes.
- if(preserveInputs&&!jobScheduleEnabledDirty)$('job-schedule-enabled').checked=jobSchedules.some(schedule=>schedule.name===name&&schedule.enabled===true);
- renderJobSchedule(preserveInputs);
+ if(preserveInputs&&!selectionChanged&&!jobScheduleEnabledDirty)$('job-schedule-enabled').checked=jobSchedules.some(schedule=>schedule.name===name&&schedule.enabled===true);
+ renderJobSchedule(preserveInputs||selectionChanged);
  if(typeof renderJobList==='function')renderJobList();
 }
 $('job-schedule-kind').onchange=updateJobScheduleKind;
@@ -2243,13 +2258,15 @@ $('job-run-open').onclick=()=>{
 };
 $('jobs-refresh').onclick=()=>busy($('jobs-refresh'),loadJobs);
 $('job-runs-refresh').onclick=()=>busy($('job-runs-refresh'),refreshJobRuns);
-$('job-form').onsubmit=event=>{event.preventDefault();busy($('job-save'),async()=>{
+$('job-form').onsubmit=event=>{event.preventDefault();const role=currentRole,epoch=stageEpoch;
+ const current=()=>role===currentRole&&epoch===stageEpoch;
+ busy($('job-save'),async()=>{
  try{
  syncJobSteps();const parameters=JSON.parse($('job-parameters').value);
  if(!parameters||Array.isArray(parameters)||typeof parameters!=='object')throw Error(t('Argument definitions must be a JSON object.'));
  const definition={name:$('job-name').value.trim(),description:$('job-description').value.trim(),parameters,steps:jobSteps.map(step=>Object.fromEntries(Object.entries(step).filter(([key,value])=>value!==''||key==='sql')))};
- await api('/api/jobs/save',definition);await loadJobs();const entry=jobEntries.find(entry=>entry.name===definition.name);if(entry)openJob(entry);ui($('job-save-state'),'Job saved.');
- }catch(error){ui($('job-save-state'),'Save failed: {error}',{error:error.message});}
+ await api('/api/jobs/save',definition);if(!current())return;await loadJobs();if(!current())return;const entry=jobEntries.find(entry=>entry.name===definition.name);if(entry)openJob(entry);ui($('job-save-state'),'Job saved.');
+ }catch(error){if(current())ui($('job-save-state'),'Save failed: {error}',{error:error.message});}
  });};
 $('job-run-form').onsubmit=event=>{event.preventDefault();if(!selectedJob?.can_manage||$('job-run').disabled)return;
  const job=selectedJob.name,selection=jobSelectionEpoch,role=currentRole,epoch=stageEpoch;

@@ -130,6 +130,39 @@ load=loadCatalog();const stale=pending.shift();invalidateCatalogDetails();stale.
 assert.deepEqual(catalogMetadata,{raw:[['b']]});assert.equal(pending.length,0);
 """)
 
+    def test_delayed_catalog_lists_explain_run_observation_invalidation(self):
+        self.javascript(r"""
+for(const path of ['/api/jobs/runs','/api/marts'])for(const status of ['running','success'])for(const reject of [false,true]){
+ if(status==='success'){
+  const seed=api(path);pending.shift().resolve(path==='/api/jobs/runs'?{runs:[{id:'r',status:'running'}]}:{marts:[{last_run:{id:'r',status:'running'}}]});await seed;
+ }
+ const load=loadCatalog(),list=pending.shift();
+ const observation=api(path),run=pending.shift();
+ run.resolve(path==='/api/jobs/runs'?{runs:[{id:'r',status}]}:{marts:[{last_run:{id:'r',status}}]});await observation;
+ if(reject)list.reject(Error('late list failure'));else list.resolve({metadata:{raw:[['stale']]}});await load;
+ assert.deepEqual(catalogMetadata,{});assert.equal(trees,0);assert.equal(pending.length,0,'no automatic retry or lineage read');
+ for(const id of ['catalog-tree','worksheet-tree'])assert.match($(id).textContent,/Refresh catalog in Database Explorer/);
+ assert.equal($('catalog-error').textContent,'');
+ // Make each combination observe a new state, including the initial nonempty history.
+ catalogRunStates.clear();
+}
+""")
+
+    def test_delayed_catalog_observation_guidance_keeps_request_and_role_fences(self):
+        self.javascript(r"""
+for(const reject of [false,true])for(const fence of ['request','role']){
+ const old=loadCatalog(),list=pending.shift(),observation=api('/api/jobs/runs');
+ pending.shift().resolve({runs:[{id:String(catalogGeneration),status:'running'}]});await observation;
+ let fresh;
+ if(fence==='request')fresh=loadCatalog();else{currentRole=currentRole==='admin'?'bi_viewer':'admin';resetCatalogIdentity();}
+ $('catalog-tree').textContent='current tree';$('worksheet-tree').textContent='current worksheet';
+ if(reject)list.reject(Error('old error'));else list.resolve({metadata:{raw:[['old']]}});await old;
+ assert.equal($('catalog-tree').textContent,'current tree');assert.equal($('worksheet-tree').textContent,'current worksheet');
+ assert.deepEqual(catalogMetadata,{});assert.equal($('catalog-error').textContent,'');
+ if(fresh){pending.shift().resolve({metadata:{}});await tick();pending.shift().resolve({metadata:{lineage:{}}});await fresh;}
+}
+""")
+
     def test_mutations_invalidate_before_and_finally_and_poll_changes(self):
         self.javascript(r"""
 for(const [path,body] of [
