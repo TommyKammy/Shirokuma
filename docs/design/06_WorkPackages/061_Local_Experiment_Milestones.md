@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-29
-version: "7.2.0"
+version: "7.3.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-29 — DB-P6-1 Database audit technical acceptance completed
+
+- Added read-only persisted-metadata audit APIs, HTTP CLI, scoped search/detail/related metadata/JSON and an independent P-only Pawprints preview with bounded filters. See the [contract and verification record](../../guides/database-p6-1-implementation-2026-10-29.md).
+- Full regression: 2,862 passed, 33 existing skips, zero failures; Go tests/vet and live API/CLI/browser checks passed. Audit GETs preserved the ledger digest. Live Pawprints reports `TELEMETRY_UNAVAILABLE`; dedicated fault acceptance remains separate.
+- Next unit is DB-P6-2 shared-Warehouse suspend/resume. M1 owner acceptance and remaining mandatory feature rows stay open.
 
 ### 2026-10-29 — DB-P6-0 capability inventory and accurate UI completed
 

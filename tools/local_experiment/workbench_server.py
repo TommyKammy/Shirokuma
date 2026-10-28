@@ -178,6 +178,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 raise ValueError('One valid explicit role is required')
             role = headers[0]
             path = url.path
+            import audit_routes
+            if audit_routes.dispatch(self, method, path, params, principal, role):
+                return
             import db_schedule_routes
             if db_schedule_routes.dispatch(self, method, path, params, principal, role):
                 return
@@ -264,6 +267,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 
     def management_request(self, method):
         """Public control routes only hand operations to the explicit private operator."""
+        path = urlsplit(self.path).path
+        if path == '/api/v1/audit' or path.startswith('/api/v1/audit/'):
+            self.database_request(method)
+            return True
         import database_creations
         if database_creations.dispatch(self, method):
             return True

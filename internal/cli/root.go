@@ -43,6 +43,7 @@ func newRootCommand(output io.Writer, runner commandRunner) *cobra.Command {
 	root.AddCommand(newMartCommand(runner))
 	root.AddCommand(newScheduleCommand(runner))
 	root.AddCommand(newAlertCommand(runner))
+	root.AddCommand(newAuditCommand(runner))
 	root.AddCommand(newBearCommand(execResidentWarehouse{}))
 	root.AddCommand(newLakeCommand(execResidentWarehouse{}))
 	root.AddCommand(newWarehouseQueryCommand(execResidentWarehouse{}))

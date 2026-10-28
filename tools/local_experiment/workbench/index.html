@@ -516,6 +516,7 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #db-creation-next-action{font-weight:600;max-width:75ch}
 #db-creation-actions{margin-block:16px;overflow-wrap:anywhere}
 #db-creation-observation{max-width:75ch;font-size:13px}
+#db-audit-panel .toolbar{flex-wrap:wrap;align-items:end}#db-audit-panel .field{min-width:9rem;flex:1}#db-audit-panel .field input,#db-audit-panel .field select{width:100%;max-width:100%;min-width:0}#db-audit-panel .table-wrap{max-width:100%;overflow-x:auto}#db-audit-panel td{overflow-wrap:anywhere}#db-audit-context,#db-audit-detail,#db-audit-preview{overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -2432,7 +2433,7 @@ Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。",
  "AI Bears and Copilot are unavailable in Database mode. Use SQL for queries and Manual WAP for build, audit and publication.": "Database モードでは AI Bears と Copilot は未対応です。クエリには SQL、build・audit・公開には手動 WAP を利用してください。",
- "The combined Audit Log is unavailable in Database mode. View query history in SQL and individual execution history in Jobs, Stages, Managed Marts or Manual WAP.": "Database モードでは統合監査ログは未対応です。SQL のクエリ履歴、または Jobs・Stage・管理 Mart・手動 WAP の個別の実行履歴を確認してください。",
+ "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.": "保存済みメタデータの監査を利用できます。SQL・プロンプト・結果は含みません。Pawprints は別の補助的な基盤プレビューです。",
  "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control.": "Database モードでは Compute 操作・Auto-Chill・ガバナンス検査は未対応です。共有ウェアハウスの状態はヘッダーで確認できます。Database の admin ロールは基盤の操作権限を付与しません。",
  "AI settings are unavailable in Database mode. Use SQL or Manual WAP.": "Database モードでは AI 設定は未対応です。SQL または手動 WAP を利用してください。",
  "Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.": "Database モードではウェアハウスの起動／休止操作は未対応です。共有ウェアハウスの状態はヘッダーで確認してください。",
@@ -2454,10 +2455,12 @@ const dbAuthorizationReads=new WeakMap();
 const dbRoleAuthorizationVersions=new Map();
 const dbRoleVersion=role=>dbRoleAuthorizationVersions.get(role)||0;
 function dbInvalidateReceipt(role,account=false){
+ if(dbAudit.installed&&(account||role===dbAudit.role&&dbAudit.scope!=='platform'))dbAuditPurge();
  if(account)++dbAuthorizationVersion;else dbRoleAuthorizationVersions.set(role,dbRoleVersion(role)+1);
  // Inventory revisions invalidate DB reads, not the separate platform-management capability.
  // Session/admin-route checks still clear management state on actual account or admin loss.
  if(account){dbAdmin.platform=false;dbAdminClear();}
+ if(dbAudit.installed)dbAuditValidate();
 }
 let dbAuthorizationVersion=0;
 const dbExplorer={database_id:'',schema_id:'',binding_revision:null,generation_id:null,grant_revision:null,schemas:[],schemaScope:'',invalid:false};
@@ -2546,6 +2549,7 @@ function dbReason(w=dbCurrent()){
  return '';
 }
 function dbControls(){
+ if(dbAudit.installed)dbAuditValidate();
  const w=dbCurrent();if(!w)return;
  const schemaCurrent=dbSchemaScope===dbSchemaKey(w.selected_role,w.database_id);
  dbSelectOptions('query-execution-role',['bi_viewer','data_engineer','admin'].map(role=>({value:role,label:role,disabled:!dbRoleWithinHeader(role)})),w.selected_role,'Execution role');
@@ -2637,22 +2641,23 @@ function dbRunAllowed(run,items){
  return dbInventoryCurrent(items)&&dbAuthorizationReads.get(items)?.role===run.origin.role&&run.origin.principal===dbPrincipal&&dbRoleWithinHeader(run.origin.role)&&!!d&&d.state==='READY'&&d.capabilities?.query&&d.allowed_roles?.includes(run.origin.role)&&d.binding_revision===c.binding_revision&&d.generation_id===c.generation_id&&(d.grant_revision??null)===(c.grant_revision??null);
 }
 function dbAuthorizationCurrent(read){
- return !!read&&read.principal===dbPrincipal&&read.epoch===dbEpoch&&read.version===dbAuthorizationVersion&&read.roleVersion===dbRoleVersion(read.role);
+ return !!read&&(!read.current||read.current())&&read.principal===dbPrincipal&&read.epoch===dbEpoch&&read.version===dbAuthorizationVersion&&read.roleVersion===dbRoleVersion(read.role);
 }
 function dbInventoryCurrent(items){return dbAuthorizationCurrent(dbAuthorizationReads.get(items));}
 function dbCheckAuthorization(read){
  if(!dbAuthorizationCurrent(read))throw Object.assign(Error('Authorization changed; response ignored.'),{code:'AUTH_READ_STALE'});
 }
-async function dbReadInventory(role){
+async function dbReadInventory(role,current){
  // A session maximum_role is not a grant epoch. Always read the inventory too.
  const request=(dbInventoryRequests.get(role)||0)+1;dbInventoryRequests.set(role,request);
- const read={principal:dbPrincipal,epoch:dbEpoch,version:dbAuthorizationVersion,roleVersion:dbRoleVersion(role),role,request},principal=dbPrincipal;
+ const read={principal:dbPrincipal,epoch:dbEpoch,version:dbAuthorizationVersion,roleVersion:dbRoleVersion(role),role,request,current},principal=dbPrincipal;
  let sessionResponse,session;
- try{sessionResponse=await fetch('/api/session');session=await sessionResponse.json();}catch(error){dbCheckAuthorization(read);throw error;}
+ try{sessionResponse=await fetch('/api/session',current?{headers:{'X-Shirokuma-Role':role}}:undefined);session=await sessionResponse.json();}catch(error){dbCheckAuthorization(read);throw error;}
  dbCheckAuthorization(read);
  if(!sessionResponse.ok){dbAdmin.platform=false;dbAdminClear();const error=dbError(session,sessionResponse.status);if(['DB_ACCESS_REVOKED','AUTHENTICATION_REQUIRED'].includes(error.code))dbInvalidateReceipt(role,true);throw error;}
  const identity=JSON.stringify([session.username,session.authenticated]);
  if(identity!==principal||session.data_mode!=='database'){
+  if(dbAudit.installed)dbAuditPurge();
   dbAdmin.platform=false;dbAdminClear();
   if(principal===dbPrincipal){++dbAuthorizationVersion;++dbEpoch;dbPrincipal=identity;dbInventories.clear();dbSchemaCache.clear();dbInventoryRequests.clear();dbRoleAuthorizationVersions.clear();dbObservedGrants.clear();dbTreeExpanded.clear();dbDatabases=[];dbSchemas=[];dbSchemaScope='';Object.assign(dbExplorer,{database_id:'',schema_id:'',binding_revision:null,generation_id:null,grant_revision:null});dbHideRows();dbClearCatalog();dbClearHistory();dbControls();}
   throw Object.assign(Error('DB_ACCESS_REVOKED'),{code:'DB_ACCESS_REVOKED'});
@@ -2681,7 +2686,8 @@ async function dbRefreshAccess(){
   if(typeof dbJobs!=='undefined')await dbJobsRefreshAuthorization();
   if(typeof dbStages!=='undefined')await dbStagesRefreshAuthorization();
   if(typeof dbMarts!=='undefined')await dbMartsRefreshAuthorization();
- }catch(error){if(error.code==='AUTH_READ_STALE')return;if(identity===dbIdentity()){dbInvalidateReceipt(role,error.code==='AUTHENTICATION_REQUIRED');dbHideRows(run=>error.code==='AUTHENTICATION_REQUIRED'||run.origin.role===role);dbInventories.delete(role);dbDatabases=[];dbClearCatalog();if(role===dbTabRole())dbClearHistory();dbControls();message('database-context-state',error.message);}}
+  if(dbAudit.installed)await dbAuditRefreshAuthorization();
+ }catch(error){if(error.code==='AUTH_READ_STALE')return;if(identity===dbIdentity()){if(dbAudit.installed){dbAudit.scope='self';dbAuditPurge();}dbInvalidateReceipt(role,error.code==='AUTHENTICATION_REQUIRED');dbHideRows(run=>error.code==='AUTHENTICATION_REQUIRED'||run.origin.role===role);dbInventories.delete(role);dbDatabases=[];dbClearCatalog();if(role===dbTabRole())dbClearHistory();dbControls();message('database-context-state',error.message);}}
 }
 async function dbRefreshContext(){
  const request=++dbRefreshRequest,identity=dbTabIdentity(),w=dbCurrent(),id=w?.id,database=w?.database_id,role=w?.selected_role;
@@ -2829,11 +2835,12 @@ function dbRoleAllowed(role){
 }
 function dbUpdateMaximumRole(maximum){
  const changed=maximum!==dbMaximumRole;
- if(changed){++dbAuthorizationVersion;dbMaximumRole=maximum;dbInventories.clear();dbSchemaCache.clear();dbHideRows();dbClearCatalog();dbClearHistory();++dbInventoryVersion;}
+ if(changed){if(dbAudit.installed)dbAuditPurge();++dbAuthorizationVersion;dbMaximumRole=maximum;dbInventories.clear();dbSchemaCache.clear();dbHideRows();dbClearCatalog();dbClearHistory();++dbInventoryVersion;}
  if(maximum!=='admin'&&dbAdmin.platform){dbAdmin.platform=false;dbAdminClear();}else dbAdminGate();
  for(const option of $('role-selector').options)option.disabled=!dbRoleAllowed(option.value);
  // A disabled selected role remains visible until the user explicitly changes it.
  $('role-selector').value=currentRole;
+ if(dbAudit.installed)dbAuditValidate();
  if(changed&&$('query-database'))dbRenderRun();
 }
 function dbHistoryIdentity(){const w=dbCurrent();return JSON.stringify([dbTabIdentity(),w?.database_id,w?.binding_revision,w?.generation_id,dbTabItems().find(d=>d.id===w?.database_id)?.grant_revision??null,dbInventoryVersion]);}
@@ -3273,6 +3280,7 @@ function dbSelectInspector(button){
  if(dbObject)return dbDescribe(dbObject);
 }
 function dbApplyRole(){
+ if(dbAudit.installed)dbAuditPurge();
  dbAdminClear();
  ++dbEpoch;++dbAuthorizationVersion;for(const run of dbRuns.values())run.authorized=false;
  dbInventories.clear();dbSchemaCache.clear();dbDatabases=[];dbSchemas=[];dbSchemaScope='';dbHideRows(run=>!dbRoleWithinHeader(run.origin.role));dbClearCatalog();dbClearHistory();
@@ -3325,7 +3333,7 @@ async function initializeDatabaseUI(session){
  ],
  [
   "pawprints",
-  "The combined Audit Log is unavailable in Database mode. View query history in SQL and individual execution history in Jobs, Stages, Managed Marts or Manual WAP."
+  "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview."
  ],
  [
   "compute",
@@ -3364,8 +3372,8 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else dataopsOpen(target);};
- $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();};
+ activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
  $('query-schema').onchange=async()=>{dbCurrent().schema_id=$('query-schema').value;await dbReselect();dbSave();dbRenderRun();};
@@ -3389,6 +3397,7 @@ async function initializeDatabaseUI(session){
  dbJobsInstall();
  dbStagesInstall();
  dbMartsInstall();
+ dbAuditInstall();
  const creationID=dbCreationURL().id;
  if(dbAdminAllowed()&&/^[A-Za-z0-9_-]{1,128}$/.test(creationID||''))await activate($('tab-db-admin'));
 }
@@ -3447,7 +3456,8 @@ function dbAdminClear(){
 }
 function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
- if(dbAdmin.platform!==allowed){dbAdmin.platform=allowed;dbAdminClear();}
+ if(dbAdmin.platform!==allowed){if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();}
+ if(dbAudit.installed)dbAuditValidate();
  dbAdminGate();
 }
 function dbAdminScope(){return JSON.stringify([dbIdentity(),dbAuthorizationVersion,dbRoleVersion('admin'),dbInventoryVersion,dbMaximumRole,dbAdmin.platform,dbAdmin.epoch,dbAdmin.selection,dbAdmin.database]);}
@@ -5605,6 +5615,318 @@ async function dbCreationSQL(){
  }catch(error){if(scope===dbCreationScope())dbCreationNotice(error);}
 }
 if(typeof document.addEventListener==='function')document.addEventListener('visibilitychange',()=>{dbCreationSuspend();if(!document.hidden&&dbAdminAllowed()&&activeTab==='db-admin')void dbCreationLoad();});
+// Durable audit is an independent reference context, never an execution context.
+const dbAudit={installed:false,scope:'self',role:'',database:'',epoch:0,list:0,selection:0,detailRequest:0,auth:0,
+ draft:{},applied:null,cursors:[],cursor:'',next:null,items:[],selected:'',detail:null,proof:null,capabilities:null,url:null,preview:null,previewStamp:null};
+Object.assign(i18n.ja,{
+ 'Saved metadata audit':'保存済みメタデータの監査','Scope':'参照範囲','My DB records':'自分の DB 記録','DB administration':'DB 管理情報','Platform management':'基盤管理記録',
+ 'Reference role':'参照ロール','Start UTC':'開始 UTC','End UTC':'終了 UTC','Source':'記録元','State':'保存状態','Search':'検索','Page size':'取得件数','Search / Refresh':'検索／更新',
+ 'All sources':'すべての記録元','Filters pending. Search to apply.':'条件は未適用です。検索で適用します。',
+ 'Search to load saved metadata.':'検索して保存済みメタデータを取得してください。','No saved metadata matches these filters.':'この条件に一致する保存済みメタデータはありません。',
+ 'Audit unavailable. Check the reference role and database, then search again.':'監査を利用できません。参照ロールと DB を確認して再検索してください。',
+ 'Cursor expired. Search again.':'ページの参照期限が切れました。再検索してください。',
+ 'Choose a currently available database and permitted reference role.':'現在利用可能な DB と許可された参照ロールを選択してください。',
+ 'DB administration requires the selected admin role.':'DB 管理情報には admin 参照ロールが必要です。',
+ 'Platform management requires current platform authority and the selected admin role.':'基盤管理記録には現在の基盤管理権限と admin 参照ロールが必要です。',
+ 'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters.':'作成時刻と最新の保存状態です。全状態遷移の履歴ではありません。時刻未記録の行は末尾に表示し、期間指定時は除外します。',
+ 'Metadata only. SQL, prompts, results, definitions and raw payloads are excluded. Existing retention is unchanged. Related IDs do not grant content access.':'メタデータのみです。SQL・プロンプト・結果・定義・生の payload は含みません。既存の保持方針は変更しません。関連 ID は内容へのアクセス権限を与えません。',
+ 'Applied scope: {scope} · role: {role} · DB: {database} · filters: {filters}':'適用範囲: {scope} · ロール: {role} · DB: {database} · 条件: {filters}',
+ 'Time UTC':'時刻 UTC','Source / action':'記録元／操作','Target IDs':'対象 ID','Actor':'実行者','Not recorded':'未記録',
+ 'Previous page':'前のページ','Next page':'次のページ','Download metadata JSON':'メタデータ JSON を保存',
+ 'View linked audit metadata':'関連監査メタデータを表示','Committed':'コミット済み','Cleanup failure':'清掃エラーあり','Related IDs':'関連 ID','Saved role':'保存ロール',
+ 'Created UTC':'作成 UTC','Updated UTC':'更新 UTC','Finished UTC':'終了 UTC','Event ID':'イベント ID','Source ID':'記録元 ID','Revision':'revision',
+ 'Action':'操作','Yes':'はい','No':'いいえ','Loading audit…':'監査を取得中…',
+ 'Load legacy Pawprints preview':'旧 Pawprints プレビューを取得',
+ 'Search fetched preview':'取得済みプレビューを検索','Preview status':'プレビューのステータス','All statuses':'すべてのステータス',
+ 'Filter fetched preview metadata only. Refresh explicitly to fetch again.':'取得済みプレビューのメタデータのみを絞り込みます。再取得には取得ボタンを押してください。',
+ 'Showing {count} of {total} fetched preview records.':'取得済みプレビュー {total} 件中 {count} 件を表示。',
+ 'No fetched preview records match these filters.':'この条件に一致する取得済みプレビューの記録はありません。',
+ 'Global, unscoped Pawprints preview, at most 100 records. Separate from durable DB audit.':'DB に紐付かないグローバル Pawprints プレビュー、最大100件です。永続 DB 監査とは別です。',
+ 'Pawprints preview unavailable. Durable audit is unchanged.':'Pawprints プレビューは利用できません。永続監査への影響はありません。',
+ 'Preview available · limit 100 · truncated: Yes':'プレビュー利用可能 · 上限100件 · 切り詰め: はい',
+ 'Preview available · limit 100 · truncated: No':'プレビュー利用可能 · 上限100件 · 切り詰め: いいえ',
+ 'Coverage: saved source metadata only.':'対象範囲: 記録元に保存済みのメタデータのみ。',
+ 'Enter valid UTC dates and a page size from 1 to 100.':'有効な UTC 日時と1〜100の取得件数を入力してください。'
+});
+for(const key of Object.keys(i18n.ja))if(!(key in i18n.en))i18n.en[key]=key;
+const dbAuditFields=['id','source','source_id','action','actor','database_id','schema_id','warehouse_id','saved_role','state','created_at','updated_at','finished_at','revision','committed','has_cleanup_error'];
+const dbAuditTelemetryFields=['event_id','timestamp','agent_id','action_type','target_system','status','trace_id','duration_ms'];
+const dbAuditContextFields=['scope','principal_id','selected_role','database_id','binding_revision','generation_id','grant_revision','platform_admin'];
+const dbAuditScalar=v=>typeof v==='string'||typeof v==='number'||typeof v==='boolean';
+function dbAuditTime(value){if(value==null||value==='')return null;const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString():null;}
+function dbAuditEvent(event){
+ if(!event||typeof event.id!=='string'||!event.id||typeof event.source!=='string')throw Error('AUDIT_RESPONSE');
+ const clean=Object.fromEntries(dbAuditFields.map(key=>[key,dbAuditScalar(event[key])?event[key]:null]));
+ // Copy only the frozen relation DTO; IDs never become URLs or content routes.
+ clean.links=(Array.isArray(event.links)?event.links:[]).filter(link=>link&&
+  ['relation','source','source_id'].every(key=>typeof link[key]==='string')&&
+  (link.event_id===null||typeof link.event_id==='string'&&!!link.event_id)
+ ).map(link=>Object.fromEntries(['relation','source','source_id','event_id'].map(key=>[key,link[key]])));
+ return clean;
+}
+function dbAuditStamp(){return JSON.stringify([dbPrincipal,dbEpoch,currentRole,dbMaximumRole,dbAuthorizationVersion,dbRoleVersion(dbAudit.role),dbAdmin.platform,dbAudit.epoch,dbAudit.scope,dbAudit.role,dbAudit.database]);}
+function dbAuditPurge(){
+ ++dbAudit.epoch;++dbAudit.list;++dbAudit.selection;++dbAudit.detailRequest;
+ dbAudit.preview=null;dbAudit.previewStamp=null;
+ dbAudit.items=[];dbAudit.selected='';dbAudit.detail=null;dbAudit.applied=null;dbAudit.cursors=[];dbAudit.cursor='';dbAudit.next=null;dbAudit.proof=null;dbAudit.capabilities=null;
+ if(dbAudit.url){URL.revokeObjectURL(dbAudit.url);dbAudit.url=null;}
+ if(dbAudit.installed){$('db-audit-preview-search').value='';dbAuditSelectOptions('db-audit-preview-status',[],'','All statuses');$('db-audit-rows').replaceChildren();$('db-audit-detail').replaceChildren();$('db-audit-preview').replaceChildren();ui($('db-audit-context'),'Search to load saved metadata.');ui($('db-audit-status'),'Search to load saved metadata.');dbAuditChoices([]);}
+}
+function dbAuditReason(){
+ if(!dbRoleWithinHeader(dbAudit.role))return 'Choose a currently available database and permitted reference role.';
+ if(dbAudit.scope==='platform')return dbAudit.role==='admin'&&currentRole==='admin'&&dbMaximumRole==='admin'&&dbAdmin.platform?'':'Platform management requires current platform authority and the selected admin role.';
+ if(dbAudit.scope==='database'&&dbAudit.role!=='admin')return 'DB administration requires the selected admin role.';
+ return '';
+}
+function dbAuditValidate(){
+ if(!dbAudit.installed)return;
+ const p=dbAudit.proof,cached=dbInventories.get(dbAudit.role)?.items,d=cached?.find(d=>d.id===dbAudit.database);
+ if(dbAuditReason()||p&&cached&&p.scope!=='platform'&&(!d||dbAuditBinding(d)!==p.binding))dbAuditPurge();
+ else dbAuditChoices(p&&dbInventoryCurrent(p.items)?p.items:[]);
+}
+const dbAuditBinding=d=>JSON.stringify([d?.id,d?.state,d?.binding_revision,d?.generation_id,d?.grant_revision??null,d?.allowed_roles]);
+function dbAuditPaging(){
+ $('db-audit-previous').disabled=!dbAudit.applied||!dbAudit.cursors.length;
+ $('db-audit-next').disabled=!dbAudit.applied||!dbAudit.next;
+ const telemetry=$('db-audit-telemetry');telemetry.hidden=dbAudit.scope!=='platform';
+ telemetry.disabled=!dbAuditTelemetryAllowed();
+ $('db-audit-preview-controls').hidden=telemetry.disabled;$('db-audit-preview').hidden=telemetry.disabled;
+ const filterDisabled=telemetry.disabled||dbAudit.preview?.availability!=='available';
+ $('db-audit-preview-search').disabled=filterDisabled;$('db-audit-preview-status').disabled=filterDisabled;
+}
+function dbAuditSelectOptions(id,items,value,placeholder){
+ const signature=JSON.stringify([items,placeholder,items.some(item=>item.value===value)?null:value]),select=$(id);
+ if(select.dataset.auditChoices===signature){select.value=value||'';return;}
+ dbSelectOptions(id,items,value,placeholder);select.dataset.auditChoices=signature;
+ // Bind the actual Option nodes so language changes preserve selection and focus.
+ const options=$(id).options;ui(options[0],placeholder);
+ items.forEach((item,i)=>{if(item.labelKey)ui(options[i+1],item.labelKey);});
+}
+function dbAuditChoices(items=[]){
+ // Reference context follows the ceiling without changing worksheet ownership.
+ if(!dbRoleWithinHeader(dbAudit.role))dbAudit.role=[currentRole,'bi_viewer','data_engineer','admin'].find(dbRoleWithinHeader)||'';
+ const scopes=dbAudit.capabilities?.scopes;
+ if(dbAudit.scope==='database'&&dbAudit.role!=='admin'||dbAudit.scope==='platform'&&
+  !(dbAudit.role==='admin'&&currentRole==='admin'&&dbMaximumRole==='admin'&&dbAdmin.platform)||
+  scopes&&!scopes.includes(dbAudit.scope))dbAudit.scope='self';
+ const choices=[['self','My DB records'],['database','DB administration'],['platform','Platform management']];
+ dbAuditSelectOptions('db-audit-scope',choices.map(([value,label])=>({value,label,labelKey:label,disabled:value==='database'&&!(dbAudit.role==='admin'&&dbRoleWithinHeader('admin')&&scopes?.includes('database'))||value==='platform'&&!(dbAudit.role==='admin'&&currentRole==='admin'&&dbMaximumRole==='admin'&&dbAdmin.platform&&dbAudit.capabilities?.scopes?.includes('platform'))})),dbAudit.scope,'Scope');
+ dbAuditSelectOptions('db-audit-role',['bi_viewer','data_engineer','admin'].map(value=>({value,label:value,disabled:!dbRoleWithinHeader(value)})),dbAudit.role,'Reference role');
+ dbAuditSelectOptions('db-audit-database',items.filter(d=>d.state==='READY'&&d.allowed_roles?.includes(dbAudit.role)).map(d=>({value:d.id,label:d.display_name+' · '+d.id})),dbAudit.database,'Choose database');
+ $('db-audit-database').disabled=dbAudit.scope==='platform';dbAuditPaging();
+}
+async function dbAuditAuthorize(stamp,current=()=>stamp===dbAuditStamp(),updateChoices=false){
+ if(!current())return null;
+ if(dbAuditReason())throw Error('AUDIT_AUTH');
+ const role=dbAudit.role,scope=dbAudit.scope,database=dbAudit.database;
+ const items=await dbReadInventory(role,current);
+ if(!current()||!dbInventoryCurrent(items))return null;
+ if(updateChoices)dbAuditChoices(items);
+ const d=items.find(d=>d.id===database);
+ if(scope!=='platform'&&(!d||d.state!=='READY'||!d.allowed_roles?.includes(role)))throw Object.assign(Error('AUDIT_AUTH'),{auditChoices:updateChoices?items:null});
+ const capabilities=await dbAPI('/api/v1/audit/capabilities',role);
+ if(!current()||!dbInventoryCurrent(items))return null;
+ if(!Array.isArray(capabilities.scopes)||!capabilities.scopes.includes(scope)||scope==='platform'&&(!dbAdmin.platform||dbAuditReason()))throw Error('AUDIT_AUTH');
+ return {scope,database,role,items,d,binding:dbAuditBinding(d),capabilities};
+}
+function dbAuditContext(context,proof){
+ if(!context||context.scope!==proof.scope||context.selected_role!==proof.role||context.principal_id!==JSON.parse(dbPrincipal)[0]||typeof context.platform_admin!=='boolean')throw Error('AUDIT_CONTEXT');
+ const expected=proof.scope==='platform'?null:proof.database;
+ if(context.database_id!==expected)throw Error('AUDIT_CONTEXT');
+ for(const key of ['binding_revision','generation_id','grant_revision'])if(!(key in context)||(context[key]??null)!==(proof.scope==='platform'?null:proof.d?.[key]??null))throw Error('AUDIT_CONTEXT');
+ if(proof.scope==='platform'&&!context.platform_admin)throw Error('AUDIT_CONTEXT');
+}
+async function dbAuditResponse(path,stamp,current){
+ const before=await dbAuditAuthorize(stamp,current);if(!before||!current())return null;
+ if(dbAudit.proof&&dbAudit.proof.binding!==before.binding)throw Error('AUDIT_CONTEXT');
+ const data=await dbAPI(path,dbAudit.role);if(!current())return null;
+ const after=await dbAuditAuthorize(stamp,current);if(!after||!current())return null;
+ if(before.binding!==after.binding)throw Error('AUDIT_CONTEXT');
+ dbAuditContext(data.context,after);
+ dbAudit.proof=after;dbAudit.capabilities=after.capabilities;
+ return data;
+}
+function dbAuditFailure(error,current){
+ if(!current())return;
+ dbAuditPurge();$('db-audit-status').setAttribute('role','alert');ui($('db-audit-status'),error.code==='STALE_CURSOR'?'Cursor expired. Search again.':'Audit unavailable. Check the reference role and database, then search again.');
+}
+function dbAuditFilters(){
+ const values={};for(const key of ['source','state','search','from','to','limit'])values[key]=$('db-audit-'+key).value;
+ dbAudit.draft={...values};
+ if(!/^\d+$/.test(values.limit)||Number(values.limit)<1||Number(values.limit)>100)throw Error('AUDIT_INPUT');
+ values.limit=Number(values.limit);
+ for(const key of ['from','to'])if(values[key]){
+  // datetime-local is deliberately interpreted as UTC, independent of host timezone.
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(values[key])||!Number.isFinite(Date.parse(values[key]+'Z')))throw Error('AUDIT_INPUT');
+  const utc=new Date(values[key]+'Z').toISOString();if(utc.slice(0,values[key].length)!==values[key])throw Error('AUDIT_INPUT');values[key]=utc;
+ }
+ if(values.from&&values.to&&values.from>values.to)throw Error('AUDIT_INPUT');
+ return values;
+}
+function dbAuditParams(filters={},cursor=''){
+ const p=new URLSearchParams({scope:dbAudit.scope});if(dbAudit.scope!=='platform')p.set('database_id',dbAudit.database);
+ for(const [key,value] of Object.entries(filters))if(value!==''&&value!=null)p.set(key,String(value));
+ if(cursor)p.set('cursor',cursor);return p.toString();
+}
+async function dbAuditSearch(direction='search'){
+ let filters;try{filters=direction==='search'?dbAuditFilters():dbAudit.applied;if(!filters)return;}catch{ui($('db-audit-status'),'Enter valid UTC dates and a page size from 1 to 100.');return;}
+ const cursor=direction==='next'?dbAudit.next:direction==='previous'?dbAudit.cursors.at(-1):'';
+ if(direction!=='search'&&(!cursor||direction==='next'&&!dbAudit.cursor))return;
+ const stack=direction==='next'?[...dbAudit.cursors,dbAudit.cursor]:direction==='previous'?dbAudit.cursors.slice(0,-1):[];
+ const reason=dbAuditReason();if(reason){dbAuditPurge();ui($('db-audit-status'),reason);return;}
+ const serial=++dbAudit.list,stamp=dbAuditStamp(),current=()=>serial===dbAudit.list&&stamp===dbAuditStamp();
+ $('db-audit-status').setAttribute('role','status');
+ ui($('db-audit-status'),'Loading audit…');
+ try{
+  const data=await dbAuditResponse('/api/v1/audit/events?'+dbAuditParams(filters,cursor),stamp,current);if(!data||!current())return;
+  if(typeof data.page_cursor!=='string'||!data.page_cursor||!Array.isArray(data.items)||data.items.length>filters.limit||data.next_cursor!=null&&typeof data.next_cursor!=='string')throw Error('AUDIT_RESPONSE');
+  const items=data.items.map(dbAuditEvent);
+  dbAudit.items=items;dbAudit.applied={...filters};dbAudit.cursor=data.page_cursor;dbAudit.cursors=stack;dbAudit.next=data.next_cursor||null;
+  const source=$('db-audit-source'),value=source.value;
+  dbAuditSelectOptions('db-audit-source',(dbAudit.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value})),value,'All sources');
+  ui($('db-audit-context'),'Applied scope: {scope} · role: {role} · DB: {database} · filters: {filters}',{scope:t({self:'My DB records',database:'DB administration',platform:'Platform management'}[dbAudit.scope]),role:dbAudit.role,database:dbAudit.scope==='platform'?t('Platform management'):dbAudit.database,filters:JSON.stringify(filters)});
+  dbAuditRenderRows();dbAuditPaging();
+  let pending=true;try{pending=JSON.stringify(dbAuditFilters())!==JSON.stringify(filters);}catch{}
+  ui($('db-audit-status'),pending?'Filters pending. Search to apply.':items.length?'Coverage: saved source metadata only.':'No saved metadata matches these filters.');
+ }catch(error){dbAuditFailure(error,current);}
+}
+function dbAuditValue(node,value){if(value==null||value==='')ui(node,'Not recorded');else if(typeof value==='boolean')ui(node,value?'Yes':'No');else if(typeof value==='string'&&['UNKNOWN','QUEUED','RUNNING','FINISHED','FAILED','CANCELED'].includes(value))ui(node,value);else node.textContent=String(value);}
+function dbAuditRenderRows(){
+ const host=$('db-audit-rows');host.replaceChildren();
+ const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');
+ for(const key of ['Time UTC','Source / action','Target IDs','Actor','State','Details']){const th=document.createElement('th');th.scope='col';ui(th,key);hr.append(th);}head.append(hr);table.append(head,body);host.append(table);
+ for(const event of dbAudit.items){const row=document.createElement('tr');
+  for(const value of [dbAuditTime(event.created_at),[event.source,event.action].filter(Boolean).join(' / '),[event.database_id,event.schema_id,event.warehouse_id,event.source_id].filter(Boolean).join(' · '),event.actor,event.state]){const cell=document.createElement('td');dbAuditValue(cell,value);row.append(cell);}
+  const cell=document.createElement('td');dbAdminButton(cell,'','Details',()=>dbAuditDetail(event.id));row.append(cell);body.append(row);
+ }
+}
+async function dbAuditDetail(id){
+ dbAudit.selected=id;const selection=++dbAudit.selection,serial=++dbAudit.detailRequest,stamp=dbAuditStamp();
+ dbAudit.detail=null;$('db-audit-detail').replaceChildren();
+ const current=()=>stamp===dbAuditStamp()&&selection===dbAudit.selection&&serial===dbAudit.detailRequest&&id===dbAudit.selected;
+ try{const data=await dbAuditResponse('/api/v1/audit/events/'+encodeURIComponent(id)+'?'+dbAuditParams(),stamp,current);if(!data||!current())return;
+  const event=dbAuditEvent(data.event);if(event.id!==id)throw Error('AUDIT_RESPONSE');dbAudit.detail=event;dbAuditRenderDetail(event);
+ }catch(error){dbAuditFailure(error,current);}
+}
+function dbAuditRenderDetail(event){
+ const host=$('db-audit-detail');host.replaceChildren();const list=document.createElement('dl');host.append(list);
+ const labels=['Event ID','Source','Source ID','Action','Actor','Database','Schema','Warehouse','Saved role','State','Created UTC','Updated UTC','Finished UTC','Revision','Committed','Cleanup failure'];
+ dbAuditFields.forEach((key,i)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,labels[i]);dbAuditValue(dd,key.endsWith('_at')?dbAuditTime(event[key]):event[key]);list.append(dt,dd);});
+ const dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,'Related IDs');list.append(dt,dd);
+ const stamp=dbAuditStamp(),selection=dbAudit.selection,serial=dbAudit.detailRequest;
+ if(!event.links.length)dbAuditValue(dd,null);
+ for(const link of event.links){
+  const row=document.createElement('p');row.textContent=[link.relation,link.source,link.source_id].join(' · ');dd.append(row);
+  if(link.event_id)dbAdminButton(row,'','View linked audit metadata',()=>{
+   if(stamp!==dbAuditStamp()||selection!==dbAudit.selection||serial!==dbAudit.detailRequest||dbAudit.detail!==event)return;
+   return dbAuditDetail(link.event_id);
+  });
+ }
+ dbAdminButton(host,'db-audit-download','Download metadata JSON',dbAuditDownload);
+}
+async function dbAuditDownload(){
+ const id=dbAudit.selected,selection=dbAudit.selection,serial=dbAudit.detailRequest,stamp=dbAuditStamp();if(!id||!dbAudit.detail)return;
+ const current=()=>stamp===dbAuditStamp()&&selection===dbAudit.selection&&serial===dbAudit.detailRequest&&id===dbAudit.selected;
+ try{const data=await dbAuditResponse('/api/v1/audit/events/'+encodeURIComponent(id)+'/download?'+dbAuditParams(),stamp,current);if(!data||!current())return;
+  const event=dbAuditEvent(data.event);if(event.id!==id)throw Error('AUDIT_RESPONSE');
+  const context=Object.fromEntries(dbAuditContextFields.map(key=>[key,data.context[key]]));
+  const url=URL.createObjectURL(new Blob([JSON.stringify({event,context},null,2)],{type:'application/json'}));dbAudit.url=url;
+  try{const a=document.createElement('a');a.href=url;a.download='audit-metadata.json';a.click();}finally{URL.revokeObjectURL(url);if(dbAudit.url===url)dbAudit.url=null;}
+ }catch(error){dbAuditFailure(error,current);}
+}
+function dbAuditTelemetryAllowed(){return dbAudit.scope==='platform'&&!dbAuditReason()&&!!dbAudit.capabilities?.scopes?.includes('platform');}
+function dbAuditRenderTelemetry(){
+ const host=$('db-audit-preview'),data=dbAudit.preview;host.replaceChildren();
+ if(!dbAuditTelemetryAllowed()||dbAudit.previewStamp!==dbAuditStamp()||!data)return;
+ dbAdminNode('p','',host,'Global, unscoped Pawprints preview, at most 100 records. Separate from durable DB audit.');
+ const status=dbAdminNode('p','',host);
+ if(data.availability!=='available'){ui(status,'Pawprints preview unavailable. Durable audit is unchanged.');return;}
+ ui(status,data.truncated?'Preview available · limit 100 · truncated: Yes':'Preview available · limit 100 · truncated: No');
+ const search=$('db-audit-preview-search').value.toLowerCase(),selected=$('db-audit-preview-status').value;
+ const items=data.items.filter(item=>(!selected||item.status===selected)&&
+  dbAuditTelemetryFields.map(key=>item[key]==null?'':String(item[key])).join(' ').toLowerCase().includes(search));
+ ui(dbAdminNode('p','',host),'Showing {count} of {total} fetched preview records.',{count:items.length,total:data.items.length});
+ if(!items.length)dbAdminNode('p','',host,'No fetched preview records match these filters.');
+ const rows=dbAdminNode('div','db-audit-preview-rows',host);
+ for(const item of items){const row=dbAdminNode('p','',rows);row.textContent=dbAuditTelemetryFields.map(key=>item[key]==null?t('Not recorded'):String(item[key])).join(' · ');}
+}
+async function dbAuditTelemetry(){
+ const stamp=dbAuditStamp(),serial=++dbAudit.auth,current=()=>stamp===dbAuditStamp()&&serial===dbAudit.auth;
+ if(!dbAuditTelemetryAllowed())return;
+ let data;
+ try{if(!await dbAuditAuthorize(stamp,current)||!current())return;}
+ catch(error){dbAuditFailure(error,current);return;}
+ try{data=await dbAPI('/api/v1/audit/telemetry',dbAudit.role);if(!current())return;}
+ catch(error){if([401,403].includes(error.status)){dbAuditFailure(error,current);return;}if(!current())return;data={availability:'unavailable'};}
+ try{if(!await dbAuditAuthorize(stamp,current)||!current())return;}
+ catch(error){dbAuditFailure(error,current);return;}
+ // Discard every non-DTO field before storing, rendering or searching the preview.
+ dbAudit.preview={availability:data.availability,truncated:!!data.truncated,items:data.availability==='available'&&Array.isArray(data.items)?
+  data.items.slice(0,100).map(item=>Object.fromEntries(dbAuditTelemetryFields.map(key=>[key,dbAuditScalar(item?.[key])?item[key]:null]))):[]};
+ dbAudit.previewStamp=stamp;
+ const selected=$('db-audit-preview-status').value;
+ dbAuditSelectOptions('db-audit-preview-status',[...new Set(dbAudit.preview.items.map(item=>item.status).filter(value=>typeof value==='string'&&value))].sort().map(value=>({value,label:value})),selected,'All statuses');
+ dbAuditPaging();dbAuditRenderTelemetry();
+}
+async function dbAuditRefreshAuthorization(){
+ if(!dbAudit.installed)return;
+ const stamp=dbAuditStamp();try{const p=await dbAuditAuthorize(stamp,undefined,true);if(!p||stamp!==dbAuditStamp())return;
+  if(dbAudit.proof&&dbAudit.proof.binding!==p.binding){dbAuditPurge();return;}
+  dbAudit.proof=p;dbAudit.capabilities=p.capabilities;dbAuditChoices(p.items);
+ }catch(error){if(stamp===dbAuditStamp()){
+  const items=error.auditChoices&&dbInventoryCurrent(error.auditChoices)?error.auditChoices:[];
+  dbAudit.scope='self';dbAuditPurge();dbAuditChoices(items);
+ }}
+}
+async function dbAuditOpen(){
+ const reason=dbAuditReason();if(reason){dbAuditPurge();ui($('db-audit-status'),reason);return;}
+ const stamp=dbAuditStamp();try{const p=await dbAuditAuthorize(stamp,undefined,true);if(!p||stamp!==dbAuditStamp())return;
+  dbAudit.proof=p;dbAudit.capabilities=p.capabilities;dbAuditChoices(p.items);
+  dbAuditSelectOptions('db-audit-source',(p.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value})),$('db-audit-source').value,'All sources');
+ }catch(error){if(stamp===dbAuditStamp()){
+  // A missing selected DB does not hide other DBs from this fresh inventory.
+  const items=error.auditChoices&&dbInventoryCurrent(error.auditChoices)?error.auditChoices:[];
+  dbAuditPurge();dbAuditChoices(items);ui($('db-audit-status'),'Audit unavailable. Check the reference role and database, then search again.');
+ }}
+}
+function dbAuditInstall(){
+ if(dbAudit.installed)return;dbAudit.installed=true;
+ const w=dbCurrent();dbAudit.role=w?.selected_role||currentRole;dbAudit.database=w?.database_id||'';
+ const host=$('pawprints');host.replaceChildren();const panel=dbAdminNode('div','db-audit-panel',host);panel.className='panel';
+ dbAdminNode('h2','',panel,'Saved metadata audit');
+ dbAdminNode('p','database-pawprints-notice',panel,'Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.');
+ dbAdminNode('p','',panel,'Metadata only. SQL, prompts, results, definitions and raw payloads are excluded. Existing retention is unchanged. Related IDs do not grant content access.');
+ dbAdminNode('p','',panel,'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters.');
+ const form=dbAdminNode('form','db-audit-form',panel);form.className='toolbar';
+ for(const [key,label,tag] of [['scope','Scope','select'],['role','Reference role','select'],['database','Database','select'],['from','Start UTC','input'],['to','End UTC','input'],['source','Source','select'],['state','State','input'],['search','Search','input'],['limit','Page size','input']]){
+  const field=dbAdminNode('div','',form);field.className='field';const l=dbAdminNode('label','',field,label);l.htmlFor='db-audit-'+key;
+  const node=dbAdminNode(tag,'db-audit-'+key,field);if(key==='from'||key==='to')node.type='datetime-local';
+  if(key==='limit'){node.type='number';node.min=1;node.max=100;node.value='50';}
+  if(['scope','role','database'].includes(key))node.onchange=async()=>{
+   const value=node.value;dbAuditPurge();dbAudit[key==='database'?'database':key]=value;dbAuditChoices();await dbAuditOpen();
+  };else node.oninput=()=>{dbAudit.draft[key]=node.value;ui($('db-audit-status'),'Filters pending. Search to apply.');};
+ }
+ const search=dbAdminButton(form,'db-audit-submit','Search / Refresh',()=>dbAuditSearch());search.type='submit';search.onclick=undefined;
+ form.onsubmit=e=>{e.preventDefault();return dbAuditSearch();};
+ const status=dbAdminNode('p','db-audit-status',panel,'Search to load saved metadata.');status.setAttribute('role','status');
+ dbAdminNode('p','db-audit-context',panel,'Search to load saved metadata.');
+ const rows=dbAdminNode('div','db-audit-rows',panel);rows.className='table-wrap';
+ const paging=dbAdminNode('div','',panel);paging.className='toolbar';
+ dbAdminButton(paging,'db-audit-previous','Previous page',()=>dbAuditSearch('previous'));dbAdminButton(paging,'db-audit-next','Next page',()=>dbAuditSearch('next'));
+ dbAdminNode('div','db-audit-detail',panel);
+ dbAdminButton(panel,'db-audit-telemetry','Load legacy Pawprints preview',dbAuditTelemetry);
+ const previewControls=dbAdminNode('div','db-audit-preview-controls',panel);
+ dbAdminNode('p','',previewControls,'Filter fetched preview metadata only. Refresh explicitly to fetch again.');
+ const previewFilters=dbAdminNode('div','',previewControls);previewFilters.className='toolbar';
+ for(const [id,label,tag] of [['db-audit-preview-search','Search fetched preview','input'],['db-audit-preview-status','Preview status','select']]){
+  const field=dbAdminNode('div','',previewFilters);field.className='field';const caption=dbAdminNode('label','',field,label);caption.htmlFor=id;
+  const control=dbAdminNode(tag,id,field);if(tag==='input')control.type='search';
+  control[tag==='input'?'oninput':'onchange']=dbAuditRenderTelemetry;
+ }
+ dbAuditSelectOptions('db-audit-preview-status',[],'','All statuses');
+ const preview=dbAdminNode('div','db-audit-preview',panel);preview.setAttribute('role','status');dbAuditChoices();
+ dbAuditSelectOptions('db-audit-source',[],'','All sources');
+}
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }
 setLanguage(['en','ja'].includes(initialLanguage) ? initialLanguage : navigator.language?.toLowerCase().startsWith('ja') ? 'ja' : 'en');

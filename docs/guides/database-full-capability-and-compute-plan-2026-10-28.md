@@ -80,7 +80,7 @@ DB-P6-2〜6は契約と読取り実装を並行できる。DB-P6-5の管理操�
 
 ### DB-P6-0 機能契約と画面の正確化
 
-2026-10-29：[89項目の機能一覧と利用条件](database-capability-matrix-2026-10-29.md)を固定し、画面案内・利用条件の表示の実装と技術検証を完了した。[実装と検証記録](database-p6-0-implementation-2026-10-29.md)を参照。次の実装はDB-P6-1とする。
+2026-10-29：[89項目の機能一覧と利用条件](database-capability-matrix-2026-10-29.md)を固定し、画面案内・利用条件の表示の実装と技術検証を完了した。[実装と検証記録](database-p6-0-implementation-2026-10-29.md)を参照。後続DB-P6-1の監査対応を機能表へ反映した。
 
 全ナビゲーション、Copilot、Worksheet出力、探索操作、AI設定、管理操作を棚卸しし、機能別に「DB／platform scope、許可role、入力、出力、実行owner、監査、回復、対応入口」を一表へ固定する。platform adminとDB内のadminを分け、既存の例外権限を各APIで再確認する。
 
@@ -91,6 +91,8 @@ DB-P6-2〜6は契約と読取り実装を並行できる。DB-P6-5の管理操�
 **受入**：全表示操作に対応行がある。直リンク・reload・role切替・DB切替・失効・遅延応答で利用可否が一致する。既存WAP／Martへ実際に到達でき、未対応APIは明示拒否を維持する。
 
 ### DB-P6-1 Database別の監査ログ
+
+2026-10-29：[実装契約](database-p6-1-contract-2026-10-29.md)に基づくAPI／CLI／Workbenchを実装し、[技術受入を完了](database-p6-1-implementation-2026-10-29.md)した。公開するのは保存済みmetadataであり、全遷移の再現やSQL本文の監査コピーではない。Pawprintsは独立したP専用previewとして扱い、現環境の`TELEMETRY_UNAVAILABLE`を耐久監査の失敗と混同しない。次はDB-P6-2とする。
 
 既存control storeのquery／operation／Job／WAP／作成／権限変更を正本とし、Database・actor・保存role・実効role・実行先・版・時刻・状態・関連IDを辿れる監査APIと画面を作る。PawprintsはAI／運用テレメトリとして関連付け、実操作の成否を置き換えない。
 
@@ -252,7 +254,7 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 
-次の着手は**DB-P6-0**である。成果物は全操作のcapability表、権限とscope、現行の利用可能操作が分かる画面、起動／SQL／DB作成の性能baselineとする。続けてDB-P6-1を実装し、その契約の上で読取りcompute、dbt先行実証、読取りBearsを並行する。
+DB-P6-0の機能棚卸し・表示契約と、DB-P6-1の保存metadata監査は技術受入済みである。次の着手は**DB-P6-2**の共有Warehouse休止・自動復帰とする。その契約の上で読取りcompute、dbt先行実証、読取りBearsを並行する。M1の全必須行の対応と本人受入は別に残す。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

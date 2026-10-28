@@ -20,7 +20,7 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 最優先のDB-P6は変換・AI・監査・ガバナンスと共有Warehouseの自動休止／復帰を通常導線へ統合し、技術受入と所有者受入でM1を判定する。
 DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse、DB-P9は外部S3とRoutine／Taskを扱う。LOCAL／XS／Sは現状同一computeの別名であり、計画を実装完了と扱わない。
 
-2026-10-29、DB-P6-0の[機能一覧89項目](../../guides/database-capability-matrix-2026-10-29.md)と画面案内・利用条件を整合させ、[技術検証を完了](../../guides/database-p6-0-implementation-2026-10-29.md)した。次のunitはDB-P6-1のDB別監査であり、未対応機能の開放やM1の本人受入は別に残す。
+2026-10-29、DB-P6-0の[機能一覧89項目](../../guides/database-capability-matrix-2026-10-29.md)と画面案内・利用条件を整合させ、[技術検証を完了](../../guides/database-p6-0-implementation-2026-10-29.md)した。続けて[DB-P6-1のDB別監査](../../guides/database-p6-1-implementation-2026-10-29.md)を技術受入済みとし、次のunitはDB-P6-2の共有Warehouse休止・自動復帰とする。未対応機能の開放やM1の本人受入は別に残す。
 
 ---
 

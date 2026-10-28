@@ -100,11 +100,11 @@ class Client:
             path = path / ("credential.json" if (path / "credential.json").exists() else "state.json")
         return cls(credential_bytes=path.read_bytes())
 
-    def query(self, sql: str) -> str:
+    def query(self, sql: str, *, timeout: float = 30) -> str:
         request = urllib.request.Request(URL + "/?wait_end_of_query=1", data=sql.encode("utf-8"),
                                          headers={"Authorization": "Basic " + self.auth}, method="POST")
         try:
-            with self.opener.open(request, timeout=30) as response:
+            with self.opener.open(request, timeout=timeout) as response:
                 if response.status != 200 or response.headers.get("X-ClickHouse-Exception-Code"):
                     raise AgentHouseError("local AgentHouse query failed")
                 # urllib handles Content-Length and chunked transfer framing.
@@ -115,11 +115,11 @@ class Client:
         except (urllib.error.URLError, OSError, http.client.HTTPException, UnicodeError) as error:
             raise AgentHouseError("local AgentHouse request failed; verify its runtime") from error
 
-    def rows(self, sql: str) -> list[dict]:
+    def rows(self, sql: str, *, timeout: float | None = None) -> list[dict]:
         """Read a JSONEachRow query, or an explicitly requested JSON response."""
         if "FORMAT" not in sql.upper().split():
             sql = sql.rstrip().rstrip(";") + " FORMAT JSONEachRow"
-        text = self.query(sql)
+        text = self.query(sql) if timeout is None else self.query(sql, timeout=timeout)
         if not text.strip():
             return []
         try:

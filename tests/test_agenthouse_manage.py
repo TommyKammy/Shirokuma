@@ -51,6 +51,25 @@ def clickhouse_reply(body, *, chunked=False, status=200, headers=None):
 
 
 class AgentHouseTests(unittest.TestCase):
+    def test_explicit_preview_timeout_preserves_default_calling_convention(self):
+        client = self.client()
+        with patch.object(client, 'query', return_value='{"n":1}') as query:
+            self.assertEqual(client.rows('SELECT 1 AS n', timeout=3), [{'n': 1}])
+            query.assert_called_once_with('SELECT 1 AS n FORMAT JSONEachRow', timeout=3)
+            query.reset_mock()
+            client.rows('SELECT 1 AS n')
+            query.assert_called_once_with('SELECT 1 AS n FORMAT JSONEachRow')
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.status, response.headers = 200, {}
+        response.read.return_value = b'1'
+        with patch.object(client.opener, 'open', return_value=response) as opened:
+            client.query('SELECT 1', timeout=3)
+            self.assertEqual(opened.call_args.kwargs['timeout'], 3)
+            client.query('SELECT 1')
+            self.assertEqual(opened.call_args.kwargs['timeout'], 30)
+
     def client(self):
         return m.Client(credential_bytes=b'{"password":"saved-secret"}')
 

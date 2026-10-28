@@ -21,7 +21,7 @@ tags: [shirokuma, local, handoff, gates]
 ## Current Phase & Active Gate Status
 
 後続計画は[Databaseコア機能統合とコンピュート拡張](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を参照する。DB作成導線は[本人の条件付き受入](../../guides/database-logical-create-owner-acceptance-2026-10-28.md)に進み、待ち時間改善を継続する。
-2026-10-29、DB-P6-0の[機能契約と画面の正確化](../../guides/database-p6-0-implementation-2026-10-29.md)を技術完了とした。次の着手はDB-P6-1のDB別監査である。M1は共有LOCALでのコア統合・技術受入・所有者受入が条件となる。
+2026-10-29、DB-P6-0の[機能契約と画面の正確化](../../guides/database-p6-0-implementation-2026-10-29.md)、DB-P6-1の[保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)を技術受入済みとした。次の着手はDB-P6-2の共有Warehouse休止・自動復帰である。M1は共有LOCALでの全必須機能の統合・技術受入・所有者受入が条件となる。
 DB-P7〜9は後続計画であり、下表の旧PhaseのCompletedから新Database対応・実サイズ変更・用途別Warehouseの完了を推定しない。
 
 | Phase / WP | Gate Objective | Current Status |
