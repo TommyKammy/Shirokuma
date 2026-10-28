@@ -420,7 +420,7 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
 
     def test_cold_wake_uses_real_full_bind_and_waits_for_two_registered_trino_nodes(self):
         import logical_foundation
-        from test_logical_provider import Harness, PROBE_COMPUTE_SQL, PROBE_IDENTITY_SQL
+        from test_logical_provider import Harness, PROBE_SQL
         for section,key,value in [('storage','admin_credentials_file',dict(access_key='admin',secret_key='admin-secret')),
                 ('storage','issuer_credentials_file',dict(access_key='issuer',secret_key='issuer-secret')),
                 ('polaris','root_credentials_file',dict(client_id='root',client_secret='root-secret')),
@@ -441,8 +441,8 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
             if url.endswith('/v1/statement'):
                 statement = kwargs['data'].decode()
                 statements.append(statement)
-                if statement == PROBE_COMPUTE_SQL and statements.count(PROBE_COMPUTE_SQL) == 1:
-                    return 200,b'{"data":[[true,1]]}'  # Deployments Ready, worker not yet registered.
+                if statement == PROBE_SQL and statements.count(PROBE_SQL) == 1:
+                    return 200,b'{"data":[["logical_provisioner","483",true,1]]}'  # Deployments Ready, worker not yet registered.
             return harness.http(method,url,**kwargs)
         actual._http_transport = http
         full_probe = actual.probe
@@ -460,14 +460,14 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
                 patch.object(w,'touch_activity',side_effect=activity):
             report = w.transition('wake','LOCAL')
         self.assertEqual(report['result'],'noop')
-        self.assertEqual(statements,[PROBE_IDENTITY_SQL,PROBE_COMPUTE_SQL]*2)
+        self.assertEqual(statements,[PROBE_SQL]*2)
         self.assertEqual(readiness,[False,True])
         self.assertEqual(len(harness.children),6)  # Registration fixture + one wake lifetime, never reopened on retry.
         self.assertTrue(all(child.terminated for child in harness.children))
         self.assertTrue(all(argv[-1] == 'read' for argv,_ in harness.commands if 'exec' in argv))
         def still_unready(method,url,**kwargs):
-            if url.endswith('/v1/statement') and kwargs['data'].decode() == PROBE_COMPUTE_SQL:
-                return 200,b'{"data":[[true,1]]}'
+            if url.endswith('/v1/statement') and kwargs['data'].decode() == PROBE_SQL:
+                return 200,b'{"data":[["logical_provisioner","483",true,1]]}'
             return harness.http(method,url,**kwargs)
         actual._http_transport = still_unready
         self.elapsed = 0.0

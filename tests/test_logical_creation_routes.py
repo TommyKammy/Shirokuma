@@ -11,7 +11,7 @@ import control_store
 import runtime_profile
 
 
-class LogicalRouteTests(LogicalFixture):
+class LogicalRouteTests(legacy_routes.NameLookupRouteChecks, LogicalFixture):
     request = legacy_routes.CreationRouteTests.request
 
     def setUp(self):

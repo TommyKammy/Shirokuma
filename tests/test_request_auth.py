@@ -1,5 +1,9 @@
 """P2-2 identity and registry authorization contract (no live backend)."""
 import base64
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+import threading
 from dataclasses import FrozenInstanceError
 from email.message import Message
 import json
@@ -357,3 +361,188 @@ class PrincipalTests(unittest.TestCase):
         for database_id, generation in (('unknown', 'g'), (self.finance, 'wrong'), ('', ''), (None, None)):
             with self.assertRaises(PermissionError):
                 auth.authorize_database(self.principal(), database_id, 'bi_viewer', expected_generation_id=generation)
+
+
+class LogicalDerivationTests(unittest.TestCase):
+    def setUp(self):
+        import runtime_profile as rp
+        from test_logical_runtime import logical_profile
+        self.rp = rp
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        environment = patch.dict(os.environ, {}, clear=True)
+        environment.start(); self.addCleanup(environment.stop)
+        for name in ('_current', '_startup_fingerprint', '_startup_binding', '_startup_identity'):
+            mock = patch.object(rp, name, None)
+            mock.start(); self.addCleanup(mock.stop)
+        for name, value in (('_derivations', OrderedDict()), ('_derivation_secret', None),
+                            ('_derivation_pid', os.getpid())):
+            mock = patch.object(auth, name, value)
+            mock.start(); self.addCleanup(mock.stop)
+        location, profile, _ = logical_profile(self.root)
+        self.accounts = Path(profile['auth_file'])
+        self.expected = auth.password_hash('correct', 'ab' * 16)
+        self.users = {'alice': dict(role='admin', platform_admin=True,
+                                  salt='ab' * 16, password_hash=self.expected)}
+        self.save()
+        os.environ['SHIROKUMA_RUNTIME_PROFILE'] = str(location)
+        self.assertTrue(rp.configure_process())
+
+    def save(self):
+        self.accounts.write_text(json.dumps(self.users))
+        self.accounts.chmod(0o600)
+
+    def headers(self, user='alice', password='correct'):
+        headers = Message()
+        headers['Authorization'] = 'Basic ' + base64.b64encode((user + ':' + password).encode()).decode()
+        return headers
+
+    def principal(self, user='alice', password='correct'):
+        return auth.authenticate_principal(self.headers(user, password))
+
+    def test_warm_hit_reads_accounts_and_compares_current_hash_and_privileges(self):
+        self.assertIsNone(auth._derivation_secret)
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            first = self.principal()
+            self.users['alice'].update(platform_admin=False, role='bi_viewer')
+            self.save()
+            with patch.object(auth.hmac, 'compare_digest', wraps=auth.hmac.compare_digest) as compare:
+                second = self.principal()
+                compare.assert_called_once_with(self.expected, self.users['alice']['password_hash'])
+            self.assertEqual(derive.call_count, 1)
+            self.assertIsNot(first, second)
+            self.assertEqual((second.maximum_role, second.platform_admin), ('bi_viewer', False))
+            self.users['bob'] = dict(self.users['alice'])
+            del self.users['alice']
+            self.save()
+            with self.assertRaises(auth.AuthenticationError):
+                self.principal()
+            self.assertEqual(derive.call_count, 1)
+
+    def test_password_salt_and_expected_hash_changes_never_reuse(self):
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            self.principal(); self.principal()
+            for password, salt in (('new', 'ab' * 16), ('new', 'cd' * 16)):
+                self.users['alice'].update(salt=salt, password_hash=auth.hashlib.pbkdf2_hmac(
+                                              'sha256', password.encode(), bytes.fromhex(salt), auth.ITERATIONS).hex())
+                self.save()
+                with self.assertRaises(auth.AuthenticationError):
+                    self.principal()
+                self.principal(password=password); self.principal(password=password)
+            self.assertEqual(derive.call_count, 5)
+            self.users['alice']['password_hash'] = '00' * 32
+            self.save()
+            for _ in range(2):
+                with self.assertRaises(auth.AuthenticationError):
+                    self.principal(password='new')
+            self.assertEqual(derive.call_count, 7)
+            self.assertEqual(len(auth._derivations), 3)
+
+    def test_disabled_accounts_keep_basic_policy_but_bypass_memo(self):
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            self.principal()
+            for field in ('disabled', 'enabled'):
+                self.users['alice'][field] = field == 'disabled'
+                self.save()
+                self.principal(); self.principal()
+                self.users['alice'].pop(field)
+            self.assertEqual(derive.call_count, 5)
+            self.assertEqual(len(auth._derivations), 1)
+            self.users['alice']['enabled'] = 'false'
+            self.save()
+            with self.assertRaises(auth.AuthenticationError):
+                self.principal()
+            self.assertEqual(derive.call_count, 5)
+
+    def test_wrong_and_malformed_inputs_after_warm_never_insert(self):
+        self.principal()
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            for _ in range(2):
+                with self.assertRaises(auth.AuthenticationError):
+                    self.principal(password='wrong')
+            duplicate = self.headers()
+            duplicate['Authorization'] = self.headers()['Authorization']
+            bad_utf8 = Message(); bad_utf8['Authorization'] = 'Basic /w=='
+            malformed = Message(); malformed['Authorization'] = 'Basic !!!'
+            bearer = Message(); bearer['Authorization'] = 'Bearer token'
+            for headers in (Message(), duplicate, bad_utf8, malformed, bearer, self.headers('unknown')):
+                with self.assertRaises(auth.AuthenticationError):
+                    auth.authenticate_principal(headers)
+            self.assertEqual(derive.call_count, 2)
+            self.assertEqual(len(auth._derivations), 1)
+
+    def test_username_profile_scope_and_pid_separation(self):
+        self.users['bob'] = dict(self.users['alice']); self.save()
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            self.principal(); self.principal('bob')
+            alternate = self.root / 'other-accounts.json'
+            alternate.write_bytes(self.accounts.read_bytes()); alternate.chmod(0o600)
+            with patch.object(self.rp, '_current', replace(self.rp.current(), auth_file=str(alternate))):
+                self.principal(); self.principal()
+            self.assertEqual(derive.call_count, 3)
+            secret = auth._derivation_secret
+            with patch.object(auth, '_derivation_pid', -1):
+                self.principal()
+                self.assertNotEqual(secret, auth._derivation_secret)
+                self.assertEqual(len(auth._derivations), 1)
+            self.assertEqual(derive.call_count, 4)
+
+    def test_legacy_and_nonlogical_profiles_always_derive(self):
+        self.principal()
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            for _ in range(2):
+                self.assertEqual(auth.authenticate(self.headers()), ('alice', 'admin'))
+            for profile in (None, replace(self.rp.current(), version=1, mode='database')):
+                with patch.object(self.rp, '_current', profile):
+                    self.principal(); self.principal()
+            self.assertEqual(derive.call_count, 6)
+
+    def test_iteration_and_algorithm_changes_do_not_hit(self):
+        self.principal()
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            # Increase the policy; never lower its production work factor.
+            for name, value in (('ITERATIONS', auth.ITERATIONS + 1), ('_PBKDF_ALGORITHM', 'sha512')):
+                with patch.object(auth, name, value):
+                    with self.assertRaises(auth.AuthenticationError):
+                        self.principal()
+            self.assertEqual(derive.call_count, 2)
+            self.assertEqual(len(auth._derivations), 1)
+
+    def test_lru_bound_and_recent_entry_survives_eviction(self):
+        self.users.update({f'user{i}': dict(self.users['alice']) for i in range(256)})
+        self.save()
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            self.principal()
+            for i in range(255):
+                self.principal(f'user{i}')
+            self.principal()  # Refresh alice before inserting the 257th identity.
+            self.principal('user255')
+            self.assertEqual(len(auth._derivations), 256)
+            self.principal()
+            self.assertEqual(derive.call_count, 257)
+            self.principal('user0')
+            self.assertEqual(derive.call_count, 258)
+            self.assertEqual(len(auth._derivations), 256)
+            self.assertTrue(all(isinstance(key, bytes) and len(key) == 32 for key in auth._derivations))
+            self.assertEqual(set(auth._derivations.values()), {self.expected})
+
+    def test_concurrent_misses_and_hits_keep_file_reads_and_pbkdf_outside_lock(self):
+        barrier = threading.Barrier(4)
+        original = auth.password_hash
+        def derive(password, salt):
+            barrier.wait(timeout=10)
+            return original(password, salt)
+        original_read = auth._principal_accounts
+        def read():
+            barrier.wait(timeout=10)
+            return original_read()
+        with patch.object(auth, 'password_hash', side_effect=derive) as computation, \
+                patch.object(auth, '_principal_accounts', side_effect=read) as reads:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                results = list(pool.map(lambda _: self.principal(), range(4)))
+                warmed = list(pool.map(lambda _: self.principal(), range(8)))
+            self.assertEqual(computation.call_count, 4)
+            self.assertEqual(reads.call_count, 12)
+            self.assertTrue(all(p == results[0] for p in results + warmed))
+            self.assertEqual(len(auth._derivations), 1)

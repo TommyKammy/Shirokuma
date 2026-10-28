@@ -4,6 +4,7 @@ SHIROKUMA_AUTH_FILE maps usernames to role, salt and PBKDF2-SHA256 password_hash
 Without configuration these tools retain their trusted loopback single-user mode.
 """
 import base64
+from collections import OrderedDict
 from dataclasses import dataclass
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
@@ -15,11 +16,18 @@ import ipaddress
 import json
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Optional
 
 ROLES = {'bi_viewer': 0, 'data_engineer': 1, 'admin': 2}
 ITERATIONS = 600_000
+_PBKDF_ALGORITHM = 'sha256'
+_DERIVATION_LIMIT = 256
+_derivation_lock = threading.Lock()
+_derivation_pid = os.getpid()
+_derivation_secret = None
+_derivations = OrderedDict()
 
 
 class AuthenticationError(PermissionError):
@@ -34,7 +42,7 @@ def shared_mode():
 
 
 def password_hash(password, salt):
-    return hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), ITERATIONS).hex()
+    return hashlib.pbkdf2_hmac(_PBKDF_ALGORITHM, password.encode(), bytes.fromhex(salt), ITERATIONS).hex()
 
 
 def validate_bind(bind):
@@ -68,7 +76,43 @@ def _accounts(*, principal_mode=False, auth_file=None):
     return users
 
 
-def _verify_basic(headers, users):
+def _verified_derivation(password, username, account, scope):
+    """Reuse computation only; the caller supplied freshly read authority."""
+    global _derivation_pid, _derivation_lock, _derivation_secret, _derivations
+    if _derivation_pid != os.getpid():
+        # A child must neither reuse the parent's secret nor inherit its lock.
+        _derivation_lock = threading.Lock()
+        _derivation_secret = None
+        _derivations = OrderedDict()
+        _derivation_pid = os.getpid()
+    with _derivation_lock:
+        if _derivation_secret is None:
+            _derivation_secret = os.urandom(32)
+        secret = _derivation_secret
+    digest = hmac.new(secret, digestmod='sha256')
+    for value in (scope, username, account['salt'], account['password_hash'],
+                  str(ITERATIONS), _PBKDF_ALGORITHM, password):
+        encoded = value.encode('utf-8')
+        digest.update(len(encoded).to_bytes(8, 'big'))
+        digest.update(encoded)
+    key = digest.digest()
+    with _derivation_lock:
+        derived = _derivations.get(key)
+        if derived is not None:
+            _derivations.move_to_end(key)
+    if derived is None:
+        derived = password_hash(password, account['salt'])
+    if not hmac.compare_digest(derived, account['password_hash']):
+        return False
+    with _derivation_lock:
+        _derivations[key] = derived
+        _derivations.move_to_end(key)
+        if len(_derivations) > _DERIVATION_LIMIT:
+            _derivations.popitem(last=False)
+    return True
+
+
+def _verify_basic(headers, users, *, derivation_scope=None):
     try:
         if hasattr(headers, 'get_all'):
             values = headers.get_all('Authorization', [])
@@ -81,7 +125,14 @@ def _verify_basic(headers, users):
             raise ValueError()
         username, password = base64.b64decode(encoded, validate=True).decode('utf-8').split(':', 1)
         account = users.get(username)
-        if not account or not hmac.compare_digest(password_hash(password, account['salt']), account['password_hash']):
+        if not account:
+            raise ValueError()
+        if (derivation_scope is not None and account.get('enabled', True) is True and
+                account.get('disabled', False) is False):
+            valid = _verified_derivation(password, username, account, derivation_scope)
+        else:
+            valid = hmac.compare_digest(password_hash(password, account['salt']), account['password_hash'])
+        if not valid:
             raise ValueError()
     except (ValueError, UnicodeError, binascii.Error, AttributeError, TypeError):
         raise AuthenticationError('Valid Basic credentials are required') from None
@@ -130,7 +181,12 @@ def _principal_accounts():
 
 
 def authenticate_principal(headers):
-    username, account = _verify_basic(headers, _principal_accounts())
+    users = _principal_accounts()
+    import runtime_profile
+    profile = runtime_profile.current()
+    scope = (profile.auth_file if type(profile) is runtime_profile.RuntimeProfile and
+             profile.mode == 'logical_v1' else None)
+    username, account = _verify_basic(headers, users, derivation_scope=scope)
     return AuthenticatedPrincipal(username, account['role'], account['platform_admin'])
 
 

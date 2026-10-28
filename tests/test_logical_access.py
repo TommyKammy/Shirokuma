@@ -1,4 +1,5 @@
 """Logical production auth/query paths against private temp files and ledger."""
+import base64
 import json
 import os
 from pathlib import Path
@@ -208,3 +209,73 @@ class LogicalAccessTests(unittest.TestCase):
         with wa.accepted(handle):
             with self.assertRaises(PermissionError):
                 self.backend()
+
+
+    def test_warm_basic_rechecks_account_role_grant_and_admission(self):
+        expected = auth.password_hash('correct', '12' * 16)
+        for account in self.accounts.values():
+            account['password_hash'] = expected
+        self.save_accounts()
+        def authenticate(name):
+            return auth.authenticate_principal({'Authorization': 'Basic ' +
+                base64.b64encode((name + ':correct').encode()).decode()})
+        with patch.object(auth, 'password_hash', wraps=auth.password_hash) as derive:
+            alice = authenticate('alice')
+            bob = authenticate('bob')
+            self.assertEqual(authenticate('alice'), alice)
+            self.assertEqual(derive.call_count, 2)
+            frozen = self.context(alice)
+            self.backend(alice)
+            def denied():
+                with self.assertRaises(PermissionError):
+                    auth.authorize_database(alice, 'db', 'bi_viewer', expected_generation_id='foundation')
+                with self.assertRaises(PermissionError):
+                    self.backend(alice)
+                with self.assertRaises(qc.QueryError):
+                    self.context(alice)
+                with store.connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    with self.assertRaises(qc.QueryError):
+                        qc.revalidate_admission(db, alice, frozen)
+                self.backend(bob)
+                self.context(bob)
+            for field, value in (('disabled', True), ('enabled', False)):
+                self.accounts['alice'][field] = value; self.save_accounts()
+                # Basic still validates; current DB authorization owns disable policy.
+                self.assertEqual(authenticate('alice'), alice)
+                denied()
+                del self.accounts['alice'][field]; self.save_accounts()
+            # Establish an authorized engineer identity before reducing its account cap.
+            with store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                identity = dict(db.execute("SELECT * FROM logical_backend_identities WHERE principal_id='alice'").fetchone())
+                candidate = lr.put_identity(db, dict(identity, id='alice-engineer', selected_role='data_engineer',
+                    backend_username='alice-engineer-user', credential_ref='alice-engineer-ref',
+                    state='CANDIDATE', verification_ref=None, revision=1))
+                lr.put_identity(db, dict(candidate, state='ACTIVE', verification_ref='verified', revision=2))
+            self.secret('alice-engineer-ref', dict(username='alice-engineer-user', password='engineer-password'))
+            engineer = qc.resolve_context(alice, 'db', 'marts', 'data_engineer', expected_binding_revision=1)
+            self.backend(alice, 'data_engineer')
+            # A warmed derivation must return the fresh role cap.
+            self.accounts['alice']['role'] = 'bi_viewer'; self.save_accounts()
+            fresh = authenticate('alice')
+            self.assertEqual(fresh.maximum_role, 'bi_viewer')
+            with self.assertRaises(PermissionError):
+                auth.authorize_database(fresh, 'db', 'data_engineer', expected_generation_id='foundation')
+            for principal in (alice, fresh):
+                with self.assertRaises(PermissionError):
+                    self.backend(principal, 'data_engineer')
+                with self.assertRaises(qc.QueryError):
+                    qc.resolve_context(principal, 'db', 'marts', 'data_engineer', expected_binding_revision=1)
+            with store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                with self.assertRaises(qc.QueryError):
+                    qc.revalidate_admission(db, alice, engineer)
+            self.backend(fresh)
+            self.backend(bob)
+            self.accounts['alice']['role'] = 'admin'; self.save_accounts()
+            with store.connect() as db:
+                db.execute("UPDATE grants SET maximum_role='revoked',revision=2 WHERE principal_id='alice'")
+            self.assertEqual(authenticate('alice'), alice)
+            denied()
+            self.assertEqual(derive.call_count, 4)

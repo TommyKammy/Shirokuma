@@ -42,6 +42,7 @@ collectionは既存の`C=/api/v1/admin/database-creations`を利用する。serv
 | GET `C/principals` | 旧契約と同じ有効account・role ceilingだけを返す |
 | POST `C` | 旧Createの入力とIdempotency-Keyを維持。新規202で同一rootの受付ACKとLocation、同key再発見200。1回の作成操作で対象DBの処理を依頼 |
 | GET `C` / `C/{id}` | 現在の対象DB状態、進捗、desired/effective grant、blockerと許可された操作を返す。照会で次段階を実行しない |
+| GET `C/by-name/{sql_catalog}` | 現在の環境・modeで名前を完全一致させ、`C/{id}`と同じ詳細を返す。一覧全件の描画を避け、UNKNOWN／STOPPEDも照会できる。照会で処理を実行しない |
 | POST `C/{id}/withdraw` | 未完了処理への新dispatchを停止。確定済み外部効果・元intentは残し、削除やrollbackとしない |
 | POST `C/{id}/reconcile` | 対象DBの固定observerによる照合を依頼。clientの任意evidence／成功宣言を受け取らない |
 | POST `C/{id}/resume` | `{expected_revision}`と新しいIdempotency-Keyで、結果が全て既知になったBLOCKED rootの未送信処理だけを再依頼。元要求者の現在認可を検査。UNKNOWN／STOPPEDのままでは409 |
@@ -57,6 +58,9 @@ SQL本文、実行先、保存Job等のcontextを別DBへ黙示変更しない�
 `FOUNDATION_NOT_READY`として受理前に停止する。基盤構築やwarehouse起動の数分を通常CREATEへ
 隠さず、別操作として案内する。新規202はREADYを意味せず、HTTP応答だけを性能達成としない。
 公開応答はno-store、秘密値・private path・raw provider error・catalog SQLを含まない。
+名前による照会も現在の認証・選択admin・platform権限を検査する。名前は一度だけURL decodeして
+既存の識別子制約を適用し、queryを受け付けない。未発見は404 `DATABASE_NOT_FOUND`、
+曖昧な結果は409 `DATABASE_NAME_AMBIGUOUS`とし、別環境や履歴ACKで代用しない。
 
 ## 3. 正本・排他・不明結果
 

@@ -26,6 +26,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import yaml
+
 if __package__:
     from . import logical_foundation as foundation
 else:
@@ -166,6 +168,67 @@ def _semantic_policy(value):
                 for op, values in item['Condition'].items()}
     result['Statement'] = unordered(statements)
     return result
+
+
+def _fresh_inline_kubeconfig(path):
+    """Return only an unambiguous single inline view; never retain parsed material."""
+    try:
+        # Inspect standard YAML nodes before construction: duplicate keys, aliases,
+        # merges and YAML/Go scalar interpretation differences stay with kubectl.
+        seen = set()
+        def decode(node):
+            if id(node) in seen:
+                raise ValueError
+            seen.add(id(node))
+            if isinstance(node, yaml.ScalarNode):
+                if node.tag == 'tag:yaml.org,2002:str':
+                    return node.value
+                if node.tag == 'tag:yaml.org,2002:bool' and node.value in ('true', 'false'):
+                    return node.value == 'true'
+            elif isinstance(node, yaml.SequenceNode) and node.tag == 'tag:yaml.org,2002:seq':
+                return [decode(item) for item in node.value]
+            elif isinstance(node, yaml.MappingNode) and node.tag == 'tag:yaml.org,2002:map':
+                result = {}
+                for key, value in node.value:
+                    key = decode(key)
+                    if not isinstance(key, str) or key in result:
+                        raise ValueError
+                    result[key] = decode(value)
+                return result
+            raise ValueError
+
+        view = decode(yaml.compose(Path(path).read_bytes(), Loader=yaml.SafeLoader))
+        if not isinstance(view, dict) or not (
+                {'apiVersion', 'kind', 'current-context', 'contexts', 'clusters', 'users'} <= set(view) <=
+                {'apiVersion', 'kind', 'preferences', 'current-context', 'contexts', 'clusters', 'users'}):
+            return None
+        if view['apiVersion'] != 'v1' or view['kind'] != 'Config' or view.get('preferences', {}) != {}:
+            return None
+        if not isinstance(view['current-context'], str):
+            return None
+        for group, field, required, optional in (
+                ('contexts', 'context', {'cluster', 'user'}, {'namespace'}),
+                ('clusters', 'cluster', {'server', 'certificate-authority-data'}, {'insecure-skip-tls-verify'}),
+                ('users', 'user', {'client-certificate-data', 'client-key-data'}, set())):
+            entries = view[group]
+            if not isinstance(entries, list) or len(entries) != 1:
+                return None
+            entry = entries[0]
+            if not isinstance(entry, dict) or set(entry) != {'name', field} or not isinstance(entry['name'], str):
+                return None
+            values = entry[field]
+            if not isinstance(values, dict) or not required <= set(values) <= required | optional:
+                return None
+            for key, value in values.items():
+                if key == 'insecure-skip-tls-verify':
+                    if type(value) is not bool:
+                        return None
+                elif not isinstance(value, str):
+                    return None
+        return view
+    except (OSError, UnicodeError, yaml.YAMLError, ValueError, TypeError, RecursionError):
+        # Parser diagnostics can include private input; only fallback escapes.
+        return None
 
 
 class _KubeMetadata:
@@ -415,7 +478,9 @@ class Provider:
     def _trust_current(self, epoch):
         c, k = self._config, self._config['kube']
         base = foundation.kube_argv(c)
-        view = self._json(self._raw(base + ['config', 'view', '--minify', '--raw', '--flatten', '-o', 'json']))
+        view = _fresh_inline_kubeconfig(k['kubeconfig']) if self._metadata_transport is not None else None
+        if view is None:
+            view = self._json(self._raw(base + ['config', 'view', '--minify', '--raw', '--flatten', '-o', 'json']))
         # Configure and close share the state lock; metadata HTTP does not.
         with self._lock:
             self._active_epoch(epoch)
@@ -1388,10 +1453,21 @@ class Provider:
         def observe():
             nonlocal positive, denied
             positive = denied = False
-            actual = self._sql('SELECT current_user', engine_identity)
-            _require(actual == [[engine_identity['username']]], 'ENGINE_IDENTITY_MISMATCH')
-            rows = self._sql('SHOW SCHEMAS FROM "'+db['sql_catalog']+'"', engine_identity)
-            positive = self._role_visibility(rows, engine_identity['selected_role'])
+            if self._parallel_reads:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    actual_read = pool.submit(self._sql, 'SELECT current_user', engine_identity)
+                    schemas_read = pool.submit(self._sql, 'SHOW SCHEMAS FROM "'+db['sql_catalog']+'"', engine_identity)
+                    actual = actual_read.result()
+                    rows = schemas_read.result()
+                _require(actual == [[engine_identity['username']]], 'ENGINE_IDENTITY_MISMATCH')
+                positive = self._role_visibility(rows, engine_identity['selected_role'])
+                if not positive:
+                    return False
+            else:
+                actual = self._sql('SELECT current_user', engine_identity)
+                _require(actual == [[engine_identity['username']]], 'ENGINE_IDENTITY_MISMATCH')
+                rows = self._sql('SHOW SCHEMAS FROM "'+db['sql_catalog']+'"', engine_identity)
+                positive = self._role_visibility(rows, engine_identity['selected_role'])
             # Only a real engine denial proves this fixed negative query.
             try:
                 self._sql('SELECT node_id FROM system.runtime.nodes', engine_identity)
@@ -1435,17 +1511,16 @@ class Provider:
 
     def _sql_health(self):
         identity = self._provisioner()
-        rows = self._sql('SELECT current_user, version()', identity)
-        _require(len(rows) == 1 and type(rows[0]) is list and len(rows[0]) == 2 and
-            type(rows[0][0]) is str and rows[0][0] == identity['username'] and
-            type(rows[0][1]) is str and rows[0][1] == '483', 'FOUNDATION_SQL_IDENTITY_MISMATCH')
-        rows = self._sql("SELECT coordinator, count(*) FROM system.runtime.nodes WHERE state='active' GROUP BY coordinator", identity)
+        rows = self._sql("SELECT current_user, version(), coordinator, active_nodes FROM (SELECT coordinator, count(*) AS active_nodes FROM system.runtime.nodes WHERE state='active' GROUP BY coordinator) AS active_compute", identity)
+        _require(bool(rows), 'FOUNDATION_SQL_IDENTITY_MISMATCH')
         registered = {}
         for row in rows:
-            _require(type(row) is list and len(row) == 2 and type(row[0]) is bool and
-                type(row[1]) is int and row[1] > 0 and row[0] not in registered,
-                'FOUNDATION_SQL_COMPUTE_MISMATCH')
-            registered[row[0]] = row[1]
+            _require(type(row) is list and len(row) == 4 and
+                type(row[0]) is str and row[0] == identity['username'] and
+                type(row[1]) is str and row[1] == '483', 'FOUNDATION_SQL_IDENTITY_MISMATCH')
+            _require(type(row[2]) is bool and type(row[3]) is int and row[3] > 0 and
+                row[2] not in registered, 'FOUNDATION_SQL_COMPUTE_MISMATCH')
+            registered[row[2]] = row[3]
         expected = {True: 1}
         if self._config['trino']['workers']:
             expected[False] = self._config['trino']['workers']

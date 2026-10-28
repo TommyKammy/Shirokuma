@@ -10,7 +10,7 @@ import json
 import re
 import uuid
 from contextlib import contextmanager
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import catalog_admin
 import control_store
@@ -534,6 +534,29 @@ def get(principal, role, root_id):
         return _summary(db, _root(db, config, root_id), principal, availability)
 
 
+def _name_id(db, environment_id, mode, name):
+    try:
+        dm.validate_sql_name(name)
+    except (ValueError, TypeError):
+        raise OperationError('INVALID_NAME', 400) from None
+    rows = db.execute('''SELECT root.id FROM db_creations root
+        JOIN databases d ON d.id=root.database_id
+        WHERE root.environment_id=? AND root.creation_mode=? AND d.sql_catalog=? LIMIT 2''',
+        (environment_id, mode, name)).fetchall()
+    if len(rows) != 1:
+        raise OperationError('DATABASE_NAME_AMBIGUOUS' if rows else 'DATABASE_NOT_FOUND',
+                             409 if rows else 404)
+    return rows[0]['id']
+
+
+def get_by_name(principal, role, name):
+    current_admin(principal, role)
+    config = enrollment()
+    with control_store.connect() as db:
+        root_id = _name_id(db, config.environment_id, 'legacy', name)
+    return get(principal, role, root_id)
+
+
 def listing(principal, role, *, limit=50, cursor=None):
     current_admin(principal, role)
     config = enrollment()
@@ -829,6 +852,15 @@ def dispatch(handler, method):
                 else:
                     import database_creation_bridge
                     result = database_creation_bridge.runtime_instance()
+            elif tail.startswith('/by-name/'):
+                encoded = tail[len('/by-name/'):]
+                if re.search(r'%(?![0-9A-Fa-f]{2})', encoded):
+                    raise OperationError('INVALID_NAME', 400)
+                try:
+                    name = unquote(encoded, encoding='utf-8', errors='strict')
+                except UnicodeError:
+                    raise OperationError('INVALID_NAME', 400) from None
+                result = (coordinator.get_by_name if logical else get_by_name)(principal, roles[0], name)
             elif re.fullmatch('/[A-Za-z0-9_-]{1,128}',tail):
                 result = (coordinator.get if logical else get)(principal,roles[0],tail[1:])
             else:

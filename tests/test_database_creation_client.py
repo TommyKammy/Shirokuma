@@ -62,6 +62,13 @@ class Server:
             if tail == '/principals':
                 return Response(dict(principals=[dict(principal_id='alice', maximum_role='admin'),
                                                  dict(principal_id='bob', maximum_role='bi_viewer')]))
+            if tail.startswith('/by-name/') and self.items is not None:
+                matches = [item for item in self.items if item['sql_catalog'] == tail[len('/by-name/'):]]
+                if len(matches) != 1:
+                    code = 'DATABASE_NAME_AMBIGUOUS' if matches else 'DATABASE_NOT_FOUND'
+                    raise HTTPError(request.full_url, 409 if matches else 404, '', {},
+                                    io.BytesIO(json.dumps(dict(error=code)).encode()))
+                return Response(matches[0])
             if not tail:
                 return Response(dict(creations=self.items if self.items is not None else [self.detail], cursor=None))
             return Response(self.detail)
@@ -186,6 +193,102 @@ class CreationTests(unittest.TestCase):
         self.assertEqual(self.server.posts(), [])
         self.ok('create', '--sql-catalog', 'sales')
         self.assertEqual(self.server.posts()[0]['body']['initial_grants'], [])
+
+    def test_empty_create_skips_failing_principals_but_refreshes_capabilities(self):
+        original = self.server.open
+        def opened(request, timeout):
+            if request.full_url.endswith('/principals'):
+                raise AssertionError('empty grants must not fetch principals')
+            return original(request, timeout)
+        with patch.object(self.server, 'open', side_effect=opened) as transport:
+            first = self.ok('create', '--sql-catalog', 'sales')
+            self.assertEqual(self.ok('create', '--sql-catalog', 'sales'), first)
+        self.assertEqual([(c.args[0].method, c.args[0].full_url) for c in transport.call_args_list], [
+            ('GET', 'http://localhost:8888' + cli.COLLECTION + '/capabilities'),
+            ('POST', 'http://localhost:8888' + cli.COLLECTION),
+            ('GET', 'http://localhost:8888' + cli.COLLECTION + '/capabilities')])
+        self.assertEqual(self.server.posts()[0]['body'], dict(
+            sql_catalog='sales', display_name='sales', description='', initial_grants=[]))
+
+    def test_nonempty_create_fetches_principals_and_preserves_all_grants(self):
+        self.ok('create', '--sql-catalog', 'sales', '--grant', 'bob:bi_viewer', '--grant', 'alice:admin')
+        self.assertEqual([(c['method'], c['path']) for c in self.server.calls], [
+            ('GET', cli.COLLECTION + '/capabilities'),
+            ('GET', cli.COLLECTION + '/principals'),
+            ('POST', cli.COLLECTION)])
+        self.assertEqual(self.server.posts()[0]['body']['initial_grants'], [
+            dict(principal_id='alice', maximum_role='admin'),
+            dict(principal_id='bob', maximum_role='bi_viewer')])
+
+    def test_nonempty_create_revalidates_revoked_or_lowered_principals(self):
+        self.ok('create', '--sql-catalog', 'sales', '--grant', 'alice:admin', '--grant', 'bob:bi_viewer')
+        original = self.server.open
+        for accounts in ([], [dict(principal_id='bob', maximum_role='bi_viewer')],
+                         [dict(principal_id='alice', maximum_role='bi_viewer'),
+                          dict(principal_id='bob', maximum_role='bi_viewer')],
+                         [dict(principal_id='alice', maximum_role='admin')],
+                         [dict(principal_id='alice', maximum_role='admin'),
+                          dict(principal_id='bob', maximum_role='unknown')]):
+            with self.subTest(accounts=accounts):
+                before = len(self.server.calls)
+                def opened(request, timeout):
+                    response = original(request, timeout)
+                    if request.full_url.endswith('/principals'):
+                        return Response(dict(principals=accounts))
+                    return response
+                with patch.object(self.server, 'open', side_effect=opened):
+                    self.error('INVALID_INITIAL_GRANTS', 'create', '--sql-catalog', 'sales',
+                               '--grant', 'alice:admin', '--grant', 'bob:bi_viewer')
+                self.assertEqual([(c['method'], c['path']) for c in self.server.calls[before:]], [
+                    ('GET', cli.COLLECTION + '/capabilities'),
+                    ('GET', cli.COLLECTION + '/principals')])
+                self.assertEqual(len(self.server.posts()), 1)
+
+    def test_resolve_one_wire_get_despite_large_unrelated_list(self):
+        self.server.items = [dict(self.server.detail, sql_catalog='unrelated_'+str(i),
+                                  creation_id='other-'+str(i)) for i in range(250)] + [self.server.detail]
+        detail = cli.resolve(cli.CreationClient(self.profile), 'sales')
+        self.assertEqual(detail, self.server.detail)
+        self.assertEqual([(c['method'], c['path']) for c in self.server.calls],
+                         [('GET', cli.COLLECTION + '/by-name/sales')])
+        self.assertEqual(self.server.posts(), [])
+
+    def test_resolve_invalid_public_binding_fails_closed_without_fallback(self):
+        original = copy.deepcopy(self.server.detail)
+        malformed = [None, [], {}, dict(original, sql_catalog='sales_extra')]
+        for field in ('creation_id', 'database_id'):
+            for value in (None, '', 42, 'bad/id', ' '):
+                malformed.append(dict(original, **{field: value}))
+            missing = dict(original)
+            del missing[field]
+            malformed.append(missing)
+        for detail in malformed:
+            with self.subTest(detail=detail):
+                self.server.calls.clear()
+                self.server.detail = detail
+                with self.assertRaises(cli.Failure) as caught:
+                    cli.resolve(cli.CreationClient(self.profile), 'sales')
+                self.assertEqual(caught.exception.code, 'INVALID_PUBLIC_RESPONSE' if isinstance(detail, dict) else 'HTTP_RESPONSE_FAILED')
+                self.assertEqual(len(self.server.calls), 1)
+                self.assertEqual(self.server.posts(), [])
+
+    def test_resolve_http_errors_and_transport_never_fall_back(self):
+        for status, code in [(404, 'CREATION_NOT_FOUND'), (404, 'DATABASE_NOT_FOUND'),
+                (400, 'INVALID_NAME'), (401, 'AUTHENTICATION_REQUIRED'),
+                (403, 'ADMIN_REQUIRED'), (409, 'DATABASE_NAME_AMBIGUOUS'),
+                (502, 'UPSTREAM_UNAVAILABLE')]:
+            with self.subTest(status=status):
+                error = HTTPError('http://localhost', status, '', {},
+                                  io.BytesIO(json.dumps(dict(error=code)).encode()))
+                with patch.object(self.server, 'open', side_effect=error) as transport:
+                    with self.assertRaises(cli.Failure) as caught:
+                        cli.resolve(cli.CreationClient(self.profile), 'sales')
+                self.assertEqual(caught.exception.code, code)
+                transport.assert_called_once()
+        with patch.object(self.server, 'open', side_effect=URLError('offline')) as transport:
+            with self.assertRaises(cli.Failure):
+                cli.resolve(cli.CreationClient(self.profile), 'sales')
+            transport.assert_called_once()
 
     def test_ambiguous_exact_names(self):
         self.server.items = [self.server.detail, dict(self.server.detail, creation_id='other')]

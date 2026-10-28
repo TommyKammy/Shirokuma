@@ -1371,6 +1371,13 @@ def get(principal, role, root_id):
         return _summary(db, _root(db, root_id), principal)
 
 
+def get_by_name(principal, role, name):
+    legacy.current_admin(principal, role)
+    with control_store.connect() as db:
+        root_id = legacy._name_id(db, config()['environment_id'], 'logical_v1', name)
+    return get(principal, role, root_id)
+
+
 def listing(principal, role, *, limit=50, cursor=None):
     legacy.current_admin(principal, role)
     if type(limit) is not int or not 1 <= limit <= 100:

@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import io
 import json
+import os
 import stat
 from pathlib import Path
 import subprocess
@@ -19,8 +20,7 @@ from test_logical_foundation import isolated_import, settings
 from tools.local_experiment import logical_foundation as f
 from tools.local_experiment import logical_provider as p
 
-PROBE_IDENTITY_SQL = 'SELECT current_user, version()'
-PROBE_COMPUTE_SQL = "SELECT coordinator, count(*) FROM system.runtime.nodes WHERE state='active' GROUP BY coordinator"
+PROBE_SQL = "SELECT current_user, version(), coordinator, active_nodes FROM (SELECT coordinator, count(*) AS active_nodes FROM system.runtime.nodes WHERE state='active' GROUP BY coordinator) AS active_compute"
 
 
 class ProviderImportTests(unittest.TestCase):
@@ -165,10 +165,10 @@ class Harness:
             return 200, b'{"starting":false,"nodeVersion":{"version":"483"}}'
         if url.endswith('/v1/statement') and method == 'POST':
             statement = kwargs['data'].decode()
-            if statement == PROBE_IDENTITY_SQL:
-                return 200, b'{"data":[["logical_provisioner","483"]]}'
-            if statement == PROBE_COMPUTE_SQL:
-                rows = [[True, 1]] + ([[False, self.c['trino']['workers']]] if self.c['trino']['workers'] else [])
+            if statement == PROBE_SQL:
+                rows = [['logical_provisioner', '483', True, 1]] + (
+                    [['logical_provisioner', '483', False, self.c['trino']['workers']]]
+                    if self.c['trino']['workers'] else [])
                 return 200, json.dumps({'data': rows}).encode()
         if url.endswith('/principals') and method == 'POST':
             return 201, b'{"credentials":{"clientId":"client","clientSecret":"private-secret"}}'
@@ -273,6 +273,247 @@ class MetadataTransportTests(unittest.TestCase):
 
     def paths(self):
         return [path for connection in self.connections for _, path, _ in connection.requests]
+
+    def inline_view(self):
+        return {**copy.deepcopy(self.h.view), 'apiVersion': 'v1', 'kind': 'Config', 'preferences': {}}
+
+    def write_inline(self, view=None, *, yaml=False):
+        path = Path(self.c['kube']['kubeconfig'])
+        view = self.inline_view() if view is None else view
+        path.write_text(p.yaml.safe_dump(view) if yaml else json.dumps(view))
+        return path
+
+    def assert_observation_only(self):
+        self.assertFalse(self.h.http_calls)
+        self.assertFalse(self.h.sdk_calls)
+        self.assertFalse(self.h.children)
+        for argv, body in self.h.commands:
+            self.assertEqual(argv, f.kube_argv(self.c) +
+                ['config', 'view', '--minify', '--raw', '--flatten', '-o', 'json'])
+            self.assertIsNone(body)
+        self.assertTrue(all(method == 'GET' for connection in self.connections
+            for method, _, _ in connection.requests))
+
+    def test_fresh_inline_json_and_yaml_public_dispatch_rereads_and_checks_both_uids(self):
+        self.provider._incarnation['namespace'] = self.h.ns_uid
+        original_read = Path.read_bytes
+        for as_yaml in (False, True):
+            path = self.write_inline(yaml=as_yaml)
+            with patch.object(Path, 'read_bytes', autospec=True, side_effect=original_read) as read:
+                before = len(self.paths())
+                for _ in range(2):
+                    self.assertEqual(self.provider.compute_state(), 'ACTIVE')
+                self.assertEqual(sum(call.args == (path,) for call in read.call_args_list), 2)
+            fresh = self.paths()[before:]
+            self.assertEqual(fresh.count('/api/v1/nodes/lab-node'), 2)
+            self.assertEqual(fresh.count('/api/v1/namespaces/safe-logical'), 2)
+        self.command.assert_not_called()
+        self.assertEqual(len(self.connections), 1)
+        self.assert_observation_only()
+
+    def test_fresh_inline_same_path_size_and_mtime_client_drift_replaces_tls(self):
+        view = self.inline_view()
+        path = self.write_inline(view)
+        stamp = path.stat()
+        self.provider._trust()
+        for field, value in [('client-certificate-data', b'rotated-cert'), ('client-key-data', b'rotated-key')]:
+            old = self.connections[-1]
+            before = len(old.requests)
+            fingerprint = self.provider._metadata_transport._fingerprint
+            view['users'][0]['user'][field] = base64.b64encode(value).decode()
+            self.write_inline(view)
+            os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+            self.assertEqual(path.stat().st_size, stamp.st_size)
+            self.assertEqual(path.stat().st_mtime_ns, stamp.st_mtime_ns)
+            self.provider._trust()
+            self.assertTrue(old.closed)
+            self.assertEqual(len(old.requests), before)
+            self.assertIsNot(self.connections[-1], old)
+            self.assertNotEqual(self.provider._metadata_transport._fingerprint, fingerprint)
+        self.assertEqual(self.contexts[-1].material, (b'rotated-cert', b'rotated-key'))
+        self.assertFalse(any(path.exists() for path in self.scratch_paths))
+        self.command.assert_not_called()
+        self.assert_observation_only()
+
+    def test_fresh_inline_bad_eligible_material_and_authority_close_without_fallback(self):
+        valid = self.inline_view()
+        changes = [lambda v: v.update(**{'current-context': 'foreign'}),
+            lambda v: v['contexts'][0].update(name='foreign'),
+            lambda v: v['contexts'][0]['context'].update(user='foreign'),
+            lambda v: v['contexts'][0]['context'].update(cluster='foreign'),
+            lambda v: v['clusters'][0]['cluster'].update(server='https://foreign:6443'),
+            lambda v: v['clusters'][0]['cluster'].update(**{'certificate-authority-data': 'invalid!'}),
+            lambda v: v['clusters'][0]['cluster'].update(**{'certificate-authority-data': base64.b64encode(b'foreign-ca').decode()}),
+            lambda v: v['clusters'][0]['cluster'].update(**{'insecure-skip-tls-verify': True}),
+            lambda v: v['users'][0]['user'].update(**{'client-certificate-data': ''}),
+            lambda v: v['users'][0]['user'].update(**{'client-key-data': 'invalid!'})]
+        for as_yaml in (False, True):
+            for change in changes:
+                self.write_inline(valid, yaml=as_yaml)
+                self.provider._trust()
+                old = self.connections[-1]
+                before = len(self.paths())
+                changed = copy.deepcopy(valid)
+                change(changed)
+                self.write_inline(changed, yaml=as_yaml)
+                with self.subTest(yaml=as_yaml, change=change), self.assertRaises(p.Rejected) as caught:
+                    self.provider._trust()
+                self.assertEqual(str(caught.exception), 'FOUNDATION_TRUST_MISMATCH')
+                self.assertTrue(old.closed)
+                self.assertIsNone(self.provider._metadata_transport._fingerprint)
+                self.assertEqual(len(self.paths()), before)
+        self.command.assert_not_called()
+        self.assert_observation_only()
+
+    def test_fresh_inline_invalid_tls_material_closes_and_redacts_error(self):
+        self.write_inline()
+        self.provider._trust()
+        old = self.connections[-1]
+        view = self.inline_view()
+        view['users'][0]['user']['client-key-data'] = base64.b64encode(b'invalid-private-key').decode()
+        self.write_inline(view)
+        context = Mock(verify_mode=p.ssl.CERT_REQUIRED, check_hostname=True)
+        context.load_cert_chain.side_effect = p.ssl.SSLError('invalid-private-key')
+        before = len(self.paths())
+        with patch.object(p.ssl, 'create_default_context', return_value=context), self.assertRaises(p.Rejected) as caught:
+            self.provider._trust()
+        self.assertEqual(str(caught.exception), 'FOUNDATION_TRUST_MISMATCH')
+        self.assertTrue(old.closed)
+        self.assertEqual(len(self.paths()), before)
+        self.assertIsNone(self.provider._metadata_transport._connection)
+        self.command.assert_not_called()
+        self.assert_observation_only()
+
+    def test_fresh_inline_node_namespace_and_native_ownership_swaps_reject(self):
+        self.write_inline()
+        self.provider._incarnation['namespace'] = self.h.ns_uid
+        resource = self.h.resource
+        def foreign_namespace(kind, name):
+            result = resource(kind, name)
+            if kind == 'namespace':
+                result['metadata']['labels']['shirokuma.dev/native-admission'] = 'foreign'
+            return result
+        self.provider._trust()
+        for target, value in [('node_uid', 'changed-node'), ('ns_uid', 'changed-namespace')]:
+            old = self.connections[-1]
+            original = getattr(self.h, target)
+            setattr(self.h, target, value)
+            with self.assertRaises(p.Rejected):
+                self.provider._trust()
+            self.assertTrue(old.closed)
+            setattr(self.h, target, original)
+            self.provider._trust()
+        old = self.connections[-1]
+        with patch.object(self.h, 'resource', side_effect=foreign_namespace), self.assertRaises(p.Rejected):
+            self.provider._trust()
+        self.assertTrue(old.closed)
+        self.command.assert_not_called()
+        self.assert_observation_only()
+
+    def test_fresh_inline_close_epoch_fences_paused_parse_and_new_lifecycle(self):
+        self.write_inline()
+        self.provider._trust()
+        for reopen in (False, True):
+            if self.provider._closed:
+                self.provider.open()
+            entered, release = threading.Event(), threading.Event()
+            read_bytes = Path.read_bytes
+            def paused_read(path):
+                raw = read_bytes(path)
+                if path == Path(self.c['kube']['kubeconfig']) and threading.current_thread() is not threading.main_thread():
+                    entered.set()
+                    self.assertTrue(release.wait(timeout=3))
+                return raw
+            with patch.object(Path, 'read_bytes', paused_read), ThreadPoolExecutor(max_workers=1) as pool:
+                pending = pool.submit(self.provider._trust)
+                try:
+                    self.assertTrue(entered.wait(timeout=3))
+                    self.provider.close()
+                    if reopen:
+                        self.provider.open()
+                        current = self.connections[-1]
+                    before = (len(self.connections), len(self.paths()))
+                finally:
+                    release.set()
+                with self.assertRaises(p.Rejected):
+                    pending.result(timeout=3)
+            self.assertEqual((len(self.connections), len(self.paths())), before)
+            if reopen:
+                self.assertIs(self.provider._metadata_transport._connection, current)
+                self.assertFalse(current.closed)
+            else:
+                self.assertIsNone(self.provider._metadata_transport._connection)
+        self.command.assert_not_called()
+        # Explicit open uses only the existing mocked loopback port forwards.
+        self.assertEqual(len(self.h.children), 6)
+        self.assertTrue(all('port-forward' in argv and '--address=127.0.0.1' in argv
+            for argv, _ in self.h.commands))
+        self.assertFalse(self.h.http_calls or self.h.sdk_calls)
+        self.assertTrue(all(method == 'GET' for connection in self.connections
+            for method, _, _ in connection.requests))
+
+    def test_fresh_inline_custom_command_never_reads_file(self):
+        self.write_inline()
+        provider = p.Provider(self.c, command=self.h.command, http=self.h.http, sdk=self.h.sdk, popen=self.h.popen)
+        self.addCleanup(provider.close)
+        with patch.object(Path, 'read_bytes', side_effect=AssertionError('custom transport must not read')):
+            provider._trust()
+        self.assertEqual(self.h.commands[0][0], f.kube_argv(self.c) +
+            ['config', 'view', '--minify', '--raw', '--flatten', '-o', 'json'])
+        self.assertEqual(self.connections, [])
+        self.assertFalse(self.h.http_calls or self.h.sdk_calls or self.h.children)
+        self.assertTrue(all('config' in argv or 'get' in argv for argv, _ in self.h.commands))
+
+    def test_fresh_inline_noncanonical_fallback_argv_and_existing_validation(self):
+        valid = self.inline_view()
+        changes = [lambda v: v.pop('apiVersion'), lambda v: v.update(kind='Other'),
+            lambda v: v['contexts'].append(copy.deepcopy(v['contexts'][0])),
+            lambda v: v['clusters'].append(copy.deepcopy(v['clusters'][0])),
+            lambda v: v['users'].append(copy.deepcopy(v['users'][0])),
+            lambda v: v['users'][0]['user'].update(token='private-token'),
+            lambda v: v['users'][0]['user'].update(exec={'command': 'arbitrary'}),
+            lambda v: v['users'][0]['user'].update(**{'auth-provider': {'name': 'external'}}),
+            lambda v: v['clusters'][0]['cluster'].update(**{'proxy-url': 'https://foreign'}),
+            lambda v: v['clusters'][0]['cluster'].update(**{'tls-server-name': 'foreign'}),
+            lambda v: v['clusters'][0]['cluster'].update(**{'certificate-authority': '/external-ca'}),
+            lambda v: v['users'][0]['user'].update(**{'client-key': '/external-key'}),
+            lambda v: v['users'][0]['user'].update(**{'client-certificate': '/external-cert'}),
+            lambda v: v['contexts'][0]['context'].update(namespace=True),
+            lambda v: v['clusters'][0]['cluster'].update(**{'insecure-skip-tls-verify': 'false'})]
+        for as_yaml in (False, True):
+            for change in changes:
+                view = copy.deepcopy(valid)
+                change(view)
+                self.write_inline(view, yaml=as_yaml)
+                before = self.command.call_count
+                self.provider._trust()  # kubectl's flattened view is still validated.
+                self.assertEqual(self.command.call_count, before+1)
+        path = Path(self.c['kube']['kubeconfig'])
+        raw = json.dumps(valid)
+        ambiguous = ['{"kind":"Other",'+raw[1:],
+            p.yaml.safe_dump(valid)+'kind: Other\n',
+            p.yaml.safe_dump(valid).replace('current-context: lab-context', 'current-context: on'),
+            p.yaml.safe_dump(valid).replace('current-context: lab-context', 'current-context: 123'),
+            p.yaml.safe_dump(valid)+'unsupported: !!str value\n',
+            raw.replace('"user": "client"', '"user": "foreign", "user": "client"'),
+            'private-key: [malformed', '---\n'+p.yaml.safe_dump(valid)+'---\n{}',
+            p.yaml.safe_dump(valid).replace('preferences: {}', 'preferences: &prefs {}')+'unknown: *prefs\n']
+        for content in ambiguous:
+            path.write_text(content)
+            before = self.command.call_count
+            self.provider._trust()
+            self.assertEqual(self.command.call_count, before+1)
+        # A failed fallback view must not be rescued by the local file or old TLS.
+        self.write_inline({**valid, 'unsupported': 'field'})
+        old = self.connections[-1]
+        self.h.view['users'][0]['user']['token'] = 'private-token'
+        before = len(self.paths())
+        with self.assertRaises(p.Rejected) as caught:
+            self.provider._trust()
+        self.assertEqual(str(caught.exception), 'FOUNDATION_TRUST_MISMATCH')
+        self.assertTrue(old.closed)
+        self.assertEqual(len(self.paths()), before)
+        self.assert_observation_only()
 
     def test_reuses_connection_but_each_trust_and_owned_read_is_fresh(self):
         self.provider._trust()
@@ -1004,7 +1245,7 @@ class ProviderTests(unittest.TestCase):
                 'foundation_id': self.c['foundation_id'], 'revision': self.c['revision']})
         self.assertFalse(any('exec' in argv for argv, _ in self.h.commands))
         self.assertEqual([kwargs['data'].decode() for method, url, kwargs in self.h.http_calls
-            if url.endswith('/v1/statement')], [PROBE_IDENTITY_SQL, PROBE_COMPUTE_SQL])
+            if url.endswith('/v1/statement')], [PROBE_SQL])
         self.assertTrue(any(url.endswith('/principals/root') for _, url, _ in self.h.http_calls))
         self.assertIn(('list_roles', {'MaxItems': 1}), self.h.sdk_calls)
         self.assertIn(('head_bucket', {'Bucket': self.c['storage']['bucket']}), self.h.sdk_calls)
@@ -1077,9 +1318,10 @@ class ProviderTests(unittest.TestCase):
 
     def test_live_health_sql_and_service_failures_are_false_without_retry(self):
         self.bind()
-        failures = [(PROBE_IDENTITY_SQL, [['admin', '483']]),
-            (PROBE_IDENTITY_SQL, [['logical_provisioner', '482']]),
-            (PROBE_COMPUTE_SQL, [[True, 2]]), (PROBE_COMPUTE_SQL, [[1, 1]])]
+        failures = [(PROBE_SQL, [['admin', '483', True, 1]]),
+            (PROBE_SQL, [['logical_provisioner', '482', True, 1]]),
+            (PROBE_SQL, [['logical_provisioner', '483', True, 2]]),
+            (PROBE_SQL, [['logical_provisioner', '483', 1, 1]])]
         for statement, rows in failures:
             def http(method, url, **kwargs):
                 if url.endswith('/v1/statement') and kwargs['data'].decode() == statement:
@@ -1739,8 +1981,9 @@ class ProviderTests(unittest.TestCase):
                     def http(method, url, **kwargs):
                         if url.endswith('/v1/statement'):
                             calls.append((method, kwargs))
-                            if kwargs['data'].decode() == PROBE_COMPUTE_SQL:
-                                rows = [[True, 1]] + ([[False, workers]] if workers else [])
+                            if kwargs['data'].decode() == PROBE_SQL:
+                                rows = [['logical_provisioner', '483', True, 1]] + (
+                                    [['logical_provisioner', '483', False, workers]] if workers else [])
                                 return 200, json.dumps({'data': rows[::-1] if reverse else rows}).encode()
                         return harness.http(method, url, **kwargs)
                     with p.Provider(self.c, command=harness.command, http=http,
@@ -1751,7 +1994,7 @@ class ProviderTests(unittest.TestCase):
                         self.assertTrue(proof['ready'])
                         self.assertIsNone(provider._effects.get())
                         self.assertEqual([kw['data'].decode() for _, kw in calls],
-                            [PROBE_IDENTITY_SQL, PROBE_COMPUTE_SQL])
+                            [PROBE_SQL])
                         for method, kwargs in calls:
                             self.assertEqual(method, 'POST')
                             self.assertEqual(kwargs['headers']['X-Trino-User'], 'logical_provisioner')
@@ -1759,7 +2002,7 @@ class ProviderTests(unittest.TestCase):
                                 b'logical_provisioner:provisioner-secret').decode())
                             self.assertEqual(kwargs['ca_file'], self.c['trino']['ca_file'])
                         sql_calls = [call for call in request.call_args_list if call.args[2] == '/v1/statement']
-                        self.assertEqual(len(sql_calls), 2)
+                        self.assertEqual(len(sql_calls), 1)
                         for call in sql_calls:
                             self.assertIs(call.kwargs['business'], False)
                             self.assertIs(call.kwargs['journal'], False)
@@ -1768,16 +2011,19 @@ class ProviderTests(unittest.TestCase):
                         self.assertTrue(all(argv[-1] in ('read',) for argv, _ in harness.commands if 'exec' in argv))
                         self.assertEqual(set(proof['readiness']), {'opa', 'storage', 'polaris', 'trino', 'runtime_files', 'spi'})
                         for private in ('provisioner-secret', 'admin-secret', 'root-secret', 'private-token',
-                                'Authorization', PROBE_IDENTITY_SQL, PROBE_COMPUTE_SQL):
+                                'Authorization', PROBE_SQL):
                             self.assertNotIn(private, json.dumps(proof))
 
     def test_probe_sql_identity_and_version_are_strict(self):
         self.open(effects=False)
-        invalid = [[], [['logical_provisioner', '483'], ['logical_provisioner', '483']],
-            ['logical_provisioner'], [['logical_provisioner']], [['logical_provisioner', '483', 'extra']],
-            [{'user': 'logical_provisioner', 'version': '483'}]]
-        invalid += [[[user, '483']] for user in ('admin', 'actual_user', '', None, True, 1)]
-        invalid += [[['logical_provisioner', version]] for version in ('482', '483.0', '', 483, 483.0, True, None)]
+        invalid = [[], ['logical_provisioner'], [['logical_provisioner']],
+            [['logical_provisioner', '483']], [['logical_provisioner', '483', True]],
+            [['logical_provisioner', '483', True, 1, 'extra']],
+            [{'user': 'logical_provisioner', 'version': '483', 'coordinator': True, 'active_nodes': 1}],
+            [None]]
+        invalid += [[[user, '483', True, 1]] for user in ('admin', 'actual_user', '', None, True, 1)]
+        invalid += [[['logical_provisioner', version, True, 1]]
+            for version in ('482', '483.0', '', 483, 483.0, True, None)]
         for rows in invalid:
             calls = []
             def http(method, url, **kwargs):
@@ -1789,8 +2035,43 @@ class ProviderTests(unittest.TestCase):
                 proof = self.provider.probe()
                 self.assertFalse(proof['ready'])
                 self.assertFalse(proof['readiness']['trino'])
-                self.assertEqual(calls, [PROBE_IDENTITY_SQL])
+                self.assertEqual(calls, [PROBE_SQL])
                 self.assertNotIn('provisioner-secret', json.dumps(proof))
+
+    def test_probe_sql_rejects_bad_second_row_identity_and_version(self):
+        self.c['trino']['workers'] = 1
+        harness = Harness(self.c)
+        invalid = [[user, '483', False, 1] for user in ('admin', 'actual_user', '', None, True, 1)]
+        invalid += [['logical_provisioner', version, False, 1]
+            for version in ('482', '483.0', '', 483, 483.0, True, None)]
+        for second in invalid:
+            calls = []
+            def http(method, url, **kwargs):
+                if url.endswith('/v1/statement'):
+                    calls.append(kwargs['data'].decode())
+                    return 200, json.dumps({'data': [['logical_provisioner', '483', True, 1], second]}).encode()
+                return harness.http(method, url, **kwargs)
+            with self.subTest(second=second), p.Provider(self.c, command=harness.command,
+                    http=http, sdk=harness.sdk, popen=harness.popen) as provider:
+                proof = provider.probe()
+                self.assertFalse(proof['ready'])
+                self.assertFalse(proof['readiness']['trino'])
+                self.assertEqual(calls, [PROBE_SQL])
+                self.assertNotIn('provisioner-secret', json.dumps(proof))
+
+    def test_sql_health_rejects_nonlist_and_malformed_rows_in_either_position(self):
+        identity = {'username': 'logical_provisioner'}
+        valid = ['logical_provisioner', '483', True, 1]
+        invalid = [None, True, {}, 'logical_provisioner', tuple(valid), [], valid[:1],
+            valid[:2], valid[:3], valid + ['extra']]
+        with patch.object(self.provider, '_provisioner', return_value=identity):
+            for row in invalid:
+                for rows in ([row], [valid, row]):
+                    with self.subTest(rows=rows), patch.object(self.provider, '_sql', return_value=rows) as sql:
+                        with self.assertRaises(p.Rejected) as caught:
+                            self.provider._sql_health()
+                        self.assertEqual(str(caught.exception), 'FOUNDATION_SQL_IDENTITY_MISMATCH')
+                        sql.assert_called_once_with(PROBE_SQL, identity)
 
     def test_probe_sql_registered_compute_shape_roles_and_counts_are_strict(self):
         for workers in (0, 1):
@@ -1804,18 +2085,20 @@ class ProviderTests(unittest.TestCase):
             invalid += [[[True, count]] for count in (True, False, 1.0, '1', None, 0, -1)]
             invalid += [[[True, 1], [False, count]] for count in (True, False, 1.0, '1', None, -1)]
             invalid += [[[True, 1], [False, 1]]] if workers == 0 else [[[True, 1]]]
-            for rows in invalid:
+            for compute_rows in invalid:
+                rows = [['logical_provisioner', '483', *row] if type(row) is list else row
+                    for row in compute_rows]
                 calls = []
                 def http(method, url, **kwargs):
                     if url.endswith('/v1/statement'):
                         calls.append(kwargs['data'].decode())
-                        if calls[-1] == PROBE_COMPUTE_SQL:
+                        if calls[-1] == PROBE_SQL:
                             return 200, json.dumps({'data': rows}).encode()
                     return harness.http(method, url, **kwargs)
                 with self.subTest(workers=workers, rows=rows), p.Provider(self.c, command=harness.command,
                         http=http, sdk=harness.sdk, popen=harness.popen) as provider:
                     self.assertFalse(provider.probe()['ready'])
-                    self.assertEqual(calls, [PROBE_IDENTITY_SQL, PROBE_COMPUTE_SQL])
+                    self.assertEqual(calls, [PROBE_SQL])
 
     def test_probe_sql_failures_are_safe_false_without_retry(self):
         self.open(effects=False)
@@ -1826,26 +2109,25 @@ class ProviderTests(unittest.TestCase):
             (200, b'not json provisioner-secret'), (200, b'[]'), (200, b'{}'),
             (200, b'{"data":null}'), (200, b'{"data":{}}'),
             (200, b'{"error":"provisioner-secret"}'), TimeoutError('provisioner-secret')]
-        for statement in (PROBE_IDENTITY_SQL, PROBE_COMPUTE_SQL):
-            for failure in failures:
-                calls = []
-                def http(method, url, **kwargs):
-                    if url.endswith('/v1/statement'):
-                        calls.append(kwargs['data'].decode())
-                        if calls[-1] == statement:
-                            if isinstance(failure, Exception):
-                                raise failure
-                            return failure
-                    return self.h.http(method, url, **kwargs)
-                with self.subTest(statement=statement, failure=failure), \
-                        patch.object(self.provider, '_http_transport', side_effect=http), \
-                        patch.object(p.time, 'sleep', side_effect=AssertionError('unexpected retry')):
-                    proof = self.provider.probe()
-                    self.assertFalse(proof['ready'])
-                    self.assertEqual(calls, [PROBE_IDENTITY_SQL] if statement == PROBE_IDENTITY_SQL else
-                        [PROBE_IDENTITY_SQL, PROBE_COMPUTE_SQL])
-                    for private in ('provisioner-secret', 'Authorization', PROBE_IDENTITY_SQL, PROBE_COMPUTE_SQL):
-                        self.assertNotIn(private, json.dumps(proof))
+        statement = PROBE_SQL
+        for failure in failures:
+            calls = []
+            def http(method, url, **kwargs):
+                if url.endswith('/v1/statement'):
+                    calls.append(kwargs['data'].decode())
+                    if calls[-1] == statement:
+                        if isinstance(failure, Exception):
+                            raise failure
+                        return failure
+                return self.h.http(method, url, **kwargs)
+            with self.subTest(statement=statement, failure=failure), \
+                    patch.object(self.provider, '_http_transport', side_effect=http), \
+                    patch.object(p.time, 'sleep', side_effect=AssertionError('unexpected retry')):
+                proof = self.provider.probe()
+                self.assertFalse(proof['ready'])
+                self.assertEqual(calls, [PROBE_SQL])
+                for private in ('provisioner-secret', 'Authorization', PROBE_SQL):
+                    self.assertNotIn(private, json.dumps(proof))
 
     def test_probe_rejects_invalid_private_provisioner_before_sql(self):
         self.open(effects=False)
@@ -3222,6 +3504,249 @@ class ReadOnlyConcurrencyTests(unittest.TestCase):
         result = patcher.start()
         self.addCleanup(patcher.stop)
         return result
+
+    def verification_stubs(self, provider=None):
+        provider = provider or self.provider
+        self.db['sql_catalog'] = 'catalog_one'
+        self.mock(provider, '_gate')
+        prefix = self.mock(provider, '_verify_prefix', return_value={
+            'prefix_positive': True, 'prefix_negative': True})
+        provisioner = {'username': 'logical_provisioner', 'password': 'private'}
+        self.mock(provider, '_provisioner', return_value=provisioner)
+        identity = {'principal_id': 'principal1', 'database_id': 'db-1', 'selected_role': 'bi_viewer',
+            'grant_epoch': 4, 'policy_revision': 5, 'username': 'actual', 'password': 'secret',
+            'credential_ref': 'principal_ref'}
+        return identity, prefix, provisioner
+
+    def test_target_positive_pair_overlaps_with_two_workers_then_caller_proofs_and_journal(self):
+        identity, prefix, provisioner = self.verification_stubs()
+        self.provider._config['trino']['workers'] = 1
+        caller = threading.get_ident()
+        executor = self.mock(p, 'ThreadPoolExecutor', wraps=ThreadPoolExecutor)
+        for role in ('bi_viewer', 'data_engineer', 'admin'):
+            identity.update(selected_role=role, grant_epoch=None if role == 'admin' else 4)
+            for write in (True, False):
+                with self.subTest(role=role, write=write):
+                    barrier = threading.Barrier(2)
+                    lock = threading.Lock()
+                    events, finished = [], []
+                    active = peak = 0
+                    def record(name):
+                        events.append((name, threading.get_ident()))
+                    def sql(statement, supplied):
+                        nonlocal active, peak
+                        if statement == 'SELECT current_user' or statement.startswith('SHOW SCHEMAS'):
+                            self.assertIs(supplied, identity)
+                            self.assertIsNone(self.provider._effects.get())
+                            with lock:
+                                active += 1
+                                peak = max(peak, active)
+                            barrier.wait(timeout=5)
+                            with lock:
+                                active -= 1
+                                finished.append(statement)
+                                record('positive')
+                            return [[identity['username']]] if 'current_user' in statement else [
+                                [schema] for schema in (('marts',) if role == 'bi_viewer' else p.SCHEMAS)]
+                        self.assertEqual(len(finished), 2)
+                        self.assertEqual(active, 0)
+                        if statement == 'SELECT node_id FROM system.runtime.nodes':
+                            self.assertIs(supplied, identity)
+                            record('negative')
+                            raise p.Rejected('ENGINE_ACCESS_DENIED')
+                        self.assertEqual(statement, 'SELECT node_id, coordinator, state FROM system.runtime.nodes')
+                        self.assertIs(supplied, provisioner)
+                        record('runtime')
+                        return [['coordinator', True, 'active'], ['worker', False, 'active']]
+                    def marker(db, *, write_marker):
+                        self.assertIs(db, self.db)
+                        self.assertEqual(write_marker, write)
+                        record('prefix')
+                        if write_marker:
+                            self.provider._effect('put_object', 's3', 'marker', b'marker', lambda: record('put'))
+                        return {'prefix_positive': True, 'prefix_negative': True}
+                    def journal(key, leaf, dispatch):
+                        record('journal')
+                        return dispatch()
+                    prefix.side_effect = marker
+                    self.mock(self.provider, '_sql', side_effect=sql)
+                    with self.provider.effects(journal):
+                        proof = self.provider._verify_target(self.db, identity, write_marker=write)
+                    self.assertTrue(proof['complete'])
+                    self.assertTrue(proof['verified'])
+                    self.assertTrue(proof['identity_positive'])
+                    self.assertTrue(proof['identity_negative'])
+                    self.assertEqual(peak, 2)
+                    self.assertEqual([name for name, _ in events], ['positive', 'positive', 'negative', 'prefix'] +
+                        (['journal', 'put'] if write else []) + ['runtime'])
+                    self.assertTrue(all(thread != caller for _, thread in events[:2]))
+                    self.assertTrue(all(thread == caller for _, thread in events[2:]))
+                    for key, value in identity.items():
+                        if key != 'password':
+                            self.assertEqual(proof[key], value)
+                    self.assertNotIn('password', proof)
+        self.assertEqual(executor.call_count, 6)
+        self.assertTrue(all(call.kwargs == {'max_workers': 2} for call in executor.call_args_list))
+
+    def test_target_joins_both_positive_tasks_on_either_failure_without_later_reads(self):
+        identity, prefix, _ = self.verification_stubs()
+        self.provider._config['trino']['workers'] = 1
+        for failing in ('SELECT current_user', 'SHOW SCHEMAS FROM "catalog_one"'):
+            for error in (p.Rejected('PROVIDER_HTTP_401'), p.Rejected('PROVIDER_HTTP_403'),
+                    p.Rejected('ENGINE_ACCESS_DENIED'), p.Rejected('ENGINE_QUERY_FAILED'),
+                    p.Unknown(), TimeoutError('inert transport')):
+                with self.subTest(failing=failing, error=type(error).__name__, code=getattr(error, 'code', None)):
+                    entered = threading.Barrier(2)
+                    failed, release = threading.Event(), threading.Event()
+                    finished, calls = [], []
+                    def sql(statement, supplied):
+                        self.assertIs(supplied, identity)
+                        self.assertIn(statement, ('SELECT current_user', 'SHOW SCHEMAS FROM "catalog_one"'))
+                        calls.append(statement)
+                        entered.wait(timeout=5)
+                        if statement == failing:
+                            failed.set()
+                            raise error
+                        self.assertTrue(release.wait(5))
+                        finished.append(statement)
+                        return [['actual']] if 'current_user' in statement else [['marts']]
+                    self.mock(self.provider, '_sql', side_effect=sql)
+                    # Observe exactly once so the retryable failure's empty proof is inspectable.
+                    def once(observe):
+                        with self.assertRaises(type(error)) as raised:
+                            observe()
+                        self.assertIs(raised.exception, error)
+                        return False
+                    with patch.object(self.provider, '_refresh_read', side_effect=once), ThreadPoolExecutor(max_workers=1) as caller:
+                        result = caller.submit(self.provider.verify_target, self.db, identity)
+                        try:
+                            self.assertTrue(failed.wait(5))
+                            self.assertFalse(result.done())
+                        finally:
+                            release.set()
+                        proof = result.result(timeout=5)
+                    self.assertEqual(len(calls), 2)
+                    self.assertEqual(len(finished), 1)
+                    self.assertFalse(proof['identity_positive'])
+                    self.assertFalse(proof['identity_negative'])
+                    self.assertFalse(proof['verified'])
+                    self.assertFalse(proof['complete'])
+                    self.assertFalse(proof['prefix_positive'])
+                    self.assertFalse(proof['prefix_negative'])
+                    self.assertNotIn('runtime_nodes', proof)
+                    prefix.assert_not_called()
+                    self.provider._provisioner.assert_not_called()
+
+    def test_target_invalid_parallel_positive_never_attempts_negative_prefix_or_runtime(self):
+        identity, prefix, _ = self.verification_stubs()
+        self.provider._config['trino']['workers'] = 1
+        for actual, rows, mismatch in (([['wrong']], [['marts']], True),
+                ([['actual'], ['extra']], [['marts']], True), ([['actual']], [], False),
+                ([['actual']], [['marts'], ['raw']], False)):
+            with self.subTest(actual=actual, rows=rows):
+                barrier = threading.Barrier(2)
+                calls = []
+                def sql(statement, supplied):
+                    calls.append(statement)
+                    self.assertIn(statement, ('SELECT current_user', 'SHOW SCHEMAS FROM "catalog_one"'))
+                    barrier.wait(timeout=5)
+                    return actual if 'current_user' in statement else rows
+                self.mock(self.provider, '_sql', side_effect=sql)
+                def once(observe):
+                    if mismatch:
+                        with self.assertRaises(p.Rejected) as raised:
+                            observe()
+                        self.assertEqual(raised.exception.code, 'ENGINE_IDENTITY_MISMATCH')
+                        return False
+                    return observe()
+                with patch.object(self.provider, '_refresh_read', side_effect=once):
+                    proof = self.provider.verify_target(self.db, identity)
+                self.assertEqual(len(calls), 2)
+                for key in ('verified', 'complete', 'identity_positive', 'identity_negative', 'prefix_positive', 'prefix_negative'):
+                    self.assertFalse(proof[key])
+                self.assertNotIn('runtime_nodes', proof)
+                prefix.assert_not_called()
+                self.provider._provisioner.assert_not_called()
+
+    def test_target_refresh_discards_partial_positives_and_repeats_fresh_pair(self):
+        identity, prefix, _ = self.verification_stubs()
+        self.provider._config['trino']['workers'] = 1
+        for earlier_positive in (False, True):
+            with self.subTest(earlier_positive=earlier_positive):
+                attempt = 0
+                calls = []
+                barriers = [threading.Barrier(2) for _ in range(3)]
+                def sql(statement, supplied):
+                    current = attempt
+                    calls.append((current, statement))
+                    if statement == 'SELECT node_id FROM system.runtime.nodes':
+                        self.assertTrue(earlier_positive)
+                        self.assertEqual(current, 0)
+                        return []  # Positive pair alone never proves verification.
+                    self.assertIn(statement, ('SELECT current_user', 'SHOW SCHEMAS FROM "catalog_one"'))
+                    barriers[current].wait(timeout=5)
+                    if 'current_user' in statement:
+                        if current == 1:
+                            raise p.Rejected('PROVIDER_HTTP_401')
+                        return [['actual']]
+                    if current == 0 and not earlier_positive:
+                        raise p.Rejected('ENGINE_ACCESS_DENIED')
+                    return [] if current == 2 else [['marts']]
+                def sleep(delay):
+                    nonlocal attempt
+                    attempt += 1
+                self.mock(self.provider, '_sql', side_effect=sql)
+                with patch.object(p.time, 'monotonic', side_effect=[0, 0, 0, 5]), \
+                        patch.object(p.time, 'sleep', side_effect=sleep):
+                    proof = self.provider.verify_target(self.db, identity)
+                self.assertEqual(attempt, 2)
+                for current in range(3):
+                    pair = [statement for a, statement in calls if a == current and statement != 'SELECT node_id FROM system.runtime.nodes']
+                    self.assertCountEqual(pair, ['SELECT current_user', 'SHOW SCHEMAS FROM "catalog_one"'])
+                self.assertEqual(sum(statement == 'SELECT node_id FROM system.runtime.nodes' for _, statement in calls), int(earlier_positive))
+                for key in ('verified', 'complete', 'identity_positive', 'identity_negative', 'prefix_positive', 'prefix_negative'):
+                    self.assertFalse(proof[key])
+                self.assertNotIn('runtime_nodes', proof)
+                prefix.assert_not_called()
+                self.provider._provisioner.assert_not_called()
+
+    def test_target_custom_transport_preserves_serial_order_and_visibility_false_negative(self):
+        for transport in ('command', 'http', 'sdk', 'popen'):
+            provider = p.Provider(self.c, **{transport: Mock()})
+            self.addCleanup(provider.close)
+            identity, prefix, _ = self.verification_stubs(provider)
+            for outcome in ('success', 'visibility_false', 'wrong_user'):
+                with self.subTest(transport=transport, outcome=outcome):
+                    calls = []
+                    def sql(statement, supplied):
+                        self.assertEqual(threading.get_ident(), caller)
+                        self.assertIs(supplied, identity)
+                        calls.append(statement)
+                        if 'current_user' in statement:
+                            return [['wrong' if outcome == 'wrong_user' else 'actual']]
+                        if statement.startswith('SHOW SCHEMAS'):
+                            return [] if outcome == 'visibility_false' else [['marts']]
+                        raise p.Rejected('ENGINE_ACCESS_DENIED')
+                    caller = threading.get_ident()
+                    self.mock(provider, '_sql', side_effect=sql)
+                    prefix.reset_mock()
+                    with patch.object(p, 'ThreadPoolExecutor', side_effect=AssertionError('injected fanout')), \
+                            patch.object(provider, '_refresh_read', side_effect=lambda observe: observe()):
+                        if outcome == 'wrong_user':
+                            with self.assertRaises(p.Rejected) as raised:
+                                provider.verify_target(self.db, identity)
+                            self.assertEqual(raised.exception.code, 'ENGINE_IDENTITY_MISMATCH')
+                        else:
+                            proof = provider.verify_target(self.db, identity)
+                            self.assertEqual(proof['verified'], outcome == 'success')
+                            self.assertEqual(proof['identity_positive'], outcome == 'success')
+                            self.assertTrue(proof['identity_negative'])
+                    self.assertEqual(calls, ['SELECT current_user'] + ([] if outcome == 'wrong_user' else [
+                        'SHOW SCHEMAS FROM "catalog_one"', 'SELECT node_id FROM system.runtime.nodes']))
+                    if outcome == 'success':
+                        prefix.assert_called_once_with(self.db, write_marker=True)
+                    else:
+                        prefix.assert_not_called()
 
     def health(self, provider=None, start=lambda branch: None):
         provider = provider or self.provider

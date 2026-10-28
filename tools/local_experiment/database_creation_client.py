@@ -326,10 +326,13 @@ def creations(client):
 
 
 def resolve(client, name):
-    matches = [item for item in creations(client) if item.get('sql_catalog') == name]
-    if len(matches) != 1:
-        raise Failure('DATABASE_NAME_AMBIGUOUS' if matches else 'DATABASE_NOT_FOUND')
-    return client.request('GET', COLLECTION + '/' + quote(matches[0]['creation_id'], safe=''))
+    detail = client.request('GET', COLLECTION + '/by-name/' + quote(name, safe=''))
+    if (type(detail) is not dict or detail.get('sql_catalog') != name
+            or any(not isinstance(detail.get(field), str)
+                   or re.fullmatch('[A-Za-z0-9_-]{1,128}', detail[field]) is None
+                   for field in ('creation_id', 'database_id'))):
+        raise Failure('INVALID_PUBLIC_RESPONSE')
+    return detail
 
 
 def eligible(detail, action):
@@ -529,10 +532,11 @@ def execute(args, *, profile=None, state_dir=None):
             if capability.get('creation_mode') == 'logical_v1' and capability.get('blocker') == 'WAREHOUSE_START_REQUIRED':
                 raise Failure('WAREHOUSE_START_REQUIRED')
             raise Failure('FOUNDATION_NOT_READY')
-        accounts = client.request('GET', COLLECTION + '/principals')['principals']
-        available = {a['principal_id']: a['maximum_role'] for a in accounts}
-        if any(g['principal_id'] not in available or ROLES[g['maximum_role']] > ROLES.get(available[g['principal_id']], -1) for g in grants):
-            raise Failure('INVALID_INITIAL_GRANTS')
+        if grants:
+            accounts = client.request('GET', COLLECTION + '/principals')['principals']
+            available = {a['principal_id']: a['maximum_role'] for a in accounts}
+            if any(g['principal_id'] not in available or ROLES[g['maximum_role']] > ROLES.get(available[g['principal_id']], -1) for g in grants):
+                raise Failure('INVALID_INITIAL_GRANTS')
         body = dict(sql_catalog=name, display_name=args.display_name if args.display_name is not None else name,
                     description=args.description, initial_grants=sorted(grants, key=lambda g: g['principal_id']))
         return success(receipts.mutate(client, 'create', COLLECTION, body), 'Creation accepted; use show to inspect progress.')
