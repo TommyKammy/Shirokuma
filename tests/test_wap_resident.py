@@ -16,6 +16,22 @@ import bears_resident as b
 
 
 class WapResidentTests(unittest.TestCase):
+    def test_manual_facades_call_real_backend_lazily(self):
+        import manual_wap
+        for name in ('save_model', 'build', 'audit', 'publish', 'rollback'):
+            with self.subTest(name=name), patch.object(manual_wap, name, return_value={'receipt': name}) as call:
+                self.assertEqual(getattr(b.wap, name)('principal', 'context', key='request'), {'receipt': name})
+                call.assert_called_once_with('principal', 'context', key='request')
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        for manager in (patch.dict(os.environ, SHIROKUMA_STATE_DIR=temporary.name),
+                        patch('runtime_profile.configure_process', return_value=False),
+                        patch('runtime_profile._current', None)):
+            manager.start()
+            self.addCleanup(manager.stop)
+
     def test_state_path_requires_writable_durable_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             durable = Path(temporary).resolve() / 'state'

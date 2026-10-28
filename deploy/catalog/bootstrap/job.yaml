@@ -29,22 +29,72 @@ spec:
         fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: create-polaris-schema
+          image: cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8
+          imagePullPolicy: IfNotPresent
+          command: ["psql"]
+          args:
+            - --no-psqlrc
+            - --set
+            - ON_ERROR_STOP=1
+            - --command
+            - CREATE SCHEMA IF NOT EXISTS polaris_schema;
+          env:
+            - name: PGHOST
+              value: polaris-postgresql.shirokuma-dev.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: database
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: password
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: polaris-admin
-          image: ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd
+          image: docker.io/apache/polaris-admin-tool@sha256:9f85ebe1fdfa9eb1214c4d5d343de29f76fef3dda7b4eb11c6767acc7e6c4fa4
           imagePullPolicy: IfNotPresent
           args:
             - bootstrap
             - --credentials-file=/var/run/secrets/shirokuma/polaris/credentials.json
           env:
+            - name: QUARKUS_LOG_FILE_ENABLED
+              value: "false"
+            - name: QUARKUS_LOG_CONSOLE_ENABLED
+              value: "true"
             - name: POLARIS_PERSISTENCE_TYPE
               value: relational-jdbc
             - name: POLARIS_REALM_CONTEXT_REALMS
-              value: POLARIS
+              value: SALES,FINANCE
             - name: QUARKUS_DATASOURCE_DB_KIND
               value: postgresql
             - name: QUARKUS_DATASOURCE_JDBC_URL
-              value: jdbc:postgresql://polaris-postgresql.shirokuma-dev.svc.cluster.local:5432/polaris
+              value: jdbc:postgresql://polaris-postgresql.shirokuma-dev.svc.cluster.local:5432/polaris?currentSchema=polaris_schema
             - name: QUARKUS_DATASOURCE_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -80,7 +130,7 @@ spec:
       volumes:
         - name: credentials
           secret:
-            secretName: polaris-root-credentials
+            secretName: polaris-bootstrap-credentials
             defaultMode: 0440
             items:
               - key: credentials.json

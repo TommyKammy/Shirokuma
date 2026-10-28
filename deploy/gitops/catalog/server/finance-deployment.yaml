@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: polaris-finance
+  namespace: shirokuma-dev
+  labels:
+    app.kubernetes.io/name: polaris-finance
+    app.kubernetes.io/component: catalog-server
+    app.kubernetes.io/part-of: shirokuma
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: polaris-finance
+      app.kubernetes.io/component: catalog-server
+  template:
+    metadata:
+      annotations:
+        shirokuma.dev/polaris-credential-generation: "generation-${POLARIS_CREDENTIAL_GENERATION}"
+        shirokuma.dev/polaris-jwt-key-generation: "generation-${POLARIS_FINANCE_JWT_KEY_GENERATION}"
+        shirokuma.dev/s3-credential-generation: "1"
+      labels:
+        app.kubernetes.io/name: polaris-finance
+        app.kubernetes.io/component: catalog-server
+        app.kubernetes.io/part-of: shirokuma
+        shirokuma.dev/object-storage-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: polaris-finance
+          image: docker.io/apache/polaris@sha256:74e6416c75f24563fc62f4ed52699d4fb872741b6a3e0af77fdc551b4ee72fce
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POLARIS_AUTHENTICATION_TOKEN_BROKER_TYPE
+              value: rsa-key-pair
+            - name: POLARIS_AUTHENTICATION_TOKEN_BROKER_RSA_KEY_PAIR_PUBLIC_KEY_FILE
+              value: /etc/polaris/jwt/public.pem
+            - name: POLARIS_AUTHENTICATION_TOKEN_BROKER_RSA_KEY_PAIR_PRIVATE_KEY_FILE
+              value: /etc/polaris/jwt/private.pem
+            - name: QUARKUS_LOG_FILE_ENABLED
+              value: "false"
+            - name: QUARKUS_LOG_CONSOLE_ENABLED
+              value: "true"
+            - name: POLARIS_PERSISTENCE_TYPE
+              value: relational-jdbc
+            - name: POLARIS_REALM_CONTEXT_REALMS
+              value: FINANCE
+            - name: QUARKUS_DATASOURCE_DB_KIND
+              value: postgresql
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              value: jdbc:postgresql://polaris-postgresql.shirokuma-dev.svc.cluster.local:5432/polaris?currentSchema=polaris_schema
+            - name: QUARKUS_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: username
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: password
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-finance-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-finance-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-finance-credentials
+                  key: AWS_REGION
+          ports:
+            - name: http
+              containerPort: 8181
+              protocol: TCP
+            - name: management
+              containerPort: 8182
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /q/health/started
+              port: management
+            failureThreshold: 30
+            periodSeconds: 2
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: management
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: management
+            initialDelaySeconds: 30
+            failureThreshold: 3
+            periodSeconds: 30
+            timeoutSeconds: 2
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10001
+          volumeMounts:
+            - name: jwt
+              mountPath: /etc/polaris/jwt
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: jwt
+          secret:
+            secretName: polaris-finance-jwt-signing-key
+            defaultMode: 0440
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi

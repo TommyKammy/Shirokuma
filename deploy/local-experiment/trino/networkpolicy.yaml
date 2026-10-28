@@ -28,6 +28,10 @@ spec:
             matchLabels:
               app.kubernetes.io/name: polaris
               app.kubernetes.io/component: catalog-server
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: polaris-finance
+              app.kubernetes.io/component: catalog-server
       ports:
         - port: 8181
           protocol: TCP

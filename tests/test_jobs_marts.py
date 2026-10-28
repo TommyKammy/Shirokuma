@@ -413,6 +413,7 @@ class MartScheduleTests(unittest.TestCase):
             self.assertEqual(len(late['skipped']), 1)
             self.assertEqual(late['started'], [])
             with jobs._db() as connection:
+                connection.execute('BEGIN IMMEDIATE')
                 run_id = jobs._insert_run(connection, dict(name='busy', steps=[]), {}, [], 'alice', 'admin')
             held = jobs._lock()
             try:

@@ -1,10 +1,67 @@
 SHELL := /bin/bash
 PYTHON ?= python3
+DATAOPS_PYTHON ?= tools/local_experiment/dataops/.venv/bin/python3
 
 .PHONY: verify-core test-resident-core
 verify-core: test-resident-core verify-go verify-design-context check-newlines check-trailing-whitespace check-no-secret-filenames
 
 test-resident-core:
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_retirement.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_retirement_routes.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_retirement_client.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_retirement_ui.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_schedules.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_schedule_routes.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_schedules_client.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_schedules_database_ui.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_marts.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_marts_client.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_marts_database_ui.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_stages.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_stage_scans.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_stage_routes.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_stages_client.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_stages_database_ui.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_request_auth.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_grant_management.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_grant_boundary.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_grant_client.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_display_management.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_display_client.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_jobs.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_execution_recovery.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_job_routes.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_security.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_inventory.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_generation_gitops.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_generation.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_admin.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_operator.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_admission.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_operations.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_admission_entries.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_logical*.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_creations.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_creation_auth.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_creation_preparation.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_creation_bridge.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_creation_worker.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_creation_recovery.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_provision.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_creation_routes.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_admin_management.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_workbench_management.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_material.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_generation_tofu.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_control_store.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_query*.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_dataops_service.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_dataops_routes.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_dataops_client.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_manual_ingest.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_wap.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_export.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_data_management.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_wap_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_disaster_recovery.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_agenthouse_manage.py'
@@ -73,6 +130,7 @@ lab-status:
 test-lab-lifecycle:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lab_lifecycle.py'
 verify-local-experiment: test-resident-core
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_creation_client.py'
 PREFLIGHT_REF ?= origin/main
 TOFU ?= tofu
 TOFU_DIR ?= opentofu/dev
@@ -150,7 +208,7 @@ tofu-init:
 	@$(TOFU) -chdir=$(TOFU_DIR) init -backend=false -input=false -lockfile=readonly
 
 tofu-fmt:
-	@$(TOFU) fmt -check -recursive
+	@$(TOFU) fmt -check -recursive opentofu
 
 tofu-validate: tofu-init
 	@$(TOFU) -chdir=$(TOFU_DIR) validate
@@ -167,10 +225,9 @@ gitops-bootstrap:
 	@test -n "$${GITHUB_TOKEN:-}" || { echo "GITHUB_TOKEN is required for Flux bootstrap and is never persisted by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_access_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_secret_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
-	@test -n "$${TF_VAR_seaweedfs_s3_application_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_access_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
-	@test -n "$${TF_VAR_seaweedfs_s3_application_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_secret_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_polaris_postgresql_password:-}" || { echo "TF_VAR_polaris_postgresql_password is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
-	@test -n "$${TF_VAR_polaris_root_client_secret:-}" || { echo "TF_VAR_polaris_root_client_secret is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_polaris_database_credentials:-}" || { echo "TF_VAR_polaris_database_credentials is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_local_gitops_s3_credentials:-}" || { echo "TF_VAR_local_gitops_s3_credentials is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
 	@legacy_pvc="$$(kubectl --context $(KUBE_CONTEXT) -n shirokuma-dev get pvc seaweedfs-data-seaweedfs-0 --ignore-not-found -o name)" || { echo "legacy PVC lookup failed; refusing OpenTofu apply"; exit 1; }; test -z "$$legacy_pvc" || { echo "legacy shirokuma-dev/seaweedfs-data-seaweedfs-0 PVC exists; complete a verified export and the whole-profile nuke/rebuild procedure before bootstrap"; exit 1; }
 	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false -auto-approve
 	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(FLUX_GITHUB_REPOSITORY) --private=$(FLUX_GITHUB_PRIVATE) --branch=$(FLUX_BOOTSTRAP_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT)
@@ -197,10 +254,9 @@ gitops-teardown:
 	@echo "gitops-teardown is disabled in local mode: retained data and backup safety require a separate reviewed plan"; exit 1
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_access_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_secret_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
-	@test -n "$${TF_VAR_seaweedfs_s3_application_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_access_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
-	@test -n "$${TF_VAR_seaweedfs_s3_application_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_secret_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_polaris_postgresql_password:-}" || { echo "TF_VAR_polaris_postgresql_password is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
-	@test -n "$${TF_VAR_polaris_root_client_secret:-}" || { echo "TF_VAR_polaris_root_client_secret is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_polaris_database_credentials:-}" || { echo "TF_VAR_polaris_database_credentials is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_local_gitops_s3_credentials:-}" || { echo "TF_VAR_local_gitops_s3_credentials is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@$(TOFU) -chdir=$(TOFU_DIR) plan -destroy -refresh=false -input=false >/dev/null
 	@$(FLUX) uninstall --context=$(KUBE_CONTEXT) --namespace=flux-system --silent
 	@$(TOFU) -chdir=$(TOFU_DIR) destroy -input=false -auto-approve

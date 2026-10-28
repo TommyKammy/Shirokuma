@@ -36,3 +36,27 @@ replacements:
           name: shirokuma-catalog
         fieldPaths:
           - spec.postBuild.substitute.POLARIS_CREDENTIAL_GENERATION
+  - source:
+      kind: ConfigMap
+      name: polaris-runtime-generation
+      fieldPath: data.POLARIS_SALES_JWT_KEY_GENERATION
+    targets:
+      - select:
+          group: kustomize.toolkit.fluxcd.io
+          version: v1
+          kind: Kustomization
+          name: shirokuma-catalog
+        fieldPaths:
+          - spec.postBuild.substitute.POLARIS_SALES_JWT_KEY_GENERATION
+  - source:
+      kind: ConfigMap
+      name: polaris-runtime-generation
+      fieldPath: data.POLARIS_FINANCE_JWT_KEY_GENERATION
+    targets:
+      - select:
+          group: kustomize.toolkit.fluxcd.io
+          version: v1
+          kind: Kustomization
+          name: shirokuma-catalog
+        fieldPaths:
+          - spec.postBuild.substitute.POLARIS_FINANCE_JWT_KEY_GENERATION

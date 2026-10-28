@@ -19,6 +19,11 @@ class SqlServerSyncTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        for manager in (patch.dict('os.environ', SHIROKUMA_STATE_DIR=self.temp.name),
+                        patch('runtime_profile.configure_process', return_value=False),
+                        patch('runtime_profile._current', None)):
+            manager.start()
+            self.addCleanup(manager.stop)
         self.path = Path(self.temp.name) / 'source.json'
         self.columns = [dict(name='id', type='BIGINT'),
                         dict(name='amount', type='DECIMAL', precision=38, scale=2),

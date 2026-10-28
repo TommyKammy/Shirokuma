@@ -83,9 +83,19 @@ def _catalog(include_tables):
 
 
 def backup(output_path=None, include_tables=True):
+    if warehouse._profile_active():
+        raise ValueError('Legacy warehouse backup is unsupported with the database profile')
+    include_ledger = (state_dir() / 'jobs.sqlite3').exists()
+    with warehouse.warehouse_operation():
+        return _backup(output_path, include_tables, include_ledger)
+
+
+def _backup(output_path, include_tables, include_ledger):
     """Create a private tar.gz archive; query failures never publish a bundle."""
     files = {}
     for name in STATE_FILES:
+        if name == 'jobs.sqlite3' and not include_ledger:
+            continue
         source = state_dir() / name
         if source.exists():
             if name == 'jobs.sqlite3':
@@ -252,6 +262,13 @@ def _pause_restored_schedules(data):
 
 
 def restore(archive_path, target_state_dir=None, dry_run=False, restore_warehouse=False):
+    if restore_warehouse and not dry_run:
+        with warehouse.warehouse_operation():
+            return _restore(archive_path, target_state_dir, dry_run, restore_warehouse)
+    return _restore(archive_path, target_state_dir, dry_run, restore_warehouse)
+
+
+def _restore(archive_path, target_state_dir=None, dry_run=False, restore_warehouse=False):
     """Validate the bundle and optionally recover warehouse DDL and logical rows."""
     files, manifest = _validated_files(archive_path)
     schemas, tables, warehouse_data, statements = [], [], [], []
@@ -321,6 +338,8 @@ def restore(archive_path, target_state_dir=None, dry_run=False, restore_warehous
 
 
 def main(argv=None):
+    import runtime_profile
+    runtime_profile.configure_process()
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     command = commands.add_parser('backup')

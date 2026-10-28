@@ -13,11 +13,15 @@ spec:
   prune: true
   force: true
   sourceRef:
-    kind: GitRepository
-    name: flux-system
+    kind: Bucket
+    name: shirokuma-local-source
   wait: true
   healthChecks:
     - apiVersion: batch/v1
       kind: Job
       name: iceberg-table-bootstrap
+      namespace: shirokuma-dev
+    - apiVersion: batch/v1
+      kind: Job
+      name: iceberg-finance-table-bootstrap
       namespace: shirokuma-dev

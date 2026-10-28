@@ -64,3 +64,51 @@ client session/role overrides are rejected for restricted/shared requests.
 Continuation and cancellation URLs require the same authenticated identity that
 received them. The endpoint retains at most 4096 issued continuation paths;
 expired entries and process restarts require a fresh query.
+
+## Database authentication foundation (P2-2)
+
+The new v2 path uses `request_auth.authenticate_principal()` and
+`authorize_database()` with an explicit Database ID and selected role. Every
+selection reloads the account and its grant, requires `READY` and a fully applied
+binding for the expected generation, and rejects unknown or unavailable targets.
+Each account explicitly declares `platform_admin: bool`; only a maximum role of
+`admin` may set it true. Downgraded admin requests require a DatabaseGrant and
+receive the selected DB's limited identity. Their authorization result has no
+effective platform admin privilege. Grant revoke/regrant uses a `revoked`
+tombstone and increasing CAS revision, with no delete-and-recreate API.
+
+`trino_auth.initialize_database(directory, databases)` generates a private v2
+`backend.json`, bcrypt password file and TLS material. The metadata argument maps
+Database IDs to `sql_catalog` and `generation_id`; no password is stored in
+control_store. `backend_headers_v2()` reauthorizes before choosing credentials,
+removes caller identity headers, and reloads the private credential file.
+`database_security.render_file_acl()` and `render_opa_policy()` generate both
+access controls from that same validated manifest. Install both: ordinary object
+privileges and the Table procedure guard compose with AND.
+
+Engineer identities can operate on raw/sandbox Tables and their procedures in
+the selected DB; staging/marts are read-only. Viewer identities can read marts.
+Schema management and marts rollback require admin. Table OWNERSHIP and Schema
+ownership are distinct checks in [Trino 483](https://github.com/trinodb/trino/blob/483/lib/trino-plugin-toolkit/src/main/java/io/trino/plugin/base/security/FileBasedSystemAccessControl.java#L460).
+
+P2-3 connects the ordinary Workbench, SQL endpoint and warehouse query CLI to
+v2 through an explicit runtime profile. The active local profile uses the normal
+Trino deployment, with SALES=`iceberg` and FINANCE=`finance`. SQL requests pin
+their original context and backend credentials; continuations reauthorize the
+owner and original DB/role, and cancellation remains owner-only after revocation.
+Issued URI tokens are method- and context-specific. A process restart loses the
+private transport pin and rejects continuation rather than rebinding credentials
+or replaying SQL. See the [P2-3 report](database-p2-3-exploration-sql-report-2026-10-19.md).
+P2-4 now renders candidate configuration from one public generation. Its public
+identity map is the shared input to file ACL and OPA; the generated tree is not
+overlaid again from a private backend manifest. The explicit private material
+adapter supplies existing passwords/verifiers and versioned Secret values,
+without issuing credentials. The active P2-3 runtime continues using its current
+private v2 overlay until a separate controlled cutover. See the
+[P2-4 generation report](database-p2-4-config-generation-report-2026-10-20.md).
+Old role-only APIs reject a v2 manifest,
+and v2 APIs reject a v1 manifest or missing context. P2-2 acceptance used a fresh
+private registry and temporary Trino/OPA, leaving the ordinary deployment intact.
+Results are in the ignored `var/shirokuma/p2-2-acceptance/` directory: 473 original
+checks passed; one test with a missing client capability was completed by a
+focused real-engine retest. The original failure record is retained.

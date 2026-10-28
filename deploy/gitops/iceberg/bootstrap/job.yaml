@@ -30,14 +30,17 @@ spec:
           type: RuntimeDefault
       containers:
         - name: iceberg-table-bootstrap
-          image: ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e
+          image: apache/polaris@sha256:74e6416c75f24563fc62f4ed52699d4fb872741b6a3e0af77fdc551b4ee72fce
           imagePullPolicy: IfNotPresent
           command:
             - /usr/bin/java
           args:
             - -Djava.util.logging.manager=org.jboss.logmanager.LogManager
+            - -Dshirokuma.catalog=shirokuma_l1
+            - -Dshirokuma.namespace=smoke
+            - -Dshirokuma.base-location=s3://shirokuma-lakehouse/databases/sales
             - --class-path
-            - /deployments/lib/boot/*:/deployments/lib/main/*:/deployments/app/*
+            - /deployments/lib/main/*
             - /opt/shirokuma/IcebergBootstrap.java
           env:
             - name: POLARIS_URI
@@ -45,34 +48,34 @@ spec:
             - name: POLARIS_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: polaris-root-credentials
+                  name: polaris-iceberg-bootstrap-credentials
                   key: client_id
             - name: POLARIS_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: polaris-root-credentials
+                  name: polaris-iceberg-bootstrap-credentials
                   key: client_secret
             - name: POLARIS_REALM
               valueFrom:
                 secretKeyRef:
-                  name: polaris-root-credentials
+                  name: polaris-iceberg-bootstrap-credentials
                   key: realm
             - name: S3_ENDPOINT
               value: http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333
             - name: AWS_REGION
               valueFrom:
                 secretKeyRef:
-                  name: seaweedfs-s3-application-credentials
+                  name: seaweedfs-s3-sales-credentials
                   key: S3_REGION
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: seaweedfs-s3-application-credentials
+                  name: seaweedfs-s3-sales-credentials
                   key: AWS_ACCESS_KEY_ID
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: seaweedfs-s3-application-credentials
+                  name: seaweedfs-s3-sales-credentials
                   key: AWS_SECRET_ACCESS_KEY
           resources:
             requests:

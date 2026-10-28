@@ -6,7 +6,6 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: polaris
       app.kubernetes.io/component: catalog-server
   policyTypes:
     - Ingress

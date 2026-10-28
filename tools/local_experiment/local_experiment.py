@@ -27,6 +27,8 @@ COMPONENTS = {
         ("apps/v1", "Deployment", "shirokuma-dev", "polaris"),
         ("v1", "Service", "shirokuma-dev", "polaris"),
         ("networking.k8s.io/v1", "NetworkPolicy", "shirokuma-dev", "polaris"),
+        ("apps/v1", "Deployment", "shirokuma-dev", "polaris-finance"),
+        ("v1", "Service", "shirokuma-dev", "polaris-finance"),
     }),
 }
 

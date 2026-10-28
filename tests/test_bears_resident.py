@@ -748,6 +748,11 @@ class BearsResidentTests(unittest.TestCase):
         model.assert_not_called()
 
     def setUp(self):
+        # Legacy CLI tests must never discover the operator's runtime profile.
+        for name in ('configure_process', 'active'):
+            profile = patch('runtime_profile.' + name, return_value=False)
+            profile.start()
+            self.addCleanup(profile.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.ai_config_path = Path(temporary.name) / 'ai_config.json'
@@ -756,7 +761,7 @@ class BearsResidentTests(unittest.TestCase):
             config_patch = patch.object(target, name, value)
             config_patch.start()
             self.addCleanup(config_patch.stop)
-        environment = patch.dict(b.os.environ, {}, clear=True)
+        environment = patch.dict(b.os.environ, {'SHIROKUMA_STATE_DIR': temporary.name}, clear=True)
         environment.start()
         self.addCleanup(environment.stop)
         registry = patch.object(b, 'WAP_REGISTRY', Path(temporary.name) / 'wap_models.json')
@@ -822,10 +827,10 @@ class BearsResidentTests(unittest.TestCase):
         self.assertEqual(b.load_wap_registry()['model_b']['sql'], 'SELECT 2')
 
     def test_state_path_durable_override_and_fail_closed(self):
-        root = TOOLS.parents[1]
+        root = self.ai_config_path.parent
         with patch.object(Path, 'mkdir'), patch.object(b.wap.os, 'access', return_value=True):
             for name in ('ai_config.json', 'wap_models.json'):
-                self.assertEqual(b.wap.state_path(name), root / 'var/shirokuma' / name)
+                self.assertEqual(b.wap.state_path(name), root / name)
         with patch.object(Path, 'mkdir', side_effect=OSError('read-only')):
             with self.assertRaisesRegex(RuntimeError, 'State directory is not writable:'):
                 b.wap.state_path('wap_models.json')

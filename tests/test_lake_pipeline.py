@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import stat
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -23,8 +24,13 @@ class LakePipelineTests(unittest.TestCase):
     def setUp(self):
         stack = ExitStack()
         self.addCleanup(stack.close)
+        temporary = stack.enter_context(tempfile.TemporaryDirectory())
+        stack.enter_context(patch.dict(os.environ, SHIROKUMA_STATE_DIR=temporary))
+        stack.enter_context(patch('runtime_profile.configure_process', return_value=False))
+        stack.enter_context(patch('runtime_profile._current', None))
         self.state = stack.enter_context(patch.object(w, "status", return_value={"replicas": 1}))
         self.kubectl = stack.enter_context(patch.object(w, "kubectl"))
+        self.transition = stack.enter_context(patch.object(w, 'transition'))
         self.tunnel = stack.enter_context(patch.object(w, "trino", return_value=nullcontext(
             "http://127.0.0.1:18080")))
         self.sql = stack.enter_context(patch.object(w, "execute", return_value={"rows": [[42]]}))
@@ -57,7 +63,7 @@ class LakePipelineTests(unittest.TestCase):
         self.assertEqual(report["telemetry"], "recorded")
         self.assertIsInstance(report["duration_ms"], int)
         self.assertEqual(report["models"][0]["status"], "success")
-        self.kubectl.assert_any_call("scale", "deployment/trino-local", "--replicas=1")
+        self.transition.assert_called_once_with('wake', 'LOCAL')
         self.assertEqual([c.args[1] for c in self.sql.call_args_list], [
             "CREATE SCHEMA IF NOT EXISTS iceberg.staging",
             "CREATE SCHEMA IF NOT EXISTS iceberg.marts"])

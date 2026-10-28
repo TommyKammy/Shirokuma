@@ -33,9 +33,13 @@ Icon
 logs/
 tmp/
 var/shirokuma/
+/var/
 temp/
 *.pid
 *.seed
+
+# Local UI review artifacts
+/.impeccable/critique/
 
 # Node / frontend
 node_modules/
@@ -85,6 +89,9 @@ bin/
 warehouse/
 metastore/
 catalog/
+!deploy/catalog/
+!deploy/gitops/catalog/
+!deploy/gitops/catalog/**
 object-store/
 data/
 scratch/

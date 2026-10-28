@@ -103,17 +103,13 @@ public final class IcebergBootstrap {
   }
 
   private static Result run(Environment environment) throws Exception {
-    ensureManagementCatalog(environment);
     Map<String, String> properties = catalogProperties(environment);
 
     try (RESTCatalog catalog = new RESTCatalog()) {
       catalog.initialize("shirokuma", properties);
       Namespace namespace = Namespace.of(NAMESPACE);
       if (!catalog.namespaceExists(namespace)) {
-        Map<String, String> namespaceProperties = new HashMap<>();
-        namespaceProperties.put(
-            "shirokuma.dev/managed-by", "gitops-bootstrap");
-        catalog.createNamespace(namespace, namespaceProperties);
+        throw new BootstrapException("operator must precreate the catalog and smoke namespace");
       }
 
       TableIdentifier identifier = TableIdentifier.of(namespace, TABLE);

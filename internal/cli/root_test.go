@@ -34,7 +34,7 @@ func TestRootCommandGroups(t *testing.T) {
 	for _, command := range root.Commands() {
 		names = append(names, command.Name())
 	}
-	if want := []string{"bear", "doctor", "lake", "version", "warehouse", "workbench"}; !reflect.DeepEqual(names, want) {
+	if want := []string{"alert", "bear", "database", "doctor", "job", "lake", "mart", "schedule", "stage", "version", "warehouse", "workbench"}; !reflect.DeepEqual(names, want) {
 		t.Fatalf("root commands = %v, want %v", names, want)
 	}
 	warehouse, _, err := root.Find([]string{"warehouse"})

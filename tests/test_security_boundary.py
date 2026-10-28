@@ -212,8 +212,9 @@ initializeSession().then(()=>{
         backend = Mock()
         response = backend.getresponse.return_value
         response.status = 200
-        response.read.return_value = json.dumps({'nextUri': 'http://backend/v1/statement/executing/query1/0/1',
-            'partialCancelUri': 'http://backend/v1/statement/partialCancel/query1/0'}).encode()
+        response.read.return_value = json.dumps({'id': 'query1', 'nextUri': 'http://backend/v1/statement/executing/query1/0/1',
+            'partialCancelUri': 'http://backend/v1/statement/partialCancel/query1/0',
+            'stats': {'state': 'RUNNING'}}).encode()
         response.getheaders.return_value = []
         response.getheader.return_value = ''
         ready = threading.Event()
@@ -248,7 +249,8 @@ initializeSession().then(()=>{
                 thread.join(3)
                 server.server_close()
 
-    def test_shared_startup_requires_secure_backend(self):
+    @patch('runtime_profile.active', return_value=False)
+    def test_shared_startup_requires_secure_backend(self, _profile_active):
         with self.assertRaisesRegex(auth.AuthenticationError, 'password-authenticated'):
             validate_shared_backend()
         with patch.object(trino_auth, 'password_mode', return_value=True), \

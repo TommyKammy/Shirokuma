@@ -93,6 +93,8 @@
     {"source": "06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md"},
     {"source": "06_WorkPackages/L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md"},
     {"source": "07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md", "target": "docs/design/07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md"},
+    {"source": "07_ADR/ADR-0037_Use_Bounded_Database_Creation_Delegation_and_Runtime_Handoff.md", "target": "docs/design/07_ADR/ADR-0037_Use_Bounded_Database_Creation_Delegation_and_Runtime_Handoff.md"},
+    {"source": "07_ADR/ADR-0038_Separate_Logical_Database_Creation_from_Platform_Provisioning.md", "target": "docs/design/07_ADR/ADR-0038_Separate_Logical_Database_Creation_from_Platform_Provisioning.md"},
     {"source": "04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md", "target": "docs/design/04_Development/04F_Commander_Worker_and_Pragmatic_Roadmap.md"}
   ]
 }

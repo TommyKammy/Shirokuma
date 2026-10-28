@@ -245,6 +245,7 @@ class BatchMetrics:
         return self.metrics
 
 
+@wr.legacy_operation
 def extract(source_table, target_table, *, mode='replace', key=None, amount_col=None, batch_size=500,
             target_types=None, **connection):
     target = lake_ingest.target_table(target_table, Path('source.csv'))
@@ -306,6 +307,7 @@ class ReconciliationError(RuntimeError):
         super().__init__('SQL Server / Iceberg reconciliation mismatch')
 
 
+@wr.legacy_operation
 def reconcile(source_table, target_table, *, key=None, amount_col=None, extracted_metrics=None, **connection):
     target = lake_ingest.target_table(target_table, Path('source.csv'))
     columns = list(dict.fromkeys(c for c in (key, amount_col) if c))
@@ -342,6 +344,7 @@ def reconcile(source_table, target_table, *, key=None, amount_col=None, extracte
     return report
 
 
+@wr.legacy_operation
 def table_metrics(target, columns, key=None, amount_col=None):
     """Read metrics from the actual typed table before it is published."""
     expressions = ['COUNT(*)']
@@ -372,6 +375,7 @@ def table_metrics(target, columns, key=None, amount_col=None):
     return target_metrics
 
 
+@wr.legacy_operation
 def sync(source_table, target_table, *, mode='replace', key=None, amount_col=None, **connection):
     target = lake_ingest.target_table(target_table, Path('source.csv'))
     if mode not in {'replace', 'append', 'upsert'}:
@@ -426,6 +430,8 @@ def sync(source_table, target_table, *, mode='replace', key=None, amount_col=Non
 
 
 def main(argv=None):
+    import runtime_profile
+    runtime_profile.configure_process()
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     for command in ('extract', 'reconcile', 'sync'):

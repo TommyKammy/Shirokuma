@@ -15,6 +15,7 @@ SPEC.loader.exec_module(warehouse_resident)
 TABLES = ("region", "nation", "part", "supplier", "partsupp", "customer", "orders", "lineitem")
 
 
+@warehouse_resident.legacy_operation
 def run(action, scale="tiny"):
     if action not in {"seed", "status"} or scale not in {"tiny", "sf1"}:
         raise ValueError("expected seed/status and scale tiny/sf1")
@@ -57,6 +58,7 @@ def run(action, scale="tiny"):
             if all(table["state"] in {"created", "present"} for table in report["tables"]):
                 report["result"] = "ready"
     except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
+        warehouse_resident._operation_finish(warehouse_resident.admission.current(), 'UNKNOWN')
         print(str(exc), file=sys.stderr)
     finally:
         report["duration_ms"] = int((time.monotonic() - started) * 1000)
@@ -66,6 +68,8 @@ def run(action, scale="tiny"):
 
 
 def main():
+    import runtime_profile
+    runtime_profile.configure_process()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("seed", "status"))
     parser.add_argument("--scale", choices=("tiny", "sf1"), default="tiny")

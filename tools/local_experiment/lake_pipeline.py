@@ -22,6 +22,7 @@ DBT = DATAOPS / ".venv/bin/dbt"
 MARTS = ("fct_orders", "dim_customers")
 
 
+@warehouse_resident.legacy_operation
 def run_dbt(action, url):
     endpoint = urlsplit(url)
     with tempfile.TemporaryDirectory(prefix="shirokuma-lake-") as directory:
@@ -64,14 +65,13 @@ def run_dbt(action, url):
         return models, success
 
 
+@warehouse_resident.legacy_operation
 def run(action):
     started = time.monotonic()
     report = dict(action=action, result="failed", models=[], telemetry="skipped")
     try:
         if warehouse_resident.status("LOCAL")["replicas"] < 1:
-            warehouse_resident.kubectl("scale", "deployment/trino-local", "--replicas=1")
-            warehouse_resident.kubectl("rollout", "status", "deployment/trino-local",
-                                       f"--timeout={warehouse_resident.TIMEOUT}s")
+            warehouse_resident.transition('wake', 'LOCAL')
         with warehouse_resident.trino() as url:
             headers = {"X-Trino-User": "shirokuma-lake"}
             if action == "build":
@@ -89,6 +89,7 @@ def run(action):
                 report["models"], success = run_dbt(action, url)
             report["result"] = "success" if success else "failed"
     except Exception as exc:
+        warehouse_resident._operation_finish(warehouse_resident.admission.current(), 'UNKNOWN')
         report["error"] = str(exc)
     report["duration_ms"] = int((time.monotonic() - started) * 1000)
     if action in ("build", "test"):
@@ -98,6 +99,8 @@ def run(action):
 
 
 def main():
+    import runtime_profile
+    runtime_profile.configure_process()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("build", "test", "status"))
     report = run(parser.parse_args().action)

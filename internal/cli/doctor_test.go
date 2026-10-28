@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -95,6 +96,76 @@ func TestCheckFluxRequiresExactControllerNames(t *testing.T) {
 	check := checkFlux(context.Background(), runner, "test")
 	if check.Status != "degraded" || !strings.Contains(check.Summary, "notification-controller") {
 		t.Fatalf("check = %#v, want missing notification-controller", check)
+	}
+}
+
+func TestDoctorLocalFluxSourceAndChildren(t *testing.T) {
+	checkFixture := func(t *testing.T, fixture localDoctorFixture, local bool) doctorCheck {
+		t.Helper()
+		runner := &fakeRunner{}
+		for _, items := range [][]kubernetesResource{fixture.controllers, fixture.flux} {
+			raw, err := json.Marshal(kubernetesResourceList{Items: items})
+			if err != nil {
+				t.Fatal(err)
+			}
+			runner.responses = append(runner.responses, fakeResponse{output: string(raw)})
+		}
+		check := checkFluxForProfile(context.Background(), runner, localExperimentContext, local)
+		if !strings.Contains(strings.Join(runner.calls[1], " "), "buckets.source.toolkit.fluxcd.io") {
+			t.Fatal("Flux inventory must fetch Buckets")
+		}
+		return check
+	}
+	for _, state := range []string{"missing", "unready", "stale", "missing observedGeneration", "suspended"} {
+		t.Run("Bucket/"+state, func(t *testing.T) {
+			fixture := healthyLocalDoctorFixture()
+			switch state {
+			case "missing":
+				fixture.flux = fixture.flux[1:]
+			case "unready":
+				fixture.flux[0] = localTestCondition(fixture.flux[0], "Ready", "False")
+			case "stale":
+				fixture.flux[0].Metadata.Generation++
+			case "missing observedGeneration":
+				fixture.flux[0].Status.Conditions[0].ObservedGeneration = 0
+			case "suspended":
+				fixture.flux[0].Spec.Suspend = true
+			}
+			check := checkFixture(t, fixture, true)
+			if check.Status != "degraded" || !strings.Contains(check.Summary, "Bucket/flux-system/shirokuma-local-source") {
+				t.Fatalf("check = %#v", check)
+			}
+		})
+	}
+	for _, child := range []string{"shirokuma-dev", "shirokuma-object-storage", "shirokuma-catalog-database",
+		"shirokuma-catalog-bootstrap", "shirokuma-catalog", "shirokuma-iceberg-bootstrap", "shirokuma-trino"} {
+		for _, missing := range []bool{false, true} {
+			t.Run(child+fmt.Sprint(missing), func(t *testing.T) {
+				fixture := healthyLocalDoctorFixture()
+				for i, resource := range fixture.flux {
+					if resource.Metadata.Name == child {
+						if missing {
+							fixture.flux = append(fixture.flux[:i], fixture.flux[i+1:]...)
+						} else {
+							fixture.flux[i].Spec.Suspend = true
+						}
+						break
+					}
+				}
+				check := checkFixture(t, fixture, true)
+				if check.Status != "degraded" || !strings.Contains(check.Summary, child) {
+					t.Fatalf("check = %#v", check)
+				}
+			})
+		}
+	}
+	fixture := healthyLocalDoctorFixture()
+	fixture.flux = append(fixture.flux, localTestCondition(localTestResource("GitRepository", "flux-system", "flux-system"), "Ready", "False"))
+	if check := checkFixture(t, fixture, true); check.Status != "healthy" {
+		t.Fatalf("legacy Git must not affect local source: %#v", check)
+	}
+	if check := checkFixture(t, fixture, false); check.Status != "degraded" || !strings.Contains(check.Summary, "GitRepository/flux-system/flux-system") {
+		t.Fatalf("non-local profile must still check Git: %#v", check)
 	}
 }
 

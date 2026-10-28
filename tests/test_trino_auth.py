@@ -226,6 +226,201 @@ class TrinoAuthTests(unittest.TestCase):
             self.assertIn(required, result.stdout)
 
 
+class DatabaseBackendTests(unittest.TestCase):
+    def test_scoped_admin_uses_exact_db_identity_and_legacy_missing_admin_fails_closed(self):
+        from test_request_auth import PrincipalTests
+        import control_store
+        import data_management as dm
+        from grant_fixtures import verified_grants
+        fixture = PrincipalTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.users['alice']['role'] = 'admin'
+        fixture.save()
+        principal = fixture.principal()
+        with control_store.connect() as db:
+            dm.update_grant(db, 'alice', fixture.sales, 1, 'admin')
+            # Seed only the authorization boundary; this is not apply evidence.
+            db.execute("UPDATE effective_grants SET maximum_role='admin',epoch=epoch+1 WHERE principal_id='alice'")
+        config = dict(version=2, platform_admin=dict(username='shirokuma_admin', password='platform-only'),
+            databases={key: dict(sql_catalog=catalog, generation_id='g-' + key,
+                roles={r: dict(username=auth.scoped_username(key, r), password=key+r)
+                    for r in ('bi_viewer', 'data_engineer')})
+                for key, catalog in ((fixture.sales, 'sales'), (fixture.finance, 'finance'))})
+        with patch.object(auth, 'password_mode', return_value=True), \
+             patch.object(auth, 'backend_ssl_context', return_value=object()), \
+             patch.object(auth, 'load_database_credentials', side_effect=lambda: auth.validate_database_config(config)):
+            def capture(role='admin', who=principal, key=fixture.sales):
+                return auth.prepare_backend_v2({'X-Presto-User': 'shirokuma_admin',
+                    'X-Trino-Original-User': 'shirokuma_admin', 'Authorization': 'spoof'},
+                    principal=who, database_id=key, selected_role=role)
+            capture('bi_viewer')  # legacy two-role backend remains usable
+            with self.assertRaisesRegex(PermissionError, 'credential is unavailable'):
+                capture()
+            for key in config['databases']:
+                config['databases'][key]['roles']['admin'] = dict(
+                    username=auth.scoped_username(key, 'admin'), password=key+'admin')
+            decision, headers = capture()
+            self.assertFalse(decision.platform_admin)
+            self.assertIsNotNone(decision.grant_revision)
+            self.assertEqual(headers['X-Trino-User'], auth.scoped_username(fixture.sales, 'admin'))
+            self.assertEqual(set(headers), {'X-Trino-User', 'Authorization'})
+            self.assertNotIn('platform-only', base64.b64decode(headers['Authorization'].split()[1]).decode())
+            with self.assertRaises(PermissionError):
+                capture(key=fixture.finance)
+            self.assertEqual(capture(who=fixture.principal('owner'))[1]['X-Trino-User'], 'shirokuma_admin')
+
+    def test_v2_has_no_local_or_missing_tls_passthrough(self):
+        from test_database_security import manifest
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'backend.json'
+            path.write_text(json.dumps(manifest()))
+            path.chmod(0o600)
+            with patch.dict(os.environ, {'SHIROKUMA_TRINO_AUTH_FILE': str(path),
+                'SHIROKUMA_TRINO_AUTH_MODE': 'password'}, clear=True):
+                with self.assertRaises(RuntimeError):
+                    auth.backend_headers_v2(principal=None, database_id='opaque/sales', selected_role='bi_viewer')
+                with patch.dict(os.environ, SHIROKUMA_TRINO_AUTH_MODE='local'):
+                    with self.assertRaises(RuntimeError):
+                        auth.backend_headers_v2(principal=None, database_id='opaque/sales', selected_role='bi_viewer')
+
+    def test_headers_recheck_current_grants_accounts_generation_and_rotation(self):
+        from test_request_auth import PrincipalTests
+        import control_store
+        import data_management as dm
+        from grant_fixtures import verified_grants
+        fixture = PrincipalTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        principal = fixture.principal()
+        owner = fixture.principal('owner')
+        databases = {key: dict(sql_catalog=catalog, generation_id='g-' + key,
+            roles={role: dict(username=auth.scoped_username(key, role), password=key + role)
+                for role in ('bi_viewer', 'data_engineer')})
+            for key, catalog in ((fixture.sales, 'sales'), (fixture.finance, 'finance'))}
+        config = dict(version=2, platform_admin=dict(username='shirokuma_admin', password='admin-password'), databases=databases)
+        path = fixture.root / 'backend.json'
+        def save():
+            path.write_text(json.dumps(config))
+            path.chmod(0o600)
+        save()
+        def build(role='bi_viewer', database_id=None, who=None, headers=None):
+            return auth.backend_headers_v2(headers, principal=who or principal,
+                database_id=database_id or fixture.sales, selected_role=role)
+        with patch.dict(os.environ, SHIROKUMA_TRINO_AUTH_MODE='password', SHIROKUMA_TRINO_AUTH_FILE=str(path)), \
+             patch.object(auth, 'backend_ssl_context', return_value=object()):
+            supplied = {key: 'spoof' for key in ('aUtHoRiZaTiOn', 'PROXY-Authorization',
+                'x-TRINO-user', 'X-Trino-Original-User', 'X-Trino-Original-Roles',
+                'X-Trino-Role', 'X-Trino-Extra-Credential', 'X-Presto-User',
+                'X-Presto-Role', 'X-Trino-Authorization-User')}
+            supplied['X-Trino-Source'] = 'client'
+            first = build(headers=supplied)
+            credential = databases[fixture.sales]['roles']['bi_viewer']
+            self.assertEqual(first, {'X-Trino-Source': 'client', 'X-Trino-User': credential['username'],
+                'Authorization': 'Basic ' + base64.b64encode((credential['username'] + ':' + credential['password']).encode()).decode()})
+            self.assertEqual(build('admin', who=owner)['X-Trino-User'], 'shirokuma_admin')
+            with self.assertRaises(PermissionError):
+                build(who=owner)
+            with control_store.connect() as db:
+                dm.create_grant(db, 'owner', fixture.sales, 'bi_viewer')
+                dm.create_grant(db, 'alice', fixture.finance, 'bi_viewer')
+            with self.assertRaises(PermissionError):
+                build(who=owner)
+            with control_store.connect() as db:
+                verified_grants(db)
+            self.assertEqual(build(who=owner)['X-Trino-User'], credential['username'])
+            with control_store.connect() as db:
+                dm.update_grant(db, 'owner', fixture.sales, 1, 'data_engineer')
+            with self.assertRaises(PermissionError):
+                build('data_engineer', who=owner)
+            with control_store.connect() as db:
+                verified_grants(db)
+            self.assertEqual(build('data_engineer', who=owner)['X-Trino-User'],
+                databases[fixture.sales]['roles']['data_engineer']['username'])
+            self.assertTrue(owner.platform_admin)
+            self.assertNotEqual(build(database_id=fixture.finance)['X-Trino-User'], credential['username'])
+            build('data_engineer')
+            fixture.users['alice']['role'] = 'bi_viewer'
+            fixture.save()
+            with self.assertRaises(PermissionError):
+                build('data_engineer')
+            with control_store.connect() as db:
+                dm.update_grant(db, 'alice', fixture.sales, 1, 'revoked')
+            with self.assertRaises(PermissionError):
+                build()
+            with control_store.connect() as db:
+                dm.update_grant(db, 'alice', fixture.sales, 2, 'bi_viewer')
+            with self.assertRaises(PermissionError):
+                build()
+            with control_store.connect() as db:
+                verified_grants(db)
+            build()
+            credential['password'] = 'rotated-password'
+            save()
+            self.assertNotEqual(build()['Authorization'], first['Authorization'])
+            for field, value in (('generation_id', 'wrong'), ('sql_catalog', 'wrong')):
+                original = databases[fixture.sales][field]
+                databases[fixture.sales][field] = value
+                save()
+                with self.assertRaises(PermissionError):
+                    build()
+                databases[fixture.sales][field] = original
+            save()
+            for role in (None, '', 'admin'):
+                with self.assertRaises(PermissionError):
+                    build(role)
+            with self.assertRaises(PermissionError):
+                build(database_id='unknown')
+            del fixture.users['alice']
+            fixture.save()
+            with self.assertRaises(PermissionError):
+                build()
+            with patch.dict(os.environ, SHIROKUMA_TRINO_AUTH_MODE='local'):
+                with self.assertRaises(RuntimeError):
+                    build()
+
+    def test_v2_initialization_and_version_isolation(self):
+        from test_database_security import manifest
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'backend.json'
+            config = manifest()
+            path.write_text(json.dumps(config))
+            path.chmod(0o600)
+            with patch.dict(os.environ, SHIROKUMA_TRINO_AUTH_FILE=str(path)):
+                self.assertEqual(auth.load_database_credentials(), config)
+                with self.assertRaises(RuntimeError):
+                    auth.load_credentials()
+                config['platform_admin']['password'] = 'rotated'
+                path.write_text(json.dumps(config))
+                self.assertEqual(auth.load_database_credentials()['platform_admin']['password'], 'rotated')
+                path.chmod(0o644)
+                with self.assertRaises(RuntimeError):
+                    auth.load_database_credentials()
+                path.chmod(0o600)
+                path.write_text(json.dumps({role: dict(username=user, password=role) for role, user in auth.SERVICE_USERS.items()}))
+                with self.assertRaises(RuntimeError):
+                    auth.load_database_credentials()
+
+    @unittest.skipUnless(shutil.which('htpasswd') and shutil.which('openssl'), 'htpasswd/openssl not installed')
+    def test_generated_v2_hashes_tls_and_private_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / 'new'
+            auth.initialize_database(directory, {'opaque/one': dict(sql_catalog='research', generation_id='g')})
+            with patch.dict(os.environ, SHIROKUMA_TRINO_AUTH_FILE=str(directory / 'backend.json')):
+                config = auth.load_database_credentials()
+            credentials = [config['platform_admin']] + list(config['databases']['opaque/one']['roles'].values())
+            for entry in credentials:
+                result = subprocess.run([shutil.which('htpasswd'), '-vi', str(directory / 'password.db'), entry['username']],
+                    input=entry['password'] + '\n', text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0)
+            ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER).load_cert_chain(directory / 'tls.pem')
+            self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+            for name in ('backend.json', 'password.db', 'tls.key', 'tls.crt', 'tls.pem', 'shared-secret'):
+                self.assertEqual((directory / name).stat().st_mode & 0o777, 0o600)
+            with self.assertRaises(FileExistsError):
+                auth.initialize_database(directory, {'opaque/one': dict(sql_catalog='research', generation_id='g')})
+
+
 class TrinoAuthImageTests(unittest.TestCase):
     def test_builder_materializes_distribution_hardlinks(self):
         with tempfile.TemporaryDirectory() as temporary:

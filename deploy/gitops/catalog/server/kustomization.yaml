@@ -5,3 +5,5 @@ resources:
   - deployment.yaml
   - networkpolicy.yaml
   - service.yaml
+  - finance-deployment.yaml
+  - finance-service.yaml

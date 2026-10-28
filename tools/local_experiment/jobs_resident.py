@@ -4,7 +4,6 @@ No automatic retries. The 900 second budget is checked between steps, not a
 hard cancellation deadline for a running warehouse operation. A lost worker is
 reported unknown; already successful steps are retained and never replayed.
 """
-from contextlib import contextmanager
 import csv
 from datetime import date, datetime, timezone
 from decimal import InvalidOperation
@@ -13,13 +12,13 @@ import json
 import os
 from pathlib import Path
 import re
-import sqlite3
 import subprocess
 import threading
 import time
 import uuid
 
 import request_auth
+import control_store
 import warehouse_resident as wr
 
 
@@ -47,73 +46,11 @@ def _now():
 
 
 def _root():
-    path = Path(os.environ.get('SHIROKUMA_STATE_DIR') or
-                Path(__file__).resolve().parents[2] / 'var/shirokuma')
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return control_store.root()
 
 
-@contextmanager
 def _db():
-    path = _root() / 'jobs.sqlite3'
-    descriptor = os.open(path, os.O_CREAT | os.O_WRONLY, 0o600)
-    os.close(descriptor)
-    connection = sqlite3.connect(path, timeout=5)
-    connection.row_factory = sqlite3.Row
-    try:
-        connection.executescript('''
-            CREATE TABLE IF NOT EXISTS jobs (
-                name TEXT PRIMARY KEY, owner TEXT NOT NULL, definition TEXT NOT NULL,
-                created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS stages (
-                name TEXT PRIMARY KEY, owner TEXT NOT NULL, definition TEXT NOT NULL,
-                created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS stage_files (
-                stage_name TEXT NOT NULL, content_key TEXT NOT NULL, status TEXT NOT NULL,
-                last_run_id TEXT NOT NULL, position INTEGER NOT NULL,
-                PRIMARY KEY(stage_name,content_key));
-            CREATE TABLE IF NOT EXISTS runs (
-                id TEXT PRIMARY KEY, job_name TEXT NOT NULL, actor TEXT NOT NULL,
-                role TEXT NOT NULL, definition TEXT NOT NULL, arguments TEXT NOT NULL,
-                status TEXT NOT NULL, created_at TEXT NOT NULL, started_at TEXT,
-                finished_at TEXT, error TEXT);
-            CREATE UNIQUE INDEX IF NOT EXISTS one_active_job ON runs((1))
-                WHERE status IN ('queued', 'running');
-            CREATE TABLE IF NOT EXISTS steps (
-                run_id TEXT NOT NULL, position INTEGER NOT NULL, name TEXT NOT NULL,
-                action TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT,
-                finished_at TEXT, error TEXT, summary TEXT,
-                PRIMARY KEY(run_id, position));
-            CREATE TABLE IF NOT EXISTS schedules (
-                name TEXT PRIMARY KEY, owner TEXT NOT NULL, kind TEXT NOT NULL,
-                every_minutes INTEGER, time TEXT, timezone TEXT, arguments TEXT NOT NULL,
-                enabled INTEGER NOT NULL, role TEXT NOT NULL, auth_mode TEXT NOT NULL,
-                next_run_at TEXT, last_status TEXT, last_run_id TEXT, last_scheduled_for TEXT);
-            CREATE TABLE IF NOT EXISTS alerts (
-                id TEXT PRIMARY KEY, job_name TEXT NOT NULL, step_position INTEGER NOT NULL,
-                step_name TEXT NOT NULL, owner TEXT NOT NULL, severity TEXT NOT NULL,
-                message TEXT NOT NULL, first_run_id TEXT NOT NULL, last_run_id TEXT NOT NULL,
-                first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, occurrences INTEGER NOT NULL,
-                acknowledged_at TEXT, acknowledged_by TEXT, resolved_at TEXT, resolution TEXT,
-                rule_key TEXT NOT NULL, arguments_key TEXT NOT NULL);
-            CREATE UNIQUE INDEX IF NOT EXISTS one_open_alert ON alerts
-                (job_name,step_position,owner,rule_key,arguments_key) WHERE resolved_at IS NULL;
-        ''')
-        connection.execute('BEGIN IMMEDIATE')
-        columns = {row['name'] for row in connection.execute('PRAGMA table_info(runs)')}
-        if 'trigger' not in columns:
-            connection.execute("ALTER TABLE runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'")
-        if 'scheduled_for' not in columns:
-            connection.execute('ALTER TABLE runs ADD COLUMN scheduled_for TEXT')
-        schedule_columns = {row['name'] for row in connection.execute('PRAGMA table_info(schedules)')}
-        for column in ('date', 'weekdays', 'day_of_month'):
-            if column not in schedule_columns:
-                connection.execute(f'ALTER TABLE schedules ADD COLUMN {column} TEXT')
-        connection.commit()
-        yield connection
-        connection.commit()
-    finally:
-        connection.close()
+    return control_store.connect()
 
 
 def _identity(actor, role):
@@ -300,6 +237,32 @@ def _lock():
 
 
 def _lost(connection):
+    import db_jobs
+    import warehouse_admission as admission
+    if not connection.in_transaction:
+        connection.execute('BEGIN IMMEDIATE')
+    db_jobs._lost(connection)
+    for row in connection.execute("SELECT id FROM runs WHERE status IN ('queued','running')").fetchall():
+        handle = admission.get_for_subject(connection, kind='job', subject_id=row['id'])
+        if handle is not None:
+            saved = next((item for item in admission.blockers(connection) if item['id'] == handle.id), None)
+            firing = next((item for item in admission.blockers(connection)
+                           if saved is not None and item['id'] == saved.get('parent_id') and
+                           item['kind'] == 'schedule_firing'), None)
+            parents = {handle.id}
+            remaining = list(admission.blockers(connection))
+            while True:
+                children = [item for item in remaining if item.get('parent_id') in parents and item['id'] not in parents]
+                if not children:
+                    break
+                for item in children:
+                    child = admission.get_for_subject(connection, kind=item['kind'], subject_id=item['subject_id'])
+                    admission.finish(connection, child, state='UNKNOWN')
+                    parents.add(child.id)
+            admission.finish(connection, handle, state='UNKNOWN')
+            if firing is not None:
+                parent = admission.get_for_subject(connection, kind='schedule_firing', subject_id=firing['subject_id'])
+                _finish_firing(connection, parent, 'UNKNOWN')
     now = _now()
     connection.execute("UPDATE schedules SET enabled=0,next_run_at=NULL WHERE name IN "
                        "(SELECT job_name FROM runs WHERE status IN ('queued','running') AND job_name LIKE 'mart:%')")
@@ -370,6 +333,8 @@ def submit_run(name, arguments, actor, role):
             if not job or job['owner'] != actor:
                 raise JobNotFound('Job not found or not owned by this identity')
             definition = json.loads(job['definition'])
+            import warehouse_admission as admission
+            admission.check_open(connection)
             values, prepared = _validate(definition, role, arguments, preflight=True)
             run_id = _insert_run(connection, definition, values, prepared, actor, role)
         result = get_run(run_id, actor, role)
@@ -383,6 +348,11 @@ def submit_run(name, arguments, actor, role):
 def _insert_run(connection, definition, arguments, steps, actor, role, *,
                 trigger='manual', scheduled_for=None, status='queued', error=None):
     run_id, now = uuid.uuid4().hex, _now()
+    if status in ACTIVE:
+        if connection.execute("SELECT 1 FROM db_job_runs WHERE status IN ('queued','running','unknown')").fetchone():
+            raise JobConflict('Database Job is active or unresolved')
+        import warehouse_admission as admission
+        admission.admit(connection, actor=actor, kind='job', subject_id=run_id)
     finished = now if status not in ACTIVE else None
     connection.execute('INSERT INTO runs(id,job_name,actor,role,definition,arguments,status,created_at,'
                        'finished_at,error,trigger,scheduled_for) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
@@ -397,8 +367,11 @@ def _insert_run(connection, definition, arguments, steps, actor, role, *,
     return run_id
 
 
-def _start_worker(run_id, steps, actor, role, lock, shared, name, auth_mode=None):
-    thread = threading.Thread(target=_worker, args=(run_id, steps, actor, role, lock, shared, name, auth_mode),
+def _start_worker(run_id, steps, actor, role, lock, shared, name, auth_mode=None, firing_handle=None):
+    import warehouse_admission as admission
+    with _db() as connection:
+        handle = admission.get_for_subject(connection, kind='job', subject_id=run_id)
+    thread = threading.Thread(target=_worker, args=(run_id, steps, actor, role, lock, shared, name, auth_mode, handle, firing_handle),
                               name='job-' + run_id[:8], daemon=True)
     thread.start()
 
@@ -508,11 +481,29 @@ def _execute_step(step):
     return report
 
 
-def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mode=None):
+def _finish_firing(connection, handle, state):
+    """A firing stays blocking until every child has an authoritative outcome."""
+    if handle is None:
+        return
+    import warehouse_admission as admission
+    rows = admission.blockers(connection, handle.warehouse_id)
+    saved = next((item for item in rows if item['id'] == handle.id), None)
+    if saved is None:
+        return
+    if saved['state'] == 'UNKNOWN' or any(item.get('parent_id') == handle.id for item in rows):
+        state = 'UNKNOWN'
+    admission.finish(connection, handle, state=state)
+
+
+def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mode=None, handle=None, firing_handle=None):
+    import warehouse_admission as admission
+    if handle is None:
+        with _db() as connection:
+            handle = admission.get_for_subject(connection, kind='job', subject_id=run_id)
     deadline = time.monotonic() + 900
     final_status = None
     try:
-        with request_auth.effective_role(role):
+        with admission.accepted(handle), request_auth.effective_role(role):
             with _db() as connection:
                 arguments = json.loads(connection.execute('SELECT arguments FROM runs WHERE id=?', (run_id,)).fetchone()[0])
                 connection.execute("UPDATE runs SET status='running',started_at=? WHERE id=?", (_now(), run_id))
@@ -526,6 +517,7 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                     if time.monotonic() >= deadline:
                         raise ValueError('Job budget exceeded between steps; no further steps started')
                     with _db() as connection:
+                        connection.execute('BEGIN IMMEDIATE')
                         connection.execute("UPDATE steps SET status='running',started_at=? WHERE run_id=? AND position=?", (_now(), run_id, position))
                     if step['action'] in {'stage_import', 'stage_export', 'mart_refresh'} and not shared:
                         wr.resolve_role(actor, role)
@@ -545,7 +537,12 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         connection.execute("UPDATE steps SET status='success',finished_at=?,summary=? WHERE run_id=? AND position=?",
                                            (_now(), json.dumps(summary), run_id, position))
                 except Exception as exc:
-                    uncertain = isinstance(exc, (OSError, subprocess.TimeoutExpired, StepUnknown)) and not isinstance(exc, PermissionError)
+                    # Alert SQL is read-only; notification bookkeeping rolls back with the step.
+                    uncertain = (report is not None and step['action'] != 'alert') or (isinstance(exc, (OSError, subprocess.TimeoutExpired, StepUnknown)) and not isinstance(exc, PermissionError))
+                    with _db() as connection:
+                        uncertain = uncertain or any(row.get('parent_id') == handle.id or
+                            row['id'] == handle.id and row['state'] == 'UNKNOWN'
+                            for row in admission.blockers(connection))
                     if step['action'] == 'stage_import':
                         with _db() as connection:
                             claim = connection.execute('SELECT status FROM stage_files WHERE last_run_id=? AND position=?', (run_id, position)).fetchone()
@@ -571,11 +568,20 @@ def _worker(run_id, steps, actor, role, lock, shared=False, job_name='', auth_mo
                         if step['action'] == 'mart_refresh':
                             connection.execute('UPDATE schedules SET enabled=0,next_run_at=NULL WHERE name=?', (job_name,))
                         connection.execute('UPDATE runs SET status=?,finished_at=?,error=? WHERE id=?', (status, now, error, run_id))
+                        unresolved = any(row.get('parent_id') == handle.id for row in admission.blockers(connection))
+                        admission.finish(connection, handle, state='UNKNOWN' if uncertain or unresolved else 'FAILED')
+                        _finish_firing(connection, firing_handle, 'FAILED')
                     final_status = status
                     return
             with _db() as connection:
-                connection.execute("UPDATE runs SET status='success',finished_at=? WHERE id=?", (_now(), run_id))
-            final_status = 'success'
+                connection.execute('BEGIN IMMEDIATE')
+                unresolved = any(row.get('parent_id') == handle.id or
+                    row['id'] == handle.id and row['state'] == 'UNKNOWN'
+                    for row in admission.blockers(connection))
+                final_status = 'unknown' if unresolved else 'success'
+                connection.execute('UPDATE runs SET status=?,finished_at=? WHERE id=?', (final_status, _now(), run_id))
+                admission.finish(connection, handle, state='UNKNOWN' if unresolved else 'FINISHED')
+                _finish_firing(connection, firing_handle, 'FINISHED')
     finally:
         lock.close()
         if final_status is not None:

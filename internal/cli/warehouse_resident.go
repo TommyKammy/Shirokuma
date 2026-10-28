@@ -26,7 +26,11 @@ func (execResidentWarehouse) Run(ctx context.Context, explicit string, args []st
 	if err != nil {
 		return nil, err
 	}
-	command := exec.CommandContext(ctx, "python3", append([]string{filepath.Join(root, "tools", "local_experiment", "warehouse_resident.py")}, args...)...)
+	python, err := workbenchPython(root)
+	if err != nil {
+		return nil, err
+	}
+	command := exec.CommandContext(ctx, python, append([]string{filepath.Join(root, "tools", "local_experiment", "warehouse_resident.py")}, args...)...)
 	command.Dir = root
 	data, err := command.Output()
 	if err != nil {
@@ -87,7 +91,7 @@ func newResidentWarehouseCommand(action string, runner residentWarehouseRunner) 
 }
 
 func newWarehouseEndpointCommand(runner residentWarehouseRunner) *cobra.Command {
-	var size, bind, root string
+	var size, bind, root, enrollment string
 	var port int
 	command := &cobra.Command{
 		Use: "endpoint", Short: "Serve a fixed local Trino endpoint for BI clients",
@@ -99,6 +103,19 @@ func newWarehouseEndpointCommand(runner residentWarehouseRunner) *cobra.Command 
 			if port < 1 || port > 65535 {
 				return errors.New("--port must be between 1 and 65535")
 			}
+			if enrollment != "" {
+				resolved, err := resolveRepositoryRoot(root)
+				if err != nil {
+					return err
+				}
+				python, err := workbenchPython(resolved)
+				if err != nil {
+					return err
+				}
+				ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+				defer stop()
+				return runManagedOwner(ctx, resolved, python, []string{filepath.Join(resolved, "tools", "local_experiment", "warehouse_resident.py"), "endpoint", "--warehouse", size, "--port", strconv.Itoa(port), "--bind", bind}, enrollment, "native", nil)
+			}
 			return runResidentWarehouse(cmd, runner, root, []string{
 				"endpoint", "--warehouse", size, "--port", strconv.Itoa(port), "--bind", bind,
 			})
@@ -108,5 +125,6 @@ func newWarehouseEndpointCommand(runner residentWarehouseRunner) *cobra.Command 
 	command.Flags().IntVar(&port, "port", 8080, "local endpoint port")
 	command.Flags().StringVar(&bind, "bind", "127.0.0.1", "local endpoint bind address")
 	command.Flags().StringVar(&root, "repo-root", "", "repository root")
+	command.Flags().StringVar(&enrollment, "database-creation-enrollment", "", "private database creation enrollment")
 	return command
 }

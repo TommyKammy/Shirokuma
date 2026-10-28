@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -32,7 +33,11 @@ func TestWorkbenchRunnerInvocation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			expected := [][]string{{"python3", filepath.Join(root, "tools", "local_experiment", "workbench_server.py"), "--port", tc.port}}
+			python, err := workbenchPython(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := [][]string{{python, filepath.Join(root, "tools", "local_experiment", "workbench_server.py"), "--port", tc.port}}
 			if !reflect.DeepEqual(runner.calls, expected) {
 				t.Fatalf("calls = %#v, want %#v", runner.calls, expected)
 			}
@@ -48,7 +53,7 @@ type workbenchBrowserRunner struct {
 
 func (r *workbenchBrowserRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	r.calls = append(r.calls, append([]string{name}, args...))
-	if name == "python3" {
+	if filepath.Base(name) == "python3" {
 		close(r.started)
 		select {
 		case <-r.opened:
@@ -78,7 +83,7 @@ func TestWorkbenchOpensAfterServerStarts(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		opener = "open"
 	}
-	if len(runner.calls) != 2 || runner.calls[0][0] != "python3" || !reflect.DeepEqual(runner.calls[1], []string{opener, "http://127.0.0.1:9013"}) {
+	if len(runner.calls) != 2 || filepath.Base(runner.calls[0][0]) != "python3" || !reflect.DeepEqual(runner.calls[1], []string{opener, "http://127.0.0.1:9013"}) {
 		t.Fatalf("calls = %#v", runner.calls)
 	}
 }
@@ -114,7 +119,40 @@ func TestWorkbenchRegistered(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.calls) != 1 || runner.calls[0][0] != "python3" {
+	if len(runner.calls) != 1 || filepath.Base(runner.calls[0][0]) != "python3" {
 		t.Fatalf("calls = %v", runner.calls)
+	}
+}
+
+func TestWorkbenchDatabasePythonSelection(t *testing.T) {
+	t.Setenv("SHIROKUMA_RUNTIME_PROFILE", "")
+	root := t.TempDir()
+	if got, err := workbenchPython(root); err != nil || got != "python3" {
+		t.Fatalf("legacy: %s %v", got, err)
+	}
+	t.Setenv("SHIROKUMA_RUNTIME_PROFILE", "/explicit/profile.json")
+	if _, err := workbenchPython(root); err == nil {
+		t.Fatal("missing database interpreter accepted")
+	}
+	python := filepath.Join(root, "tools", "local_experiment", "dataops", ".venv", "bin", "python3")
+	if err := os.MkdirAll(filepath.Dir(python), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(python, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := workbenchPython(root); err != nil || got != python {
+		t.Fatalf("explicit: %s %v", got, err)
+	}
+	t.Setenv("SHIROKUMA_RUNTIME_PROFILE", "")
+	profile := filepath.Join(root, "var", "shirokuma", "runtime-profile.json")
+	if err := os.MkdirAll(filepath.Dir(profile), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profile, []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := workbenchPython(root); err != nil || got != python {
+		t.Fatalf("default: %s %v", got, err)
 	}
 }

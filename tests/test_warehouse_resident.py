@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import copy
 import http.client
 import http.server
 import threading
@@ -10,7 +11,7 @@ import tempfile
 from contextlib import nullcontext
 from pathlib import Path
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 
@@ -20,11 +21,609 @@ w = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(w)
 
 
-class ResidentWarehouseTests(unittest.TestCase):
+class LogicalSharedWarehouseTests(unittest.TestCase):
     def setUp(self):
+        import control_store
+        import logical_foundation
+        from test_logical_foundation import settings
+        from types import SimpleNamespace
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.cfg = dict(environment_id='lab', warehouse_id='LOCAL', foundation_generation_id='wcg-owned',
+                        foundation_revision=3, provider_config_file='/tmp/synthetic-foundation.json')
+        self.foundation = logical_foundation.validate(settings(self.temp.name))
+        self.foundation['warehouse_id'] = 'LOCAL'
+        self.foundation['trino']['workers'] = 1
+        self.proof_path = str(Path(self.temp.name)/'verification.json')
+        self.expected = dict(ready=True, foundation_id='wcg-owned', revision=3,
+            incarnation=dict(namespace='namespace-uid', node=dict(self.foundation['kube']['node_uids'])),
+            spi_sha256='a'*64, readiness={key:True for key in
+                ('opa','storage','polaris','trino','runtime_files','spi')},
+            hashes={'target.'+name:'b'*64 for name in
+                ('credentials.properties','password.db','rules.json','guard.rego')})
+        for kind,names in [('namespace',('safe-logical',)), ('configmap',('owned-secrets-code',)),
+                ('service',('owned-seaweed','owned-polaris','trino-local')),
+                ('deployment',('trino-local','trino-local-worker','trino-opa','owned-postgres','owned-seaweed','owned-polaris')),
+                ('pvc',('trino-runtime','trino-catalogs','owned-seaweed-data','owned-postgres-data'))]:
+            for name in names:
+                self.expected['incarnation'][kind+'/'+name] = kind+'-'+name+'-uid'
+                if kind == 'pvc':
+                    self.expected['incarnation'][name] = kind+'-'+name+'-uid'
+                    self.expected['incarnation']['pv/'+name+'-pv'] = 'pv-'+name+'-uid'
+        self.saved = dict(kind='foundation_probe',generation_id='wcg-owned',revision=3,result=self.expected)
+        logical_foundation.save_private(self.proof_path,json.dumps(self.saved))
+        from logical_provider import Provider as ActualProvider
+        self.actual_provider_type = ActualProvider
+        self.bound_provider = Mock()
+        self.provider_context = MagicMock()
+        self.provider_context.__enter__.return_value = self.bound_provider
+        provider_patch = patch('logical_provider.Provider', return_value=self.provider_context)
+        self.provider_factory = provider_patch.start()
+        self.addCleanup(provider_patch.stop)
+        for mock in (patch.dict(w.os.environ, SHIROKUMA_STATE_DIR=self.temp.name),
+                     patch('runtime_profile.current', return_value=SimpleNamespace(mode='logical_v1')),
+                     patch('runtime_profile.logical_config', side_effect=lambda: dict(self.cfg)),
+                     patch('logical_foundation.load', side_effect=lambda _: self.foundation),
+                     patch.object(w, 'telemetry', return_value='skipped'),
+                     patch.object(w, 'touch_activity')):
+            mock.start()
+            self.addCleanup(mock.stop)
+        with control_store.connect() as db:
+            db.execute("INSERT INTO warehouse_config_generations VALUES (?,?,?,'[]','[]',?,'APPLIED')",
+                ('wcg-owned','LOCAL','foundation:wcg-owned',json.dumps([self.cfg['provider_config_file'],self.proof_path])))
+            db.execute("INSERT INTO logical_foundations VALUES ('lab','LOCAL','wcg-owned',3,'READY',?,?)",
+                (self.cfg['provider_config_file'],self.proof_path))
+            db.execute("INSERT INTO warehouse_controls VALUES ('LOCAL','OPEN',NULL,1,'wcg-owned')")
+
+    def objects(self, coordinator=1, workers=1):
+        import logical_foundation
+        return dict(items=[dict(kind='Deployment', metadata=dict(name=name, namespace='safe-logical',
+            uid=name+'-uid', generation=7, labels={logical_foundation.LABEL:'wcg-owned',logical_foundation.REVISION:'3'}),
+            spec=dict(replicas=count), status=dict(replicas=count,readyReplicas=count,updatedReplicas=count,
+                availableReplicas=count,observedGeneration=7))
+            for name,count in [('trino-local',coordinator),('trino-local-worker',workers)]])
+
+    def test_single_batch_sealed_target_and_public_states(self):
+        import logical_foundation
+        for counts, expected in [((1,1),'active'),((0,0),'chilled'),((1,0),'starting'),((0,1),'starting')]:
+            with self.subTest(counts=counts), patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects(*counts)))) as run:
+                result = w.status('LOCAL')
+                self.assertEqual(result['state'],expected)
+                self.assertEqual(run.call_args.args[0],logical_foundation.kube_argv(self.foundation)+
+                    ['get','deployment/trino-local','deployment/trino-local-worker','-o','json'])
+                run.assert_called_once()
+                self.assertNotIn(self.temp.name,json.dumps(result))
+                self.assertEqual(set(result),{'warehouse','backend','deployment','namespace','state','replicas','ready_replicas'})
+
+    def test_partial_rollout_stale_generation_and_stopping_workers(self):
+        for field in ('replicas','readyReplicas','updatedReplicas','availableReplicas','observedGeneration'):
+            for index in (0,1):
+                objects = self.objects()
+                objects['items'][index]['status'][field] = 0
+                with self.subTest(field=field,index=index), patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(objects))):
+                    self.assertEqual(w.status('LOCAL')['state'],'starting')
+        for field in ('replicas','readyReplicas','updatedReplicas','availableReplicas'):
+            objects = self.objects(0,0)
+            objects['items'][1]['status'][field] = 1
+            with self.subTest(stopping=field), patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(objects))):
+                self.assertEqual(w.status('LOCAL')['state'],'starting')
+        objects = self.objects(0,0)
+        objects['items'][1]['status']['observedGeneration'] = 6
+        with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(objects))):
+            self.assertEqual(w.status('LOCAL')['state'],'starting')
+
+    def test_zero_worker_active_requires_fully_stopped_worker(self):
+        self.foundation['trino']['workers'] = 0
+        for worker,expected in ((0,'active'),(1,'starting')):
+            with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects(1,worker)))):
+                self.assertEqual(w.status('LOCAL')['state'],expected)
+
+    def test_foreign_missing_and_malformed_metadata_fail_safely(self):
+        from warehouse_operations import OperationError
+        for key,value in (('namespace','foreign'),('uid',''),('generation',True),('deletionTimestamp','now')):
+            objects = self.objects();objects['items'][1]['metadata'][key] = value
+            with self.subTest(key=key), patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(objects))):
+                with self.assertRaises(OperationError) as error:
+                    w.status('LOCAL')
+                self.assertEqual(error.exception.code,'WAREHOUSE_UNAVAILABLE')
+        import logical_foundation
+        for objects in (dict(items=self.objects()['items'][:1]),dict(items=self.objects()['items'][:1]*2)):
+            with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(objects))), self.assertRaises(OperationError):
+                w.status('LOCAL')
+        for key,value in ((logical_foundation.LABEL,'foreign'),(logical_foundation.REVISION,'2')):
+            objects = self.objects();objects['items'][0]['metadata']['labels'][key] = value
+            with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(objects))), self.assertRaises(OperationError):
+                w.transition('chill','LOCAL')
+
+    def test_config_and_committed_provenance_mismatches_issue_no_commands(self):
+        import control_store
+        from warehouse_operations import OperationError
+        for key,value in (('environment_id','other'),('warehouse_id','other'),('foundation_generation_id','other'),
+                          ('foundation_revision',4),('provider_config_file','/tmp/other')):
+            previous = self.cfg[key];self.cfg[key] = value
+            with self.subTest(config=key), patch.object(w.subprocess,'run') as run:
+                for action in ('chill','wake'):
+                    with self.assertRaises(OperationError):
+                        w.transition(action,'LOCAL')
+                run.assert_not_called()
+            self.cfg[key] = previous
+        mutations = [
+            ("UPDATE warehouse_config_generations SET state='PLANNED'", "UPDATE warehouse_config_generations SET state='APPLIED'"),
+            ("UPDATE warehouse_config_generations SET warehouse_id='other'", "UPDATE warehouse_config_generations SET warehouse_id='LOCAL'"),
+            ("UPDATE warehouse_config_generations SET apply_id='foreign'", "UPDATE warehouse_config_generations SET apply_id='foundation:wcg-owned'"),
+            ("UPDATE warehouse_config_generations SET configuration_refs='[]'", None),
+            ("UPDATE logical_foundations SET revision=4", "UPDATE logical_foundations SET revision=3"),
+            ("UPDATE logical_foundations SET status='MAINTENANCE'", "UPDATE logical_foundations SET status='READY'"),
+            ("UPDATE logical_foundations SET config_ref='/tmp/other'", None),
+            ("UPDATE warehouse_controls SET applied_generation_id=NULL", "UPDATE warehouse_controls SET applied_generation_id='wcg-owned'")]
+        for sql, restore in mutations:
+            with control_store.connect() as db:
+                db.execute(sql)
+            with self.subTest(sql=sql), patch.object(w.subprocess,'run') as run:
+                for action in ('chill','wake'):
+                    with self.assertRaises(OperationError):
+                        w.transition(action,'LOCAL')
+                with self.assertRaises(OperationError):
+                    w.status('LOCAL')
+                run.assert_not_called()
+            with control_store.connect() as db:
+                if restore:
+                    db.execute(restore)
+                elif 'configuration_refs' in sql:
+                    db.execute('UPDATE warehouse_config_generations SET configuration_refs=?',
+                        (json.dumps([self.cfg['provider_config_file'],self.proof_path]),))
+                else:
+                    db.execute('UPDATE logical_foundations SET config_ref=?',(self.cfg['provider_config_file'],))
+
+    def test_transitions_restore_exact_replicas_observe_both_and_preserve_registry(self):
+        import control_store
+        for workers in (0,1):
+            self.foundation['trino']['workers'] = workers
+            for action,initial,target in [('chill',(1,workers),(0,0)),('wake',(0,0),(1,workers))]:
+                observations = [self.objects(*initial),self.objects(0,1),self.objects(*target)]
+                def command(argv,**kwargs):
+                    import sqlite3
+                    self.assertEqual(w._WAREHOUSE_GATE.mode,'exclusive' if action=='chill' else 'shared')
+                    # Even a second writer must remain blocked throughout scale and observation.
+                    with control_store.connect() as other:
+                        other.execute('PRAGMA busy_timeout=0')
+                        with self.assertRaises(sqlite3.OperationalError):
+                            other.execute('BEGIN IMMEDIATE')
+                    if 'get' in argv:
+                        return Mock(stdout=json.dumps(observations.pop(0)))
+                    self.assertIn('scale',argv)
+                    return Mock(stdout='')
+                with control_store.connect() as db:
+                    before = list(db.iterdump())
+                with self.subTest(workers=workers,action=action), patch.object(w.subprocess,'run',side_effect=command) as run, patch.object(w.time,'sleep'):
+                    report = w.transition(action,'LOCAL')
+                    self.assertEqual(report['state'],'chilled' if action=='chill' else 'active')
+                    self.assertEqual(report['result'],'verified')
+                    commands = [call.args[0] for call in run.call_args_list if 'scale' in call.args[0]]
+                    self.assertEqual([cmd[-2:] for cmd in commands],[[f'deployment/{name}',f'--replicas={count}']
+                        for name,count in zip(('trino-local','trino-local-worker'),target)])
+                    self.assertEqual(observations,[])
+                with control_store.connect() as db:
+                    self.assertEqual(list(db.iterdump()),before)
+
+    def test_noop_requires_both_deployments_at_the_observed_target(self):
+        for workers in (0,1):
+            self.foundation['trino']['workers'] = workers
+            for action,counts in [('wake',(1,workers)),('chill',(0,0))]:
+                with self.subTest(workers=workers,action=action), patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects(*counts)))) as run:
+                    self.assertEqual(w.transition(action,'LOCAL')['result'],'noop')
+                    run.assert_called_once()
+                    self.assertIn('get',run.call_args.args[0])
+
+    def test_configured_warehouse_admission_guard_uses_its_own_control(self):
+        import control_store
+        import warehouse_admission as admission
+        self.cfg['warehouse_id'] = 'shared-compute'
+        self.foundation['warehouse_id'] = 'shared-compute'
+        with control_store.connect() as db:
+            db.execute("UPDATE warehouse_config_generations SET warehouse_id='shared-compute'")
+            db.execute("UPDATE logical_foundations SET warehouse_id='shared-compute'")
+            db.execute("UPDATE warehouse_controls SET warehouse_id='shared-compute'")
+            db.execute("INSERT INTO warehouse_controls VALUES ('LOCAL','OPEN',NULL,1,NULL)")
+            handle = admission.admit(db,warehouse_id='shared-compute',actor='test',kind='operation',subject_id='accepted')
+        for state in ('ACTIVE','UNKNOWN'):
+            if state == 'UNKNOWN':
+                with control_store.connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    admission.finish(db,handle,state=state)
+            with self.subTest(state=state), patch.object(w.subprocess,'run') as run:
+                for action in ('chill','wake'):
+                    with self.subTest(action=action), self.assertRaises(admission.AdmissionConflict):
+                        w.transition(action,'LOCAL')
+                run.assert_not_called()
+
+    def test_accepted_work_and_stop_guards_precede_commands(self):
+        import control_store
+        import warehouse_admission as admission
+        with control_store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            handle = admission.admit(db,actor='test',kind='operation',subject_id='accepted')
+        with patch.object(w.subprocess,'run') as run:
+            for action in ('chill','wake'):
+                with self.assertRaises(admission.AdmissionConflict):
+                    w.transition(action,'LOCAL')
+            run.assert_not_called()
+        with control_store.connect() as db:
+            db.execute('BEGIN IMMEDIATE');admission.finish(db,handle,state='FINISHED')
+            db.execute("UPDATE warehouse_controls SET state='DRAINING'")
+        with patch.object(w.subprocess,'run') as run, self.assertRaises(admission.AdmissionDenied):
+            w.transition('chill','LOCAL')
+        run.assert_not_called()
+
+
+    def fake_readiness_clock(self, timeout=1):
+        self.elapsed = 0.0
+        def sleep(seconds):
+            self.elapsed += seconds
+        for patcher in (patch.object(w, 'TIMEOUT', timeout),
+                patch.object(w.time, 'monotonic', side_effect=lambda: self.elapsed),
+                patch.object(w.time, 'sleep', side_effect=sleep)):
+            mocked = patcher.start()
+            self.addCleanup(patcher.stop)
+        return mocked
+
+    def test_wake_waits_for_binding_after_deployment_ready_without_repeating_scales(self):
+        from logical_provider import Rejected
+        self.fake_readiness_clock()
+        events = []
+        foundation_guard = w._logical_foundation
+        def guard(db=None):
+            events.append('guard')
+            return foundation_guard(db)
+        attempts = 0
+        def bind(expected):
+            nonlocal attempts
+            self.assertEqual(expected, self.expected)
+            self.assertEqual(events[-1], 'guard')
+            self.assertEqual(w._WAREHOUSE_GATE.mode, 'shared')
+            attempts += 1
+            events.append('unready' if attempts == 1 else 'bound')
+            if attempts == 1:
+                raise Rejected('FOUNDATION_BINDING_INVALID')
+        self.bound_provider.bind_registered.side_effect = bind
+        self.provider_context.__exit__.side_effect = lambda *args: events.append('closed')
+        observations = iter((self.objects(0,0), self.objects()))
+        def command(argv, **kwargs):
+            self.assertIn('receipt',events)
+            return Mock(stdout=json.dumps(next(observations)) if 'get' in argv else '')
+        import runtime_profile
+        private_json = runtime_profile.private_json
+        def receipt(path):
+            events.append('receipt')
+            return private_json(path)
+        with patch.object(w.subprocess,'run',side_effect=command) as run, \
+                patch.object(w,'_logical_foundation',side_effect=guard), \
+                patch.object(runtime_profile,'private_json',side_effect=receipt) as saved, \
+                patch.object(w,'touch_activity',side_effect=lambda: events.append('activity')):
+            result = w.transition('wake','LOCAL')
+            events.append('returned')
+        self.assertEqual(result['result'],'verified')
+        self.assertEqual(attempts,2)
+        self.assertEqual(sum('scale' in call.args[0] for call in run.call_args_list),2)
+        self.assertEqual(saved.call_count,1)
+        self.assertEqual(events[-4:],['bound','closed','activity','returned'])
+        self.provider_factory.assert_called_once_with(self.foundation)
+        self.provider_context.__enter__.assert_called_once_with()
+        self.provider_context.__exit__.assert_called_once()
+
+    def test_noop_wake_also_waits_for_engine_without_scaling(self):
+        from logical_provider import Rejected
+        self.fake_readiness_clock()
+        self.bound_provider.bind_registered.side_effect = [Rejected('FOUNDATION_BINDING_INVALID'),None]
+        with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects()))) as run:
+            report = w.transition('wake','LOCAL')
+        self.assertEqual(report['result'],'noop')
+        run.assert_called_once()
+        self.assertEqual(self.bound_provider.bind_registered.call_count,2)
+        self.provider_context.__exit__.assert_called_once()
+        w.touch_activity.assert_called_once_with()
+
+    def test_permanent_binding_trust_and_uid_failures_propagate_without_wait_retry(self):
+        from logical_provider import Rejected
+        sleep = self.fake_readiness_clock()
+        for code in ('FOUNDATION_BINDING_MISMATCH','FOUNDATION_TRUST_MISMATCH',
+                'FOUNDATION_INCARNATION_CHANGED','FOUNDATION_SERVICE_TARGET_MISMATCH'):
+            self.bound_provider.bind_registered.reset_mock()
+            self.provider_context.__exit__.reset_mock()
+            self.bound_provider.bind_registered.side_effect = Rejected(code)
+            with self.subTest(code=code), \
+                    patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects()))):
+                with self.assertRaises(Rejected) as caught:
+                    w.transition('wake','LOCAL')
+                self.assertEqual(caught.exception.code,code)
+                self.bound_provider.bind_registered.assert_called_once_with(self.expected)
+                self.provider_context.__exit__.assert_called_once()
+        sleep.assert_not_called()
+        w.touch_activity.assert_not_called()
+
+    def test_invalid_saved_proof_rejected_once_before_provider_work(self):
+        from warehouse_operations import OperationError
+        cases = [None, [], {}, {**self.saved,'kind':'other'}, {**self.saved,'generation_id':'foreign'},
+            {**self.saved,'revision':True}, {**self.saved,'revision':4}]
+        for field, values in {'ready':[False,1], 'foundation_id':['foreign'], 'revision':[True,4],
+                'spi_sha256':[None,'A'*64,'a'*63], 'incarnation':[None,{}, {'node':{'lab-node':'foreign'}}],
+                'readiness':[{},None], 'hashes':[{},None]}.items():
+            for value in values:
+                expected = {**self.expected,field:value}
+                cases.append({**self.saved,'result':expected})
+        for missing in ('ready','incarnation','spi_sha256'):
+            expected = dict(self.expected)
+            del expected[missing]
+            cases.append({**self.saved,'result':expected})
+        for missing in self.expected['incarnation']:
+            expected = copy.deepcopy(self.expected)
+            del expected['incarnation'][missing]
+            cases.append({**self.saved,'result':expected})
+        for saved in cases:
+            Path(self.proof_path).write_text(json.dumps(saved))
+            for counts in ((0,0),(1,1)):
+                with self.subTest(saved=saved,counts=counts), \
+                        patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects(*counts)))) as run:
+                    with self.assertRaises(OperationError) as caught:
+                        w.transition('wake','LOCAL')
+                    self.assertEqual(caught.exception.code,'FOUNDATION_NOT_READY')
+                    run.assert_not_called()  # No status, scale or PF work, including from chilled.
+        for content in ('not json',None):
+            if content is None:
+                Path(self.proof_path).unlink()
+            else:
+                Path(self.proof_path).write_text(content)
+            for counts in ((0,0),(1,1)):
+                with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects(*counts)))) as run:
+                    with self.assertRaises(OperationError):
+                        w.transition('wake','LOCAL')
+                    run.assert_not_called()
+        self.provider_factory.assert_not_called()
+        w.touch_activity.assert_not_called()
+
+    def test_actual_unready_times_out_closes_lifetime_without_activity(self):
+        from logical_provider import Rejected
+        self.fake_readiness_clock(timeout=0.5)
+        self.bound_provider.bind_registered.side_effect = Rejected('FOUNDATION_BINDING_INVALID')
+        with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects()))), \
+                self.assertRaises(TimeoutError):
+            w.transition('wake','LOCAL')
+        self.assertEqual(self.bound_provider.bind_registered.call_count,3)
+        self.provider_context.__exit__.assert_called_once()
+        w.touch_activity.assert_not_called()
+
+    def test_foundation_is_rechecked_before_each_actual_readiness_attempt(self):
+        from logical_provider import Rejected
+        from warehouse_operations import OperationError
+        self.fake_readiness_clock()
+        self.bound_provider.bind_registered.side_effect = Rejected('FOUNDATION_BINDING_INVALID')
+        original = w._logical_foundation
+        def changed(db=None):
+            current = original(db)
+            return dict(current,prefix='different-foundation') if self.bound_provider.bind_registered.called else current
+        with patch.object(w,'_logical_foundation',side_effect=changed), \
+                patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects()))):
+            with self.assertRaises(OperationError) as caught:
+                w.transition('wake','LOCAL')
+        self.assertEqual(caught.exception.code,'FOUNDATION_NOT_READY')
+        self.bound_provider.bind_registered.assert_called_once()
+        self.provider_context.__exit__.assert_called_once()
+        w.touch_activity.assert_not_called()
+
+    def test_chill_never_constructs_provider_or_reads_engine_receipt(self):
+        import runtime_profile
+        with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects(0,0)))), \
+                patch.object(runtime_profile,'private_json',side_effect=AssertionError('engine receipt')):
+            self.assertEqual(w.transition('chill','LOCAL')['result'],'noop')
+        self.provider_factory.assert_not_called()
+        w.touch_activity.assert_not_called()
+
+    def test_cold_wake_uses_real_full_bind_and_waits_for_two_registered_trino_nodes(self):
+        import logical_foundation
+        from test_logical_provider import Harness, PROBE_COMPUTE_SQL, PROBE_IDENTITY_SQL
+        for section,key,value in [('storage','admin_credentials_file',dict(access_key='admin',secret_key='admin-secret')),
+                ('storage','issuer_credentials_file',dict(access_key='issuer',secret_key='issuer-secret')),
+                ('polaris','root_credentials_file',dict(client_id='root',client_secret='root-secret')),
+                ('trino','provisioner_credentials_file',dict(version=1,username='logical_provisioner',password='provisioner-secret'))]:
+            logical_foundation.save_private(self.foundation[section][key],json.dumps(value))
+        logical_foundation.save_private(self.foundation['artifacts']['jar'],b'code')
+        harness = Harness(self.foundation)
+        actual = self.actual_provider_type(self.foundation,command=harness.command,http=harness.http,
+            sdk=harness.sdk,popen=harness.popen)
+        self.addCleanup(actual.close)
+        with actual:
+            full_saved = actual.probe()
+        self.assertTrue(full_saved['ready'])
+        Path(self.proof_path).write_text(json.dumps(dict(self.saved,result=full_saved)))
+        self.provider_factory.return_value = actual
+        statements, readiness = [], []
+        def http(method,url,**kwargs):
+            if url.endswith('/v1/statement'):
+                statement = kwargs['data'].decode()
+                statements.append(statement)
+                if statement == PROBE_COMPUTE_SQL and statements.count(PROBE_COMPUTE_SQL) == 1:
+                    return 200,b'{"data":[[true,1]]}'  # Deployments Ready, worker not yet registered.
+            return harness.http(method,url,**kwargs)
+        actual._http_transport = http
+        full_probe = actual.probe
+        def observe_probe():
+            proof = full_probe()
+            readiness.append(proof['ready'])
+            return proof
+        self.fake_readiness_clock()
+        def activity():
+            self.assertEqual(readiness,[False,True])
+            self.assertTrue(all(child.terminated for child in harness.children))
+        with patch.object(actual,'probe',side_effect=observe_probe), \
+                patch.object(actual,'_effect',side_effect=AssertionError('business mutation')), \
+                patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects()))), \
+                patch.object(w,'touch_activity',side_effect=activity):
+            report = w.transition('wake','LOCAL')
+        self.assertEqual(report['result'],'noop')
+        self.assertEqual(statements,[PROBE_IDENTITY_SQL,PROBE_COMPUTE_SQL]*2)
+        self.assertEqual(readiness,[False,True])
+        self.assertEqual(len(harness.children),6)  # Registration fixture + one wake lifetime, never reopened on retry.
+        self.assertTrue(all(child.terminated for child in harness.children))
+        self.assertTrue(all(argv[-1] == 'read' for argv,_ in harness.commands if 'exec' in argv))
+        def still_unready(method,url,**kwargs):
+            if url.endswith('/v1/statement') and kwargs['data'].decode() == PROBE_COMPUTE_SQL:
+                return 200,b'{"data":[[true,1]]}'
+            return harness.http(method,url,**kwargs)
+        actual._http_transport = still_unready
+        self.elapsed = 0.0
+        readiness.clear()
+        with patch.object(actual,'probe',side_effect=observe_probe), \
+                patch.object(actual,'_effect',side_effect=AssertionError('business mutation')), \
+                patch.object(w,'TIMEOUT',0.5), \
+                patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects()))), \
+                self.assertRaises(TimeoutError):
+            w.transition('wake','LOCAL')
+        self.assertEqual(readiness,[False,False,False])
+        self.assertEqual(len(harness.children),9)
+        self.assertTrue(all(child.terminated for child in harness.children))
+        w.touch_activity.assert_not_called()
+
+
+
+class ResidentWarehouseTests(unittest.TestCase):
+    def test_scoped_admin_sql_context_keeps_same_db_and_denies_system_shortcuts(self):
+        from test_request_auth import PrincipalTests
+        import control_store
+        import data_management as dm
+        import query_context
+        from grant_fixtures import verified_grants
+        fixture = PrincipalTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.users['alice']['role'] = 'admin'
+        fixture.save()
+        with control_store.connect() as db:
+            for key in (fixture.sales, fixture.finance):
+                for name in ('raw', 'sandbox', 'staging', 'marts'):
+                    schema = dm.create_schema(db, key, name, name, name, 'test')
+                    if key == fixture.sales and name == 'raw':
+                        schema_id = schema.id
+            dm.update_grant(db, 'alice', fixture.sales, 1, 'admin')
+            # Seed only the SQL boundary; no verification receipt is invented.
+            db.execute("UPDATE effective_grants SET maximum_role='admin',epoch=epoch+1 WHERE principal_id='alice'")
+        def context(who):
+            return query_context.resolve_context(who, fixture.sales, schema_id, 'admin',
+                warehouse_id='w', expected_binding_revision=1)
+        scoped = context(fixture.principal())
+        platform = context(fixture.principal('owner'))
+        self.assertIsNotNone(scoped.grant_revision)
+        for sql in ('CREATE TABLE sales.marts.t (id integer)',
+                    'INSERT INTO sales.staging.t VALUES (1)',
+                    'INSERT INTO marts.t SELECT * FROM sales.raw.t',
+                    'ALTER TABLE sales.raw.t EXECUTE rollback_to_snapshot(1)',
+                    'SELECT * FROM sales.sandbox.t'):
+            self.assertEqual(w.check_sql_policy(sql, 'admin-write', 'admin', context=scoped), sql)
+        for sql in ('SELECT * FROM finance.raw.t', 'CREATE TABLE finance.raw.t (id integer)',
+                    'INSERT INTO sales.raw.t SELECT * FROM finance.raw.t',
+                    'SELECT * FROM system.runtime.queries', 'SELECT * FROM sales.information_schema.tables',
+                    'SHOW SESSION', 'SHOW CATALOGS', 'SHOW ROLES', 'SHOW FUNCTIONS',
+                    'SET SESSION query_max_run_time = \'1h\'', 'RESET SESSION query_max_run_time',
+                    'USE finance.raw', 'SHOW CREATE SCHEMA finance.raw',
+                    'EXPLAIN SHOW SESSION'):
+            with self.subTest(sql=sql), self.assertRaises(ValueError):
+                w.check_sql_policy(sql, 'admin-write', 'admin', context=scoped)
+        # The authenticated platform context retains registered cross-DB access.
+        sql = 'CREATE TABLE finance.raw.t (id integer)'
+        self.assertIsNone(platform.grant_revision)
+        with self.assertRaises(ValueError):
+            w.check_sql_policy(sql, 'admin-write', 'admin', context=platform)
+        import request_auth
+        decision = request_auth.authorize_database(fixture.principal('owner'), fixture.sales, 'admin',
+            expected_generation_id=platform.generation_id)
+        self.assertEqual(w.check_sql_policy(sql, 'admin-write', 'admin', context=platform,
+            _platform_authorized=decision.platform_admin), sql)
+        with self.assertRaises(ValueError):
+            w.check_sql_policy(sql, 'admin-write', 'admin', context=platform,
+                database_only=True, _platform_authorized=decision.platform_admin)
+
+    def test_active_profile_client_query_reports_normal_verified_envelope_only_for_finished(self):
+        import runtime_profile
+        with tempfile.TemporaryDirectory() as directory:
+            auth = Path(directory) / 'client.json'
+            auth.write_text(json.dumps(dict(username='alice', password='secret', selected_role='data_engineer')))
+            auth.chmod(0o600)
+            profile = Mock(client_auth_file=str(auth), sql_endpoint_url='http://127.0.0.1:8080')
+            for state in ('FINISHED', 'UNKNOWN', 'CANCELED'):
+                with self.subTest(state=state):
+                    page = dict(id='query-1', columns=[dict(name='_col0', type='integer')],
+                        data=[[1]], stats=dict(state=state), context=dict(database_id='sales'))
+                    opener = Mock()
+                    opener.open.return_value = io.BytesIO(json.dumps(page).encode())
+                    with patch.object(runtime_profile, 'current', return_value=profile), \
+                            patch.object(w.urllib.request, 'build_opener', return_value=opener):
+                        result = w._profile_client_query('SELECT 1', 'sales', 'raw', 10)
+                    self.assertEqual(result['warehouse'], 'LOCAL')
+                    self.assertEqual(result['action'], 'query')
+                    self.assertEqual(result['result'], 'verified' if state == 'FINISHED' else 'unverified')
+                    self.assertEqual(result['rows'], [[1]])
+                    self.assertEqual(result['query_id'], 'query-1')
+                    self.assertEqual(result['state'], state)
+                    self.assertEqual(result['context'], page['context'])
+                    self.assertFalse(result['truncated'])
+
+    def test_active_profile_query_main_preserves_warehouse_alias_and_uncertainty_exit(self):
+        for state, expected in (('FINISHED', 0), ('UNKNOWN', 1)):
+            with self.subTest(state=state), patch.object(w, '_profile_active', return_value=True), \
+                    patch.object(w, '_profile_client_query', return_value=dict(warehouse='LOCAL', action='query',
+                        result='verified' if state == 'FINISHED' else 'unverified', state=state, rows=[[1]], truncated=False)), \
+                    patch.object(sys, 'argv', ['warehouse_resident.py', 'query', '--warehouse', 'XS',
+                        '--sql', 'SELECT 1', '--catalog', 'sales', '--schema', 'raw']), \
+                    patch.object(sys, 'stdout', new_callable=io.StringIO) as output:
+                self.assertEqual(w.main(), expected)
+                record = json.loads(output.getvalue())
+                self.assertEqual(record['warehouse'], 'XS')
+                self.assertEqual(record['state'], state)
+                self.assertEqual(record['rows'], [[1]])
+
+    def test_native_runtime_proof_requires_platform_and_selected_admin_without_admission(self):
+        import request_auth
+        import runtime_profile
+        import query_service
+        proof = dict(version=1, generation_id='fixed-generation', databases={}, profile_ref='fixed-profile')
+        admin = request_auth.AuthenticatedPrincipal('admin', 'admin', True)
+        with patch.object(request_auth, 'authenticate_principal', return_value=admin), \
+                patch.object(runtime_profile, 'generation_attestation', return_value=proof), \
+                patch('warehouse_admission.admit', side_effect=AssertionError('proof must work while CLOSED')):
+            self.assertEqual(w._native_request({'X-Shirokuma-Role': 'admin'}, '/api/v1/runtime',
+                'GET', b'', 'http://127.0.0.1:8080'), proof)
+            for selected in ('bi_viewer', 'data_engineer'):
+                with self.assertRaises(query_service.QueryError) as error:
+                    w._native_request({'X-Shirokuma-Role': selected}, '/api/v1/runtime', 'GET', b'', 'http://127.0.0.1:8080')
+                self.assertEqual(error.exception.status, 403)
+            for path, method in (('/api/v1/runtime?path=secret', 'GET'), ('/api/v1/runtime', 'POST')):
+                with self.assertRaises(query_service.QueryError):
+                    w._native_request({}, path, method, b'', 'http://127.0.0.1:8080')
+        with patch.object(request_auth, 'authenticate_principal', return_value=
+                request_auth.AuthenticatedPrincipal('admin', 'admin', False)), self.assertRaises(query_service.QueryError):
+            w._native_request({'X-Shirokuma-Role': 'admin'}, '/api/v1/runtime', 'GET', b'', 'http://127.0.0.1:8080')
+        with patch.object(request_auth, 'authenticate_principal', side_effect=request_auth.AuthenticationError('required')), \
+                self.assertRaises(request_auth.AuthenticationError):
+            w._native_request({}, '/api/v1/runtime', 'GET', b'', 'http://127.0.0.1:8080')
+        with patch.object(request_auth, 'authenticate_principal', return_value=admin), \
+                patch.object(runtime_profile, 'generation_attestation', side_effect=ValueError('restart required')), \
+                self.assertRaises(ValueError):
+            w._native_request({'X-Shirokuma-Role': 'admin'}, '/api/v1/runtime', 'GET', b'', 'http://127.0.0.1:8080')
+
+    def setUp(self):
+        import runtime_profile
+        self.configure_process = runtime_profile.configure_process
+        profile_configuration = patch('runtime_profile.configure_process', return_value=False)
+        profile_configuration.start()
+        self.addCleanup(profile_configuration.stop)
+        profile_state = patch('runtime_profile._current', None)
+        profile_state.start()
+        self.addCleanup(profile_state.stop)
         state = tempfile.TemporaryDirectory()
         self.addCleanup(state.cleanup)
-        environment = patch.dict(w.os.environ, {'SHIROKUMA_STATE_DIR': state.name})
+        environment = patch.dict(w.os.environ, {'SHIROKUMA_STATE_DIR': state.name,
+            'SHIROKUMA_AUTH_MODE': 'local', 'SHIROKUMA_AUTH_FILE': '',
+            'SHIROKUMA_TRINO_AUTH_MODE': 'local', 'SHIROKUMA_TRINO_AUTH_FILE': '',
+            'SHIROKUMA_TRINO_CA_FILE': ''})
         environment.start()
         self.addCleanup(environment.stop)
         advertised = patch.dict(w.os.environ)
@@ -106,15 +705,20 @@ class ResidentWarehouseTests(unittest.TestCase):
 
     def test_activity_io_failure_preserves_successful_query(self):
         for operation in ('mkdir', 'write_text', 'replace', 'unlink'):
+            original = getattr(Path, operation)
+            activity = w.activity_path()
+            def fail_activity(path, *args, **kwargs):
+                if path == activity.parent or path.parent == activity.parent:
+                    raise PermissionError('read-only activity')
+                return original(path, *args, **kwargs)
             with self.subTest(operation=operation), \
-                 patch.object(Path, operation, side_effect=PermissionError('read-only state')), \
+                 patch.object(Path, operation, fail_activity), \
                  self.assertLogs(w.__name__, level='WARNING'), \
                  patch.object(w, 'status', return_value={'replicas': 1}), \
                  patch.object(w, 'trino', return_value=nullcontext('url')), \
                  patch.object(w, 'execute', return_value={'rows': [[1]]}), \
                  patch.object(w, 'telemetry'):
                 self.assertEqual(w.query('LOCAL', 'SELECT 1')['rows'], [[1]])
-                self.assertEqual(self.endpoint_request('GET', '/v1/statement/q/1')[0], 200)
 
     def test_role_sql_permissions(self):
         self.assertEqual(w.check_sql_policy('SELECT * FROM marts.t', role='bi_viewer'), 'SELECT * FROM marts.t')
@@ -211,7 +815,8 @@ class ResidentWarehouseTests(unittest.TestCase):
         backend = Mock()
         response = backend.getresponse.return_value
         response.status = backend_status
-        response.read.return_value = json.dumps(payload or {'data': [[42]]}).encode()
+        response.read.return_value = json.dumps(payload if payload is not None else
+            {'id': 'q', 'stats': {'state': 'FINISHED'}, 'data': [[42]]}).encode()
         response.getheaders.return_value = [('Content-Type', 'application/json'),
                                             ('X-Trino-Set-Catalog', 'iceberg')]
         if location:
@@ -253,6 +858,7 @@ class ResidentWarehouseTests(unittest.TestCase):
     def test_endpoint_host_and_advertised_url_rewriting(self):
         uri = 'http://backend:8080/v1/statement/q/1?token=abc#fragment'
         payload = dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), uri)
+        payload.update(id='q', stats={'state': 'RUNNING'})
         cases = [({'Host': 'localhost:18080'}, '', '', 'http://localhost:18080'),
                  ({'Host': 'internal:8080', 'X-Forwarded-Host': 'proxy.example:443',
                    'X-Forwarded-Proto': 'https'}, '', '', 'http://internal:8080'),
@@ -269,12 +875,13 @@ class ResidentWarehouseTests(unittest.TestCase):
                     'POST', '/v1/statement', 'SELECT 1', headers, payload=payload, location=uri)
                 self.assertEqual(code, 200)
                 expected = base + '/v1/statement/q/1?token=abc#fragment'
-                self.assertEqual(page, dict.fromkeys(payload, expected))
+                self.assertEqual(page, dict(payload, **dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), expected)))
                 self.assertEqual(response_headers['Location'], expected)
 
     def test_endpoint_missing_host_does_not_imply_forwarded_trust(self):
         uri = 'http://backend:8080/v1/statement/q/1?token=abc'
         payload = dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), uri)
+        payload.update(id='q', stats={'state': 'RUNNING'})
         for host in (None, ''):
             for trust in ('', 'false', '0', 'true'):
                 with self.subTest(host=host, trust=trust), patch.dict(w.os.environ, {
@@ -294,7 +901,7 @@ class ResidentWarehouseTests(unittest.TestCase):
                     self.assertGreater(parsed.port, 0)
                     self.assertEqual(parsed.path, '/v1/statement/q/1')
                     self.assertEqual(parsed.query, 'token=abc')
-                    self.assertEqual(page, dict.fromkeys(payload, page['nextUri']))
+                    self.assertEqual(page, dict(payload, **dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), page['nextUri'])))
                     self.assertEqual(response_headers['Location'], page['nextUri'])
 
     def test_endpoint_uses_threading_http_server(self):
@@ -324,7 +931,7 @@ class ResidentWarehouseTests(unittest.TestCase):
                         raise TimeoutError('test statement was not released')
             backend.request.side_effect = request
             backend.getresponse.return_value.status = 200
-            backend.getresponse.return_value.read.return_value = b'{}'
+            backend.getresponse.return_value.read.return_value = b'{"id":"q","stats":{"state":"FINISHED"}}'
             backend.getresponse.return_value.getheaders.return_value = []
             backend.getresponse.return_value.getheader.return_value = ''
             return backend
@@ -346,7 +953,7 @@ class ResidentWarehouseTests(unittest.TestCase):
              patch.object(w, 'initialize_auto_chill'), \
              patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
              patch.object(w.time, 'time', return_value=100), \
-             patch.object(w, 'execute', return_value={'rows': [[0]]}), \
+             patch.object(w, '_execute', return_value={'rows': [[0]]}), \
              patch.object(w, 'transition') as transition:
             endpoint = threading.Thread(target=w.serve_endpoint, kwargs={'port': 0})
             endpoint.start()
@@ -361,7 +968,9 @@ class ResidentWarehouseTests(unittest.TestCase):
                 transition.assert_not_called()
                 send('GET', '/v1/statement/q/1')
                 send('DELETE', '/v1/statement/q/1')
-                self.assertEqual(outcomes, [('GET', 200), ('DELETE', 200)])
+                # Until the POST response provides a continuation, guessing a
+                # backend path cannot borrow its still-active admission.
+                self.assertEqual(outcomes, [('GET', 409), ('DELETE', 409)])
                 self.assertTrue(statement.is_alive())
             finally:
                 release.set()
@@ -377,7 +986,7 @@ class ResidentWarehouseTests(unittest.TestCase):
         code, headers, page, backend, wake, _, _, activity = self.endpoint_request(
             'POST', '/v1/statement', 'SELECT 42; ',
             {'X-Trino-User': 'powerbi', 'X-Trino-Source': 'Power BI'}, replicas=0,
-            payload={'nextUri': 'http://backend:8080/v1/statement/queued/q/1?x=2',
+            payload={'id': 'q', 'stats': {'state': 'RUNNING'}, 'nextUri': 'http://backend:8080/v1/statement/queued/q/1?x=2',
                      'partialCancelUri': 'http://backend:8080/v1/statement/queued/q/1', 'data': [[42]]})
         self.assertEqual(code, 200)
         wake.assert_called_once_with('wake', 'LOCAL')
@@ -468,8 +1077,11 @@ class ResidentWarehouseTests(unittest.TestCase):
                              ('DELETE', '/v1/statement/executing/q/1'),
                              ('POST', '/v1/statement/executing/q/1'), ('GET', '/v1/info')):
             code, _, _, backend, wake, status, _, _ = self.endpoint_request(method, path)
-            self.assertEqual(code, 200)
-            self.assertEqual(backend.request.call_args.args, (method, path))
+            self.assertEqual(code, 200 if path == '/v1/info' else 409)
+            if path == '/v1/info':
+                self.assertEqual(backend.request.call_args.args, (method, path))
+            else:
+                backend.request.assert_not_called()
             wake.assert_not_called()
             status.assert_not_called()
         code, _, page, _, _, _, _, activity = self.endpoint_request(
@@ -501,7 +1113,7 @@ class ResidentWarehouseTests(unittest.TestCase):
              patch.object(w, 'start_auto_chill_daemon') as start, \
              patch.object(w, 'stop_auto_chill_daemon') as stop, \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', return_value={'rows': [[0]]}), \
+             patch.object(w, '_execute', return_value={'rows': [[0]]}), \
              patch.object(w, 'transition') as transition:
             self.assertFalse(w.check_auto_chill()['chilled'])
             status.assert_not_called()
@@ -531,7 +1143,7 @@ class ResidentWarehouseTests(unittest.TestCase):
                  patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100), \
                  patch.object(w, 'status', return_value={'replicas': 1}), \
                  patch.object(w, 'trino', return_value=nullcontext('url')), \
-                 patch.object(w, 'execute', return_value={'rows': [[count]]}) as execute, \
+                 patch.object(w, '_execute', return_value={'rows': [[count]]}) as execute, \
                  patch.object(w, 'transition') as transition:
                 self.assertEqual(w.check_auto_chill(), dict(chilled=False, active_queries=count,
                     auto_chill_minutes=1, idle_seconds=0))
@@ -552,7 +1164,7 @@ class ResidentWarehouseTests(unittest.TestCase):
                  patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100), \
                  patch.object(w, 'status', return_value={'replicas': 1}), \
                  patch.object(w, 'trino', return_value=nullcontext('url')), \
-                 patch.object(w, 'execute', side_effect=active_count), \
+                 patch.object(w, '_execute', side_effect=active_count), \
                  patch.object(w, 'transition') as transition:
                 self.assertEqual(w.check_auto_chill()['active_queries'], 1)
                 transition.assert_not_called()
@@ -566,7 +1178,7 @@ class ResidentWarehouseTests(unittest.TestCase):
              patch.object(w.time, 'time', return_value=100), \
              patch.object(w, 'status', return_value={'replicas': 1}), \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', side_effect=poll), \
+             patch.object(w, '_execute', side_effect=poll), \
              patch.object(w, 'transition') as transition:
             self.assertFalse(w.check_auto_chill()['chilled'])
             transition.assert_not_called()
@@ -616,7 +1228,7 @@ class ResidentWarehouseTests(unittest.TestCase):
              patch.object(w.time, 'time', return_value=100), \
              patch.object(w, 'status', return_value={'replicas': 1}) as status, \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', return_value={'rows': [[0]]}), \
+             patch.object(w, '_execute', return_value={'rows': [[0]]}), \
              patch.object(w, 'transition') as transition:
             stop.wait.side_effect = tick
             w.start_auto_chill_daemon(interval=3)
@@ -639,7 +1251,7 @@ class ResidentWarehouseTests(unittest.TestCase):
              patch.object(w.time, 'time', return_value=100), \
              patch.object(w, 'status', return_value={'replicas': 1}), \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', side_effect=poll), \
+             patch.object(w, '_execute', side_effect=poll), \
              patch.object(w, 'transition') as transition:
             self.assertEqual(w.check_auto_chill(),
                              dict(chilled=False, auto_chill_minutes=0, idle_seconds=100))
@@ -665,7 +1277,8 @@ class ResidentWarehouseTests(unittest.TestCase):
             w.touch_activity()
             self.assertEqual(json.loads(w.activity_path().read_text()), {'last_activity': 100})
         script = (
-            "import importlib.util; "
+            "import importlib.util, sys; "
+            f"sys.path.insert(0, {str(Path(w.__file__).resolve().parent)!r}); "
             f"spec = importlib.util.spec_from_file_location('resident', {str(Path(w.__file__).resolve())!r}); "
             "module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
             "module.time.time = lambda: 190; module.touch_activity()"
@@ -692,7 +1305,7 @@ class ResidentWarehouseTests(unittest.TestCase):
             w.query('LOCAL', 'SELECT 1')
         self.assertEqual(json.loads(w.activity_path().read_text())['last_activity'], 100)
         with patch.object(w.time, 'time', return_value=200):
-            self.endpoint_request('GET', '/v1/statement/q/1')
+            self.endpoint_request('POST', '/v1/statement', 'SELECT 1')
         self.assertEqual(json.loads(w.activity_path().read_text())['last_activity'], 200)
 
     def test_auto_chill_query_failure_does_not_chill(self):
@@ -700,7 +1313,7 @@ class ResidentWarehouseTests(unittest.TestCase):
              patch.object(w.time, 'time', return_value=100), \
              patch.object(w, 'status', return_value={'replicas': 1}), \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', side_effect=RuntimeError('Trino unavailable')), \
+             patch.object(w, '_execute', side_effect=RuntimeError('Trino unavailable')), \
              patch.object(w, 'transition') as transition:
             with self.assertRaisesRegex(RuntimeError, 'Trino unavailable'):
                 w.check_auto_chill()
@@ -749,11 +1362,6 @@ class ResidentWarehouseTests(unittest.TestCase):
              patch.object(w, 'telemetry'):
             w.query('LOCAL', 'SELECT 1')
             self.assertEqual(w._LAST_ACTIVITY, 50)
-            w._LAST_ACTIVITY = 0
-            execute.side_effect = RuntimeError('failed')
-            with self.assertRaises(RuntimeError):
-                w.query('LOCAL', 'SELECT 1')
-            self.assertEqual(w._LAST_ACTIVITY, 50)
             w.transition('wake', 'LOCAL')
             self.assertEqual(w._LAST_ACTIVITY, 50)
             w._LAST_ACTIVITY = 0
@@ -764,6 +1372,13 @@ class ResidentWarehouseTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     w.transition('wake', 'LOCAL')
             self.assertEqual(w._LAST_ACTIVITY, 0)
+            execute.side_effect = RuntimeError('failed')
+            with self.assertRaises(RuntimeError):
+                w.query('LOCAL', 'SELECT 1')
+            self.assertEqual(w._LAST_ACTIVITY, 50)
+            with self.assertRaises(w.admission.AdmissionConflict):
+                w.transition('wake', 'LOCAL')
+            self.assertEqual(w._LAST_ACTIVITY, 50)
 
     def test_qualify_rewrite(self):
         body = 'SELECT id, row_number() OVER (PARTITION BY id ORDER BY ts DESC) AS rn FROM events'
@@ -889,8 +1504,8 @@ class ResidentWarehouseTests(unittest.TestCase):
              patch.object(w, "transition") as wake, \
              patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
              patch.object(w, "http_json", side_effect=[
-                 {"id": "query1", "nextUri": "http://localhost:1234/next"},
-                 {"columns": [{"name": "name"}], "data": [["a"], ["b"]]}]) as http:
+                 {"id": "query1", "stats": {"state": "RUNNING"}, "nextUri": "http://localhost:1234/next"},
+                 {"id": "query1", "stats": {"state": "FINISHED"}, "columns": [{"name": "name"}], "data": [["a"], ["b"]]}]) as http:
             report = w.query("local", sql, "iceberg", "public")
             wake.assert_called_once_with("wake", "LOCAL")
             self.assertEqual(report["rows"], [["a"], ["b"]])
@@ -910,9 +1525,9 @@ class ResidentWarehouseTests(unittest.TestCase):
         with patch.object(w, "status", return_value={"replicas": 1}), \
              patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
              patch.object(w, "http_json", side_effect=[
-                 {"id": "job1", "data": [[1], [2]], "nextUri": "http://localhost:1234/next"},
-                 {"data": [[3]], "nextUri": "http://localhost:1234/done"},
-                 {}]) as http, patch.object(w.urllib.request, "urlopen") as cancel:
+                 {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[1], [2]], "nextUri": "http://localhost:1234/next"},
+                 {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[3]], "nextUri": "http://localhost:1234/done"},
+                 {"id": "job1", "stats": {"state": "FINISHED"}}]) as http, patch.object(w.urllib.request, "urlopen") as cancel:
             report = w.query("LOCAL", "SELECT 1", max_rows=None)
         self.assertEqual(http.call_count, 3)
         cancel.assert_not_called()
@@ -926,8 +1541,8 @@ class ResidentWarehouseTests(unittest.TestCase):
         with patch.object(w, "status", return_value={"replicas": 1}), \
              patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
              patch.object(w, "http_json", side_effect=[
-                 {"data": [[1]], "nextUri": "http://localhost:1234/next"},
-                 {"error": {"message": "private value", "errorName": "DIVISION_BY_ZERO"}}]), \
+                 {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[1]], "nextUri": "http://localhost:1234/next"},
+                 {"id": "job1", "stats": {"state": "FAILED"}, "error": {"message": "private value", "errorName": "DIVISION_BY_ZERO"}}]), \
              patch.object(w.urllib.request, "urlopen") as cancel:
             with self.assertRaises(w.TrinoQueryError) as failure:
                 w.query("LOCAL", "SELECT 1", max_rows=None)
@@ -981,7 +1596,7 @@ class ResidentWarehouseTests(unittest.TestCase):
                                              (2, "http://localhost/next", True), (3, None, False), (2, None, False)]:
             with patch.object(w, "status", return_value={"replicas": 1}), \
                  patch.object(w, "trino", return_value=nullcontext("http://localhost")), \
-                 patch.object(w, "http_json", return_value={"data": [[i] for i in range(count)],
+                 patch.object(w, "http_json", return_value={"id": "bounded", "stats": {"state": "RUNNING" if next_uri else "FINISHED"}, "data": [[i] for i in range(count)],
                               "nextUri": next_uri}) as http, \
                  patch.object(w.urllib.request, "urlopen", side_effect=OSError() if cancel_error else None) as cancel:
                 report = w.query("LOCAL", "SELECT arbitrary", max_rows=2)
@@ -1011,6 +1626,246 @@ class ResidentWarehouseTests(unittest.TestCase):
                 process.terminate.assert_called_once()
                 process.wait.assert_called_once()
                 self.assertIn("svc/trino-local", popen.call_args.args[0])
+
+    def test_managed_sql_uses_enrolled_foundation_for_both_roles(self):
+        import database_creation_bridge as bridge
+        import database_creation_worker as worker
+        import runtime_profile
+        from tests.test_database_creation_bridge import BridgeFixture
+        for role in ('native', 'workbench'):
+            with self.subTest(role=role):
+                fixture = BridgeFixture()
+                with patch('runtime_profile.configure_process', self.configure_process):
+                    fixture.setUp()
+                previous = sys.getprofile()
+                try:
+                    view, nodes = self.sql_foundation(fixture)
+                    record = runtime_profile.private_json(fixture.owners[role]['record_path'])
+                    hello = dict(record, purpose='http', private_enrollment_path=str(fixture.path),
+                                 profile_path=str(fixture.profile))
+                    managed, _, _ = fixture.connect(hello)
+                    kubeconfig = fixture.value['preparation']['kubeconfig']
+                    calls = []
+                    def profile(frame, event, arg):
+                        if event == 'call' and frame.f_code is worker.validate_candidate_profile.__code__:
+                            calls.append(frame.f_code.co_name)
+                    sys.setprofile(profile)
+                    with patch.dict('os.environ', KUBECONFIG='/wrong/config', KUBE_CONTEXT='wrong', KUBE_NAMESPACE='wrong'), \
+                         patch.object(w.subprocess, 'run', side_effect=self.sql_responses(view, nodes)) as run, \
+                         patch.object(w, 'KUBECTL', ['kubectl', '--context', 'wrong', '-n', 'wrong']), \
+                         patch.object(w.subprocess, 'Popen') as popen, \
+                         patch.object(w.socket, 'socket') as socket_factory, \
+                         patch.object(w, 'http_json', return_value={'starting': False}) as http, \
+                         patch('trino_auth.backend_ssl_context', return_value=None):
+                        socket_factory.return_value.__enter__.return_value.getsockname.return_value = ('127.0.0.1', 1234)
+                        popen.return_value.poll.return_value = None
+                        with w.trino() as url:
+                            self.assertTrue(url.startswith('https://127.0.0.1:'))
+                        argv = popen.call_args.args[0]
+                        self.assertEqual(argv[:7], ['kubectl', '--kubeconfig', kubeconfig,
+                            '--context', fixture.value['foundation']['kube_context'], '-n', 'shirokuma-dev'])
+                        self.assertEqual(argv[7:-1], ['port-forward', '--address', '127.0.0.1', 'svc/trino-local'])
+                        self.assertRegex(argv[-1], r'^\d+:8080$')
+                        self.assertEqual(calls, [])
+                        self.assert_sql_reads(run, managed.config)
+                        self.assertEqual(http.call_args.args, (url + '/v1/info',))
+                        popen.return_value.terminate.assert_called_once()
+                        popen.return_value.wait.assert_called_once()
+                finally:
+                    sys.setprofile(previous)
+                    fixture.doCleanups()
+
+    def sql_foundation(self, fixture):
+        import base64
+        import hashlib
+        fixture.value['foundation']['ca_sha256'] = hashlib.sha256(b'enrolled-ca').hexdigest()
+        fixture.save()
+        return (dict(**{'current-context': fixture.value['foundation']['kube_context']},
+                     clusters=[dict(cluster={'server': fixture.value['foundation']['api_server'],
+                         'certificate-authority-data': base64.b64encode(b'enrolled-ca').decode()})]),
+                dict(items=[dict(metadata=dict(name='node', uid='uid'))]))
+
+    def sql_responses(self, view, nodes):
+        return [subprocess.CompletedProcess([], 0, json.dumps(value), '') for value in (view, nodes)]
+
+    def assert_sql_reads(self, run, config):
+        prefix = ['rtk', 'proxy', 'kubectl', '--kubeconfig', str(config.preparation().kubeconfig),
+                  '--context', config.value['foundation']['kube_context'], '--request-timeout=10s']
+        self.assertEqual([call.args[0] for call in run.call_args_list],
+                         [prefix + ['config', 'view', '--minify', '--raw', '-o', 'json'],
+                          prefix + ['get', 'nodes', '-o', 'json']])
+        for call in run.call_args_list:
+            self.assertEqual(call.kwargs, dict(capture_output=True, text=True, timeout=15))
+
+    def test_managed_sql_real_sealed_full_candidate(self):
+        import base64
+        import hashlib
+        import os
+        import socket
+        import uuid
+        import database_creation_auth as auth
+        import database_creation_bridge as bridge
+        import database_creation_worker as worker
+        import database_creations as creations
+        import runtime_profile
+        from tests.test_database_creation_preparation import ManagedPreparationTests
+        from warehouse_operator import save_private
+        from warehouse_operations import OperationError
+        fixture = ManagedPreparationTests()
+        fixture.setUp()
+        try:
+            candidate = fixture.managed_candidate(prepare=False)
+            managed, _, _, _, _, value, path, _ = candidate
+            value['foundation']['ca_sha256'] = hashlib.sha256(b'enrolled-ca').hexdigest()
+            save_private(path, value)
+            managed.config = bridge.Configuration(path)
+            managed, full, *_ = fixture.managed_candidate(candidate)
+            detail = creations.get(fixture.alice, 'admin', fixture.root_id)
+            plan = next(p for p in detail['plans'] if p['phase'] == 'full')
+            approval = creations.mutate(fixture.alice, 'admin', fixture.root_id, 'APPROVE',
+                dict(expected_revision=detail['revision'], plan_id=plan['plan_id'],
+                     operation_id=plan['operation_id'], expected_operation_revision=plan['operation_revision'],
+                     delivery_digest=plan['delivery_digest']), 'resident-full-review', phase='full')
+            auth.claim(fixture.config.enrollment, fixture.executor, approval['request_id'],
+                       owner_id=managed.hello['owner_instance_id'])
+            request, root, original, _ = worker.resolve(managed, approval['request_id'])
+            worker.seal_activation_plans(managed, request, root, original, full)
+            for role in ('native', 'workbench'):
+                desc = worker.descriptor(request, root, original, full, role)
+                record = managed.config.owner(role)
+                journal = Path(value['owners'][role]['directory'])/'activations'/(desc['activation_id']+'.json')
+                save_private(journal, dict(descriptor=desc, state='UNKNOWN',
+                    stop=dict(state='ACK', intent_id=str(uuid.uuid4())),
+                    start=dict(state='INTENT', intent_id=str(uuid.uuid4())), readiness=dict(state='UNSENT')))
+                record['runtime_instance_id'] = desc['candidate_runtime_instance_id']
+                save_private(Path(value['owners'][role]['record_path']), record)
+                hello = dict(record, purpose='http', private_enrollment_path=str(path),
+                             profile_path=full.config['runtime_profile'])
+                with self.subTest(role=role):
+                    parent, child = socket.socketpair()
+                    fixture.addCleanup(parent.close); fixture.addCleanup(child.close)
+                    parent.sendall(json.dumps(hello).encode()+b'\n')
+                    duplicate = os.dup
+                    with patch.dict(os.environ, SHIROKUMA_RUNTIME_PROFILE=full.config['runtime_profile'],
+                                    SHIROKUMA_MANAGED_FD='3', KUBECONFIG='/wrong/config',
+                                    KUBE_CONTEXT='wrong', KUBE_NAMESPACE='wrong'), \
+                         patch.object(bridge.os, 'dup', side_effect=lambda fd: duplicate(child.fileno())), \
+                         patch.object(bridge, '_managed', None):
+                        self.configure_process()
+                        successor = bridge.configure()
+                        fixture.addCleanup(successor.channel.close)
+                        self.assertEqual(bridge.line(parent)['runtime_attestation'],
+                                         full.config['managed_handoff']['runtime_attestation'])
+                        view = {'current-context': value['foundation']['kube_context'],
+                            'clusters': [dict(cluster={'server': value['foundation']['api_server'],
+                                'certificate-authority-data': base64.b64encode(b'enrolled-ca').decode()})]}
+                        nodes = dict(items=[dict(metadata=dict(name='node', uid='uid'))])
+                        with patch.object(w.subprocess, 'run', side_effect=self.sql_responses(view, nodes)) as run, \
+                             patch.object(w.subprocess, 'Popen') as popen, \
+                             patch.object(w.socket, 'socket') as network, \
+                             patch.object(w, 'http_json', return_value={'starting': False}), \
+                             patch('trino_auth.backend_ssl_context', return_value=None):
+                            network.return_value.__enter__.return_value.getsockname.return_value = ('127.0.0.1', 1234)
+                            popen.return_value.poll.return_value = None
+                            with w.trino():
+                                pass
+                            self.assertEqual(popen.call_args.args[0], ['kubectl', '--kubeconfig',
+                                str(managed.config.preparation().kubeconfig), '--context', value['foundation']['kube_context'],
+                                '-n', 'shirokuma-dev', 'port-forward', '--address', '127.0.0.1', 'svc/trino-local', '1234:8080'])
+                            self.assert_sql_reads(run, successor.config)
+                        # The real validator must reject byte drift in the sealed kubeconfig.
+                        kubeconfig = managed.config.preparation().kubeconfig
+                        before = kubeconfig.read_bytes()
+                        try:
+                            kubeconfig.write_bytes(before+b'\n')
+                            with patch.object(w.subprocess, 'Popen') as popen, \
+                                 patch.object(w.subprocess, 'run') as run, patch.object(w, 'http_json') as http:
+                                with self.assertRaises(OperationError):
+                                    with w.trino():
+                                        self.fail('sealed drift must fail')
+                                popen.assert_not_called(); run.assert_not_called(); http.assert_not_called()
+                        finally:
+                            kubeconfig.write_bytes(before)
+        finally:
+            fixture.doCleanups()
+
+    def test_managed_sql_rejects_lost_authority_before_transport(self):
+        import runtime_profile
+        from tests.test_database_creation_bridge import BridgeFixture
+        from warehouse_operations import OperationError
+        for loss in ('eof', 'closed_fd', 'owner', 'runtime', 'profile', 'enrollment', 'api', 'ca', 'nodes',
+                     'lineage', 'context', 'insecure', 'kubectl', 'late_eof', 'invalid_candidate'):
+            with self.subTest(loss=loss):
+                fixture = BridgeFixture()
+                with patch('runtime_profile.configure_process', self.configure_process):
+                    fixture.setUp()
+                try:
+                    view, nodes = self.sql_foundation(fixture)
+                    managed, parent, _ = fixture.connect()
+                    if loss == 'eof':
+                        parent.close()
+                    elif loss == 'closed_fd':
+                        managed.channel.close()
+                    elif loss == 'owner':
+                        Path(fixture.owners['workbench']['record_path']).unlink()
+                    elif loss == 'runtime':
+                        Path(fixture.profile_value['trino_auth_file']).unlink()
+                    elif loss == 'profile':
+                        fixture.profile.write_text('{}')
+                    elif loss == 'enrollment':
+                        fixture.path.write_text('{}')
+                    elif loss == 'api':
+                        view['clusters'][0]['cluster']['server'] = 'https://wrong:6443'
+                    elif loss == 'ca':
+                        view['clusters'][0]['cluster']['certificate-authority-data'] = 'd3Jvbmc='
+                    elif loss == 'nodes':
+                        nodes['items'][0]['metadata']['uid'] = 'wrong'
+                    elif loss == 'lineage':
+                        Path(fixture.value['preparation']['tofu_state']).write_text('{"lineage":"wrong"}')
+                    elif loss == 'context':
+                        view['current-context'] = 'wrong'
+                    elif loss == 'insecure':
+                        view['clusters'][0]['cluster']['insecure-skip-tls-verify'] = True
+                    elif loss == 'invalid_candidate':
+                        from warehouse_operator import save_private
+                        path = fixture.root/'unsealed-profile.json'
+                        save_private(path, fixture.profile_value)
+                        w.os.environ['SHIROKUMA_RUNTIME_PROFILE'] = str(path)
+                        managed.hello['profile_path'] = str(path)
+                        self.configure_process()
+                    responses = iter(self.sql_responses(view, nodes))
+                    def read(*args, **kwargs):
+                        if loss == 'kubectl':
+                            raise subprocess.TimeoutExpired(args[0], 15)
+                        result = next(responses)
+                        if loss == 'late_eof' and 'get' in args[0]:
+                            parent.close()
+                        return result
+                    with patch.object(w.subprocess, 'run', side_effect=read), \
+                         patch.object(w.subprocess, 'Popen') as popen, \
+                         patch.object(w, 'http_json') as http:
+                        process = Mock()
+                        process.poll.return_value = None
+                        for persistent in (None, dict(process=process, url='https://127.0.0.1:1234')):
+                            responses = iter(self.sql_responses(view, nodes))
+                            with patch.object(w, '_PERSISTENT_TRINO', persistent), self.assertRaises(OperationError):
+                                with w.trino():
+                                    self.fail('lost managed authority must not yield')
+                        popen.assert_not_called()
+                        http.assert_not_called()
+                        process.terminate.assert_not_called()
+                finally:
+                    fixture.doCleanups()
+
+    def test_unmanaged_sql_argv_remains_legacy(self):
+        import database_creation_bridge as bridge
+        with patch.object(bridge, '_managed', None), patch.dict('os.environ', {}, clear=True), \
+             patch.object(w, 'KUBECTL', ['kubectl', '--context', 'legacy', '-n', 'legacy']):
+            self.assertEqual(w._sql_kubectl(), w.KUBECTL)
+        with patch.object(bridge, '_managed', None), patch.dict('os.environ', SHIROKUMA_MANAGED_FD='3'):
+            from warehouse_operations import OperationError
+            with self.assertRaises(OperationError):
+                w._sql_kubectl()
 
     def test_uninitialized_telemetry_is_best_effort(self):
         with patch.dict("sys.modules", {"agenthouse.manage": None}):

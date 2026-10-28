@@ -1,6 +1,8 @@
 """Small calendar scheduler for the local jobs ledger; never catches up."""
 from datetime import date, datetime, time as wall_time, timedelta, timezone
+from contextlib import ExitStack
 import calendar
+import hashlib
 import fcntl
 import json
 import logging
@@ -10,6 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import jobs_resident as jobs
 import request_auth
+import warehouse_admission as admission
 
 _THREAD = None
 _STOP = threading.Event()
@@ -228,8 +231,22 @@ def tick(now=None):
     return _tick(_utc(now), refresh_clock=now is None)
 
 
+def _firing_subject(schedule):
+    # The existing row, including its last consumed run, is the revision stamp.
+    # An explicit edit/re-enable is distinct; a crash before consumption is not.
+    return hashlib.sha256(json.dumps(schedule, sort_keys=True).encode()).hexdigest()
+
+
 def _tick(now, stop=None, refresh_clock=False):
     result = dict(started=[], skipped=[], paused=[], unknown=[])
+    if stop is None or not stop.is_set():
+        try:
+            import db_schedules
+            database = db_schedules.tick(now, refresh_clock=refresh_clock, stop=stop)
+            for key in result:
+                result[key].extend(database[key])
+        except Exception:
+            logging.getLogger(__name__).exception('DB scheduler tick failed')
     claim = _lock('jobs-scheduler-tick.lock')
     if claim is None:
         return result
@@ -242,6 +259,8 @@ def _tick(now, stop=None, refresh_clock=False):
                 break
             active = jobs._lock()
             current = _utc() if refresh_clock else now
+            contexts = ExitStack()
+            firing = None
             try:
                 prepared, run_id, paused = None, None, False
                 with jobs._db() as connection:
@@ -259,21 +278,51 @@ def _tick(now, stop=None, refresh_clock=False):
                     if active is not None:
                         jobs._lost(connection)
                     schedule = dict(row)
+                    saved_schedule = dict(row)
                     is_stage = name.startswith('stage:')
                     is_mart = name.startswith('mart:')
                     job = connection.execute('SELECT * FROM jobs WHERE name=?', (name,)).fetchone()
-                    definition = json.loads(job['definition']) if job else dict(name=name, steps=[])
-                    arguments = json.loads(row['arguments'])
+                    malformed = False
+                    try:
+                        definition = json.loads(job['definition']) if job else dict(name=name, steps=[])
+                        arguments = json.loads(row['arguments'])
+                        if not isinstance(definition, dict) or not isinstance(arguments, dict):
+                            raise ValueError('invalid saved schedule input')
+                    except (ValueError, TypeError):
+                        malformed = True
+                        definition, arguments = dict(name=name, steps=[]), {}
+                    import warehouse_admission as admission
                     reason = None
                     try:
-                        _authorize(schedule)
-                        if is_mart:
+                        admission.check_open(connection)
+                        subject = _firing_subject(saved_schedule)
+                        previous = admission.get_for_subject(connection, kind='schedule_firing', subject_id=subject)
+                        if previous is not None:
+                            jobs._finish_firing(connection, previous, 'UNKNOWN')
+                            reason = 'Previous firing already reserved; no automatic retry'
+                        else:
+                            firing = admission.admit(connection, actor=row['owner'], kind='schedule_firing', subject_id=subject)
+                    except admission.AdmissionDenied:
+                        reason = 'maintenance_skipped'
+                    # No SQLite writer is held across account, file or SQL work.
+                    connection.commit()
+                    if firing is not None:
+                        contexts.enter_context(admission.accepted(firing))
+                    if reason is None and malformed:
+                        paused, reason = True, 'Schedule validation failed (ValueError); paused'
+                    try:
+                        if reason is not None:
+                            pass
+                        elif is_mart:
+                            _authorize(schedule)
                             import marts_resident
                             definition, prepared = marts_resident._scheduled(name[5:], row['owner'], row['role'], connection=connection)
                         elif is_stage:
+                            _authorize(schedule)
                             import stages_resident
                             definition, prepared = stages_resident._scheduled(name[6:], row['owner'], row['role'], connection=connection)
                         else:
+                            _authorize(schedule)
                             if job is None or job['owner'] != row['owner']:
                                 raise PermissionError('Job ownership unavailable; schedule paused')
                             arguments, prepared = jobs._validate(definition, row['role'], arguments)
@@ -296,7 +345,7 @@ def _tick(now, stop=None, refresh_clock=False):
                             paused, reason = True, 'Schedule input preflight failed (' + type(exc).__name__ + '); paused'
                     current = _utc() if refresh_clock else now
                     if due > current:
-                        continue
+                        reason = 'Scheduled clock moved before occurrence; skipped'
                     if reason is None and (current - due).total_seconds() >= 60:
                         reason = 'Scheduled time missed by at least 60 seconds; no catch-up'
                     status = 'skipped' if reason else 'queued'
@@ -305,27 +354,57 @@ def _tick(now, stop=None, refresh_clock=False):
                         day = schedule.get('day_of_month')
                         schedule['day_of_month'] = int(day) if day is not None and day != 'last' else day
                         normalized = _validate_schedule({key: schedule[key] for key in SCHEDULE_FIELDS if schedule.get(key) is not None and not (key == 'weekdays' and not schedule[key])}, current)
-                        occurrence = None if paused else _next(normalized, current, previous=due)
+                        occurrence = None if paused else _next(normalized, max(current, due), previous=due)
                     except (ValueError, TypeError, KeyError, OverflowError):
                         paused, status = True, 'skipped'
                         reason = 'Schedule calendar calculation failed; paused'
                         occurrence = None
                     next_run = occurrence.isoformat() if occurrence else None
                     steps = prepared if prepared is not None else definition.get('steps', [])
+                    steps = [step for step in steps if isinstance(step, dict) and isinstance(step.get('action'), str)] if isinstance(steps, list) else []
+                    # Revalidate the saved role immediately before publication;
+                    # account files are still read outside the write transaction.
+                    if status == 'queued':
+                        try:
+                            _authorize(saved_schedule)
+                        except (ValueError, PermissionError, OSError):
+                            paused, status, next_run = True, 'skipped', None
+                            reason = 'Schedule authorization changed during preflight; paused'
+                    connection.execute('BEGIN IMMEDIATE')
+                    latest = connection.execute('SELECT * FROM schedules WHERE name=?', (name,)).fetchone()
+                    unchanged = latest is not None and dict(latest) == saved_schedule
+                    latest_job = connection.execute('SELECT * FROM jobs WHERE name=?', (name,)).fetchone()
+                    if not unchanged or (job is not None and (latest_job is None or
+                            latest_job['owner'] != job['owner'] or latest_job['definition'] != job['definition'])):
+                        status, reason = 'skipped', 'Schedule changed during preflight; skipped'
+                    if status == 'queued' and connection.execute(
+                            "SELECT 1 FROM runs WHERE status IN ('queued','running') LIMIT 1").fetchone():
+                        status, reason = 'skipped', 'Another job is active; scheduled run skipped without a queue'
                     connection.execute('SAVEPOINT schedule_admission')
                     try:
                         run_id = jobs._insert_run(connection, definition, arguments, steps, row['owner'], row['role'],
                             trigger='schedule', scheduled_for=due.isoformat(), status=status, error=reason)
-                    except jobs.JobConflict:
+                    except (jobs.JobConflict, admission.AdmissionDenied, admission.AdmissionConflict) as exc:
                         # Undo both the run and any earlier claims in this admission.
                         connection.execute('ROLLBACK TO schedule_admission')
-                        status, reason = 'skipped', 'Scheduled run admission conflict; skipped without a queue'
+                        status = 'skipped'
+                        maintenance = isinstance(exc, admission.AdmissionDenied)
+                        if isinstance(exc, admission.AdmissionConflict):
+                            try:
+                                admission.check_open(connection)
+                            except admission.AdmissionDenied:
+                                maintenance = True
+                        reason = ('maintenance_skipped' if maintenance
+                                  else 'Scheduled run admission conflict; skipped without a queue')
                         run_id = jobs._insert_run(connection, definition, arguments, steps, row['owner'], row['role'],
                             trigger='schedule', scheduled_for=due.isoformat(), status=status, error=reason)
                     finally:
                         connection.execute('RELEASE schedule_admission')
-                    connection.execute('UPDATE schedules SET enabled=?,next_run_at=?,last_status=?,last_run_id=?,last_scheduled_for=? WHERE name=?',
-                        (0 if paused or schedule['kind'] == 'once' else 1, next_run, status, run_id, due.isoformat(), name))
+                    if unchanged:
+                        connection.execute('UPDATE schedules SET enabled=?,next_run_at=?,last_status=?,last_run_id=?,last_scheduled_for=? WHERE name=?',
+                            (0 if paused or schedule['kind'] == 'once' else 1, next_run, status, run_id, due.isoformat(), name))
+                    if status == 'skipped' and firing is not None:
+                        jobs._finish_firing(connection, firing, 'FAILED')
                 if paused:
                     result['paused'].append(name)
                 if status == 'skipped':
@@ -333,7 +412,7 @@ def _tick(now, stop=None, refresh_clock=False):
                 else:
                     try:
                         jobs._start_worker(run_id, prepared, row['owner'], row['role'], active,
-                                           row['auth_mode'] == 'shared', name, auth_mode=row['auth_mode'])
+                                           row['auth_mode'] == 'shared', name, auth_mode=row['auth_mode'], firing_handle=firing)
                     except Exception:
                         # The slot is already consumed; mark the unstarted claim unknown.
                         with jobs._db() as connection:
@@ -343,6 +422,7 @@ def _tick(now, stop=None, refresh_clock=False):
                         active = None  # Worker owns and releases this descriptor.
                         result['started'].append(run_id)
             finally:
+                contexts.close()
                 if active is not None:
                     active.close()
     finally:

@@ -26,6 +26,50 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
+    def test_permanent_iceberg_jobs_use_dedicated_oauth_and_s3(self):
+        directory = ROOT / 'deploy/gitops/iceberg/bootstrap'
+        for db, filename, job_name, catalog, service, oauth in (
+            ('sales', 'job.yaml', 'iceberg-table-bootstrap', 'shirokuma_l1', 'polaris', 'polaris-iceberg-bootstrap-credentials'),
+            ('finance', 'finance-job.yaml', 'iceberg-finance-table-bootstrap', 'finance', 'polaris-finance', 'polaris-finance-iceberg-bootstrap-credentials'),
+        ):
+            job = load_yaml_text((directory / filename).read_text())[0]
+            self.assertEqual(job['metadata']['name'], job_name)
+            container = job['spec']['template']['spec']['containers'][0]
+            self.assertEqual(container['image'], 'apache/polaris@sha256:74e6416c75f24563fc62f4ed52699d4fb872741b6a3e0af77fdc551b4ee72fce')
+            self.assertEqual(container['args'][container['args'].index('--class-path') + 1], '/deployments/lib/main/*')
+            source_index = container['args'].index('/opt/shirokuma/IcebergBootstrap.java')
+            for setting in ('-Dshirokuma.catalog=' + catalog, '-Dshirokuma.namespace=smoke',
+                            '-Dshirokuma.base-location=s3://shirokuma-lakehouse/databases/' + db):
+                self.assertLess(container['args'].index(setting), source_index)
+            env = {item['name']: item for item in container['env']}
+            self.assertEqual(env['POLARIS_URI']['value'], 'http://' + service + '.shirokuma-dev.svc.cluster.local:8181')
+            for name, key in (('POLARIS_CLIENT_ID', 'client_id'), ('POLARIS_CLIENT_SECRET', 'client_secret'), ('POLARIS_REALM', 'realm')):
+                self.assertEqual(env[name]['valueFrom']['secretKeyRef'], {'name': oauth, 'key': key})
+            for name, key in (('AWS_REGION', 'S3_REGION'), ('AWS_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID'), ('AWS_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY')):
+                self.assertEqual(env[name]['valueFrom']['secretKeyRef'], {'name': 'seaweedfs-s3-' + db + '-credentials', 'key': key})
+            self.assertNotIn('root-credentials', (directory / filename).read_text())
+            policy = load_yaml_text((directory / ('networkpolicy.yaml' if db == 'sales' else 'finance-networkpolicy.yaml')).read_text())[0]
+            self.assertEqual(policy['spec']['podSelector']['matchLabels']['app.kubernetes.io/name'], job_name)
+            self.assertEqual(policy['spec']['egress'][0]['to'][0]['podSelector']['matchLabels']['app.kubernetes.io/name'], service)
+        source = (directory / 'IcebergBootstrap.java').read_text()
+        run = source.split('private static Result run(', 1)[1].split('private static Map', 1)[0]
+        self.assertNotIn('ensureManagementCatalog', run)
+        self.assertNotIn('createNamespace', run)
+        self.assertIn('operator must precreate', run)
+        child = load_yaml_text((ROOT / 'deploy/gitops/clusters/local-lite/iceberg-bootstrap.yaml').read_text())[0]
+        self.assertEqual(child['spec']['sourceRef'], {'kind': 'Bucket', 'name': 'shirokuma-local-source'})
+        self.assertEqual({item['name'] for item in child['spec']['healthChecks']}, {'iceberg-table-bootstrap', 'iceberg-finance-table-bootstrap'})
+        customization = load_yaml_text((directory / 'kustomization.yaml').read_text())[0]
+        self.assertTrue({'job.yaml', 'finance-job.yaml', 'networkpolicy.yaml', 'finance-networkpolicy.yaml'} <= set(customization['resources']))
+        rendered = subprocess.run(['rtk', 'proxy', 'kubectl', 'kustomize', str(directory)],
+                                  text=True, capture_output=True, check=True)
+        objects = load_yaml_text(rendered.stdout)
+        jobs = [obj for obj in objects if obj['kind'] == 'Job']
+        self.assertEqual({job['metadata']['name'] for job in jobs}, {'iceberg-table-bootstrap', 'iceberg-finance-table-bootstrap'})
+        configmaps = {obj['metadata']['name'] for obj in objects if obj['kind'] == 'ConfigMap'}
+        for job in jobs:
+            self.assertIn(job['spec']['template']['spec']['volumes'][0]['configMap']['name'], configmaps)
+
     def test_reconcile_refuses_other_context_before_writes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             binary = Path(directory) / "flux-fixture"
@@ -554,10 +598,9 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "GITHUB_TOKEN",
             "TF_VAR_seaweedfs_s3_operator_access_key",
             "TF_VAR_seaweedfs_s3_operator_secret_key",
-            "TF_VAR_seaweedfs_s3_application_access_key",
-            "TF_VAR_seaweedfs_s3_application_secret_key",
             "TF_VAR_polaris_postgresql_password",
-            "TF_VAR_polaris_root_client_secret",
+            "TF_VAR_polaris_database_credentials",
+            "TF_VAR_local_gitops_s3_credentials",
         )
 
         for variable in required_variables:
@@ -737,10 +780,9 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
         required_variables = (
             "TF_VAR_seaweedfs_s3_operator_access_key",
             "TF_VAR_seaweedfs_s3_operator_secret_key",
-            "TF_VAR_seaweedfs_s3_application_access_key",
-            "TF_VAR_seaweedfs_s3_application_secret_key",
             "TF_VAR_polaris_postgresql_password",
-            "TF_VAR_polaris_root_client_secret",
+            "TF_VAR_polaris_database_credentials",
+            "TF_VAR_local_gitops_s3_credentials",
         )
 
         for variable in required_variables:

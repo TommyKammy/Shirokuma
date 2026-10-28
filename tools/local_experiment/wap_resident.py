@@ -34,7 +34,46 @@ def persist_json(path, value):
         temporary.unlink(missing_ok=True)
 
 
-WAP_REGISTRY = state_path('wap_models.json')
+class _LegacyRegistryPath:
+    """Resolve the gated legacy path only when a legacy caller uses it."""
+    def __getattr__(self, name):
+        return getattr(state_path('wap_models.json'), name)
+
+    def __fspath__(self):
+        return os.fspath(state_path('wap_models.json'))
+
+
+WAP_REGISTRY = _LegacyRegistryPath()
+
+
+def save_model(*args, **kwargs):
+    """Lazy backend facade; see manual_wap.save_model for the explicit contract."""
+    from manual_wap import save_model as call
+    return call(*args, **kwargs)
+
+
+def build(*args, **kwargs):
+    """Lazy backend facade for a manual model build (no resident routing)."""
+    from manual_wap import build as call
+    return call(*args, **kwargs)
+
+
+def audit(*args, **kwargs):
+    """Lazy backend facade for a manual immutable audit."""
+    from manual_wap import audit as call
+    return call(*args, **kwargs)
+
+
+def publish(*args, **kwargs):
+    """Lazy backend facade for an explicitly authorized admin publication."""
+    from manual_wap import publish as call
+    return call(*args, **kwargs)
+
+
+def rollback(*args, **kwargs):
+    """Lazy backend facade for rollback of a recorded publication."""
+    from manual_wap import rollback as call
+    return call(*args, **kwargs)
 
 
 @contextmanager
@@ -199,6 +238,7 @@ def data_table(value, rollback=False):
     return parts[-1]
 
 
+@wr.legacy_operation
 def data(b, args):
     with model_operation(b):
         candidate = (getattr(args, 'refresh', None) or getattr(args, 'publish', None)

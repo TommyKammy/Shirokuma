@@ -3,6 +3,8 @@ kind: Kustomization
 resources:
   - job.yaml
   - networkpolicy.yaml
+  - finance-job.yaml
+  - finance-networkpolicy.yaml
 configMapGenerator:
   - name: iceberg-table-bootstrap-source
     namespace: shirokuma-dev

@@ -17,9 +17,15 @@ spec:
   postBuild:
     substitute:
       POLARIS_CREDENTIAL_GENERATION: __REPLACED_BY_ROOT_KUSTOMIZATION__
+      POLARIS_SALES_JWT_KEY_GENERATION: __REPLACED_BY_ROOT_KUSTOMIZATION__
+      POLARIS_FINANCE_JWT_KEY_GENERATION: __REPLACED_BY_ROOT_KUSTOMIZATION__
   wait: true
   healthChecks:
     - apiVersion: apps/v1
       kind: Deployment
       name: polaris
+      namespace: shirokuma-dev
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: polaris-finance
       namespace: shirokuma-dev

@@ -20,6 +20,7 @@ from unittest.mock import patch, Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools/local_experiment"))
 import workbench_server as wb
+import runtime_profile
 
 
 class WorkbenchHTML(HTMLParser):
@@ -501,7 +502,8 @@ eval(HANDLERS+`
         busy_handler = 'async function busy(' + script.split('async function busy(', 1)[1].split('function aiStatus(', 1)[0]
         harness = r"""
 const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',checked:false,disabled:false,hidden:false,children:[],querySelectorAll(){return [];},replaceChildren(...items){this.children=items;},append(...items){this.children.push(...items);},reportValidity(){return true;},setAttribute(){},removeAttribute(){}};
+const nodes={};const $=id=>nodes[id]??={value:'',checked:false,disabled:false,hidden:false,dataset:{},children:[],querySelectorAll(){return [];},replaceChildren(...items){this.children=items;},append(...items){this.children.push(...items);},reportValidity(){return true;},setAttribute(){},removeAttribute(){}};
+const databaseMode=false;
 let language='en',currentRole='admin',stageEpoch=1,jobScheduleRequest=0,jobSelectionEpoch=0,jobScheduleEnabledDirty=false;
 const jobsVisible=()=>currentRole!=='bi_viewer';
 let selectedJob={name:'orders',can_manage:true},jobSchedules=[];
@@ -1118,7 +1120,8 @@ eval(HANDLERS+`
         role = script[script.index(" for(const option of $('bear-data-action').options)"):script.index("\n}\n$('role-selector').onchange")]
         harness = r'''
 const assert=require('node:assert/strict');
-class Element{constructor(){this.value='';this.disabled=false;this.attrs={};this.parentElement={};this.labels=[{}];this.children=[];this.textContent='';}
+const databaseMode=false;
+class Element{constructor(){this.value='';this.disabled=false;this.dataset={};this.attrs={};this.parentElement={};this.labels=[{}];this.children=[];this.textContent='';}
  setAttribute(k,v){this.attrs[k]=v;}removeAttribute(k){delete this.attrs[k];}getAttribute(k){return this.attrs[k]??null;}
  replaceChildren(...nodes){this.children=nodes;this.firstChild=nodes[0];}checkValidity(){return true;}}
 const nodes={},$=id=>nodes[id]??=new Element(),document={createElement:()=>new Element()};
@@ -1642,14 +1645,15 @@ const run=eval(HANDLER);
         navigation = next(n for n in doc.nodes if n['tag'] == 'nav')
         headings = [n['text'] for n in doc.nodes
                     if n['tag'] == 'h2' and navigation in n['ancestors']]
-        self.assertEqual(headings, ['Work with Data', 'Catalog', 'Manage & Monitor'])
+        self.assertEqual(headings, ['Work with Data', 'Manage & Monitor'])
         expected = [
+            ('catalog', 'Data Explorer'),
             ('warehouse', 'SQL Worksheets'),
             ('ingestion', 'Ingestion & Stages'),
             ('transformation', 'Transformation'),
             ('jobs', 'Jobs'),
             ('bears', 'AI Bears'),
-            ('catalog', 'Database Explorer'),
+            ('db-admin', 'DB management'),
             ('pawprints', 'Audit Log'),
             ('compute', 'Compute & Governance'),
         ]
@@ -1663,6 +1667,7 @@ const run=eval(HANDLER);
                 self.assertEqual(panel['role'], 'tabpanel')
                 self.assertEqual(panel['aria-labelledby'], tab['id'])
                 self.assertEqual('hidden' in panel, name != 'warehouse')
+        self.assertIn('hidden', doc.by_id('tab-db-admin'))
         for identifier in ('quick-warehouse-state', 'quick-wake', 'quick-chill'):
             self.assertTrue(any(n['tag'] == 'header' for n in doc.by_id(identifier)['ancestors']))
 
@@ -1731,8 +1736,16 @@ const run=eval(HANDLER);
         self.assertEqual(next(n for n in doc.nodes if n['tag'] == 'html')['lang'], 'en')
 
         script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
-        dictionary = script.split('const i18n = {ja: {', 1)[1].split('}};', 1)[0]
-        translations = dict(re.findall(r"'([^']+)':'([^']+)'", dictionary))
+        # Evaluate the pure translation declarations, including Database-mode additions.
+        # No page handlers or browser APIs run in this isolated dictionary check.
+        dictionary = script[script.index('const i18n = '):script.index("let language = 'en';")]
+        additions = re.findall(
+            r'const dbCreationGuidance=[^\n]*;|Object\.assign\(i18n\.ja,\{[\s\S]*?\}\);', script)
+        result = subprocess.run(['node', '-e', dictionary + '\n' + '\n'.join(additions)
+                                 + '\nprocess.stdout.write(JSON.stringify(i18n.ja));'],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        translations = json.loads(result.stdout)
         expected = {
             'Work with Data': 'データを扱う', 'Catalog': 'カタログ',
             'Manage & Monitor': '監視・管理',
@@ -1740,7 +1753,8 @@ const run=eval(HANDLER);
             'Ingestion & Stages': '取り込み・ステージ',
             'Transformation': 'データ変換',
             'AI Bears': 'AI Bears（専門AI）',
-            'Database Explorer': 'データベース探索',
+            'Data Explorer': 'データ探索',
+            'DB management': 'DB 管理',
             'Audit Log': '監査ログ',
             'AgentHouse Pawprints': 'AgentHouse 監査ログ (Pawprints)',
             'Compute & Governance': 'コンピュート & ガバナンス',
@@ -2208,6 +2222,8 @@ const run=eval(HANDLER);
                  patch.object(wb.jobs_resident, 'stop_scheduler') as stop_schedule, \
                  patch.object(wb.warehouse_resident, 'initialize_auto_chill') as initialize, \
                  patch.object(wb.warehouse_resident, 'stop_auto_chill_daemon') as stop_chill, \
+                 patch.object(runtime_profile, 'configure_process', return_value=False), \
+                 patch.object(runtime_profile, 'active', return_value=False), \
                  patch('builtins.print'):
                 wb.main(['--port', '0'])
                 stop_schedule.assert_called_once_with()

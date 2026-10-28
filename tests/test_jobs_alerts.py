@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experi
 import alerts_resident as alerts
 import jobs_resident as jobs
 import request_auth
+import warehouse_admission as admission
 
 
 class JobsAlertsTests(unittest.TestCase):
@@ -255,6 +256,44 @@ class JobsAlertsTests(unittest.TestCase):
         after = alerts.list_alerts('local', 'admin')['alerts'][0]
         self.assertEqual(after['occurrences'], before['occurrences'])
         self.assertEqual(after['last_run_id'], before['last_run_id'])
+
+    def test_unknown_alert_child_keeps_parent_and_run_unknown_after_wrapped_errors(self):
+        self.save()
+        original = alerts.record
+        for failure in ('transport', 'finalize'):
+            with self.subTest(failure=failure):
+                handles = []
+                def query(*args, **kwargs):
+                    parent = admission.current()
+                    with jobs._db() as connection:
+                        connection.execute('BEGIN IMMEDIATE')
+                        child = admission.admit(connection, actor='local', kind='legacy_sql',
+                                                subject_id='synthetic-' + failure)
+                        admission.finish(connection, child, state='UNKNOWN')
+                    handles.extend((parent, child))
+                    if failure == 'transport':
+                        raise OSError('synthetic transport failure')
+                    return self.result(True)
+                def fail_after_write(*args, **kwargs):
+                    original(*args, **kwargs)
+                    raise RuntimeError('synthetic finalize failure')
+                with patch.object(jobs.wr, 'query', side_effect=query), \
+                        patch.object(alerts, 'record', side_effect=fail_after_write):
+                    run = self.terminal(jobs.submit_run('alert_job', {}, 'local', 'admin')['id'])
+                self.assertEqual(run['status'], 'unknown')
+                self.assertEqual(run['steps'][0]['status'], 'unknown')
+                if failure == 'transport':
+                    self.assertEqual(run['error'], 'alert SQL could not be evaluated')
+                else:
+                    self.assertEqual(run['error'], 'Step operation failed (RuntimeError)')
+                parent, child = handles
+                self.assertEqual(parent.subject_id, run['id'])
+                with jobs._db() as connection:
+                    blockers = {row['id']: row for row in admission.blockers(connection)}
+                self.assertEqual(blockers[parent.id]['state'], 'UNKNOWN')
+                self.assertEqual(blockers[child.id]['state'], 'UNKNOWN')
+                self.assertEqual(blockers[child.id]['parent_id'], parent.id)
+                self.assertEqual(alerts.list_alerts('local', 'admin')['alerts'], [])
 
     def test_engineer_alert_is_readonly_scoped_and_uses_bounded_two_row_check(self):
         self.save(actor='alice', role='data_engineer')

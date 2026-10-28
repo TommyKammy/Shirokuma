@@ -60,7 +60,7 @@ def scale(*args):
     return ''
 with patch.object(w, 'status', return_value={'replicas': 1, 'state': 'active'}), \
      patch.object(w, 'trino', return_value=nullcontext('url')), \
-     patch.object(w, 'execute', return_value={'rows': [[0]]}), \
+     patch.object(w, '_execute', return_value={'rows': [[0]]}), \
      patch.object(w, 'kubectl', side_effect=scale), \
      patch.object(w, 'wait_for'), patch.object(w, 'telemetry'):
     print(json.dumps(w.check_auto_chill()), flush=True)

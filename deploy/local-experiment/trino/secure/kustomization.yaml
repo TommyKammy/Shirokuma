@@ -3,12 +3,15 @@ kind: Kustomization
 namespace: shirokuma-dev
 images:
   - name: shirokuma.local/trino
-    newName: shirokuma.local/trino
-    digest: sha256:7347d14eb3a3017c351c0220c811d50b556e5c8596564d8b6195276600064670
+    newName: docker.io/trinodb/trino
+    digest: sha256:aa18e61b2e7776ab8641ba8baaa8687d0430894e88c639e61010cc46a994ab36
 resources:
   - ../deployment.yaml
   - ../service.yaml
   - ../networkpolicy.yaml
+generatorOptions:
+  annotations:
+    kustomize.toolkit.fluxcd.io/substitute: disabled
 configMapGenerator:
   - name: trino-local-config
     files:
@@ -17,10 +20,16 @@ configMapGenerator:
       - ../jvm.config
       - ../log.properties
       - ../iceberg.properties
+      - ../finance.properties
       - ../tpch.properties
       - password-authenticator.properties
       - access-control.properties
+      - opa-access-control.properties
       - rules.json
+  - name: trino-local-opa
+    files:
+      - opa/guard.rego
+      - opa/api.rego
 patches:
   - path: deployment.yaml
   - target:

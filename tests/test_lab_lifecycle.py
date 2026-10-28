@@ -4,10 +4,14 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import os
+import tempfile
+import sys
 import unittest
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools/local_experiment'))
 SPEC = importlib.util.spec_from_file_location('lab_lifecycle', ROOT / 'tools/local_experiment/lab_lifecycle.py')
 M = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(M)
@@ -18,6 +22,13 @@ def result(code=0, data=None):
 
 
 class LabLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        environment = patch.dict(os.environ, SHIROKUMA_STATE_DIR=temporary.name)
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def test_status_checks_all_services_and_emits_only_summary(self):
         good = [result(data={'status': 'healthy'}), result(data={'result': 'ready'}), result(data={'ready': True})]
         for failed in (None, 0, 1, 2):
@@ -57,13 +68,24 @@ class LabLifecycleTests(unittest.TestCase):
                     self.assertEqual(repairs[0][1:5], ('ssh', '--profile', M.PROFILE, '--'))
                 kube = [c for c in calls if c[0] == 'kubectl']
                 self.assertTrue(all(c[1:3] == ('--context', M.CONTEXT) for c in kube))
-                self.assertEqual(sum('scale' in c for c in kube), 8)
-                self.assertEqual(sum('rollout' in c for c in kube), 8)
+                self.assertEqual(sum('scale' in c for c in kube), 9)
+                self.assertEqual(sum('rollout' in c for c in kube), 9)
                 patches = [c for c in kube if 'patch' in c]
-                self.assertEqual(len(patches), 10)
+                self.assertEqual(len(patches), 11)
+                self.assertEqual({c[6] for c in patches if c[6].startswith('job/')},
+                                 {'job/polaris-bootstrap', 'job/iceberg-table-bootstrap', 'job/iceberg-finance-table-bootstrap'})
                 self.assertFalse(any('kustomization/flux-system' in c for c in patches))
+                self.assertFalse(any('gitrepository/flux-system' in c for c in patches))
                 self.assertTrue(all(c[-1] == '{"spec":{"suspend":false}}' for c in patches[:3]))
                 self.assertTrue(all(c[-1] == '{"spec":{"suspend":null}}' for c in patches[3:]))
+                def position(verb, resource):
+                    return next(i for i, c in enumerate(kube) if verb in c and resource in c)
+                self.assertLess(position('rollout', 'statefulset/polaris-postgresql'),
+                                position('patch', 'job/polaris-bootstrap'))
+                self.assertLess(position('wait', 'job/polaris-bootstrap'), position('rollout', 'deployment/polaris'))
+                for name in M.JOBS:
+                    for polaris in ('polaris', 'polaris-finance'):
+                        self.assertLess(position('rollout', 'deployment/' + polaris), position('patch', 'job/' + name))
                 self.assertEqual(calls[-2:], [('python3', 'tools/local_experiment/agenthouse/manage.py', 'up'),
                                               ('python3', 'tools/local_experiment/loki/manage.py', 'up')])
                 status.assert_called_once_with()
@@ -71,6 +93,17 @@ class LabLifecycleTests(unittest.TestCase):
     def test_up_propagates_failed_readiness(self):
         with patch.object(M, 'run', return_value=result()), patch.object(M, 'status', return_value=1):
             self.assertEqual(M.up(), 1)
+
+    def test_catalog_readiness_failure_keeps_consumer_jobs_suspended(self):
+        def invoke(*args, **kwargs):
+            if 'rollout' in args and 'deployment/polaris-finance' in args:
+                raise RuntimeError('not ready')
+            return result()
+        with patch.object(M, 'run', side_effect=invoke) as run:
+            with self.assertRaisesRegex(RuntimeError, 'not ready'):
+                M.up()
+            for call in run.call_args_list:
+                self.assertFalse('patch' in call.args and any('job/' + name in call.args for name in M.JOBS))
 
     def test_down_attempts_all_stops_on_failure(self):
         with patch.object(M, 'run', side_effect=[result(1), FileNotFoundError(), result()]) as run:

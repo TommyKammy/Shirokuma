@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -37,6 +39,73 @@ func residentCommand(f *fakeResidentWarehouse, args ...string) (string, error) {
 	cmd.SetArgs(args)
 	err := cmd.Execute()
 	return out.String(), err
+}
+
+func TestExecResidentWarehousePythonDispatch(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		explicit bool
+		marker   string
+		missing  bool
+		unusable bool
+	}{
+		{name: "explicit profile", explicit: true},
+		{name: "default profile", marker: "runtime-profile.json"},
+		{name: "active marker", marker: "runtime-profile.active"},
+		{name: "missing configured interpreter", explicit: true, missing: true},
+		{name: "unusable configured interpreter", explicit: true, unusable: true},
+		{name: "legacy unconfigured"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			write := func(path, content string, mode os.FileMode) {
+				t.Helper()
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(content), mode); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(filepath.Join(root, "Makefile"), "", 0644)
+			write(filepath.Join(root, "security", "resident-images.json"), "{}", 0644)
+			t.Setenv("SHIROKUMA_RUNTIME_PROFILE", "")
+			if tc.explicit {
+				t.Setenv("SHIROKUMA_RUNTIME_PROFILE", filepath.Join(root, "explicit-profile.json"))
+			}
+			if tc.marker != "" {
+				write(filepath.Join(root, "var", "shirokuma", tc.marker), "{}", 0600)
+			}
+			// Both interpreters report dispatch without executing Python or starting an endpoint.
+			stub := "#!/bin/sh\nprintf '%s\\n' \"$0\" \"$PWD\" \"$@\"\n"
+			fallback := filepath.Join(root, "bin", "python3")
+			write(fallback, stub, 0755)
+			t.Setenv("PATH", filepath.Dir(fallback))
+			python := filepath.Join(root, "tools", "local_experiment", "dataops", ".venv", "bin", "python3")
+			if !tc.missing {
+				mode := os.FileMode(0755)
+				if tc.unusable {
+					mode = 0644
+				}
+				write(python, stub, mode)
+			}
+			args := []string{"endpoint", "--warehouse", "LOCAL", "--port", "18080", "--bind", "127.0.0.1"}
+			data, err := (execResidentWarehouse{}).Run(context.Background(), root, args)
+			if tc.missing || tc.unusable {
+				if err == nil || data != nil || !strings.Contains(err.Error(), "requires the repository DataOps Python environment") {
+					t.Fatalf("configured interpreter failure did not fail closed: %q %v", data, err)
+				}
+				return
+			}
+			if !tc.explicit && tc.marker == "" {
+				python = fallback
+			}
+			want := append([]string{python, root, filepath.Join(root, "tools", "local_experiment", "warehouse_resident.py")}, args...)
+			if err != nil || string(data) != strings.Join(want, "\n")+"\n" {
+				t.Fatalf("native dispatch: got %q, %v; want %q", data, err, want)
+			}
+		})
+	}
 }
 
 func TestResidentLifecycleCommands(t *testing.T) {

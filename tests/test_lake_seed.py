@@ -1,10 +1,15 @@
 import importlib.util
 import io
 import json
+import os
+import tempfile
+import sys
 from contextlib import ExitStack, nullcontext
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 
 SPEC = importlib.util.spec_from_file_location(
     "lake_seed", Path(__file__).resolve().parents[1] / "tools/local_experiment/lake_seed.py")
@@ -14,6 +19,15 @@ w = lake.warehouse_resident
 
 
 class LakeSeedTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        for manager in (patch.dict(os.environ, SHIROKUMA_STATE_DIR=temporary.name),
+                        patch('runtime_profile.configure_process', return_value=False),
+                        patch('runtime_profile._current', None)):
+            manager.start()
+            self.addCleanup(manager.stop)
+
     def setup_lab(self, existing=None, replicas=1, schema=True):
         self.existing = dict(existing or {})
         self.statements = []

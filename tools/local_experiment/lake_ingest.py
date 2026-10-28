@@ -25,9 +25,21 @@ FORMATS = {'.csv': 'csv', '.tsv': 'csv', '.jsonl': 'jsonl',
            '.ndjson': 'jsonl', '.json': 'jsonl', '.parquet': 'parquet'}
 
 
+def manual_ingest(principal, context, *, idempotency_key, mode, **options):
+    """P3 manual adapter; requires explicit locator/Ref and authenticated context."""
+    from manual_ingest import ingest as manual
+    return manual(principal, context, idempotency_key=idempotency_key, mode=mode, **options)
+
+
 def sanitize(value):
     name = re.sub(r'[^\w]', '_', str(value).lower()) or 'col'
     return 'col_' + name if name[0].isdigit() else name
+
+
+def manual_export(principal, context, *, key, source, format='csv'):
+    """Lazy backend facade; normal and legacy routes remain gated."""
+    from manual_export import export_table
+    return export_table(principal, context, key=key, source=source, format=format)
 
 
 def target_table(value, path):
@@ -316,6 +328,7 @@ def validate_upsert_keys(execute, sql_target, key_cols):
         raise ValueError('upsert target keys must be unique and non-null')
 
 
+@wr.legacy_operation
 def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500, key=None,
            *, filename=None, content=None, schema_hints=None, encoding=None, atomic_append=False):
     if filename is not None or content is not None:
@@ -418,6 +431,7 @@ def ingest(file=None, table=None, mode='replace', format='auto', batch_size=500,
     return result
 
 
+@wr.legacy_operation
 def export_table(table, file=None, format='auto', max_rows=None, full=False):
     started = time.monotonic()
     try:
@@ -477,6 +491,21 @@ def export_table(table, file=None, format='auto', max_rows=None, full=False):
 
 
 def main():
+    import dataops_client
+    try:
+        profile = dataops_client.configured_profile()
+        if profile is not None:
+            result = dataops_client.main(sys.argv[1:], profile=profile)
+            print(json.dumps(dict(result, action=dataops_client.action_label(sys.argv[1:]))))
+            return 0
+    except Exception as exc:
+        if isinstance(exc, dataops_client.ClientError) and exc.reply is not None:
+            print(json.dumps(dict(exc.reply, action=dataops_client.action_label(sys.argv[1:]),
+                                  error=dict(code=str(exc)))))
+        print(str(exc), file=sys.stderr)
+        return 1
+    import runtime_profile
+    runtime_profile.configure_process()
     parser = argparse.ArgumentParser(description=__doc__)
     options = sys.argv[1:sys.argv.index('--')] if '--' in sys.argv else sys.argv[1:]
     if any(arg == '--export' or arg.startswith('--export=') for arg in options):

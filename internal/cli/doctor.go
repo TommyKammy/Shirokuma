@@ -323,6 +323,9 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		kinds[resource.Kind]++
 		id := resource.Kind + "/" + resource.Metadata.Namespace + "/" + resource.Metadata.Name
 		found[id] = true
+		if localExperiment && id == "GitRepository/flux-system/flux-system" {
+			continue // Local children use the Bucket, not the legacy Git bootstrap source.
+		}
 		if localExperiment && id == "Kustomization/flux-system/flux-system" &&
 			resource.Spec.Suspend && resource.Metadata.DeletionTimestamp == "" {
 			rootSuspended = true
@@ -335,11 +338,15 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 			unhealthy = append(unhealthy, id)
 		}
 	}
-	if kinds["GitRepository"] == 0 || kinds["Kustomization"] == 0 {
+	if !localExperiment && (kinds["GitRepository"] == 0 || kinds["Kustomization"] == 0) {
 		unhealthy = append(unhealthy, "Flux GitRepository and Kustomization resources are required")
 	}
 	if localExperiment {
-		for _, id := range []string{"GitRepository/flux-system/flux-system", "Kustomization/flux-system/flux-system", "Kustomization/flux-system/shirokuma-dev"} {
+		for _, id := range []string{"Bucket/flux-system/shirokuma-local-source", "Kustomization/flux-system/flux-system",
+			"Kustomization/flux-system/shirokuma-dev", "Kustomization/flux-system/shirokuma-object-storage",
+			"Kustomization/flux-system/shirokuma-catalog-database", "Kustomization/flux-system/shirokuma-catalog-bootstrap",
+			"Kustomization/flux-system/shirokuma-catalog", "Kustomization/flux-system/shirokuma-iceberg-bootstrap",
+			"Kustomization/flux-system/shirokuma-trino"} {
 			if !found[id] {
 				unhealthy = append(unhealthy, "missing "+id)
 			}
@@ -349,8 +356,11 @@ func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext 
 		return unhealthyFlux(unhealthy)
 	}
 	summary := fmt.Sprintf("4 controllers and %d reconciled resource(s) are Ready", len(resources.Items))
-	if rootSuspended {
-		summary = fmt.Sprintf("4 controllers and %d active resource(s) are Ready; root Kustomization/flux-system/flux-system is suspended in local-experiment", len(resources.Items)-1)
+	if localExperiment {
+		summary = "4 controllers, local source Bucket and child Kustomizations are Ready"
+		if rootSuspended {
+			summary += "; root Kustomization/flux-system/flux-system is suspended in local-experiment"
+		}
 	}
 	return doctorCheck{Name: "flux", Status: "healthy", Summary: summary}
 }

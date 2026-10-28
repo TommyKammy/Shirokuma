@@ -39,6 +39,8 @@ class DisasterRecoveryTests(unittest.TestCase):
             (self.state / name).write_bytes(data)
         (self.models / 'nested/orders.sql').write_bytes(b'SELECT 42 AS answer\n')
         self.enterContext(patch.dict(os.environ, SHIROKUMA_STATE_DIR=str(self.state)))
+        self.enterContext(patch('runtime_profile.configure_process', return_value=False))
+        self.enterContext(patch('runtime_profile._current', None))
         self.enterContext(patch.object(dr, 'MODELS_DIR', self.models))
         self.enterContext(patch.object(dr.warehouse, 'trino',
                                       side_effect=lambda: contextlib.nullcontext('http://trino')))

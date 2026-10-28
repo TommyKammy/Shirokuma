@@ -12,21 +12,36 @@ manage other roles' queries, or invoke connector procedures/functions. Requests
 cannot impersonate another service user. Users sharing one role share that
 backend identity; application audit records retain the authenticated person.
 
+## Image supply and database guard
+
+The active supply is the full official Trino 483 linux/arm64 image, pinned
+directly in this overlay. It uses `/usr/lib/trino/bin/run-trino` and includes
+password and OPA plugins. The local `Dockerfile` and
+`tools/local_experiment/trino_auth_image.py` restoration recipe are historical;
+password plugin restoration is not needed for this image. The parent preloads
+the pinned image into the node; `imagePullPolicy: Never` remains required.
+
+`iceberg` uses Polaris realm SALES / catalog `shirokuma_l1`; `finance` uses
+the separate `polaris-finance` endpoint, realm FINANCE / catalog `finance`.
+Create service-principal Secrets `polaris-trino-credentials` and
+`polaris-finance-trino-credentials`, each with `client_id` and `client_secret`.
+S3 Secrets `seaweedfs-s3-sales-credentials` and
+`seaweedfs-s3-finance-credentials` each require `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, and `S3_REGION`. No root principal or shared S3 fallback
+is used. Finance remains admin only under the unchanged file ACL.
+
+The sidecar uses the official OPA 1.20.2 linux/arm64 image from
+`docker.io/openpolicyagent/opa`, pinned by digest in `deployment.yaml`.
+Both file and OPA access controls must allow each request. File rules remain
+authoritative for ordinary access; the loopback OPA sidecar additionally limits
+all table procedures (including future/unknown names) to admin in iceberg/finance
+or engineer in iceberg raw/sandbox. Viewer cannot execute table procedures.
+Unsupported OPA permission-management checks delegate to the file ACL. OPA has
+no fail-open fallback, request/decision logging, Service, or externally exposed
+port; its API permits only the decision POST and health GET. Static mounted
+configuration/policy edits require an explicit rollout restart.
+
 ## Prepare credentials
-
-The earlier slim image includes only Iceberg and TPC-H plugins. This overlay
-pins a local same-version derivative that restores the unmodified upstream
-`password-authenticators` plugin. To rebuild it from the approved distribution:
-
-```sh
-rtk proxy python3 tools/local_experiment/trino_auth_image.py /path/to/trino-server-483.tar.gz
-```
-
-The builder verifies the archive against the base image's provenance label and
-materializes its complete plugin directory, including hardlinked dependency
-jars. It performs no compilation or dependency modification. Build in the
-dedicated Docker context, update the overlay digest if rebuilt, and coordinate
-activation. The local node uses Docker as its Kubernetes container runtime.
 
 From the repository root, create new credentials in the ignored state directory:
 

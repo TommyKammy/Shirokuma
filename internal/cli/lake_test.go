@@ -92,6 +92,114 @@ func TestRootContainsLakeIngest(t *testing.T) {
 	}
 }
 
+func TestLakeDatabaseForwarding(t *testing.T) {
+	f := &fakeLake{data: []byte(`{"action":"ingest","context":{}}`)}
+	_, err := executeLake(f, "ingest", "rows.csv", "--database", "sales", "--schema", "raw", "--mode", "create", "--table", "orders", "--idempotency-key", "once", "--atomic-append", "--delimiter", ";")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(f.args, " ")
+	for _, expected := range []string{"--database sales", "--schema raw", "--mode create", "--idempotency-key once", "--atomic-append", "--delimiter ;", "-- rows.csv"} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing %s in %v", expected, f.args)
+		}
+	}
+	for _, args := range [][]string{
+		{"ingest", "rows.csv", "--database", "sales", "--schema", "raw", "--table", "orders", "--idempotency-key", "once"},
+		{"ingest", "rows.csv", "--database", "sales", "--mode", "create", "--table", "orders"},
+		{"export", "orders", "--output", "out.csv", "--database", "sales", "--schema", "raw", "--idempotency-key", "once", "--max-rows", "1", "--full"},
+		{"export", "orders", "--output", "out.parquet", "--database", "sales", "--schema", "raw", "--idempotency-key", "once", "--format", "parquet"},
+	} {
+		f = &fakeLake{}
+		if _, err := executeLake(f, args...); err == nil || f.args != nil {
+			t.Fatalf("accepted %v: %v", args, err)
+		}
+	}
+}
+
+func TestLakeNestedDataOps(t *testing.T) {
+	for _, tc := range []struct {
+		group, action string
+		flags         []string
+	}{
+		{"wap", "save", []string{"--model-id", "m", "--sql", "SELECT * FROM source", "--sources", `{}`, "--target", `{}`, "--expected-version", "null"}},
+		{"wap", "build", []string{"--model-id", "m", "--version", "2", "--idempotency-key", "once"}},
+		{"wap", "models", nil},
+		{"wap", "get-publication", []string{"--id", "pub"}},
+		{"wap", "model", []string{"--model-id", "m"}},
+	} {
+		f := &fakeLake{data: []byte(`{"action":"` + tc.group + `-` + tc.action + `","context":{},"model":{},"items":[],"publication":{},"operation":{"state":"FINISHED"}}`)}
+		args := append([]string{tc.group, tc.action, "--database", "sales", "--schema", "raw"}, tc.flags...)
+		if _, err := executeLake(f, args...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if !reflect.DeepEqual(f.args[:2], []string{"--" + tc.group, tc.action}) {
+			t.Fatal(f.args)
+		}
+		for _, flag := range tc.flags {
+			if !strings.Contains(strings.Join(f.args, " "), flag) {
+				t.Fatal(f.args)
+			}
+		}
+	}
+	f := &fakeLake{}
+	if _, err := executeLake(f, "wap", "build", "--database", "sales", "--schema", "raw"); err == nil || f.args != nil {
+		t.Fatal("missing submission key accepted")
+	}
+}
+
+func TestLakeNestedRejectsMissingFieldsAndWrongReply(t *testing.T) {
+	for _, data := range []string{`{"context":{}}`, `{"context":{},"operation":null}`, `null`, `[]`} {
+		f := &fakeLake{data: []byte(data)}
+		out, err := executeLake(f, "operation", "get", "op", "--context-file", "saved.json")
+		if err == nil || out != "" {
+			t.Fatalf("accepted %s: %s %v", data, out, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"operation", "cancel", "--database", "sales", "--schema", "raw", "--id", "op"},
+		{"wap", "build", "--database", "sales", "--schema", "raw", "--idempotency-key", "once"},
+	} {
+		f := &fakeLake{}
+		if _, err := executeLake(f, args...); err == nil || f.args != nil {
+			t.Fatalf("accepted %v: %v", args, err)
+		}
+	}
+}
+
+func TestLakeOperationFrozenContextFile(t *testing.T) {
+	f := &fakeLake{data: []byte(`{"action":"operation-cancel","context":{},"operation":{"state":"CANCELED"}}`)}
+	if _, err := executeLake(f, "operation", "cancel", "op", "--context-file", "saved.json"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(f.args, []string{"--operation", "cancel", "--id", "op", "--context-file", "saved.json"}) {
+		t.Fatal(f.args)
+	}
+}
+
+func TestLakeAcceptedFailurePreservesRecoveryJSON(t *testing.T) {
+	want := errors.New("accepted but uncertain")
+	for _, tc := range []struct {
+		action string
+		args   []string
+	}{
+		{"ingest", []string{"ingest", "rows.csv"}},
+		{"export", []string{"export", "orders", "--output", "out.csv"}},
+		{"wap-build", []string{"wap", "build", "--database", "sales", "--schema", "raw", "--model-id", "m", "--version", "1", "--idempotency-key", "once"}},
+		{"operation-cancel", []string{"operation", "cancel", "op", "--context-file", "saved.json"}},
+	} {
+		f := &fakeLake{data: []byte(`{"action":"` + tc.action + `","context":{},"operation":{"id":"saved","state":"UNKNOWN"},"error":{"code":"OPERATION_UNKNOWN"}}`), err: want}
+		out, err := executeLake(f, tc.args...)
+		if !errors.Is(err, want) || !strings.Contains(out, `"id":"saved"`) {
+			t.Fatalf("%s: %s %v", tc.action, out, err)
+		}
+		f.data = []byte(`{"action":"wrong","context":{},"operation":{}}`)
+		if out, _ := executeLake(f, tc.args...); out != "" {
+			t.Fatalf("mismatched recovery printed: %s", out)
+		}
+	}
+}
+
 func TestLakeExportFlags(t *testing.T) {
 	for _, tc := range []struct {
 		args, want []string

@@ -141,7 +141,7 @@ for(const path of ['/api/jobs/runs','/api/marts'])for(const status of ['running'
  run.resolve(path==='/api/jobs/runs'?{runs:[{id:'r',status}]}:{marts:[{last_run:{id:'r',status}}]});await observation;
  if(reject)list.reject(Error('late list failure'));else list.resolve({metadata:{raw:[['stale']]}});await load;
  assert.deepEqual(catalogMetadata,{});assert.equal(trees,0);assert.equal(pending.length,0,'no automatic retry or lineage read');
- for(const id of ['catalog-tree','worksheet-tree'])assert.match($(id).textContent,/Refresh catalog in Database Explorer/);
+ for(const id of ['catalog-tree','worksheet-tree'])assert.match($(id).textContent,/Refresh catalog in Data Explorer/);
  assert.equal($('catalog-error').textContent,'');
  // Make each combination observe a new state, including the initial nonempty history.
  catalogRunStates.clear();

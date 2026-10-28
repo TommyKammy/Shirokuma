@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from functools import wraps
+import warehouse_resident as warehouse
 
 ROOT = Path(__file__).resolve().parents[2]
 PROFILE = 'mac-studio-solo'
@@ -13,11 +15,14 @@ BASELINE = './scripts/colima_baseline.sh'
 FLUX = ('source-controller', 'kustomize-controller', 'helm-controller',
         'notification-controller')
 CHILDREN = ('shirokuma-dev', 'shirokuma-object-storage', 'shirokuma-catalog-database',
-            'shirokuma-catalog-bootstrap', 'shirokuma-catalog', 'shirokuma-iceberg-bootstrap')
-JOBS = ('polaris-bootstrap', 'iceberg-table-bootstrap', 'iceberg-local-smoke-20260916')
+            'shirokuma-catalog-bootstrap', 'shirokuma-catalog', 'shirokuma-iceberg-bootstrap',
+            'shirokuma-trino')
+JOBS = ('iceberg-table-bootstrap', 'iceberg-finance-table-bootstrap')
 WORKLOADS = (('shirokuma-storage', 'statefulset/seaweedfs'),
              ('shirokuma-dev', 'statefulset/polaris-postgresql'),
-             ('shirokuma-dev', 'deployment/polaris'), ('shirokuma-dev', 'deployment/trino-local'))
+             ('shirokuma-dev', 'deployment/polaris'),
+             ('shirokuma-dev', 'deployment/polaris-finance'),
+             ('shirokuma-dev', 'deployment/trino-local'))
 
 # Kine stores the protobuf Node value as a BLOB. Equal-length replacement keeps
 # its string lengths intact; SQLite handles the database and WAL transaction.
@@ -85,6 +90,15 @@ def status():
     return 0 if summary['ready'] else 1
 
 
+def _mutation(function):
+    @wraps(function)
+    def guarded(*args, **kwargs):
+        with warehouse.lifecycle_mutation():
+            return function(*args, **kwargs)
+    return guarded
+
+
+@_mutation
 def up():
     if run(BASELINE, 'status', check=False).returncode:
         if run(BASELINE, 'start', check=False).returncode:
@@ -94,18 +108,24 @@ def up():
         kubectl('flux-system', 'scale', 'deployment/' + name, '--replicas=1')
     for name in FLUX:
         kubectl('flux-system', 'rollout', 'status', 'deployment/' + name, '--timeout=180s')
-    for name in JOBS:
-        kubectl('shirokuma-dev', 'patch', 'job/' + name, '--type=merge', '-p', '{"spec":{"suspend":false}}')
     for namespace, resource in WORKLOADS:
+        if resource == 'deployment/trino-local':
+            # Consumer Jobs need BOTH catalog services, not merely PostgreSQL.
+            for name in JOBS:
+                kubectl('shirokuma-dev', 'patch', 'job/' + name, '--type=merge', '-p', '{"spec":{"suspend":false}}')
         kubectl(namespace, 'scale', resource, '--replicas=1')
         kubectl(namespace, 'rollout', 'status', resource, '--timeout=300s')
-    for resource in ('gitrepository/flux-system', *('kustomization/' + name for name in CHILDREN)):
+        if resource == 'statefulset/polaris-postgresql':
+            kubectl('shirokuma-dev', 'patch', 'job/polaris-bootstrap', '--type=merge', '-p', '{"spec":{"suspend":false}}')
+            kubectl('shirokuma-dev', 'wait', '--for=condition=complete', 'job/polaris-bootstrap', '--timeout=300s')
+    for resource in ('bucket/shirokuma-local-source', *('kustomization/' + name for name in CHILDREN)):
         kubectl('flux-system', 'patch', resource, '--type=merge', '-p', '{"spec":{"suspend":null}}')
     manager('agenthouse', 'up')
     manager('loki', 'up')
     return status()
 
 
+@_mutation
 def down():
     failed = False
     for command in (('python3', 'tools/local_experiment/agenthouse/manage.py', 'stop'),

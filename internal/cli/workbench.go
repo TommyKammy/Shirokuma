@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +18,33 @@ import (
 
 func newWorkbenchCommand(runner commandRunner) *cobra.Command {
 	return workbenchCommand(runner, waitForWorkbench)
+}
+
+func workbenchPython(root string) (string, error) {
+	configured := strings.TrimSpace(os.Getenv("SHIROKUMA_RUNTIME_PROFILE")) != ""
+	if !configured {
+		_, err := os.Stat(filepath.Join(root, "var", "shirokuma", "runtime-profile.json"))
+		configured = err == nil
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+		if !configured {
+			_, err = os.Stat(filepath.Join(root, "var", "shirokuma", "runtime-profile.active"))
+			configured = err == nil
+			if err != nil && !os.IsNotExist(err) {
+				return "", err
+			}
+		}
+	}
+	if !configured {
+		return "python3", nil
+	}
+	python := filepath.Join(root, "tools", "local_experiment", "dataops", ".venv", "bin", "python3")
+	info, err := os.Stat(python)
+	if err != nil || info.IsDir() || info.Mode()&0111 == 0 {
+		return "", fmt.Errorf("configured database Workbench requires the repository DataOps Python environment: %s", python)
+	}
+	return python, nil
 }
 
 func waitForWorkbench(ctx context.Context, address string) error {
@@ -41,6 +69,7 @@ func waitForWorkbench(ctx context.Context, address string) error {
 func workbenchCommand(runner commandRunner, ready func(context.Context, string) error) *cobra.Command {
 	var port int
 	var open bool
+	var enrollment string
 	command := &cobra.Command{
 		Use: "workbench", Short: "Launch the local Workbench web interface", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -51,20 +80,41 @@ func workbenchCommand(runner commandRunner, ready func(context.Context, string) 
 			if err != nil {
 				return err
 			}
+			python, err := workbenchPython(root)
+			if err != nil {
+				return err
+			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			url := "http://127.0.0.1:" + strconv.Itoa(port)
 			fmt.Fprintln(cmd.OutOrStdout(), "Shirokuma Workbench:", url)
 			serverArgs := []string{filepath.Join(root, "tools", "local_experiment", "workbench_server.py"), "--port", strconv.Itoa(port)}
+			if enrollment != "" {
+				var started func(context.Context) error
+				if open {
+					started = func(ownerCtx context.Context) error {
+						if err := ready(ownerCtx, "127.0.0.1:"+strconv.Itoa(port)); err != nil {
+							return err
+						}
+						opener := "xdg-open"
+						if runtime.GOOS == "darwin" {
+							opener = "open"
+						}
+						_, err := runner.Run(ownerCtx, opener, url)
+						return err
+					}
+				}
+				return runManagedOwner(ctx, root, python, serverArgs, enrollment, "workbench", started)
+			}
 			if !open {
-				_, err := runner.Run(ctx, "python3", serverArgs...)
+				_, err := runner.Run(ctx, python, serverArgs...)
 				return err
 			}
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
-				_, err := runner.Run(ctx, "python3", serverArgs...)
+				_, err := runner.Run(ctx, python, serverArgs...)
 				done <- err
 				cancel()
 			}()
@@ -92,5 +142,6 @@ func workbenchCommand(runner commandRunner, ready func(context.Context, string) 
 	}
 	command.Flags().IntVar(&port, "port", 8888, "local HTTP port")
 	command.Flags().BoolVar(&open, "open", false, "open the Workbench in the default browser")
+	command.Flags().StringVar(&enrollment, "database-creation-enrollment", "", "private database creation enrollment")
 	return command
 }

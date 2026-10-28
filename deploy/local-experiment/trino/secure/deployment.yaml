@@ -7,6 +7,7 @@ spec:
     spec:
       containers:
         - name: trino
+          command: [/usr/lib/trino/bin/run-trino]
           ports:
             - name: https
               containerPort: 8443
@@ -20,7 +21,40 @@ spec:
             - name: auth
               mountPath: /etc/trino-auth
               readOnly: true
+        - name: opa
+          image: docker.io/openpolicyagent/opa@sha256:2ce2bacc87ddc25a475d71b67d422d206c20cf85b6ed00d81d520a5a039e22ce
+          imagePullPolicy: Never
+          args:
+            - run
+            - --server
+            - --addr=127.0.0.1:8182
+            - --authorization=basic
+            - --log-level=error
+            - /etc/opa/guard.rego
+            - /etc/opa/api.rego
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            - name: opa-policy
+              mountPath: /etc/opa
+              readOnly: true
       volumes:
+        - name: opa-policy
+          configMap:
+            name: trino-local-opa
         - name: auth
           secret:
             secretName: trino-local-auth
@@ -39,11 +73,15 @@ spec:
                 path: log.properties
               - key: iceberg.properties
                 path: catalog/iceberg.properties
+              - key: finance.properties
+                path: catalog/finance.properties
               - key: tpch.properties
                 path: catalog/tpch.properties
               - key: password-authenticator.properties
                 path: password-authenticator.properties
               - key: access-control.properties
                 path: access-control.properties
+              - key: opa-access-control.properties
+                path: opa-access-control.properties
               - key: rules.json
                 path: rules.json

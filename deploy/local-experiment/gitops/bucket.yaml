@@ -1,0 +1,15 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: Bucket
+metadata:
+  name: shirokuma-local-source
+  namespace: flux-system
+spec:
+  interval: 1m
+  provider: generic
+  bucketName: shirokuma-gitops
+  endpoint: seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333
+  region: us-east-1
+  insecure: true
+  prefix: generations/PREPARE_WITH_LOCAL_GITOPS_HELPER/
+  secretRef:
+    name: shirokuma-local-source

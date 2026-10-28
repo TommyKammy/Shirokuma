@@ -209,7 +209,7 @@ const ui=(node,key,values)=>{display=values.count;},pruneUIBindings=()=>{};
 
     def test_catalog_generation_refresh_guidance_is_translated(self):
         self.javascript(r"""
-const key='Catalog changed. Use Refresh catalog in Database Explorer.';
+const key='Catalog changed. Use Refresh catalog in Data Explorer.';
 language='ja';
 if(!i18n.ja[key]||t(key)===key||!t(key).includes('カタログを更新'))throw Error('catalog refresh guidance translation');
 """)

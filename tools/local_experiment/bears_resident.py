@@ -293,6 +293,7 @@ def qualified_table(table):
     return table if table.startswith('iceberg.') else 'iceberg.' + table
 
 
+@wr.legacy_operation
 def clone_table(source_table, target_table=None, snapshot_id=None):
     full_source = qualified_table(source_table)
     if target_table is None or target_table == '':
@@ -355,6 +356,7 @@ def activity_history(limit=50, *, mode=None):
                 load_history=[e for e in events if e.get('action_type') in loads])
 
 
+@wr.legacy_operation
 def drop_table(table):
     message = 'drop is only allowed in raw, sandbox, staging, marts, or scratch schemas'
     if not isinstance(table, str) or not re.fullmatch(
@@ -389,6 +391,9 @@ def validate_catalog_detail(detail, table):
 
 
 def catalog(args):
+    import runtime_profile
+    if runtime_profile.active():
+        raise ValueError('FEATURE_UNAVAILABLE: legacy catalog is unavailable in database mode')
     check_catalog_access(getattr(args, 'role', 'admin'), getattr(args, 'table', None))
     detail = getattr(args, 'detail', None)
     validate_catalog_detail(detail, getattr(args, 'table', None))
@@ -521,6 +526,9 @@ def policy(args):
 
 
 def run(args):
+    import runtime_profile
+    if runtime_profile.active():
+        return {'code': 'FEATURE_UNAVAILABLE', 'error': 'Legacy bears are unavailable in database mode'}
     if args.bear == 'catalog':
         check_catalog_access(getattr(args, 'role', 'admin'), getattr(args, 'table', None))
     started, status = time.monotonic(), "success"
@@ -559,6 +567,11 @@ def run(args):
 
 
 def main():
+    import runtime_profile
+    runtime_profile.configure_process()
+    if runtime_profile.active():
+        print(json.dumps({'code': 'FEATURE_UNAVAILABLE', 'error': 'Legacy bears are unavailable in database mode'}))
+        return 1
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="bear", required=True)
     command = sub.add_parser('ai')

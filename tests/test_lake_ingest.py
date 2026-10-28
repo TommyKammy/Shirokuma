@@ -18,6 +18,13 @@ import lake_ingest as lake
 
 
 class LakeIngestTests(unittest.TestCase):
+    def test_manual_export_backend_facade(self):
+        with patch('manual_export.export_table', return_value={'id': 'operation'}) as run:
+            actor, context, source = object(), object(), object()
+            self.assertEqual(lake.manual_export(actor, context, key='export', source=source, format='jsonl'),
+                             {'id': 'operation'})
+            run.assert_called_once_with(actor, context, key='export', source=source, format='jsonl')
+
     def test_invalid_integer_values_never_create_stage_or_modify_target(self):
         bounds = {'TINYINT': 8, 'SMALLINT': 16, 'INTEGER': 32, 'INT': 32, 'BIGINT': 64}
         for kind, bits in bounds.items():
@@ -207,8 +214,10 @@ class LakeIngestTests(unittest.TestCase):
         self.execute.return_value = dict(rows=rows)
         with patch.object(lake.wr, 'execute', wraps=self.real_execute), \
              patch.object(lake.wr, 'http_json', side_effect=[
-                 dict(columns=[{'name': 'id'}], data=rows[:1000], nextUri='url/next'),
-                 dict(data=rows[1000:])]) as http:
+                 dict(id='20261020_000000_00001_abcde', stats={'state': 'RUNNING'},
+                      columns=[{'name': 'id'}], data=rows[:1000], nextUri='url/next'),
+                 dict(id='20261020_000000_00001_abcde', stats={'state': 'FINISHED'},
+                      data=rows[1000:])]) as http:
             report = lake.export_table('raw.orders')
         self.assertEqual((report['row_count'], report['total_rows'], report['truncated']),
                          (1501, 1501, False))
@@ -354,11 +363,15 @@ class LakeIngestTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        self.enterContext(patch.dict('os.environ', SHIROKUMA_STATE_DIR=str(self.root)))
+        self.enterContext(patch('runtime_profile.configure_process', return_value=False))
+        self.enterContext(patch('dataops_client.configured_profile', return_value=None))
+        self.enterContext(patch('runtime_profile._current', None))
         self.execute = self.enterContext(patch.object(lake.bears, 'sql', return_value={}))
         self.real_execute = lake.wr.execute
         self.enterContext(patch.object(lake.wr, 'execute',
                                       side_effect=lambda url, sql, headers, **kw: self.execute(url, sql)))
-        self.enterContext(patch.object(lake.uuid, 'uuid4', return_value=SimpleNamespace(hex='abcd1234' * 4)))
+        self.enterContext(patch.object(lake, 'uuid', SimpleNamespace(uuid4=lambda: SimpleNamespace(hex='abcd1234' * 4))))
         def execute(url, statement):
             if statement.startswith('SELECT COUNT(*)'):
                 return dict(rows=[[len(self.execute.return_value['rows'])]])

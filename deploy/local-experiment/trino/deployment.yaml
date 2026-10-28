@@ -50,35 +50,55 @@ spec:
               cpu: "8"
               memory: 16Gi
           env:
-            - name: POLARIS_CLIENT_ID
+            - name: SALES_POLARIS_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: polaris-root-credentials
+                  name: polaris-trino-credentials
                   key: client_id
-            - name: POLARIS_CLIENT_SECRET
+            - name: SALES_POLARIS_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: polaris-root-credentials
+                  name: polaris-trino-credentials
                   key: client_secret
-            - name: POLARIS_REALM
+            - name: FINANCE_POLARIS_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: polaris-root-credentials
-                  key: realm
-            - name: AWS_REGION
+                  name: polaris-finance-trino-credentials
+                  key: client_id
+            - name: FINANCE_POLARIS_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: seaweedfs-s3-application-credentials
+                  name: polaris-finance-trino-credentials
+                  key: client_secret
+            - name: SALES_S3_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-sales-credentials
                   key: S3_REGION
-            - name: AWS_ACCESS_KEY_ID
+            - name: SALES_S3_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: seaweedfs-s3-application-credentials
+                  name: seaweedfs-s3-sales-credentials
                   key: AWS_ACCESS_KEY_ID
-            - name: AWS_SECRET_ACCESS_KEY
+            - name: SALES_S3_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: seaweedfs-s3-application-credentials
+                  name: seaweedfs-s3-sales-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: FINANCE_S3_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-finance-credentials
+                  key: S3_REGION
+            - name: FINANCE_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-finance-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: FINANCE_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-finance-credentials
                   key: AWS_SECRET_ACCESS_KEY
           startupProbe:
             httpGet:
@@ -120,6 +140,8 @@ spec:
                 path: log.properties
               - key: iceberg.properties
                 path: catalog/iceberg.properties
+              - key: finance.properties
+                path: catalog/finance.properties
               - key: tpch.properties
                 path: catalog/tpch.properties
         - name: tmp

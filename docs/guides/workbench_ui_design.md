@@ -29,7 +29,12 @@ API契約と実行の意味は変えていない。画面の非表示・無効�
 
 - 広い画面は探索・エディター・結果を並べる。1024px以下はエディター、折りたたんだ探索、結果の順に積む。
 - 390px程度ではエディターを短くし、実行ボタンをエディター直下に置く。長いSQLは内部スクロールと高さ調整で編集する。
-- 探索の先頭に「選ぶとカーソル位置に名前を挿入」と示す。データベース探索のテーブル選択は詳細表示である。
+- Database mode（UX-D1）では共通ツリーの単クリックは詳細表示であり、SQL名の挿入・新しいSQL・実行先の変更は詳細の明示ボタンで行う。
+  旧形式（Database mode以外）の探索だけが「選ぶとカーソル位置に名前を挿入」の動作を残す。
+- Database modeの配置（2026-10-20、UX-D1モックに整合）：左は検索・更新→Database／Schema／Tables・Views（種類アイコン）→探索コンテキスト。
+  作業領域は「詳細／ワークシート」の1本のタブ列、詳細はパンくず・名前・SQL名・主操作（新しいSQLを主ボタン）、
+  ワークシートは実行コンテキスト（DB／Schema／実行role／mode／Warehouse／最大行数）をエディター上、取消と実行を下に置く。
+  履歴の復元は結果の下にあり、1024px以下では探索を上部の折りたたみ行にする。記録は [UX-D1探索・SQL記録](database-ux-d1-explorer-sql-report-2026-10-20.md)。
 - 各タブ右側の × はローカルのワークシートとその SQL を削除する。最後の1枚は理由を添えて無効化する。
   空欄と既定の注文サンプルそのものだけは直接閉じ、それ以外は保存済み SQL も含め削除確認を出す（編集履歴は持たない）。
 - アクティブなタブを閉じると右隣、右がなければ左隣へ移る。他のタブを閉じても編集中の SQL と選択範囲を保つ。
@@ -107,3 +112,11 @@ API契約と実行の意味は変えていない。画面の非表示・無効�
 - タブ右側の「×」、カスタムSQLの削除確認、最後の1枚の保護、隣接タブ選択、再読込、番号重複防止を確認。生成待ち中の削除・切替・編集で別タブのSQLを上書きしない。
 - `make verify` 成功：Python 738件中707件成功、31件スキップ（実機用30件、任意PyArrow 1件）。独立レビューと専用状態のブラウザー操作で、両不具合、タブ削除、キー操作、390px表示を検証した。
 - 画面・ログは `tmp/opus-followup-review/` に保存。専用サーバーと状態は片付け、通常Workbenchは既存設定で起動を確認した。
+
+### Databaseモードの手動DataOps（2026-10-20、P3-5）
+
+- 手動Ingestは入力bytesと型付きpreviewを固定し、明示modeと作成先／既存Tableを確認して実行する。入力やcontextを変更した場合は再previewが必要。
+- 手動WAPは独立したDB／Schema／roleを持ち、model版・build・audit・publicationを表示する。publish／rollbackはadminに限定し、role切替後は許可済みmetadataを明示的に再取得する。
+- Explorerの実TableにCSV／JSONLのSnapshot固定Exportを提供する。receiptとdownloadは取得時に再認可し、grant失効後の結果・fileを表示しない。View全件ExportとWorksheet結果保存等の未対応入口は無効を維持する。
+- 各DataOpsパネルと受付済みoperationは元contextを保持し、WorksheetのSQL／DB／Schema／保存role／Warehouse／modeやExplorer選択を変更しない。応答不明は元の同一keyで明示照会し、別identityへ切り替えて回復しない。
+- 通常CLI・3DBの実engine・実ブラウザーの正負証拠と残件は、[P3-5受入報告](database-p3-5-normal-entry-acceptance-report-2026-10-20.md)を参照。所有者の最終操作性評価はPhase 5に残す。
