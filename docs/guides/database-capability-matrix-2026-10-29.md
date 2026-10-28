@@ -1,0 +1,145 @@
+# Databaseモードの機能一覧と利用条件
+
+2026年10月29日。対象は[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)の機能棚卸しと表示契約である。現在のDatabase実装と、未接続の旧操作を区別する。機能の開放や実行権限をこの一覧から追加しない。
+
+## 利用条件と表示の意味
+
+- **V／E／A**は`bi_viewer`／`data_engineer`／選択中のDB `admin`。利用role上限、現在のaccount、DB grantの上限をすべて満たす必要がある。
+- **P**は実accountのplatform管理権限、最大role `admin`、選択role `admin`のすべてを満たす状態。Aの選択だけではPにならない。実platform管理者がAを選ぶ場合の既存DB grant例外は維持する。
+- **有効context**は本人、DB／Schema、保存role、LOCAL、binding／generation／grant revisionが現在の認可と一致すること。DBはREADYで、desired／applied bindingが一致する。未知・不許可・非READYのDBは同様に隠し、一覧にない理由を推測して開示しない。
+- **対応**は実装された入口があるという意味であり、対象未選択や権限失効でも操作できるという意味ではない。**未接続**はDatabase用の入口がなく、roleを管理者にしても解除されない。**別計画**は追加の製品契約が必要な機能である。
+
+| 表示の分類 | 判定と案内 | 利用者の次の操作 |
+| --- | --- | --- |
+| 機能未接続 | その機能名とDatabase対応状況を表示。古いroute／buttonの拒否を保持 | 対応済みのSQL・WAP・実行履歴などへ移動 |
+| 既知のrole条件不一致 | 選択role上限、A／E条件、P条件が不一致 | 許可された実行roleを明示選択。存在を隠したDBの権限不足とは断定しない |
+| 対象未選択 | 操作自身のDB／Schema／Table等が未選択 | そのパネルの対象を選ぶ |
+| 確認中・context利用不可 | 認可読取り中、古い版、失効、非公開の対象不在等 | context更新・明示再選択。古い結果を再表示しない |
+| 利用可能 | 実装対応、現在の認可、操作自身のcapability、入力、状態の全条件が成立 | 既存の確認・送信操作へ進む |
+
+この分類は案内の意味を固定するもので、新しい認可方式ではない。UIは既存の`dbReason`／`dbExplorerReason`と各DataOpsの判定を使う。APIは要求ごとに再認可する。`manage=False`はplatform管理機能の包括許可ではなく、DB内admin操作の全拒否を意味するものでもない。
+
+## 所有と実行記録の共通契約
+
+| 記号 | 入力と出力 | 所有・監査・回復 |
+| --- | --- | --- |
+| U | ローカルの表示・下書き・明示選択→表示更新 | ブラウザーの下書き。role上限変更で保存済み実行roleを黙示変更しない |
+| Q | SQL、mode、行上限、query／worksheet ID、context→query・page・結果 | 本人と受理時contextへ固定。結果・履歴を再認可。取消は元のidentityを使い、UNKNOWNを再送しない |
+| X | Schema／Table Ref、detail、Snapshot、format→metadata／preview／artifact | Explorer独自context。実Table identityとincarnation、Snapshotを検査。exportは本人・元operationに固定しdownload時も再認可 |
+| I | 入力bytes、型、format、mode、locator／Ref、key、context→preview／取込operation | 入力変更で再preview。受理済みpayloadを固定。本人と元contextで照会・取消し、commitと後続記帳失敗を分ける |
+| W | DB内model ID／version、source Ref、build／audit／publication ID→WAP metadata／公開操作 | **modelとbuild／audit／publication metadataはDB内で共有**し、actorを記録。EからAへの明示引渡しが可能。実行operationは呼出者へ固定 |
+| J | 版管理したtyped steps、引数、file、context→Job定義／run／step履歴 | owner＋保存role＋DB／Schema／context。CASと受理版固定。元runの取消・証拠に基づく照合 |
+| S | 宣言済みlocal root、設定、file、target、context→Stage／preview／scan／export | ownerとDB／context。内容dedupと設定版を保存。UNKNOWNを再取込しない。receiptは完成した出力のみ |
+| M | WAPの明示model版、監視source、MARTS target、context→Mart／check／refresh履歴 | ownerとDB／context、定義revision。監査済みSnapshotを公開。基準保存と公開commitを区別 |
+| T | Job／Stage／Martの保存版、予定、timezone→予定／tick／alert | ownerと保存role／対象版。既存schedulerのみ。既定無効、競合・遅延は既存skip方針。失効・UNKNOWNで停止 |
+| A | Pと管理context、期待revision、key、対象→管理operation／状態 | 作成root・actor・環境、CASと現在権限。登録／受付と実READYを区別。UNKNOWNは同じ要求で照合 |
+
+## 全操作の対応表
+
+入口欄のAPI群はHTTP-only CLIからも利用する。Qは送信時のWorksheet contextを保持し、I／W／J／S／M／Tは各パネル自身のcontextを持つ。受理済み操作を画面の現在選択へ付け替えない。未接続の行はDB-P6以降の残件として保持し、本一覧で対象から落とさない。
+
+| ID | 操作と入力から出力 | 状態・利用条件 | 所有・記録・回復 | 入口または後続 |
+| --- | --- | --- | --- | --- |
+| GLOBAL-01 | 言語切替 | 対応、認証済み利用者 | U、設定を保存 | ヘッダー |
+| GLOBAL-02 | 利用role上限の選択 | 対応、account上限以内 | U、各保存roleは保持 | ヘッダー |
+| SQL-01 | Worksheet追加・選択・閉じる | 対応、最後の1枚は保持。表示名は既存の自動採番 | U、独自下書き | SQLワークシート |
+| SQL-02 | DB／Schema／role／mode／LOCAL／行上限、更新・再選択 | 対応、有効contextと許可mode | Q、明示再選択 | SQL、`/api/v1/databases`／schemas |
+| SQL-03 | SQL本文／選択部分を実行 | VはMARTS読取、Eは4Schema読取とRAW／SANDBOX書込、Aは許可admin-write | Q、SQL guardを維持 | `/api/v1/queries` |
+| SQL-04 | page取得・poll・実行状態 | 対応、元queryの現在認可 | Q、部分・打切り・UNKNOWNを区別 | query pages |
+| SQL-05 | query取消 | 対応、元本人のcleanup契約 | Q、失効後の取消と結果閲覧を区別 | query cancel |
+| SQL-06 | 最近の履歴・詳細・復元 | 対応、本人と許可context | Q、復元だけでは実行しない | query history／inspect |
+| SQL-07 | table／chart、filter、sort | 対応、許可された返却済み行 | U＋Q、失効後は消去 | 結果表示 |
+| SQL-08 | Worksheet結果CSV／JSON／TSV保存 | 未接続。Table全件Exportと別機能 | 結果保存の再認可は後続 | DB-P6-6 |
+| SQL-09 | 固定sample SQL shortcut | 未接続、旧catalogを仮定 | U、固定SQLを自動送信しない | 選択DBのSQLを明示入力 |
+| SQL-10 | Copilot SQL生成 | 未接続 | 将来はQに結び付く提案 | DB-P6-4 |
+| SQL-11 | Copilot Explain | 未接続 | 将来は許可されたSQL／plan | DB-P6-4 |
+| SQL-12 | Copilot Stage and Audit | 未接続。手動WAPは対応 | 将来はWの明示実行 | 手動WAP、DB-P6-4 |
+| SQL-13 | Copilot Publish | 未接続。手動WAP公開は対応 | 将来もAによる明示WAP公開 | 手動WAP、DB-P6-4 |
+| EXP-01 | DB／Schema／Table／Viewツリー、検索・page・更新 | 対応、V／E／Aの許可Schema | X、Explorer独自context | inventory／objects |
+| EXP-02 | DB／Schema概要、identity、columns | 対応、許可browseと安定Ref | X、再作成した同名Tableは別identity | object detail |
+| EXP-03 | 最新データpreview | 対応、許可queryとpreview capability | X＋Q、query pages | object preview |
+| EXP-04 | Snapshot一覧 | 対応、読取可能な安定TABLE。Viewは対象外 | X、metadata取得 | object snapshots |
+| EXP-05 | Snapshot／Time Travel preview | 対応、選んだSnapshotとpreview capability | X＋Q、latestへの代替なし | Snapshot preview |
+| EXP-06 | DDL表示 | 対応、Schemaの**write capability**が必要 | X＋Q、browseのみでは不可 | object ddl |
+| EXP-07 | 新しいSQL、SQL名挿入、Explorer Schemaの明示適用 | 対応、許可context | U＋X、新しい／元Worksheetを区別 | 探索の明示ボタン |
+| EXP-08 | Snapshot固定Table全件Export CSV／JSONL | 対応、読取可能な安定TABLE。許可Vも可 | X、元Snapshotと件数・内容 | `/api/v1/table-exports` |
+| EXP-09 | Export照会・取消・新規・receipt／download | 対応、本人と元context | X、同一operation／key、完全出力のみ | table export／dataops |
+| EXP-10 | 現在／過去Tableのsandbox clone | 未接続 | 将来はsource／target identityを固定 | DB-P6-6 |
+| EXP-11 | 探索のDrop Table | 未接続。A選択だけで解除しない | 削除方式と認可を別途確定 | DB-P6-6 |
+| EXP-12 | profiling／NULL統計 | 未接続。columns／previewは対応 | 将来はXの集計範囲と再認可 | DB-P6-6 |
+| EXP-13 | Table lineage | 未接続。WAP metadataと別機能 | 将来は許可source／target | DB-P6-6 |
+| EXP-14 | dbtモデルlineage | 未接続、旧固定projectの入口 | 将来はDB内model版と関係 | DB-P6-3／6 |
+| ING-01 | browser file／drop、型・delimiter等、preview | 対応、E／AかつRAW／SANDBOXのwrite | I、入力と設定のfingerprint | ファイル取り込み |
+| ING-02 | create／replace／append／upsertの明示確認 | 対応、previewと現在入力が一致 | I、固定payload／key | `/api/v1/ingests` |
+| ING-03 | 取込照会・取消・回復情報 | 対応、元本人／context | I、UNKNOWN再送なし | `/api/v1/dataops` |
+| ING-04 | 旧server path／固定catalogフォーム | 非表示・未接続 | 新しいbrowser file入口を使用 | 旧ingest routeは拒否 |
+| ING-05 | Stage一覧・新規・Load・再Load・保存 | 対応、A、本人の同DB Stage | S、宣言済local rootとCAS | `/api/v1/stages` |
+| ING-06 | Stage file一覧・preview・単件取込確認 | 対応、上記条件と入力確認 | S＋I、設定／bytesを固定 | Stage files／ingest |
+| ING-07 | Stage scan・照会・scan履歴 | 対応、A、本人のStage、atomic append／keyed upsert | S、内容dedup、未知効果を保護 | Stage scans |
+| ING-08 | Stage Snapshot export・receipt・download | 対応、A、元owner／context | S＋X、安定sourceと完成出力 | Stage exports |
+| ING-09 | Stage operation照会・取消・履歴 | 対応、元owner／context | S、元の受理identity | Stage operation |
+| ING-10 | Stage予定の作成・Load・保存・有効化・停止・tick | 対応、A、atomic append／keyed upsert | S＋T、既定無効、保存target版 | schedules |
+| ING-11 | 外部Stage／connector同期 | 別計画。local Stageと区別 | 外部接続の契約が必要 | 後続scope |
+| TRF-01 | WAP model一覧・版Load・版保存・source alias／target | 対応、E／A、有効contextと同DB Ref | W、DB共有metadata | `/api/v1/wap/models` |
+| TRF-02 | 保存版のWAP build | 対応、E／A | W、呼出者とimmutable版 | WAP build |
+| TRF-03 | buildのaudit、build／audit／publication詳細 | 対応、E／A、同DB | W、E→Aのmetadata引渡し | WAP audit／details |
+| TRF-04 | 監査済みbuildのpublish | 対応、A | W、監査Snapshotから明示公開 | WAP publish |
+| TRF-05 | publication rollback | 対応、A | W、publication IDを固定 | WAP rollback |
+| TRF-06 | WAP operation照会・取消・metadata ID取得 | 対応、許可role／context | W、実行はcaller-bound、metadataはDB共有 | WAP／dataops |
+| TRF-07 | Managed Mart新規・一覧・Load・保存・model版選択 | 対応、A、MARTS purpose、本人のMart | M、定義revisionと固定model版 | `/api/v1/marts` |
+| TRF-08 | 変更確認、無条件／条件付き全件更新 | 対応、上記条件。変更確認はwatch sourceが必要 | M、source Ref／Snapshot集合 | Mart check／refresh |
+| TRF-09 | Mart照会・履歴 | 対応、元owner／context | M、未知操作再送なし | Mart runs |
+| TRF-10 | Mart予定のLoad・新規・保存・有効化・停止・tick | 対応、A、監視sourceあり | M＋T、保存版で実行 | schedules |
+| TRF-11 | 旧dbt一覧・model SQL・build／test | 未接続、`iceberg`固定profile | candidate→test→明示WAP公開へ移す | DB-P6-3 |
+| TRF-12 | 旧dynamic WAP一覧・refresh widget | 未接続の旧widget | 手動WAP／Managed Martを使用 | 変換の新パネル |
+| JOB-01 | Job新規・一覧・Load・再Load・定義／引数保存 | 対応、E／A | J、owner＋保存role＋context、CAS | `/api/v1/jobs` |
+| JOB-02 | SQL／alert step | 対応、E／A、既存SQL policy | J、alertはread-only | typed Job step |
+| JOB-03 | Ingest／WAP refresh／Table export step | 対応、A | J、型付きadapterのみ | typed Job step |
+| JOB-04 | 手動run、名前付きfile入力 | 対応、保存roleで実行可能なowner | J、受理版／引数／fileを固定 | Job run |
+| JOB-05 | 自動poll・照会・実行／step履歴 | 対応、元owner／context | J、元runの状態 | Job runs |
+| JOB-06 | run取消 | 対応、元ownerとcleanup契約 | J、失効後も結果閲覧とは分離 | Job cancel |
+| JOB-07 | UNKNOWN runの照合 | 対応、E／A、元owner／context | J、backend証拠。未解決子を無視しない | Job reconcile |
+| JOB-08 | Job予定一覧・新規・保存・有効化・停止・tick | 対応、E／A、Job owner。runtime upload Jobは不可 | J＋T、保存定義版 | schedules |
+| JOB-09 | interval／daily／once／weekly／monthly／timezone | 対応、予定の入力契約 | T、競合・遅延の既存方針 | schedules |
+| JOB-10 | alert一覧・更新・確認 | 対応、E／A、元owner／context | T、確認と解消を区別 | alerts |
+| JOB-11 | native Stored Procedure／CALL／DAG／任意command | 別計画。Jobと同義にしない | Routineの意味を先に確定 | DB-P9-2 |
+| AI-01 | Query Doctor Bear | 未接続 | 許可SQL／planを扱う入口が必要 | DB-P6-4 |
+| AI-02 | Data Engineer Bear | 未接続。手動SQL／WAPは対応 | 提案と実実行を分離 | DB-P6-4 |
+| AI-03 | Catalog Curator Bear | 未接続 | 許可metadata scopeが必要 | DB-P6-4 |
+| AI-04 | SRE Bear | 未接続 | DB／platform観測を分離 | DB-P6-4／5 |
+| AI-05 | Policy Gatekeeper Bear | 未接続 | 同上、AIへ管理権限を渡さない | DB-P6-4／5 |
+| AI-06 | AI provider／model／URL／key／timeout、接続test／保存 | 未接続 | 設定管理権限とDB閲覧権限を分離 | DB-P6-4 |
+| AUD-01 | Pawprints一覧・filter・status・更新 | 未接続、旧APIはglobal最新100件 | DB／本人scopeが未接続 | DB-P6-1 |
+| AUD-02 | 旧runtime query／load履歴画面 | 未接続。個別query／Job履歴は対応 | 個別履歴へ案内 | SQL／Job／WAP |
+| AUD-03 | 統合Database監査の検索・詳細・download | 未実装。既存台帳の存在とは区別 | DB／platform履歴の契約が必要 | DB-P6-1 |
+| CMP-01 | ヘッダー／SQLの共有Warehouse状態・更新 | 対応、状態の観測のみ | `/api/status`、稼働証明は限定 | ヘッダー／SQL |
+| CMP-02 | 旧Compute panelの状態更新・component readiness | 未接続 | CMP-01は利用可能 | DB-P6-2／5 |
+| CMP-03 | quick／SQL／Computeの手動Wake／Chill | UIの旧経路は未接続。運用CLIの手動lifecycleは存在 | 共有影響とP権限を接続する | DB-P6-2 |
+| CMP-04 | Auto-Chill設定と入口横断のAuto-resume | 現Database起動／query経路では未接続 | global admission／drainを維持 | DB-P6-2 |
+| CMP-05 | ComputeのSRE check／Policy audit | 未接続 | DB対応Bearsとplatform scopeが必要 | DB-P6-4／5 |
+| CMP-06 | XS／Sの実サイズ、Worker増減、用途別Warehouse | 未実装。現在は同一computeのalias | 容量と実資源の計測が必要 | DB-P7／8 |
+| ADM-01 | DB管理一覧・選択・revision／binding情報 | 対応、P | A、Worksheetと独立 | `/api/v1/admin/databases` |
+| ADM-02 | 論理DB作成、作成capability、初期access | 対応、P、logical_v1の準備条件 | A、root／actor／環境／key | admin database-creations |
+| ADM-03 | 同じ要求の再発見・状態照会・固定payloadの再確認 | 対応、P | A、同じ要求を再発見 | 作成一覧／詳細 |
+| ADM-04 | 作成の照合・resume・dispatch停止 | 対応、P＋元owner＋状態別action | A、logical／stagedの意味を分離 | creation recovery |
+| ADM-05 | READYから新しいSQL | 対応、現在の許可role／schema | U＋Q、新しいWorksheet | 作成詳細 |
+| ADM-06 | DB／Schema表示metadataのCAS更新 | 対応、P | A、SQL名／binding不変 | display API |
+| ADM-07 | desired grant一覧・変更・取消 | 対応、P | A、desired／effectiveを分離。付与はbackend検証が条件 | grants API |
+| ADM-08 | retire依存確認・要求・照会・照合 | 対応、P、非purge | A、既存UNKNOWNと履歴を保全 | retirement API |
+| ADM-09 | 高度なregistry登録、構成plan／operator apply要求 | 条件付き、P＋準備済み材料／profile。通常logical CREATEとは別経路 | A、要求受付のみではREADYにしない | warehouses／operations |
+| ADM-10 | staged plan確認・承認・再計画・回復承認・停止 | 条件付き、P＋元root owner＋staged modeの状態契約 | A、明示承認とoperator証拠 | staged creation操作 |
+| ADM-11 | 物理purge、credential／PVCの削除 | 非purge retireには含まない | 別の破棄scopeが必要 | 別計画 |
+
+## 画面と実装の対応
+
+安定したIDの案内をパネルへ置き、手動WAP等の追加順序によって説明対象が変わらないようにする。取り込みと変換の説明は対応済み操作を先に示す。未対応のdbt、AI、統合監査、共有compute管理には、それぞれの制限と利用できる確認先を表示する。
+
+Worksheet結果保存の案内は「結果保存が未対応」とし、対応済みTable全件Exportを否定しない。profilingとlineageは機能名を示し、対象identity未確認・対象／roleのcapability不足とは説明を分ける。未接続機能は管理者への変更を解決策にしない。
+
+実装上の根拠は[認可](../../tools/local_experiment/request_auth.py)、[inventoryのcapability](../../tools/local_experiment/database_inventory.py)、[HTTP routeの拒否](../../tools/local_experiment/workbench_server.py)、[Workbench](../../tools/local_experiment/workbench/index.html)、[WAPのDB共有metadata](../../tools/local_experiment/manual_wap.py)、[Jobs](../../tools/local_experiment/db_jobs.py)、[Stages](../../tools/local_experiment/db_stages.py)、[Marts](../../tools/local_experiment/db_marts.py)、[予定とalert](../../tools/local_experiment/db_schedules.py)である。
+
+## DB-P6-0の検証対象
+
+全ナビゲーションと上表の操作について、対応済み／未接続の説明が正しいことを確認する。実行条件は各パネル自身で判定し、role切替、context欠落・失効、遅延応答、言語切替、refresh／reload後に誤って有効化しない。WAPとManaged Martへ到達でき、旧APIは引き続き拒否される。
+
+本unitは監査API・dbt実行・Bears・Warehouse管理を新設しない。コード回帰、実ブラウザー、認可API、性能baselineの結果は[DB-P6-0実装と検証記録](database-p6-0-implementation-2026-10-29.md)へ記録する。

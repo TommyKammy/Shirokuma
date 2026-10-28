@@ -2428,6 +2428,22 @@ editJob(null);clearSelectedJob();
 // Database mode is deliberately installed only after /api/session selects it.
 // The legacy handlers and storage remain the default for older servers.
 const dbWorksheetKey='shirokuma.worksheets.v2';
+Object.assign(i18n.ja,{
+ "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
+ "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。",
+ "AI Bears and Copilot are unavailable in Database mode. Use SQL for queries and Manual WAP for build, audit and publication.": "Database モードでは AI Bears と Copilot は未対応です。クエリには SQL、build・audit・公開には手動 WAP を利用してください。",
+ "The combined Audit Log is unavailable in Database mode. View query history in SQL and individual execution history in Jobs, Stages, Managed Marts or Manual WAP.": "Database モードでは統合監査ログは未対応です。SQL のクエリ履歴、または Jobs・Stage・管理 Mart・手動 WAP の個別の実行履歴を確認してください。",
+ "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control.": "Database モードでは Compute 操作・Auto-Chill・ガバナンス検査は未対応です。共有ウェアハウスの状態はヘッダーで確認できます。Database の admin ロールは基盤の操作権限を付与しません。",
+ "AI settings are unavailable in Database mode. Use SQL or Manual WAP.": "Database モードでは AI 設定は未対応です。SQL または手動 WAP を利用してください。",
+ "Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.": "Database モードではウェアハウスの起動／休止操作は未対応です。共有ウェアハウスの状態はヘッダーで確認してください。",
+ "Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.": "Database モードではワークシート結果の保存は未対応です。データ探索で許可されたテーブルを選び、「テーブルをエクスポート」を利用してください。",
+ "Clone and drop are unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.": "Database モードでは複製と削除は未対応です。許可されたテーブルのカラム・プレビュー・スナップショット・DDL を確認できます。",
+ "Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.": "Database モードではテーブルのプロファイリングとリネージュは未対応です。カラム・プレビュー・スナップショット・DDL を利用してください。",
+ "Object identity is not verified. Refresh Explorer and select the object again.": "対象の識別情報を確認できません。探索を更新して対象を選択し直してください。",
+ "This detail is not permitted for the current role or object. Choose another authorized object or role.": "現在のロールまたは対象では、この詳細を利用できません。許可された別の対象またはロールを選択してください。",
+ "This detail is unsupported in Database mode. Use columns, preview, snapshots or DDL.": "Database モードではこの詳細は未対応です。カラム・プレビュー・スナップショット・DDL を利用してください。",
+ "Legacy dbt build/test is unavailable in Database mode. Use Manual WAP or Managed Marts with an authorized context.": "Database モードでは旧 dbt の build／test は未対応です。許可されたコンテキストで手動 WAP または管理 Mart を利用してください。"
+});
 const dbInputFields=['id','name','sql','database_id','schema_id','binding_revision','generation_id','warehouse','mode','max_rows','selected_role'];
 const dbRuns=new Map(),dbDetails=new Map(),dbPending=new Map(),dbObservedGrants=new Map();
 const dbInventories=new Map(),dbInventoryRequests=new Map(),dbSchemaCache=new Map();
@@ -2546,7 +2562,7 @@ function dbControls(){
  $('run-query').disabled=!!reason||dbRunBlocked(run);
  $('cancel-query').disabled=!dbCanCancel(run)||!!run?.canceling;
  for(const id of ['export-csv','export-json','copy-tsv','export-table-btn','export-table-format','clone-table-btn','drop-table-btn'])$(id).disabled=true;
- ui($('result-action-state'),'Export unavailable in Database mode.');
+ ui($('result-action-state'),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.');
  dbExplorerControls();
  if(typeof dataopsPanels!=='undefined')dataopsValidate();
  if(typeof dbJobs!=='undefined')dbJobsValidate();
@@ -2562,7 +2578,7 @@ function dbClearExplorer(){
  ++dbObjectEpoch;dbDetails.clear();dbPending.clear();dbObjects=[];dbObject=null;
  ++dbListRequest;
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
- for(const id of ['inspect-profile','table-lineage'])ui($(id),'Unavailable in Database mode in this phase.');
+ for(const id of ['inspect-profile','table-lineage'])ui($(id),'Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.');
  $('refresh-table-details').disabled=true;
  dbExplorerControls();
 }
@@ -3195,10 +3211,12 @@ async function dbDescribe(object,section=activeInspector,snapshot){
  const scope=dbCatalogScope(),epoch=++dbObjectEpoch,identity=dbIdentity(),role=currentRole;
  dbObject=object;$('table-title').textContent=object.display_name;
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
- const target=snapshot?'snapshot-preview':inspectorTargets[section];
+ const target=snapshot?'snapshot-preview':(inspectorTargets[section]||'table-columns');
  message('catalog-error','');dbControls();$('refresh-table-details').disabled=!object.id;
  if(dbExplorerReason()){ui($(target),dbExplorerReason());return;}
- if(!object.id||!object.ref||!object.capabilities?.[section]||!['columns','preview','snapshots','ddl'].includes(section)){ui($(target),'Unavailable in Database mode in this phase.');return;}
+ if(!object.id||!object.ref){ui($(target),'Object identity is not verified. Refresh Explorer and select the object again.');return;}
+ if(!['columns','preview','snapshots','ddl'].includes(section)){ui($(target),['profile','lineage'].includes(section)?'Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.':'This detail is unsupported in Database mode. Use columns, preview, snapshots or DDL.');return;}
+ if(!object.capabilities?.[section]){ui($(target),'This detail is not permitted for the current role or object. Choose another authorized object or role.');return;}
  const current=()=>identity===dbIdentity()&&scope===dbCatalogScope()&&epoch===dbObjectEpoch;
  try{
   const items=await dbReadInventory(role);if(!current()||!dbInventoryCurrent(items))return;
@@ -3280,10 +3298,10 @@ async function initializeDatabaseUI(session){
  const explorerStatus=document.createElement('span');explorerStatus.id='catalog-context-state';explorerStatus.setAttribute('role','status');explorerTools.append(reselect,explorerStatus);$('catalog-error').before(explorerTools);
  dbInstallWorkspace(explorerTools);
  for(const section of ['profile','lineage']){
-  const button=inspectorTabs.find(b=>b.dataset.inspect===section);button.disabled=true;const key='Unavailable in Database mode in this phase.';button.title=t(key);uiAttributes.push({node:button,attribute:'title',key});ui($(inspectorTargets[section]),key);
+  const button=inspectorTabs.find(b=>b.dataset.inspect===section);button.disabled=true;const key='Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.';button.title=t(key);uiAttributes.push({node:button,attribute:'title',key});ui($(inspectorTargets[section]),key);
  }
  wireTabs(inspectorTabs.filter(button=>!button.disabled),dbSelectInspector);
- ui($('lineage'),'Unavailable in Database mode in this phase.');
+ ui($('lineage'),'Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.');
  const bar=document.createElement('div'),contextActions=document.createElement('div');bar.id='database-context-bar';bar.setAttribute('role','group');bar.setAttribute('aria-label',t('Execution context'));uiAttributes.push({node:bar,attribute:'aria-label',key:'Execution context'});contextActions.className='context-actions';
  for(const id of ['query-database','query-schema','query-execution-role','query-mode','query-warehouse','max-rows']){const field=$(id)?.parentElement;if(field)bar.append(field);}
  const buttons={};for(const [id,key,task] of [['database-context-refresh','Refresh context',dbRefreshContext],['database-context-reselect','Reselect context',dbReselect],['cancel-query','Cancel query',dbCancelQuery]]){const button=document.createElement('button');button.id=id;button.type='button';ui(button,key);button.onclick=task;buttons[id]=button;}
@@ -3292,22 +3310,50 @@ async function initializeDatabaseUI(session){
  $('sql').before(bar);$('run-query').before(buttons['cancel-query']);
  const details=document.createElement('details'),summary=document.createElement('summary');ui(summary,'Request details');const content=document.createElement('div');content.id='request-provenance';details.append(summary,content);$('query-results').after(details);
  // Keep the navigation and forms visible, with explicit unavailable actions.
- for(const id of ['ingestion','transformation','jobs','bears','pawprints','compute']){
-  const panel=$(id),notice=document.createElement('p');notice.className='callout info';ui(notice,'Unavailable in Database mode in this phase.');panel.prepend(notice);
+ for(const [id,key] of [
+ [
+  "ingestion",
+  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target."
+ ],
+ [
+  "transformation",
+  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode."
+ ],
+ [
+  "bears",
+  "AI Bears and Copilot are unavailable in Database mode. Use SQL for queries and Manual WAP for build, audit and publication."
+ ],
+ [
+  "pawprints",
+  "The combined Audit Log is unavailable in Database mode. View query history in SQL and individual execution history in Jobs, Stages, Managed Marts or Manual WAP."
+ ],
+ [
+  "compute",
+  "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control."
+ ]
+]) {
+  const panel=$(id),notice=document.createElement('p');notice.id='database-'+id+'-notice';notice.className='callout info';ui(notice,key);panel.prepend(notice);
   for(const node of panel.querySelectorAll('button,input,select,textarea')){node.disabled=true;node.dataset.databaseUnavailable='true';}
  }
+ // Jobs replaces its legacy contents with a Database panel.
+ for(const node of $('jobs').querySelectorAll('button,input,select,textarea')){node.disabled=true;node.dataset.databaseUnavailable='true';}
  for(const id of ['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table','ai-settings-button','chill','wake']){$(id).disabled=true;$(id).dataset.databaseUnavailable='true';}
  for(const [controls,key] of [
-  [['quick-wake','quick-chill'].map(id=>$(id)),'Warehouse wake/chill controls are unavailable in Database mode.'],
+  [['quick-wake','quick-chill','wake','chill'].map(id=>$(id)),'Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.'],
+  [[$('ai-settings-button')],'AI settings are unavailable in Database mode. Use SQL or Manual WAP.'],
+  [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'AI Bears and Copilot are unavailable in Database mode. Use SQL for queries and Manual WAP for build, audit and publication.'],
+  [['export-csv','export-json','copy-tsv'].map(id=>$(id)),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.'],
+  [['clone-table-btn','drop-table-btn'].map(id=>$(id)),'Clone and drop are unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.'],
+  [['run-dbt-build','run-dbt-test'].map(id=>$(id)),'Legacy dbt build/test is unavailable in Database mode. Use Manual WAP or Managed Marts with an authorized context.'],
   [[...document.querySelectorAll('[data-sample]')],'Fixed sample queries are unavailable in Database mode. Enter SQL for the selected database.']
- ])for(const node of controls){node.disabled=true;node.setAttribute('title',t(key));uiAttributes.push({node,attribute:'title',key});}
- const copilot=$('copilot-result');ui(copilot,'Unavailable in Database mode in this phase.');copilot.hidden=false;
+ ])for(const node of controls){node.disabled=true;node.dataset.databaseUnavailable='true';node.setAttribute('title',t(key));uiAttributes.push({node,attribute:'title',key});}
+ const copilot=$('copilot-result');ui(copilot,'AI Bears and Copilot are unavailable in Database mode. Use SQL for queries and Manual WAP for build, audit and publication.');copilot.hidden=false;
  const legacyRenderWorksheets=renderWorksheets,legacyRenderResults=renderResults,legacyAPI=api;
  saveWorksheet=dbSave;
  renderWorksheets=()=>{legacyRenderWorksheets();dbWorkspacePane='worksheet';dbWireWorkspaceTabs();dbControls();dbRenderRun();return dbRefreshContext();};
  addWorksheet=(sql=samples.orders)=>{dbSave();const inherited=dbInput(dbCurrent()),number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={...inherited,id:crypto.randomUUID(),name:'Worksheet '+number,sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;dbPersist();renderWorksheets();};
  renderResults=()=>{legacyRenderResults();for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=true;};
- download=()=>ui($('result-action-state'),'Export unavailable in Database mode.');
+ download=()=>ui($('result-action-state'),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.');
  $('copy-tsv').onclick=download;
  // This gate also prevents programmatic or timer-driven v1 actions.
  api=(path,body)=>path==='/api/status'&&body===undefined?legacyAPI(path):Promise.reject(Error(t('Unavailable in Database mode in this phase.')));
@@ -3703,6 +3749,9 @@ Object.assign(i18n.ja,{
  'Results hidden until access is revalidated.':'アクセスを再確認するまで結果を非表示にします。',
  'Unknown execution requires manual reconciliation. Observe the saved operation.':'実行結果不明のため手動照合が必要です。保存した操作を照会してください。',
  'Reselect the original table and role, then observe to retrieve its receipt.':'元のテーブルとロールを再選択し、操作を照会して受領記録を取得してください。',
+ 'Select an execution role within the current ceiling for this panel.':'このパネルで現在のロール上限内の実行ロールを明示的に選択してください。',
+ 'Manual Ingest and WAP require data_engineer or admin. Select an execution role for this panel.':'手動取り込みと WAP にはデータ作成者または管理者ロールが必要です。このパネルの実行ロールを選択してください。',
+ 'Panel context is unavailable. Refresh this panel context or reselect its database, schema and execution role.':'このパネルのコンテキストは利用できません。このパネルのコンテキストを更新するか、データベース、スキーマ、実行ロールを再選択してください。',
  'Stage snapshot':'ステージのスナップショット','Target snapshot':'対象のスナップショット',
  'Null counts':'NULL 件数','Quality':'品質','Passed':'合格','Failed':'不合格','REJECTED':'受付拒否'
 });
@@ -3767,7 +3816,10 @@ function dataopsInvalidate(p){
  ui(p.status,'Access changed. Protected data cleared; refresh context explicitly.');dataopsRender(p);
 }
 function dataopsValidate(){
- for(const p of dataopsPanels.values())if(p.context&&!p.invalid&&!dataopsAllowed(p,p.id==='p35-ingest'?'manual_ingest':'wap_models'))dataopsInvalidate(p);
+ for(const p of dataopsPanels.values()){
+  if(p.context&&!p.invalid&&!dataopsAllowed(p,p.id==='p35-ingest'?'manual_ingest':'wap_models'))dataopsInvalidate(p);
+  else dataopsRenderAvailability(p);
+ }
  if(dataopsExport&&!dataopsExport.invalid&&!dataopsExportAuthorized(dataopsExport)){dataopsExport.invalid=true;dataopsExport.receipt=null;dataopsExport.operation=null;dataopsExportRender();}
  dataopsExportControls();
 }
@@ -3837,6 +3889,7 @@ function dataopsPanel(id,title,parent){
   const n=dataopsField(fields,id+'-'+key,label,'select');n.onchange=()=>{p[key]=n.value;dataopsChanged(p);return dataopsRefresh(p);};
  }
  dataopsButton(form,id+'-refresh','Refresh panel context',()=>dataopsRefresh(p));
+ p.availability=dataopsNode('p',id+'-availability',body);p.availability.className='help';p.availability.setAttribute('role','status');
  p.status=dataopsNode('p',id+'-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');
  dataopsNode('p',id+'-accepted-context',body).className='help';
  p.receipt=dataopsNode('div',id+'-operation',body);p.receipt.setAttribute('aria-live','polite');
@@ -3865,6 +3918,20 @@ function dataopsRenderWapMetadata(area,record){
  if(record.passed!==undefined)row('Quality',t(record.passed?'Passed':'Failed'));
  const details=dataopsNode('details','',area);dataopsNode('summary','',details,'Request details');const pre=dataopsNode('pre','',details);pre.textContent=JSON.stringify(record,null,2);
 }
+function dataopsAvailabilityReason(p,allowed){
+ if(!dbRoleWithinHeader(p.role))return 'Saved execution role exceeds the current role ceiling.';
+ if(p.role==='bi_viewer')return 'Manual Ingest and WAP require data_engineer or admin. Select an execution role for this panel.';
+ if(!p.database||!p.schema)return 'Choose an available database and schema.';
+ return allowed?'':'Panel context is unavailable. Refresh this panel context or reselect its database, schema and execution role.';
+}
+function dataopsRenderAvailability(p,allowed=dataopsAllowed(p,p.id==='p35-ingest'?'manual_ingest':'wap_models')){
+ const reason=dataopsAvailabilityReason(p,allowed);
+ if(p.availability.dataset.reason!==reason){
+  ui(p.availability,reason==='Saved execution role exceeds the current role ceiling.'?'{reason} {action}':reason,()=>({reason:t(reason),action:t('Select an execution role within the current ceiling for this panel.')}));
+  p.availability.dataset.reason=reason;
+ }
+ p.availability.hidden=!reason;
+}
 function dataopsRender(p,inventory=false){
  const id=p.id,waiting=!!(p.pending||p.trackingPending);
  if(inventory){
@@ -3874,6 +3941,7 @@ function dataopsRender(p,inventory=false){
  }
  if(p.context&&!p.invalid){const context=$(id+'-accepted-context');context.textContent=[p.context.sql_catalog,p.context.sql_schema,p.context.selected_role].join(' / ');}
  const cap=id==='p35-ingest'?'manual_ingest':'wap_models',allowed=dataopsAllowed(p,cap);
+ dataopsRenderAvailability(p,allowed);
  // Context selectors remain usable for explicit recovery. Never blindly enable after await.
  for(const n of p.form.querySelectorAll('input,select,textarea,button'))n.disabled=waiting||!allowed;
  for(const k of ['role','database','schema','refresh'])$(id+'-'+k).disabled=waiting;
@@ -4102,7 +4170,8 @@ function dataopsInstall(){
  const ingest=dataopsInstallIngest(),wap=dataopsInstallWap();
  // Unsupported legacy pathways remain gated; manual WAP is outside marts-admin.
  for(const id of ['ingestion-view-file','ingestion-view-stages'])$(id).disabled=id.endsWith('stages');
- for(const id of ['ingestion','transformation']){const first=$(id).children[0];if(first?.className==='callout info')ui(first,id==='ingestion'?'Manual file ingestion':'Manual WAP');}
+ // Keep supported-feature guidance above the independently inserted Manual WAP form.
+ for(const id of ['ingestion','transformation'])$(id).prepend($('database-'+id+'-notice'));
  for(const p of [ingest,wap]){p.databases=dbRoleItems(p.role);p.schemas=dbSchemasFor({selected_role:p.role,database_id:p.database});dataopsRender(p,true);}
  dataopsOptions($('export-table-format'),[['csv','CSV'],['jsonl','JSONL (one object per line)']],'csv','File format');
  $('export-table-btn').onclick=dataopsStartExport;

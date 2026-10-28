@@ -32,7 +32,7 @@ class Node {
  after(...items){for(const item of items)if(item.id)nodes[item.id]=item;}
  replaceChildren(...items){this.children=[];delete this.rows;this.textContent='';this.append(...items);}
  add(item){this.append(item);} get options(){return this.children;}
- setAttribute(key,value){this[key]=value;} getAttribute(key){return this[key];}
+ setAttribute(key,value){this[key]=value;} getAttribute(key){return this[key];} removeAttribute(key){delete this[key];}
  addEventListener(key,fn){(this.listeners[key]??=[]).push(fn);} focus(){document.activeElement=this;}
  click(){return this.onclick?.();}
  dispatchEvent(event){for(const fn of this.listeners[event.type]||[])fn(event);}
@@ -91,7 +91,7 @@ main.append(editor,results);editor.append(strip,$('sql'));strip.append($('worksh
 head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),...Object.values(inspectorTargets).map($),$('snapshot-preview'));actions.append($('open-table-sql'));
 filter.append($('catalog-filter'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
-''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs']) + '\n' + DATABASE + '\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'busy', 'pruneUIBindings']) + '\n' + DATABASE + '\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
 const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
 const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',warehouse:'LOCAL',mode:'read-only',max_rows:100});
 async function boot(tabs=[input()]){
@@ -118,6 +118,62 @@ const objectButtons=()=>treeActions('select-object').filter(node=>node.dataset.t
 ''' + '\n(async()=>{\n' + body + '\n})().catch(error=>{console.error(error);process.exitCode=1;});'
         result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_async_finally_cannot_reenable_a_database_blocked_action(self):
+        self.javascript(r'''
+const done=deferred(),button=$('wake');let actions=0;
+const pending=busy(button,async()=>{actions++;await done.promise;});
+await boot();setLanguage('ja');await dbRefreshContext();
+done.resolve();await pending;
+assert.equal(button.disabled,true);assert.equal(button.dataset.databaseUnavailable,'true');
+assert.match(button.title,/起動／休止操作は未対応/);
+await busy(button,async()=>{actions++;});assert.equal(actions,1);
+assert.equal(calls.filter(c=>c.options?.method==='POST').length,0);
+''')
+
+    def test_detail_reasons_keep_early_gates_and_do_not_replay(self):
+        self.javascript(r'''
+await boot();
+const object={...salesObject,capabilities:{columns:false,profile:true,lineage:true}};
+const before=calls.length;
+await dbDescribe({...object,id:null,ref:null},'columns');
+assert.match($('table-columns').textContent,/identity is not verified/);
+await dbDescribe(object,'columns');
+assert.match($('table-columns').textContent,/current role or object/);
+for(const section of ['profile','lineage']){
+ await dbDescribe(object,section);
+ assert.match($(inspectorTargets[section]).textContent,/profiling and lineage are unavailable/);
+}
+assert.equal(calls.length,before);assert.equal(dbPending.size,0);assert.equal(dbDetails.size,0);
+dbExplorer.invalid=true;
+await dbDescribe({...object,id:null,ref:null},'columns');
+assert.equal($('table-columns').textContent,t(dbExplorerReason()));
+assert.doesNotMatch($('table-columns').textContent,/identity|role or object/);
+assert.equal(calls.length,before);
+setLanguage('ja');assert.equal($('table-columns').textContent,t(dbExplorerReason()));
+setLanguage('en');dbExplorer.invalid=false;
+assert.equal(calls.length,before);
+''')
+
+    def test_disabled_explanations_survive_language_role_and_refresh(self):
+        self.javascript(r'''
+await boot();$('sql').focus();const draft=JSON.stringify(dbInput(dbCurrent()));
+for(const lang of ['ja','en']){
+ setLanguage(lang);
+ session.maximum_role='bi_viewer';await dbRefreshContext();await dbRefreshExplorer();
+ assert.equal(document.activeElement,$('sql'));assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);
+ for(const id of ['ai-settings-button','wake','chill','quick-wake','quick-chill','copilot-generate','export-csv','export-json','copy-tsv','clone-table-btn','drop-table-btn','run-dbt-build','run-dbt-test']){
+  assert.equal($(id).disabled,true,id);assert.equal($(id).dataset.databaseUnavailable,'true',id);
+  const binding=uiAttributes.find(b=>b.node===$(id)&&b.attribute==='title');assert.ok(binding,id);assert.equal($(id).title,t(binding.key));
+ }
+ assert.equal($('result-action-state').textContent,lang==='ja'?'Database モードではワークシート結果の保存は未対応です。データ探索で許可されたテーブルを選び、「テーブルをエクスポート」を利用してください。':'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.');
+ for(const button of inspectorTabs.filter(b=>['profile','lineage'].includes(b.dataset.inspect))){assert.equal(button.disabled,true);assert.match(button.title,lang==='ja'?/プロファイリングとリネージュ/:/profiling and lineage/);}
+ session.maximum_role='admin';await dbRefreshContext();
+}
+const before=calls.length;
+await assert.rejects(api('/api/warehouse/wake',{}));await assert.rejects(api('/api/lake/dbt/build',{}));
+assert.equal(calls.length,before);
+''')
 
     def test_status_refresh_clears_recovered_error_and_retains_current_failure(self):
         self.javascript(r'''
@@ -630,7 +686,7 @@ await boot();for(const panel of ['ingestion','transformation','jobs','bears','co
 for(const id of ['p35-ingest-role','p35-ingest-database','p35-ingest-schema','p35-wap-role','p35-wap-database','p35-wap-schema'])assert.equal($(id).disabled,false,id);
 for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button','export-csv','export-json','copy-tsv','export-table-btn'])assert.equal($(id).disabled,true,id);
 await assert.rejects(api('/api/jobs/run',{}),/Unavailable/);const n=calls.length;download('csv');await $('copy-tsv').onclick();assert.equal(calls.length,n);
-const view={id:null,ref:null,display_name:'Unresolved',capabilities:{columns:false}};await dbDescribe(view);assert.equal(calls.length,n);assert.match($('table-columns').textContent,/Unavailable/);
+const view={id:null,ref:null,display_name:'Unresolved',capabilities:{columns:false}};await dbDescribe(view);assert.equal(calls.length,n);assert.match($('table-columns').textContent,/identity is not verified/);
 const context=dbContext(dbCurrent()),first={id:'detail',request_id:'detail-request',worksheet_id:'inventory:object:preview',context,columns:[{name:'n'}],data:[[7]],next_uri:'/api/v1/queries/detail/pages/next',state:'RUNNING'};
 route=async path=>path.includes('/api/v1/objects/')?{query:first}:{...first,data:[[8]],next_uri:null,state:'FINISHED'};
 await dbDescribe({id:'object',ref:{id:'object'},display_name:'Orders',capabilities:{preview:true}},'preview');
@@ -873,7 +929,7 @@ databaseMode=false;setLanguage('en');assert.ok(controls.every(node=>!node.disabl
 databaseMode=true;await boot();const inputs=JSON.stringify(dbInput(dbCurrent()));
 assert.ok(controls.every(node=>node.disabled&&/unavailable in Database mode/.test(node.title)));
 assert.match(sampleButtons[0].title,/Enter SQL for the selected database/);
-setLanguage('ja');assert.ok(controls.every(node=>node.disabled&&/利用できません/.test(node.title)));
+setLanguage('ja');assert.ok(controls.every(node=>node.disabled&&/未対応|利用できません/.test(node.title)));
 assert.match(sampleButtons[0].title,/SQL を入力/);
 currentRole='data_engineer';dbApplyRole();await dbRefreshContext();setLanguage('en');
 assert.ok(controls.every(node=>node.disabled&&/unavailable in Database mode/.test(node.title)));
@@ -977,11 +1033,11 @@ tab('columns').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'previe
 tab('preview').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'ddl');assert.equal(document.activeElement,tab('ddl'));
 tab('ddl').onkeydown(key('Home'));assert.equal(activeInspector,'columns');
 for(const section of ['profile','lineage']){
- const button=inspectorTabs.find(b=>b.dataset.inspect===section);assert.equal(button.disabled,true);assert.match(button.title,/Unavailable/);
- await dbSelectInspector(button);assert.equal(activeInspector,'columns');assert.match($(inspectorTargets[section]).textContent,/Unavailable/);
+ const button=inspectorTabs.find(b=>b.dataset.inspect===section);assert.equal(button.disabled,true);assert.match(button.title,/profiling and lineage are unavailable/);
+ await dbSelectInspector(button);assert.equal(activeInspector,'columns');assert.match($(inspectorTargets[section]).textContent,/profiling and lineage are unavailable/);
 }
-assert.match($('lineage').textContent,/Unavailable/);assert.ok(!$('lineage').textContent.includes('Loading'));
-setLanguage('ja');for(const section of ['profile','lineage'])assert.match(inspectorTabs.find(b=>b.dataset.inspect===section).title,/利用できません/);
+assert.match($('lineage').textContent,/profiling and lineage are unavailable/);assert.ok(!$('lineage').textContent.includes('Loading'));
+setLanguage('ja');for(const section of ['profile','lineage'])assert.match(inspectorTabs.find(b=>b.dataset.inspect===section).title,/プロファイリングとリネージュは未対応/);
 assert.equal(JSON.stringify(dbInput(dbCurrent())),inputs);assert.equal(calls.length,before);
 ''')
 

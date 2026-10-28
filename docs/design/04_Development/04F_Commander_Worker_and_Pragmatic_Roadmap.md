@@ -4,8 +4,8 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-10-18
-version: "1.16"
+updated: 2026-10-29
+version: "1.18"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -13,6 +13,14 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
 
 本ドキュメントは [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) に基づき、2026年10月16日以降の Shirokuma の開発体制（**Antigravity 司令塔 × `codex-cli` GPT-6.1 Sol Medium 実装ワーカー**）および **Phase 0〜Phase 6 再起動ロードマップ** を定義する。
+
+### Databaseコア機能統合とコンピュート拡張の後続計画
+
+2026-10-28、[Database後続実装計画](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を作成した。新しいDatabase trackは`DB-P6`〜`DB-P9`とし、下記の旧コアPhase番号と区別する。
+最優先のDB-P6は変換・AI・監査・ガバナンスと共有Warehouseの自動休止／復帰を通常導線へ統合し、技術受入と所有者受入でM1を判定する。
+DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse、DB-P9は外部S3とRoutine／Taskを扱う。LOCAL／XS／Sは現状同一computeの別名であり、計画を実装完了と扱わない。
+
+2026-10-29、DB-P6-0の[機能一覧89項目](../../guides/database-capability-matrix-2026-10-29.md)と画面案内・利用条件を整合させ、[技術検証を完了](../../guides/database-p6-0-implementation-2026-10-29.md)した。次のunitはDB-P6-1のDB別監査であり、未対応機能の開放やM1の本人受入は別に残す。
 
 ---
 

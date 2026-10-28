@@ -4,8 +4,8 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-27
-version: "7.0.0"
+updated: 2026-10-29
+version: "7.2.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,18 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-29 — DB-P6-0 capability inventory and accurate UI completed
+
+- Fixed supported-feature notices, localized disabled reasons and per-panel role/context guidance; preserved action gates and receipt focus during unchanged refresh. The [89-row capability matrix](../../guides/database-capability-matrix-2026-10-29.md) distinguishes DB/platform authority and shared WAP metadata from caller-bound execution.
+- Verified 470 Workbench tests plus 39 authentication/inventory tests, role-specific live API reads, Japanese/English browser flows and 390px layout. Read-only warm SQL succeeded 30/30 with median154ms and sample p95 292ms ([implementation and evidence](../../guides/database-p6-0-implementation-2026-10-29.md)).
+- Next is DB-P6-1 scoped audit. Database creation latency improvement and M1 owner acceptance remain separate; this unit does not enable the remaining unsupported features.
+
+### 2026-10-28 — Database core integration and compute expansion planned
+
+- Created the [DB-P6–9 implementation plan](../../guides/database-full-capability-and-compute-plan-2026-10-28.md): integrate Database transformations, Bears, scoped audit, governance and shared-compute lifecycle before resource sizing and Worker scaling.
+- Defined M1 technical and owner acceptance, then conditional multi-Warehouse and independent external-S3/Routine tracks. Current LOCAL/XS/S aliases and disconnected Database auto-chill/resume paths are recorded as implementation gaps.
+- Next unit is DB-P6-0 capability contracts and accurate UI, followed by scoped audit. The [current creation flow](../../guides/database-logical-create-owner-acceptance-2026-10-28.md) has conditional owner acceptance with latency improvement continuing; no feature implementation or deployment is claimed by this planning entry.
 
 ### 2026-10-27 — ADR-0038: Bounded feasibility complete; successor contract drafted
 

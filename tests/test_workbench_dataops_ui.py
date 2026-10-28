@@ -38,6 +38,134 @@ class DataopsUI(unittest.TestCase):
     def javascript(self, body):
         database_ui.DatabaseUI.javascript(self, SETUP + '\n' + body)
 
+    def test_panel_availability_missing_own_context_and_localized_recovery(self):
+        self.javascript(r'''
+await boot();
+for(const p of dataopsPanels.values()){
+ const help=$(p.id+'-availability');
+ assert.equal(help.getAttribute('role'),'status');assert.equal(p.context,null);
+ assert.match(help.textContent,/Panel context is unavailable.*Refresh this panel context or reselect/);
+ assert.equal($('p35-wap-model-id').disabled,true);
+ const before=calls.length;
+ p.database='';p.schema='';dataopsValidate();
+ assert.equal(help.textContent,'Choose an available database and schema.');
+ setLanguage('ja');assert.equal(help.textContent,'利用可能なデータベースとスキーマを選択してください。');
+ setLanguage('en');assert.equal(calls.length,before);
+}
+''')
+
+    def test_header_downgrade_renders_unstarted_panel_and_explicit_viewer_reason(self):
+        self.javascript(r'''
+await boot();const p=dataopsPanels.get('p35-wap'),help=$('p35-wap-availability');
+assert.equal(p.context,null);assert.equal(p.role,'admin');
+$('role-selector').value='data_engineer';const change=$('role-selector').onchange();
+assert.equal(p.role,'admin');assert.equal($('p35-wap-model-id').disabled,true);
+assert.match(help.textContent,/Saved execution role exceeds the current role ceiling.*Select an execution role/);
+await change;
+$('p35-wap-role').value='bi_viewer';await $('p35-wap-role').onchange();
+assert.equal(p.role,'bi_viewer');assert.match(help.textContent,/require data_engineer or admin/);
+setLanguage('ja');assert.match(help.textContent,/データ作成者または管理者ロールが必要/);setLanguage('en');
+$('p35-wap-role').value='data_engineer';await $('p35-wap-role').onchange();
+assert.equal(help.hidden,true);assert.equal(help.textContent,'');assert.equal($('p35-wap-model-id').disabled,false);
+''')
+
+    def test_delayed_panel_refresh_keeps_ceiling_help_and_operation_status(self):
+        self.javascript(r'''
+const p=await ready('p35-wap'),help=$('p35-wap-availability');
+assert.equal(p.schema,'raw');assert.equal(help.hidden,true);
+// Worksheet context remains independent of this panel's raw schema.
+dbCurrent().schema_id='schema';await dbRefreshContext();assert.equal(p.schema,'raw');
+const wait=deferred();inventoryRoute=()=>wait.promise;
+const refresh=$('p35-wap-refresh').onclick();await tick();
+assert.match(help.textContent,/Panel context is unavailable/);
+$('role-selector').value='data_engineer';const change=$('role-selector').onchange();
+assert.equal(p.role,'admin');assert.match(help.textContent,/exceeds the current role ceiling/);
+wait.resolve({items:structuredClone(inventory)});await Promise.all([refresh,change]);
+assert.equal($('p35-wap-model-id').disabled,true);assert.match(help.textContent,/exceeds the current role ceiling/);
+p.op={key:'saved-key',id:'saved-operation',context:structuredClone(p.context),state:'UNKNOWN',ambiguous:true,protected:false};
+ui(p.status,'Outcome unknown. Observe with the saved key; do not submit again.');
+const status=p.status.textContent;dataopsRender(p);dataopsValidate();
+assert.equal(p.status.textContent,status);
+assert.ok(p.receipt.descendants().some(n=>n.textContent===': UNKNOWN'));
+assert.ok(p.receipt.descendants().some(n=>n.textContent.includes('Results hidden until access is revalidated')));
+ui(p.status,'operation error retained');dataopsRender(p);assert.equal(p.status.textContent,'operation error retained');
+assert.equal(submissions.length,0);
+''')
+
+    def test_unchanged_controls_and_authorization_preserve_open_operation_details(self):
+        self.javascript(r'''
+const p=await ready();p.role='data_engineer';await dataopsRefresh(p);
+const original=route;
+route=async(path,options)=>{
+ const reply=await original(path,options);
+ if(path==='/api/v1/ingests')reply.operation.result={build:{model_id:'daily_orders',version:1,count:1}};
+ return reply;
+};
+await preview(p);await $('p35-ingest-confirm').onclick();
+assert.equal(p.invalid,false);assert.equal(p.op.protected,true);assert.equal(p.op.state,'FINISHED');
+const details=p.receipt.querySelector('details'),summary=details.querySelector('summary');
+// The minimal DOM adapter permits the native details.open property directly.
+details.open=true;summary.focus();
+const operation=p.op,status=p.status.textContent,before=calls.length,posts=submissions.length;
+let receiptWrites=0,availabilityWrites=0;
+const replace=p.receipt.replaceChildren;
+p.receipt.replaceChildren=function(...items){receiptWrites++;return replace.apply(this,items);};
+const help=p.availability;let text=help.textContent;
+Object.defineProperty(help,'textContent',{get:()=>text,set:value=>{availabilityWrites++;text=value;}});
+const stableReceipt=()=>{
+ assert.equal(p.receipt.querySelector('details'),details);assert.equal(details.querySelector('summary'),summary);
+ assert.equal(details.open,true);assert.equal(document.activeElement,summary);
+ assert.equal(p.op,operation);assert.equal(p.status.textContent,t(status));assert.equal(receiptWrites,0);
+};
+dbControls();stableReceipt();assert.equal(calls.length,before);
+await dataopsRefreshAuthorization();stableReceipt();
+assert.deepEqual(calls.slice(before).map(c=>c.path),['/api/session','/api/v1/databases']);
+assert.equal(availabilityWrites,0);assert.equal(submissions.length,posts);
+setLanguage('ja');stableReceipt();assert.ok(availabilityWrites>0);
+setLanguage('en');stableReceipt();assert.equal(submissions.length,posts);
+''')
+
+    def test_availability_reason_changes_leave_retained_receipt_untouched(self):
+        self.javascript(r'''
+await boot();const p=dataopsPanels.get('p35-wap'),help=p.availability;
+p.op={key:'retained',id:'completed',context:{sql_catalog:'sales',sql_schema:'raw',selected_role:'admin'},state:'FINISHED',protected:false};
+dataopsRender(p);const receipt=[...p.receipt.children],status=p.status.textContent,before=calls.length;
+const unchanged=()=>{assert.deepEqual(p.receipt.children,receipt);assert.equal(p.status.textContent,status);};
+currentRole='data_engineer';dbControls();unchanged();assert.match(help.textContent,/exceeds the current role ceiling/);
+setLanguage('ja');unchanged();assert.equal(help.textContent,t('{reason} {action}',{reason:t('Saved execution role exceeds the current role ceiling.'),action:t('Select an execution role within the current ceiling for this panel.')}));
+setLanguage('en');p.role='bi_viewer';dbControls();unchanged();assert.match(help.textContent,/require data_engineer or admin/);
+p.role='data_engineer';p.database='';p.schema='';dbControls();unchanged();assert.equal(help.textContent,'Choose an available database and schema.');
+p.database='db';p.schema='raw';dbControls();unchanged();assert.match(help.textContent,/Panel context is unavailable/);
+assert.equal(calls.length,before);assert.equal(submissions.length,0);
+''')
+
+    def test_installed_notice_order_and_supported_wap_with_legacy_gates(self):
+        self.javascript(r'''
+$('transformation').append(Object.assign($('run-dbt-build'),{tagName:'BUTTON'}),Object.assign($('run-dbt-test'),{tagName:'BUTTON'}),Object.assign($('transformation-view-marts'),{tagName:'BUTTON'}));
+const p=await ready('p35-wap');
+assert.equal($('transformation').children[0],$('database-transformation-notice'));
+assert.ok($('transformation').children.includes(p.root));
+assert.match($('database-transformation-notice').textContent,/Manual WAP and Managed Marts are supported/);
+assert.match($('database-transformation-notice').textContent,/Legacy dbt build\/test is unavailable/);
+assert.match($('database-ingestion-notice').textContent,/file ingestion and registered Stages/);
+assert.equal($('p35-wap-model-id').disabled,false);assert.equal($('transformation-view-marts').disabled,false);
+assert.equal($('db-marts-panel').hidden,false);
+assert.ok($('jobs').children.filter(n=>!n.hidden).every(n=>n.id==='db-jobs-panel'));
+const before=calls.length;
+for(const lang of ['ja','en']){
+ setLanguage(lang);dataopsInstall();dbControls();
+ assert.equal($('run-dbt-build').disabled,true);assert.equal($('run-dbt-test').disabled,true);
+ assert.equal($('database-transformation-notice').textContent,t(uiBindings.get($('database-transformation-notice')).key));
+ assert.match($('database-transformation-notice').textContent,lang==='ja'?/データベース／スキーマ.*build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロール/:/database\/schema.*build\/audit requires the selected data_engineer or admin role; publish\/rollback and Managed Marts require an authorized admin role/);
+}
+assert.equal(calls.length,before);
+// A stale panel remains recoverable without claiming the Worksheet makes it ready.
+dataopsInvalidate(p);dataopsRender(p);
+assert.equal($('p35-wap-model-id').disabled,true);assert.equal($('p35-wap-refresh').disabled,false);
+assert.match($('database-transformation-notice').textContent,/own database\/schema context/);
+assert.equal(submissions.length,0);
+''')
+
     def test_bytes_once_immutable_preview_and_explicit_confirmation(self):
         self.javascript(r'''
 const p=await ready();let reads=0;
