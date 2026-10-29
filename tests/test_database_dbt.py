@@ -152,6 +152,65 @@ class CompileBoundaryTests(unittest.TestCase):
                 run.assert_not_called()
                 file.unlink()
 
+    def test_digest_matches_captured_sources_when_originals_change(self):
+        preflight = dbt._preflight
+        captured = {}
+        model = self.project / 'models/staging/stg_orders.sql'
+
+        def capture_then_change(project):
+            config, files, digest = preflight(project)
+            captured.update(files)
+            model.write_text('select 999 as changed_after_preflight\n')
+            (project / 'dbt_project.yml').write_text('name: changed_after_preflight\n')
+            return config, files, digest
+
+        def compile_snapshot(command, **kwargs):
+            copied = Path(command[command.index('--project-dir') + 1])
+            for rel, raw in captured.items():
+                if rel != 'dbt_project.yml':
+                    self.assertEqual((copied / rel).read_bytes(), raw)
+            config = yaml.safe_load((copied / 'dbt_project.yml').read_bytes())
+            self.assertEqual(config['name'], yaml.safe_load(captured['dbt_project.yml'])['name'])
+            target = Path(command[command.index('--target-path') + 1])
+            target.mkdir()
+            (target / 'manifest.json').write_text('{}')
+            return subprocess.CompletedProcess(command, 0, '', '')
+
+        with patch.object(dbt, '_preflight', side_effect=capture_then_change), \
+                patch.object(dbt.subprocess, 'run', side_effect=compile_snapshot), \
+                patch.object(dbt, '_validate_manifest', return_value={}):
+            result = dbt.compile_project(self.project, catalog='cat', source_schema='raw')
+        digest = hashlib.sha256()
+        for rel, raw in sorted(captured.items()):
+            digest.update(rel.encode() + b'\0' + raw + b'\0')
+        self.assertEqual(result['source_digest'], digest.hexdigest())
+        self.assertEqual(model.read_text(), 'select 999 as changed_after_preflight\n')
+        self.assertEqual((self.project / 'dbt_project.yml').read_text(),
+                         'name: changed_after_preflight\n')
+
+    def test_project_config_is_read_once_for_validation_and_digest(self):
+        original_read = Path.read_bytes
+        project_file = self.project / 'dbt_project.yml'
+        original_bytes = project_file.read_bytes()
+        reads = []
+
+        def read_then_change(path):
+            raw = original_read(path)
+            if path == project_file:
+                reads.append(path)
+                project_file.write_text('name: changed_after_read\n')
+            return raw
+
+        with patch.object(Path, 'read_bytes', read_then_change):
+            config, files, digest = dbt._preflight(self.project)
+        self.assertEqual(reads, [project_file])
+        self.assertEqual(files['dbt_project.yml'], original_bytes)
+        self.assertEqual(config['name'], yaml.safe_load(original_bytes)['name'])
+        expected = hashlib.sha256()
+        for rel, raw in sorted(files.items()):
+            expected.update(rel.encode() + b'\0' + raw + b'\0')
+        self.assertEqual(digest, expected.hexdigest())
+
     def test_subprocess_failure_sanitizes_cleans_and_does_not_mutate(self):
         before = contents(self.project)
         captured = []

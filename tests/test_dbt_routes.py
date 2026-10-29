@@ -1,0 +1,164 @@
+"""Strict normal HTTP routing, without compile or SQL execution."""
+from contextlib import ExitStack
+from dataclasses import asdict
+from email.message import Message
+from http.client import HTTPResponse
+import io
+import json
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+import unittest
+from unittest.mock import Mock, patch
+from urllib.parse import urlencode
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
+import dbt_routes as routes
+import workbench_server as wb
+import warehouse_resident as wh
+import request_auth
+import runtime_profile
+from query_context import ResolvedQueryContext, QueryError
+
+C = ResolvedQueryContext('db', 'sc', 'LOCAL', 'sales', 'sandbox', 'data_engineer', 1, 'gen', 3)
+ID = '11111111-1111-1111-1111-111111111111'
+BASE = '/api/v1/dbt/'
+
+
+class Routes(unittest.TestCase):
+    def handler(self, path, body=None, headers=None):
+        h = SimpleNamespace(path=path, headers=Message(), database_body=Mock(return_value=body), respond=Mock())
+        for k, v in (headers or {}).items():
+            for item in v if isinstance(v, list) else [v]:
+                h.headers[k] = item
+        return h
+
+    def test_all_locked_calls(self):
+        cases = [
+            ('GET', 'projects', None, 'list_projects', 'projects', 200),
+            ('GET', 'plans', None, 'list_plans', 'items', 200),
+            ('GET', 'plans/' + ID, None, 'get_plan', 'plan', 200),
+            ('GET', 'runs', None, 'list_runs', 'items', 200),
+            ('GET', 'runs/' + ID, None, 'get_run', 'run', 200),
+            ('GET', 'publications/' + ID, None, 'get_publication', 'publication', 200),
+            ('POST', 'plans', dict(project_id='lake_marts', source_schema='raw', target_schema='marts', staging_materialization=None), 'submit_plan', 'plan', 202),
+            ('POST', 'runs', dict(plan_id=ID), 'submit_run', 'run', 202),
+            ('POST', 'runs/' + ID + '/cancel', {}, 'cancel_run', 'run', 200),
+            ('POST', 'runs/' + ID + '/reconcile', {}, 'reconcile_run', 'run', 200),
+            ('POST', 'runs/' + ID + '/publish', dict(node_id='model.project.orders'), 'submit_publication', 'publication', 202)]
+        for method, path, body, service, field, status in cases:
+            with self.subTest(service=service), patch.object(routes.dbt, service, return_value={'safe': True}) as call:
+                params = {'context': [json.dumps(asdict(C))]} if method == 'GET' else {}
+                h = self.handler(BASE + path, dict(context=asdict(C), **(body or {})),
+                    {'Content-Type': 'application/json', 'Idempotency-Key': 'original'})
+                self.assertTrue(routes.dispatch(h, method, BASE + path, params, 'actor', C.selected_role))
+                h.respond.assert_called_once_with(dict(context=asdict(C), **{field: {'safe': True}}), status)
+                self.assertEqual(call.call_args.args[:2], ('actor', C))
+                if method == 'POST':
+                    self.assertEqual(call.call_args.kwargs['key'], 'original')
+        h = self.handler(BASE + 'runs')
+        with patch.object(routes.dbt, 'list_runs') as call:
+            routes.dispatch(h, 'GET', h.path, dict(context=[json.dumps(asdict(C))], plan_id=[ID]), 'actor', C.selected_role)
+            self.assertEqual(call.call_args.kwargs, {'plan_id': ID})
+
+    def test_reject_before_service(self):
+        for path, method, params, body, headers in [
+            ('runs/' + ID + '/extra', 'GET', {}, {}, {}),
+            ('plans', 'GET', {'context': ['{}', '{}']}, {}, {}),
+            ('plans', 'GET', {'context': [json.dumps(asdict(C))], 'sql': ['select 1']}, {}, {}),
+            ('plans', 'GET', {'context': [json.dumps(asdict(C))]}, {}, {'Content-Length': '1'}),
+            ('runs', 'POST', {}, {'context': asdict(C), 'plan_id': ID, 'actor': 'admin'}, {}),
+            ('runs', 'POST', {}, {'context': asdict(C), 'plan_id': ID}, {'Idempotency-Key': ['a', 'b']}),
+            ('runs', 'POST', {}, {'context': dict(asdict(C), selected_role='admin'), 'plan_id': ID}, {'Idempotency-Key': 'a'}),
+            ('runs', 'POST', {}, {'context': asdict(C), 'plan_id': '../private'}, {'Idempotency-Key': 'a'}),
+            ('runs', 'POST', {'x': ['1']}, {'context': asdict(C), 'plan_id': ID}, {'Idempotency-Key': 'a'}),
+        ]:
+            with self.subTest(path=path, method=method), patch.object(routes.dbt, 'submit_run') as run, patch.object(routes.dbt, 'list_plans') as plans:
+                h = self.handler(BASE + path, body, dict({'Content-Type': 'application/json'}, **headers))
+                with self.assertRaises((ValueError, QueryError)):
+                    routes.dispatch(h, method, h.path, params, 'actor', C.selected_role)
+                run.assert_not_called()
+                plans.assert_not_called()
+
+    def test_cancel_delegates_current_authority(self):
+        h = self.handler(BASE + 'runs/' + ID + '/cancel', {'context': asdict(C)}, {'Content-Type': 'application/json', 'Idempotency-Key': 'k'})
+        with patch.object(routes.common, 'current_context', side_effect=AssertionError('must delegate')), patch.object(routes.dbt, 'cancel_run') as cancel:
+            routes.dispatch(h, 'POST', h.path, {}, 'actor', C.selected_role)
+            cancel.assert_called_once_with('actor', C, ID, key='k')
+
+    def test_both_http_dispatchers_and_legacy_denial(self):
+        handlers = [wb.WorkbenchHandler]
+        class Capture:
+            def __init__(self, address, handler):
+                handlers.append(handler)
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def handle_request(self): pass
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(wh, '_profile_active', return_value=True))
+            stack.enter_context(patch.object(wh, 'warehouse', return_value='LOCAL'))
+            stack.enter_context(patch('http.server.ThreadingHTTPServer', Capture))
+            stack.enter_context(patch('logical_creations.enabled', return_value=False))
+            stack.enter_context(patch('database_creation_bridge.configure'))
+            wh.serve_endpoint(once=True)
+        principal = request_auth.AuthenticatedPrincipal('alice', 'admin', False)
+        class Connection:
+            def __init__(self, incoming): self.incoming, self.outgoing = io.BytesIO(incoming), io.BytesIO()
+            def makefile(self, *args): return self.incoming
+            def sendall(self, data): self.outgoing.write(data)
+        for handler in handlers:
+            for role in ('admin', 'data_engineer', 'bi_viewer'):
+                context = dict(asdict(C), selected_role=role)
+                path = BASE + 'projects?' + urlencode({'context': json.dumps(context)})
+                raw = ('GET ' + path + ' HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAuthorization: Basic synthetic\r\nX-Shirokuma-Role: ' + role + '\r\n\r\n').encode()
+                conn = Connection(raw)
+                def service(p, c):
+                    if c.selected_role == 'bi_viewer': raise QueryError('SQL_PERMISSION_DENIED', 403)
+                    return [{'id': 'lake_marts'}]
+                with patch.object(runtime_profile, 'active', return_value=True), patch.object(request_auth, 'authenticate_principal', return_value=principal), patch.object(routes.dbt, 'list_projects', side_effect=service) as call, patch.object(handler, 'log_message'):
+                    handler(conn, ('127.0.0.1', 1), SimpleNamespace())
+                    response = HTTPResponse(Connection(conn.outgoing.getvalue())); response.begin()
+                    reply = json.loads(response.read())
+                    self.assertEqual(response.status, 403 if role == 'bi_viewer' else 200, reply)
+                    call.assert_called_once()
+
+
+    def test_http_post_strict_body_headers_origin_and_legacy(self):
+        handlers = [wb.WorkbenchHandler]
+        class Capture:
+            def __init__(self, address, handler): handlers.append(handler)
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def handle_request(self): pass
+        with patch.object(wh, '_profile_active', return_value=True), patch.object(wh, 'warehouse', return_value='LOCAL'), patch('http.server.ThreadingHTTPServer', Capture), patch('logical_creations.enabled', return_value=False), patch('database_creation_bridge.configure'):
+            wh.serve_endpoint(once=True)
+        class Connection:
+            def __init__(self, incoming): self.incoming, self.outgoing = io.BytesIO(incoming), io.BytesIO()
+            def makefile(self, *args): return self.incoming
+            def sendall(self, data): self.outgoing.write(data)
+        body = json.dumps(dict(context=asdict(C), plan_id=ID))
+        cases = [
+            (BASE + 'runs', body, 'Idempotency-Key: k\r\n', 202),
+            (BASE + 'runs', body, '', 400),
+            (BASE + 'runs', body, 'Idempotency-Key: a\r\nIdempotency-Key: b\r\n', 400),
+            (BASE + 'runs', body[:-1] + ',"plan_id":"' + ID + '"}', 'Idempotency-Key: k\r\n', 400),
+            (BASE + 'runs', body[:-1] + ',"sql":"select 1"}', 'Idempotency-Key: k\r\n', 400),
+            (BASE + 'runs', body, 'Idempotency-Key: k\r\nOrigin: http://evil.invalid\r\n', 403),
+            (BASE + 'runs/' + ID + '/publish/extra', body, 'Idempotency-Key: k\r\n', 404),
+            ('/api/dbt/run', body, 'Idempotency-Key: k\r\n', 404),
+        ]
+        for handler in handlers:
+            for path, raw_body, extra, expected in cases:
+                with self.subTest(handler=handler.__name__, path=path, expected=expected):
+                    raw = ('POST ' + path + ' HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAuthorization: Basic synthetic\r\nX-Shirokuma-Role: data_engineer\r\nContent-Type: application/json\r\nContent-Length: ' + str(len(raw_body.encode())) + '\r\n' + extra + '\r\n' + raw_body).encode()
+                    conn = Connection(raw)
+                    with patch.object(runtime_profile, 'active', return_value=True), patch.object(runtime_profile, 'current', return_value=SimpleNamespace(sql_endpoint_url='http://backend.invalid')), patch.object(request_auth, 'authenticate_principal', return_value=request_auth.AuthenticatedPrincipal('alice', 'data_engineer', False)), patch.object(routes.dbt, 'submit_run', return_value={'id': ID}) as call, patch.object(handler, 'log_message'):
+                        handler(conn, ('127.0.0.1', 1), SimpleNamespace())
+                        response = HTTPResponse(Connection(conn.outgoing.getvalue())); response.begin()
+                        reply = json.loads(response.read())
+                        self.assertEqual(response.status, expected, reply)
+                        self.assertEqual(call.call_count, int(expected == 202))
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -82,6 +82,62 @@ class AdmissionTests(unittest.TestCase):
             # informed manual handling of its own older UNKNOWN runs.
             admission.admit(db, actor='owner', kind='job', subject_id='next-job')
 
+    def test_dbt_root_exclusion_is_symmetric_and_unknown_blocks_until_closed(self):
+        pairs = [('dbt', kind) for kind in ('dbt', 'mart', 'job', 'stage_scan', 'dataops')]
+        pairs += [(kind, 'dbt') for kind in ('mart', 'job', 'stage_scan', 'dataops')]
+        for index, (existing, requested) in enumerate(pairs):
+            with self.subTest(existing=existing, requested=requested), store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                root = admission.admit(db, actor='owner', kind=existing, subject_id=f'root-{index}')
+                for state in ('ACTIVE', 'UNKNOWN'):
+                    if state == 'UNKNOWN':
+                        admission.finish(db, root, state=state)
+                    with self.assertRaises(admission.AdmissionConflict):
+                        admission.admit(db, warehouse_id='other', actor='other', kind=requested,
+                                        subject_id=f'blocked-{index}-{state}')
+                admission.finish(db, root, state='FAILED', evidence_ref='positively-closed')
+                next_root = admission.admit(db, actor='owner', kind=requested,
+                                            subject_id=f'next-{index}')
+                admission.finish(db, next_root, state='FINISHED')
+
+    def test_dbt_root_rejects_legacy_unresolved_job_runs(self):
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute("INSERT INTO runs (id,job_name,actor,role,definition,arguments,status,created_at) VALUES ('legacy-dbt','job','owner','admin','{}','{}','queued','now')")
+            for state in ('queued', 'running', 'unknown'):
+                db.execute('UPDATE runs SET status=? WHERE id=?', (state, 'legacy-dbt'))
+                with self.assertRaises(admission.AdmissionConflict):
+                    admission.admit(db, actor='owner', kind='dbt', subject_id=state)
+            db.execute("UPDATE runs SET status='success' WHERE id='legacy-dbt'")
+            admission.admit(db, actor='owner', kind='dbt', subject_id='closed-legacy')
+
+    def test_dbt_parent_continuation_requires_same_actor(self):
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            parent = admission.admit(db, actor='owner', kind='dbt', subject_id='dbt-parent')
+
+        def attempt_children(scoped):
+            with store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                explicit = {} if scoped else {'parent': parent}
+                with self.assertRaisesRegex(admission.AdmissionConflict, 'actor'):
+                    admission.admit(db, actor='other', kind='dataops',
+                                    subject_id=f'wrong-actor-{scoped}', **explicit)
+                child = admission.admit(db, actor='owner', kind='dataops',
+                                        subject_id=f'child-{scoped}', **explicit)
+                row = db.execute('SELECT parent_id FROM warehouse_admissions WHERE id=?',
+                                 (child.id,)).fetchone()
+                self.assertEqual(row[0], parent.id)
+                admission.finish(db, child, state='FINISHED')
+
+        attempt_children(False)
+        with admission.accepted(parent):
+            attempt_children(True)
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self.assertEqual(db.execute("SELECT count(*) FROM warehouse_admissions WHERE actor='other'").fetchone()[0], 0)
+            admission.finish(db, parent, state='FINISHED')
+
     def test_legacy_run_states_block_scans_without_new_job_policy(self):
         with store.connect() as db:
             db.execute('BEGIN IMMEDIATE')

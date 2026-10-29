@@ -95,6 +95,42 @@ class AuditTests(unittest.TestCase):
             credential_snapshot_ref=SECRET, state='UNKNOWN', committed=1, result=SECRET,
             cleanup_error=SECRET, created_at=NOW) | changes))
 
+    def test_dbt_metadata_redaction_scope_and_authorized_links(self):
+        def record(identifier, kind='run', actor='alice', database=None, role='data_engineer', **extra):
+            self.insert('dbt_runs', id=identifier, database_id=database or self.sales,
+                record=dict(id=identifier, kind=kind, actor=actor, context=self.context(database, role),
+                    state='READY', project_id='lake_marts', source_digest='safe-digest',
+                    created_at=NOW, updated_at=NOW, error_code=None,
+                    compiled_sql=SECRET, project_path=SECRET, credential=SECRET, raw_log=SECRET, **extra))
+        record('plan', 'plan')
+        record('run', plan_id='plan')
+        record('pub', 'publication', actor='admin', role='admin', parent_run_id='run', plan_id='plan')
+        record('other', actor='other')
+        record('viewer-forged', role='bi_viewer')
+        record('foreign', database=self.finance)
+        self.dataops('child')
+        self.dataops('hidden-child', actor='other')
+        self.insert('dbt_run_operations', run_id='run', phase='test', node_id='test.orders', operation_id='child')
+        self.insert('dbt_run_operations', run_id='run', phase='build', node_id='model.orders', operation_id='hidden-child')
+        rows = self.listing(source='dbt')['items']
+        self.assertEqual({r['source_id'] for r in rows}, {'plan', 'run'})
+        run = next(r for r in rows if r['source_id'] == 'run')
+        self.assertEqual(run['kind'], 'run')
+        self.assertEqual(run['project_id'], 'lake_marts')
+        self.assertEqual(run['source_digest'], 'safe-digest')
+        self.assertEqual({l['source_id'] for l in run['links'] if l['event_id']}, {'plan', 'child'})
+        self.assertNotIn(SECRET, json.dumps(rows))
+        self.assertEqual(self.listing(role='bi_viewer', source='dbt')['items'], [])
+        admin = self.listing(self.admin, 'admin', scope='database', source='dbt')['items']
+        self.assertEqual({r['source_id'] for r in admin}, {'plan', 'run', 'pub', 'other', 'viewer-forged'})
+        pub = next(r for r in admin if r['source_id'] == 'pub')
+        self.assertEqual({l['source_id'] for l in pub['links'] if l['event_id']}, {'plan', 'run'})
+        self.assertNotIn(SECRET, json.dumps(admin))
+        self.error(lambda: self.listing(event_id=pub['id']))
+        child = self.listing(source='dataops')['items']
+        child = next(r for r in child if r['source_id'] == 'child')
+        self.assertIn('run', {l['source_id'] for l in child['links'] if l['source'] == 'dbt'})
+
     def test_unknown_committed_cleanup_no_mutation_or_recovery(self):
         import dataops_service
         import db_stages
@@ -371,6 +407,7 @@ class AuditTests(unittest.TestCase):
         self.insert('warehouse_controls', warehouse_id='w', state='OPEN', revision=1)
         self.insert('warehouse_admissions', id='adm', warehouse_id='w', actor='alice', kind='mart', subject_id='mart-run', state='UNKNOWN', created_at=NOW)
         self.insert('db_mart_runs', id='mart-run', mart_id='mart', record=record, admission_id='adm')
+        self.insert('dbt_runs', id='dbt-run', database_id=self.sales, record=dict(record, kind='run', state='UNKNOWN'))
         self.insert('db_schedules', id='sched', database_id=self.sales, owner='alice', selected_role='data_engineer',
                     auth_mode='shared', context=c, revision=1, target_kind='job', target_id='job', target_revision=1,
                     spec=SECRET, intent=SECRET, enabled=1, last_status='unknown')

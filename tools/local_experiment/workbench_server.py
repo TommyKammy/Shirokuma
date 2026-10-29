@@ -193,6 +193,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             import db_stage_routes
             if db_stage_routes.dispatch(self, method, path, params, principal, role):
                 return
+            import dbt_routes
+            if dbt_routes.dispatch(self, method, path, params, principal, role):
+                return
             import db_mart_routes
             if db_mart_routes.dispatch(self, method, path, params, principal, role):
                 return

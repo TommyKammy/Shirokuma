@@ -40,6 +40,17 @@ _lock = threading.RLock()
 _job = ContextVar('dataops_job', default=None)
 _stage_scan = ContextVar('dataops_stage_scan', default=None)
 _mart = ContextVar('dataops_mart', default=None)
+_dbt = ContextVar('dataops_dbt', default=None)
+
+
+@contextmanager
+def _dbt_scope(principal, context, parent, frozen, credential_ref, run_id, phase, node_id):
+    """Private continuation of one durable dbt node, never request supplied."""
+    token = _dbt.set((principal, context, parent, frozen, credential_ref, run_id, phase, node_id))
+    try:
+        yield
+    finally:
+        _dbt.reset(token)
 
 
 @contextmanager
@@ -195,7 +206,8 @@ def begin(principal, context, *, route, idempotency_key, payload, _admission_hoo
         _validated_context(principal, context)
         scan_scope = _stage_scan.get()
         mart_scope = _mart.get()
-        inherited = mart_scope or scan_scope or _job.get()
+        dbt_scope = _dbt.get()
+        inherited = dbt_scope or mart_scope or scan_scope or _job.get()
         if inherited is not None and (inherited[0] != principal or inherited[1] != context):
             raise QueryError('CONTEXT_MISMATCH', 409)
         frozen = inherited[3] if inherited else queries._capture_dataops(principal, context)
@@ -206,7 +218,10 @@ def begin(principal, context, *, route, idempotency_key, payload, _admission_hoo
                 db.execute('BEGIN IMMEDIATE')
                 queries.revalidate_admission(db, principal, context)
                 if inherited:
-                    if mart_scope:
+                    if dbt_scope:
+                        import db_dbt
+                        db_dbt._check_child(db, principal, context, *dbt_scope[5:])
+                    elif mart_scope:
                         import db_marts
                         db_marts._check_child(db, principal, context, mart_scope[5])
                     elif scan_scope:
@@ -230,7 +245,10 @@ def begin(principal, context, *, route, idempotency_key, payload, _admission_hoo
                     (operation_id, principal.principal_id, route, idempotency_key, normalized, fingerprint,
                      _json(asdict(context)), frozen.headers['X-Trino-User'],
                      inherited[4] if inherited else secrets.token_urlsafe(32), admission._now()))
-                if mart_scope:
+                if dbt_scope:
+                    db.execute('INSERT INTO dbt_run_operations VALUES (?,?,?,?)',
+                               (*inherited[5:], operation_id))
+                elif mart_scope:
                     db.execute('INSERT INTO db_mart_operations VALUES (?,?,?)',
                                (inherited[5], inherited[6], operation_id))
                 elif scan_scope:
@@ -282,6 +300,16 @@ class Execution:
             raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
         if self._row()['state'] != 'ACTIVE':
             raise QueryError('ADMISSION_CONFLICT', 409)
+        try:
+            with control_store.connect() as db:
+                import db_dbt
+                db_dbt._check_operation(db, self.id)
+        except QueryError:
+            with control_store.connect() as db:
+                ids = [r[0] for r in db.execute('SELECT query_id FROM dataops_queries WHERE operation_id=?', (self.id,))]
+            for query_id in ids:
+                queries._best_cancel(query_id)
+            raise
         return _live[self.id]
 
     def _schema(self, schema_id, *, write=False, admin=False):
@@ -618,7 +646,10 @@ class Execution:
         schema = self._schema(schema_id, write=True)
         if schema.sql_name != 'sandbox':
             raise QueryError('SQL_PERMISSION_DENIED', 403)
-        if _start is None:
+        if _dbt.get() is not None:
+            import db_dbt
+            inputs = db_dbt._pinned(self, sources)
+        elif _start is None:
             inputs = {alias: self.wap_measure(ref) for alias, ref in sources.items()}
         else:
             import db_marts
@@ -644,6 +675,19 @@ class Execution:
         return self.wap_measure(ref), inputs, generated
 
     @_serialized
+    def _dbt_test(self):
+        """Execute only the saved test node of this durable private child."""
+        import db_dbt
+        from manual_wap import _compile_model
+        normalized = db_dbt._test_select(self)
+        inputs = db_dbt._pinned(self, normalized['sources'])
+        sql = _compile_model(normalized['sql'], normalized['sources'], execution=self, measurements=inputs)
+        rows = self._execute('dbt_test', 'SELECT COUNT(*) FROM (' + sql + ') AS dbt_failures', 'test')['data']
+        if len(rows) != 1 or len(rows[0]) != 1 or type(rows[0][0]) is not int or rows[0][0] < 0:
+            raise QueryError('INVALID_DBT_TEST_RESULT', 502)
+        return rows[0][0]
+
+    @_serialized
     def wap_audit(self, build, not_null, *, step):
         """Count rows/nulls using the measured build's exact snapshot."""
         ref = self._wap_owned(build)
@@ -661,6 +705,8 @@ class Execution:
     def wap_publish(self, target, build, audit, *, step, result):
         """Admin CTAS/CRTA of explicit columns at a passed immutable audit."""
         from manual_wap import _same_measurement
+        import db_dbt
+        db_dbt._guard(self.principal, self._context(), 'publish', build=build)
         self._schema(target.schema_id, write=True, admin=True)
         if asdict(target) != build['destination'] or (
                 type(target) is registry.ResourceRef) != (build['target_kind'] == 'ref'):
@@ -691,6 +737,8 @@ class Execution:
     def wap_rollback(self, publication, *, step, result):
         """Admin rollback only to a DB-local publication's recorded predecessor."""
         from manual_wap import _same_measurement
+        import db_dbt
+        db_dbt._guard(self.principal, self._context(), 'rollback', model_id=publication['model_id'])
         with control_store.connect() as db:
             row = db.execute('SELECT record FROM wap_publications WHERE id=? AND database_id=?',
                 (publication['id'], self._context().database_id)).fetchone()

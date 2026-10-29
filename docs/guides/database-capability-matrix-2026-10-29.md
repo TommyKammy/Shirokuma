@@ -68,7 +68,7 @@
 | EXP-11 | 探索のDrop Table | 未接続。A選択だけで解除しない | 削除方式と認可を別途確定 | DB-P6-6 |
 | EXP-12 | profiling／NULL統計 | 未接続。columns／previewは対応 | 将来はXの集計範囲と再認可 | DB-P6-6 |
 | EXP-13 | Table lineage | 未接続。WAP metadataと別機能 | 将来は許可source／target | DB-P6-6 |
-| EXP-14 | dbtモデルlineage | 通常画面は未接続。DB-P6-3Aでmanifestのrefs／sourcesとDB別候補の対応を先行実証 | 耐久runと画面への関連付けは後続 | DB-P6-3／6 |
+| EXP-14 | dbtモデルlineage | 変換画面の保存planでmodels／sources／refsと候補Ref／Snapshotを表示 | Eは本人、Aは同DBの認可済みmetadata。Explorerの旧lineage入口は未接続 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、残るExplorerはDB-P6-6 |
 | ING-01 | browser file／drop、型・delimiter等、preview | 対応、E／AかつRAW／SANDBOXのwrite | I、入力と設定のfingerprint | ファイル取り込み |
 | ING-02 | create／replace／append／upsertの明示確認 | 対応、previewと現在入力が一致 | I、固定payload／key | `/api/v1/ingests` |
 | ING-03 | 取込照会・取消・回復情報 | 対応、元本人／context | I、UNKNOWN再送なし | `/api/v1/dataops` |
@@ -90,7 +90,7 @@
 | TRF-08 | 変更確認、無条件／条件付き全件更新 | 対応、上記条件。変更確認はwatch sourceが必要 | M、source Ref／Snapshot集合 | Mart check／refresh |
 | TRF-09 | Mart照会・履歴 | 対応、元owner／context | M、未知操作再送なし | Mart runs |
 | TRF-10 | Mart予定のLoad・新規・保存・有効化・停止・tick | 対応、A、監視sourceあり | M＋T、保存版で実行 | schedules |
-| TRF-11 | dbt一覧・model SQL・build／test | 通常API／CLI／UIは未接続。DB-P6-3Aはoffline compileとtable／ephemeralのWAP接続実証 | 標準dbt build・view・耐久run・サーバー側test gateは未受入 | [DB-P6-3A](database-p6-3a-dbt-feasibility-2026-10-29.md)、後続DB-P6-3B |
+| TRF-11 | dbt一覧・model SQL・build／test | 承認済みSQL projectのcompile、候補build／test、耐久履歴、取消・照合・明示公開をAPI／CLI／Workbenchへ接続 | table／ephemeral限定。全test成功をサーバーで検査。標準dbt executor・view等は未対応 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、materialization互換性は残件 |
 | TRF-12 | 旧dynamic WAP一覧・refresh widget | 未接続の旧widget | 手動WAP／Managed Martを使用 | 変換の新パネル |
 | JOB-01 | Job新規・一覧・Load・再Load・定義／引数保存 | 対応、E／A | J、owner＋保存role＋context、CAS | `/api/v1/jobs` |
 | JOB-02 | SQL／alert step | 対応、E／A、既存SQL policy | J、alertはread-only | typed Job step |

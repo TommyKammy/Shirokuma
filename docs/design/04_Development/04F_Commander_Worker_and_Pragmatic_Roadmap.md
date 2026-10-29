@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-29
-version: "1.20"
+version: "1.21"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -22,7 +22,7 @@ DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse�
 
 2026-10-29、DB-P6-0の[89項目の表示契約](../../guides/database-capability-matrix-2026-10-29.md)と[DB-P6-1の保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
 [DB-P6-2の共有LOCAL休止・自動復帰](../../guides/database-p6-2-implementation-2026-10-29.md)はAPI／CLI／UIを実装し、技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。warm各30回の標本p95差は35.3ms、限定復旧は元UNKNOWNを保持して実行だけを閉鎖した。
-[DB-P6-3Aのdbt先行実証](../../guides/database-p6-3a-dbt-feasibility-2026-10-29.md)ではoffline compileと2DBのWAP候補・test・明示公開を確認した。次はDB-P6-3Bの耐久run・版固定・サーバー側test gate・通常導線の統合とする。標準dbt build／view、Bears／SRE／Policy、実サイズ変更・用途別Warehouse、M1本人受入は未完了である。
+[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)では、DB-P6-3Aのcompile実証を耐久plan／run・版固定・サーバー側test gate・通常API／CLI／Workbenchへ接続した。table／ephemeral範囲の技術受入を完了した。次は標準dbt executor・view等の互換性を確定する。DB-P6-3全体、Bears／SRE／Policy、実サイズ変更・用途別Warehouse、M1本人受入は未完了である。
 
 ---
 

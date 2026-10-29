@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 
 
-VERSION = 21
+VERSION = 22
 
 _CREATION_SCHEMA = '''
 CREATE TABLE db_creations (
@@ -52,6 +52,20 @@ CREATE TABLE db_creation_principal_gates (
     request_id TEXT REFERENCES db_creation_requests(id), updated_at TEXT NOT NULL,
     PRIMARY KEY(environment_id,principal_id));
 '''
+
+_DBT_SCHEMA = """
+CREATE TABLE dbt_runs (
+    id TEXT PRIMARY KEY, database_id TEXT NOT NULL REFERENCES databases(id),
+    record TEXT NOT NULL, admission_id TEXT REFERENCES warehouse_admissions(id));
+CREATE TABLE dbt_run_operations (
+    run_id TEXT NOT NULL REFERENCES dbt_runs(id), phase TEXT NOT NULL,
+    node_id TEXT NOT NULL, operation_id TEXT NOT NULL UNIQUE REFERENCES dataops_operations(id),
+    PRIMARY KEY(run_id,phase,node_id));
+CREATE TABLE dbt_requests (
+    actor TEXT NOT NULL, route TEXT NOT NULL, idempotency_key TEXT NOT NULL,
+    payload TEXT NOT NULL, response TEXT NOT NULL,
+    PRIMARY KEY(actor,route,idempotency_key));
+"""
 
 _RETIREMENT_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS database_retirements (
@@ -584,6 +598,11 @@ def _bootstrap(connection):
     if _version(connection) == 20:
         _migrate_observed_effects(connection)
         connection.execute('PRAGMA user_version=21')
+    if _version(connection) == 21:
+        for statement in _DBT_SCHEMA.split(';'):
+            if statement.strip():
+                connection.execute(statement)
+        connection.execute('PRAGMA user_version=22')
     connection.commit()
 
 

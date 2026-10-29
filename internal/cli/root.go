@@ -41,6 +41,7 @@ func newRootCommand(output io.Writer, runner commandRunner) *cobra.Command {
 	root.AddCommand(newJobCommand(runner))
 	root.AddCommand(newStageCommand(runner))
 	root.AddCommand(newMartCommand(runner))
+	root.AddCommand(newDbtCommand(runner))
 	root.AddCommand(newScheduleCommand(runner))
 	root.AddCommand(newAlertCommand(runner))
 	root.AddCommand(newAuditCommand(runner))

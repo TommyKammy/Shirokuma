@@ -23,6 +23,11 @@ class LogicalRegistryTests(unittest.TestCase):
         current.start(); self.addCleanup(current.stop)
         self.db.execute('BEGIN IMMEDIATE')
 
+    def remove_v22_schema(self, db):
+        # Historical fixtures must omit v22 tables and their implicit indexes.
+        for table in ('dbt_run_operations', 'dbt_requests', 'dbt_runs'):
+            db.execute('DROP TABLE ' + table)
+
     def base(self, database_id='db', mode='logical_v1', reservation=1):
         db = self.db
         db.execute("INSERT INTO databases VALUES (?,?,'Database','','test','READY',1)", (database_id, database_id))
@@ -212,6 +217,7 @@ class LogicalRegistryTests(unittest.TestCase):
         db.row_factory = sqlite3.Row
         with patch.object(store, '_migrate_logical'), patch.object(store, '_migrate_observed_effects'):
             store._bootstrap(db)
+        self.remove_v22_schema(db)
         db.execute('PRAGMA user_version=19')
         before = db.execute('SELECT type,name,sql FROM sqlite_master ORDER BY name').fetchall()
         with patch.object(store, '_LOGICAL_SCHEMA', store._LOGICAL_SCHEMA + 'CREATE TABLE broken('):
@@ -254,6 +260,7 @@ class LogicalRegistryTests(unittest.TestCase):
         old.execute('PRAGMA foreign_keys=ON')
         with patch.object(store, '_migrate_logical'), patch.object(store, '_migrate_observed_effects'):
             store._bootstrap(old)
+        self.remove_v22_schema(old)
         old.execute('PRAGMA user_version=19')
         current = self.db; self.db = old
         try:
@@ -289,6 +296,7 @@ class LogicalRegistryTests(unittest.TestCase):
         # Execute the original production v20 migration without the v21 rebuild.
         with patch.object(store, '_migrate_observed_effects'):
             store._bootstrap(db)
+        self.remove_v22_schema(db)
         db.execute('PRAGMA user_version=20')
         current = self.db
         self.db = db
@@ -340,7 +348,7 @@ class LogicalRegistryTests(unittest.TestCase):
         self.base()
         self.db.execute("INSERT INTO logical_effects VALUES ('root-db','catalog','{}','OBSERVED_APPLIED',NULL,'{}','then','now')")
         self.assertEqual(self.db.execute('SELECT state FROM logical_effects').fetchone()[0], 'OBSERVED_APPLIED')
-        self.assertEqual(self.db.execute('PRAGMA user_version').fetchone()[0], 21)
+        self.assertEqual(self.db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
         self.assert_effect_constraints(self.db)
 
     def test_populated_v20_upgrade_retains_effects_and_constraints(self):
@@ -354,7 +362,7 @@ class LogicalRegistryTests(unittest.TestCase):
         foreign_keys = [tuple(row) for row in db.execute('PRAGMA foreign_key_list(logical_effects)')]
         parents = [tuple(row) for row in db.execute('SELECT * FROM db_creations ORDER BY id')]
         store._bootstrap(db)
-        self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 21)
+        self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
         self.assertEqual(self.effect_rows(db), before)
         self.assertEqual(self.effect_objects(db), objects)
         self.assertEqual([tuple(row) for row in db.execute('PRAGMA table_info(logical_effects)')], columns)
@@ -377,7 +385,7 @@ class LogicalRegistryTests(unittest.TestCase):
                 store, '_migrate_observed_effects', side_effect=AssertionError('must not migrate again')):
             for _ in range(2):
                 with store.connect() as reopened:
-                    self.assertEqual(reopened.execute('PRAGMA user_version').fetchone()[0], 21)
+                    self.assertEqual(reopened.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
                     self.assertEqual(self.effect_rows(reopened), before)
                     self.assertEqual([tuple(row) for row in reopened.execute(
                         'SELECT type,name,sql FROM sqlite_master ORDER BY name')], schema)
@@ -411,7 +419,7 @@ class LogicalRegistryTests(unittest.TestCase):
                 db.execute("UPDATE logical_effects SET state='OBSERVED_APPLIED'")
             db.rollback()
             with store.connect() as restored:
-                self.assertEqual(restored.execute('PRAGMA user_version').fetchone()[0], 21)
+                self.assertEqual(restored.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
                 self.assertEqual(self.effect_rows(restored), before)
                 self.assert_effect_constraints(restored)
                 restored.execute("UPDATE logical_effects SET state='OBSERVED_APPLIED' WHERE state='UNKNOWN'")

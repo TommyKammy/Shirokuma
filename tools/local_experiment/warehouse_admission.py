@@ -164,15 +164,15 @@ def admit(db, *, warehouse_id='LOCAL', actor, kind, subject_id, parent=None, gen
             if database is None or database['state'] != 'READY':
                 raise AdmissionDenied('database is not ready')
         check_open(db, warehouse_id)
-        # Preserve legacy Job-vs-Job behavior. Mart physical roots alone add
+        # Preserve legacy Job-vs-Job behavior. Mart/dbt physical roots add
         # cross-capacity exclusion, including independent P3 DataOps roots.
-        if kind == 'mart' and (
-                db.execute("SELECT 1 FROM warehouse_admissions WHERE kind IN ('mart','job','stage_scan','dataops') AND state IN ('ACTIVE','UNKNOWN')").fetchone()
+        if kind in ('mart', 'dbt') and (
+                db.execute("SELECT 1 FROM warehouse_admissions WHERE kind IN ('mart','dbt','job','stage_scan','dataops') AND state IN ('ACTIVE','UNKNOWN')").fetchone()
                 or db.execute("SELECT 1 FROM runs WHERE status IN ('queued','running','unknown')").fetchone()):
             raise AdmissionConflict('another physical operation is unresolved')
         if kind in ('job', 'stage_scan', 'dataops') and db.execute(
-                "SELECT 1 FROM warehouse_admissions WHERE kind='mart' AND state IN ('ACTIVE','UNKNOWN')").fetchone():
-            raise AdmissionConflict('a Mart physical operation is unresolved')
+                "SELECT 1 FROM warehouse_admissions WHERE kind IN ('mart','dbt') AND state IN ('ACTIVE','UNKNOWN')").fetchone():
+            raise AdmissionConflict('a Mart or dbt physical operation is unresolved')
         if kind == 'stage_scan' and (
                 db.execute("SELECT 1 FROM warehouse_admissions WHERE kind IN ('job','stage_scan') AND state IN ('ACTIVE','UNKNOWN')").fetchone()
                 or db.execute("SELECT 1 FROM runs WHERE status IN ('queued','running','unknown')").fetchone()):

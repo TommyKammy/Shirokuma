@@ -143,7 +143,8 @@ def filters(*, scope='self', database_id=None, source='', state='', search='', l
 FIELDS = ('source', 'source_id', 'action', 'actor', 'database_id', 'schema_id', 'warehouse_id',
           'saved_role', 'state', 'created_at', 'updated_at', 'finished_at', 'revision',
           'committed', 'has_cleanup_error')
-_COLUMNS = FIELDS + ('related_source', 'related_id')
+_DBT_FIELDS = ('kind', 'project_id', 'source_digest', 'error_code')
+_COLUMNS = FIELDS + ('related_source', 'related_id') + _DBT_FIELDS
 _PROJECTIONS = []
 _SOURCE_SQL = {}
 _TABLES = set()
@@ -195,6 +196,12 @@ for source, table, parent, fk in (('stage_run', 'db_stage_runs', 'db_stages', 's
          committed=_path('r.record', 'committed'),
          has_cleanup_error="CASE WHEN json_type(r.record,'$.cleanup_error') IS NOT NULL THEN json_extract(r.record,'$.cleanup_error') IS NOT NULL END",
          **(dict(related_source="'dataops'", related_id='r.operation_id') if source == 'stage_run' else {}))
+_add('dbt', 'dbt_runs', actor=_path('r.record', 'actor'),
+     **(_context("json_extract(r.record,'$.context')") | dict(database_id='r.database_id')),
+     action=_path('r.record', 'kind'), state=_path('r.record', 'state'),
+     created_at=_path('r.record', 'created_at'), updated_at=_path('r.record', 'updated_at'),
+     finished_at=_path('r.record', 'finished_at'),
+     **{k: _path('r.record', k) for k in _DBT_FIELDS})
 _add('schedule', 'db_schedules', actor='r.owner',
      **(_context('r.context') | dict(saved_role='r.selected_role', database_id='r.database_id')),
      state='r.last_status', revision='r.revision')
@@ -307,6 +314,13 @@ def _relations(db, row):
         else:
             select("SELECT 'operation','dataops',operation_id FROM db_job_operations WHERE run_id=? AND position=?",
                    (row['related_id'], int(identifier.rsplit(':', 1)[1])))
+    if source == 'dbt':
+        select("SELECT 'operation','dataops',operation_id FROM dbt_run_operations WHERE run_id=?", (identifier,))
+        for field, relation in (('plan_id', 'plan'), ('parent_run_id', 'run')):
+            select(f"SELECT '{relation}','dbt',json_extract(record,'$.{field}') FROM dbt_runs WHERE id=? AND database_id=?", (identifier, database))
+    if source == 'dataops':
+        select("""SELECT 'dbt','dbt',o.run_id FROM dbt_run_operations o
+            JOIN dbt_runs r ON r.id=o.run_id WHERE o.operation_id=? AND r.database_id=?""", (identifier, database))
     if source == 'mart_run':
         select("SELECT 'operation','dataops',operation_id FROM db_mart_operations WHERE run_id=?", (identifier,))
     if source == 'stage_scan':
@@ -390,6 +404,8 @@ def _links(db, page, principal, role, f, context, ceilings):
 def _event(row, links):
     event = {k: row[k] for k in FIELDS}
     event['id'] = _encode(_json([event['source'], event['source_id']]).encode())
+    if row['source'] == 'dbt':
+        event.update({k: row[k] for k in _DBT_FIELDS})
     event['effective_role'] = None  # Historical effective authority is not stored.
     event['links'] = links
     for key in ('committed', 'has_cleanup_error'):
@@ -400,6 +416,8 @@ def _event(row, links):
 
 def _where(principal, role, f, context):
     clauses, args = [], []
+    if role == 'bi_viewer':
+        clauses.append("source != 'dbt'")
     if f['scope'] == 'platform':
         clauses.append('source IN (' + ','.join('?' for _ in MANAGEMENT) + ')')
         args.extend(MANAGEMENT)

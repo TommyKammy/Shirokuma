@@ -14,8 +14,14 @@ sys.path.insert(0, str(TOOLS))
 import control_store as store
 
 
+def drop_dbt_schema(db):
+    for table in ('dbt_run_operations', 'dbt_requests', 'dbt_runs'):
+        db.execute('DROP TABLE ' + table)
+
+
 def drop_creation_schema(db):
     """Make downgrade fixtures genuine pre-P5 stores, including implicit indexes."""
+    drop_dbt_schema(db)
     # Remove the additive v20 layer when constructing genuine older fixtures.
     for table in ('logical_backend_identities', 'logical_bindings', 'logical_foundations',
                   'logical_effects', 'logical_requests'):
@@ -111,6 +117,51 @@ class ControlStoreTests(unittest.TestCase):
             self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
             self.assert_history(db, before)
 
+    def v21_history(self):
+        import data_management as dm
+        import warehouse_admission as admission
+        with store.connect() as db:
+            database = dm.create_database(db, 'retained_v21', 'Retained', '', 'test')
+            schema = dm.create_schema(db, database.id, 'raw', 'Raw', 'raw', 'test')
+            dm.record_query(db, dm.QueryRecord('retained-query', 'actor',
+                dm.QueryContext(database.id, schema.id, 'LOCAL', None), 'UNKNOWN', 'now'))
+            handle = admission.admit(db, actor='actor', kind='query', subject_id='retained-query')
+            admission.finish(db, handle, state='UNKNOWN')
+            db.execute("INSERT INTO jobs VALUES ('kept-v21','actor','{}','now','now')")
+            db.execute("INSERT INTO operations VALUES ('kept-operation','actor','apply','[]',1,'UNKNOWN','[]',NULL,'{}','{}')")
+            drop_dbt_schema(db)
+            db.execute('PRAGMA user_version=21')
+            tables = [row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+            return {table: sorted([tuple(row) for row in db.execute('SELECT * FROM '+table)], key=repr)
+                    for table in tables}
+
+    def test_v21_dbt_upgrade_preserves_all_history(self):
+        before = self.v21_history()
+        self.assertTrue(all(table not in before for table in
+                            ('dbt_runs', 'dbt_run_operations', 'dbt_requests')))
+        with store.connect() as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 22)
+            self.assert_history(db, before)
+            for table in ('dbt_runs', 'dbt_run_operations', 'dbt_requests'):
+                self.assertEqual(db.execute('SELECT count(*) FROM '+table).fetchone()[0], 0)
+
+    def test_v21_dbt_upgrade_failure_rolls_back_schema_and_history(self):
+        before = self.v21_history()
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            schema_before = db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name').fetchall()
+        with patch.object(store, '_DBT_SCHEMA', store._DBT_SCHEMA + 'CREATE TABLE broken('):
+            with self.assertRaises(sqlite3.OperationalError):
+                with store.connect():
+                    self.fail('failed dbt migration accepted')
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 21)
+            self.assertEqual(db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name').fetchall(),
+                             schema_before)
+            self.assert_history(db, before)
+        with store.connect() as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 22)
+            self.assert_history(db, before)
+
     def test_creation_requests_enforce_scope_foreign_keys_and_immutable_ack(self):
         with store.connect() as db:
             request = '''INSERT INTO db_creation_requests
@@ -190,7 +241,8 @@ class ControlStoreTests(unittest.TestCase):
                     'database_retirements', 'database_retirement_requests',
                     'db_creations', 'db_creation_phase_plans', 'db_creation_requests',
                     'db_creation_principal_gates', 'logical_requests', 'logical_effects',
-                    'logical_foundations', 'logical_bindings', 'logical_backend_identities'}
+                    'logical_foundations', 'logical_bindings', 'logical_backend_identities',
+                    'dbt_runs', 'dbt_run_operations', 'dbt_requests'}
         for _ in range(2):
             with store.connect() as db:
                 self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)

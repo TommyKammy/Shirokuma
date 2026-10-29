@@ -1,0 +1,489 @@
+"""Database dbt production handlers exercised through the existing Node UI harness."""
+import ast
+from email.message import Message
+from pathlib import Path
+from types import SimpleNamespace
+import sys
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'tests'))
+import test_workbench_database_ui as harness
+
+SETUP = r"""
+const p=dbDbt;
+const sandbox={id:'sandbox',database_id:'db',display_name:'Sandbox',sql_name:'sandbox',purpose:'SANDBOX',allowed_modes:['read-only','sandbox-write'],capabilities:{query:true,write:true}};
+schemas.push(sandbox);
+localStorage.removeItem=key=>storage.delete(key);
+let plan=null,run=null,pubs={},receipts=new Map(),lose=false,wrong=null,gate=null,observing=null;
+const posts=()=>calls.filter(c=>c.path.startsWith('/api/v1/dbt/')&&c.options?.method==='POST');
+const readBody=c=>JSON.parse(c.options.body);
+const ids=['model.demo.stage','model.demo.first','model.demo.second'];
+function makePlan(context,body={}){return {id:'plan-1',kind:'plan',actor:dbDbtOwner(),context:structuredClone(context),state:'READY',project_id:'lake_marts',project_name:'Lake marts',source_digest:'bytes-digest',source_schema:'raw',target_schema:'schema',staging_materialization:'ephemeral',created_at:'2026-10-29T00:00:00Z',models:ids.map((id,i)=>({unique_id:id,name:['stage','first','second'][i],materialized:i?'table':'ephemeral',relation:['sales','sandbox',['stage','first','second'][i]],depends_on:i?[ids[0]]:['source.demo.orders'],compiled_sql:i?'select * from orders':"select '<img src=x onerror=attack()>' from sales.raw.orders"})),tests:[{unique_id:'test.first',name:'not_null',test_type:'not_null',depends_on:[ids[1]]},{unique_id:'test.second',name:'unique',test_type:'unique',depends_on:[ids[2]]}],source_bindings:[{unique_id:'source.demo.orders',relation:['sales','raw','orders'],ref:{database_id:'db',schema_id:'raw',object_id:'orders',incarnation:1}}],...body};}
+function makeRun(context,body={}){return {id:'run-1',kind:'run',actor:dbDbtOwner(),context:structuredClone(context),plan_id:plan.id,state:'READY',cancel_requested:false,created_at:'2026-10-29T00:01:00Z',models:plan.models.map((m,i)=>({unique_id:m.unique_id,name:m.name,materialized:m.materialized,state:i?'BUILT':'EXPANDED',wap_model_id:'wap-'+i,wap_version:2,build_id:i?'build-'+i:null,candidate:i?{ref:{database_id:'db',schema_id:'sandbox',object_id:'candidate-'+i,incarnation:1},snapshot:'snap-'+i}:null,operation_ids:[]})),tests:plan.tests.map(t=>({...t,state:'PASSED',failure_count:0,operation_id:'op-'+t.unique_id})),operations:[{id:'safe-op',state:'FINISHED'}],...body};}
+route=async(path,options)=>{
+ const url=new URL('http://local'+path),body=options?.body?JSON.parse(options.body):null,context=body?.context||JSON.parse(url.searchParams.get('context')||'null');
+ if(!url.pathname.startsWith('/api/v1/dbt/'))return {};
+ if(gate)await gate.promise;
+ if(body){
+  const key=options.headers['Idempotency-Key'];assert.ok(key);
+  assert.equal(Object.keys(options.headers).some(name=>name.toLowerCase()==='x-idempotency-key'),false);
+  assert.equal(Object.keys(context).length,9);
+  let artifact=receipts.get(key);
+  if(!artifact){
+   if(url.pathname.endsWith('/plans')){plan=makePlan(context,{...body});delete plan.context.context;artifact={plan};}
+   else if(url.pathname.endsWith('/runs')){run=makeRun(context);artifact={run};}
+   else if(url.pathname.endsWith('/cancel')){run={...run,state:'CANCELING',cancel_requested:true};artifact={run};}
+   else if(url.pathname.endsWith('/reconcile')){artifact={run};}
+   else if(url.pathname.endsWith('/publish')){const publication={id:'pub-'+body.node_id.split('.').at(-1),kind:'publication',actor:dbDbtOwner(),context,run_id:run.id,parent_run_id:run.id,plan_id:run.plan_id,node_id:body.node_id,state:'QUEUED',build_id:'build',audit_id:null,publication_id:null,operation_ids:[]};pubs[publication.id]=publication;artifact={publication};}
+   else throw Error('Unexpected POST '+path);
+   receipts.set(key,structuredClone(artifact));
+  }
+  if(lose)throw Error('ACK lost');return {context,...structuredClone(artifact),...wrong};
+ }
+ if(observing)await observing.promise;
+ if(url.pathname.endsWith('/projects'))return {context,projects:[{id:'lake_marts',name:'Lake marts'},{id:'approved_second',name:'Other approved project'}]};
+ if(url.pathname.endsWith('/plans'))return {context,items:plan?[structuredClone(plan)]:[]};
+ if(url.pathname.endsWith('/runs'))return {context,items:run?[structuredClone(run)]:[]};
+ if(url.pathname.includes('/plans/'))return {context,plan:structuredClone(plan),...wrong};
+ if(url.pathname.includes('/runs/'))return {context,run:structuredClone(run),...wrong};
+ if(url.pathname.includes('/publications/'))return {context,publication:structuredClone(pubs[url.pathname.split('/').at(-1)]),...wrong};
+ throw Error('Unexpected GET '+path);
+};
+async function openDbt(role='admin'){
+ currentRole=role;session.maximum_role=role;
+ await boot(Array.from({length:13},(_,i)=>({...input(i?'sheet-'+i:'a'),sql:'SELECT '+i,selected_role:role})));
+ await dbDbtRefresh();assert.equal(dbDbtAllowed(),role!=='bi_viewer');
+ if(role==='bi_viewer')return;
+ for(const [name,value] of [['project','lake_marts'],['source','raw'],['target','schema'],['materialization','ephemeral']])dbDbtNode(name).value=value;
+ dbDbtRender();
+}
+async function compile(){await openDbt();await dbDbtSubmit('compile');assert.equal(p.plan?.id,'plan-1');}
+async function build(){await compile();await dbDbtSubmit('build');assert.equal(p.run?.id,'run-1');}
+function text(node){return node.textContent+' '+node.children.map(text).join(' ');}
+function review(node=ids[1]){p.review=node;dbDbtRender();assert.ok(dbDbtNode('publish'));}
+"""
+
+
+class DbtDatabaseUI(unittest.TestCase):
+    def javascript(self, body):
+        harness.DatabaseUI.javascript(self, SETUP + body)
+
+    def test_mock_header_contract_matches_shared_backend_key_adapter(self):
+        # Execute the actual adapter function without importing unrelated services.
+        tree = ast.parse((ROOT / 'tools/local_experiment/dataops_routes.py').read_text())
+        key_function = next(node for node in tree.body
+                            if isinstance(node, ast.FunctionDef) and node.name == '_key')
+        namespace = {}
+        exec(compile(ast.Module(body=[key_function], type_ignores=[]),
+                     'dataops_routes.py', 'exec'), namespace)
+        headers = Message()
+        headers['Idempotency-Key'] = 'original-receipt-key'
+        self.assertEqual(namespace['_key'](SimpleNamespace(headers=headers)),
+                         'original-receipt-key')
+        legacy_headers = Message()
+        legacy_headers['X-Idempotency-Key'] = 'original-receipt-key'
+        with self.assertRaises(ValueError):
+            namespace['_key'](SimpleNamespace(headers=legacy_headers))
+        self.javascript(r"""
+await compile();
+const first=posts()[0],key=first.options.headers['Idempotency-Key'];
+assert.ok(key);assert.equal(Object.hasOwn(first.options.headers,'X-Idempotency-Key'),false);
+// The mock must reject a legacy-only request and a request with both headers.
+for(const headers of [{'X-Idempotency-Key':key},{...first.options.headers,'X-Idempotency-Key':key}]){
+ await assert.rejects(()=>route(first.path,{...first.options,headers}),{name:'AssertionError'});
+}
+assert.equal(posts().length,1);assert.equal(receipts.size,1);
+""")
+
+    def test_engineer_query_only_marts_target_default_and_explicit_selection(self):
+        self.javascript(r"""
+schemas[0].capabilities.write=false;schemas[0].purpose='MARTS';
+await openDbt('data_engineer');
+assert.equal(p.schemas.find(s=>s.id==='schema').capabilities.write,false);
+assert.equal(p.schemas.find(s=>s.id==='sandbox').capabilities.write,true);
+assert.equal(dbDbtNode('target').children.find(n=>n.value==='schema').disabled,false);
+assert.equal(dbDbtNode('target').value,'schema');assert.equal(dbDbtNode('compile').disabled,false);
+dbDbtNode('target').value='raw';dbDbtRender();dbDbtNode('target').value='schema';await dbDbtNode('target').onchange();
+await dbDbtSubmit('compile');assert.equal(readBody(posts()[0]).target_schema,'schema');
+assert.equal(readBody(posts()[0]).context.schema_id,'sandbox');assert.equal(dbDbtCanPublish(null),false);
+""")
+
+    def test_admin_own_publication_reconcile_refreshes_children_with_get_only(self):
+        for state in ['PUBLISHED', 'COMMITTED_RECORDING_FAILED']:
+            with self.subTest(state=state):
+                self.javascript(r"""
+inventory[0].grant_revision=1;await openDbt('data_engineer');await dbDbtSubmit('compile');await dbDbtSubmit('build');
+currentRole='admin';session.maximum_role='admin';dbMaximumRole='admin';session.username='administrator';dbPrincipal=JSON.stringify(['administrator',true]);inventory[0].grant_revision=9;
+p.role='admin';await dbDbtRefresh();await dbDbtObserve('run','run-1');review();await dbDbtSubmit('publish',ids[1]);
+pubs['pub-first'].state='UNKNOWN';run.state='UNKNOWN';run.models[1].publication_id='pub-first';await dbDbtObserve('run','run-1');await dbDbtObserve('publication','pub-first');
+assert.equal(dbDbtNode('reconcile').disabled,false);assert.equal(dbDbtNode('cancel').disabled,true);assert.equal(dbDbtNode('build').disabled,true);
+const before=posts().length;await dbDbtSubmit('cancel');await dbDbtSubmit('build');assert.equal(posts().length,before);
+const baseRoute=route;route=async(path,options)=>{if(options?.method==='POST'&&path.endsWith('/reconcile')){pubs['pub-first'].state='FINAL_STATE';run.state='READY';}return baseRoute(path,options);};
+const mark=calls.length;await dbDbtNode('reconcile').onclick();
+assert.equal(p.intent,null);assert.equal(p.run.state,'READY');assert.equal(p.publications[ids[1]].state,'FINAL_STATE');
+const tail=calls.slice(mark);assert.equal(tail.filter(c=>c.options?.method==='POST').length,1);assert.match(tail[0].path,/reconcile$/);
+assert.ok(tail.some(c=>c.path.includes('/publications/pub-first?')&&!c.options.method));
+assert.equal(readBody(posts().at(-1)).context.grant_revision,9);assert.equal(p.run.context.grant_revision,1);
+const count=posts().length;const observe=dbDbtNode('publications').descendants().find(n=>n.tagName==='BUTTON'&&n.textContent==='Observe saved state');
+assert.ok(observe);await observe.onclick();assert.equal(posts().length,count);assert.equal(p.publications[ids[1]].state,'FINAL_STATE');
+""".replace('FINAL_STATE', state))
+
+    def test_admin_reconcile_rejects_wrong_publication_association_owner_and_context(self):
+        self.javascript(r"""
+await openDbt('data_engineer');await dbDbtSubmit('compile');await dbDbtSubmit('build');
+currentRole='admin';session.maximum_role='admin';dbMaximumRole='admin';session.username='administrator';dbPrincipal=JSON.stringify(['administrator',true]);p.role='admin';await dbDbtRefresh();await dbDbtObserve('run','run-1');review();await dbDbtSubmit('publish',ids[1]);
+const original=structuredClone(p.publications[ids[1]]),count=posts().length;
+p.schemas.find(s=>s.id==='schema').capabilities.write=false;assert.equal(dbDbtCanPublish(p.run.models[2]),false);p.schemas.find(s=>s.id==='schema').capabilities.write=true;
+for(const change of [{run_id:'other'},{parent_run_id:'other'},{plan_id:'other'},{actor:'other'},{node_id:'other'},{context:{...original.context,grant_revision:99}}]){
+ p.publications[ids[1]]={...original,...change};dbDbtRender();assert.equal(dbDbtCanReconcile(),false);assert.equal(dbDbtNode('reconcile').disabled,true);await dbDbtSubmit('reconcile');assert.equal(posts().length,count);
+}
+p.publications[ids[1]]=original;assert.equal(dbDbtCanReconcile(),true);
+wrong={publication:{...original,parent_run_id:'other'}};await dbDbtObserve('publication',original.id);assert.equal(p.publications[ids[1]],original);assert.match(p.status.textContent,/Observation failed/);
+""")
+
+    def test_known_preaccept_project_rejection_explicit_close_retains_receipt(self):
+        self.javascript(r"""
+await openDbt();const baseRoute=route;route=async(path,options)=>{if(options?.method==='POST'&&path.endsWith('/plans'))throw Object.assign(Error('missing'),{status:404,code:'DBT_PROJECT_NOT_FOUND'});return baseRoute(path,options);};
+await dbDbtSubmit('compile');const original=p.intent,first=posts()[0];assert.ok(dbDbtCanCloseRejected());assert.match(p.status.textContent,/rejected before acceptance/);
+await dbDbtRefresh();assert.equal(p.intent,original);await dbDbtRecover();assert.equal(posts().length,1);
+assert.equal(dbDbtNode('compile').disabled,true);assert.equal(dbDbtNode('project').disabled,true);
+await dbDbtNode('close-rejected').onclick();assert.equal(p.intent,null);assert.deepEqual(p.rejectedIntent,original);assert.deepEqual(readStorage(dbDbtKey+'.rejected',null),JSON.parse(JSON.stringify(original)));
+assert.equal(dbDbtNode('compile').disabled,false);assert.equal(dbDbtNode('project').disabled,false);assert.equal(posts().length,1);
+assert.match(text(dbDbtNode('receipt')),new RegExp(first.options.headers['Idempotency-Key']));assert.match(text(dbDbtNode('receipt')),/DBT_PROJECT_NOT_FOUND/);
+assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST').length,0);
+setLanguage('ja');assert.match(dbDbtNode('close-rejected').textContent,/要求を閉じて選び直す/);
+""")
+
+    def test_reconcile_child_get_late_response_cannot_restore_purged_context(self):
+        self.javascript(r"""
+await build();review();await dbDbtSubmit('publish',ids[1]);
+const baseRoute=route,child=deferred();let reading=false;
+route=async(path,options)=>{if(!options?.method&&path.includes('/publications/')){reading=true;await child.promise;}return baseRoute(path,options);};
+const pending=dbDbtSubmit('reconcile');await tick();assert.equal(reading,true);
+p.database='other';dbDbtPurge();child.resolve();await pending;
+assert.equal(p.run,null);assert.deepEqual(p.publications,{});assert.equal(dbDbtNode('publications').children.length,0);
+assert.equal(posts().filter(c=>c.path.endsWith('/publish')).length,1);assert.equal(posts().filter(c=>c.path.endsWith('/reconcile')).length,1);
+""")
+
+    def test_uncertain_or_invalid_ack_cannot_close_even_after_recovery_404(self):
+        for failure in ['transport', 'mismatch', 'forbidden']:
+            with self.subTest(failure=failure):
+                self.javascript(r"""
+await openDbt();const baseRoute=route;
+route=async(path,options)=>{if(options?.method==='POST'){
+ if('FAILURE'==='transport')throw Error('lost');
+ if('FAILURE'==='forbidden')throw Object.assign(Error('denied'),{status:403,code:'FORBIDDEN'});
+ const reply=await baseRoute(path,options);reply.plan.context.grant_revision=99;return reply;
+}return baseRoute(path,options);};
+await dbDbtSubmit('compile');const original=p.intent,first=posts()[0];assert.ok(original);assert.equal(dbDbtCanCloseRejected(),false);
+dbDbtCloseRejected();assert.equal(p.intent,original);assert.equal(dbDbtNode('compile').disabled,true);
+route=async(path,options)=>{if(options?.method==='POST')throw Object.assign(Error('missing'),{status:404,code:'DBT_PROJECT_NOT_FOUND'});return baseRoute(path,options);};
+if(p.invalid)await dbDbtRefresh();await dbDbtRecover();assert.equal(dbDbtCanCloseRejected(),false);assert.equal(p.intent,original);assert.deepEqual(posts().at(-1),first);
+route=baseRoute;await dbDbtRecover();assert.equal(p.intent,null);assert.deepEqual(posts().at(-1),first);clearTimeout(p.timer);
+""".replace('FAILURE', failure))
+
+    def test_full_multimodel_flow_compile_sql_lineage_tests_and_per_model_publish(self):
+        self.javascript(r"""
+await compile();
+assert.equal(posts().length,1);assert.equal(posts()[0].path,'/api/v1/dbt/plans');
+assert.deepEqual(readBody(posts()[0]),{context:p.context,project_id:'lake_marts',source_schema:'raw',target_schema:'schema',staging_materialization:'ephemeral'});
+assert.equal(p.context.schema_id,'sandbox');assert.equal(p.context.sql_schema,'sandbox');
+assert.match(text(dbDbtNode('models')),/expanded into SQL/);assert.match(text(dbDbtNode('sql')),/source.demo.orders/);
+assert.match(text(dbDbtNode('sql')),/<img src=x onerror=attack\(\)>/);
+assert.equal(dbDbtNode('sql').descendants().some(n=>n.tagName==='IMG'),false);
+assert.match(text(dbDbtNode('plan-detail')),/bytes-digest/);
+await dbDbtSubmit('build');assert.equal(posts()[1].path,'/api/v1/dbt/runs');assert.equal(readBody(posts()[1]).plan_id,'plan-1');
+assert.match(text(dbDbtNode('run-detail')),/Tests passed, awaiting publication/);
+assert.match(text(dbDbtNode('candidates')),/snap-2/);assert.match(text(dbDbtNode('tests')),/PASSED/);
+assert.equal(dbDbtCanPublish(p.run.models[0]),false);assert.equal(dbDbtCanPublish(p.run.models[1]),true);
+review();assert.match(text(dbDbtNode('confirmation')),/sales.marts.first/);assert.match(text(dbDbtNode('confirmation')),/snap-1/);
+await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,3);assert.equal(readBody(posts()[2]).node_id,ids[1]);
+assert.equal(dbDbtCanPublish(p.run.models[1]),false);assert.equal(dbDbtCanPublish(p.run.models[2]),true);
+pubs['pub-first'].state='PUBLISHED';await dbDbtObserve('publication','pub-first');
+assert.match(text(dbDbtNode('publications')),/Published/);assert.equal(p.run.state,'READY');assert.equal(posts().length,3);
+const drafts=worksheets.map(w=>w.sql);assert.equal(drafts.length,13);assert.deepEqual(drafts,Array.from({length:13},(_,i)=>'SELECT '+i));
+""")
+
+    def test_default_override_not_silently_changed_and_project_options(self):
+        self.javascript(r"""
+await openDbt();dbDbtNode('materialization').value='';await dbDbtSubmit('compile');
+assert.equal(readBody(posts()[0]).staging_materialization,null);
+assert.match(text(dbDbtNode('plan-detail')),/Project default/);
+assert.deepEqual(p.projects.map(p=>p.id),['lake_marts','approved_second']);
+assert.equal(dbDbtNode('project').tagName,'SELECT');
+assert.match(text(dbDbtNode('panel')),/defaults to views/);
+""")
+
+    def test_compile_async_ack_get_polling_and_observation_failure_is_not_unknown(self):
+        self.javascript(r"""
+await compile();plan.state='COMPILING';await dbDbtObserve('plan',plan.id);assert.equal(p.plan.state,'COMPILING');
+assert.ok(p.timer);clearTimeout(p.timer);const count=posts().length;
+wrong={plan:{...plan,id:'wrong-id'}};await dbDbtObserve('plan',plan.id);
+assert.equal(p.plan.state,'COMPILING');assert.match(p.status.textContent,/Observation failed/);assert.equal(posts().length,count);
+wrong=null;plan.state='READY';await dbDbtObserve('plan',plan.id);assert.equal(p.plan.state,'READY');assert.equal(posts().length,count);
+""")
+
+    def test_failed_missing_duplicate_tests_canceled_unknown_never_publish(self):
+        self.javascript(r"""
+await build();const original=structuredClone(run);
+for(const replacement of [{state:'FAILED'},{state:'CANCELED'},{state:'UNKNOWN'},{cancel_requested:true},{tests:[]},{tests:[original.tests[0],original.tests[0]]},{tests:[{...original.tests[0],failure_count:2,state:'FAILED'},original.tests[1]]}]){
+ run={...original,...replacement};await dbDbtObserve('run','run-1');assert.equal(dbDbtTestsPassed(),false);assert.equal(dbDbtCanPublish(p.run.models[1]),false);p.review=ids[1];await dbDbtSubmit('publish',ids[1]);
+}
+assert.equal(posts().length,2);
+""")
+
+    def test_lost_ack_same_key_frozen_body_context_and_explicit_recovery(self):
+        self.javascript(r"""
+await openDbt();lose=true;await dbDbtSubmit('compile');const first=posts()[0];const intent=p.intent;
+assert.equal(p.plan,null);assert.match(p.status.textContent,/Receipt not observed/);assert.ok(storage.has(dbDbtKey));
+dbDbtNode('source').value='schema';await dbDbtSubmit('compile');assert.equal(posts().length,1);
+lose=false;await dbDbtRecover();assert.equal(posts().length,2);assert.deepEqual(posts()[1],first);assert.equal(p.plan.source_schema,'raw');assert.equal(p.intent,null);assert.equal(storage.has(dbDbtKey),false);
+""")
+
+    def test_late_compile_ack_and_principal_change_purge_protected_content(self):
+        self.javascript(r"""
+await openDbt();gate=deferred();const pending=dbDbtSubmit('compile');await tick();
+currentRole='bi_viewer';dbDbtValidate();assert.equal(p.plan,null);assert.equal(p.pending,false);gate.resolve();await pending;
+assert.equal(p.plan,null);assert.equal(dbDbtNode('sql').children.length,0);assert.equal(dbDbtNode('recover').disabled,true);
+assert.equal(posts().length,1);currentRole='admin';dbPrincipal=JSON.stringify(['other',true]);dbDbtValidate();await dbDbtRecover();assert.equal(posts().length,1);
+assert.equal(dbDbtNode('receipt').textContent,'');
+""")
+
+    def test_wrong_db_context_id_and_delayed_get_rejected(self):
+        self.javascript(r"""
+await build();const original=p.run;
+for(const replacement of [{...run,id:'wrong'},{...run,context:{...run.context,database_id:'other'}},{...run,actor:'other',context:{...run.context,selected_role:'bi_viewer'}}]){
+ wrong={run:replacement};await dbDbtObserve('run','run-1');assert.equal(p.run,original);assert.match(p.status.textContent,/Observation failed/);
+}
+wrong=null;observing=deferred();const pending=dbDbtObserve('run','run-1');await tick();p.database='other';dbDbtPurge();observing.resolve();await pending;
+assert.equal(p.run,null);assert.equal(p.plan,null);assert.equal(dbDbtNode('sql').children.length,0);assert.equal(posts().length,2);
+""")
+
+    def test_engineer_build_admin_inspection_publication_viewer_and_role_cap(self):
+        self.javascript(r"""
+await openDbt('data_engineer');await dbDbtSubmit('compile');await dbDbtSubmit('build');
+assert.equal(dbDbtOwnRun(),true);assert.equal(dbDbtCanPublish(p.run.models[1]),false);assert.match(dbDbtNode('reason').textContent,/requires admin/);
+const saved=structuredClone(run);currentRole='admin';session.maximum_role='admin';dbMaximumRole='admin';dbDbtValidate();p.role='admin';await dbDbtRefresh();await dbDbtObserve('run',saved.id);
+assert.equal(p.run.context.selected_role,'data_engineer');assert.equal(dbDbtOwnRun(),false);assert.equal(dbDbtCanPublish(p.run.models[1]),true);
+review();await dbDbtSubmit('publish',ids[1]);assert.equal(readBody(posts().at(-1)).context.selected_role,'admin');
+currentRole='bi_viewer';dbDbtValidate();assert.equal(p.plan,null);assert.equal(p.run,null);assert.equal(dbDbtNode('sql').children.length,0);assert.equal(dbDbtNode('compile').disabled,true);
+assert.match(dbDbtNode('reason').textContent,/Viewer access/);assert.equal(dbDbtNode('role').children.filter(n=>n.value==='admin').every(n=>n.disabled),true);
+""")
+
+
+    def test_admin_inspects_engineer_revision_and_publishes_with_current_authority(self):
+        for revision in ('null', '9'):
+            with self.subTest(admin_revision=revision):
+                self.javascript(r"""
+inventory[0].grant_revision=1;
+await openDbt('data_engineer');await dbDbtSubmit('compile');await dbDbtSubmit('build');
+const savedPlan=structuredClone(plan),savedRun=structuredClone(run),count=posts().length;
+currentRole='admin';session.maximum_role='admin';dbMaximumRole='admin';session.username='administrator';dbPrincipal=JSON.stringify(['administrator',true]);
+inventory[0].grant_revision=ADMIN_REV;p.role='admin';await dbDbtRefresh();
+const adminContext=structuredClone(p.context);assert.equal(adminContext.grant_revision,ADMIN_REV);
+await dbDbtHistory();assert.deepEqual(p.plans,[savedPlan]);assert.deepEqual(p.runs,[savedRun]);
+await dbDbtNode('history').descendants().filter(n=>n.tagName==='BUTTON')[0].onclick();
+assert.deepEqual(p.plan,savedPlan);assert.equal(p.run,null);assert.equal(dbDbtCanBuild(),false);
+await dbDbtNode('history').descendants().filter(n=>n.tagName==='BUTTON')[1].onclick();
+assert.deepEqual(p.run,savedRun);assert.deepEqual(p.context,adminContext);assert.equal(posts().length,count);
+assert.equal(dbDbtOwnRun(),false);assert.equal(dbDbtCanReconcile(),false);assert.equal(dbDbtNode('cancel').disabled,true);
+await dbDbtSubmit('build');await dbDbtSubmit('cancel');await dbDbtSubmit('reconcile');assert.equal(posts().length,count);
+for(const node of ids.slice(1)){
+ review(node);await dbDbtSubmit('publish',node);assert.equal(p.intent,null);
+ assert.deepEqual(readBody(posts().at(-1)).context,adminContext);
+ assert.equal(p.publications[node].actor,'administrator');assert.deepEqual(p.publications[node].context,adminContext);
+ assert.deepEqual(p.run,savedRun);assert.deepEqual(p.plan,savedPlan);
+}
+assert.equal(dbDbtCanReconcile(),true);assert.equal(dbDbtNode('reconcile').disabled,false);
+lose=true;await dbDbtSubmit('reconcile');const original=posts().at(-1);assert.ok(p.intent);
+// A reload restores only the frozen receipt, without adopting the engineer's authority.
+p.intent=null;dbDbtPurge();lose=false;await dbDbtRefresh();assert.ok(p.intent);assert.equal(p.run,null);
+await dbDbtRecover();assert.deepEqual(posts().at(-1),original);assert.equal(p.intent,null);
+assert.deepEqual(p.run,savedRun);assert.deepEqual(p.context,adminContext);clearTimeout(p.timer);
+""".replace('ADMIN_REV', revision))
+
+    def test_own_post_receipts_reject_wrong_owner_and_context_with_same_key_recovery(self):
+        for action, setup in [('compile', 'await openDbt();'), ('build', 'await compile();'), ('publish', 'await build();review();')]:
+            for replacement in ["a.actor='another-actor'", "a.context.database_id='other'", "a.context.grant_revision=99", "a.context.selected_role='data_engineer'"]:
+                with self.subTest(action=action, replacement=replacement):
+                    self.javascript(setup + r"""
+const originalRoute=route;
+route=async(path,options)=>{const reply=await originalRoute(path,options);if(options?.method==='POST'){const a=reply.plan||reply.run||reply.publication;MUTATE;}return reply;};
+await dbDbtSubmit('ACTION',ids[1]);assert.ok(p.intent);assert.match(p.status.textContent,/Receipt not observed/);
+const original=posts().at(-1),intent=p.intent;assert.equal(intent.key,original.options.headers['Idempotency-Key']);
+route=originalRoute;await dbDbtRecover();assert.deepEqual(posts().at(-1),original);assert.equal(p.intent,null);clearTimeout(p.timer);
+""".replace('ACTION', action).replace('MUTATE', replacement))
+
+    def test_engineer_cannot_inspect_saved_admin_or_other_grant_metadata(self):
+        self.javascript(r"""
+await build();const savedPlan=structuredClone(plan),savedRun=structuredClone(run);
+currentRole='data_engineer';session.maximum_role='data_engineer';dbMaximumRole='data_engineer';p.role='data_engineer';await dbDbtRefresh();
+await dbDbtHistory();assert.deepEqual(p.plans,[]);assert.deepEqual(p.runs,[]);assert.match(p.status.textContent,/Observation failed/);
+await dbDbtObserve('plan',plan.id);assert.equal(p.plan,null);
+await dbDbtObserve('run',run.id);assert.equal(p.run,null);assert.equal(dbDbtNode('sql').children.length,0);
+plan={...savedPlan,context:{...savedPlan.context,selected_role:'data_engineer',grant_revision:99}};
+run={...savedRun,context:{...plan.context}};
+await dbDbtObserve('run',run.id);assert.equal(p.run,null);assert.match(p.status.textContent,/Observation failed/);
+assert.equal(posts().length,2);
+""")
+
+    def test_history_frozen_artifact_and_worksheet_changes_do_not_retarget_mutation(self):
+        self.javascript(r"""
+await build();await dbDbtHistory();assert.equal(p.plans.length,1);assert.equal(p.runs.length,1);
+assert.match(text(dbDbtNode('history')),/sandbox.*admin.*2026-10-29/);
+const count=posts().length;await dbDbtNode('history').descendants().filter(n=>n.tagName==='BUTTON').at(-1).onclick();assert.equal(posts().length,count);
+dbCurrent().database_id='elsewhere';dbCurrent().schema_id='else-schema';$('query-database').value='elsewhere';
+await dbDbtSubmit('cancel');assert.equal(readBody(posts().at(-1)).context.database_id,'db');assert.equal(readBody(posts().at(-1)).context.schema_id,'sandbox');
+assert.equal(p.run.state,'CANCELING');assert.equal(dbDbtNode('cancel').disabled,true);const n=posts().length;await dbDbtSubmit('cancel');assert.equal(posts().length,n);
+await dbDbtSubmit('reconcile');assert.match(posts().at(-1).path,/\/reconcile$/);assert.deepEqual(Object.keys(readBody(posts().at(-1))),['context']);
+""")
+
+    def test_cancel_lost_ack_replay_latches_and_unknown_reconcile_does_not_build(self):
+        self.javascript(r"""
+await build();lose=true;await dbDbtSubmit('cancel');const cancel=posts().at(-1);assert.equal(dbDbtNode('build').disabled,true);assert.equal(dbDbtNode('cancel').disabled,true);
+lose=false;await dbDbtRecover();assert.deepEqual(posts().at(-1),cancel);run.state='UNKNOWN';await dbDbtObserve('run','run-1');
+assert.match(text(dbDbtNode('run-detail')),/Backend outcome unknown/);await dbDbtSubmit('reconcile');assert.equal(p.run.state,'UNKNOWN');assert.match(posts().at(-1).path,/reconcile$/);assert.equal(posts().filter(c=>c.path==='/api/v1/dbt/runs').length,1);
+""")
+
+    def test_deep_link_reload_get_only_no_elevation_preserves_hash_and_drafts(self):
+        self.javascript(r"""
+await build();const savedDrafts=worksheets.map(w=>w.sql),count=posts().length;
+globalThis.location={href:'http://local/#transformation?creation=keep&dbt_db=db&dbt_plan=plan-1&dbt_run=run-1'};
+globalThis.history={replaceState:(_,__,url)=>{globalThis.location.href=String(url);}};
+dbDbtPurge();await dbDbtRestore();assert.equal(p.run.id,'run-1');assert.equal(posts().length,count);assert.equal(p.role,'admin');assert.deepEqual(worksheets.map(w=>w.sql),savedDrafts);assert.match(location.href,/creation=keep/);assert.doesNotMatch(location.href,/SELECT|credential|compiled_sql/);
+const gets=calls.filter(c=>c.path.includes('/api/v1/dbt/')&&!c.options.method);assert.ok(gets.some(c=>c.path.includes('/runs/run-1?')));
+""")
+
+    def test_publication_commit_record_failure_is_terminal_and_never_republished(self):
+        self.javascript(r"""
+await build();review();await dbDbtSubmit('publish',ids[1]);pubs['pub-first'].state='COMMITTED_RECORDING_FAILED';await dbDbtObserve('publication','pub-first');
+assert.match(text(dbDbtNode('publications')),/committed; recording failed/);assert.equal(dbDbtCanPublish(p.run.models[1]),false);assert.equal(p.timer,null);
+const count=posts().length;p.review=ids[1];await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,count);assert.equal(p.run.state,'READY');
+""")
+
+    def test_reload_retains_unacknowledged_intent_and_never_automatically_posts(self):
+        self.javascript(r"""
+await openDbt();lose=true;await dbDbtSubmit('compile');const original=posts()[0];
+p.intent=null;dbDbtPurge();lose=false;await dbDbtRefresh();
+assert.equal(posts().length,1);assert.equal(p.plan,null);assert.ok(p.intent);assert.equal(dbDbtNode('recover').disabled,false);
+await dbDbtRecover();assert.deepEqual(posts()[1],original);assert.equal(p.plan.id,'plan-1');
+""")
+
+    def test_role_maximum_binding_and_grant_change_purge_then_fail_closed(self):
+        self.javascript(r"""
+await build();dbUpdateMaximumRole('data_engineer');assert.equal(p.run,null);assert.equal(p.plan,null);assert.equal(dbDbtNode('sql').children.length,0);
+session.maximum_role='admin';dbMaximumRole='admin';await dbDbtRefresh();await dbDbtObserve('run','run-1');assert.ok(p.run);
+inventory[0].grant_revision++;await dbDbtRefreshAuthorization();assert.equal(p.run,null);assert.equal(dbDbtNode('build').disabled,true);
+assert.equal(posts().length,2);
+""")
+
+    def test_role_cap_purges_admin_inventory_without_losing_refresh_selection(self):
+        self.javascript(r"""
+inventory.push({...inventory[0],id:'private-db',display_name:'Admin finance',sql_catalog:'admin_finance',allowed_roles:['admin']});
+schemas.push({...schemas[0],id:'private-schema',display_name:'Admin secrets',sql_name:'admin_secrets'});
+await compile();
+assert.match(text(dbDbtNode('database')),/Admin finance/);assert.match(text(dbDbtNode('source')),/Admin secrets/);
+assert.match(text(dbDbtNode('sql')),/select.*orders/);
+currentRole='bi_viewer';dbDbtValidate();
+assert.deepEqual(p.databases,[]);assert.deepEqual(p.schemas,[]);assert.equal(p.database,'db');
+for(const name of ['database','source','target'])assert.deepEqual(dbDbtNode(name).options.map(o=>o.value),['']);
+assert.equal(p.plan,null);assert.equal(p.run,null);assert.equal(text(dbDbtNode('sql')).trim(),'');
+assert.equal(dbDbtNode('compile').disabled,true);assert.equal(dbDbtNode('build').disabled,true);
+const count=calls.length;await dbDbtNode('refresh').onclick();assert.equal(calls.length,count);
+inventory=inventory.filter(d=>d.id==='db');schemas=schemas.filter(s=>s.id!=='private-schema');
+currentRole='admin';dbDbtValidate();await dbDbtNode('refresh').onclick();
+assert.equal(dbDbtAllowed(),true);assert.equal(dbDbtNode('database').value,'db');
+assert.doesNotMatch(text(dbDbtNode('database')),/Admin finance/);assert.doesNotMatch(text(dbDbtNode('source')),/Admin secrets/);
+assert.equal(p.plan,null);assert.equal(text(dbDbtNode('sql')).trim(),'');assert.equal(posts().length,1);
+""")
+
+    def test_auth_failure_purges_inventory_and_preserves_frozen_receipt_recovery(self):
+        for status in (401, 403):
+            with self.subTest(status=status):
+                self.javascript(r"""
+inventory.push({...inventory[0],id:'private-db',display_name:'Admin finance',sql_catalog:'admin_finance',allowed_roles:['admin']});
+schemas.push({...schemas[0],id:'private-schema',display_name:'Admin secrets',sql_name:'admin_secrets'});
+await compile();lose=true;await dbDbtSubmit('build');
+const original=posts().at(-1),intent=p.intent;assert.ok(intent);assert.match(text(dbDbtNode('sql')),/select.*orders/);
+schemasRoute=async()=>({http:STATUS,body:{error:{code:'FORBIDDEN',message:'denied'}}});
+await dbDbtRefreshAuthorization();
+assert.deepEqual(p.databases,[]);assert.deepEqual(p.schemas,[]);assert.equal(p.database,'db');assert.equal(p.intent,intent);
+for(const name of ['database','source','target'])assert.deepEqual(dbDbtNode(name).options.map(o=>o.value),['']);
+assert.equal(p.plan,null);assert.equal(p.run,null);assert.equal(text(dbDbtNode('sql')).trim(),'');assert.equal(dbDbtNode('recover').disabled,true);
+inventory=inventory.filter(d=>d.id==='db');schemas=schemas.filter(s=>s.id!=='private-schema');schemasRoute=null;lose=false;
+await dbDbtNode('refresh').onclick();assert.equal(dbDbtAllowed(),true);assert.equal(p.intent,intent);
+assert.equal(dbDbtNode('database').value,'db');assert.equal(text(dbDbtNode('sql')).trim(),'');assert.equal(posts().length,2);
+await dbDbtRecover();assert.deepEqual(posts().at(-1),original);assert.equal(p.run.id,'run-1');assert.equal(p.intent,null);
+""".replace('STATUS', str(status)))
+
+    def test_dbt_role_and_database_onchange_refresh_authorized_inventory(self):
+        self.javascript(r"""
+await compile();inventory.push({...inventory[0],id:'other',display_name:'Other',sql_catalog:'other'});
+schemasRoute=async(path)=>({items:schemas.map(s=>({...s,database_id:path.includes('/other/')?'other':'db'}))});
+dbDbtNode('role').value='data_engineer';await dbDbtNode('role').onchange();
+assert.equal(p.role,'data_engineer');assert.equal(dbDbtAllowed(),true);assert.equal(p.database,'db');assert.equal(p.plan,null);
+assert.equal(text(dbDbtNode('sql')).trim(),'');assert.ok(dbDbtNode('database').options.some(o=>o.value==='other'));
+dbDbtNode('database').value='other';await dbDbtNode('database').onchange();
+assert.equal(p.database,'other');assert.equal(dbDbtNode('database').value,'other');assert.equal(p.context.database_id,'other');assert.equal(dbDbtAllowed(),true);
+assert.ok(calls.some(c=>c.path==='/api/v1/databases/other/schemas'&&c.options.headers['X-Shirokuma-Role']==='data_engineer'));
+await dbDbtNode('refresh').onclick();assert.equal(p.database,'other');assert.equal(dbDbtAllowed(),true);assert.equal(posts().length,1);
+""")
+
+    def test_deeplink_wrong_parent_rejects_and_history_run_change_clears_publications(self):
+        self.javascript(r"""
+await build();review();await dbDbtSubmit('publish',ids[1]);assert.ok(p.publications[ids[1]]);
+run={...run,id:'run-2'};await dbDbtObserve('run','run-2');assert.deepEqual(p.publications,{});
+globalThis.location={href:'http://local/#transformation?dbt_db=db&dbt_plan=wrong-plan&dbt_run=run-2'};
+dbDbtPurge();await dbDbtRestore();assert.equal(p.run,null);assert.equal(p.plan,null);assert.match(p.status.textContent,/Observation failed/);assert.equal(posts().length,3);
+""")
+
+    def test_compile_failed_identity_has_actionable_copy_and_keeps_no_candidate(self):
+        self.javascript(r"""
+await compile();plan={...plan,state:'FAILED',error_code:'STALE_RESOURCE'};await dbDbtObserve('plan','plan-1');
+assert.match(text(dbDbtNode('plan-detail')),/Refresh context and compile a new plan/);assert.equal(dbDbtNode('build').disabled,true);assert.equal(p.run,null);assert.equal(dbDbtNode('compile').disabled,false);
+""")
+
+    def test_cancel_wrong_receipt_stays_unacknowledged(self):
+        self.javascript(r"""
+await build();wrong={run:{...run,id:'different-run'}};await dbDbtSubmit('cancel');assert.equal(p.run.state,'READY');assert.ok(p.intent);assert.equal(dbDbtNode('cancel').disabled,true);
+wrong=null;await dbDbtRecover();assert.equal(p.run.state,'CANCELING');assert.equal(p.intent,null);
+""")
+
+    def test_async_acks_enable_only_get_polling_until_plan_and_tests_ready(self):
+        self.javascript(r"""
+await openDbt();const originalRoute=route;
+route=async(path,options)=>{const reply=await originalRoute(path,options);if(options?.method==='POST'&&path.endsWith('/plans')){reply.plan.state='QUEUED';plan.state='COMPILING';}if(options?.method==='POST'&&path.endsWith('/runs')){reply.run.state='QUEUED';run.state='BUILDING';}return reply;};
+await dbDbtSubmit('compile');assert.equal(p.plan.state,'QUEUED');assert.ok(p.timer);assert.equal(dbDbtNode('build').disabled,true);
+assert.match(p.status.textContent,/does not execute engine SQL/);await dbDbtObserve('plan','plan-1');assert.equal(p.plan.state,'COMPILING');
+plan.state='READY';await dbDbtObserve('plan','plan-1');assert.equal(dbDbtNode('build').disabled,false);await dbDbtSubmit('build');assert.equal(p.run.state,'QUEUED');assert.match(p.status.textContent,/few minutes/);assert.equal(dbDbtTestsPassed(),false);
+run.state='TESTING';await dbDbtObserve('run','run-1');assert.equal(dbDbtCanPublish(p.run.models[1]),false);run.state='READY';await dbDbtObserve('run','run-1');assert.equal(dbDbtTestsPassed(),true);
+assert.equal(posts().length,2);assert.equal(p.timer,null);assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST').length,0);
+""")
+
+    def test_publication_ack_wrong_model_keeps_original_publish_receipt(self):
+        self.javascript(r"""
+await build();review();const originalRoute=route;
+route=async(path,options)=>{const reply=await originalRoute(path,options);if(options?.method==='POST'&&path.endsWith('/publish'))reply.publication.node_id=ids[2];return reply;};
+await dbDbtSubmit('publish',ids[1]);assert.deepEqual(p.publications,{});assert.ok(p.intent);const first=posts().at(-1);assert.equal(p.intent.body.node_id,ids[1]);
+route=originalRoute;await dbDbtRecover();assert.deepEqual(posts().at(-1),first);assert.equal(p.publications[ids[1]].node_id,ids[1]);assert.equal(p.intent,null);clearTimeout(p.timer);
+""")
+
+    def test_japanese_english_state_copy_and_native_responsive_structure(self):
+        self.javascript(r"""
+await build();setLanguage('ja');assert.match(text(dbDbtNode('run-detail')),/テスト成功・公開待ち/);assert.match(dbDbtNode('reason').textContent,/モデルごとに独立/);
+assert.equal(dbDbtNode('compile').textContent,'プロジェクトをコンパイル');review();assert.equal(dbDbtNode('publish').textContent,'監査して公開');
+setLanguage('en');assert.match(text(dbDbtNode('run-detail')),/Tests passed, awaiting publication/);assert.equal(dbDbtNode('compile').textContent,'Compile project');
+assert.equal(dbDbtNode('role').tagName,'SELECT');assert.equal(dbDbtNode('models').className,'table-wrap');assert.equal(dbDbtNode('panel').getAttribute('aria-labelledby'),'db-dbt-title');
+""")
+        self.assertIn('@media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}', harness.HTML)
+        self.assertIn('#db-dbt-panel{min-width:0;max-width:100%}', harness.HTML)
+        self.assertIn('overflow-wrap:anywhere', harness.HTML)
+        dbt = harness.DATABASE.split('// Database dbt:')[1].split('// Database schedules')[0]
+        self.assertNotIn('innerHTML', dbt)
+        self.assertNotIn('/api/dbt', dbt)
+
+
+if __name__ == '__main__':
+    unittest.main()

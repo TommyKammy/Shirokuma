@@ -660,6 +660,8 @@ def _submit_dataops(principal, statement, frozen, parent, operation_id, step):
             op = db.execute('SELECT * FROM dataops_operations WHERE id=?', (operation_id,)).fetchone()
             if op is None or op['actor'] != principal.principal_id or op['state'] != 'ACTIVE':
                 raise QueryError('ADMISSION_CONFLICT', 409)
+            import db_dbt
+            db_dbt._check_operation(db, operation_id)
             from dataops_service import _check_job
             job = db.execute('SELECT run_id FROM db_job_operations WHERE operation_id=?', (operation_id,)).fetchone()
             if job is not None:
@@ -697,6 +699,8 @@ def _submit_dataops(principal, statement, frozen, parent, operation_id, step):
             _pins[query_id].origin = frozen.origin
         with _pins[query_id].lock:
             _owned(principal, query_id, context.selected_role, cleanup=True)
+            import db_dbt
+            db_dbt._before_query(operation_id, principal, context)
             response = _receive(query_id, frozen.origin.rstrip('/') + '/v1/statement',
                                 'POST', backend_sql.encode('utf-8'))
             _owned(principal, query_id, context.selected_role, cleanup=True)
@@ -716,6 +720,19 @@ def _receive(query_id, url, method, body=None):
 
 
 def _receive_accepted(query_id, url, method, body=None):
+    # A durable dbt cancel/phase fence is checked outside transport uncertainty.
+    # No POST has happened when this check rejects the initial send.
+    if method in ('POST', 'GET'):
+        try:
+            with control_store.connect() as db:
+                db.execute('BEGIN')
+                link = db.execute('SELECT operation_id FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
+                if link:
+                    import db_dbt
+                    db_dbt._check_operation(db, link['operation_id'])
+        except QueryError:
+            _best_cancel(query_id)
+            raise
     try:
         if method == 'POST':
             _pins[query_id].initial_attempted = True
@@ -785,6 +802,17 @@ def fetch(principal, query_id, page_token, *, selected_role):
         if row['state'] in _TERMINAL:
             raise QueryError('CONTEXT_MISMATCH', 409)
         try:
+            with control_store.connect() as db:
+                link = db.execute('SELECT operation_id FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
+            if link:
+                import db_dbt
+                try:
+                    db_dbt._before_query(link['operation_id'], principal, pin.context)
+                except QueryError:
+                    # The owner still holds the accepting pin and its original
+                    # cancellation URL even when the durable dbt fence rejects.
+                    _best_cancel(query_id)
+                    raise
             response = _receive(query_id, registered[0], 'GET')
             _owned(principal, query_id, selected_role, cleanup=True)
         except QueryError as error:

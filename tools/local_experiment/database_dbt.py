@@ -17,7 +17,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import tempfile
 
@@ -61,9 +60,10 @@ def _check_config(value):
 
 
 def _preflight(project):
-    """Select project source files; deliberately ignore prior generated artifacts."""
+    """Capture checked source bytes; deliberately ignore generated artifacts."""
     try:
-        config = yaml.safe_load((project / 'dbt_project.yml').read_text())
+        project_bytes = (project / 'dbt_project.yml').read_bytes()
+        config = yaml.safe_load(project_bytes)
     except (OSError, yaml.YAMLError):
         _fail('PREFLIGHT_UNSUPPORTED', 'readable dbt_project.yml required')
     if not isinstance(config, dict) or not isinstance(config.get('name'), str):
@@ -105,8 +105,10 @@ def _preflight(project):
                     _fail('PREFLIGHT_UNSUPPORTED', 'SQL-only project required')
                 roots.add(source.relative_to(project).as_posix())
     digest = hashlib.sha256()
+    files = {}
     for rel in sorted(roots):
-        raw = (project / rel).read_bytes()
+        raw = project_bytes if rel == 'dbt_project.yml' else (project / rel).read_bytes()
+        files[rel] = raw
         digest.update(rel.encode() + b'\0' + raw + b'\0')
         text = raw.decode()
         if rel.endswith(('.yml', '.yaml')):
@@ -122,7 +124,7 @@ def _preflight(project):
                 _fail('UNSUPPORTED_CONFIG', 'inline write-side configuration unsupported')
             if re.search(r'\b(run_query\s*\(|statement\s*\(|adapter\s*\.\s*(execute|add_query)\s*\()', text):
                 _fail('PREFLIGHT_UNSUPPORTED', 'custom macro SQL execution unsupported')
-    return config, sorted(roots), digest.hexdigest()
+    return config, files, digest.hexdigest()
 
 
 def _sql_tree(sql):
@@ -360,10 +362,10 @@ def compile_project(project, *, catalog, source_schema, staging_materialization=
         work = Path(temporary)
         copied = work / 'project'
         copied.mkdir()
-        for rel in files:
+        for rel, raw in files.items():
             destination = copied / rel
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(project / rel, destination)
+            destination.write_bytes(raw)
         # Never honor project-selected output locations, even in a copied project.
         config.update({'target-path': str(work / 'target'), 'log-path': str(work / 'logs'),
                        'packages-install-path': str(work / 'packages'), 'profile': 'offline'})

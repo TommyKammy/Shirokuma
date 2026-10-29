@@ -167,6 +167,8 @@ def save_model(principal, context, *, model_id, sql, sources, target,
     existing tables or DestinationLocator for an absent first publication.
     """
     metadata = _access(principal, context, write=True)
+    import db_dbt
+    db_dbt._guard(principal, context, 'save', model_id=model_id)
     if not isinstance(sources, dict):
         raise ValueError('explicit source bindings required')
     sources = dict(sources)
@@ -213,6 +215,7 @@ def save_model(principal, context, *, model_id, sql, sources, target,
         with control_store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             revalidate_admission(db, principal, context)
+            db_dbt._guard(principal, context, 'save', model_id=model_id)
             if head is None:
                 db.execute('INSERT INTO wap_models(database_id,model_id,version) VALUES (?,?,?)',
                            (context.database_id, model_id, version))
@@ -359,6 +362,8 @@ def _run_accepted(principal, context, key, action, payload, work):
 
 def build(principal, context, *, key, model_id, version, _start=None):
     """Build one exact current model version into a retained, owned SANDBOX CTAS."""
+    import db_dbt
+    db_dbt._guard(principal, context, 'build', model_id=model_id)
     def work(execution):
         if type(version) is not int or version < 1:
             raise ValueError('positive integer version required')
@@ -403,9 +408,12 @@ def _target(model, head):
 
 def audit(principal, context, *, key, build_id):
     """Measure exact immutable build stage; failed quality is a durable failed audit."""
+    import db_dbt
+    db_dbt._guard_id(principal, context, 'audit', build_id)
     def work(execution):
         built = get_build(principal, context, build_id=build_id)
         with _model_lock(context.database_id, built['model_id']):
+            db_dbt._guard(principal, context, 'audit', build=built)
             _claim_model(context, built['model_id'], execution.id)
             model = get_model(principal, context, model_id=built['model_id'], version=built['version'])
             _current(execution, model)
@@ -427,10 +435,13 @@ def audit(principal, context, *, key, build_id):
 
 def publish(principal, context, *, key, build_id, audit_id):
     """Explicit admin publication of a passed audit; never re-run the model."""
+    import db_dbt
+    db_dbt._guard_id(principal, context, 'publish', build_id)
     def work(execution):
         built = get_build(principal, context, build_id=build_id)
         audited = get_audit(principal, context, audit_id=audit_id)
         with _model_lock(context.database_id, built['model_id']):
+            db_dbt._guard(principal, context, 'publish', build=built)
             head = _claim_model(context, built['model_id'], execution.id)
             model = get_model(principal, context, model_id=built['model_id'], version=built['version'])
             _current(execution, model)
@@ -469,6 +480,8 @@ def rollback(principal, context, *, key, publication_id):
     """Admin rollback only to this publication's recorded prior target snapshot."""
     def work(execution):
         publication = get_publication(principal, context, publication_id=publication_id)
+        import db_dbt
+        db_dbt._guard(principal, context, 'rollback', model_id=publication['model_id'])
         with _model_lock(context.database_id, publication['model_id']):
             head = _claim_model(context, publication['model_id'], execution.id)
             model = get_model(principal, context, model_id=publication['model_id'], version=publication['version'])
