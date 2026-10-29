@@ -29,9 +29,15 @@ import manual_wap
 class DbtError(ValueError):
     """Fixed private-operator error code; no captured dbt output is exposed."""
 
-    def __init__(self, code, message):
+    def __init__(self, code, message, issues=None):
+        self.compatibility = compatibility(issues or [], supported=False)
         self.code = code
         super().__init__(f'{code}: {message}')
+
+
+def compatibility(issues=None, *, supported=True):
+    return dict(version=1, executor="sql_wap", status="supported" if supported else "blocked",
+                issues=issues or [])
 
 
 def _fail(code, message):
@@ -49,6 +55,8 @@ def _check_config(value):
     if isinstance(value, dict):
         for key, item in value.items():
             key = str(key).lstrip('+').replace('_', '-')
+            if key in ('meta', 'docs', 'columns'):
+                continue
             if key in {k.replace('_', '-') for k in _CONFIGS} and item:
                 _fail('UNSUPPORTED_CONFIG', 'hooks or write-side configuration unsupported')
             if key == 'contract' and isinstance(item, dict) and item.get('enforced'):
@@ -233,6 +241,64 @@ def normalize_select(compiled_sql, bindings, *, database_id):
     return {'sql': sql, 'sources': sources}
 
 
+def _semantic_config(nodes):
+    """Inspect resolved execution config only; issue fields never contain values."""
+    issues, properties = [], {}
+    def issue(uid, code, setting):
+        issues.append(dict(node_id=uid, code=code, setting=setting))
+    for uid, node in sorted(nodes.items()):
+        kind = node.get('resource_type')
+        if kind not in ('model', 'test'):
+            continue
+        config = node.get('config', {})
+        code = 'UNSUPPORTED_MODEL_CONFIG' if kind == 'model' else 'UNSUPPORTED_TEST_CONFIG'
+        prefix = '' if kind == 'model' else 'test.'
+        # Empty/default dbt-injected settings have no write effect.
+        for setting in sorted(_CONFIGS | {'column_types', 'unique_key', 'partition_by',
+                'cluster_by', 'table_format', 'file_format', 'location', 'catalog_name',
+                'indexes', 'bind', 'dist', 'sort', 'sql_where'}):
+            value = config.get(setting)
+            if value and (not isinstance(value, dict) or any(value.values())):
+                issue(uid, code, prefix + setting.replace('-', '_'))
+        if config.get('contract', {}).get('enforced'):
+            issue(uid, code, prefix + 'contract')
+        if kind == 'model':
+            if config.get('materialized') not in ('table', 'ephemeral'):
+                issue(uid, 'UNSUPPORTED_MATERIALIZATION', 'materialized')
+            if config.get('on_table_exists') is not None:
+                issue(uid, code, 'on_table_exists')
+            for setting, default in (('on_schema_change', 'ignore'),
+                    ('on_configuration_change', 'apply'), ('lookback', 1)):
+                if config.get(setting, default) != default:
+                    issue(uid, code, setting)
+            for setting in ('batch_size', 'begin', 'event_time', 'concurrent_batches', 'on_error'):
+                if config.get(setting) is not None:
+                    issue(uid, code, setting)
+            props = config.get('properties')
+            properties[uid] = {}
+            if props not in (None, {}):
+                if (isinstance(props, dict) and set(props) == {'format'}
+                        and isinstance(props['format'], str)
+                        and re.fullmatch(r"\s*'PARQUET'\s*", props['format'], re.IGNORECASE)):
+                    if config.get('materialized') == 'table':
+                        properties[uid] = {'format': 'PARQUET'}
+                else:
+                    issue(uid, 'UNSUPPORTED_TABLE_PROPERTIES', 'properties')
+        else:
+            for setting, default in (('severity', 'error'), ('fail_calc', 'count(*)'),
+                    ('error_if', '!=0'), ('warn_if', '!=0')):
+                value = config.get(setting, default)
+                if not isinstance(value, str) or re.sub(r'\s+', '', value).lower() != default:
+                    issue(uid, code, 'test.' + setting)
+            if config.get('limit') is not None:
+                issue(uid, code, 'test.limit')
+    if issues:
+        raise DbtError(issues[0]['code'],
+            'SQL/WAP supports table and explicitly selected ephemeral models with zero-failure COUNT tests; '
+            'remove unsupported execution settings or explicitly select ephemeral for staging views', issues)
+    return properties
+
+
 def _validate_manifest(manifest, *, catalog, source_schema):
     if any(manifest.get(k) for k in ('exposures', 'metrics', 'semantic_models', 'saved_queries', 'unit_tests')):
         _fail('INVALID_MANIFEST', 'unexpected resource type')
@@ -240,6 +306,7 @@ def _validate_manifest(manifest, *, catalog, source_schema):
     source_nodes = manifest.get('sources', {})
     if not isinstance(nodes, dict) or not isinstance(source_nodes, dict):
         _fail('INVALID_MANIFEST', 'nodes and sources required')
+    table_properties = _semantic_config(nodes)
     models, tests, sources = [], [], []
     known = set(nodes) | set(source_nodes)
     relations = {}
@@ -284,7 +351,7 @@ def _validate_manifest(manifest, *, catalog, source_schema):
                 _fail('INVALID_RELATION', 'ambiguous manifest relation')
             # Ephemeral identities still cannot collide with physical resources.
             relations[relation] = uid
-            selected.update(materialized=materialized,
+            selected.update(materialized=materialized, table_properties=table_properties[uid],
                             relation=list(relation) if materialized == 'table' else None)
             models.append(selected)
         else:
@@ -329,7 +396,7 @@ def _validate_manifest(manifest, *, catalog, source_schema):
         bindings = {rel: registry.ResourceRef('offline', 'source', str(i), 1)
                     for i, rel in enumerate(sorted(used))}
         normalize_select(item['compiled_sql'], bindings, database_id='offline')
-    return {'models': [model_by_id[uid] for uid in order], 'tests': tests,
+    return {'compatibility': compatibility(), 'models': [model_by_id[uid] for uid in order], 'tests': tests,
             'sources': sources, 'materialized_order': [uid for uid in order
                 if model_by_id[uid]['materialized'] == 'table']}
 

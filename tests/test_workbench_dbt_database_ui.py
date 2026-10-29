@@ -20,8 +20,8 @@ let plan=null,run=null,pubs={},receipts=new Map(),lose=false,wrong=null,gate=nul
 const posts=()=>calls.filter(c=>c.path.startsWith('/api/v1/dbt/')&&c.options?.method==='POST');
 const readBody=c=>JSON.parse(c.options.body);
 const ids=['model.demo.stage','model.demo.first','model.demo.second'];
-function makePlan(context,body={}){return {id:'plan-1',kind:'plan',actor:dbDbtOwner(),context:structuredClone(context),state:'READY',project_id:'lake_marts',project_name:'Lake marts',source_digest:'bytes-digest',source_schema:'raw',target_schema:'schema',staging_materialization:'ephemeral',created_at:'2026-10-29T00:00:00Z',models:ids.map((id,i)=>({unique_id:id,name:['stage','first','second'][i],materialized:i?'table':'ephemeral',relation:['sales','sandbox',['stage','first','second'][i]],depends_on:i?[ids[0]]:['source.demo.orders'],compiled_sql:i?'select * from orders':"select '<img src=x onerror=attack()>' from sales.raw.orders"})),tests:[{unique_id:'test.first',name:'not_null',test_type:'not_null',depends_on:[ids[1]]},{unique_id:'test.second',name:'unique',test_type:'unique',depends_on:[ids[2]]}],source_bindings:[{unique_id:'source.demo.orders',relation:['sales','raw','orders'],ref:{database_id:'db',schema_id:'raw',object_id:'orders',incarnation:1}}],...body};}
-function makeRun(context,body={}){return {id:'run-1',kind:'run',actor:dbDbtOwner(),context:structuredClone(context),plan_id:plan.id,state:'READY',cancel_requested:false,created_at:'2026-10-29T00:01:00Z',models:plan.models.map((m,i)=>({unique_id:m.unique_id,name:m.name,materialized:m.materialized,state:i?'BUILT':'EXPANDED',wap_model_id:'wap-'+i,wap_version:2,build_id:i?'build-'+i:null,candidate:i?{ref:{database_id:'db',schema_id:'sandbox',object_id:'candidate-'+i,incarnation:1},snapshot:'snap-'+i}:null,operation_ids:[]})),tests:plan.tests.map(t=>({...t,state:'PASSED',failure_count:0,operation_id:'op-'+t.unique_id})),operations:[{id:'safe-op',state:'FINISHED'}],...body};}
+function makePlan(context,body={}){return {id:'plan-1',kind:'plan',actor:dbDbtOwner(),context:structuredClone(context),state:'READY',compatibility:{version:1,executor:'sql_wap',status:'supported',issues:[]},project_id:'lake_marts',project_name:'Lake marts',source_digest:'bytes-digest',source_schema:'raw',target_schema:'schema',staging_materialization:'ephemeral',created_at:'2026-10-29T00:00:00Z',models:ids.map((id,i)=>({unique_id:id,name:['stage','first','second'][i],materialized:i?'table':'ephemeral',table_properties:i===1?{format:'PARQUET'}:{},relation:['sales','sandbox',['stage','first','second'][i]],depends_on:i?[ids[0]]:['source.demo.orders'],compiled_sql:i?'select * from orders':"select '<img src=x onerror=attack()>' from sales.raw.orders"})),tests:[{unique_id:'test.first',name:'not_null',test_type:'not_null',depends_on:[ids[1]]},{unique_id:'test.second',name:'unique',test_type:'unique',depends_on:[ids[2]]}],source_bindings:[{unique_id:'source.demo.orders',relation:['sales','raw','orders'],ref:{database_id:'db',schema_id:'raw',object_id:'orders',incarnation:1}}],...body};}
+function makeRun(context,body={}){return {id:'run-1',kind:'run',actor:dbDbtOwner(),context:structuredClone(context),plan_id:plan.id,state:'READY',cancel_requested:false,created_at:'2026-10-29T00:01:00Z',models:plan.models.map((m,i)=>({unique_id:m.unique_id,name:m.name,materialized:m.materialized,table_properties:structuredClone(m.table_properties),state:i?'BUILT':'EXPANDED',wap_model_id:'wap-'+i,wap_version:2,build_id:i?'build-'+i:null,candidate:i?{ref:{database_id:'db',schema_id:'sandbox',object_id:'candidate-'+i,incarnation:1},snapshot:'snap-'+i}:null,operation_ids:[]})),tests:plan.tests.map(t=>({...t,state:'PASSED',failure_count:0,operation_id:'op-'+t.unique_id})),operations:[{id:'safe-op',state:'FINISHED'}],...body};}
 route=async(path,options)=>{
  const url=new URL('http://local'+path),body=options?.body?JSON.parse(options.body):null,context=body?.context||JSON.parse(url.searchParams.get('context')||'null');
  if(!url.pathname.startsWith('/api/v1/dbt/'))return {};
@@ -469,6 +469,209 @@ route=async(path,options)=>{const reply=await originalRoute(path,options);if(opt
 await dbDbtSubmit('publish',ids[1]);assert.deepEqual(p.publications,{});assert.ok(p.intent);const first=posts().at(-1);assert.equal(p.intent.body.node_id,ids[1]);
 route=originalRoute;await dbDbtRecover();assert.deepEqual(posts().at(-1),first);assert.equal(p.publications[ids[1]].node_id,ids[1]);assert.equal(p.intent,null);clearTimeout(p.timer);
 """)
+
+    def test_missing_contract_ack_polls_original_plan_until_supported_or_blocked(self):
+        for language in ['ja', 'en']:
+            for terminal in ['READY', 'FAILED']:
+                with self.subTest(language=language, terminal=terminal):
+                    self.javascript(r"""
+await openDbt();setLanguage('LANGUAGE');
+const originalRoute=route,originalTimeout=setTimeout,originalClearTimeout=clearTimeout;
+// Capture and invoke the production scheduler callback, without waiting on wall time.
+globalThis.setTimeout=callback=>({callback,unref(){}});globalThis.clearTimeout=()=>{};
+const originalObserve=dbDbtObserve;let observation;
+dbDbtObserve=(...args)=>(observation=originalObserve(...args));
+route=async(path,options)=>{
+ const reply=await originalRoute(path,options);
+ if(options?.method==='POST'&&path.endsWith('/plans')){
+  reply.plan.state='QUEUED';delete reply.plan.compatibility;
+  plan.state='COMPILING';delete plan.compatibility;
+ }
+ return reply;
+};
+await dbDbtSubmit('compile');const savedContext=structuredClone(p.context),savedId=p.plan.id;
+function assertPending(state){
+ assert.equal(p.plan.state,state);assert.equal(p.plan.id,savedId);
+ assert.deepEqual(p.plan.context,savedContext);assert.deepEqual(p.context,savedContext);
+ assert.equal(dbDbtCompatibility(p.plan),'pending');assert.equal(dbDbtNode('build').disabled,true);
+ const detail=text(dbDbtNode('compatibility')),reason=dbDbtNode('reason').textContent;
+ assert.match(detail,'LANGUAGE'==='ja'?/設定の互換性を検証中/:/Validating settings compatibility/);
+ const wait='LANGUAGE'==='ja'?/元の保存済みプランの検証完了をお待ちください/:/Wait for validation of the original saved plan/;
+ assert.match(detail,wait);assert.match(reason,wait);
+ assert.doesNotMatch(detail+reason,/Legacy plan|旧プラン|Recompile to validate|新規構築の前に再コンパイル/);
+ assert.equal(posts().length,1);assert.ok(p.timer?.callback);
+}
+assertPending('QUEUED');await dbDbtSubmit('build');assert.equal(posts().length,1);
+let mark=calls.length;p.timer.callback();await observation;assertPending('COMPILING');
+assert.equal(calls.length,mark+1);assert.match(calls.at(-1).path,/\/plans\/plan-1\?/);assert.equal(calls.at(-1).options.method,undefined);
+await dbDbtSubmit('build');assert.equal(posts().length,1);
+plan.state='TERMINAL';plan.compatibility={version:1,executor:'sql_wap',status:'TERMINAL'==='READY'?'supported':'blocked',issues:'TERMINAL'==='READY'?[]:[{node_id:ids[1],code:'UNSUPPORTED_MODEL_CONFIG',setting:'on_schema_change'}]};
+mark=calls.length;p.timer.callback();await observation;
+assert.equal(calls.length,mark+1);assert.equal(posts().length,1);assert.equal(p.timer,null);
+assert.equal(p.plan.id,savedId);assert.deepEqual(p.plan.context,savedContext);assert.deepEqual(p.context,savedContext);
+assert.equal(p.plan.state,'TERMINAL');assert.equal(dbDbtNode('build').disabled,'TERMINAL'!=='READY');
+assert.equal(dbDbtCanBuild(),'TERMINAL'==='READY');
+const detail=text(dbDbtNode('compatibility')),reason=dbDbtNode('reason').textContent;
+if('TERMINAL'==='READY'){
+ assert.match(detail,'LANGUAGE'==='ja'?/対応済み: SQL \/ WAP/:/Supported: SQL \/ WAP/);
+ assert.match(detail,'LANGUAGE'==='ja'?/保存プランと下記の適用テーブル形式/:/Build candidates and test using the saved plan/);
+}else{
+ assert.match(detail,'LANGUAGE'==='ja'?/停止中: 未対応の設定/:/Blocked: unsupported settings/);
+ assert.match(detail,/on_schema_change/);
+ assert.match(reason,'LANGUAGE'==='ja'?/設定を確認し、対応範囲のプロジェクト/:/Review the settings and compile a supported project/);
+ await dbDbtSubmit('build');assert.equal(posts().length,1);
+}
+globalThis.setTimeout=originalTimeout;globalThis.clearTimeout=originalClearTimeout;
+""".replace('LANGUAGE', language).replace('TERMINAL', terminal))
+
+    def test_present_in_progress_contracts_fail_closed_instead_of_pending(self):
+        self.javascript(r"""
+await compile();
+for(const state of ['QUEUED','COMPILING'])for(const compatibility of [null,{},[],{version:2,executor:'sql_wap',status:'supported',issues:[]},{version:1,executor:'native',status:'supported',issues:[]},{version:1,executor:'sql_wap',status:'unknown',issues:[]},{version:1,executor:'sql_wap',status:'supported',issues:[{}]},{version:1,executor:'sql_wap',status:'blocked',issues:[{node_id:ids[0],code:'UNSUPPORTED_MATERIALIZATION',setting:'materialized'}]}]){
+ plan={...plan,state,compatibility};await dbDbtObserve('plan',plan.id);
+ for(const lang of ['ja','en']){
+  setLanguage(lang);const blocked=compatibility?.status==='blocked';
+  assert.equal(dbDbtCompatibility(p.plan),blocked?'blocked':'invalid');
+  assert.match(text(dbDbtNode('compatibility')),blocked?(lang==='ja'?/停止中: 未対応の設定/:/Blocked: unsupported settings/):(lang==='ja'?/互換性を検証できません/:/Compatibility not validated/));
+  assert.match(dbDbtNode('reason').textContent,blocked?(lang==='ja'?/ephemeral を明示指定/:/explicitly choose ephemeral/):(lang==='ja'?/新規構築の前に再コンパイル/:/Recompile to validate settings/));
+  assert.equal(dbDbtNode('build').disabled,true);assert.equal(dbDbtCanBuild(),false);
+ }
+ await dbDbtSubmit('build');assert.equal(posts().length,1);
+}
+clearTimeout(p.timer);
+""")
+
+    def test_supported_saved_contract_and_actual_plan_run_table_formats(self):
+        self.javascript(r"""
+await compile();assert.equal(dbDbtCanBuild(),true);
+for(const lang of ['ja','en']){
+ setLanguage(lang);
+ const detail=text(dbDbtNode('compatibility'));
+ assert.match(detail,/SQL \/ WAP/);assert.match(detail,/COUNT\(\*\)/);
+ assert.match(detail,lang==='ja'?/標準 executor と view は未対応/:/Native executor and views are unsupported/);
+ assert.match(text(dbDbtNode('models')),lang==='ja'?/適用テーブル形式/:/Applied table format/);
+ assert.match(text(dbDbtNode('models')),/PARQUET/);
+ assert.match(text(dbDbtNode('models')),lang==='ja'?/コネクタ既定/:/Connector default/);
+}
+const detail=dbDbtNode('plan-detail');assert.ok(detail.children.indexOf(dbDbtNode('compatibility'))<detail.children.length-1);
+await dbDbtSubmit('build');assert.match(text(dbDbtNode('candidates')),/PARQUET/);
+assert.match(text(dbDbtNode('candidates')),/Connector default/);
+// Run format is read from the run, never inferred from a subsequently inspected plan.
+p.plan={...p.plan,models:p.plan.models.map(m=>({...m,table_properties:{}}))};dbDbtRender();
+assert.match(text(dbDbtNode('candidates')),/PARQUET/);
+assert.equal(posts().length,2);assert.equal(calls.some(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST'),false);
+""")
+
+    def test_blocked_view_and_test_settings_are_localized_and_actionable(self):
+        self.javascript(r"""
+await compile();const selection=dbDbtNode('materialization').value;
+plan={...plan,state:'FAILED',models:[],compatibility:{version:1,executor:'sql_wap',status:'blocked',issues:[{node_id:'model.demo.stage',code:'UNSUPPORTED_MATERIALIZATION',setting:'materialized'},{node_id:'test.demo.policy',code:'UNSUPPORTED_TEST_CONFIG',setting:'test.severity'}]}};
+await dbDbtObserve('plan',plan.id);
+for(const lang of ['ja','en']){
+ setLanguage(lang);const detail=text(dbDbtNode('compatibility'));
+ assert.match(detail,/model.demo.stage/);assert.match(detail,/test.demo.policy/);assert.match(detail,/test.severity/);
+ assert.match(detail,lang==='ja'?/未対応の materialization/:/Unsupported materialization/);
+ assert.match(detail,lang==='ja'?/テストは error・COUNT\(\*\)・失敗件数0が必要/:/Test requires error severity, COUNT\(\*\) and zero failures/);
+ assert.match(dbDbtNode('reason').textContent,lang==='ja'?/ephemeral を明示指定/:/explicitly choose ephemeral/);
+ assert.doesNotMatch(dbDbtNode('reason').textContent,/Only the original owner/);
+ assert.equal(dbDbtNode('build').disabled,true);assert.equal(dbDbtNode('compile').disabled,false);
+}
+assert.equal(dbDbtNode('materialization').value,selection);await dbDbtSubmit('build');assert.equal(posts().length,1);
+plan.compatibility.issues.shift();await dbDbtObserve('plan',plan.id);
+assert.match(dbDbtNode('reason').textContent,/Review the settings and compile a supported project/);
+""")
+
+    def test_unknown_or_malformed_compatibility_cannot_build(self):
+        self.javascript(r"""
+await compile();
+for(const compatibility of [null,{},[],{version:2,executor:'sql_wap',status:'supported',issues:[]},{version:'1',executor:'sql_wap',status:'supported',issues:[]},{version:1,executor:'native',status:'supported',issues:[]},{version:1,executor:'sql_wap',status:'unknown',issues:[]},{version:1,executor:'sql_wap',status:'supported'},{version:1,executor:'sql_wap',status:'supported',issues:[{}]}]){
+ plan={...plan,compatibility};await dbDbtObserve('plan',plan.id);
+ assert.ok(p.plan);assert.equal(dbDbtCanBuild(),false);assert.equal(dbDbtNode('build').disabled,true);
+ assert.match(text(dbDbtNode('compatibility')),/Compatibility not validated/);
+ assert.match(dbDbtNode('reason').textContent,/Recompile to validate settings/);
+ await dbDbtSubmit('build');
+}
+plan={...plan,compatibility:{version:1,executor:'sql_wap',status:'blocked',issues:[]}};
+await dbDbtObserve('plan',plan.id);assert.equal(dbDbtCanBuild(),false);assert.equal(posts().length,1);
+""")
+
+    def test_legacy_plan_get_history_and_existing_run_publication_are_preserved(self):
+        self.javascript(r"""
+await compile();delete plan.compatibility;for(const m of plan.models)delete m.table_properties;
+await dbDbtHistory();await dbDbtObserve('plan',plan.id);
+assert.ok(p.plan);assert.match(text(dbDbtNode('history')),/plan-1/);
+for(const state of ['READY','FAILED']){
+ plan.state=state;await dbDbtObserve('plan',plan.id);
+ for(const lang of ['ja','en']){
+  setLanguage(lang);
+  assert.equal(dbDbtCompatibility(p.plan),'legacy');
+  assert.match(text(dbDbtNode('compatibility')),lang==='ja'?/旧プラン: 再コンパイルが必要/:/Legacy plan: recompile required/);
+  assert.match(dbDbtNode('reason').textContent,lang==='ja'?/新規構築の前に再コンパイル/:/Recompile to validate settings/);
+  assert.equal(dbDbtNode('build').disabled,true);
+ }
+}
+await dbDbtSubmit('build');assert.equal(posts().length,1);
+// An already admitted run is observed through GET and retains all publication gates.
+run=makeRun(p.context);for(const m of run.models)delete m.table_properties;
+await dbDbtObserve('run',run.id);assert.equal(dbDbtTestsPassed(),true);
+assert.match(text(dbDbtNode('candidates')),/Not recorded/);assert.equal(dbDbtCanPublish(p.run.models[1]),true);
+review();await dbDbtSubmit('publish',ids[1]);assert.ok(p.publications[ids[1]]);assert.equal(posts().length,2);
+""")
+
+    def test_diagnostics_name_every_semantic_setting_without_rendering_values(self):
+        self.javascript(r"""
+await compile();
+const shared=['pre_hook','post_hook','on_run_start','on_run_end','hooks','grants','persist_docs','sql_header','store_failures','store_failures_as','incremental_strategy','full_refresh','column_types','unique_key','partition_by','cluster_by','table_format','file_format','location','catalog_name','indexes','bind','dist','sort','sql_where','contract'];
+const modelOnly=['materialized','properties','on_table_exists','on_schema_change','on_configuration_change','lookback','batch_size','begin','event_time','concurrent_batches','on_error'];
+const settings=[...shared,...shared.map(s=>'test.'+s),...modelOnly,'test.severity','test.fail_calc','test.error_if','test.warn_if','test.limit'];
+const secret="SELECT private_token FROM '/private/dbt' <img src=x onerror=attack()>";
+plan={...plan,state:'FAILED',compatibility:{version:1,executor:'sql_wap',status:'blocked',issues:settings.map(setting=>({node_id:setting.startsWith('test.')?'test.demo.policy':ids[1],code:setting.startsWith('test.')?'UNSUPPORTED_TEST_CONFIG':'UNSUPPORTED_MODEL_CONFIG',setting,value:secret,config:{injected:secret}}))}};
+await dbDbtObserve('plan',plan.id);
+for(const lang of ['ja','en']){
+ setLanguage(lang);const detail=text(dbDbtNode('compatibility'));
+ const table=dbDbtNode('compatibility').descendants().find(n=>n.tagName==='TABLE');
+ const rows=table.children.find(n=>n.tagName==='TBODY').children;
+ assert.deepEqual(rows.map(row=>row.children[1].textContent),settings);
+ assert.doesNotMatch(detail,/Unknown setting|不明な設定|private_token|private\/dbt|onerror|injected/);
+ assert.equal(dbDbtNode('build').disabled,true);
+}
+await dbDbtSubmit('build');assert.equal(posts().length,1);
+""")
+
+    def test_diagnostics_allowlist_hides_injected_values_paths_sql_and_logs(self):
+        self.javascript(r"""
+await compile();const secret="SELECT secret_token FROM '/private/dbt/project' <img src=x onerror=attack()>";
+plan={...plan,state:'FAILED',compatibility:{version:1,executor:'sql_wap',status:'blocked',raw_logs:secret,issues:[
+ {node_id:ids[1],code:'UNSUPPORTED_TABLE_PROPERTIES',setting:'properties',value:secret,path:secret,sql:secret},
+ {node_id:null,code:'UNSUPPORTED_MODEL_CONFIG',setting:'on_table_exists',config:secret},
+ {node_id:secret,code:secret,setting:secret},
+ {node_id:ids[2],code:'__proto__',setting:'column_types'},null
+]}};
+plan.models[1].table_properties={format:secret};plan.models[2].table_properties={format:'PARQUET',secret};
+await dbDbtObserve('plan',plan.id);
+const detail=text(dbDbtNode('plan-detail')),models=text(dbDbtNode('models'));
+assert.match(detail,/Only fixed format=PARQUET is supported/);assert.match(detail,/Unsupported model setting/);
+assert.match(detail,/Unknown compatibility issue/);assert.match(detail,/Unknown setting/);
+assert.doesNotMatch(detail+models,/secret_token|private\/dbt|onerror|raw_logs/);
+assert.match(models,/Not validated/);assert.equal(dbDbtNode('build').disabled,true);
+assert.equal(calls.some(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST'),false);assert.equal(posts().length,1);
+""")
+
+    def test_compatibility_diagnostics_purge_with_role_and_context_and_fit_narrow_structure(self):
+        self.javascript(r"""
+narrow=true;await compile();assert.ok(dbDbtNode('compatibility').children.length);
+const sections=dbDbtNode('compatibility');assert.equal(sections.tagName,'SECTION');assert.equal(sections.getAttribute('aria-labelledby'),'db-dbt-compatibility-title');
+plan.compatibility={version:1,executor:'sql_wap',status:'blocked',issues:[{node_id:ids[0],code:'UNSUPPORTED_MATERIALIZATION',setting:'materialized'}]};
+await dbDbtObserve('plan',plan.id);assert.equal(dbDbtNode('compatibility').children.find(n=>n.className==='table-wrap').children[0].tagName,'TABLE');
+currentRole='bi_viewer';dbDbtValidate();assert.equal(p.plan,null);assert.equal(dbDbtNode('plan-detail').children.length,0);
+assert.equal(dbDbtNode('models').children.length,0);assert.equal(dbDbtNode('build').disabled,true);
+currentRole='admin';dbDbtValidate();await dbDbtRefresh();assert.equal(dbDbtNode('plan-detail').children.some(n=>n.id==='db-dbt-compatibility'),false);
+await dbDbtObserve('plan',plan.id);assert.match(text(dbDbtNode('compatibility')),/Unsupported materialization/);
+inventory[0].generation_id='changed';await dbDbtRefreshAuthorization();assert.equal(p.plan,null);assert.equal(dbDbtNode('plan-detail').children.length,0);
+assert.equal(posts().length,1);
+""")
+        self.assertIn('#db-dbt-panel :is(p,td,th,summary){overflow-wrap:anywhere}', harness.HTML)
+        self.assertIn('#db-dbt-panel .table-wrap{max-width:100%;overflow-x:auto}', harness.HTML)
 
     def test_japanese_english_state_copy_and_native_responsive_structure(self):
         self.javascript(r"""

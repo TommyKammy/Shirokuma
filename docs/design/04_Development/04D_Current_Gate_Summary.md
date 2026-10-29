@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-29
-version: "2.6.0"
+version: "2.7.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -23,7 +23,7 @@ tags: [shirokuma, local, handoff, gates]
 後続計画は[Databaseコア機能統合とコンピュート拡張](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を参照する。DB作成導線は[本人の条件付き受入](../../guides/database-logical-create-owner-acceptance-2026-10-28.md)に進み、待ち時間改善を継続する。
 2026-10-29、DB-P6-0の[表示契約](../../guides/database-p6-0-implementation-2026-10-29.md)、DB-P6-1の[保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
 [DB-P6-2の共有LOCAL管理](../../guides/database-p6-2-implementation-2026-10-29.md)は実装済み、技術受入は完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。read-only UNKNOWNは結果を変えず実行閉鎖・OPENまで照合し、元の138 DB／552 Schemaとbindingを保持した。
-[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)で承認済みSQL projectの耐久plan／run、全test成功を条件にしたWAP公開、通常API／CLI／Workbenchを実装した。table／ephemeral範囲の技術受入を完了した。標準dbt executor・view等の互換性を次unitで確定する。DB-P6-3全体、Bears／SRE／Policy、実サイズ／multi-WarehouseとM1本人受入は未完了である。
+[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)はtable／ephemeral範囲の技術受入を完了した。続く[C1設定互換性](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)はPARQUETの実適用・未対応設定の診断・旧plan再検証を実装し、この範囲の技術受入を完了した。次はC2で標準dbt executor／真のVIEWのidentity・権限・型付き操作を設計する。DB-P6-3全体、Bears／SRE／Policy、実サイズ／multi-WarehouseとM1本人受入は未完了である。
 DB-P7〜9は後続計画であり、下表の旧PhaseのCompletedから新Database対応・実サイズ変更・用途別Warehouseの完了を推定しない。
 
 | Phase / WP | Gate Objective | Current Status |

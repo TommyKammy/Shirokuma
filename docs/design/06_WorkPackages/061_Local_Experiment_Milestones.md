@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-29
-version: "7.6.0"
+version: "7.7.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-29 — DB-P6-3C1 SQL/WAP configuration compatibility
+
+- Added saved, versioned compatibility diagnostics and fixed typed PARQUET for candidate CTAS and publication CTAS/CRTA. See the [contract and verification record](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md).
+- Unsupported materialization/model/test settings are rejected with reasons; legacy plans require recompilation for new runs while admitted histories and receipts remain usable. Technical acceptance passed: 3,194 Python tests with 33 existing skips, Go tests/vet, design checks and live API/CLI/browser/format verification.
+- Standard dbt executor and true VIEW identity/authority/lifecycle remain C2 work. Full DB-P6-3 and M1 owner acceptance remain open.
 
 ### 2026-10-29 — DB-P6-3B durable dbt SQL / WAP integration
 

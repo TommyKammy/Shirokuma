@@ -665,7 +665,10 @@ class Execution:
                                               'wap_' + secrets.token_hex(12))
         name = self._locator(locator)
         self._absent(locator)
-        self._execute('wap_build', 'CREATE TABLE ' + name + ' AS ' + generated, step,
+        import db_dbt
+        properties = db_dbt._table_properties(self)
+        clause = " WITH (format='PARQUET')" if properties else ''
+        self._execute('wap_build', 'CREATE TABLE ' + name + clause + ' AS ' + generated, step,
                       commit_result=dict(result, stage_locator=asdict(locator), input_refs=inputs,
                                          generated_sql=generated))
         ref = self._observe(locator)
@@ -730,7 +733,9 @@ class Execution:
             self._absent(target)
         columns = ', '.join(_column(c['name']) for c in audit['stage']['columns'])
         source = self._ref(ref) + ' FOR VERSION AS OF ' + audit['stage']['snapshot']
-        return self._execute('wap_publish', prefix + name + ' AS SELECT ' + columns + ' FROM ' + source,
+        properties = db_dbt._table_properties(self, build=build)
+        clause = " WITH (format='PARQUET')" if properties else ''
+        return self._execute('wap_publish', prefix + name + clause + ' AS SELECT ' + columns + ' FROM ' + source,
                              step, commit_result=result)
 
     @_serialized

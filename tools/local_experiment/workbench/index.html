@@ -546,6 +546,8 @@ html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wr
 #db-dbt-panel table{width:100%}
 #db-dbt-panel details{padding-block:10px;border-bottom:1px solid var(--line)}
 #db-dbt-panel summary{cursor:pointer}
+#db-dbt-panel .db-dbt-compatibility{padding-block:12px;border-block:1px solid var(--line);margin-block:8px}
+#db-dbt-panel .db-dbt-compatibility h3{margin-bottom:8px}
 #db-dbt-panel .db-dbt-confirm{padding-block:12px;border-top:1px solid var(--line)}
 @media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}#db-dbt-panel select{width:100%}#db-dbt-panel .panel-body{padding:12px}}
 </style>
@@ -2462,7 +2464,7 @@ editJob(null);clearSelectedJob();
 const dbWorksheetKey='shirokuma.worksheets.v2';
 Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
- "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, tests and per-model WAP publication. Native dbt build, views and table properties are unsupported.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。Database dbt はコンパイル済み table／ephemeral SELECT の候補構築・テストとモデル単位の WAP 公開に対応します。標準 dbt build・view・table properties は未対応です。",
+ "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, tests and per-model WAP publication. Only fixed format=PARQUET table properties are supported. Native dbt build, views and other table properties are unsupported.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。Database dbt はコンパイル済み table／ephemeral SELECT の候補構築・テストとモデル単位の WAP 公開に対応します。table properties は固定の format=PARQUET のみ対応します。標準 dbt build・view・その他の table properties は未対応です。",
  "AI Bears and Copilot are unavailable in Database mode. Use SQL for queries and Manual WAP for build, audit and publication.": "Database モードでは AI Bears と Copilot は未対応です。クエリには SQL、build・audit・公開には手動 WAP を利用してください。",
  "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.": "保存済みメタデータの監査を利用できます。SQL・プロンプト・結果は含みません。Pawprints は別の補助的な基盤プレビューです。",
  "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control.": "Database モードでは Compute 操作・Auto-Chill・ガバナンス検査は未対応です。共有ウェアハウスの状態はヘッダーで確認できます。Database の admin ロールは基盤の操作権限を付与しません。",
@@ -3361,7 +3363,7 @@ async function initializeDatabaseUI(session){
  ],
  [
   "transformation",
-  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, tests and per-model WAP publication. Native dbt build, views and table properties are unsupported."
+  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, tests and per-model WAP publication. Only fixed format=PARQUET table properties are supported. Native dbt build, views and other table properties are unsupported."
  ],
  [
   "bears",
@@ -4969,7 +4971,34 @@ Object.assign(i18n.ja,{
  'Tests passed, awaiting publication':'テスト成功・公開待ち','Published':'公開済み','Publication committed; recording failed. Do not republish.':'公開はコミット済みですが記帳に失敗しました。再公開しないでください。','Backend outcome unknown. Reconcile existing operations; publication is blocked.':'backend の実行結果が不明です。既存処理を照合してください。公開は停止しています。',
  'Observation failed. Saved backend state is unchanged. Retry observation.':'状態の照会に失敗しました。保存済み backend 状態は変更していません。再照会してください。','Receipt not observed. Recover repeats only the original request with the same key and context.':'受付を確認できません。照合は元のキーとコンテキストで同じ要求だけを再送します。','Request in progress. Inputs and receipt are fixed.':'要求中です。入力と受付情報は固定されています。','Compile may take a few minutes. It does not execute engine SQL.':'コンパイルには数分かかる場合があります。エンジン SQL は実行しません。','Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'閲覧者は利用できません。許可された data_engineer または admin を選択してください。ソース SQL は非表示です。',
  'Refresh an authorized Database and SANDBOX context.':'許可された Database と SANDBOX コンテキストを更新してください。','Saved context differs. Reselect the original context; requests are never retargeted.':'保存コンテキストと異なります。元のコンテキストを選び直してください。要求の対象は変更しません。','Only the original owner and saved execution role/context may build this plan.':'元の所有者と保存済み実行ロール／コンテキストでのみ、このプランを構築できます。','Publication requires admin and every planned test to pass. Each model publishes independently.':'公開には admin と予定された全テストの成功が必要です。モデルごとに独立して公開します。','Choose an approved project and explicit registered source and target schemas.':'承認済みプロジェクトと登録済みソース／公開先 Schema を選択してください。','lake_marts defaults to views. Choose an explicit ephemeral override to compile its staging models in this SQL subset. No automatic conversion.':'lake_marts の既定は view です。この SQL 対応範囲で staging モデルをコンパイルするには ephemeral を明示指定してください。自動変換はしません。',
- 'Compiled table/ephemeral SELECT and WAP only. Native dbt build, views and table properties are unsupported.':'コンパイル済み table／ephemeral SELECT と WAP に対応します。標準 dbt build・view・table properties は未対応です。','Context is independent of Worksheets. History and deep links only read saved records.':'Worksheet とは独立したコンテキストです。履歴と直接リンクは保存済み記録だけを参照します。','Choose a saved plan or compile an approved project.':'保存プランを選ぶか、承認済みプロジェクトをコンパイルしてください。','Choose a saved run or build a ready plan.':'保存実行を選ぶか、準備済みプランから候補を構築してください。','Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.':'ソースまたは公開先の識別情報が変わりました。Schema を確認し、コンテキストを更新して新しいプランをコンパイルしてください。',
+ 'Compiled table/ephemeral SELECT and WAP only. Only fixed format=PARQUET table properties are supported. Native dbt build, views and other table properties are unsupported.':'コンパイル済み table／ephemeral SELECT と WAP に対応します。table properties は固定の format=PARQUET のみ対応します。標準 dbt build・view・その他の table properties は未対応です。','Context is independent of Worksheets. History and deep links only read saved records.':'Worksheet とは独立したコンテキストです。履歴と直接リンクは保存済み記録だけを参照します。','Choose a saved plan or compile an approved project.':'保存プランを選ぶか、承認済みプロジェクトをコンパイルしてください。','Choose a saved run or build a ready plan.':'保存実行を選ぶか、準備済みプランから候補を構築してください。','Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.':'ソースまたは公開先の識別情報が変わりました。Schema を確認し、コンテキストを更新して新しいプランをコンパイルしてください。',
+ 'Compatibility':'互換性',
+ 'Validating settings compatibility':'設定の互換性を検証中',
+ 'Wait for validation of the original saved plan. No new compile request is needed.':'元の保存済みプランの検証完了をお待ちください。新しいコンパイル要求は不要です。',
+ 'Supported: SQL / WAP':'対応済み: SQL / WAP',
+ 'Blocked: unsupported settings':'停止中: 未対応の設定',
+ 'Legacy plan: recompile required':'旧プラン: 再コンパイルが必要',
+ 'Compatibility not validated':'互換性を検証できません',
+ 'Recompile to validate settings before a new build. Existing runs and publications retain their saved gates.':'新規構築の前に再コンパイルして設定を検証してください。既存の実行と公開には保存済みの gate を適用します。',
+ 'Review the settings and compile a supported project.':'設定を確認し、対応範囲のプロジェクトをコンパイルしてください。',
+ 'For staging, explicitly choose ephemeral, or use a supported project, then recompile. No automatic conversion.':'staging には ephemeral を明示指定するか、対応範囲のプロジェクトを選び、再コンパイルしてください。自動変換はしません。',
+ 'SQL / WAP uses compiled table/ephemeral SELECT and tests with error severity, COUNT(*) and zero failures. Native executor and views are unsupported.':'SQL / WAP はコンパイル済み table／ephemeral SELECT と、error・COUNT(*)・失敗件数0のテストに対応します。標準 executor と view は未対応です。',
+ 'Build candidates and test using the saved plan and applied table formats below.':'保存プランと下記の適用テーブル形式で候補を構築し、テストしてください。',
+ 'Unsupported materialization':'未対応の materialization',
+ 'Unsupported model setting':'未対応のモデル設定',
+ 'Only fixed format=PARQUET is supported':'固定の format=PARQUET のみ対応',
+ 'Test requires error severity, COUNT(*) and zero failures':'テストは error・COUNT(*)・失敗件数0が必要',
+ 'Unknown compatibility issue':'不明な互換性の問題',
+ 'Node':'ノード',
+ 'Setting':'設定',
+ 'Reason':'理由',
+ 'Project / unknown node':'プロジェクト / 不明なノード',
+ 'Unknown setting':'不明な設定',
+ 'Applied table format':'適用テーブル形式',
+ 'Connector default':'コネクタ既定',
+ 'Not recorded':'記録なし',
+ 'Not applicable':'対象外',
+ 'Not validated':'未検証',
  'Model':'モデル','Materialization':'materialization','Candidate Ref / Snapshot / WAP':'候補 Ref / Snapshot / WAP','Failure count':'失敗件数','Ephemeral, expanded into SQL':'ephemeral、SQL 内に展開','Table candidate':'table 候補','Saved context':'保存コンテキスト','Project version / source digest':'プロジェクト版 / ソース digest','Target FQN':'公開先 FQN','Dependencies':'依存関係','Sources / refs':'ソース / refs','Backend state':'backend 状態','Request key':'要求キー','Publication':'公開','No saved records yet. Compile a project to create a plan.':'保存記録はありません。プロジェクトをコンパイルしてプランを作成してください。'
 });
 for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
@@ -5027,7 +5056,47 @@ async function dbDbtRefresh(){
  ui(p.status,'Choose an approved project and explicit registered source and target schemas.');
  }catch(error){if(current())dbDbtError(error);}finally{if(current()){p.pending=false;dbDbtRender();}}
 }
-function dbDbtCanBuild(){const p=dbDbt,a=p.plan;return dbDbtAllowed()&&a?.state==='READY'&&a.actor===dbDbtOwner()&&dataopsSameContext(a.context,p.context)&&!p.intent&&!p.run;}
+// Compatibility comes only from the selected saved plan. Unknown contracts fail closed.
+function dbDbtCompatibility(a){
+ if(!a||a.compatibility===undefined)return ['QUEUED','COMPILING'].includes(a?.state)?'pending':'legacy';
+ const c=a.compatibility;
+ if(!c||c.version!==1||c.executor!=='sql_wap'||!Array.isArray(c.issues)||!['supported','blocked'].includes(c.status))return 'invalid';
+ return c.status==='supported'&&c.issues.length?'invalid':c.status;
+}
+function dbDbtCompatibilityAction(a){
+ const state=dbDbtCompatibility(a);
+ if(state==='pending')return 'Wait for validation of the original saved plan. No new compile request is needed.';
+ if(state==='legacy'||state==='invalid')return 'Recompile to validate settings before a new build. Existing runs and publications retain their saved gates.';
+ if(state==='blocked')return a.compatibility.issues.some(i=>i?.code==='UNSUPPORTED_MATERIALIZATION')?'For staging, explicitly choose ephemeral, or use a supported project, then recompile. No automatic conversion.':'Review the settings and compile a supported project.';
+ return 'Build candidates and test using the saved plan and applied table formats below.';
+}
+function dbDbtFormat(m){
+ if(m.materialized==='ephemeral')return t('Not applicable');
+ const properties=m.table_properties;
+ if(properties===undefined)return t('Not recorded');
+ if(!properties||typeof properties!=='object'||Array.isArray(properties))return t('Not validated');
+ const keys=Object.keys(properties);
+ return !keys.length?t('Connector default'):keys.length===1&&properties.format==='PARQUET'?'PARQUET':t('Not validated');
+}
+function dbDbtRenderCompatibility(parent,a){
+ const state=dbDbtCompatibility(a),section=dataopsNode('section','db-dbt-compatibility',parent);section.className='db-dbt-compatibility';section.setAttribute('aria-labelledby','db-dbt-compatibility-title');
+ dataopsNode('h3','db-dbt-compatibility-title',section,'Compatibility');
+ dataopsNode('p','',section,({pending:'Validating settings compatibility',supported:'Supported: SQL / WAP',blocked:'Blocked: unsupported settings',legacy:'Legacy plan: recompile required',invalid:'Compatibility not validated'})[state]);
+ if(state==='supported')dataopsNode('p','',section,'SQL / WAP uses compiled table/ephemeral SELECT and tests with error severity, COUNT(*) and zero failures. Native executor and views are unsupported.');
+ if(state==='blocked'){
+  const reasons={UNSUPPORTED_MATERIALIZATION:'Unsupported materialization',UNSUPPORTED_MODEL_CONFIG:'Unsupported model setting',UNSUPPORTED_TABLE_PROPERTIES:'Only fixed format=PARQUET is supported',UNSUPPORTED_TEST_CONFIG:'Test requires error severity, COUNT(*) and zero failures'};
+  const sharedSettings=['pre_hook','post_hook','on_run_start','on_run_end','hooks','grants','persist_docs','sql_header','store_failures','store_failures_as','incremental_strategy','full_refresh','column_types','unique_key','partition_by','cluster_by','table_format','file_format','location','catalog_name','indexes','bind','dist','sort','sql_where','contract'];
+  const settings=[...sharedSettings,...sharedSettings.map(s=>'test.'+s),'materialized','properties','on_table_exists','on_schema_change','on_configuration_change','lookback','batch_size','begin','event_time','concurrent_batches','on_error','test.severity','test.fail_calc','test.error_if','test.warn_if','test.limit'];
+  const wrap=dataopsNode('div','',section);wrap.className='table-wrap';
+  dbDbtTable(wrap,['Node','Setting','Reason'],a.compatibility.issues.map(i=>[
+   typeof i?.node_id==='string'&&i.node_id.length<=240&&/^(model|test)\.[a-zA-Z0-9_.-]+$/.test(i.node_id)?i.node_id:t('Project / unknown node'),
+   settings.includes(i?.setting)?i.setting:t('Unknown setting'),
+   t(Object.hasOwn(reasons,i?.code)?reasons[i.code]:'Unknown compatibility issue')
+  ]));
+ }
+ dataopsNode('p','',section,dbDbtCompatibilityAction(a));
+}
+function dbDbtCanBuild(){const p=dbDbt,a=p.plan;return dbDbtAllowed()&&a?.state==='READY'&&dbDbtCompatibility(a)==='supported'&&a.actor===dbDbtOwner()&&dataopsSameContext(a.context,p.context)&&!p.intent&&!p.run;}
 function dbDbtOwnRun(){const p=dbDbt;return dbDbtAllowed()&&p.run?.actor===dbDbtOwner()&&dataopsSameContext(p.run.context,p.context);}
 function dbDbtPublicationAssociated(a,run=dbDbt.run){return !!run&&dbDbtArtifact(run,'run',dbDbt.context,run.id)&&dbDbtArtifact(a,'publication',dbDbt.context,a?.id)&&a.run_id===run.id&&a.parent_run_id===run.id&&a.plan_id===run.plan_id&&run.models?.some(m=>m.unique_id===a.node_id&&(!m.publication_id||m.publication_id===a.id));}
 function dbDbtOwnPublication(a){return dbDbtAllowed()&&dbDbtPublicationAssociated(a)&&a.actor===dbDbtOwner()&&dataopsSameContext(a.context,dbDbt.context);}
@@ -5118,17 +5187,17 @@ function dbDbtRender(){
  dbDbtNode('recover').disabled=p.pending||!dbDbtCanRecover()||dbDbtCanCloseRejected();dbDbtNode('recover').hidden=!p.intent;dbDbtNode('close-rejected').hidden=!dbDbtCanCloseRejected();dbDbtNode('close-rejected').disabled=p.pending||!dbDbtCanCloseRejected();
  dbDbtNode('cancel').disabled=locked||!dbDbtOwnRun()||p.run.cancel_requested||['CANCELED','FAILED','UNKNOWN','CANCELING'].includes(p.run.state);
  dbDbtNode('reconcile').disabled=locked||!dbDbtCanReconcile();dbDbtNode('history-refresh').disabled=locked||!allowed;
- ui(dbDbtNode('reason'),!allowed?(p.role==='bi_viewer'||!dbRoleWithinHeader('data_engineer')?'Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'Refresh an authorized Database and SANDBOX context.'):p.intentBlocked?'Saved context differs. Reselect the original context; requests are never retargeted.':p.plan&&!dbDbtCanBuild()&&!p.run?'Only the original owner and saved execution role/context may build this plan.':'Publication requires admin and every planned test to pass. Each model publishes independently.');
+ ui(dbDbtNode('reason'),!allowed?(p.role==='bi_viewer'||!dbRoleWithinHeader('data_engineer')?'Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'Refresh an authorized Database and SANDBOX context.'):p.intentBlocked?'Saved context differs. Reselect the original context; requests are never retargeted.':p.plan&&dbDbtCompatibility(p.plan)!=='supported'?dbDbtCompatibilityAction(p.plan):p.plan&&!dbDbtCanBuild()&&!p.run?'Only the original owner and saved execution role/context may build this plan.':'Publication requires admin and every planned test to pass. Each model publishes independently.');
  const receipt=dbDbtNode('receipt');receipt.replaceChildren();const saved=p.intent||p.rejectedIntent;if(allowed&&saved?.principal===dbPrincipal){dataopsNode('p','',receipt).textContent=[t('Request key'),saved.key,saved.context.database_id,saved.context.sql_schema,saved.context.selected_role].join(' · ');if(saved.rejection){const detail=dataopsNode('details','',receipt);dataopsNode('summary','',detail,'Rejected request receipt');dataopsNode('pre','',detail).textContent=JSON.stringify(saved,null,2);}}
  for(const name of ['plan-detail','models','sql','run-detail','candidates','tests','publications','confirmation','history'])dbDbtNode(name).replaceChildren();
  if(!allowed)return;
  const a=p.plan,r=p.run;
- if(a){dbDbtSummary(dbDbtNode('plan-detail'),a);dataopsNode('p','',dbDbtNode('plan-detail'),'Project version / source digest');dataopsNode('p','',dbDbtNode('plan-detail')).textContent=[a.project_name||a.project_id,a.project_version||JSON.stringify(a.compiler_versions||{}),a.source_digest||'',t('Staging materialization')+': '+(a.staging_materialization||t('Project default (no override)')),t('Source Schema')+': '+a.source_schema,t('Target Schema')+': '+a.target_schema].join(' · ');
- dbDbtTable(dbDbtNode('models'),['Model','Materialization','Dependencies'],(a.models||[]).map(m=>[m.name,m.materialized==='ephemeral'?t('Ephemeral, expanded into SQL'):m.materialized==='table'?t('Table candidate'):m.materialized,JSON.stringify(m.depends_on||[])]));
+ if(a){dbDbtSummary(dbDbtNode('plan-detail'),a);dbDbtRenderCompatibility(dbDbtNode('plan-detail'),a);dataopsNode('p','',dbDbtNode('plan-detail'),'Project version / source digest');dataopsNode('p','',dbDbtNode('plan-detail')).textContent=[a.project_name||a.project_id,a.project_version||JSON.stringify(a.compiler_versions||{}),a.source_digest||'',t('Staging materialization')+': '+(a.staging_materialization||t('Project default (no override)')),t('Source Schema')+': '+a.source_schema,t('Target Schema')+': '+a.target_schema].join(' · ');
+ dbDbtTable(dbDbtNode('models'),['Model','Materialization','Applied table format','Dependencies'],(a.models||[]).map(m=>[m.name,m.materialized==='ephemeral'?t('Ephemeral, expanded into SQL'):m.materialized==='table'?t('Table candidate'):m.materialized,dbDbtFormat(m),JSON.stringify(m.depends_on||[])]));
  for(const m of a.models||[]){const detail=dataopsNode('details','',dbDbtNode('sql'));dataopsNode('summary','',detail).textContent=m.unique_id+' · '+JSON.stringify(m.relation);dataopsNode('pre','',detail).textContent=m.compiled_sql||'';dataopsNode('p','',detail,'Dependencies');dataopsNode('pre','',detail).textContent=JSON.stringify(m.depends_on||[],null,2);}
  dataopsNode('h3','',dbDbtNode('sql'),'Sources / refs');dataopsNode('pre','',dbDbtNode('sql')).textContent=JSON.stringify({sources:a.sources||[],source_bindings:a.source_bindings||[],refs:a.refs||[]},null,2);dataopsNode('h3','',dbDbtNode('sql'),'Tests and failure counts');dataopsNode('pre','',dbDbtNode('sql')).textContent=JSON.stringify((a.tests||[]).map(x=>({unique_id:x.unique_id,name:x.name,test_type:x.test_type,depends_on:x.depends_on})),null,2);
  }else dataopsNode('p','',dbDbtNode('plan-detail'),'Choose a saved plan or compile an approved project.');
- if(r){dbDbtSummary(dbDbtNode('run-detail'),r);dbDbtTable(dbDbtNode('candidates'),['Model','Status','Candidate Ref / Snapshot / WAP'],(r.models||[]).map(m=>[m.name,m.state,JSON.stringify({ref:m.candidate?.ref,snapshot:m.candidate?.snapshot,wap_model_id:m.wap_model_id,wap_version:m.wap_version,build_id:m.build_id})]));
+ if(r){dbDbtSummary(dbDbtNode('run-detail'),r);dbDbtTable(dbDbtNode('candidates'),['Model','Status','Applied table format','Candidate Ref / Snapshot / WAP'],(r.models||[]).map(m=>[m.name,m.state,dbDbtFormat(m),JSON.stringify({ref:m.candidate?.ref,snapshot:m.candidate?.snapshot,wap_model_id:m.wap_model_id,wap_version:m.wap_version,build_id:m.build_id})]));
  dbDbtTable(dbDbtNode('tests'),['Model','Status','Failure count'],(r.tests||[]).map(x=>[x.unique_id+' · '+x.name,x.state,x.failure_count??'']));
  for(const m of r.models||[]){if(m.materialized!=='table')continue;const row=dataopsNode('div','',dbDbtNode('publications'));dataopsNode('p','',row).textContent=m.name;
  const pub=p.publications[m.unique_id];if(pub)dbDbtSummary(row,pub);
@@ -5157,7 +5226,7 @@ function dbDbtInstall(){
  for(const child of $('transformation-models').children)child.hidden=true;
  delete $('transformation-view-models').dataset.databaseUnavailable;$('transformation-view-models').disabled=false;
  const root=dataopsNode('section','db-dbt-panel',$('transformation-models'));root.className='panel';root.setAttribute('aria-labelledby','db-dbt-title');const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','db-dbt-title',body,'Database dbt SQL / WAP');
- for(const copy of ['Compiled table/ephemeral SELECT and WAP only. Native dbt build, views and table properties are unsupported.','Context is independent of Worksheets. History and deep links only read saved records.'])dataopsNode('p','',body,copy).className='help';
+ for(const copy of ['Compiled table/ephemeral SELECT and WAP only. Only fixed format=PARQUET table properties are supported. Native dbt build, views and other table properties are unsupported.','Context is independent of Worksheets. History and deep links only read saved records.'])dataopsNode('p','',body,copy).className='help';
  const context=dataopsNode('div','',body);context.className='toolbar';
  for(const [name,label] of [['role','Execution role'],['database','Database']])dataopsField(context,'db-dbt-'+name,label,'select').onchange=()=>{const value=dbDbtNode(name).value;dbDbtPurge();p[name]=value;return dbDbtRefresh();};
  dataopsNode('p','',context,'Candidate Schema: SANDBOX (fixed)');dataopsButton(context,'db-dbt-refresh','Refresh dbt context',dbDbtRefresh);

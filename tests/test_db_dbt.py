@@ -50,8 +50,8 @@ class DbtTests(unittest.TestCase):
         first, second = [catalog, 'sandbox', 'first'], [catalog, 'sandbox', 'second']
         def model(uid, relation, sql, depends, materialized='table'):
             return dict(unique_id=uid, name=uid.rsplit('.', 1)[1], relation=relation, compiled_sql=sql,
-                depends_on=depends, materialized=materialized)
-        return dict(source_digest='copied-digest', versions={}, sources=[dict(unique_id='source.rows', name='rows', relation=source)],
+                depends_on=depends, materialized=materialized, table_properties={'format': 'PARQUET'} if materialized == 'table' else {})
+        return dict(compatibility=compiler.compatibility(), source_digest='copied-digest', versions={}, sources=[dict(unique_id='source.rows', name='rows', relation=source)],
             models=[model('model.stage', None, f'SELECT id, label FROM {catalog}.{source_schema}.source_rows', ['source.rows'], 'ephemeral'),
                 model('model.first', first, f'SELECT id, label FROM {catalog}.{source_schema}.source_rows', ['model.stage']),
                 model('model.second', second, f'SELECT id, label FROM {catalog}.sandbox.first', ['model.first'])],
@@ -129,6 +129,124 @@ class DbtTests(unittest.TestCase):
         self.code('DBT_PUBLICATION_EXISTS', dbt.submit_publication, self.admin, self.admin_context,
             run['id'], key='new-key', node_id='model.first')
         self.assertEqual(len(self.w.posts), before)
+
+    def test_fixed_format_build_new_publication_and_replacement(self):
+        run = self.build_run()
+        self.assertEqual(run['state'], 'READY', run)
+        self.assertEqual(run['models'][1]['table_properties'], {'format': 'PARQUET'})
+        self.assertTrue(all(" WITH (format='PARQUET') AS " in sql
+            for sql, _ in self.w.posts if sql.startswith('CREATE ')))
+        pub = self.publish(run)
+        self.assertEqual(pub['state'], 'PUBLISHED', pub)
+        self.assertIn(" WITH (format='PARQUET') AS ", self.w.posts[-1][0])
+        replacement = self.build_run(key='replacement')
+        self.assertEqual(self.publish(replacement, key='replace')['state'], 'PUBLISHED')
+        self.assertTrue(self.w.posts[-1][0].startswith('CREATE OR REPLACE TABLE '))
+        self.assertIn(" WITH (format='PARQUET') AS ", self.w.posts[-1][0])
+
+    def test_standalone_manual_wap_sql_keeps_existing_property_behavior(self):
+        source = self.sources[self.context.database_id]
+        model = wap.save_model(self.engineer, self.context, model_id='ordinary_manual',
+            sql='SELECT id, label FROM source', sources={'source': source},
+            target=self.b.locator('manual_output', schema='marts'), expected_version=None)
+        built = wap.build(self.engineer, self.context, key='manual-build',
+            model_id=model['model_id'], version=model['version'])['result']['build']
+        audit = wap.audit(self.admin, self.admin_context, key='manual-audit', build_id=built['id'])['result']['audit']
+        wap.publish(self.admin, self.admin_context, key='manual-publish', build_id=built['id'], audit_id=audit['id'])
+        self.assertTrue(any(sql.startswith('CREATE TABLE ') for sql, _ in self.w.posts))
+        self.assertFalse(any('WITH (format=' in sql for sql, _ in self.w.posts))
+
+    def test_compile_blocked_contract_is_saved_without_admission_or_children(self):
+        cases = [('model', {'materialized': 'view'}, 'UNSUPPORTED_MATERIALIZATION'),
+            ('model', {'materialized': 'table', 'properties': {'format': "'ORC'"}}, 'UNSUPPORTED_TABLE_PROPERTIES'),
+            ('model', {'materialized': 'table', 'on_table_exists': 'drop'}, 'UNSUPPORTED_MODEL_CONFIG'),
+            ('test', {'severity': 'warn'}, 'UNSUPPORTED_TEST_CONFIG')]
+        for kind, config, code in cases:
+            with self.subTest(code=code):
+                def reject(*args, **kwargs):
+                    compiler._semantic_config({'node.example': dict(resource_type=kind, config=config)})
+                self.compile.side_effect = reject
+                ack = dbt.submit_plan(self.engineer, self.context, key='blocked-' + code, project_id='lake_marts',
+                    source_schema='raw', target_schema='marts', staging_materialization=None)
+                dbt._execute(ack['id'])
+                plan = dbt.get_plan(self.engineer, self.context, ack['id'])
+                self.assertEqual(plan['state'], 'FAILED')
+                self.assertEqual(plan['compatibility']['status'], 'blocked')
+                self.assertEqual(plan['compatibility']['issues'][0]['code'], code)
+                with control_store.connect() as db:
+                    self.assertEqual(db.execute('SELECT count(*) FROM warehouse_admissions').fetchone()[0], 0)
+                    self.assertEqual(db.execute('SELECT count(*) FROM dataops_operations').fetchone()[0], 0)
+                self.assertEqual(self.w.posts, [])
+
+    def legacy(self, plan):
+        def change(record):
+            record.pop('compatibility')
+            for model in record['models']:
+                model.pop('table_properties')
+            record['_plan_digest'] = dbt._hash_plan(record)
+        self.mutate(plan['id'], change)
+        return self.record(plan['id'])
+
+    def test_legacy_recompile_required_but_admitted_run_publication_still_work(self):
+        plan = self.plan()
+        ack = dbt.submit_run(self.engineer, self.context, key='accepted', plan_id=plan['id'])
+        legacy = self.legacy(plan)
+        def admitted(record):
+            record['_plan_digest'] = legacy['_plan_digest']
+            for model in record['models']:
+                model.pop('table_properties')
+        self.mutate(ack['id'], admitted)
+        before = len(self.w.posts)
+        self.code('DBT_PLAN_RECOMPILE_REQUIRED', dbt.submit_run, self.engineer, self.context,
+            key='new-legacy', plan_id=plan['id'])
+        self.assertNotIn('compatibility', dbt.get_plan(self.engineer, self.context, plan['id']))
+        dbt._execute(ack['id'])
+        run = dbt.get_run(self.engineer, self.context, ack['id'])
+        self.assertEqual(run['state'], 'READY', run)
+        self.assertTrue(all('table_properties' not in m for m in run['models']))
+        self.assertEqual(self.publish(run)['state'], 'PUBLISHED')
+        self.assertFalse(any('WITH (format=' in sql for sql, _ in self.w.posts[before:]))
+        count = len(self.w.posts)
+        self.assertEqual(dbt.reconcile_run(self.engineer, self.context, run['id'], key='legacy-reconcile')['state'], 'READY')
+        self.assertEqual(dbt.cancel_run(self.engineer, self.context, run['id'], key='legacy-cancel')['state'], 'CANCELED')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_tampered_property_or_contract_hash_blocks_before_sql(self):
+        for field in ('property', 'contract'):
+            plan = self.plan(key='plan-' + field)
+            ack = dbt.submit_run(self.engineer, self.context, key='run-' + field, plan_id=plan['id'])
+            def tamper(record):
+                if field == 'property':
+                    record['models'][1]['table_properties']['format'] = "PARQUET'); DROP TABLE x"
+                else:
+                    record['compatibility']['executor'] = 'native'
+            self.mutate(plan['id'], tamper)
+            before = len(self.w.posts)
+            dbt._execute(ack['id'])
+            self.assertEqual(self.record(ack['id'])['error_code'], 'DBT_PLAN_CHANGED')
+            self.assertEqual(len(self.w.posts), before)
+
+    def test_property_helper_rejects_wrong_child_link_and_phase(self):
+        original = dbt._table_properties
+        called = []
+        def check(execution, **kwargs):
+            scope = ds._dbt.get()
+            if not called and scope and scope[6] == 'build':
+                called.append(True)
+                with control_store.connect() as db:
+                    db.execute("UPDATE dbt_run_operations SET node_id='model.second' WHERE operation_id=?", (execution.id,))
+                self.code('DBT_CONTINUATION_REQUIRED', original, execution, **kwargs)
+                with control_store.connect() as db:
+                    db.execute('UPDATE dbt_run_operations SET node_id=? WHERE operation_id=?', (scope[7], execution.id))
+                token = ds._dbt.set(scope[:6] + ('publish',) + scope[7:])
+                try:
+                    self.code('DBT_CONTINUATION_REQUIRED', original, execution, **kwargs)
+                finally:
+                    ds._dbt.reset(token)
+            return original(execution, **kwargs)
+        with patch.object(dbt, '_table_properties', side_effect=check):
+            self.assertEqual(self.build_run()['state'], 'READY')
+        self.assertEqual(called, [True])
 
     def test_ack_is_saved_before_start_and_key_replay_does_not_launch(self):
         def start(ident):

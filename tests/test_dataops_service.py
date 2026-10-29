@@ -29,6 +29,14 @@ import warehouse_admission as admission
 
 class DataOpsTests(unittest.TestCase):
 
+    def test_standalone_execution_has_no_dbt_property_contract(self):
+        import db_dbt
+        execution = self.begin()
+        self.assertIsNone(ds._dbt.get())
+        self.assertEqual(db_dbt._table_properties(execution), {})
+        self.assertEqual(db_dbt._table_properties(execution, build={'id': 'manual'}), {})
+        execution.cancel()
+
     def retire(self, state='retiring', database=None):
         with control_store.connect() as db:
             db.execute('UPDATE databases SET state=?,revision=revision+1 WHERE id=?',

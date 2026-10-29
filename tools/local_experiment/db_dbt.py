@@ -228,6 +228,8 @@ def submit_plan(principal, context, *, key, project_id, source_schema, target_sc
 def _hash_plan(plan):
     fields = ('source_digest', 'source_schema', 'target_schema', 'staging_materialization',
               'models', 'tests', 'source_bindings', '_targets')
+    if 'compatibility' in plan:
+        fields += ('compatibility',)
     return hashlib.sha256(ds._json({k: plan[k] for k in fields}).encode()).hexdigest()
 
 
@@ -305,7 +307,7 @@ def _compile(ident, principal, context):
                 target = registry.ResourceRef(context.database_id, schema.id, obj.id, obj.incarnation)
                 metadata._ref(target)
         targets[model['unique_id']] = asdict(target)
-    plan.update(source_digest=summary['source_digest'], models=summary['models'], tests=summary['tests'],
+    plan.update(compatibility=summary['compatibility'], source_digest=summary['source_digest'], models=summary['models'], tests=summary['tests'],
         source_bindings=bindings, _targets=targets, compiler_versions=summary.get('versions'), state='READY')
     plan['_plan_digest'] = _hash_plan(plan)
     with control_store.connect() as db:
@@ -335,9 +337,12 @@ def submit_run(principal, context, *, key, plan_id):
         raise QueryError('CONTEXT_MISMATCH', 409)
     if plan['state'] != 'READY' or _hash_plan(plan) != plan['_plan_digest']:
         raise QueryError('DBT_PLAN_NOT_READY', 409)
+    if plan.get('compatibility') != dict(version=1, executor='sql_wap', status='supported', issues=[]):
+        raise QueryError('DBT_PLAN_RECOMPILE_REQUIRED', 409)
     record = _base(principal, context, 'run', plan)
     record.update(plan_id=plan_id, _plan_digest=plan['_plan_digest'], _pins=None, _phase=None, _node_id=None,
-        models=[dict(unique_id=m['unique_id'], name=m['name'], materialized=m['materialized'], state='QUEUED',
+        models=[dict(unique_id=m['unique_id'], name=m['name'], materialized=m['materialized'],
+            table_properties=m['table_properties'], state='QUEUED',
             wap_model_id='dbt_' + record['id'].replace('-', '') + '_' + str(i), wap_version=None,
             build_id=None, candidate=None, operation_ids=[]) for i, m in enumerate(plan['models'])],
         tests=[dict(unique_id=t['unique_id'], name=t['name'], test_type=t['test_type'], state='QUEUED',
@@ -486,6 +491,42 @@ def _pinned(execution, sources):
             raise QueryError('STAGE_CHANGED', 409)
         inputs[alias] = saved
     return inputs
+
+
+def _table_properties(execution, *, build=None):
+    """Only the exact admitted build/publish child may read saved typed properties."""
+    scope = ds._dbt.get()
+    if scope is None:
+        return {}
+    phase = 'build' if build is None else 'publish'
+    if scope[:2] != (execution.principal, execution._context()) or scope[6] != phase:
+        raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+    with control_store.connect() as db:
+        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
+        if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]:
+            raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+        _, run = _row(db, scope[5])
+        if phase == 'publish':
+            if run['kind'] != 'publication' or run['build_id'] != build['id']:
+                raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+            _, source = _row(db, run['parent_run_id'])
+            model, saved_build = _gate(db, source, scope[7], publication=run['id'])
+            if saved_build != build:
+                raise QueryError('DBT_CANDIDATE_CHANGED', 409)
+        else:
+            if run['kind'] != 'run':
+                raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+            source = run
+        plan = _check_plan(db, source)
+        if 'compatibility' not in plan:
+            return {}  # Historical admitted runs retain their original SQL semantics.
+        if plan['compatibility'] != dict(version=1, executor='sql_wap', status='supported', issues=[]):
+            raise QueryError('DBT_PLAN_CHANGED', 409)
+        matches = [m for m in plan['models'] if m['unique_id'] == scope[7] and m['materialized'] == 'table']
+        if len(matches) != 1 or matches[0].get('table_properties') not in ({}, {'format': 'PARQUET'}):
+            raise QueryError('DBT_PLAN_CHANGED', 409)
+        return dict(matches[0]['table_properties'])
 
 
 def _test_select(execution):
@@ -756,6 +797,8 @@ def _execute(ident):
             run['error_code'] = getattr(error, 'code', 'DBT_EXECUTION_FAILED')
             if run['kind'] == 'plan':
                 run['state'] = 'FAILED'
+                import database_dbt as compiler
+                run['compatibility'] = getattr(error, 'compatibility', compiler.compatibility(supported=False))
             _write(db, run)
     finally:
         try:

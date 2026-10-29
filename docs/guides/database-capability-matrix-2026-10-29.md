@@ -90,7 +90,7 @@
 | TRF-08 | 変更確認、無条件／条件付き全件更新 | 対応、上記条件。変更確認はwatch sourceが必要 | M、source Ref／Snapshot集合 | Mart check／refresh |
 | TRF-09 | Mart照会・履歴 | 対応、元owner／context | M、未知操作再送なし | Mart runs |
 | TRF-10 | Mart予定のLoad・新規・保存・有効化・停止・tick | 対応、A、監視sourceあり | M＋T、保存版で実行 | schedules |
-| TRF-11 | dbt一覧・model SQL・build／test | 承認済みSQL projectのcompile、候補build／test、耐久履歴、取消・照合・明示公開をAPI／CLI／Workbenchへ接続 | table／ephemeral限定。全test成功をサーバーで検査。標準dbt executor・view等は未対応 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、materialization互換性は残件 |
+| TRF-11 | dbt一覧・model SQL・build／test | 承認済みSQL projectのcompile、候補build／test、耐久履歴、取消・照合・明示公開と設定互換性の診断をAPI／CLI／Workbenchへ接続 | table／ephemeral限定。PARQUETだけを型付き適用。全test成功を検査し、未対応設定は理由を示して拒否。標準dbt executor・viewは未対応 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C1設定互換性](database-p6-3c-dbt-compatibility-2026-10-29.md)、C2は残件 |
 | TRF-12 | 旧dynamic WAP一覧・refresh widget | 未接続の旧widget | 手動WAP／Managed Martを使用 | 変換の新パネル |
 | JOB-01 | Job新規・一覧・Load・再Load・定義／引数保存 | 対応、E／A | J、owner＋保存role＋context、CAS | `/api/v1/jobs` |
 | JOB-02 | SQL／alert step | 対応、E／A、既存SQL policy | J、alertはread-only | typed Job step |

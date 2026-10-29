@@ -131,6 +131,18 @@ class CompileBoundaryTests(unittest.TestCase):
                                     'target': {'schema': 'fallback'}})
         self.assertEqual(module.generate_schema_name('marts', None).strip(), 'sandbox')
 
+    def test_installed_builtin_default_view_blocked_and_ephemeral_typed_format(self):
+        with self.assertRaises(dbt.DbtError) as caught:
+            dbt.compile_project(self.project, catalog='cat', source_schema='raw')
+        self.assertEqual(caught.exception.code, 'UNSUPPORTED_MATERIALIZATION')
+        self.assertTrue(all(i['setting'] == 'materialized' for i in caught.exception.compatibility['issues']))
+        self.assertIn('ephemeral', str(caught.exception))
+        summary = dbt.compile_project(self.project, catalog='cat', source_schema='raw', staging_materialization='ephemeral')
+        self.assertEqual(summary['compatibility'], dbt.compatibility())
+        tables = [m for m in summary['models'] if m['materialized'] == 'table']
+        self.assertTrue(tables)
+        self.assertTrue(all(m['table_properties'] == {'format': 'PARQUET'} for m in tables))
+
     def test_preflight_rejects_execution_features_before_subprocess(self):
         cases = [
             ('models/unsafe.py', 'print(1)'),
@@ -270,6 +282,57 @@ class ManifestTests(unittest.TestCase):
         self.assertIsNone(summary['models'][0]['relation'])
         self.assertEqual(summary['tests'][0]['depends_on'], ['model.t'])
 
+    def test_resolved_semantic_issues_are_fixed_safe_and_collected(self):
+        cases = [('on_table_exists', 'rename', 'UNSUPPORTED_MODEL_CONFIG'),
+            ('column_types', {'id': 'secret'}, 'UNSUPPORTED_MODEL_CONFIG'),
+            ('table_format', 'iceberg', 'UNSUPPORTED_MODEL_CONFIG'),
+            ('properties', {'format': "'ORC'"}, 'UNSUPPORTED_TABLE_PROPERTIES'),
+            ('properties', {'format': "'PARQUET'; secret"}, 'UNSUPPORTED_TABLE_PROPERTIES'),
+            ('properties', {'partitioning': 'secret'}, 'UNSUPPORTED_TABLE_PROPERTIES')]
+        for setting, value, code in cases:
+            with self.subTest(setting=setting, value=value):
+                manifest = self.manifest()
+                manifest['nodes']['model.t']['config'][setting] = value
+                manifest['nodes']['test.unique']['config'].update(severity='warn', fail_calc='secret',
+                    error_if='> 99', warn_if='> 1', limit=1)
+                with self.assertRaises(dbt.DbtError) as caught:
+                    dbt._validate_manifest(manifest, catalog='cat', source_schema='raw')
+                issues = caught.exception.compatibility['issues']
+                self.assertEqual(issues[0], dict(node_id='model.t', code=code, setting=setting))
+                self.assertEqual({i['setting'] for i in issues[1:]},
+                    {'test.severity', 'test.fail_calc', 'test.error_if', 'test.warn_if', 'test.limit'})
+                self.assertNotIn('secret', str(issues))
+                self.assertEqual(caught.exception.compatibility['status'], 'blocked')
+
+    def test_typed_literal_and_metadata_and_injected_defaults(self):
+        for literal in ("'PARQUET'", "  'parquet'  "):
+            manifest = self.manifest()
+            manifest['nodes']['model.t']['config'].update(properties={'format': literal},
+                meta={'properties': {'format': 'documentation'}, 'hooks': 'documentation'},
+                view_security='definer', column_types={}, persist_docs={},
+                on_schema_change='ignore', on_configuration_change='apply', contract={'enforced': False})
+            manifest['nodes']['model.t']['columns'] = {'id': {'properties': {'anything': 'metadata'}}}
+            manifest['nodes']['test.unique']['config'].update(severity='ERROR', fail_calc='count(*)',
+                error_if='!= 0', warn_if='!= 0', limit=None, store_failures=None)
+            summary = dbt._validate_manifest(manifest, catalog='cat', source_schema='raw')
+            self.assertEqual(summary['compatibility'], dbt.compatibility())
+            self.assertEqual(summary['models'][1]['table_properties'], {'format': 'PARQUET'})
+            self.assertEqual(summary['models'][0]['table_properties'], {})
+
+    def test_inherited_supported_format_applies_only_to_table(self):
+        for literal in ("'PARQUET'", "  'parquet'  "):
+            with self.subTest(literal=literal):
+                manifest = self.manifest()
+                # dbt resolves inherited project properties onto both model configs.
+                for uid in ('model.e', 'model.t'):
+                    manifest['nodes'][uid]['config']['properties'] = {'format': literal}
+                summary = dbt._validate_manifest(manifest, catalog='cat', source_schema='raw')
+                models = {model['unique_id']: model for model in summary['models']}
+                self.assertEqual(models['model.e']['table_properties'], {})
+                self.assertIsNone(models['model.e']['relation'])
+                self.assertEqual(models['model.t']['table_properties'], {'format': 'PARQUET'})
+                self.assertEqual(summary['materialized_order'], ['model.t'])
+
     def test_source_schema_must_match_requested_schema(self):
         manifest = self.manifest()
         manifest['sources']['source.orders']['schema'] = 'other_raw'
@@ -288,9 +351,9 @@ class ManifestTests(unittest.TestCase):
         cases = [
             ('UNSUPPORTED_MATERIALIZATION', lambda m: m['nodes']['model.t']['config'].update(materialized='view')),
             ('UNSUPPORTED_MATERIALIZATION', lambda m: m['nodes']['model.t']['config'].update(materialized='incremental')),
-            ('UNSUPPORTED_CONFIG', lambda m: m['nodes']['test.unique']['config'].update(store_failures=True)),
-            ('UNSUPPORTED_CONFIG', lambda m: m['nodes']['model.t']['config'].update(contract={'enforced': True})),
-            ('UNSUPPORTED_CONFIG', lambda m: m['nodes']['model.t']['config'].update({'post-hook': ['select 1']})),
+            ('UNSUPPORTED_TEST_CONFIG', lambda m: m['nodes']['test.unique']['config'].update(store_failures=True)),
+            ('UNSUPPORTED_MODEL_CONFIG', lambda m: m['nodes']['model.t']['config'].update(contract={'enforced': True})),
+            ('UNSUPPORTED_MODEL_CONFIG', lambda m: m['nodes']['model.t']['config'].update({'post-hook': ['select 1']})),
             ('INVALID_RELATION', lambda m: m['nodes']['model.t'].update(schema='outside')),
             ('INVALID_RELATION', lambda m: m['sources']['source.orders'].update(database='other')),
             ('INVALID_RELATION', lambda m: m['nodes']['model.t'].update(alias='e')),

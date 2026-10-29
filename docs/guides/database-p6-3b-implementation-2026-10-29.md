@@ -2,6 +2,8 @@
 
 2026年10月29日。table／ephemeral SQL対応範囲の技術受入完了。[契約](database-p6-3b-dbt-contract-2026-10-29.md)に従い、[DB-P6-3A](database-p6-3a-dbt-feasibility-2026-10-29.md)のoffline compileを耐久plan／run、全testの公開gate、通常API／CLI／Workbenchへ接続した。
 
+後続の[C1設定互換性](database-p6-3c-dbt-compatibility-2026-10-29.md)で固定PARQUETの実適用と未対応設定の診断を追加した。以下はB時点の実装・受入記録であり、標準executor／viewは引き続き残件である。
+
 ## 利用できる範囲
 
 データ変換の「Database dbt SQL / WAP」で、承認済みproject、Database、source／公開先Schemaを選び、compile→候補構築・test→モデル単位の明示公開へ進める。Worksheetと独立したSANDBOX contextを使う。同梱`lake_marts`のstaging既定はviewなので、現在の対応範囲では`ephemeral`を明示指定する。自動でmaterializationを変更しない。
