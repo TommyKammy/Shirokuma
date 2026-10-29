@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-29
-version: "1.18"
+version: "1.19"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -20,7 +20,9 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 最優先のDB-P6は変換・AI・監査・ガバナンスと共有Warehouseの自動休止／復帰を通常導線へ統合し、技術受入と所有者受入でM1を判定する。
 DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse、DB-P9は外部S3とRoutine／Taskを扱う。LOCAL／XS／Sは現状同一computeの別名であり、計画を実装完了と扱わない。
 
-2026-10-29、DB-P6-0の[機能一覧89項目](../../guides/database-capability-matrix-2026-10-29.md)と画面案内・利用条件を整合させ、[技術検証を完了](../../guides/database-p6-0-implementation-2026-10-29.md)した。続けて[DB-P6-1のDB別監査](../../guides/database-p6-1-implementation-2026-10-29.md)を技術受入済みとし、次のunitはDB-P6-2の共有Warehouse休止・自動復帰とする。未対応機能の開放やM1の本人受入は別に残す。
+2026-10-29、DB-P6-0の[89項目の表示契約](../../guides/database-capability-matrix-2026-10-29.md)と[DB-P6-1の保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
+[DB-P6-2の共有LOCAL休止・自動復帰](../../guides/database-p6-2-implementation-2026-10-29.md)はAPI／CLI／UIを実装し、技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。warm各30回の標本p95差は35.3ms、限定復旧は元UNKNOWNを保持して実行だけを閉鎖した。
+次はDB-P6-3のdbt先行実証へ進む。Bears／SRE／Policy、実サイズ変更と用途別Warehouse、M1本人受入は完了扱いにしない。
 
 ---
 

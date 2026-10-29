@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 from contextlib import ExitStack, contextmanager
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 
@@ -581,6 +582,13 @@ class QueryHistoryTests(unittest.TestCase):
 
 
 class QueryExecutionTests(unittest.TestCase):
+    def _mock_lifecycle(self):
+        lifecycle = SimpleNamespace(applicable=lambda: False, requires_wake=lambda: False,
+                                    ensure_awake=lambda **kwargs: None)
+        patcher = patch.dict(sys.modules, warehouse_lifecycle=lifecycle)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_submit_propagates_current_platform_decision_and_scoped_admin_identity(self):
         import base64
         import json
@@ -671,6 +679,7 @@ class QueryExecutionTests(unittest.TestCase):
 
     def setUp(self):
         from test_request_auth import PrincipalTests
+        QueryExecutionTests._mock_lifecycle(self)
         self.fixture = PrincipalTests()
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
@@ -782,7 +791,8 @@ class QueryExecutionTests(unittest.TestCase):
              'columns': [], 'data': [], 'stats': {}, 'state': 'RUNNING',
              'next_uri': '/api/v1/queries/app/pages/opaque', 'cancel_uri': '/api/v1/queries/app/cancel'}):
             page = wr._native_request(headers, '/v1/statement', 'POST', b'SELECT * FROM events', 'https://public', warehouse_id='w')
-            self.assertEqual(page['id'], 'backend')
+            self.assertEqual(page['id'], 'app')
+            self.assertEqual(page['infoUri'], 'https://public/v1/query/app')
             self.assertEqual(page['nextUri'], 'https://public/v1/statement/app/pages/opaque')
         for path, method in (('/v1/statement?x=1', 'POST'), ('/v1/info', 'POST'),
                              ('/v1/statement/app/cancel', 'GET')):
@@ -866,8 +876,113 @@ class QueryExecutionTests(unittest.TestCase):
             prepare.assert_called_once()
             del headers['X-Shirokuma-Mode']
             headers['X-Shirokuma-Mode'] = 'sandbox-write'
-            self.assertEqual(wr._native_request(headers, '/v1/statement', 'POST',
-                b'INSERT INTO events VALUES (1)', 'https://public', warehouse_id='w')['id'], 'q')
+            native = wr._native_request(headers, '/v1/statement', 'POST',
+                b'INSERT INTO events VALUES (1)', 'https://public', warehouse_id='w')
+            self.assertEqual(qs._row(native['id'])['backend_query_id'], 'q')
+
+    def test_native_only_exact_single_driver_noop_headers_are_accepted(self):
+        import warehouse_resident as wr
+        import query_service as qs
+        for name, value in (('X-Trino-Session', ''), ('X-Trino-Transaction-Id', 'NONE')):
+            headers = self.fixture.headers()
+            headers[name] = value
+            self.assertFalse(wr._native_request(headers, '/v1/info', 'GET', b'', 'https://public')['starting'])
+            headers[name] = value
+            with self.assertRaises(qs.QueryError):
+                wr._native_request(headers, '/v1/info', 'GET', b'', 'https://public')
+        for name, value in (('X-Trino-Session', 'foo=bar'), ('X-Trino-Session', ' '),
+                            ('X-Trino-Transaction-Id', 'none'), ('X-Trino-Transaction-Id', 'real'),
+                            ('X-Trino-Role', 'NONE'), ('X-Trino-Original-User', 'alice'),
+                            ('X-Trino-User', 'owner'), ('X-Presto-Session', '')):
+            headers = self.fixture.headers()
+            headers[name] = value
+            with self.subTest(name=name, value=value), self.assertRaises(qs.QueryError):
+                wr._native_request(headers, '/v1/info', 'GET', b'', 'https://public')
+
+    def test_native_info_is_local_safe_owner_bound_and_reauthorizes(self):
+        import warehouse_resident as wr
+        import query_service as qs
+        import request_auth
+        ctx = self.context()
+        decision = request_auth.authorize_database(self.principal, ctx.database_id, ctx.selected_role,
+                                                  expected_generation_id=ctx.generation_id)
+        with patch('trino_auth.prepare_backend_v2', return_value=(decision, {'X-Trino-User': 'scoped'})), \
+             patch('trino_auth.backend_ssl_context', return_value=None), patch('trino_auth.validate_backend_url'), \
+             patch.object(wr, 'persistent_trino', return_value=__import__('contextlib').nullcontext('https://trusted:8443')), \
+             patch.object(qs, '_transport', return_value={'id': 'backend', 'data': [[1]]}):
+            headers = self.fixture.headers()
+            headers['X-Shirokuma-Role'] = 'bi_viewer'
+            headers['X-Trino-Catalog'] = 'sales'
+            headers['X-Trino-Schema'] = 'marts'
+            page = wr._native_request(headers, '/v1/statement', 'POST', b'SELECT 1', 'https://public', warehouse_id='w')
+        path = '/v1/query/' + page['id']
+        info = wr._native_request(headers, path, 'GET', b'', 'https://public')
+        self.assertEqual(info['queryId'], page['id'])
+        self.assertEqual(set(info), {'queryId', 'state', 'createdAt'})
+        with self.assertRaises(qs.QueryError) as error:
+            wr._native_request(self.fixture.headers('owner'), path, 'GET', b'', 'https://public')
+        self.assertEqual(error.exception.status, 404)
+        self.fixture.users['alice']['disabled'] = True
+        self.fixture.save()
+        with self.assertRaises((qs.QueryError, request_auth.AuthenticationError)):
+            wr._native_request(headers, path, 'GET', b'', 'https://public')
+
+    def test_official_dbapi_cold_pages_stable_id_and_cursor_cancel_204(self):
+        import control_store
+        import http.server
+        import threading
+        import uuid
+        import requests
+        import trino
+        import trino.dbapi
+        import warehouse_resident as wr
+        import query_service as qs
+        self.assertEqual(trino.__version__, '0.339.0')
+        with control_store.connect() as db:
+            db.execute("UPDATE warehouse_config_generations SET warehouse_id='LOCAL'")
+        public_id = str(uuid.uuid4())
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
+        endpoint = 'http://127.0.0.1:' + str(server.server_port)
+        columns = [dict(name='value', type='integer', typeSignature=dict(rawType='integer', arguments=[]))]
+        def page(state, token, *, backend_id=None, data=None):
+            return dict(id=public_id, backend_query_id=backend_id, state=state,
+                columns=columns if backend_id else [], data=data or [], stats={'state': state},
+                next_uri='/api/v1/queries/' + public_id + '/pages/' + token if token else None,
+                cancel_uri='/api/v1/queries/' + public_id + '/cancel')
+        def factory(address, handler):
+            server.RequestHandlerClass = handler
+            return server
+        session = requests.Session()
+        session.headers.update(dict(self.fixture.headers().items()))
+        session.headers['X-Shirokuma-Role'] = 'bi_viewer'
+        row = dict(actor='alice', selected_role='bi_viewer', mode='read-only', sql_catalog='sales', sql_schema='marts')
+        with patch.object(wr, '_profile_active', return_value=True), \
+             patch('runtime_profile.current', return_value=SimpleNamespace(mode='database', sql_endpoint_url=endpoint)), \
+             patch.object(wr.http.server, 'ThreadingHTTPServer', side_effect=factory), \
+             patch.object(qs, 'submit', side_effect=[page('QUEUED', 'cold'), page('RUNNING', 'cancel', backend_id='engine', data=[[2]])]) as submit, \
+             patch.object(qs, 'fetch', side_effect=[page('QUEUED', 'next'), page('FINISHED', None, backend_id='engine', data=[[1]])]) as fetch, \
+             patch.object(qs, '_owned', return_value=row), \
+             patch.object(qs, '_cancel_registered', return_value={'id': public_id, 'state': 'CANCELED'}) as cancel:
+            thread = threading.Thread(target=wr.serve_endpoint, kwargs=dict(port=server.server_port))
+            thread.start()
+            try:
+                connection = trino.dbapi.connect(host='127.0.0.1', port=server.server_port, user='alice',
+                    catalog='sales', schema='marts', http_session=session, max_attempts=1, request_timeout=3)
+                cursor = connection.cursor()
+                cursor.execute('SELECT 1')
+                self.assertEqual(cursor.fetchall(), [[1]])
+                self.assertEqual(cursor.query_id, public_id)
+                self.assertEqual(cursor.info_uri, endpoint + '/v1/query/' + public_id)
+                other = connection.cursor()
+                other.execute('SELECT 2')
+                other.cancel()
+                cancel.assert_called_once_with(self.principal, public_id, 'cancel', selected_role='bi_viewer')
+                self.assertEqual(submit.call_count, 2)
+                self.assertEqual(fetch.call_count, 2)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                session.close()
 
     def test_raw_transport_rejects_unknown_url_method_and_origin(self):
         import query_service as qs

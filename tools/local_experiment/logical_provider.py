@@ -327,7 +327,9 @@ class _KubeMetadata:
             _require(len(name) <= 253 and re.fullmatch('[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', name),
                 'PROVIDER_METADATA_TARGET_INVALID')
             cluster = {'node': 'nodes', 'namespace': 'namespaces', 'pv': 'persistentvolumes'}
-            core = {'service': 'services', 'pod': 'pods', 'pvc': 'persistentvolumeclaims', 'configmap': 'configmaps'}
+            core = {'service': 'services', 'pod': 'pods', 'pvc': 'persistentvolumeclaims', 'configmap': 'configmaps', 'secret': 'secrets'}
+            _require(kind != 'secret' or name in (prefix+'-private', prefix+'-bootstrap'),
+                'PROVIDER_METADATA_TARGET_INVALID')
             apps = {'deployment': 'deployments', 'replicaset': 'replicasets'}
             _require(kind not in ('node', 'namespace') or name == kube[
                 'node_name' if kind == 'node' else 'namespace'], 'PROVIDER_METADATA_TARGET_INVALID')
@@ -656,6 +658,7 @@ class Provider:
                 return self
             try:
                 self._trust()
+                _require(self.compute_state() == 'ACTIVE', 'WAREHOUSE_START_REQUIRED')
                 namespace = self._owned('namespace', self._config['kube']['namespace'])
                 self._incarnation['namespace'] = namespace['metadata']['uid']
                 for service, port, scheme in ((self._config['prefix']+'-seaweed', 8333, 'http'),
@@ -688,8 +691,10 @@ class Provider:
                     self._tunnels[service] = f'{scheme}://127.0.0.1:{local}'
                 self._opened = True
                 return self
-            except Exception:
+            except Exception as error:
                 self.close()
+                if isinstance(error, Rejected) and error.code == 'WAREHOUSE_START_REQUIRED':
+                    raise
                 raise Rejected('FOUNDATION_TUNNEL_FAILED') from None
 
     def close(self):
@@ -741,35 +746,41 @@ class Provider:
             'FOUNDATION_BINDING_INVALID')
         return pins
 
+    def _registered_pins(self, actual, expected_probe):
+        _require(isinstance(expected_probe, dict) and expected_probe.get('ready') is True, 'FOUNDATION_BINDING_INVALID')
+        for proof in (actual, expected_probe):
+            _require(isinstance(proof, dict) and
+                proof.get('foundation_id') == self._config['foundation_id'] and
+                type(proof.get('revision')) is int and proof['revision'] == self._config['revision'],
+                'FOUNDATION_BINDING_INVALID')
+            _require(isinstance(proof.get('spi_sha256'), str) and
+                re.fullmatch('[0-9a-f]{64}', proof['spi_sha256']) is not None,
+                'FOUNDATION_BINDING_INVALID')
+            _require(isinstance(proof.get('incarnation'), dict) and
+                proof['incarnation'].get('node') == self._config['kube']['node_uids'],
+                'FOUNDATION_BINDING_INVALID')
+        pins = self._stable_pins(actual['incarnation'])
+        expected = self._stable_pins(expected_probe['incarnation'])
+        mandatory = {'namespace', 'namespace/'+self._config['kube']['namespace'],
+            'configmap/'+self._config['prefix']+'-secrets-code',
+            *self._pvc_names(), *('pvc/'+name for name in self._pvc_names()),
+            *('service/'+name for name in self._services()),
+            *('deployment/'+name for name in ('trino-local', 'trino-local-worker', 'trino-opa',
+                self._config['prefix']+'-postgres', self._config['prefix']+'-seaweed',
+                self._config['prefix']+'-polaris'))}
+        _require(mandatory <= pins.keys() and sum(key.startswith('pv/') for key in pins) == 4 and
+            pins == expected and
+            actual['spi_sha256'] == expected_probe['spi_sha256'], 'FOUNDATION_BINDING_MISMATCH')
+        return pins
+
     def bind_registered(self, expected_probe: dict) -> None:
         """Bind a saved result to our own full startup proof, never adopt its verdict."""
         with self._lock:
             self._startup_verified = False
             self._bound_pins = {}
             actual = self.probe()
-            for proof in (actual, expected_probe):
-                _require(isinstance(proof, dict) and proof.get('ready') is True and
-                    proof.get('foundation_id') == self._config['foundation_id'] and
-                    type(proof.get('revision')) is int and proof['revision'] == self._config['revision'],
-                    'FOUNDATION_BINDING_INVALID')
-                _require(isinstance(proof.get('spi_sha256'), str) and
-                    re.fullmatch('[0-9a-f]{64}', proof['spi_sha256']) is not None,
-                    'FOUNDATION_BINDING_INVALID')
-                _require(isinstance(proof.get('incarnation'), dict) and
-                    proof['incarnation'].get('node') == self._config['kube']['node_uids'],
-                    'FOUNDATION_BINDING_INVALID')
-            pins = self._stable_pins(actual['incarnation'])
-            expected = self._stable_pins(expected_probe['incarnation'])
-            mandatory = {'namespace', 'namespace/'+self._config['kube']['namespace'],
-                'configmap/'+self._config['prefix']+'-secrets-code',
-                *self._pvc_names(), *('pvc/'+name for name in self._pvc_names()),
-                *('service/'+name for name in self._services()),
-                *('deployment/'+name for name in ('trino-local', 'trino-local-worker', 'trino-opa',
-                    self._config['prefix']+'-postgres', self._config['prefix']+'-seaweed',
-                    self._config['prefix']+'-polaris'))}
-            _require(mandatory <= pins.keys() and sum(key.startswith('pv/') for key in pins) == 4 and
-                pins == expected and
-                actual['spi_sha256'] == expected_probe['spi_sha256'], 'FOUNDATION_BINDING_MISMATCH')
+            _require(isinstance(actual, dict) and actual.get('ready') is True, 'FOUNDATION_BINDING_INVALID')
+            pins = self._registered_pins(actual, expected_probe)
             # PVs and direct PVC aliases were formerly returned only in the proof.
             self._incarnation.update(pins)
             self._bound_pins = dict(pins)
@@ -777,6 +788,100 @@ class Provider:
                 set(self._tunnels) == set(self._services()) and
                 all(child.poll() is None for child in self._children), 'FOUNDATION_NOT_OPEN')
             self._startup_verified = True
+
+    @staticmethod
+    def _matches_spec(actual, expected):
+        """Match rendered intent while tolerating Kubernetes defaulted fields."""
+        if isinstance(expected, dict):
+            if not isinstance(actual, dict):
+                return False
+            overrides = {'command', 'args', 'env', 'envFrom', 'initContainers',
+                'subPath', 'subPathExpr', 'hostPath', 'privileged', 'hostNetwork',
+                'lifecycle', 'volumeDevices', 'ephemeralContainers', 'shareProcessNamespace',
+                'hostPID', 'hostIPC', 'procMount', 'windowsOptions'}
+            if any(key not in expected and actual.get(key) for key in overrides):
+                return False
+            return all(Provider._matches_spec(actual.get(key, [] if value == [] else
+                False if key == 'readOnly' and value is False else None), value)
+                for key, value in expected.items())
+        if isinstance(expected, list):
+            return (isinstance(actual, list) and len(actual) == len(expected) and
+                all(Provider._matches_spec(a, e) for a, e in zip(actual, expected)))
+        return type(actual) is type(expected) and actual == expected
+
+    def _stopped_credentials(self):
+        state = self._json(foundation.private_read(Path(self._config['private_dir']) / 'foundation-private.json'))
+        for section, key, saved in (('storage', 'admin_credentials_file', 'admin'),
+                ('storage', 'issuer_credentials_file', 'issuer'),
+                ('polaris', 'root_credentials_file', 'root')):
+            _require(self._private(section, key) == state[saved], 'FOUNDATION_SECRET_MISMATCH')
+        identity = self._provisioner()
+        record = state['bootstrap']['password.db'].strip().split(':')
+        _require(len(record) == 4 and record[0] == identity['username'], 'FOUNDATION_SECRET_MISMATCH')
+        iterations, salt, digest = record[1:]
+        # Bootstrap records use the existing PBKDF2-HMAC-SHA1 format.
+        _require(hashlib.pbkdf2_hmac('sha1', identity['password'].encode(), bytes.fromhex(salt),
+            int(iterations), dklen=len(bytes.fromhex(digest))).hex() == digest, 'FOUNDATION_SECRET_MISMATCH')
+        _require(foundation.private_read(self._config['trino']['ca_file']) ==
+            foundation.private_read(Path(self._config['private_dir']) / 'trino-ca.pem'),
+            'FOUNDATION_SECRET_MISMATCH')
+
+    def bind_stopped_registered(self, expected_probe: dict) -> None:
+        """Read-only stopped proof. Never grants the opened mutation capability."""
+        with self._lock:
+            _require(not self._opened and not self._children and not self._tunnels,
+                'FOUNDATION_NOT_CLOSED')
+            self._startup_verified = False
+            self._bound_pins = {}
+            _require(self.compute_state() == 'STOPPED', 'FOUNDATION_NOT_STOPPED')
+            namespace = self._owned('namespace', self._config['kube']['namespace'])
+            self._incarnation['namespace'] = namespace['metadata']['uid']
+            # Render derives fixed specs and secret bytes from explicit private
+            # configuration. No engine or mutable runtime-file observations.
+            self._stopped_credentials()
+            public, private = foundation.render(self._config)
+            for desired in public + private:
+                kind = desired['kind'].lower()
+                if kind not in ('deployment', 'service', 'configmap', 'secret'):
+                    continue
+                name = desired['metadata']['name']
+                actual = self._owned(kind, name)
+                if kind == 'deployment':
+                    spec = copy.deepcopy(desired['spec'])
+                    if name in ('trino-local', 'trino-local-worker'):
+                        spec['replicas'] = 0
+                    _require(self._matches_spec(actual.get('spec'), spec), 'FOUNDATION_SPEC_MISMATCH')
+                elif kind == 'service':
+                    _require(self._matches_spec(actual.get('spec'), desired['spec']), 'FOUNDATION_SPEC_MISMATCH')
+                elif kind == 'configmap':
+                    _require(all(actual.get(key, {}) == desired.get(key, {}) for key in
+                        ('data', 'binaryData')), 'FOUNDATION_CONFIG_MISMATCH')
+                else:
+                    data = {key: base64.b64encode(value.encode()).decode()
+                        for key, value in desired['stringData'].items()}
+                    _require(actual.get('type') == desired['type'] and actual.get('data') == data,
+                        'FOUNDATION_SECRET_MISMATCH')
+            resources, spi = self._storage_spi_proof()
+            pods = self._json(self._cmd(['get', 'pods', '-o', 'json']))['items']
+            _require(isinstance(pods, list) and not any(
+                pod.get('status', {}).get('phase') not in ('Succeeded', 'Failed') and (
+                pod.get('metadata', {}).get('labels', {}).get('shirokuma.dev/logical-compute') == 'true' or
+                pod.get('metadata', {}).get('labels', {}).get('app.kubernetes.io/name') in
+                    ('trino-local', 'trino-local-worker') or
+                any(c.get('name') == 'trino' or c.get('image') == self._config['images']['trino']
+                    for c in pod.get('spec', {}).get('containers', []))) for pod in pods),
+                'FOUNDATION_COMPUTE_NOT_STOPPED')
+            _require(self.compute_state() == 'STOPPED', 'FOUNDATION_NOT_STOPPED')
+            # Identity/SPI comparison only; never expose this as runtime readiness.
+            _require(isinstance(expected_probe, dict), 'FOUNDATION_BINDING_INVALID')
+            expected_keys = self._stable_pins(expected_probe.get('incarnation'))
+            observed = {**self._incarnation, **resources}
+            pins = self._registered_pins(dict(
+                foundation_id=self._config['foundation_id'], revision=self._config['revision'],
+                incarnation={**{k: v for k, v in observed.items() if k in expected_keys},
+                    'node': self._config['kube']['node_uids']},
+                spi_sha256=spi), expected_probe)
+            self._incarnation = dict(pins)
 
     def bound_alive(self) -> bool:
         """Local capability gate: no observation, private reads or reconnects."""
@@ -1552,36 +1657,40 @@ class Provider:
                     _require(active['metadata']['uid'] in compute, 'FOUNDATION_COMPUTE_MISMATCH')
         return compute, images
 
+    def _storage_spi_proof(self):
+        resources = {}
+        for name in ('trino-runtime', 'trino-catalogs', self._config['prefix']+'-seaweed-data', self._config['prefix']+'-postgres-data'):
+            pvc = self._owned('pvc', name)
+            _require(pvc.get('status', {}).get('phase') == 'Bound', 'FOUNDATION_PVC_NOT_READY')
+            spec = pvc.get('spec', {})
+            _require(spec.get('storageClassName') == 'local-path' and spec.get('volumeMode') == 'Filesystem' and
+                spec.get('accessModes') == ['ReadWriteOnce'] and bool(spec.get('volumeName')), 'FOUNDATION_PVC_MISMATCH')
+            pv = self._json(self._cmd(['get', 'pv', spec['volumeName'], '-o', 'json']))
+            claim = pv.get('spec', {}).get('claimRef', {})
+            pv_spec = pv.get('spec', {})
+            terms = pv_spec.get('nodeAffinity', {}).get('required', {}).get('nodeSelectorTerms', [])
+            _require(pv.get('status', {}).get('phase') == 'Bound' and bool(pv.get('metadata', {}).get('uid')) and
+                claim.get('uid') == pvc['metadata']['uid'] and claim.get('name') == name and
+                claim.get('namespace') == self._config['kube']['namespace'] and
+                pv_spec.get('storageClassName') == 'local-path' and pv_spec.get('volumeMode') == 'Filesystem' and
+                isinstance(pv_spec.get('local', {}).get('path'), str) and pv_spec['local']['path'].startswith('/') and
+                bool(terms) and all(any(expr.get('key') == 'kubernetes.io/hostname' and expr.get('operator') == 'In' and
+                    expr.get('values') == [self._config['kube']['node_name']] for expr in term.get('matchExpressions', []))
+                    for term in terms), 'FOUNDATION_PV_MISMATCH')
+            resources[name] = pvc['metadata']['uid']
+            resources['pv/'+spec['volumeName']] = pv['metadata']['uid']
+        code = self._owned('configmap', self._config['prefix']+'-secrets-code')
+        jar = base64.b64decode(code['binaryData']['logical-secrets.jar'], validate=True)
+        _require(code['data']['sha256'] == hashlib.sha256(jar).hexdigest() == hashlib.sha256(Path(self._config['artifacts']['jar']).read_bytes()).hexdigest(), 'FOUNDATION_SPI_MISMATCH')
+        return resources, code['data']['sha256']
+
     def probe(self):
         """Private readiness/incarnation evidence, never credentials/public readiness."""
         try:
             self._gate()
             self._issuer_identity()
             self._opa_health()
-            resources = {}
-            for name in ('trino-runtime', 'trino-catalogs', self._config['prefix']+'-seaweed-data', self._config['prefix']+'-postgres-data'):
-                pvc = self._owned('pvc', name)
-                _require(pvc.get('status', {}).get('phase') == 'Bound', 'FOUNDATION_PVC_NOT_READY')
-                spec = pvc.get('spec', {})
-                _require(spec.get('storageClassName') == 'local-path' and spec.get('volumeMode') == 'Filesystem' and
-                    spec.get('accessModes') == ['ReadWriteOnce'] and bool(spec.get('volumeName')), 'FOUNDATION_PVC_MISMATCH')
-                pv = self._json(self._cmd(['get', 'pv', spec['volumeName'], '-o', 'json']))
-                claim = pv.get('spec', {}).get('claimRef', {})
-                pv_spec = pv.get('spec', {})
-                terms = pv_spec.get('nodeAffinity', {}).get('required', {}).get('nodeSelectorTerms', [])
-                _require(pv.get('status', {}).get('phase') == 'Bound' and bool(pv.get('metadata', {}).get('uid')) and
-                    claim.get('uid') == pvc['metadata']['uid'] and claim.get('name') == name and
-                    claim.get('namespace') == self._config['kube']['namespace'] and
-                    pv_spec.get('storageClassName') == 'local-path' and pv_spec.get('volumeMode') == 'Filesystem' and
-                    isinstance(pv_spec.get('local', {}).get('path'), str) and pv_spec['local']['path'].startswith('/') and
-                    bool(terms) and all(any(expr.get('key') == 'kubernetes.io/hostname' and expr.get('operator') == 'In' and
-                        expr.get('values') == [self._config['kube']['node_name']] for expr in term.get('matchExpressions', []))
-                        for term in terms), 'FOUNDATION_PV_MISMATCH')
-                resources[name] = pvc['metadata']['uid']
-                resources['pv/'+spec['volumeName']] = pv['metadata']['uid']
-            code = self._owned('configmap', self._config['prefix']+'-secrets-code')
-            jar = base64.b64decode(code['binaryData']['logical-secrets.jar'], validate=True)
-            _require(code['data']['sha256'] == hashlib.sha256(jar).hexdigest() == hashlib.sha256(Path(self._config['artifacts']['jar']).read_bytes()).hexdigest(), 'FOUNDATION_SPI_MISMATCH')
+            resources, spi_sha256 = self._storage_spi_proof()
             pod = self._publisher()
             self._trino_health()
             nodes = self._compute()
@@ -1599,7 +1708,7 @@ class Provider:
                 'incarnation': {**self._incarnation, **resources, 'compute': compute, 'node': dict(self._config['kube']['node_uids']), 'images': images,
                     'tunnels': {service: {'endpoint': endpoint, 'service_uid': self._incarnation['service/'+service],
                         'child_pid': getattr(child, 'pid', None)} for (service, endpoint), child in zip(self._tunnels.items(), self._children)}},
-                'hashes': hashes, 'spi_sha256': code['data']['sha256']}
+                'hashes': hashes, 'spi_sha256': spi_sha256}
         except Exception:
             return {'ready': False, 'revision': self._config['revision'], 'foundation_id': self._config['foundation_id'],
                 'readiness': {'opa': False, 'storage': False, 'polaris': False, 'trino': False, 'runtime_files': False, 'spi': False},

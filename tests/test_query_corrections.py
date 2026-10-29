@@ -214,7 +214,7 @@ class QueryCorrections(unittest.TestCase):
                     columns=[], data=[], stats={}, state='FINISHED', next_uri=None, cancel_uri='')) as fetch:
                 wr._native_request(headers, path, 'GET', b'', 'https://public')
                 self.assertEqual(fetch.call_args.kwargs['selected_role'], 'bi_viewer')
-            with patch.object(qs, 'submit', return_value={'backend_query_id': 'q', 'columns': [],
+            with patch.object(qs, 'submit', return_value={'id': 'app', 'backend_query_id': 'q', 'columns': [],
                     'data': [], 'stats': {}, 'state': 'FINISHED', 'next_uri': None, 'cancel_uri': ''}) as submit:
                 wr._native_request(headers, '/v1/statement', 'POST', b'SELECT 1', 'https://public', warehouse_id='w')
                 self.assertEqual(submit.call_args.args[1].selected_role, 'data_engineer')

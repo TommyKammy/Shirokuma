@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-29
-version: "2.3.0"
+version: "2.4.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -21,7 +21,9 @@ tags: [shirokuma, local, handoff, gates]
 ## Current Phase & Active Gate Status
 
 後続計画は[Databaseコア機能統合とコンピュート拡張](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を参照する。DB作成導線は[本人の条件付き受入](../../guides/database-logical-create-owner-acceptance-2026-10-28.md)に進み、待ち時間改善を継続する。
-2026-10-29、DB-P6-0の[機能契約と画面の正確化](../../guides/database-p6-0-implementation-2026-10-29.md)、DB-P6-1の[保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)を技術受入済みとした。次の着手はDB-P6-2の共有Warehouse休止・自動復帰である。M1は共有LOCALでの全必須機能の統合・技術受入・所有者受入が条件となる。
+2026-10-29、DB-P6-0の[表示契約](../../guides/database-p6-0-implementation-2026-10-29.md)、DB-P6-1の[保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
+[DB-P6-2の共有LOCAL管理](../../guides/database-p6-2-implementation-2026-10-29.md)は実装済み、技術受入は完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。read-only UNKNOWNは結果を変えず実行閉鎖・OPENまで照合し、元の138 DB／552 Schemaとbindingを保持した。
+次unitはDB-P6-3のdbt先行実証とする。Bears／SRE／Policy・実サイズ／multi-Warehouseは後続であり、M1の全必須機能と所有者受入は未完了である。
 DB-P7〜9は後続計画であり、下表の旧PhaseのCompletedから新Database対応・実サイズ変更・用途別Warehouseの完了を推定しない。
 
 | Phase / WP | Gate Objective | Current Status |

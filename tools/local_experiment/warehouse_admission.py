@@ -114,6 +114,18 @@ def check_open(db, warehouse_id='LOCAL'):
         raise AdmissionDenied('warehouse configuration is being reconciled')
 
 
+def stopping_barriers(db, warehouse_id='LOCAL'):
+    """Persisted typed stop fences remain effective after their owner disappears."""
+    result = []
+    for row in db.execute("SELECT id,targets,before_after FROM operations WHERE action IN ('WAREHOUSE_CHILL','WAREHOUSE_AUTO_CHILL') AND state IN ('ACCEPTED','RUNNING','UNKNOWN')"):
+        import json
+        metadata = json.loads(row['before_after'])
+        if (metadata.get('stopping_barrier') is True and
+                json.loads(row['targets']) == [warehouse_id]):
+            result.append(row['id'])
+    return tuple(result)
+
+
 def admit(db, *, warehouse_id='LOCAL', actor, kind, subject_id, parent=None, generation_id=None, database_id=None):
     _transaction(db)
     if database_id is not None and (not isinstance(database_id, str) or not database_id):
@@ -145,6 +157,8 @@ def admit(db, *, warehouse_id='LOCAL', actor, kind, subject_id, parent=None, gen
         if state['state'] not in ('OPEN', 'DRAINING'):
             raise AdmissionDenied('warehouse configuration is being reconciled')
     else:
+        if stopping_barriers(db, warehouse_id):
+            raise AdmissionDenied('warehouse is stopping or stop outcome is unknown')
         if database_id is not None:
             database = db.execute('SELECT state FROM databases WHERE id=?', (database_id,)).fetchone()
             if database is None or database['state'] != 'READY':

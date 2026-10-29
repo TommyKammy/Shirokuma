@@ -68,6 +68,8 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_agenthouse_manage.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lab_lifecycle.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_resident.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_*database.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_runtime_*.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_concurrency.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_security_boundary.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_jobs_*.py'

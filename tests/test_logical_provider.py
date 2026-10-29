@@ -923,6 +923,21 @@ class ProviderTests(unittest.TestCase):
         self.assertTrue(self.provider.bound_alive())
         return saved['result']
 
+    def test_stopped_spec_match_tolerates_api_defaults_but_rejects_execution_overrides(self):
+        expected = dict(containers=[dict(name='trino', image=self.c['images']['trino'],
+            volumeMounts=[dict(name='runtime', mountPath='/private', readOnly=False)], env=[])])
+        actual = copy.deepcopy(expected)
+        del actual['containers'][0]['volumeMounts'][0]['readOnly']
+        del actual['containers'][0]['env']
+        actual['restartPolicy'] = 'Always'
+        self.assertTrue(p.Provider._matches_spec(actual, expected))
+        for key, value in [('command', ['/bin/sh']), ('envFrom', [{'secretRef': {'name': 'foreign'}}]),
+                ('lifecycle', {'postStart': {'exec': {'command': ['/bin/sh']}}})]:
+            changed = copy.deepcopy(actual)
+            changed['containers'][0][key] = value
+            with self.subTest(key=key):
+                self.assertFalse(p.Provider._matches_spec(changed, expected))
+
     def test_compute_state_active_for_both_configured_worker_counts(self):
         for workers in (0, 1):
             config = copy.deepcopy(self.c)

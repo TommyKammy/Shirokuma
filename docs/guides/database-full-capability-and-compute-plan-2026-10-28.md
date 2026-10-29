@@ -23,17 +23,17 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 
 ### 2.1 現行実装
 
-2026年10月28日の開発checkoutを基準とする。DB作成・SQL・実データ・Job・role切替は[本人の条件付き受入](database-logical-create-owner-acceptance-2026-10-28.md)まで進んでいる。DB作成待ち時間の[性能改善](database-logical-create-performance-2026-10-28.md)は独立して継続し、M1の機能統合から落とさない。
+2026年10月29日の開発checkoutの確認結果へ更新した。DB作成・SQL・実データ・Job・role切替は[本人の条件付き受入](database-logical-create-owner-acceptance-2026-10-28.md)まで進んでいる。DB-P6-0／1は技術受入済み、DB-P6-2の技術受入は完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））とする。DB作成待ち時間の[性能改善](database-logical-create-performance-2026-10-28.md)とM1の本人受入は独立して継続する。
 
 | 観点 | 現行実装 | 計画への反映 |
 | --- | --- | --- |
 | LOCAL／XS／S | 同じ`trino-local`の別名。実CPU・メモリのサイズ切替ではない | DB-P7まで実効サイズを偽装せず「共有LOCAL」と表示 |
-| 手動休止・起動 | `logical_v1`はCoordinator／Workerを0／0、1／設定Worker数へ変更し、起動後を検証する | 運用処理をDatabase管理API／UIへ接続する |
-| 自動休止・自動復帰 | 旧実装はあるが、Databaseの通常起動経路ではAuto-Chill初期化を通らず、SQLの共通transportにもWakeがない | DB-P6で入口別に接続・受入する。実装済み扱いにしない |
+| 手動休止・起動 | `logical_v1`のP専用API／CLI／UIと共有操作receiptを実装。技術受入は完了 | 0／0と1／設定Worker数、実engine検証、全DBへの共有影響を区別。旧profileの対応を自動宣言しない |
+| 自動休止・自動復帰 | `logical_v1`の既存server lifecycleと共通SQL経路へ接続。技術受入は完了、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 元intent・現在権限・admissionを維持し、queued取消とUNKNOWNを保護。未接続dbt／AIは後続 |
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
 | データ変換 | 手動WAP・管理MartはDB対応済み。旧dbt profileは`iceberg`固定 | 既存操作を保ち、dbt実行を共通境界へ接続する |
-| AIと監査 | 旧BearsはDatabase profileで拒否。旧Pawprints一覧は全体の最新イベントを読む | 旧routeの無効化解除だけで開放しない |
+| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview、Bears／Copilotは未接続 | telemetryと耐久監査を分離。AIはDB-P6-4で認可／WAPへ接続する |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
 
@@ -92,7 +92,7 @@ DB-P6-2〜6は契約と読取り実装を並行できる。DB-P6-5の管理操�
 
 ### DB-P6-1 Database別の監査ログ
 
-2026-10-29：[実装契約](database-p6-1-contract-2026-10-29.md)に基づくAPI／CLI／Workbenchを実装し、[技術受入を完了](database-p6-1-implementation-2026-10-29.md)した。公開するのは保存済みmetadataであり、全遷移の再現やSQL本文の監査コピーではない。Pawprintsは独立したP専用previewとして扱い、現環境の`TELEMETRY_UNAVAILABLE`を耐久監査の失敗と混同しない。次はDB-P6-2とする。
+2026-10-29：[実装契約](database-p6-1-contract-2026-10-29.md)に基づくAPI／CLI／Workbenchを実装し、[技術受入を完了](database-p6-1-implementation-2026-10-29.md)した。公開するのは保存済みmetadataであり、全遷移の再現やSQL本文の監査コピーではない。Pawprintsは独立したP専用previewとして扱い、現環境の`TELEMETRY_UNAVAILABLE`を耐久監査の失敗と混同しない。DB-P6-2の結果は以下に別記する。
 
 既存control storeのquery／operation／Job／WAP／作成／権限変更を正本とし、Database・actor・保存role・実効role・実行先・版・時刻・状態・関連IDを辿れる監査APIと画面を作る。PawprintsはAI／運用テレメトリとして関連付け、実操作の成否を置き換えない。
 
@@ -105,6 +105,8 @@ SQL／promptの保存範囲、秘密値の除去、保持期間を契約にし�
 **受入**：同名資源を持つ2DB、別owner、role降格、grant剥奪、retireで一覧と詳細の漏えいがない。ページングと期間検索を提供し、最新100件だけを全履歴と表示しない。テレメトリ停止でも実効果を誤表示せず、UNKNOWN・commit後の記帳失敗を区別する。
 
 ### DB-P6-2 共有Warehouseの休止と自動復帰
+
+2026-10-29：共有LOCALのAPI／HTTP CLI／UI、server側Auto-Chill、共通SQLのAuto-resumeを実装した。[実装と検証記録](database-p6-2-implementation-2026-10-29.md)の技術受入は完了、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功）である。warm各30回の標本p95は変更前168.2ms／変更後203.5ms（差35.3ms）。read-only UNKNOWNは[限定復旧契約](database-p6-2-logical-recovery-contract-2026-10-29.md)で実行だけを閉鎖し、元結果をUNKNOWNのまま保持した。元の138 DB／552 Schemaと既存bindingの保全を確認し、M1本人受入と未接続機能は別に残す。
 
 最初に読取り状態と明示Wake／Chillを通常API／UIへつなぎ、次にDatabase版Auto-ChillとAuto-resumeを接続する。共有LOCALの操作は全DBへ影響するため、手動変更と自動休止設定はplatformの権限で管理する。データ利用者の自動Wakeは、許可された処理の実行権限として別に定義する。
 
@@ -254,7 +256,7 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 
-DB-P6-0の機能棚卸し・表示契約と、DB-P6-1の保存metadata監査は技術受入済みである。次の着手は**DB-P6-2**の共有Warehouse休止・自動復帰とする。その契約の上で読取りcompute、dbt先行実証、読取りBearsを並行する。M1の全必須行の対応と本人受入は別に残す。
+DB-P6-0の機能棚卸し・表示契約とDB-P6-1の保存metadata監査は技術受入済みである。現在のDB-P6-2は技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。次のunitは**DB-P6-3**のdbt先行実証とする。Bears／Copilot・SRE／Policy、残る探索操作、実サイズ変更と用途別Warehouseは各後続unitへ残す。M1の全必須行の対応と本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

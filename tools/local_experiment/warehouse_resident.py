@@ -1,6 +1,6 @@
 """Resident Trino warehouse control for the dedicated local lab."""
 import argparse
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from functools import wraps
 import control_store
 import warehouse_admission as admission
@@ -28,6 +28,7 @@ if KUBE_CONTEXT not in ('', 'none', 'default'):
 KUBECTL += ['-n', os.environ.get('KUBE_NAMESPACE', 'shirokuma-dev')]
 TIMEOUT = 180
 _PERSISTENT_TRINO = None
+_PERSISTENT_TRINO_LOCK = threading.RLock()
 _HTTP_POOL = threading.local()
 _DEFAULT_URLOPEN = urllib.request.urlopen
 WRITABLE_SCHEMAS = ('raw', 'sandbox', 'staging', 'marts')
@@ -60,11 +61,27 @@ def start_auto_chill_daemon(interval=15):
         _AUTO_CHILL_STOP.clear()
 
         def run():
-            while not _AUTO_CHILL_STOP.wait(interval):
-                try:
-                    check_auto_chill()
-                except Exception:
-                    logging.getLogger(__name__).exception('auto-chill check failed')
+            import warehouse_lifecycle
+            monitor = None
+            owner = False
+            if warehouse_lifecycle.applicable():
+                import fcntl
+                monitor = (control_store.root() / 'local-auto-chill-monitor.lock').open('a')
+            try:
+                while not _AUTO_CHILL_STOP.wait(interval):
+                    if monitor is not None and not owner:
+                        try:
+                            fcntl.flock(monitor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            owner = True
+                        except BlockingIOError:
+                            continue
+                    try:
+                        check_auto_chill()
+                    except Exception:
+                        logging.getLogger(__name__).exception('auto-chill check failed')
+            finally:
+                if monitor is not None:
+                    monitor.close()
 
         _AUTO_CHILL_THREAD = threading.Thread(target=run, name='warehouse-auto-chill', daemon=True)
         _AUTO_CHILL_THREAD.start()
@@ -159,6 +176,11 @@ def check_lifecycle(*, accepted_wake=False, db=None):
         admission.check_open(db, warehouse_id)
         if admission.blockers(db, warehouse_id):
             raise admission.AdmissionConflict('warehouse has unresolved work')
+        import warehouse_lifecycle
+        if logical_creations.enabled() and warehouse_lifecycle.runtime_blockers(db):
+            raise admission.AdmissionConflict('warehouse has unresolved lifecycle work')
+        if logical_creations.enabled() and any(logical_creations.compute_blockers(db).values()):
+            raise admission.AdmissionConflict('warehouse has unresolved creation work')
 
 
 @contextmanager
@@ -223,6 +245,10 @@ def configure_auto_chill(minutes: int):
     global _AUTO_CHILL_MINUTES
     if type(minutes) is not int or not 0 <= minutes <= 1440:
         raise ValueError('minutes must be an integer between 0 and 1440')
+    import warehouse_lifecycle
+    if warehouse_lifecycle.applicable():
+        # Management HTTP performs current platform authorization and revision CAS.
+        raise PermissionError('Use authenticated warehouse runtime policy API')
     path = activity_path().with_name('auto_chill.json')
     temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
     with lifecycle_mutation(), _ACTIVITY_LOCK:
@@ -260,7 +286,8 @@ def initialize_auto_chill():
     minutes = _load_auto_chill_minutes()
     with _ACTIVITY_LOCK:
         _AUTO_CHILL_MINUTES = minutes
-    if minutes > 0:
+    import warehouse_lifecycle
+    if minutes > 0 or warehouse_lifecycle.applicable():
         start_auto_chill_daemon()
     else:
         stop_auto_chill_daemon()
@@ -274,6 +301,16 @@ def check_auto_chill(size='LOCAL'):
     if not (_AUTO_CHILL_MINUTES > 0 and
             time.time() - last_activity >= _AUTO_CHILL_MINUTES * 60):
         return dict(chilled=False, **auto_chill_status())
+    import warehouse_lifecycle
+    if warehouse_lifecycle.applicable():
+        try:
+            import warehouse_runtime_routes
+            result = warehouse_runtime_routes.monitor_chill()
+            chilled = result['state'] == 'chilled'
+        except Exception:
+            # Missing/failed observation and blockers always preserve compute.
+            chilled = False
+        return dict(chilled=chilled, **auto_chill_status())
     # Serialize the poll and stop with lifecycle changes. Durable admissions
     # additionally cover the gaps between backend requests and job steps.
     with _warehouse_gate(exclusive=True):
@@ -608,32 +645,70 @@ def _trino_connection():
 def persistent_trino():
     """Own a reusable tunnel for a server's lifetime; nested callers borrow it."""
     global _PERSISTENT_TRINO
-    if _borrowable_trino():
-        yield _PERSISTENT_TRINO['url']
-        return
-    previous = _PERSISTENT_TRINO
-    with _trino_connection() as connection:
-        _PERSISTENT_TRINO = connection
-        try:
-            yield connection['url']
-        finally:
-            _PERSISTENT_TRINO = previous
+    with _PERSISTENT_TRINO_LOCK:
+        connection = _borrowable_trino_connection()
+        if connection is not None:
+            owner = None
+        else:
+            previous = _PERSISTENT_TRINO
+            owner = ExitStack()
+            try:
+                connection = owner.enter_context(_trino_connection())
+            except BaseException:
+                owner.close()
+                raise
+            connection['owner'] = owner
+            _PERSISTENT_TRINO = connection
+    try:
+        yield connection['url']
+    finally:
+        if owner is not None:
+            with _PERSISTENT_TRINO_LOCK:
+                if _PERSISTENT_TRINO is connection:
+                    _PERSISTENT_TRINO = previous if previous and not previous.get('invalidated') else None
+                owner.close()
+
+
+def invalidate_persistent_trino():
+    """Close only this cache's owned SQL tunnel before adopting a new epoch.
+
+    Existing query pins retain their original URLs; this never rebinds a query
+    continuation or closes any independently owned Provider connection.
+    """
+    global _PERSISTENT_TRINO
+    with _PERSISTENT_TRINO_LOCK:
+        connection, _PERSISTENT_TRINO = _PERSISTENT_TRINO, None
+        if connection is not None:
+            connection['invalidated'] = True
+            connection['owner'].close()
 
 
 @contextmanager
 def trino():
-    if _borrowable_trino():
-        yield _PERSISTENT_TRINO['url']
+    connection = _borrowable_trino_connection()
+    if connection is not None:
+        yield connection['url']
         return
     with _trino_connection() as connection:
         yield connection['url']
 
 
+def _borrowable_trino_connection():
+    """Capture one owned connection while checking liveness and SQL identity.
+
+    Invalidation can close it after this snapshot, but its URL stays captured.
+    Callers must never switch an attempted request or continuation to a new one.
+    """
+    with _PERSISTENT_TRINO_LOCK:
+        connection = _PERSISTENT_TRINO
+        if connection is None or connection['process'].poll() is not None:
+            return None
+        argv = _sql_kubectl()
+        return connection if argv is KUBECTL or connection.get('kubectl') == argv else None
+
+
 def _borrowable_trino():
-    if not _PERSISTENT_TRINO or _PERSISTENT_TRINO['process'].poll() is not None:
-        return False
-    argv = _sql_kubectl()
-    return argv is KUBECTL or _PERSISTENT_TRINO.get('kubectl') == argv
+    return _borrowable_trino_connection() is not None
 
 
 def telemetry(action, duration, status="success", prefix="warehouse.", **extra):
@@ -658,34 +733,76 @@ def finish(report, started):
 
 
 def transition(action, size):
-    with lifecycle_mutation(accepted_wake=action == 'wake') as db:
-        import logical_creations
-        if logical_creations.enabled():
-            return _logical_transition(action, size, _logical_foundation(db), db)
+    import logical_creations
+    if logical_creations.enabled():
+        import warehouse_lifecycle
+        if action == 'chill':
+            return warehouse_lifecycle.chill(authorize=lambda: None)
+        # Gate -> physical lock -> short transaction, identical to automatic Wake.
+        with _warehouse_gate(exclusive=action != 'wake'), warehouse_lifecycle._lock():
+            with control_store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                check_lifecycle(accepted_wake=action == 'wake', db=db)
+                foundation = _logical_foundation(db)
+                db.commit()
+                # A trusted direct observation must not leave an earlier warm
+                # epoch usable if this transition or its proof fails.
+                warehouse_lifecycle.invalidate_proof()
+                return _logical_transition(action, size, foundation, db)
+    with lifecycle_mutation(accepted_wake=action == 'wake'):
         return _transition(action, size)
 
 
-def _logical_transition(action, size, foundation, db):
+def _logical_transition(action, size, foundation, db, *, authorize=None, mutation_started=None):
     if action not in ('chill', 'wake'):
         raise ValueError('Invalid warehouse action')
     started = time.monotonic()
-    expected = _logical_wake_expected(foundation, db) if action == 'wake' else None
+    expected = _logical_wake_expected(foundation, db)
     before = _logical_status(size, foundation)
     target_state = 'chilled' if action == 'chill' else 'active'
     noop = before['state'] == target_state
     targets = (0, 0) if action == 'chill' else (1, foundation['trino']['workers'])
     if not noop:
+        dispatched = False
         for name, replicas in zip(('trino-local', 'trino-local-worker'), targets):
             if _logical_foundation(db) != foundation:
                 from warehouse_operations import OperationError
                 raise OperationError('FOUNDATION_NOT_READY', 503)
+            if authorize is not None:
+                authorize()
+            if not dispatched and mutation_started is not None:
+                mutation_started()
+            dispatched = True
             _logical_kubectl(foundation, 'scale', 'deployment/' + name, f'--replicas={replicas}')
         wait_for(lambda: _logical_status(size, foundation)['state'] == target_state)
+    if action == 'chill':
+        _logical_stopped_ready(foundation, db, expected)
     if action == 'wake':
         _logical_wake_ready(foundation, db, expected)
         touch_activity()
     return finish(dict(warehouse=warehouse(size), action=action, result='noop' if noop else 'verified',
         before_replicas=before['replicas'], after_replicas=sum(targets), state=target_state), started)
+
+
+def _logical_stopped_ready(foundation, db, expected):
+    """Match the startup STOPPED proof, including terminating compute pods."""
+    from logical_provider import Provider, Rejected
+    from warehouse_operations import OperationError
+    provider = Provider(foundation)
+    def stopped():
+        if _logical_foundation(db) != foundation:
+            raise OperationError('FOUNDATION_NOT_READY',503)
+        try:
+            provider.bind_stopped_registered(expected)
+        except Rejected as error:
+            if error.code in ('FOUNDATION_NOT_STOPPED','FOUNDATION_COMPUTE_NOT_STOPPED'):
+                return False
+            raise
+        return True
+    try:
+        wait_for(stopped)
+    finally:
+        provider.close()
 
 
 def _logical_wake_expected(foundation, db):
@@ -1267,8 +1384,18 @@ def _native_request(headers, path, method, body, endpoint, *, warehouse_id='LOCA
     for key, value in headers.items():
         name = key.lower()
         suffix = re.sub(r'^x-(trino|presto)-', '', name)
+        # The official DB-API client sends these even without overrides.
+        # Treat only the exact, single no-op headers as absent capabilities.
+        if name == 'x-trino-session' and value == '':
+            single('X-Trino-Session')
+            continue
+        if name == 'x-trino-transaction-id' and value == 'NONE':
+            single('X-Trino-Transaction-Id')
+            continue
         if suffix in forbidden or (suffix == 'user' and value != principal.principal_id):
             raise service.QueryError('SQL_PERMISSION_DENIED', 403)
+    if method != 'POST' and body:
+        raise service.QueryError('UNKNOWN_CONTEXT', 400)
     if path == '/v1/info' and method == 'GET':
         return {'nodeVersion': {'version': 'shirokuma'}, 'environment': 'local', 'coordinator': True, 'starting': False}
     if path == '/v1/statement' and method == 'POST':
@@ -1290,28 +1417,37 @@ def _native_request(headers, path, method, body, endpoint, *, warehouse_id='LOCA
             mode=selected_mode or ('admin-write' if role == 'admin' else 'sandbox-write' if role == 'data_engineer' else 'read-only'),
             max_rows=None, request_id=str(uuid.uuid4()), worksheet_id=None)
     else:
+        info = re.fullmatch(r'/v1/query/([a-zA-Z0-9-]+)', path)
         match = re.fullmatch(r'/v1/statement/([a-zA-Z0-9-]+)/(?:pages/([a-zA-Z0-9_-]+)|(cancel))', path)
-        if match is None or method not in ('GET', 'DELETE') or (match.group(3) and method != 'DELETE'):
+        if info is not None:
+            if method != 'GET':
+                raise service.QueryError('QUERY_NOT_FOUND', 404)
+            query_id, token, cancel_route = info.group(1), None, None
+        elif match is None or method not in ('GET', 'DELETE') or (match.group(3) and method != 'DELETE'):
             raise service.QueryError('QUERY_NOT_FOUND', 404)
-        query_id, token, cancel_route = match.groups()
+        else:
+            query_id, token, cancel_route = match.groups()
         if role is None:
             original = service._row(query_id)
             if original is None or original['actor'] != principal.principal_id:
                 raise service.QueryError('QUERY_NOT_FOUND', 404)
             role = original['selected_role']
-        row = service._owned(principal, query_id, role, grants=False)
+        row = service._owned(principal, query_id, role, grants=info is not None)
         if selected_mode is not None and selected_mode != row['mode']:
             raise service.QueryError('CONTEXT_MISMATCH', 409)
         for name, key in (('X-Trino-Catalog', 'sql_catalog'), ('X-Trino-Schema', 'sql_schema')):
             selection = single(name, required=False)
             if selection is not None and selection != row[key]:
                 raise service.QueryError('CONTEXT_MISMATCH', 409)
+        if info is not None:
+            return dict(queryId=query_id, state=row['state'], createdAt=row['created_at'])
         if method == 'DELETE':
             if token:
                 return service._cancel_registered(principal, query_id, token, selected_role=role)
             return service.cancel(principal, query_id, selected_role=role)
         page = service.fetch(principal, query_id, token, selected_role=role)
-    result = dict(id=page['backend_query_id'], columns=page['columns'], data=page['data'], stats=page['stats'])
+    result = dict(id=page['id'], infoUri=endpoint.rstrip('/') + '/v1/query/' + page['id'],
+                  columns=page['columns'], data=page['data'], stats=page['stats'])
     if page.get('truncated'):
         result['truncated'] = True
     if page.get('error'):
@@ -1452,14 +1588,21 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                 try:
                     import runtime_profile
                     import query_service
-                    if self.headers.get('Transfer-Encoding'):
+                    lengths = self.headers.get_all('Content-Length', [])
+                    if (self.headers.get_all('Transfer-Encoding', []) or len(lengths) > 1 or
+                            lengths and not re.fullmatch(r'[0-9]+', lengths[0])):
                         raise query_service.QueryError('UNKNOWN_CONTEXT', 400)
-                    length = int(self.headers.get('Content-Length', '0'))
+                    length = int(lengths[0]) if lengths else 0
                     if length < 0 or length > 1024 * 1024:
                         raise query_service.QueryError('UNKNOWN_CONTEXT', 400)
                     body = self.rfile.read(length) if length else b''
                     page = _native_request(self.headers, self.path, self.command, body,
                         runtime_profile.current().sql_endpoint_url, warehouse_id=size)
+                    if self.command == 'DELETE':
+                        self.send_response(204)
+                        self.send_header('Content-Length', '0')
+                        self.end_headers()
+                        return
                     payload = json.dumps(page).encode('utf-8')
                     self.send_response(200)
                     self.send_header('Content-Type', 'application/json')
@@ -1659,7 +1802,11 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
         from contextlib import ExitStack
         with ExitStack() as stack:
             if logical_creations.enabled():
-                stack.enter_context(logical_creations.lifetime())
+                provider = stack.enter_context(logical_creations.lifetime())
+                import warehouse_lifecycle
+                warehouse_lifecycle.observe_startup(provider)
+                initialize_auto_chill()
+                stack.callback(stop_auto_chill_daemon)
             else:
                 database_creation_bridge.configure()
             if once:

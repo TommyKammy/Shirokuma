@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 import uuid
 
@@ -176,6 +177,12 @@ class DataOpsTests(unittest.TestCase):
         self.assertFalse(self.calls)
 
     def setUp(self):
+        # Only the agreed lifecycle boundary is mocked while core is built.
+        lifecycle = SimpleNamespace(applicable=lambda: False, requires_wake=lambda: False,
+                                    ensure_awake=lambda **kwargs: None)
+        lifecycle_patch = patch.dict(sys.modules, warehouse_lifecycle=lifecycle)
+        lifecycle_patch.start()
+        self.addCleanup(lifecycle_patch.stop)
         from test_request_auth import PrincipalTests
         self.fixture = PrincipalTests()
         self.fixture.setUp()
@@ -475,7 +482,7 @@ class DataOpsTests(unittest.TestCase):
     def test_lost_process_intent_is_unknown_and_observation_only(self):
         execution = self.begin()
         ref = self.existing()
-        with patch.object(qs, '_receive', side_effect=SystemExit):
+        with patch.object(qs, '_transport', side_effect=SystemExit):
             with self.assertRaises(SystemExit):
                 execution.insert_rows(ref, ['id'], [(7,)], step='intent')
         # Simulate the interpreter disappearing, including process-private leases.

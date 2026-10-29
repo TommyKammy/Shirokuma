@@ -517,6 +517,23 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #db-creation-actions{margin-block:16px;overflow-wrap:anywhere}
 #db-creation-observation{max-width:75ch;font-size:13px}
 #db-audit-panel .toolbar{flex-wrap:wrap;align-items:end}#db-audit-panel .field{min-width:9rem;flex:1}#db-audit-panel .field input,#db-audit-panel .field select{width:100%;max-width:100%;min-width:0}#db-audit-panel .table-wrap{max-width:100%;overflow-x:auto}#db-audit-panel td{overflow-wrap:anywhere}#db-audit-context,#db-audit-detail,#db-audit-preview{overflow-wrap:anywhere}
+#runtime-panel{min-width:0;max-width:100%}
+#runtime-panel p{max-width:75ch;overflow-wrap:anywhere;margin:0 0 8px}
+#runtime-panel p:last-child{margin-bottom:0}#runtime-panel p:empty{display:none}
+#runtime-panel h3{margin-bottom:8px}#runtime-panel .panel-head{gap:12px;padding:14px}
+#runtime-panel .runtime-status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:18px 28px}
+#runtime-panel .runtime-status-grid>div{min-width:0}
+#runtime-panel .runtime-status-grid p{color:var(--ink-2)}
+#runtime-panel #runtime-physical{color:var(--ink);font-weight:600}
+#runtime-panel .toolbar{gap:8px;flex-wrap:wrap;min-width:0}
+#runtime-panel .runtime-policy-editor{align-items:flex-end;margin-top:12px;gap:12px 16px}
+#runtime-panel .runtime-minutes-field{flex:0 1 24rem;min-width:0;max-width:100%}
+#runtime-panel .runtime-minutes-field label{margin:0 0 6px}
+#runtime-panel input{width:9rem;min-width:0;max-width:100%}
+#runtime-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+#runtime-panel .runtime-actions{margin-block:12px}
+#runtime-panel .help{color:var(--muted)}
+html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wrap:anywhere}html[data-data-mode=database] #quick-warehouse-state{white-space:normal;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -759,10 +776,10 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 <section id="pawprints" role="tabpanel" aria-labelledby="tab-pawprints" hidden><div class="page-head"><div class="page-title"><h1>Audit Log</h1><p>Recent warehouse and Bear activity, recorded in ClickHouse.</p></div></div>
 <div class="panel"><div class="panel-head"><div><h2>AgentHouse Pawprints</h2><small id="pawprint-meta" role="status">Latest 100 events</small></div><button id="refresh-pawprints">Refresh</button></div><div class="filters"><label for="pawprint-filter">Search Pawprints</label><input id="pawprint-filter" type="search" placeholder="Action, Bear, trace, or model"><label for="pawprint-status-filter">Status</label><select id="pawprint-status-filter"><option value="">All statuses</option><option>success</option><option>failed</option><option>degraded</option><option>denied</option></select></div><div id="pawprint-error" class="error" role="alert" hidden></div><div id="pawprint-results" class="table-wrap"><div class="empty">Refresh to load recent Pawprints.</div></div></div>
 <div class="panel"><div class="panel-head"><h2>Query &amp; Load History</h2><button id="refresh-history">Refresh History</button></div><div id="history-error" class="error" role="alert" hidden></div><h3 class="subhead">Trino Query History</h3><div id="runtime-queries-results" class="table-wrap"></div><h3 class="subhead">Copy &amp; Data Load History</h3><div id="load-history-results" class="table-wrap"></div></div></section>
-<section id="compute" role="tabpanel" aria-labelledby="tab-compute" hidden><div class="page-head"><div class="page-title"><h1>Compute &amp; Governance</h1><p>Virtual warehouse readiness and resident cluster checks.</p></div><div class="page-actions"><button id="compute-refresh">Refresh status</button><button id="compute-sre-check" class="run">SRE Cluster Health Check</button><button id="compute-policy-check" class="run">Policy Gatekeeper Audit</button></div></div>
+<section id="compute" role="tabpanel" aria-labelledby="tab-compute" hidden><div id="compute-legacy-overview" class="page-head"><div class="page-title"><h1>Compute &amp; Governance</h1><p>Virtual warehouse readiness and resident cluster checks.</p></div><div class="page-actions"><button id="compute-refresh">Refresh status</button><button id="compute-sre-check" class="run">SRE Cluster Health Check</button><button id="compute-policy-check" class="run">Policy Gatekeeper Audit</button></div></div>
 <pre id="compute-check-result" role="status" hidden></pre>
-<div class="panel"><div class="panel-head"><h2>Virtual warehouse status</h2></div><dl id="compute-summary" class="facts"></dl><details class="raw"><summary>Raw status</summary><pre id="compute-warehouse" role="status">Loading…</pre></details><h3 class="subhead">Component readiness</h3><div id="compute-components" class="table-wrap"></div></div>
-<div class="panel"><div class="panel-head"><div><h2>Auto-Chill</h2><small>Chill the warehouse after it has been idle for the selected time.</small></div></div><div class="panel-body toolbar"><label for="auto-chill-minutes">Auto-Chill (idle minutes)</label><select id="auto-chill-minutes"><option value="0">Off</option><option value="5">5m</option><option value="15">15m</option><option value="30">30m</option><option value="60">60m</option></select><button id="save-auto-chill" class="primary">Apply Auto-Chill</button><span id="auto-chill-state" class="badge" role="status">Auto-Chill: Off</span></div></div></section>
+<div id="compute-legacy-status" class="panel"><div class="panel-head"><h2>Virtual warehouse status</h2></div><dl id="compute-summary" class="facts"></dl><details class="raw"><summary>Raw status</summary><pre id="compute-warehouse" role="status">Loading…</pre></details><h3 class="subhead">Component readiness</h3><div id="compute-components" class="table-wrap"></div></div>
+<div id="compute-legacy-auto-chill" class="panel"><div class="panel-head"><div><h2>Auto-Chill</h2><small>Chill the warehouse after it has been idle for the selected time.</small></div></div><div class="panel-body toolbar"><label for="auto-chill-minutes">Auto-Chill (idle minutes)</label><select id="auto-chill-minutes"><option value="0">Off</option><option value="5">5m</option><option value="15">15m</option><option value="30">30m</option><option value="60">60m</option></select><button id="save-auto-chill" class="primary">Apply Auto-Chill</button><span id="auto-chill-state" class="badge" role="status">Auto-Chill: Off</span></div></div></section>
 </main></div>
 <dialog id="ai-settings" aria-labelledby="ai-settings-title">
 <form id="ai-settings-form">
@@ -2549,6 +2566,7 @@ function dbReason(w=dbCurrent()){
  return '';
 }
 function dbControls(){
+ if(dbRuntime.installed)dbRuntimeSync();
  if(dbAudit.installed)dbAuditValidate();
  const w=dbCurrent();if(!w)return;
  const schemaCurrent=dbSchemaScope===dbSchemaKey(w.selected_role,w.database_id);
@@ -2737,7 +2755,7 @@ function dbRenderRun(){
  if(!run.authorized||run.rowsPurged||!dbRoleWithinHeader(run.origin.role)||run.origin.principal!==dbPrincipal){message('query-error',run.state==='UNKNOWN'?t('Query outcome unknown; no automatic retry.'):'');ui($('query-meta'),run.state);ui($('query-results'),'Results hidden until access is revalidated.');dbControls();return;}
  const c=run.origin.context;
  const differs=JSON.stringify(dbInput(w))!==JSON.stringify(run.origin.input)||w.sql!==run.origin.sql;
- $('query-meta').textContent=[t(run.state),run.truncated?t('Row limit reached'):'',run.state!=='FINISHED'?t('Partial results'):'',c.sql_catalog||c.database_id,c.sql_schema||c.schema_id,c.warehouse_id,run.origin.role,differs?t('Current inputs differ'):''].filter(Boolean).join(' · ');
+ $('query-meta').textContent=[t(run.state),run.truncated?t('Row limit reached'):'',run.state==='QUEUED'&&!run.backend_query_id?t('Waiting for shared LOCAL startup. Cancel affects only this SQL request.'):run.state!=='FINISHED'?t('Partial results'):'',c.sql_catalog||c.database_id,c.sql_schema||c.schema_id,c.warehouse_id,run.origin.role,differs?t('Current inputs differ'):''].filter(Boolean).join(' · ');
  const details=document.createElement('pre');details.textContent=JSON.stringify({request_id:run.origin.request_id,worksheet_id:run.origin.saved_worksheet_id||run.origin.worksheet_id,query_id:run.id,role:run.origin.role,mode:run.origin.input?.mode,context:c,sql:run.origin.sql},null,2);$('request-provenance').append(details);
  if(run.authorized&&!run.rowsPurged&&dbRoleWithinHeader(run.origin.role)&&run.origin.principal===dbPrincipal){
   queryResult={columns:run.columns,rows:run.rows};populateChartColumns();renderResults();
@@ -2761,7 +2779,7 @@ function dbAcceptPage(run,page){
  if(!page||typeof page.id!=='string'||!page.id)throw Error('UNKNOWN_CONTEXT');
  if(page.id!==run.id&&run.id)throw Error('CONTEXT_MISMATCH');
  if(page.worksheet_id!==run.origin.worksheet_id||page.request_id!==run.origin.request_id)throw Error('CONTEXT_MISMATCH');
- run.id=page.id;
+ run.id=page.id;run.backend_query_id=page.backend_query_id;
  if(page.cancel_uri)run.cancel_uri=dbQueryURI(page.cancel_uri,run.id,'cancel');
  else run.cancel_uri='/api/v1/queries/'+encodeURIComponent(run.id)+'/cancel';
  const c=run.origin.context;
@@ -3280,6 +3298,7 @@ function dbSelectInspector(button){
  if(dbObject)return dbDescribe(dbObject);
 }
 function dbApplyRole(){
+ dbRuntimePurge();
  if(dbAudit.installed)dbAuditPurge();
  dbAdminClear();
  ++dbEpoch;++dbAuthorizationVersion;for(const run of dbRuns.values())run.authorized=false;
@@ -3366,14 +3385,14 @@ async function initializeDatabaseUI(session){
  // This gate also prevents programmatic or timer-driven v1 actions.
  api=(path,body)=>path==='/api/status'&&body===undefined?legacyAPI(path):Promise.reject(Error(t('Unavailable in Database mode in this phase.')));
  let logicalWarehouseStatus=false;
- refreshStatus=async()=>{const identity=dbIdentity();try{const data=await api('/api/status');if(identity!==dbIdentity())return;message('status-error','');logicalWarehouseStatus=data.creation_mode==='logical_v1';
+ refreshStatus=async()=>{const identity=dbIdentity();if(await dbRuntimeRefresh())return;try{const data=await api('/api/status');if(identity!==dbIdentity())return;message('status-error','');logicalWarehouseStatus=data.creation_mode==='logical_v1';dbRuntimeConfirmProfile(data,'status');
   if(logicalWarehouseStatus)dbRenderWarehouseStatus(data.warehouse?.state);
-  else{ui($('warehouse-state'),data.status==='healthy'?'Ready':'Unavailable');ui($('quick-warehouse-state'),'Database mode supports LOCAL only.');}
+  else{ui($('warehouse-state'),data.status==='healthy'?'Ready':'Unavailable');ui($('quick-warehouse-state'),'Database mode supports LOCAL only.');if(dbRuntimeSupport()==='unsupported'){ui($('quick-status-error'),dbRuntimeDefaultGuidance());$('quick-status-error').hidden=false;}}
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
  activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
- $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();};
+ $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
  $('query-schema').onchange=async()=>{dbCurrent().schema_id=$('query-schema').value;await dbReselect();dbSave();dbRenderRun();};
@@ -3398,6 +3417,7 @@ async function initializeDatabaseUI(session){
  dbStagesInstall();
  dbMartsInstall();
  dbAuditInstall();
+ dbRuntimeInstall();await dbRuntimeRefresh();
  const creationID=dbCreationURL().id;
  if(dbAdminAllowed()&&/^[A-Za-z0-9_-]{1,128}$/.test(creationID||''))await activate($('tab-db-admin'));
 }
@@ -3456,7 +3476,7 @@ function dbAdminClear(){
 }
 function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
- if(dbAdmin.platform!==allowed){if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();}
+ if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();}
  if(dbAudit.installed)dbAuditValidate();
  dbAdminGate();
 }
@@ -5124,7 +5144,7 @@ Object.assign(i18n.ja,{
  'Start the warehouse before creating a database.':'データベースを作成する前にウェアハウスを起動してください。',
  'Active':'稼働中','Stopped':'停止中','Transitioning':'移行中',
  'Shared warehouse is active.':'共有ウェアハウスは稼働中です。',
- 'Ask an administrator to start the shared warehouse through administrator management before creating a database or running SQL.':'データベース作成や SQL 実行の前に、管理者に管理操作で共有ウェアハウスを起動するよう依頼してください。',
+ 'Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.':'データベース作成や SQL 実行の前に、管理者に管理操作で共有ウェアハウスを起動するよう依頼してください。',
  'Shared warehouse is transitioning. Wait for it to become active.':'共有ウェアハウスは状態を移行中です。稼働状態になるまでお待ちください。',
  'Shared warehouse status is unavailable. Refresh to check again.':'共有ウェアハウスの状態を取得できません。更新して再確認してください。',
  'Ask an administrator to prepare the database service.':'管理者にデータベースの利用準備を依頼してください。',
@@ -5136,7 +5156,7 @@ Object.assign(i18n.ja,{
 });
 for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
 function dbWarehousePresentation(state){
- const labels={ACTIVE:['Active','Shared warehouse is active.','tone-ok'],STOPPED:['Stopped','Ask an administrator to start the shared warehouse through administrator management before creating a database or running SQL.','tone-warn'],TRANSITIONING:['Transitioning','Shared warehouse is transitioning. Wait for it to become active.','tone-run']};
+ const labels={ACTIVE:['Active','Shared warehouse is active.','tone-ok'],STOPPED:['Stopped','Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.','tone-warn'],TRANSITIONING:['Transitioning','Shared warehouse is transitioning. Wait for it to become active.','tone-run']};
  return typeof state==='string'&&Object.hasOwn(labels,state)?labels[state]:['Unavailable','Shared warehouse status is unavailable. Refresh to check again.','tone-bad'];
 }
 function dbRenderWarehouseStatus(state){
@@ -5291,6 +5311,7 @@ async function dbCreationRequest(path,options={},scope=dbCreationScope(),beforeS
    ['INVALID_REQUEST','INVALID_NAME','INVALID_INITIAL_GRANTS','REVISION_CONFLICT','STALE_PLAN','RECONCILIATION_REQUIRED','CREATION_BUSY','UNAPPLIED_CHANGES'].includes(data.error);
   throw Object.assign(Error(code),{code,status:response.status,rejection});
  }
+ if(path===dbCreationRoute+'/capabilities')dbRuntimeConfirmProfile(data,'capability');
  return data;
 }
 function dbCreationNotice(error,readOnly=false){
@@ -5515,7 +5536,7 @@ function dbCreationSummary(parent,p){
  dbAdminNode('p','',parent,lifecycle==='READY'?(p.access_source==='none'?'Verification is complete. SQL use is unavailable for the selected role.':'Verification is complete. The database is ready to use.'):['RETIRING','RETIRED'].includes(lifecycle)?'Creation history is shown for this retiring or retired database.':'Foundation setup and SQL connection setup require separate plan review and approval. Creation will place all of LOCAL in maintenance until full verification completes.');
 }
 function dbCreationLogicalBlocker(parent,blocker){
- const labels={RECONCILIATION_REQUIRED:'Reconcile the saved creation to check its outcome. No creation work is resent.',CREATION_FAILED:'Creation failed. Ask an administrator to review the status and available recovery actions.',WAREHOUSE_START_REQUIRED:'Ask an administrator to start the shared warehouse through administrator management before creating a database or running SQL.',FOUNDATION_NOT_READY:'Ask an administrator to prepare the database service.',OPERATOR_UNAVAILABLE:'The database creation service is unavailable. Try refreshing its status.',PRINCIPAL_STOPPED:'Creation has stopped and cannot be resumed.'};
+ const labels={RECONCILIATION_REQUIRED:'Reconcile the saved creation to check its outcome. No creation work is resent.',CREATION_FAILED:'Creation failed. Ask an administrator to review the status and available recovery actions.',WAREHOUSE_START_REQUIRED:'Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.',FOUNDATION_NOT_READY:'Ask an administrator to prepare the database service.',OPERATOR_UNAVAILABLE:'The database creation service is unavailable. Try refreshing its status.',PRINCIPAL_STOPPED:'Creation has stopped and cannot be resumed.'};
  dbAdminNode('p','',parent,labels[blocker]||'Creation is blocked. Resolve the cause, then resume only when available.');
 }
 function dbCreationRenderLogical(box,p){
@@ -5926,6 +5947,242 @@ function dbAuditInstall(){
  dbAuditSelectOptions('db-audit-preview-status',[],'','All statuses');
  const preview=dbAdminNode('div','db-audit-preview',panel);preview.setAttribute('role','status');dbAuditChoices();
  dbAuditSelectOptions('db-audit-source',[],'','All sources');
+}
+
+// Shared LOCAL metadata is independent of worksheet selection. No metadata read wakes compute.
+const dbRuntime={installed:false,scope:'',serial:0,status:null,operation:null,intent:null,pending:false,reading:false,observing:false,dirty:false,base:null,conflict:false,support:null,supportPrincipal:''};
+const dbRuntimeBase='/api/v1/warehouses/LOCAL/runtime';
+Object.assign(i18n.ja,{
+ 'Shared LOCAL compute':'共有 LOCAL コンピュート',
+ 'Physical observation':'物理状態の観測','Shared operation':'共有操作','Shared controls':'共有コンピュートの操作','Chill safety':'休止前の確認',
+ 'Auto-Chill minutes':'自動休止までの分数','0 disables Auto-Chill. Range: 0–1440 minutes.':'0 は自動休止を無効にします。設定範囲は 0〜1440 分です。',
+ 'Shared runtime controls and SQL auto-resume are unsupported for this profile. Use the existing operator workflow.':'このプロファイルでは共有ランタイム操作と SQL の自動復帰は未対応です。従来のオペレーター手順を利用してください。',
+ 'Runtime support is not confirmed. Refresh status; use the existing operator workflow until support is confirmed.':'ランタイム機能の対応は未確認です。状態を更新し、対応を確認するまでは従来のオペレーター手順を利用してください。',
+ 'Accepted':'受付済み','Completed':'完了','Failed':'失敗','Unknown':'不明','Unknown action':'不明な操作','Revalidated':'状態検証済み',
+ 'Revalidate state':'状態を再検証','Recheck shared LOCAL state. SQL is never resent.':'共有 LOCAL の現在状態を再検証します。SQL は再送しません。',
+ 'Creation requests':'DB 作成要求','Creation effects':'DB 作成の適用処理','Creation roots':'DB 作成の基盤処理',
+ 'Unresolved admissions (included in admitted work)':'結果不明の受付（受付済み処理の内数）',
+ 'Chill requires all observed categories to be clear. The backend rechecks before stopping.':'休止には観測した全カテゴリの件数が 0 である必要があります。停止前にバックエンドが再検証します。',
+ 'Operation {id}':'操作 {id}',
+ '{guidance} All databases share this compute; storage and catalog remain.':'{guidance} 全 DB がこのコンピュートを共有します。ストレージとカタログは保持されます。',
+ 'All databases share this compute. Wake and Chill affect all databases; data storage and catalog remain.':'全 DB がこのコンピュートを共有します。起動・休止は全 DB に影響します。データストレージとカタログは保持されます。',
+ 'SRE, Policy and Bears actions remain unavailable in this phase.':'SRE・Policy・Bears の操作はこの段階では未対応です。',
+ 'Physical {state} · observed {time}':'物理状態 {state} · 観測 {time}',
+ 'Engine verified at {time}':'エンジン検証済み {time}',
+ 'Engine readiness is unverified. Ready replicas alone do not prove SQL readiness.':'エンジンの準備は未検証です。ready replica 数だけでは SQL の準備完了を証明しません。',
+ 'Shared operation: {action} · {phase}':'共有操作: {action} · {phase}',
+ 'No observed shared operation.':'共有操作の観測はありません。',
+ 'Operation observation unavailable. Last confirmed phase: {phase}. Refresh to check again.':'操作の観測を取得できません。最後に確認した状態: {phase}。更新して再確認してください。',
+ 'Accepted; completion is not verified.':'受付済みです。完了は未確認です。',
+ 'Starting shared LOCAL':'共有 LOCAL を起動中','Stopping shared LOCAL':'共有 LOCAL を停止中',
+ 'Runtime unavailable. Refresh to check again.':'共有状態は取得できません。更新して再確認してください。',
+ 'Platform authority and the selected admin header role are required.':'基盤権限とヘッダーの admin ロール選択が必要です。',
+ 'Stored Auto-Chill: {minutes} min · revision {revision} (0 = disabled)':'保存済み自動休止: {minutes} 分 · revision {revision}（0 = 無効）',
+ 'Auto-Chill minutes (0–1440; 0 = disabled)':'自動休止までの分数（0〜1440、0 = 無効）',
+ 'Save Auto-Chill':'自動休止を保存','Reload / discard draft':'再読込／下書きを破棄',
+ 'Policy changed elsewhere. Reload / discard draft before saving.':'設定が別の場所で変更されました。保存前に再読込／下書きを破棄してください。',
+ 'Unsaved policy draft.':'設定の下書きは未保存です。','Check original receipt':'元の受付を確認',
+ 'Outcome UNKNOWN. Check the original receipt with the same key; no automatic retry.':'結果は不明です。同じキーで元の受付を明示確認してください。自動再試行は行いません。',
+ 'Operation FAILED. Review the shared state before a new action.':'操作は失敗しました。次の操作の前に共有状態を確認してください。',
+ 'Operation UNKNOWN. Use explicit Reconcile; SQL is never resent.':'操作結果は不明です。明示的に照合してください。SQL は再送しません。',
+ 'Operation finished; refresh the physical observation and engine proof.':'操作は完了しました。物理状態とエンジン検証の観測を更新してください。',
+ 'Blockers: {counts}':'停止を妨げる状態: {counts}',
+ 'Runtime operations':'共有操作','Admitted work':'受付済み処理','Unresolved outcomes':'未解決の結果','Database creation':'DB 作成',
+ 'Operation {id} · {code}':'操作 {id} · {code}',
+ 'Blocker observation unavailable; stopping safety is unverified.':'停止を妨げる状態は取得できません。安全な停止は未検証です。',
+ 'Waiting for shared LOCAL startup. Cancel affects only this SQL request.':'共有 LOCAL の起動を待っています。取消はこの SQL 要求だけに適用されます。',
+ 'Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.':'許可済み SQL は共有 LOCAL を自動起動します。DB 作成には基盤管理者が Compute で LOCAL を明示起動する必要があります。'
+});
+for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
+function dbRuntimeStamp(){return JSON.stringify([dbPrincipal,dbEpoch,currentRole,dbMaximumRole,dbAdmin.platform,dbAuthorizationVersion]);}
+function dbRuntimePurge(){
+ const p=dbRuntime;++p.serial;p.scope='';p.status=null;p.operation=null;p.intent=null;p.pending=false;p.reading=false;p.observing=false;p.dirty=false;p.base=null;p.conflict=false;
+ if(p.installed){$('runtime-minutes').value='';dbRuntimeRender();}
+}
+function dbRuntimeSync(){
+ const p=dbRuntime;if(p.scope!==dbRuntimeStamp()){dbRuntimePurge();p.scope=dbRuntimeStamp();}dbRuntimeRender();
+}
+// Profile support is public metadata, independent of P-only receipts and current observation availability.
+function dbRuntimeSupport(){return dbRuntime.supportPrincipal===dbPrincipal?dbRuntime.support:null;}
+function dbRuntimeConfirmProfile(data,source){
+ let support=null;
+ if(data?.creation_mode==='logical_v1')support='logical';
+ else if(data&&!Object.hasOwn(data,'creation_mode')&&(
+  source==='status'&&data.data_mode==='database'&&['healthy','degraded'].includes(data.status)||
+  source==='capability'&&data.warehouse_id==='LOCAL'&&typeof data.environment_id==='string'&&!!data.environment_id&&typeof data.configured==='boolean'&&typeof data.available==='boolean'))support='unsupported';
+ if(support){dbRuntime.support=support;dbRuntime.supportPrincipal=dbPrincipal;}
+ if(dbRuntime.installed)dbRuntimeRender();
+}
+function dbRuntimeDefaultGuidance(){
+ return dbRuntimeSupport()==='logical'?'Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.':dbRuntimeSupport()==='unsupported'?'Shared runtime controls and SQL auto-resume are unsupported for this profile. Use the existing operator workflow.':'Runtime support is not confirmed. Refresh status; use the existing operator workflow until support is confirmed.';
+}
+function dbRuntimeAllowed(action){return dbRuntimeSupport()==='logical'&&dbAdminAllowed()&&Array.isArray(dbRuntime.status?.available_actions)&&dbRuntime.status.available_actions.includes(action);}
+function dbRuntimeLocked(){return dbRuntime.pending||!!dbRuntime.intent||['ACCEPTED','RUNNING'].includes(dbRuntime.operation?.phase);}
+function dbRuntimeBlockers(){
+ const counts=dbRuntime.status?.blockers,record=(value,keys)=>!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+ if(!record(counts,['runtime_operations','admissions','unknown','creation'])||!record(counts.creation,['requests','effects','roots']))return null;
+ const items=[['Runtime operations',counts.runtime_operations],['Admitted work',counts.admissions],['Unresolved admissions (included in admitted work)',counts.unknown],['Creation requests',counts.creation.requests],['Creation effects',counts.creation.effects],['Creation roots',counts.creation.roots]];
+ return items.every(([,value])=>Number.isSafeInteger(value)&&value>=0)&&counts.unknown<=counts.admissions?items:null;
+}
+function dbRuntimeCanChill(){const counts=dbRuntimeBlockers();return !!counts&&counts.every(([,value])=>value===0);}
+function dbRuntimePhysicalLabel(state){return t(({active:'Active',chilled:'Chilled',starting:'Starting',unknown:'Unknown'})[state]||'Unknown');}
+function dbRuntimePhaseLabel(phase){return t(({ACCEPTED:'Accepted',RUNNING:'Running',SUCCEEDED:'Completed',FINISHED:'Completed',FAILED:'Failed',UNKNOWN:'Unknown',RECONCILED:'Revalidated'})[phase]||'Unknown');}
+function dbRuntimeActionLabel(action){return t(({WAREHOUSE_WAKE:'Wake',WAREHOUSE_CHILL:'Chill',WAREHOUSE_AUTO_CHILL:'Auto-Chill',WAREHOUSE_RECONCILE:'Revalidate state'})[action]||'Unknown action');}
+function dbRuntimeRender(){
+ const p=dbRuntime;if(!p.installed)return;const data=p.status,op=p.operation;
+ const state=['active','chilled','starting','unknown'].includes(data?.physical_state)?data.physical_state:'unknown';
+ const observed=typeof data?.observed_at==='string'?data.observed_at:'—';
+ for(const id of ['runtime-physical',...(data?['warehouse-state','quick-warehouse-state']:[])])ui($(id),'Physical {state} · observed {time}',()=>({state:dbRuntimePhysicalLabel(state),time:observed}));
+ ui($('runtime-proof'),data?.engine_verified===true&&state==='active'&&typeof data?.engine_verified_at==='string'&&Number.isFinite(Date.parse(data.engine_verified_at))?'Engine verified at {time}':'Engine readiness is unverified. Ready replicas alone do not prove SQL readiness.',{time:data?.engine_verified_at});
+ const globalID=typeof data?.operation_id==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(data.operation_id)?data.operation_id:null;
+ // A later global operation supersedes a completed local receipt, without adopting its protected detail handle.
+ const showLocal=!!op&&(!globalID||globalID===op.id||op.observation===data||dbRuntimeLocked());
+ const rawPhase=showLocal?op.phase:data?.operation_phase,rawAction=showLocal?op.action:data?.operation_action,operationID=showLocal?op.id:globalID;
+ const phase=['ACCEPTED','RUNNING','SUCCEEDED','FINISHED','FAILED','UNKNOWN','RECONCILED'].includes(rawPhase)?rawPhase:rawPhase?'UNKNOWN':null,action=['WAREHOUSE_WAKE','WAREHOUSE_CHILL','WAREHOUSE_AUTO_CHILL','WAREHOUSE_RECONCILE'].includes(rawAction)?rawAction:null;
+ ui($('replicas'),'Replicas {ready} / {desired}',{ready:Number.isSafeInteger(data?.ready_replicas)?data.ready_replicas:'—',desired:Number.isSafeInteger(data?.replicas)?data.replicas:'—'});
+ const errorCode=showLocal&&/^[A-Z][A-Z0-9_]{0,63}$/.test(op.error_code)?op.error_code:null;
+ ui($('runtime-receipt-info'),operationID?(errorCode?'Operation {id} · {code}':'Operation {id}'):'',{id:operationID,code:errorCode});
+ ui($('runtime-observation'),op?.observationUnavailable?'Operation observation unavailable. Last confirmed phase: {phase}. Refresh to check again.':'',()=>({phase:dbRuntimePhaseLabel(op?.phase)}));
+ ui($('runtime-operation'),phase?'Shared operation: {action} · {phase}':'No observed shared operation.',()=>({action:dbRuntimeActionLabel(action),phase:dbRuntimePhaseLabel(phase)}));
+ const guidance=phase==='ACCEPTED'?'Accepted; completion is not verified.':phase==='RUNNING'&&action==='WAREHOUSE_WAKE'?'Starting shared LOCAL':phase==='RUNNING'&&['WAREHOUSE_CHILL','WAREHOUSE_AUTO_CHILL'].includes(action)?'Stopping shared LOCAL':phase==='FAILED'?'Operation FAILED. Review the shared state before a new action.':phase==='UNKNOWN'?'Operation UNKNOWN. Use explicit Reconcile; SQL is never resent.':['SUCCEEDED','FINISHED','RECONCILED'].includes(phase)?'Operation finished; refresh the physical observation and engine proof.':dbRuntimeDefaultGuidance();
+ ui($('runtime-guidance'),guidance);if(data){ui($('quick-status-error'),'{guidance} All databases share this compute; storage and catalog remain.',()=>({guidance:t(guidance)}));$('quick-status-error').hidden=false;$('quick-status-error').className='muted';$('quick-status-error').title='';}
+ const counts=dbRuntimeBlockers();
+ ui($('runtime-blockers'),counts?'Blockers: {counts}':'Blocker observation unavailable; stopping safety is unverified.',()=>({counts:counts?counts.map(([label,value])=>t(label)+': '+value).join(' · '):''}));
+ const policy=data?.policy,valid=Number.isSafeInteger(policy?.minutes)&&policy.minutes>=0&&policy.minutes<=1440&&Number.isSafeInteger(policy?.revision)&&policy.revision>=0;
+ ui($('runtime-policy'),valid?'Stored Auto-Chill: {minutes} min · revision {revision} (0 = disabled)':'Runtime unavailable. Refresh to check again.',policy||{});
+ ui($('runtime-draft'),p.conflict?'Policy changed elsewhere. Reload / discard draft before saving.':p.dirty?'Unsaved policy draft.':'');
+ for(const action of ['wake','chill','reconcile'])for(const id of [action==='reconcile'?'runtime-reconcile':'runtime-'+action,...(action==='reconcile'?[]:[action,'quick-'+action])]){
+  const node=$(id);node.disabled=!dbRuntimeAllowed(action)||dbRuntimeLocked()||action==='chill'&&!dbRuntimeCanChill()||['ACCEPTED','RUNNING'].includes(data?.operation_phase);node.dataset.databaseUnavailable=String(node.disabled);
+ }
+ $('runtime-save').disabled=!dbRuntimeAllowed('auto-chill')||dbRuntimeLocked()||!valid||!p.dirty||p.conflict;
+ $('runtime-minutes').disabled=!dbRuntimeAllowed('auto-chill')||dbRuntimeLocked()||!valid;
+ $('runtime-reload').disabled=!dbRuntimeAllowed('auto-chill')||dbRuntimeLocked();
+ $('runtime-receipt').hidden=!p.intent;$('runtime-receipt').disabled=p.pending||!p.intent||!dbRuntimeAllowed(p.intent?.action);
+ ui($('runtime-authority'),dbAdminAllowed()?'':'Platform authority and the selected admin header role are required.');
+}
+async function dbRuntimeRequest(path,{body,key,stamp=dbRuntimeStamp()}={}){
+ const current=()=>stamp===dbRuntimeStamp();
+ const auth=await fetch('/api/session');if(!current())throw Error('STALE');
+ if([401,403].includes(auth.status)){dbRuntimePurge();throw Error('FORBIDDEN');}
+ const session=await auth.json();if(!current())throw Error('STALE');
+ if(!auth.ok||JSON.stringify([session.username,session.authenticated])!==dbPrincipal||session.data_mode!=='database'){dbRuntimePurge();throw Error('STALE');}
+ const platform=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin';
+ if(platform!==dbAdmin.platform)dbAdminSession(session);
+ if(session.maximum_role!==dbMaximumRole)dbUpdateMaximumRole(session.maximum_role);
+ dbRuntimeSync();if(!current())throw Error('STALE');
+ if(body!==undefined&&!dbRuntimeAllowed(path.split('/').at(-1)))throw Error('FORBIDDEN');
+ const headers={'X-Shirokuma-Role':currentRole};if(body!==undefined)Object.assign(headers,{'Content-Type':'application/json','Idempotency-Key':key});
+ const response=await fetch(path,{headers,...(body===undefined?{}:{method:'POST',body:JSON.stringify(body)})});
+ if(!current())throw Error('STALE');
+ if([401,403].includes(response.status)){dbRuntimePurge();throw Error('FORBIDDEN');}
+ const data=await response.json();if(!current())throw Error('STALE');
+ if(!response.ok||data?.error)throw Object.assign(Error('RUNTIME'),{status:response.status,code:data?.code||data?.error?.code});
+ return data;
+}
+async function dbRuntimeRefresh(){
+ const p=dbRuntime;if(!p.installed)return false;dbRuntimeSync();if(p.reading)return !!p.status;p.reading=true;
+ const stamp=dbRuntimeStamp(),serial=p.serial,current=()=>stamp===dbRuntimeStamp()&&serial===p.serial;
+ let supported=false;
+ try{
+  const data=await dbRuntimeRequest(dbRuntimeBase,{stamp});if(!current())return true;supported=data?.warehouse==='LOCAL';
+  if(data?.warehouse!=='LOCAL'||!['active','chilled','starting','unknown'].includes(data.physical_state)||typeof data.observed_at!=='string'||!Number.isFinite(Date.parse(data.observed_at)))throw Error('DTO');
+  if(!Array.isArray(data.available_actions)||!data.available_actions.includes('wake')){
+   dbRuntimePurge();p.scope=dbRuntimeStamp();
+  }
+  p.status=data;p.support='logical';p.supportPrincipal=dbPrincipal;
+  const policy=data.policy;if(Number.isSafeInteger(policy?.minutes)&&policy.minutes>=0&&policy.minutes<=1440&&Number.isSafeInteger(policy?.revision)&&policy.revision>=0){
+   if(p.dirty){if(p.base!==policy.revision)p.conflict=true;}
+   else{p.base=policy.revision;$('runtime-minutes').value=String(policy.minutes);}
+  }
+  ui($('runtime-message'),'');dbRuntimeRender();
+  if(p.operation?.id&&['ACCEPTED','RUNNING'].includes(p.operation.phase)&&dbAdminAllowed())await dbRuntimeObserve();
+  return true;
+ }catch(error){if(!current())return true;p.status=null;ui($('runtime-message'),'Runtime unavailable. Refresh to check again.');dbRuntimeRender();if(supported)for(const id of ['warehouse-state','quick-warehouse-state'])ui($(id),'Unknown');return supported;}
+ finally{if(current())p.reading=false;}
+}
+async function dbRuntimeAct(action){
+ const p=dbRuntime;dbRuntimeSync();if(!dbRuntimeAllowed(action)||dbRuntimeLocked()||action==='chill'&&!dbRuntimeCanChill()||action!=='auto-chill'&&['ACCEPTED','RUNNING'].includes(p.status?.operation_phase))return;
+ let body={};if(action==='auto-chill'){
+  if(!p.dirty)return;
+  const text=$('runtime-minutes').value,minutes=Number(text);if(!text.trim()||!Number.isInteger(minutes)||minutes<0||minutes>1440||!Number.isSafeInteger(p.base)||p.conflict)return;
+  body={minutes,expected_revision:p.base};
+ }
+ p.intent={action,body,key:crypto.randomUUID()};p.operation=null;return dbRuntimeReceipt();
+}
+async function dbRuntimeReceipt(){
+ const p=dbRuntime,intent=p.intent;if(!intent||p.pending||!dbRuntimeAllowed(intent.action))return;
+ const stamp=dbRuntimeStamp(),serial=p.serial,current=()=>stamp===dbRuntimeStamp()&&serial===p.serial&&p.intent===intent;p.pending=true;dbRuntimeRender();
+ try{
+  const ack=await dbRuntimeRequest(dbRuntimeBase+'/'+intent.action,{body:intent.body,key:intent.key,stamp});if(!current())return;
+  if(typeof ack?.operation_id!=='string'||!ack.operation_id||ack.phase!=='ACCEPTED')throw Error('ACK');
+  p.operation={id:ack.operation_id,observation:p.status,action:'WAREHOUSE_'+intent.action.replaceAll('-','_').toUpperCase(),phase:'ACCEPTED'};p.intent=null;
+  ui($('runtime-message'),'Accepted; completion is not verified.');
+ }catch(error){if(current()){
+  if(error.status===409&&error.code==='REVISION_CONFLICT'){p.intent=null;p.conflict=true;ui($('runtime-message'),'Policy changed elsewhere. Reload / discard draft before saving.');}
+  else ui($('runtime-message'),'Outcome UNKNOWN. Check the original receipt with the same key; no automatic retry.');
+ }}finally{if(stamp===dbRuntimeStamp()&&serial===p.serial){p.pending=false;dbRuntimeRender();}}
+}
+async function dbRuntimeObserve(){
+ const p=dbRuntime,op=p.operation;if(!op||!dbAdminAllowed()||p.pending||p.observing)return;p.observing=true;
+ const stamp=dbRuntimeStamp(),serial=p.serial,current=()=>stamp===dbRuntimeStamp()&&serial===p.serial&&p.operation===op;
+ try{
+  const data=await dbRuntimeRequest(dbRuntimeBase+'/operations/'+encodeURIComponent(op.id),{stamp});if(!current())return;
+  if(data?.id!==op.id||data.action!==op.action||!['ACCEPTED','RUNNING','SUCCEEDED','FINISHED','FAILED','UNKNOWN','RECONCILED'].includes(data.phase))throw Error('DTO');
+  op.phase=data.phase;op.error_code=data.error_code;op.observationUnavailable=false;
+  if(!op.policyReconciled&&op.action==='WAREHOUSE_AUTO_CHILL'&&['SUCCEEDED','FINISHED','RECONCILED'].includes(op.phase)){
+   op.policyReconciled=true;
+   p.dirty=false;p.conflict=false;p.base=null;
+   const policy=p.status?.policy;
+   if(Number.isSafeInteger(policy?.minutes)&&policy.minutes>=0&&policy.minutes<=1440&&Number.isSafeInteger(policy?.revision)&&policy.revision>=0){p.base=policy.revision;$('runtime-minutes').value=String(policy.minutes);}
+  }
+ }catch(error){if(current())op.observationUnavailable=true;}
+ if(current()){p.observing=false;dbRuntimeRender();}
+}
+function dbRuntimeInstall(){
+ const p=dbRuntime;if(p.installed)return;p.installed=true;
+ for(const id of ['compute-sre-check','compute-policy-check']){$(id).disabled=true;$(id).dataset.databaseUnavailable='true';const key='SRE, Policy and Bears actions remain unavailable in this phase.';$(id).title=t(key);uiAttributes.push({node:$(id),attribute:'title',key});}
+ const panel=dbAdminNode('div','runtime-panel',$('compute'));panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby','runtime-title');
+ const head=dbAdminNode('div','runtime-heading',panel);head.className='panel-head';
+ dbAdminNode('h2','runtime-title',head,'Shared LOCAL compute');
+ dbAdminButton(head,'runtime-refresh','Refresh status',async()=>{await dbRuntimeRefresh();if(p.operation)await dbRuntimeObserve();});
+ const status=dbAdminNode('div','runtime-status-section',panel);status.className='panel-body runtime-status-grid';
+ const physical=dbAdminNode('div','runtime-physical-group',status),operation=dbAdminNode('div','runtime-operation-group',status);
+ dbAdminNode('h3','runtime-physical-title',physical,'Physical observation');dbAdminNode('h3','runtime-operation-title',operation,'Shared operation');
+ const controls=dbAdminNode('section','runtime-controls-section',panel);controls.className='section';controls.setAttribute('aria-labelledby','runtime-controls-title');
+ dbAdminNode('h3','runtime-controls-title',controls,'Shared controls');
+ dbAdminNode('p','runtime-impact',controls,'All databases share this compute. Wake and Chill affect all databases; data storage and catalog remain.');
+ const safety=dbAdminNode('section','runtime-safety-section',panel);safety.className='section';safety.setAttribute('aria-labelledby','runtime-safety-title');
+ dbAdminNode('h3','runtime-safety-title',safety,'Chill safety');
+ const policy=dbAdminNode('section','runtime-policy-section',panel);policy.className='section';policy.setAttribute('aria-labelledby','runtime-policy-title');
+ dbAdminNode('h3','runtime-policy-title',policy,'Auto-Chill');
+ for(const [host,ids] of [[physical,['physical','proof']],[operation,['operation','receipt-info','observation']],[controls,['guidance','authority','message']],[safety,['blockers']],[policy,['policy','draft']]])for(const id of ids){const node=dbAdminNode('p','runtime-'+id,host);node.setAttribute('role','status');node.setAttribute('aria-atomic','true');}
+ dbAdminNode('p','runtime-safety-help',safety,'Chill requires all observed categories to be clear. The backend rechecks before stopping.').className='help';
+ const actions=dbAdminNode('div','runtime-actions',controls);actions.className='toolbar runtime-actions';
+ for(const [action,label] of [['wake','Wake'],['chill','Chill'],['reconcile','Revalidate state']])dbAdminButton(actions,'runtime-'+action,label,()=>dbRuntimeAct(action));
+ const reconcileKey='Recheck shared LOCAL state. SQL is never resent.';$('runtime-reconcile').title=t(reconcileKey);uiAttributes.push({node:$('runtime-reconcile'),attribute:'title',key:reconcileKey});
+ dbAdminButton(actions,'runtime-receipt','Check original receipt',dbRuntimeReceipt);
+ const editor=dbAdminNode('div','runtime-policy-editor',policy);editor.className='toolbar runtime-policy-editor';
+ const field=dbAdminNode('div','runtime-minutes-field',editor);field.className='runtime-minutes-field';
+ const label=dbAdminNode('label','runtime-minutes-label',field,'Auto-Chill minutes');label.htmlFor='runtime-minutes';
+ const input=dbAdminNode('input','runtime-minutes',field);input.type='number';input.min='0';input.max='1440';input.step='1';input.setAttribute('aria-describedby','runtime-minutes-help runtime-policy runtime-draft');input.oninput=()=>{if(!p.dirty)p.base=p.status?.policy?.revision;p.dirty=true;dbRuntimeRender();};
+ dbAdminNode('p','runtime-minutes-help',field,'0 disables Auto-Chill. Range: 0–1440 minutes.').className='help';
+ const policyActions=dbAdminNode('div','runtime-policy-actions',editor);policyActions.className='toolbar';
+ dbAdminButton(policyActions,'runtime-save','Save Auto-Chill',()=>dbRuntimeAct('auto-chill')).className='primary';
+ dbAdminButton(policyActions,'runtime-reload','Reload / discard draft',async()=>{if(dbRuntimeLocked())return;p.dirty=false;p.conflict=false;p.base=null;await dbRuntimeRefresh();});
+ for(const action of ['wake','chill'])for(const id of [action,'quick-'+action]){
+  $(id).onclick=()=>dbRuntimeAct(action);
+  for(let n=uiAttributes.length-1;n>=0;n--)if(uiAttributes[n].node===$(id)&&uiAttributes[n].attribute==='title')uiAttributes.splice(n,1);
+  $(id).title=t('All databases share this compute. Wake and Chill affect all databases; data storage and catalog remain.');
+  uiAttributes.push({node:$(id),attribute:'title',key:'All databases share this compute. Wake and Chill affect all databases; data storage and catalog remain.'});
+ }
+ $('compute-refresh').disabled=false;$('compute-refresh').dataset.databaseUnavailable='false';$('compute-refresh').onclick=()=>refreshStatus();
+ // Preserve legacy IDs and handlers; Database mode uses the single shared runtime surface.
+ $('compute-legacy-overview').hidden=true;
+ for(const id of ['compute-refresh','compute-sre-check','compute-policy-check'])$(id).hidden=true;
+ $('compute-legacy-status').hidden=true;
+ $('compute-legacy-auto-chill').hidden=true;
+ ui($('database-compute-notice'),'SRE, Policy and Bears actions remain unavailable in this phase.');
+ dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

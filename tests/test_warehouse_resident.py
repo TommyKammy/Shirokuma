@@ -60,8 +60,20 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
         provider_patch = patch('logical_provider.Provider', return_value=self.provider_context)
         self.provider_factory = provider_patch.start()
         self.addCleanup(provider_patch.stop)
+        self.diagnostic_provider = Mock()
+        self.diagnostic_provider._provisioner.return_value = {
+            'username': 'logical_provisioner', 'password': 'fixture-diagnostic-secret'}
+        self.diagnostic_provider._request.return_value = (
+            b'# TYPE trino_execution_name_QueryManager_QueryTracker_AllQueriesCount gauge\n'
+            b'trino_execution_name_QueryManager_QueryTracker_AllQueriesCount 12\n'
+            b'# TYPE trino_execution_name_QueryManager_QueryTracker_ExpiredQueriesCount gauge\n'
+            b'trino_execution_name_QueryManager_QueryTracker_ExpiredQueriesCount 12\n'
+            b'# EOF\n')
         for mock in (patch.dict(w.os.environ, SHIROKUMA_STATE_DIR=self.temp.name),
+                     patch('warehouse_lifecycle.wr', w),
+                     patch('logical_creations.ensure_active_provider', return_value=self.diagnostic_provider),
                      patch('runtime_profile.current', return_value=SimpleNamespace(mode='logical_v1')),
+                     patch('runtime_profile.generation_attestation', return_value={}),
                      patch('runtime_profile.logical_config', side_effect=lambda: dict(self.cfg)),
                      patch('logical_foundation.load', side_effect=lambda _: self.foundation),
                      patch.object(w, 'telemetry', return_value='skipped'),
@@ -184,17 +196,16 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
                 def command(argv,**kwargs):
                     import sqlite3
                     self.assertEqual(w._WAREHOUSE_GATE.mode,'exclusive' if action=='chill' else 'shared')
-                    # Even a second writer must remain blocked throughout scale and observation.
+                    # Physical observation holds the lifecycle lock, not a DB write transaction.
                     with control_store.connect() as other:
                         other.execute('PRAGMA busy_timeout=0')
-                        with self.assertRaises(sqlite3.OperationalError):
-                            other.execute('BEGIN IMMEDIATE')
+                        other.execute('BEGIN IMMEDIATE')
                     if 'get' in argv:
                         return Mock(stdout=json.dumps(observations.pop(0)))
                     self.assertIn('scale',argv)
                     return Mock(stdout='')
                 with control_store.connect() as db:
-                    before = list(db.iterdump())
+                    before = [line for line in db.iterdump() if not line.startswith('INSERT INTO "operations"')]
                 with self.subTest(workers=workers,action=action), patch.object(w.subprocess,'run',side_effect=command) as run, patch.object(w.time,'sleep'):
                     report = w.transition(action,'LOCAL')
                     self.assertEqual(report['state'],'chilled' if action=='chill' else 'active')
@@ -203,8 +214,9 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
                     self.assertEqual([cmd[-2:] for cmd in commands],[[f'deployment/{name}',f'--replicas={count}']
                         for name,count in zip(('trino-local','trino-local-worker'),target)])
                     self.assertEqual(observations,[])
+                    self.diagnostic_provider._sql.assert_not_called()
                 with control_store.connect() as db:
-                    self.assertEqual(list(db.iterdump()),before)
+                    self.assertEqual([line for line in db.iterdump() if not line.startswith('INSERT INTO "operations"')],before)
 
     def test_noop_requires_both_deployments_at_the_observed_target(self):
         for workers in (0,1):
@@ -410,12 +422,12 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
         self.provider_context.__exit__.assert_called_once()
         w.touch_activity.assert_not_called()
 
-    def test_chill_never_constructs_provider_or_reads_engine_receipt(self):
-        import runtime_profile
-        with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects(0,0)))), \
-                patch.object(runtime_profile,'private_json',side_effect=AssertionError('engine receipt')):
+    def test_chill_verifies_saved_stopped_proof_without_opening_provider(self):
+        with patch.object(w.subprocess,'run',return_value=Mock(stdout=json.dumps(self.objects(0,0)))):
             self.assertEqual(w.transition('chill','LOCAL')['result'],'noop')
-        self.provider_factory.assert_not_called()
+        self.provider_context.bind_stopped_registered.assert_called_once_with(self.expected)
+        self.provider_context.open.assert_not_called()
+        self.bound_provider.bind_registered.assert_not_called()
         w.touch_activity.assert_not_called()
 
     def test_cold_wake_uses_real_full_bind_and_waits_for_two_registered_trino_nodes(self):
@@ -1911,6 +1923,128 @@ class ResidentWarehouseTests(unittest.TestCase):
             self.assertIsNone(w._PERSISTENT_TRINO)
             popen.return_value.terminate.assert_called_once()
 
+    def test_invalidate_live_owned_sql_tunnel_preserves_other_connections_and_cleanup(self):
+        with patch.object(w, '_PERSISTENT_TRINO', None), \
+             patch.object(w.subprocess, 'Popen') as popen, \
+             patch.object(w, 'http_json', return_value={'starting': False}):
+            old, unrelated, fresh = popen.side_effect = [Mock(), Mock(), Mock()]
+            for process in (old, unrelated, fresh):
+                process.poll.return_value = None
+            with w.persistent_trino() as old_url:
+                # Independent lifetimes (as used by Provider) are never cache owners.
+                with w._trino_connection():
+                    self.assertIs(w._PERSISTENT_TRINO['process'], old)
+                    w.invalidate_persistent_trino()
+                    self.assertIsNone(w._PERSISTENT_TRINO)
+                    old.terminate.assert_called_once()
+                    old.wait.assert_called_once()
+                    unrelated.terminate.assert_not_called()
+                    with w.persistent_trino() as fresh_url:
+                        self.assertNotEqual(fresh_url, old_url)
+                        self.assertIs(w._PERSISTENT_TRINO['process'], fresh)
+                        with w.trino() as borrowed:
+                            self.assertEqual(borrowed, fresh_url)
+                        fresh.terminate.assert_not_called()
+                    self.assertIsNone(w._PERSISTENT_TRINO)
+            self.assertIsNone(w._PERSISTENT_TRINO)
+            for process in (old, unrelated, fresh):
+                process.terminate.assert_called_once()
+                process.wait.assert_called_once()
+
+    def test_old_owner_cleanup_cannot_clear_replacement_cache(self):
+        with patch.object(w, '_PERSISTENT_TRINO', None), \
+             patch.object(w.subprocess, 'Popen') as popen, \
+             patch.object(w, 'http_json', return_value={'starting': False}):
+            old, fresh = Mock(), Mock()
+            old.poll.return_value = fresh.poll.return_value = None
+            popen.side_effect = [old, fresh]
+            first, second = w.persistent_trino(), w.persistent_trino()
+            first.__enter__()
+            w.invalidate_persistent_trino()
+            fresh_url = second.__enter__()
+            try:
+                first.__exit__(None, None, None)
+                self.assertEqual(w._PERSISTENT_TRINO['url'], fresh_url)
+                fresh.terminate.assert_not_called()
+            finally:
+                second.__exit__(None, None, None)
+            old.terminate.assert_called_once()
+            fresh.terminate.assert_called_once()
+            self.assertIsNone(w._PERSISTENT_TRINO)
+
+    def test_borrow_during_invalidation_captures_url_without_cache_read_race(self):
+        import threading
+        from contextlib import contextmanager
+        for borrow in (w.trino, w.persistent_trino, w._borrowable_trino):
+            with self.subTest(borrow=borrow.__name__):
+                checking, release_check = threading.Event(), threading.Event()
+                invalidating, invalidated = threading.Event(), threading.Event()
+                armed = threading.Event()
+                errors, results = [], []
+                process = Mock()
+                class Connection(dict):
+                    def __getitem__(self, key):
+                        if key == 'url' and armed.is_set():
+                            # Force cache closure before the borrower consumes
+                            # its selected URL, after the liveness check.
+                            if not invalidated.wait(3):
+                                raise RuntimeError('invalidation did not finish')
+                        return super().__getitem__(key)
+                connection = Connection(process=process, url='http://127.0.0.1:1234', kubectl=w.KUBECTL)
+                @contextmanager
+                def tunnel():
+                    try:
+                        yield connection
+                    finally:
+                        process.terminate()
+                def poll():
+                    checking.set()
+                    if not release_check.wait(3):
+                        raise RuntimeError('liveness check blocked')
+                    return None
+                def reader():
+                    try:
+                        if borrow is w._borrowable_trino:
+                            results.append(borrow())
+                        else:
+                            with borrow() as url:
+                                results.append(url)
+                    except BaseException as error:
+                        errors.append(error)
+                def invalidate():
+                    try:
+                        invalidating.set()
+                        w.invalidate_persistent_trino()
+                    except BaseException as error:
+                        errors.append(error)
+                    finally:
+                        invalidated.set()
+                with patch.object(w, '_PERSISTENT_TRINO', None), \
+                        patch.object(w, '_sql_kubectl', return_value=w.KUBECTL), \
+                        patch.object(w, '_trino_connection', tunnel):
+                    with w.persistent_trino():
+                        armed.set()
+                        process.poll.side_effect = poll
+                        reader_thread = threading.Thread(target=reader)
+                        invalidator_thread = threading.Thread(target=invalidate)
+                        reader_thread.start()
+                        try:
+                            self.assertTrue(checking.wait(2))
+                            invalidator_thread.start()
+                            self.assertTrue(invalidating.wait(2))
+                            self.assertFalse(invalidated.wait(.05))
+                        finally:
+                            release_check.set()
+                            reader_thread.join(4)
+                            if invalidator_thread.ident is not None:
+                                invalidator_thread.join(4)
+                        self.assertFalse(reader_thread.is_alive())
+                        self.assertFalse(invalidator_thread.is_alive())
+                        self.assertEqual(errors, [])
+                        self.assertEqual(results, [True if borrow is w._borrowable_trino else connection['url']])
+                        self.assertIsNone(w._PERSISTENT_TRINO)
+                    process.terminate.assert_called_once()
+
     def test_rich_telemetry_omits_none_and_passes_event_fields(self):
         manage = Mock()
         with patch.dict('sys.modules', {'agenthouse.manage': manage}):
@@ -1933,6 +2067,69 @@ class ResidentWarehouseTests(unittest.TestCase):
         self.assertEqual(fields["action"], "warehouse.query")
         self.assertEqual(fields["status"], "failed")
         self.assertEqual(set(fields), {"action", "target", "status", "agent_id", "task_id", "trace_id", "duration_ms"})
+
+
+class AutoChillMonitorTakeoverTests(unittest.TestCase):
+    def test_standby_takes_over_and_observes_disabled_policy_enable(self):
+        import os
+        import time
+        script = r'''
+import json, os, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import warehouse_resident as wr
+import warehouse_lifecycle as lifecycle
+lifecycle.applicable = lambda: True
+def tick():
+    with (Path(os.environ['SHIROKUMA_STATE_DIR'])/'ticks').open('a') as out:
+        out.write(json.dumps([os.getpid(), wr._load_auto_chill_minutes()])+'\n')
+wr.check_auto_chill = tick
+wr.start_auto_chill_daemon(interval=.02)
+print('ready', flush=True)
+try:
+    sys.stdin.readline()
+finally:
+    wr.stop_auto_chill_daemon()
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / 'runtime'
+            runtime.mkdir()
+            policy = runtime / 'auto_chill.json'
+            policy.write_text('{"auto_chill_minutes":0}')
+            env = dict(os.environ, SHIROKUMA_STATE_DIR=directory)
+            processes = []
+            def start():
+                process = subprocess.Popen([sys.executable, '-c', script, str(Path(w.__file__).parent)],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+                processes.append(process)
+                self.assertEqual(process.stdout.readline().strip(), 'ready')
+                return process
+            def records():
+                path = root / 'ticks'
+                return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+            def until(predicate):
+                deadline = time.monotonic() + 5
+                while not predicate():
+                    if time.monotonic() >= deadline:
+                        self.fail('monitor did not reach expected owner/policy state')
+                    time.sleep(.01)
+            try:
+                first = start()
+                until(lambda: any(pid == first.pid for pid, minutes in records()))
+                standby = start()
+                time.sleep(.1)
+                self.assertTrue(all(pid == first.pid for pid, minutes in records()))
+                output, errors = first.communicate('stop\n', timeout=5)
+                self.assertEqual(first.returncode, 0, errors)
+                until(lambda: any(pid == standby.pid and minutes == 0 for pid, minutes in records()))
+                policy.write_text('{"auto_chill_minutes":5}')
+                until(lambda: any(pid == standby.pid and minutes == 5 for pid, minutes in records()))
+            finally:
+                for process in processes:
+                    if process.poll() is None:
+                        process.communicate('stop\n', timeout=5)
+                    self.assertEqual(process.returncode, 0)
 
 
 if __name__ == "__main__":

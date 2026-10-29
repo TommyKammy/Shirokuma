@@ -31,6 +31,7 @@ import warehouse_admission as admission
 from warehouse_operations import OperationError, _json
 
 COLLECTION = legacy.COLLECTION
+_provider_lock = threading.RLock()
 _provider = None
 _config = None
 _executor_id = None
@@ -105,7 +106,8 @@ def lifetime(*, register=False, refresh_interval=2):
         raise ValueError('Logical foundation differs')
     executor = value['executor_id']
     previous = _provider, _config, _executor_id, _verifier_cache
-    with Provider(foundation) as provider:
+    provider = Provider(foundation)
+    try:
         _provider, _config, _executor_id = provider, value, executor
         cache = _VerifierCache(foundation['foundation_id'], foundation['revision'])
         _verifier_cache = cache
@@ -113,20 +115,19 @@ def lifetime(*, register=False, refresh_interval=2):
         task = None
         try:
             if register:
+                provider.open()
                 register_foundation()
             with control_store.connect() as db:
                 registered = dict(_foundation(db))
             # Close the metadata connection before the full native UID binding.
             try:
-                saved = runtime_profile.private_json(registered['verification_ref'])
-                if (type(saved) is not dict or saved.get('kind') != 'foundation_probe'
-                        or type(saved.get('generation_id')) is not str
-                        or saved['generation_id'] != value['foundation_generation_id']
-                        or type(saved.get('revision')) is not int
-                        or saved['revision'] != value['foundation_revision']):
-                    raise ValueError()
-                _validate_probe(saved.get('result'))
-                provider.bind_registered(saved['result'])
+                saved = _registered_probe(registered)
+                if not register and provider.compute_state() == 'STOPPED':
+                    _bound_profile()
+                    provider.bind_stopped_registered(saved)
+                else:
+                    provider.open()
+                    provider.bind_registered(saved)
             except Exception:
                 raise OperationError('FOUNDATION_NOT_READY', 503) from None
             with transaction() as db:
@@ -143,6 +144,8 @@ def lifetime(*, register=False, refresh_interval=2):
                 task.join()
             cache.close()
             _provider, _config, _executor_id, _verifier_cache = previous
+    finally:
+        provider.close()
 
 
 @contextmanager
@@ -245,9 +248,9 @@ def _foundation(db):
             or row['generation_id'] != c['foundation_generation_id']
             or row['config_ref'] != c['provider_config_file'] or not row['verification_ref']):
         raise OperationError('FOUNDATION_NOT_READY', 503)
-    generation = db.execute('SELECT state FROM warehouse_config_generations WHERE id=?',
+    generation = db.execute('SELECT state,warehouse_id FROM warehouse_config_generations WHERE id=?',
                             (row['generation_id'],)).fetchone()
-    if not generation or generation[0] != 'APPLIED':
+    if not generation or generation['state'] != 'APPLIED' or generation['warehouse_id'] != c['warehouse_id']:
         raise OperationError('FOUNDATION_NOT_READY', 503)
     control = db.execute('SELECT * FROM warehouse_controls WHERE warehouse_id=?',
                          (c['warehouse_id'],)).fetchone()
@@ -308,11 +311,104 @@ def _bound_profile(*, alive=False):
         raise OperationError('FOUNDATION_NOT_READY', 503) from None
 
 
+def _registered_probe(registered):
+    saved = runtime_profile.private_json(registered['verification_ref'])
+    c = config()
+    if (type(saved) is not dict or saved.get('kind') != 'foundation_probe'
+            or type(saved.get('generation_id')) is not str
+            or saved['generation_id'] != c['foundation_generation_id']
+            or type(saved.get('revision')) is not int
+            or saved['revision'] != c['foundation_revision']):
+        raise ValueError('Invalid saved foundation proof')
+    return _validate_probe(saved.get('result'))
+
+
+@contextmanager
+def _provider_use():
+    # Acquire outside SQLite transactions. Dispatch holds lifecycle/root first;
+    # provider use never waits for either gate. RLock permits nested leaf effects.
+    with _provider_lock:
+        yield
+
+
+def ensure_active_provider(*, force_rebind=False):
+    """Repair this lifetime; force after Wake/epoch change despite live children."""
+    from logical_provider import Rejected
+    with _provider_lock:
+        if _provider is None:
+            return None
+        _bound_profile()
+        with control_store.connect() as db:
+            registered = dict(_foundation(db))
+        try:
+            try:
+                state = _provider.compute_state()
+            except Rejected as error:
+                # A prior failed repair closed its children. Only explicit open
+                # can leave that terminal epoch; it still requires ACTIVE below.
+                if error.code != 'FOUNDATION_CLOSED':
+                    raise
+                state = None
+            if state == 'STOPPED':
+                raise Rejected('WAREHOUSE_START_REQUIRED')
+            if state not in (None, 'ACTIVE'):
+                raise Rejected('FOUNDATION_NOT_READY')
+            if force_rebind or state is None or not _provider.bound_alive():
+                saved = _registered_probe(registered)
+                # close() touches only children owned by this Provider. Its
+                # incarnation fences survive; bind still compares saved pins.
+                _provider.close()
+                try:
+                    _provider.open()
+                    _provider.bind_registered(saved)
+                except Exception:
+                    _provider.close()
+                    raise
+            return _provider
+        except Rejected as error:
+            if error.code == 'WAREHOUSE_START_REQUIRED':
+                raise OperationError('WAREHOUSE_START_REQUIRED', 409) from None
+            raise OperationError('FOUNDATION_NOT_READY', 503) from None
+        except Exception:
+            raise OperationError('FOUNDATION_NOT_READY', 503) from None
+
+
+def compute_blockers(db):
+    """Safe counts from durable phases, including stopped roots with uncertainty."""
+    if runtime_profile.current() is not None:
+        runtime_profile.generation_attestation()
+    c = _config if _config is not None else runtime_profile.logical_config()
+    foundation = registry.get_foundation(db, c['environment_id'], c['warehouse_id'])
+    generation = db.execute('SELECT warehouse_id,state FROM warehouse_config_generations WHERE id=?',
+        (c['foundation_generation_id'],)).fetchone()
+    control = admission.control(db, c['warehouse_id'])
+    if (not foundation or foundation['status'] != 'READY'
+            or foundation['generation_id'] != c['foundation_generation_id']
+            or foundation['revision'] != c['foundation_revision']
+            or foundation['config_ref'] != c['provider_config_file']
+            or not foundation['verification_ref']
+            or not control or control['applied_generation_id'] != foundation['generation_id']
+            or not generation or generation['warehouse_id'] != c['warehouse_id']
+            or generation['state'] != 'APPLIED'):
+        raise OperationError('FOUNDATION_NOT_READY', 503)
+    scope = "root.creation_mode='logical_v1' AND root.environment_id=? AND root.warehouse_id=?"
+    params = (c['environment_id'], c['warehouse_id'])
+    requests = db.execute("SELECT count(*) FROM logical_requests r JOIN db_creations root ON root.id=r.creation_id WHERE "
+        + scope + " AND r.environment_id=root.environment_id AND r.dispatch_state IN ('ACCEPTED','CLAIMED','UNKNOWN')", params).fetchone()[0]
+    effects = db.execute("SELECT count(*) FROM logical_effects e JOIN db_creations root ON root.id=e.creation_id WHERE "
+        + scope + " AND e.state IN ('INTENT','UNKNOWN')", params).fetchone()[0]
+    roots = db.execute("SELECT count(*) FROM db_creations root WHERE " + scope
+        + " AND root.logical_state IN ('CREATING','VERIFYING','UNKNOWN')", params).fetchone()[0]
+    return dict(requests=requests, effects=effects, roots=roots)
+
+
+@_provider_use()
 def _live_health():
     from logical_provider import Rejected
     _bound_profile()
     with control_store.connect() as db:
         _foundation(db)
+    ensure_active_provider()
     try:
         result = _provider.live_health()
     except Rejected as error:
@@ -438,6 +534,7 @@ def _request(db, root, actor, route, key, payload, action):
     return ack
 
 
+@admission.lifecycle_gate()
 def create(principal, role, payload, key):
     legacy.current_admin(principal, role)
     legacy.validate_key(key)
@@ -490,6 +587,7 @@ def create(principal, role, payload, key):
         return _request(db, _root(db, root_id), principal.principal_id, COLLECTION, key, intent, 'CREATE'), True
 
 
+@admission.lifecycle_gate()
 def mutate(principal, role, root_id, action, payload, key):
     legacy.current_admin(principal, role)
     legacy.validate_key(key)
@@ -583,18 +681,19 @@ def _effect(request, key, intent, function, *, leaf=False):
             (creation_id,effect_key,intent_json,state,created_at,updated_at) VALUES (?,?,?,'INTENT',?,?)""",
             (request['creation_id'], key, _json(intent), now, now))
     try:
-        if leaf:
-            result = function()
-            if (isinstance(result, (tuple,list)) and len(result) == 2 and type(result[0]) is int
-                    and result[0] in (400,401,403,404,405,409,412,422)):
-                from logical_provider import Rejected
-                _receipt(dict(rejected=True, result=result))
-                raise Rejected('PROVIDER_HTTP_'+str(result[0]))
-        else:
-            def callback(subkey, safe_identity, call):
-                return _effect(request, key.split('/attempt/')[0]+'/leaf/'+subkey, safe_identity, call, leaf=True)
-            with _provider.effects(callback):
+        with _provider_use():
+            if leaf:
                 result = function()
+                if (isinstance(result, (tuple,list)) and len(result) == 2 and type(result[0]) is int
+                        and result[0] in (400,401,403,404,405,409,412,422)):
+                    from logical_provider import Rejected
+                    _receipt(dict(rejected=True, result=result))
+                    raise Rejected('PROVIDER_HTTP_'+str(result[0]))
+            else:
+                def callback(subkey, safe_identity, call):
+                    return _effect(request, key.split('/attempt/')[0]+'/leaf/'+subkey, safe_identity, call, leaf=True)
+                with _provider.effects(callback):
+                    result = function()
         # Even a late STOP response is saved; it never confers effective authority.
         receipt = _receipt(dict(result=result))
     except Exception as error:
@@ -630,6 +729,7 @@ def dispatch_async(request_id):
     return thread
 
 
+@admission.lifecycle_gate()
 def dispatch(request_id):
     """Single bounded pass. No polling, TTL reclaim, mutation retry, or reissue."""
     with control_store.connect() as db:
@@ -637,10 +737,19 @@ def dispatch(request_id):
         if not row or row['action'] not in ('CREATE', 'RESUME', 'RECONCILE', 'AUTH_REFRESH'):
             return
         root_id = row['creation_id']
+    if row['action'] == 'AUTH_REFRESH' and row['dispatch_state'] == 'ACCEPTED':
+        # Metadata acceptance is valid asleep. Do not claim or create an effect
+        # until the process owns a complete active binding. No UNKNOWN replay.
+        # A peer Wake can leave our old Pod tunnels locally alive.
+        try:
+            if ensure_active_provider(force_rebind=True) is None:
+                return
+        except OperationError:
+            return
     with _lock(root_id) as owned:
         if not owned:
             return
-        with transaction() as db:
+        with _provider_use(), transaction() as db:
             # An abandoned dispatched request is fenced only by the free root lock.
             db.execute("""UPDATE logical_requests SET dispatch_state='UNKNOWN'
                 WHERE creation_id=? AND dispatch_state='CLAIMED'""", (root_id,))
@@ -690,6 +799,7 @@ def _complete_observation(result, kind, intent):
                     ('database_id', 'sql_catalog', 'generation_id', 'foundation_revision')))
 
 
+@_provider_use()
 def _observe(request):
     with control_store.connect() as db:
         root = _root(db, request['creation_id'])
@@ -1186,7 +1296,8 @@ def _publication(request, descriptor, material, *, key='publication'):
                 credentials[ref] = {k:v for k,v in value.items() if k != 'version'}
             credentials[target_ref] = target_pair
         try:
-            hashes = _validate_hashes(_provider.publication_hashes(descriptor))
+            with _provider_use():
+                hashes = _validate_hashes(_provider.publication_hashes(descriptor))
         except Exception:
             raise OperationError('FOUNDATION_NOT_READY', 503) from None
         payload = _render_material(identities, descriptors, credentials, verifier_cache=_verifier_cache)
@@ -1314,7 +1425,8 @@ def capabilities(principal, role):
             _gate(db, _executor_id, read_only=True)
             row = db.execute('SELECT revision FROM warehouse_controls WHERE warehouse_id=?', (c['warehouse_id'],)).fetchone()
             revision = row[0]
-        # Only cheap native compute metadata is allowed here, after closing SQLite.
+        # Observe after closing SQLite. A different server may have completed
+        # Wake while this process still owns an unopened/dormant Provider.
         try:
             state = _provider.compute_state()
             if type(state) is not str or state not in ('ACTIVE', 'STOPPED', 'TRANSITIONING'):
@@ -1322,8 +1434,29 @@ def capabilities(principal, role):
             warehouse_state = state
             if state == 'STOPPED':
                 blocker = 'WAREHOUSE_START_REQUIRED'
-            elif state != 'ACTIVE' or _provider.bound_alive() is not True:
+            elif state != 'ACTIVE':
                 blocker = 'FOUNDATION_NOT_READY'
+            else:
+                bound = _provider.bound_alive()
+                if bound is not True and bound is not False:
+                    blocker = 'FOUNDATION_NOT_READY'
+                elif bound is False:
+                    # Keep the usual metadata path cheap; only an ACTIVE, unbound
+                    # owner repairs. Use the same lifecycle/use lock order as CREATE.
+                    with admission.lifecycle_gate(), _provider_use():
+                        # Authority may have changed while waiting for an in-flight
+                        # effect to release the Provider. Never repair on its behalf.
+                        legacy.current_admin(principal, role)
+                        with control_store.connect() as db:
+                            _foundation(db)
+                            _gate(db, principal.principal_id, read_only=True)
+                            _gate(db, _executor_id, read_only=True)
+                        ensure_active_provider()
+                        warehouse_state = _provider.compute_state()
+                        if warehouse_state != 'ACTIVE' or _provider.bound_alive() is not True:
+                            blocker = 'FOUNDATION_NOT_READY'
+        except OperationError as error:
+            blocker = error.code
         except Exception:
             blocker = 'FOUNDATION_NOT_READY'
     except OperationError as error:

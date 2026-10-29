@@ -41,6 +41,11 @@ class _Pin:
     lock: object = field(default_factory=threading.RLock, repr=False)
     responses: dict = field(default_factory=dict, repr=False)
     failures: dict = field(default_factory=dict, repr=False)
+    pending_tokens: set = field(default_factory=set, repr=False)
+    initial_done: object = field(default_factory=threading.Event, repr=False)
+    initial_response: object = field(default=None, repr=False)
+    initial_error: object = field(default=None, repr=False)
+    initial_attempted: bool = True
 
 
 _pins = {}
@@ -291,6 +296,9 @@ def _cancel_locked(query_id, pin, row, url=None):
     if row['state'] in _TERMINAL:
         _close_query_owner(pin)
         return {'id': query_id, 'state': row['state']}
+    if not pin.initial_attempted:
+        _state(query_id, 'CANCELED')
+        return {'id': query_id, 'state': 'CANCELED'}
     target = url or (pin.cancel_urls[-1] if pin.cancel_urls else None)
     if target is None:
         _state(query_id, 'UNKNOWN')
@@ -439,6 +447,81 @@ def _backend_statement(sql):
     return sql if delimiter is None else sql[:delimiter] + sql[delimiter + 1:]
 
 
+def _pending_page(query_id, pin, *, state='QUEUED'):
+    row = _row(query_id)
+    next_uri = None
+    if state == 'QUEUED':
+        token = secrets.token_urlsafe(32)
+        pin.pending_tokens.add(token)
+        next_uri = '/api/v1/queries/' + query_id + '/pages/' + token
+    return dict(id=query_id, backend_query_id=None, context=_metadata(row),
+        request_id=row['request_id'], worksheet_id=row['worksheet_id'],
+        columns=[], data=[], stats={'state': state}, state=state, next_uri=next_uri,
+        cancel_uri='/api/v1/queries/' + query_id + '/cancel')
+
+
+def _wake_authorize(principal, query_id):
+    # Shared Wake authorization must not depend on this waiter's cancellation
+    # or admission. Core owns the independent shared Wake admission.
+    row = _row(query_id)
+    _owned(principal, query_id, row['selected_role'])
+
+
+def _ensure_query_awake(principal, query_id):
+    import warehouse_lifecycle as lifecycle
+    if lifecycle.applicable():
+        _wake_authorize(principal, query_id)
+        lifecycle.ensure_awake(actor=principal.principal_id,
+            authorize=lambda: _wake_authorize(principal, query_id),
+            cancelled=lambda: _row(query_id)['state'] in _TERMINAL)
+        _wake_authorize(principal, query_id)
+        return True
+    return False
+
+
+def _initial_failure(query_id, error):
+    pin = _pins[query_id]
+    with pin.lock:
+        row = _row(query_id)
+        if not row['execution_closure'] and row['state'] not in _TERMINAL | {'UNKNOWN'}:
+            _state(query_id, 'UNKNOWN' if pin.initial_attempted else 'FAILED')
+        pin.initial_error = (error.code, error.status) if isinstance(error, QueryError) else (
+            'QUERY_BACKEND_FAILED', 502)
+        pin.initial_done.set()
+
+
+def _cold_initial(principal, query_id, backend_sql):
+    """Created only by submit, once; polling never executes this function."""
+    pin = _pins[query_id]
+    try:
+        _ensure_query_awake(principal, query_id)
+        with pin.lock:
+            if _row(query_id)['state'] in _TERMINAL:
+                return
+            _owned(principal, query_id, pin.context.selected_role)
+        # No pin lock or write transaction is held while acquiring readiness
+        # or a tunnel. Cancellation can durably settle the waiting intent.
+        import warehouse_resident as wr
+        global _origin
+        with admission.accepted(pin.admission), _lock:
+            connection = wr._borrowable_trino_connection()
+            if connection is None or _origin != connection['url']:
+                _origin = _lifetime.enter_context(wr.persistent_trino())
+            trino_auth.validate_backend_url(_origin)
+            pin.origin = _origin
+        with pin.lock:
+            if _row(query_id)['state'] in _TERMINAL:
+                return
+            _owned(principal, query_id, pin.context.selected_role)
+            pin.initial_response = _receive(query_id, pin.origin.rstrip('/') + '/v1/statement',
+                'POST', backend_sql.encode('utf-8'))
+            _owned(principal, query_id, pin.context.selected_role, cleanup=True)
+    except BaseException as error:
+        _initial_failure(query_id, error)
+    finally:
+        pin.initial_done.set()
+
+
 def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id):
     global _origin
     import warehouse_resident as wr
@@ -488,7 +571,8 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
                  query_id, context.selected_role, mode, context.sql_catalog, context.sql_schema,
                  context.binding_revision, context.grant_revision, headers['X-Trino-User'],
                  credential_ref, None, request_id, worksheet_id, sql))
-        _pins[query_id] = _Pin(context, '', headers, tls, admission=handle, owner=owner, max_rows=max_rows)
+        _pins[query_id] = _Pin(context, '', headers, tls, admission=handle, owner=owner,
+            max_rows=max_rows, initial_attempted=False)
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as error:
         owner.close()
         raise QueryError(error.code, error.status) from None
@@ -496,9 +580,23 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
         owner.close()
         raise
     try:
+        import warehouse_lifecycle as lifecycle
+        if lifecycle.applicable() and lifecycle.requires_wake():
+            pin = _pins[query_id]
+            pin.initial_attempted = False
+            response = _pending_page(query_id, pin)
+            try:
+                threading.Thread(target=_cold_initial, args=(principal, query_id, backend_sql),
+                    daemon=True, name='query-initial-' + query_id).start()
+            except BaseException as error:
+                _initial_failure(query_id, error)
+                raise QueryError('QUERY_BACKEND_FAILED', 502) from None
+            return response
+        _ensure_query_awake(principal, query_id)
         with admission.accepted(handle):
             with _lock:
-                if _origin is None or not wr._borrowable_trino():
+                connection = wr._borrowable_trino_connection()
+                if connection is None or _origin != connection['url']:
                     _origin = _lifetime.enter_context(wr.persistent_trino())
                 origin = _origin
                 trino_auth.validate_backend_url(origin)
@@ -507,11 +605,13 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
                 _owned(principal, query_id, context.selected_role, cleanup=True)
                 response = _receive(query_id, origin.rstrip('/') + '/v1/statement', 'POST', backend_sql.encode('utf-8'))
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as error:
+        _initial_failure(query_id, error)
         raise QueryError(error.code, error.status) from None
-    except QueryError:
+    except QueryError as error:
+        _initial_failure(query_id, error)
         raise
-    except Exception:
-        _state(query_id, 'UNKNOWN')
+    except Exception as error:
+        _initial_failure(query_id, error)
         raise QueryError('QUERY_BACKEND_FAILED', 502) from None
     with _pins[query_id].lock:
         _owned(principal, query_id, context.selected_role, cleanup=True)
@@ -579,16 +679,18 @@ def _submit_dataops(principal, statement, frozen, parent, operation_id, step):
             db.execute('INSERT INTO dataops_queries (operation_id,step,query_id,action,commit_result) VALUES (?,?,?,?,?)',
                        (operation_id, step, query_id, statement.action, statement.commit_result))
         _pins[query_id] = _Pin(context, frozen.origin, headers, frozen.tls,
-            admission=handle, owner=owner, max_rows=None)
+            admission=handle, owner=owner, max_rows=None, initial_attempted=False)
     except BaseException:
         owner.close()
         raise
     try:
+        lifecycle_active = _ensure_query_awake(principal, query_id)
         import warehouse_resident as wr
         global _origin
         with admission.accepted(handle), _lock:
-            if not frozen.origin:
-                if _origin is None or not wr._borrowable_trino():
+            if not frozen.origin or lifecycle_active:
+                connection = wr._borrowable_trino_connection()
+                if connection is None or _origin != connection['url']:
                     _origin = _lifetime.enter_context(wr.persistent_trino())
                 trino_auth.validate_backend_url(_origin)
                 frozen.origin = _origin
@@ -599,9 +701,8 @@ def _submit_dataops(principal, statement, frozen, parent, operation_id, step):
                                 'POST', backend_sql.encode('utf-8'))
             _owned(principal, query_id, context.selected_role, cleanup=True)
             return response
-    except BaseException:
-        if _row(query_id)['state'] not in _TERMINAL | {'UNKNOWN'}:
-            _state(query_id, 'UNKNOWN')
+    except BaseException as error:
+        _initial_failure(query_id, error)
         raise
 
 
@@ -616,6 +717,8 @@ def _receive(query_id, url, method, body=None):
 
 def _receive_accepted(query_id, url, method, body=None):
     try:
+        if method == 'POST':
+            _pins[query_id].initial_attempted = True
         return _page(query_id, _transport(url, method, _pins[query_id], body))
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout):
         raise
@@ -634,6 +737,33 @@ def fetch(principal, query_id, page_token, *, selected_role):
         if row['execution_closure']:
             raise QueryError('EXECUTION_CLOSED', 409)
         raise QueryError('QUERY_CONTEXT_LOST', 409)
+    if page_token in pin.pending_tokens:
+        # Bounded wait outside the lock prevents tight pending-page polling and
+        # lets cancellation proceed even while shared Wake is still running.
+        pin.initial_done.wait(0.05)
+        with pin.lock:
+            row = _owned(principal, query_id, selected_role, cleanup=True)
+            if row['execution_closure']:
+                raise QueryError('EXECUTION_CLOSED', 409)
+            if page_token in pin.responses:
+                response = deepcopy(pin.responses[page_token])
+                if row['state'] in ('CANCELED', 'FAILED', 'UNKNOWN'):
+                    response['state'] = response['stats']['state'] = row['state']
+                    response['next_uri'] = None
+                return response
+            if page_token in pin.failures:
+                raise QueryError(*pin.failures[page_token])
+            if row['state'] == 'CANCELED':
+                response = _pending_page(query_id, pin, state='CANCELED')
+            elif pin.initial_error is not None:
+                pin.failures[page_token] = pin.initial_error
+                raise QueryError(*pin.initial_error)
+            elif pin.initial_response is not None:
+                response = deepcopy(pin.initial_response)
+            else:
+                response = _pending_page(query_id, pin)
+            pin.responses[page_token] = deepcopy(response)
+            return response
     with pin.lock:
         row = _owned(principal, query_id, selected_role, cleanup=True)
         if row['execution_closure']:
@@ -685,6 +815,8 @@ def _cancel_registered(principal, query_id, token, *, selected_role):
         raise QueryError('QUERY_CONTEXT_LOST', 409)
     with pin.lock:
         row = _owned(principal, query_id, selected_role, grants=False)
+        if token in pin.pending_tokens:
+            return _cancel_locked(query_id, pin, row)
         registered = pin.tokens.get(token)
         if not registered or not {'GET', 'DELETE'}.issubset(registered[1]):
             raise QueryError('QUERY_NOT_FOUND', 404)
@@ -829,7 +961,8 @@ def observe_query_backend(expected):
         authorization = base64.b64encode((credential['username'] + ':' + credential['password']).encode()).decode()
         tls = trino_auth.backend_ssl_context()
         with _lock:
-            if _origin is None or not wr._borrowable_trino():
+            connection = wr._borrowable_trino_connection()
+            if connection is None or _origin != connection['url']:
                 _origin = _lifetime.enter_context(wr.persistent_trino())
             origin = _origin
         trino_auth.validate_backend_url(origin)

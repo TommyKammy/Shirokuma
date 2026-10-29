@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-29
-version: "7.3.0"
+version: "7.4.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-29 — DB-P6-2 shared LOCAL lifecycle — technically accepted
+
+- Implemented P-only Wake/Chill/Revalidate, Auto-Chill policy CAS, server-side idle handling and authorized SQL auto-resume through API/CLI/Workbench. See the [implementation and verification record](../../guides/database-p6-2-implementation-2026-10-29.md); Technical acceptance passed: 30/30 cold queries, p50 26.44s and p95 26.92s against the 30s target.
+- Warm 30-run sample p95 was 203.5ms versus 168.2ms before the change (35.3ms difference). Bounded read-only recovery preserved UNKNOWN, fenced execution and restored OPEN; The original 138 databases, 552 schemas and bindings were preserved; one bounded acceptance database was added.
+- Proceed to DB-P6-3 dbt feasibility. Bears/Copilot, SRE/Policy, actual sizing, multi-Warehouse and M1 owner acceptance remain open; legacy Database profiles are not implicitly upgraded.
 
 ### 2026-10-29 — DB-P6-1 Database audit technical acceptance completed
 

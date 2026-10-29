@@ -1185,7 +1185,11 @@ class Recovery:
                 if proof is None and not reconcile:
                     # Only an exact, still-running original container can be
                     # stopped on resume. Absence never authorizes another stop.
-                    _require(adapter.scope(frozen) == scope, 'RECOVERY_SCOPE_CHANGED')
+                    resume = getattr(type(adapter), 'validate_stop_scope', None)
+                    if resume is None:
+                        _require(adapter.scope(frozen) == scope, 'RECOVERY_SCOPE_CHANGED')
+                    else:
+                        resume(adapter, frozen, scope, intent['planned_at'])
                     self.authenticate()
                     adapter.stop(scope)
                     proof = adapter.proof(scope, intent['planned_at'])
@@ -1200,6 +1204,9 @@ class Recovery:
             _require(adapter.engine()['engine_id'] == scope['engine_id'], 'RECOVERY_ENGINE_CHANGED')
             with control_store.connect() as db:
                 row = _one(db, 'SELECT * FROM execution_recovery_requests WHERE operation_id=?', (operation_id,))
+            validate = getattr(type(adapter), 'validate_proof', None)
+            if validate is not None:
+                validate(adapter, scope, json.loads(row['proof']), intent['planned_at'])
             if row['phase'] == 'PROVED':
                 present = adapter.old_present(scope)
                 if present and reconcile:
@@ -1208,6 +1215,8 @@ class Recovery:
                     adapter.remove(scope)
             _require(not adapter.old_present(scope), 'RECOVERY_OLD_CONTAINER_PRESENT')
             self.authenticate()
+            if validate is not None:
+                validate(adapter, scope, json.loads(row['proof']), intent['planned_at'])
             with control_store.connect() as db:
                 db.execute('BEGIN IMMEDIATE')
                 row = _one(db, 'SELECT * FROM execution_recovery_requests WHERE operation_id=?', (operation_id,))
@@ -1218,6 +1227,8 @@ class Recovery:
             # No stop replay after proof; removal is explicit apply only.
             with control_store.connect() as db:
                 self._closed_graph(db, operation_id, frozen)
+            if reconcile and getattr(type(adapter), 'reconcile_read_only', False):
+                return self.inspect(operation_id)
             adapter.healthy(frozen, scope)
             self.authenticate()
             self.adapter(frozen)
@@ -1674,7 +1685,12 @@ class QueryRecovery(Recovery):
 def run(args):
     if args.command.startswith('recover-query-'):
         _require(args.config.is_absolute())
-        operator = QueryRecovery(args.config)
+        config = runtime_profile.private_json(args.config)
+        if runtime_profile.load(config['runtime_profile']).mode == 'logical_v1':
+            from logical_execution_recovery import LogicalQueryRecovery
+            operator = LogicalQueryRecovery(args.config)
+        else:
+            operator = QueryRecovery(args.config)
         if args.command == 'recover-query-plan':
             return operator.plan(args.query_id, args.idempotency_key,
                 historical_pod_snapshot=args.historical_pod_snapshot,

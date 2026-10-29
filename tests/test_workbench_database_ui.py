@@ -81,7 +81,7 @@ const fetch=async(path,options)=>{
  else if(/^\/api\/v1\/queries\/[^/]+$/.test(path)&&!options?.method)data=inspectRoute?await inspectRoute(path,options):structuredClone(serverHistory.find(q=>q.id===path.split('/').at(-1)));
  else data=await route(path,options);
  if(data?.malformed)return {ok:true,status:200,json:async()=>{throw SyntaxError('Malformed response');}};
- if(data?.http)return {ok:false,status:data.http,json:async()=>data.body};
+ if(data?.http)return {ok:data.http>=200&&data.http<300,status:data.http,json:async()=>data.body};
  return {ok:true,status:200,json:async()=>data};
 };
 $('query-schema').parentElement=new Node();
@@ -126,7 +126,7 @@ const pending=busy(button,async()=>{actions++;await done.promise;});
 await boot();setLanguage('ja');await dbRefreshContext();
 done.resolve();await pending;
 assert.equal(button.disabled,true);assert.equal(button.dataset.databaseUnavailable,'true');
-assert.match(button.title,/起動／休止操作は未対応/);
+assert.match(button.title,/全 DB/);
 await busy(button,async()=>{actions++;});assert.equal(actions,1);
 assert.equal(calls.filter(c=>c.options?.method==='POST').length,0);
 ''')
@@ -200,6 +200,7 @@ assert.equal(calls.filter(c=>c.path==='/api/status').length,3);
         self.javascript(r'''
 api=async path=>(await fetch(path)).json();
 await boot();
+dbRuntime.installed=false; // Exercise the legacy status fallback separately from runtime observations.
 const snapshot=()=>['warehouse-state','quick-warehouse-state','status-error','quick-status-error'].map(id=>({text:$(id).textContent,hidden:$(id).hidden,title:$(id).title}));
 for(const change of [()=>{dbPrincipal+='-next';},()=>{currentRole=currentRole==='admin'?'bi_viewer':'admin';},()=>{dbEpoch++;}]){
  for(const outcome of ['healthy','unhealthy','error']){
@@ -682,7 +683,7 @@ assert.equal(queryResult,null);assert.equal($('run-query').disabled,true);assert
     def test_detail_query_pages_and_unresolved_views_and_disabled_actions(self):
         self.javascript(r'''
 for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])$(panel).append(new Node('button'),new Node('input'));
-await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-jobs-panel','db-audit-panel'].some(id=>$(id).descendants().includes(n))&&n.id!=='ingestion-view-file').every(n=>n.disabled));
+await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-jobs-panel','db-audit-panel','runtime-panel'].some(id=>$(id).descendants().includes(n))&&n.id!=='ingestion-view-file').every(n=>n.disabled));
 for(const id of ['p35-ingest-role','p35-ingest-database','p35-ingest-schema','p35-wap-role','p35-wap-database','p35-wap-schema'])assert.equal($(id).disabled,false,id);
 for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button','export-csv','export-json','copy-tsv','export-table-btn'])assert.equal($(id).disabled,true,id);
 await assert.rejects(api('/api/jobs/run',{}),/Unavailable/);const n=calls.length;download('csv');await $('copy-tsv').onclick();assert.equal(calls.length,n);
@@ -927,12 +928,12 @@ const controls=[$('quick-wake'),$('quick-chill'),...sampleButtons];
 assert.equal(sampleButtons.length,3);assert.ok(controls.every(node=>!node.disabled&&!node.title));
 databaseMode=false;setLanguage('en');assert.ok(controls.every(node=>!node.disabled&&!node.title));
 databaseMode=true;await boot();const inputs=JSON.stringify(dbInput(dbCurrent()));
-assert.ok(controls.every(node=>node.disabled&&/unavailable in Database mode/.test(node.title)));
+assert.ok(controls.every(node=>node.disabled));assert.ok(sampleButtons.every(node=>/unavailable in Database mode/.test(node.title)));assert.match($('quick-wake').title,/All databases share/);
 assert.match(sampleButtons[0].title,/Enter SQL for the selected database/);
-setLanguage('ja');assert.ok(controls.every(node=>node.disabled&&/未対応|利用できません/.test(node.title)));
+setLanguage('ja');assert.ok(controls.every(node=>node.disabled));assert.match($('quick-wake').title,/全 DB/);
 assert.match(sampleButtons[0].title,/SQL を入力/);
 currentRole='data_engineer';dbApplyRole();await dbRefreshContext();setLanguage('en');
-assert.ok(controls.every(node=>node.disabled&&/unavailable in Database mode/.test(node.title)));
+assert.ok(controls.every(node=>node.disabled));assert.ok(sampleButtons.every(node=>/unavailable in Database mode/.test(node.title)));assert.match($('quick-wake').title,/All databases share/);
 assert.equal(JSON.stringify(dbInput(dbCurrent())),inputs);assert.equal($('sql').disabled,false);
 assert.equal($('add-worksheet-tab').disabled,false);assert.equal($('query-schema').disabled,false);assert.equal($('query-mode').disabled,false);
 assert.equal(calls.filter(c=>c.options?.method==='POST').length,0);

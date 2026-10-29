@@ -36,6 +36,15 @@ class Provider:
         self.compute_calls = 0
         self.warehouse_state = 'ACTIVE'
 
+    def open(self):
+        return self
+
+    def close(self):
+        self.bound = False
+
+    def bind_stopped_registered(self, expected_probe):
+        self.bound = False
+
     @contextmanager
     def effects(self, callback):
         old, self.callback = self.callback, callback
@@ -794,7 +803,8 @@ class AdmissionHealthTests(LogicalFixture):
                 with self.subTest(bound=bound, failure=type(failure).__name__, code=code):
                     baseline = self.counts()
                     with patch.object(self.provider, 'bound_alive', return_value=bound) as alive, \
-                            patch.object(self.provider, 'live_health', side_effect=failure) as health:
+                            patch.object(self.provider, 'live_health', side_effect=failure) as health, \
+                            patch.object(logical, 'ensure_active_provider'):
                         with self.assertRaises(OperationError) as error:
                             self.logical_create()
                     self.assertEqual((error.exception.code, error.exception.status), (code, status))
@@ -809,7 +819,8 @@ class AdmissionHealthTests(LogicalFixture):
             logical.dispatch(ack['request_id'])
         before, baseline = self.detail(ack), self.counts()
         with patch.object(self.provider, 'bound_alive', return_value=False) as alive, \
-                patch.object(self.provider, 'live_health', side_effect=Rejected('WAREHOUSE_START_REQUIRED')) as health:
+                patch.object(self.provider, 'live_health', side_effect=Rejected('WAREHOUSE_START_REQUIRED')) as health, \
+                patch.object(logical, 'ensure_active_provider'):
             with self.assertRaises(OperationError) as error:
                 self.mutation(ack, 'RESUME', 'resume')
         self.assertEqual((error.exception.code, error.exception.status), ('WAREHOUSE_START_REQUIRED', 409))
@@ -1284,9 +1295,8 @@ class StartupBindingTests(LogicalFixture):
 
     @contextmanager
     def startup(self, *, register=False):
-        @contextmanager
         def opened(config):
-            yield self.provider
+            return self.provider
         foundation = dict(environment_id='test-environment', warehouse_id='LOCAL',
                           foundation_id='foundation-real', revision=1)
         with patch('logical_provider.Provider', opened), patch('logical_foundation.load', return_value=foundation):
@@ -1296,14 +1306,13 @@ class StartupBindingTests(LogicalFixture):
     def test_lifetime_joins_refresh_before_provider_close(self):
         started, exited = threading.Event(), threading.Event()
         caches = []
-        @contextmanager
+        def closed():
+            self.assertTrue(exited.is_set())
+            self.assertTrue(caches[0]._closed)
+            self.assertFalse(caches[0]._records)
         def opened(config):
-            try:
-                yield self.provider
-            finally:
-                self.assertTrue(exited.is_set())
-                self.assertTrue(caches[0]._closed)
-                self.assertFalse(caches[0]._records)
+            self.provider.close = closed
+            return self.provider
         def refresh(stop, baseline, interval):
             started.set()
             if stop.wait(10):

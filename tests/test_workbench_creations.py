@@ -1494,7 +1494,7 @@ for(const locale of ['en','ja']){
   route=async()=>({status:'healthy',creation_mode:'logical_v1',warehouse:{state}});await refreshStatus();
   assert.equal($('warehouse-state').textContent,t(label));assert.equal($('quick-warehouse-state').textContent,t(label));
   assert.equal($('quick-status-error').className,label==='Unavailable'?'error':'muted');
-  if(state==='chilled')assert.equal($('quick-status-error').textContent,t('Ask an administrator to start the shared warehouse through administrator management before creating a database or running SQL.'));
+  if(state==='chilled')assert.equal($('quick-status-error').textContent,t('Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.'));
   for(const id of ['wake','chill','quick-wake','quick-chill'])assert.equal($(id).disabled,true);
  }
  route=async()=>{throw Error('/private/secret');};await refreshStatus();
@@ -1519,7 +1519,7 @@ for(const locale of ['en','ja']){
   assert.equal(dbCreationCanMutate('',{}),state==='ACTIVE');
   assert.ok($('db-creation-warehouse-state').textContent.startsWith(t(label)+':'));
   assert.doesNotMatch($('db-creation-warehouse-state').textContent,/raw secret/);
-  if(state==='STOPPED')assert.ok($('db-creation-warehouse-state').textContent.includes(t('Ask an administrator to start the shared warehouse through administrator management before creating a database or running SQL.')));
+  if(state==='STOPPED')assert.ok($('db-creation-warehouse-state').textContent.includes(t('Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.')));
  }
 }
 assert.deepEqual(worksheets,original);assert.equal(worksheetId,selected);assert.equal(creationPosts.length,0);

@@ -122,10 +122,17 @@ class LogicalRouteTests(legacy_routes.NameLookupRouteChecks, LogicalFixture):
             for bound in (True, False, 1, None):
                 with self.subTest(state=state, bound=bound):
                     self.provider.warehouse_state = state
+                    # ACTIVE/False now attempts owned saved-proof repair. Keep
+                    # this negative fixture controlled and all business effects
+                    # forbidden, including malformed nonboolean readiness.
+                    from warehouse_operations import OperationError
                     with self.metadata_only_caps() as compute, \
-                            patch.object(self.provider, 'bound_alive', return_value=bound) as alive:
+                            patch.object(self.provider, 'bound_alive', return_value=bound) as alive, \
+                            patch.object(logical, 'ensure_active_provider',
+                                side_effect=OperationError('FOUNDATION_NOT_READY', 503)) as repair:
                         status, result, _ = self.request('/capabilities')
                     compute.assert_called_once_with()
+                    self.assertEqual(repair.call_count, int(state == 'ACTIVE' and bound is False))
                     self.assertEqual(alive.call_count, int(state == 'ACTIVE'))
                     expected = 'FOUNDATION_NOT_READY' if state == 'ACTIVE' and bound is not True else blocker
                     self.assertEqual((status, result['warehouse_state'], result['blocker']), (200, state, expected))
@@ -153,6 +160,29 @@ class LogicalRouteTests(legacy_routes.NameLookupRouteChecks, LogicalFixture):
             self.assertEqual((status, result['blocker']), (200, 'FOUNDATION_NOT_READY'))
             self.assertNotIn('warehouse_state', result)
             self.assertNotIn('private-secret', str(result))
+
+    def test_capabilities_active_false_recomputes_after_controlled_owned_repair(self):
+        self.provider.bound = False
+        def repaired():
+            # The real saved-proof/tunnel path is covered by compute lifecycle
+            # tests. This route fixture permits only the controlled local repair;
+            # metadata_only_caps still rejects every business Provider method.
+            self.provider.bound = True
+            return self.provider
+        with self.metadata_only_caps() as compute, \
+                patch.object(logical, 'ensure_active_provider', side_effect=repaired) as repair:
+            status, result, headers = self.request('/capabilities')
+        repair.assert_called_once_with()
+        self.assertEqual(compute.call_count, 2)
+        self.assertEqual(status, 200)
+        self.assertTrue(result['available'])
+        self.assertTrue(result['can_create'])
+        self.assertTrue(result['can_resume'])
+        self.assertIsNone(result['blocker'])
+        self.assertEqual(result['warehouse_state'], 'ACTIVE')
+        self.assertEqual(headers['Cache-Control'], 'no-store')
+        self.assertNotIn('private-secret', str(result))
+        self.dispatch.assert_not_called()
 
     def test_capabilities_current_local_blockers_and_new_admin_without_gate(self):
         with logical.transaction() as db:

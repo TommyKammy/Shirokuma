@@ -61,5 +61,6 @@ func newWarehouseQueryCommand(resident residentWarehouseRunner) *cobra.Command {
 		group.AddCommand(newResidentWarehouseCommand(action, resident))
 	}
 	group.AddCommand(newWarehouseEndpointCommand(resident))
+	group.AddCommand(newWarehouseRuntimeCommand(execRunner{}))
 	return group
 }

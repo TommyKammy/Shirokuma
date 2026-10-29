@@ -25,6 +25,25 @@ class AdmissionTests(unittest.TestCase):
         with store.connect() as db:
             dm.record_operation(db, dm.Operation('op', 'admin', 'apply', (), None, 'AWAITING_APPLY', (), None, (), ()))
 
+    def test_typed_stop_barrier_blocks_new_roots_but_preserves_accepted_parent(self):
+        import json
+        parent=self.admit('parent')
+        for state in ('RUNNING','UNKNOWN'):
+            with store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                db.execute("INSERT OR REPLACE INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    ('stop','operator','WAREHOUSE_CHILL','["LOCAL"]',None,state,'[]',None,
+                     json.dumps({'stopping_barrier':True,'pid':99999999}),'{}'))
+                with self.assertRaises(admission.AdmissionDenied):
+                    admission.admit(db,actor='new',kind='query',subject_id='new-'+state)
+                child=admission.admit(db,actor='owner',kind='query',subject_id='child-'+state,parent=parent)
+                self.assertEqual(child.actor,parent.actor)
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute("UPDATE operations SET before_after=? WHERE id='stop'",(json.dumps({'stopping_barrier':1}),))
+            admission.admit(db,actor='new',kind='query',subject_id='not-boolean')
+
+
     def admit(self, subject='q', **extra):
         with store.connect() as db:
             db.execute('BEGIN IMMEDIATE')

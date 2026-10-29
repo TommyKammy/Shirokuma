@@ -242,26 +242,58 @@ class CoordinatorRefreshTests(LogicalFixture):
 
     def test_configured_executor_lifetime_and_owned_task_cleanup(self):
         opened, closed = [], []
-        @contextmanager
-        def provider(config):
-            opened.append(config)
-            try:
-                yield self.provider
-            finally:
+        owner = self
+        class LifetimeProvider:
+            def __init__(self, config):
+                self.config = config
+                self._opened = False
+                self._startup_verified = False
+
+            def compute_state(self):
+                return owner.provider.compute_state()
+
+            def open(self):
+                owner.assertEqual(self.compute_state(), 'ACTIVE')
+                owner.assertFalse(self._opened)
+                self._opened = True
+                opened.append(self.config)
+                return self
+
+            def bind_registered(self, expected_probe):
+                owner.assertTrue(self._opened)
+                # Keep the fixture's full proof comparison; do not invent a
+                # positive binding or accept an unexpected provider method.
+                owner.provider.bind_registered(expected_probe)
+                self._startup_verified = True
+
+            def bind_stopped_registered(self, expected_probe):
+                raise AssertionError('This ACTIVE fixture must use full binding')
+
+            def bound_alive(self):
+                return self._opened and self._startup_verified and owner.provider.bound_alive()
+
+            def close(self):
+                owner.assertFalse(any(t.name == 'logical-authority-refresh' for t in threading.enumerate()))
+                self._opened = False
+                self._startup_verified = False
                 closed.append(True)
         foundation = dict(environment_id='test-environment', warehouse_id='LOCAL',
                           foundation_id='foundation-real', revision=1)
-        with patch.object(logical_provider, 'Provider', provider), patch('logical_foundation.load', return_value=foundation):
-            with logical.lifetime(refresh_interval=0.01):
+        with patch.object(logical_provider, 'Provider', LifetimeProvider), patch('logical_foundation.load', return_value=foundation):
+            with logical.lifetime(refresh_interval=0.01) as provider:
+                self.assertTrue(provider.bound_alive())
+                self.assertEqual(opened, [foundation])
                 self.assertEqual(logical._executor_id, 'executor')
                 self.assertTrue(any(t.name=='logical-authority-refresh' for t in threading.enumerate()))
             self.assertFalse(any(t.name=='logical-authority-refresh' for t in threading.enumerate()))
             self.assertEqual(len(closed), 1)
+            self.assertFalse(provider.bound_alive())
             self.logical_config['executor_id'] = 'reader'
             with self.assertRaises(OperationError):
                 with logical.lifetime():
                     self.fail('must not pick another administrator')
             self.assertEqual(len(closed), 2)
+            self.assertEqual(opened, [foundation, foundation])
 
     def test_register_refuses_nonempty_legacy_state(self):
         import catalog_admin

@@ -1,6 +1,6 @@
 # Databaseモードの機能一覧と利用条件
 
-2026年10月29日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、[DB-P6-1の監査対応](database-p6-1-implementation-2026-10-29.md)を反映した。現在のDatabase実装と、未接続の旧操作を区別する。機能の開放や実行権限をこの一覧から追加しない。
+2026年10月29日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、[DB-P6-1の監査対応](database-p6-1-implementation-2026-10-29.md)と[DB-P6-2の共有LOCAL管理](database-p6-2-implementation-2026-10-29.md)の技術受入を反映した。現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
 
 ## 利用条件と表示の意味
 
@@ -112,12 +112,12 @@
 | AUD-01 | Pawprints一覧・filter・status・更新 | 対応。P専用のglobal補助preview、最新100件以内 | Pが明示取得。DB／本人scopeへ帰属させず、耐久監査とは別表示 | DB-P6-1、旧API拒否は維持 |
 | AUD-02 | 旧runtime query／load履歴画面 | 未接続。個別query／Job履歴は対応 | 個別履歴へ案内 | SQL／Job／WAP |
 | AUD-03 | 統合Database監査の検索・詳細・download | 対応。保存metadataの検索・前後page・関連記録・JSON | V／Eは本人・保存role・許可Schema、Aは対象DB、Pは基盤管理記録。本文・全遷移は対象外 | DB-P6-1実装契約 |
-| CMP-01 | ヘッダー／SQLの共有Warehouse状態・更新 | 対応、状態の観測のみ | `/api/status`、稼働証明は限定 | ヘッダー／SQL |
-| CMP-02 | 旧Compute panelの状態更新・component readiness | 未接続 | CMP-01は利用可能 | DB-P6-2／5 |
-| CMP-03 | quick／SQL／Computeの手動Wake／Chill | UIの旧経路は未接続。運用CLIの手動lifecycleは存在 | 共有影響とP権限を接続する | DB-P6-2 |
-| CMP-04 | Auto-Chill設定と入口横断のAuto-resume | 現Database起動／query経路では未接続 | global admission／drainを維持 | DB-P6-2 |
-| CMP-05 | ComputeのSRE check／Policy audit | 未接続 | DB対応Bearsとplatform scopeが必要 | DB-P6-4／5 |
-| CMP-06 | XS／Sの実サイズ、Worker増減、用途別Warehouse | 未実装。現在は同一computeのalias | 容量と実資源の計測が必要 | DB-P7／8 |
+| CMP-01 | ヘッダー／SQLの共有Warehouse状態・更新 | logical_v1は共有runtime観測を実装。技術受入済み | 物理状態・観測時刻・engine検証を分離し、replica数だけでSQL準備完了にしない | `/api/v1/warehouses/LOCAL/runtime`。旧Database profileは従来の観測のみ |
+| CMP-02 | Compute panelの共有状態・停止blocker・保存policy | logical_v1で対応、認証済みV／E／A。技術受入済み | 受付・処理中・SUCCEEDEDと物理状態／engine検証を区別。旧SRE／Policy検査は含まない | 共有LOCAL panel／runtime GET |
+| CMP-03 | quick／SQL／Computeの明示Wake／Chillと状態再検証 | logical_v1のP専用API／UI／HTTP CLIを実装。技術受入済み | 全DBへの影響を表示。元key／receipt保持、現在権限・admission／drain・全blockerを再確認。SQLは再送しない | runtime操作／operation照会。旧Database profileは未対応 |
+| CMP-04 | Auto-Chill設定と許可済みSQLのAuto-resume | logical_v1で設定CAS、server側休止、SQL共通経路の自動復帰を実装。技術受入済み、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 設定はP、0は無効。自動起動は元のDB／role／intentを認可し、同一初回POSTを再送しない。queued取消・UNKNOWN保護を維持 | Workbench／native／CLI、既存DataOps・Job・Stage・Mart・予定の共通SQL経路。dbt／AIは未接続 |
+| CMP-05 | ComputeのSRE check／Policy audit | 未接続。共有LOCALの休止・復帰とは別機能 | DB対応Bearsとplatform scopeが必要。旧routeの拒否を維持 | DB-P6-4／5 |
+| CMP-06 | XS／Sの実サイズ、Worker増減、用途別Warehouse | 未実装。休止・復帰の対応から伸縮完了を推定しない | 同一computeのaliasを維持し、容量・実資源・性能の計測後に採用 | DB-P7／8 |
 | ADM-01 | DB管理一覧・選択・revision／binding情報 | 対応、P | A、Worksheetと独立 | `/api/v1/admin/databases` |
 | ADM-02 | 論理DB作成、作成capability、初期access | 対応、P、logical_v1の準備条件 | A、root／actor／環境／key | admin database-creations |
 | ADM-03 | 同じ要求の再発見・状態照会・固定payloadの再確認 | 対応、P | A、同じ要求を再発見 | 作成一覧／詳細 |
@@ -132,7 +132,7 @@
 
 ## 画面と実装の対応
 
-安定したIDの案内をパネルへ置き、手動WAP等の追加順序によって説明対象が変わらないようにする。取り込みと変換の説明は対応済み操作を先に示す。未対応のdbt、AI、統合監査、共有compute管理には、それぞれの制限と利用できる確認先を表示する。
+安定したIDの案内をパネルへ置き、手動WAP等の追加順序によって説明対象が変わらないようにする。取り込みと変換、保存metadata監査は対応済み操作へ案内する。logical_v1の共有LOCAL管理は、旧Database profileの非対応と一時的な観測失敗を区別する。dbt、AI Bears、SRE／Policy検査は未接続のまま、理由と利用できる確認先を示す。
 
 Worksheet結果保存の案内は「結果保存が未対応」とし、対応済みTable全件Exportを否定しない。profilingとlineageは機能名を示し、対象identity未確認・対象／roleのcapability不足とは説明を分ける。未接続機能は管理者への変更を解決策にしない。
 

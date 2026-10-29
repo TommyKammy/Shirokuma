@@ -271,6 +271,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         if path == '/api/v1/audit' or path.startswith('/api/v1/audit/'):
             self.database_request(method)
             return True
+        import warehouse_runtime_routes
+        if warehouse_runtime_routes.dispatch(self, method):
+            return True
         import database_creations
         if database_creations.dispatch(self, method):
             return True
@@ -886,7 +889,10 @@ def main(argv=None):
     with HTTPServer((args.host, args.port), WorkbenchHandler) as server:
         import logical_creations
         if logical_creations.enabled():
-            with logical_creations.lifetime():
+            with logical_creations.lifetime() as provider:
+                import warehouse_lifecycle
+                warehouse_lifecycle.observe_startup(provider)
+                warehouse_resident.initialize_auto_chill()
                 print(f'Shirokuma Workbench: http://{args.host}:{server.server_port}', flush=True)
                 try:
                     schedule_resident.start_scheduler()
@@ -894,6 +900,7 @@ def main(argv=None):
                 except KeyboardInterrupt:
                     pass
                 finally:
+                    warehouse_resident.stop_auto_chill_daemon()
                     schedule_resident.stop_scheduler()
             return
         database_creation_bridge.configure()
