@@ -144,12 +144,17 @@ def _compile_model(sql, sources, *, execution=None, measurements=None):
         if execution is not None:
             for table in physical:
                 alias = table.alias or table.name
-                name = execution._ref(sources[table.name])
-                snapshot = measurements[table.name]['snapshot']
-                if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
-                    raise ValueError('decimal snapshot required')
-                replacement = sqlglot.parse_one('SELECT * FROM ' + name +
-                    ' FOR VERSION AS OF ' + snapshot, read='trino').args['from_'].this
+                measured = measurements[table.name]
+                if measured.get('kind') == 'VIEW':
+                    name = execution._dbt_read_ref(sources[table.name], measured)
+                    suffix = ''
+                else:
+                    name = execution._ref(sources[table.name])
+                    snapshot = measured['snapshot']
+                    if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
+                        raise ValueError('decimal snapshot required')
+                    suffix = ' FOR VERSION AS OF ' + snapshot
+                replacement = sqlglot.parse_one('SELECT * FROM ' + name + suffix, read='trino').args['from_'].this
                 replacement.set('alias', table.args.get('alias') or
                     exp.TableAlias(this=exp.Identifier(this=alias, quoted=True)))
                 table.replace(replacement)
@@ -183,7 +188,10 @@ def save_model(principal, context, *, model_id, sql, sources, target,
         ds._column(column)
     _compile_model(sql, sources)
     for ref in sources.values():
-        metadata._ref(ref)
+        if ds._dbt.get() is not None:
+            metadata._dbt_read_ref(ref)
+        else:
+            metadata._ref(ref)
     if type(target) is registry.ResourceRef:
         metadata._ref(target)
     elif type(target) is registry.DestinationLocator:

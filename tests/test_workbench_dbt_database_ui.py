@@ -206,6 +206,92 @@ assert.match(text(dbDbtNode('publications')),/Published/);assert.equal(p.run.sta
 const drafts=worksheets.map(w=>w.sql);assert.equal(drafts.length,13);assert.deepEqual(drafts,Array.from({length:13},(_,i)=>'SELECT '+i));
 """)
 
+    def test_sandbox_view_contract_version_and_table_only_publication_bilingual(self):
+        self.javascript(r"""
+await build();plan.compatibility.version=2;
+plan.models[1].materialized='view';plan.models[1].table_properties={};
+run.models[1].materialized='view';run.models[1].table_properties={};run.models[1].build_id=null;
+run.models[1].candidate={kind:'VIEW',ref:run.models[1].candidate.ref,view_uuid:'view-uuid',version:7,security:'INVOKER'};
+await dbDbtObserve('plan','plan-1');await dbDbtObserve('run','run-1');
+for(const lang of ['en','ja']){
+ setLanguage(lang);
+ assert.match(text(dbDbtNode('compatibility')),/SANDBOX INVOKER VIEW/);
+ assert.match(text(dbDbtNode('compatibility')),lang==='ja'?/公開は TABLE のみ/:/TABLE-only publication/);
+ assert.match(text(dbDbtNode('candidates')),/VIEW v7 · INVOKER/);
+ assert.match(text(dbDbtNode('candidates')),/INVOKER/);
+ assert.equal(dbDbtFormat(run.models[1]),t('Not applicable'));
+ assert.equal(dbDbtCanPublish(p.run.models[1]),false);
+ const buttons=dbDbtNode('publications').descendants().filter(n=>n.tagName==='BUTTON'&&n.textContent===t('Review publication'));
+ assert.equal(buttons.length,1);
+}
+const count=posts().length;await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,count);
+currentRole='bi_viewer';dbDbtValidate();assert.equal(p.run,null);assert.equal(p.plan,null);
+assert.equal(text(dbDbtNode('candidates')).trim(),'');
+""")
+
+    def test_candidate_version_column_and_expandable_ref_details_bilingual(self):
+        self.javascript(r"""
+await build();
+const snapshot='9223372036854775806',ref=structuredClone(run.models[1].candidate.ref);
+run.models[1].materialized='view';
+run.models[1].candidate={kind:'VIEW',ref,view_uuid:'view-uuid-<img src=x onerror=attack()>',version:7,security:'INVOKER',snapshot:'must-not-be-view-version'};
+run.models[2].candidate.snapshot=snapshot;
+run.models[2].candidate.version=99;
+await dbDbtObserve('run','run-1');
+for(const lang of ['en','ja']){
+ setLanguage(lang);dbDbtRender();
+ const candidate=dbDbtNode('candidates'),headers=candidate.querySelector('thead').querySelector('tr').children;
+ assert.equal(headers[3].textContent,lang==='ja'?'TABLE snapshot / VIEW バージョン':'TABLE snapshot / VIEW version');
+ assert.equal(headers[4].textContent,lang==='ja'?'候補 Ref の詳細':'Candidate Ref details');
+ const rows=candidate.querySelector('tbody').children;
+ assert.equal(rows[0].children[3].textContent,'N/A');
+ assert.equal(rows[1].children[3].textContent,'VIEW v7 · INVOKER');
+ assert.equal(rows[2].children[3].textContent,snapshot);
+ for(const [i,m] of run.models.entries()){
+  const cell=rows[i].children[4],detail=cell.children[0];
+  assert.equal(detail.tagName,'DETAILS');assert.equal(Boolean(detail.open),false);
+  assert.equal(detail.children[0].tagName,'SUMMARY');
+  assert.equal(detail.children[0].textContent,t('Candidate Ref details'));
+  const saved=JSON.parse(detail.querySelector('pre').textContent);
+  assert.equal(saved.node_id,m.unique_id);assert.equal(saved.wap_model_id,m.wap_model_id);
+  assert.equal(saved.wap_version,m.wap_version);assert.equal(saved.build_id,m.build_id);
+  if(m.candidate)for(const [key,value] of Object.entries(m.candidate))assert.deepEqual(saved[key],value);
+ }
+ assert.equal(candidate.descendants().some(n=>n.tagName==='IMG'),false);
+}
+// Missing candidates retain the pending/legacy presentation rather than inventing a version.
+run.models[1].candidate=null;run.models[2].candidate=null;await dbDbtObserve('run','run-1');
+const rows=dbDbtNode('candidates').querySelector('tbody').children;
+assert.equal(rows[1].children[3].textContent,'VIEW '+t('Not recorded'));
+assert.equal(rows[2].children[3].textContent,t('Not recorded'));
+""")
+
+    def test_operation_ids_native_details_collapsed_with_counts_and_visible_gates(self):
+        self.javascript(r"""
+await build();
+run.operations=Array.from({length:12},(_,i)=>({id:'full-operation-'+i+'-<img src=x onerror=attack()>',state:i<10?'FINISHED':'FAILED'}));
+await dbDbtObserve('run','run-1');
+for(const lang of ['en','ja']){
+ setLanguage(lang);dbDbtRender();
+ const area=dbDbtNode('run-detail'),detail=area.children.find(n=>n.tagName==='DETAILS');
+ assert.ok(detail);assert.equal(Boolean(detail.open),false);assert.equal(detail.children[0].tagName,'SUMMARY');
+ assert.match(text(detail.children[0]),lang==='ja'?/操作 ID \(12件\)/:/Operation IDs \(12\)/);
+ const summary=text(detail.children[0]).replace(/\s+/g,' ');
+ assert.ok(summary.includes(t('FINISHED')+' : 10'));assert.ok(summary.includes(t('FAILED')+' : 2'));
+ assert.equal(detail.children.filter(n=>n.tagName==='P').length,12);
+ for(const op of run.operations)assert.ok(text(detail).includes(op.id+' · '+op.state));
+ assert.equal(area.descendants().some(n=>n.tagName==='IMG'),false);
+ assert.ok(area.children.some(n=>n.tagName==='P'&&n.textContent===t('Tests passed, awaiting publication')));
+ assert.match(text(dbDbtNode('tests')),/PASSED/);assert.equal(dbDbtCanPublish(p.run.models[1]),true);
+ assert.ok(dbDbtNode('reason').textContent.includes(t('Publication requires admin and every planned test to pass. Each model publishes independently.')));
+ run.state='FAILED';run.error_code='DBT_TEST_FAILED';await dbDbtObserve('run','run-1');
+ assert.ok(area.children.some(n=>n.tagName==='P'&&n.textContent===t('FAILED')));
+ assert.ok(area.children.some(n=>n.tagName==='P'&&n.textContent==='DBT_TEST_FAILED'));
+ assert.equal(dbDbtCanPublish(p.run.models[1]),false);
+ run.state='READY';delete run.error_code;await dbDbtObserve('run','run-1');
+}
+""")
+
     def test_default_override_not_silently_changed_and_project_options(self):
         self.javascript(r"""
 await openDbt();dbDbtNode('materialization').value='';await dbDbtSubmit('compile');
@@ -527,7 +613,7 @@ globalThis.setTimeout=originalTimeout;globalThis.clearTimeout=originalClearTimeo
     def test_present_in_progress_contracts_fail_closed_instead_of_pending(self):
         self.javascript(r"""
 await compile();
-for(const state of ['QUEUED','COMPILING'])for(const compatibility of [null,{},[],{version:2,executor:'sql_wap',status:'supported',issues:[]},{version:1,executor:'native',status:'supported',issues:[]},{version:1,executor:'sql_wap',status:'unknown',issues:[]},{version:1,executor:'sql_wap',status:'supported',issues:[{}]},{version:1,executor:'sql_wap',status:'blocked',issues:[{node_id:ids[0],code:'UNSUPPORTED_MATERIALIZATION',setting:'materialized'}]}]){
+for(const state of ['QUEUED','COMPILING'])for(const compatibility of [null,{},[],{version:99,executor:'sql_wap',status:'supported',issues:[]},{version:1,executor:'native',status:'supported',issues:[]},{version:1,executor:'sql_wap',status:'unknown',issues:[]},{version:1,executor:'sql_wap',status:'supported',issues:[{}]},{version:1,executor:'sql_wap',status:'blocked',issues:[{node_id:ids[0],code:'UNSUPPORTED_MATERIALIZATION',setting:'materialized'}]}]){
  plan={...plan,state,compatibility};await dbDbtObserve('plan',plan.id);
  for(const lang of ['ja','en']){
   setLanguage(lang);const blocked=compatibility?.status==='blocked';
@@ -584,7 +670,7 @@ assert.match(dbDbtNode('reason').textContent,/Review the settings and compile a 
     def test_unknown_or_malformed_compatibility_cannot_build(self):
         self.javascript(r"""
 await compile();
-for(const compatibility of [null,{},[],{version:2,executor:'sql_wap',status:'supported',issues:[]},{version:'1',executor:'sql_wap',status:'supported',issues:[]},{version:1,executor:'native',status:'supported',issues:[]},{version:1,executor:'sql_wap',status:'unknown',issues:[]},{version:1,executor:'sql_wap',status:'supported'},{version:1,executor:'sql_wap',status:'supported',issues:[{}]}]){
+for(const compatibility of [null,{},[],{version:99,executor:'sql_wap',status:'supported',issues:[]},{version:'1',executor:'sql_wap',status:'supported',issues:[]},{version:1,executor:'native',status:'supported',issues:[]},{version:1,executor:'sql_wap',status:'unknown',issues:[]},{version:1,executor:'sql_wap',status:'supported'},{version:1,executor:'sql_wap',status:'supported',issues:[{}]}]){
  plan={...plan,compatibility};await dbDbtObserve('plan',plan.id);
  assert.ok(p.plan);assert.equal(dbDbtCanBuild(),false);assert.equal(dbDbtNode('build').disabled,true);
  assert.match(text(dbDbtNode('compatibility')),/Compatibility not validated/);

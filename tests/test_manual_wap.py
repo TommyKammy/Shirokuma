@@ -93,6 +93,20 @@ class ManualWapTests(unittest.TestCase):
         transport = patch.object(qs, '_transport', side_effect=self.transport)
         transport.start()
         self.addCleanup(transport.stop)
+        catalog = patch.object(ds.inventory, 'catalog_api', side_effect=self.catalog)
+        catalog.start()
+        self.addCleanup(catalog.stop)
+
+    @contextmanager
+    def catalog(self, database, binding):
+        with self.b.catalog(database, binding) as api:
+            def load(path):
+                response = api(path)
+                if '/views/' in path:
+                    # REST load response pointer, synthetic and stable for this head.
+                    response['metadata-location'] = 'memory://views/' + response['metadata']['view-uuid']
+                return response
+            yield load
 
     def metadata(self, ref):
         with control_store.connect() as db:
@@ -126,11 +140,18 @@ class ManualWapTests(unittest.TestCase):
                   for _, source in scope.selected_sources.values() if isinstance(source, exp.Table)]
         with sqlite3.connect(':memory:') as db:
             for index, table in enumerate(tables):
-                metadata = self.table_metadata(table)
+                view = self.b.objects.get((table.catalog, table.db, table.name, 'views'))
                 version = table.args.get('version')
-                snapshot = int(version.expression.this) if version else metadata['current-snapshot-id']
-                rows = self.snapshots[(metadata['table-uuid'], snapshot)]
-                fields = next(s['fields'] for s in metadata['schemas'] if s['schema-id'] == metadata['current-schema-id'])
+                if view is not None:
+                    self.assertIsNone(version, 'VIEW versions are not TABLE snapshots')
+                    current = next(v for v in view['versions'] if v['version-id'] == view['current-version-id'])
+                    rows, _ = self.evaluate(sqlglot.parse_one(current['representations'][0]['sql'], read='trino'))
+                    fields = next(s['fields'] for s in view['schemas'] if s['schema-id'] == current['schema-id'])
+                else:
+                    metadata = self.table_metadata(table)
+                    snapshot = int(version.expression.this) if version else metadata['current-snapshot-id']
+                    rows = self.snapshots[(metadata['table-uuid'], snapshot)]
+                    fields = next(s['fields'] for s in metadata['schemas'] if s['schema-id'] == metadata['current-schema-id'])
                 name = 'input_' + str(index)
                 db.execute('CREATE TABLE ' + name + ' (' + ', '.join(ds._column(f['name']) for f in fields) + ')')
                 db.executemany('INSERT INTO ' + name + ' VALUES (' + ','.join('?' for _ in fields) + ')', rows)
@@ -151,7 +172,24 @@ class ManualWapTests(unittest.TestCase):
             self.assertIsNotNone(intent, 'intent must precede every POST')
         tree = None if sql.startswith('ALTER TABLE ') else sqlglot.parse_one(sql, read='trino')
         data = []
-        if isinstance(tree, exp.Create):
+        if isinstance(tree, exp.Create) and tree.args.get('kind') == 'VIEW':
+            self.assertTrue(sql.startswith('CREATE VIEW '))
+            self.assertIn(' SECURITY INVOKER AS ', sql)
+            self.assertFalse(tree.args.get('replace'))
+            table = tree.this
+            _, names = self.evaluate(tree.expression)
+            self.b.objects[(table.catalog, table.db, table.name, 'views')] = {
+                'view-uuid': str(uuid.uuid4()), 'current-version-id': 1, 'format-version': 1,
+                'location': 'memory://warehouse/views',
+                'version-log': [{'version-id': 1, 'timestamp-ms': 1000}],
+                'versions': [{'version-id': 1, 'schema-id': 0, 'timestamp-ms': 1000,
+                    'default-catalog': table.catalog, 'default-namespace': [table.db],
+                    'summary': {'iceberg-version': 'Apache Iceberg'}, 'representations': [
+                    {'type': 'sql', 'dialect': 'trino', 'sql': sql.split(' SECURITY INVOKER AS ', 1)[1]}]}],
+                'schemas': [{'schema-id': 0, 'fields': [
+                    dict(id=i + 1, name=n, type='long' if n == 'id' else 'string', required=False)
+                    for i, n in enumerate(names)]}]}
+        elif isinstance(tree, exp.Create):
             table = tree.this
             rows, names = self.evaluate(tree.expression)
             key = (table.catalog, table.db, table.name, 'tables')

@@ -131,14 +131,14 @@ class CompileBoundaryTests(unittest.TestCase):
                                     'target': {'schema': 'fallback'}})
         self.assertEqual(module.generate_schema_name('marts', None).strip(), 'sandbox')
 
-    def test_installed_builtin_default_view_blocked_and_ephemeral_typed_format(self):
-        with self.assertRaises(dbt.DbtError) as caught:
-            dbt.compile_project(self.project, catalog='cat', source_schema='raw')
-        self.assertEqual(caught.exception.code, 'UNSUPPORTED_MATERIALIZATION')
-        self.assertTrue(all(i['setting'] == 'materialized' for i in caught.exception.compatibility['issues']))
-        self.assertIn('ephemeral', str(caught.exception))
-        summary = dbt.compile_project(self.project, catalog='cat', source_schema='raw', staging_materialization='ephemeral')
+    def test_installed_builtin_default_views_and_ephemeral_typed_format(self):
+        summary = dbt.compile_project(self.project, catalog='cat', source_schema='raw')
         self.assertEqual(summary['compatibility'], dbt.compatibility())
+        views = [m for m in summary['models'] if m['materialized'] == 'view']
+        self.assertTrue(views)
+        self.assertTrue(all(m['view_security'] == 'INVOKER' for m in views))
+        self.assertTrue(all(m['relation'] and m['table_properties'] == {} for m in views))
+        summary = dbt.compile_project(self.project, catalog='cat', source_schema='raw', staging_materialization='ephemeral')
         tables = [m for m in summary['models'] if m['materialized'] == 'table']
         self.assertTrue(tables)
         self.assertTrue(all(m['table_properties'] == {'format': 'PARQUET'} for m in tables))
@@ -282,6 +282,34 @@ class ManifestTests(unittest.TestCase):
         self.assertIsNone(summary['models'][0]['relation'])
         self.assertEqual(summary['tests'][0]['depends_on'], ['model.t'])
 
+    def test_view_security_properties_and_view_graph_fail_closed(self):
+        for security in ('definer', 'unknown', '', True):
+            manifest = self.manifest()
+            manifest['nodes']['model.t']['config'].update(materialized='view', view_security=security)
+            with self.assertRaises(dbt.DbtError) as caught:
+                dbt._validate_manifest(manifest, catalog='cat', source_schema='raw')
+            self.assertEqual(caught.exception.code, 'UNSUPPORTED_VIEW_SECURITY')
+            if security == 'unknown':
+                self.assertNotIn(security, str(caught.exception.compatibility['issues']))
+        for props in ({'format': "'PARQUET'"}, {'location': 'secret'}, {'replace': True}):
+            manifest = self.manifest()
+            manifest['nodes']['model.t']['config'].update(materialized='view', properties=props)
+            with self.assertRaises(dbt.DbtError) as caught:
+                dbt._validate_manifest(manifest, catalog='cat', source_schema='raw')
+            self.assertEqual(caught.exception.code, 'UNSUPPORTED_VIEW_PROPERTIES')
+            self.assertNotIn('secret', str(caught.exception.compatibility))
+        manifest = self.manifest()
+        manifest['nodes']['model.e']['config']['materialized'] = 'view'
+        manifest['nodes']['model.t'].update(compiled_code='SELECT * FROM cat.sandbox.e')
+        summary = dbt._validate_manifest(manifest, catalog='cat', source_schema='raw')
+        self.assertEqual(summary['models'][0]['materialized'], 'view')
+        self.assertEqual(summary['models'][0]['table_properties'], {})
+        self.assertEqual(summary['models'][0]['view_security'], 'INVOKER')
+        manifest['nodes']['model.t']['config']['materialized'] = 'view'
+        with self.assertRaises(dbt.DbtError) as caught:
+            dbt._validate_manifest(manifest, catalog='cat', source_schema='raw')
+        self.assertEqual(caught.exception.code, 'UNSUPPORTED_VIEW_DEPENDENCY')
+
     def test_resolved_semantic_issues_are_fixed_safe_and_collected(self):
         cases = [('on_table_exists', 'rename', 'UNSUPPORTED_MODEL_CONFIG'),
             ('column_types', {'id': 'secret'}, 'UNSUPPORTED_MODEL_CONFIG'),
@@ -349,7 +377,7 @@ class ManifestTests(unittest.TestCase):
     def test_reject_invalid_materialization_config_relations_and_graph(self):
         original = self.manifest()
         cases = [
-            ('UNSUPPORTED_MATERIALIZATION', lambda m: m['nodes']['model.t']['config'].update(materialized='view')),
+            ('UNSUPPORTED_VIEW_SECURITY', lambda m: m['nodes']['model.t']['config'].update(materialized='view', view_security='definer')),
             ('UNSUPPORTED_MATERIALIZATION', lambda m: m['nodes']['model.t']['config'].update(materialized='incremental')),
             ('UNSUPPORTED_TEST_CONFIG', lambda m: m['nodes']['test.unique']['config'].update(store_failures=True)),
             ('UNSUPPORTED_MODEL_CONFIG', lambda m: m['nodes']['model.t']['config'].update(contract={'enforced': True})),

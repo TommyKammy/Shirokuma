@@ -105,6 +105,63 @@ class DatabaseSecurityTests(unittest.TestCase):
                         self.assertEqual(run.returncode, 0, run.stderr)
                         self.assertEqual(run.stdout.strip(), 'false', (operation, schema, name))
 
+    def test_scoped_admin_generated_create_view_rule_is_sandbox_only(self):
+        config = manifest()
+        for key, db in config['databases'].items():
+            db['roles']['admin'] = dict(username=trino_auth.scoped_username(key, 'admin'), password=key+'admin')
+        policy = security.render_opa_policy(config)
+        self.assertEqual(policy, security.render_opa_policy_identities(security.public_identities(config)))
+        view_rules = [rule for rule in policy.split('allow if {') if '"CreateView"' in rule]
+        self.assertEqual(len(view_rules), 1)
+        self.assertEqual(view_rules[0].split('}', 1)[0].strip(), '''catalog := scoped_admin_catalogs[input.context.identity.user]
+    input.action.operation == "CreateView"
+    input.action.resource.table.catalogName == catalog
+    input.action.resource.table.schemaName == "sandbox"
+    is_string(input.action.resource.table.tableName)
+    input.action.resource.table.tableName != ""''')
+        for operation in ('DropView', 'ShowCreateView', 'CreateViewWithSelectFromColumns'):
+            self.assertNotIn('"' + operation + '"', policy)
+        self.assertIn('"ShowCreateTable"', policy)
+
+    @unittest.skipUnless(shutil.which('opa'), 'OPA binary unavailable; renderer assertions run separately')
+    def test_scoped_admin_opa_create_view_boundaries(self):
+        config = manifest()
+        for key, db in config['databases'].items():
+            db['roles']['admin'] = dict(username=trino_auth.scoped_username(key, 'admin'), password=key+'admin')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'guard.rego'
+            path.write_text(security.render_opa_policy(config))
+
+            def decision(user, table, expected, operation='CreateView'):
+                request = dict(context=dict(identity=dict(user=user)), action=dict(operation=operation,
+                    resource=dict(table=table)))
+                with self.subTest(user=user, operation=operation, table=table):
+                    run = subprocess.run([shutil.which('opa'), 'eval', '--stdin-input', '--data', str(path),
+                        '--format', 'raw', 'data.shirokuma.allow'], input=json.dumps(request), text=True, capture_output=True)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    self.assertEqual(run.stdout.strip(), str(expected).lower())
+
+            for db in config['databases'].values():
+                user, own_catalog = db['roles']['admin']['username'], db['sql_catalog']
+                for catalog in ('sales', 'finance', 'unregistered', 'system'):
+                    for schema in ('sandbox', 'raw', 'marts', 'staging', 'information_schema', 'other', ''):
+                        decision(user, dict(catalogName=catalog, schemaName=schema, tableName='report_view'),
+                            catalog == own_catalog and schema == 'sandbox')
+                table = dict(catalogName=own_catalog, schemaName='sandbox', tableName='report_view')
+                for name in ('v', 'daily_report_2026', 'Report View'):
+                    decision(user, dict(table, tableName=name), True)
+                for field in ('catalogName', 'schemaName', 'tableName'):
+                    missing = dict(table)
+                    missing.pop(field)
+                    decision(user, missing, False)
+                    for invalid in ('', None, 1, True, [], {}):
+                        decision(user, dict(table, **{field: invalid}), False)
+                for operation in ('DropView', 'ShowCreateView', 'CreateViewWithSelectFromColumns'):
+                    decision(user, table, False, operation)
+                decision(user, table, True, 'ShowCreateTable')
+                for unknown in ('unknown', 'shirokuma_admin_evil', user + '_evil'):
+                    decision(unknown, table, False)
+
     def test_public_identity_renderer_matches_existing_private_api(self):
         private = manifest()
         public = security.public_identities(private)

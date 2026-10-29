@@ -617,6 +617,106 @@ class Execution:
         return dict(ref=asdict(ref), snapshot=str(snapshot), schema_id=schema_id,
             columns=columns, schema_fingerprint=hashlib.sha256(_json(schemas[0]).encode()).hexdigest())
 
+    def _dbt_measure_view(self, ref):
+        """REST-only distinct VIEW head, including full metadata and metadata location."""
+        if type(ref) is not registry.ResourceRef or ref.database_id != self._context().database_id:
+            raise QueryError('CROSS_DATABASE_TARGET', 409)
+        schema = self._schema(ref.schema_id)
+        with control_store.connect() as db:
+            obj = registry.get_object(db, ref.object_id)
+        if (schema.sql_name != 'sandbox' or obj is None or obj.kind != 'VIEW'
+                or obj.schema_id != ref.schema_id or obj.incarnation != ref.incarnation):
+            raise QueryError('DBT_VIEW_CHANGED', 409)
+        database, binding = self._catalog()
+        with inventory.catalog_api(database, binding) as api:
+            response = api(inventory._path(schema, 'VIEW', obj.physical_name))
+        metadata = response.get('metadata', {})
+        try:
+            pointer = response['metadata-location']
+            if not isinstance(pointer, str) or not pointer.strip():
+                raise ValueError()
+            identity = metadata['view-uuid']
+            uuid.UUID(identity)
+            version = metadata['current-version-id']
+            versions = [v for v in metadata['versions'] if v.get('version-id') == version]
+            if identity != obj.backend_identity or type(version) is not int or version < 1 or len(versions) != 1:
+                raise ValueError()
+            current = versions[0]
+            schema_id = current['schema-id']
+            schemas = [v for v in metadata['schemas'] if v.get('schema-id') == schema_id]
+            reps = [r for r in current['representations'] if r.get('type') == 'sql' and r.get('dialect') == 'trino']
+            # Trino 483 REST views are INVOKER exactly when run-as-owner is absent.
+            properties = metadata.get('properties', {})
+            security = 'INVOKER' if (isinstance(properties, dict)
+                and 'trino.run-as-owner' not in properties
+                and properties.get('trino.security', 'INVOKER') == 'INVOKER'
+                and not any(k in properties for k in ('trino.owner', 'owner'))) else None
+            if (type(schema_id) is not int or len(schemas) != 1 or not schemas[0]['fields']
+                    or len(reps) != 1 or not isinstance(reps[0]['sql'], str) or not reps[0]['sql'].strip()
+                    or security != 'INVOKER'):
+                raise ValueError()
+            columns = [dict(name=f['name'], type=f['type']) for f in schemas[0]['fields']]
+            if len({c['name'] for c in columns}) != len(columns):
+                raise ValueError()
+        except (KeyError, ValueError, TypeError, AttributeError):
+            raise QueryError('DBT_VIEW_CHANGED', 409) from None
+        import database_dbt
+        canonical = database_dbt._sql_tree(reps[0]['sql']).sql(dialect='trino')
+        return dict(kind='VIEW', ref=asdict(ref), view_uuid=identity, version=version,
+            security=security, schema_id=schema_id, columns=columns,
+            schema_fingerprint=hashlib.sha256(_json(schemas[0]).encode()).hexdigest(),
+            _definition_digest=hashlib.sha256(reps[0]['sql'].encode()).hexdigest(),
+            _canonical_definition_digest=hashlib.sha256(canonical.encode()).hexdigest(),
+            _head_digest=hashlib.sha256(_json(dict(metadata=metadata,
+                metadata_location=pointer)).encode()).hexdigest())
+
+    def _dbt_read_ref(self, ref, measurement=None):
+        with control_store.connect() as db:
+            obj = registry.get_object(db, ref.object_id)
+        if obj is None or obj.kind != 'VIEW':
+            return self._ref(ref)
+        import db_dbt
+        db_dbt._view_binding(self, ref, expected=measurement)
+        return self._locator(registry.DestinationLocator(ref.database_id, ref.schema_id, obj.physical_name), write=False)
+
+    @_serialized
+    def _dbt_create_view(self):
+        """One saved private action, no caller SQL, locator or security argument."""
+        import db_dbt
+        from manual_wap import _compile_model
+        run, node, locator = db_dbt._view_node(self)
+        normalized = db_dbt._normalized(run, node)
+        inputs = db_dbt._pinned(self, normalized['sources'])
+        if any(m.get('kind') == 'VIEW' for m in inputs.values()):
+            raise QueryError('UNSUPPORTED_VIEW_DEPENDENCY', 409)
+        generated = _compile_model(normalized['sql'], normalized['sources'], execution=self, measurements=inputs)
+        import database_dbt
+        canonical = database_dbt._sql_tree(generated).sql(dialect='trino')
+        with control_store.connect() as db:
+            _, saved_run = db_dbt._row(db, run['id'])
+            next(m for m in saved_run['models'] if m['unique_id'] == node['unique_id'])['_view_definition_digest'] = hashlib.sha256(canonical.encode()).hexdigest()
+            db_dbt._write(db, saved_run)
+        name = self._locator(locator)
+        if locator.schema_id != self._context().schema_id or self._schema(locator.schema_id).sql_name != 'sandbox':
+            raise QueryError('SANDBOX_REQUIRED', 409)
+        self._absent(locator)
+        self._execute('dbt_view_create', 'CREATE VIEW ' + name + ' SECURITY INVOKER AS ' + generated, 'view',
+            commit_result=dict(view_created=True, _view_locator=asdict(locator)))
+        schema = self._schema(locator.schema_id, write=True)
+        database, binding = self._catalog()
+        with inventory.catalog_api(database, binding) as api:
+            metadata = inventory._metadata(api, schema, 'VIEW', locator.physical_name)
+        identity = metadata.get('view-uuid')
+        try:
+            uuid.UUID(identity)
+        except (ValueError, TypeError, AttributeError):
+            raise QueryError('DBT_VIEW_OBSERVATION_REQUIRED', 409) from None
+        with control_store.connect() as db:
+            obj = registry.observe_object(db, schema.id, locator.physical_name, 'VIEW', identity, locator.physical_name)
+            db.execute('INSERT INTO dataops_owned_objects VALUES (?,?,?,?)',
+                (self.id, obj.id, obj.incarnation, 'stage'))
+        return registry.ResourceRef(locator.database_id, locator.schema_id, obj.id, obj.incarnation)
+
     def _wap_owned(self, build):
         """Resolve an immutable, DB-local build; ownership stays with its builder."""
         context = self._context()
@@ -643,6 +743,7 @@ class Execution:
     def wap_build(self, schema_id, sql, sources, *, step, result, _start=None):
         """Validate/rewrite a read model internally; never execute caller SQL verbatim."""
         from manual_wap import _compile_model
+        import db_dbt
         schema = self._schema(schema_id, write=True)
         if schema.sql_name != 'sandbox':
             raise QueryError('SQL_PERMISSION_DENIED', 403)
@@ -658,6 +759,9 @@ class Execution:
         # Head append is harmless because SQL pins the captured snapshot; a
         # schema change can affect column binding even with the same snapshot.
         for alias, ref in sources.items():
+            if inputs[alias].get('kind') == 'VIEW':
+                db_dbt._view_binding(self, ref, expected=inputs[alias])
+                continue
             current = self.wap_measure(ref)
             if any(current[k] != inputs[alias][k] for k in ('ref', 'schema_id', 'schema_fingerprint')):
                 raise QueryError('SOURCE_SCHEMA_CHANGED', 409)
@@ -671,6 +775,9 @@ class Execution:
         self._execute('wap_build', 'CREATE TABLE ' + name + clause + ' AS ' + generated, step,
                       commit_result=dict(result, stage_locator=asdict(locator), input_refs=inputs,
                                          generated_sql=generated))
+        for alias, source in sources.items():
+            if inputs[alias].get('kind') == 'VIEW':
+                db_dbt._view_binding(self, source, expected=inputs[alias])
         ref = self._observe(locator)
         with control_store.connect() as db:
             db.execute('INSERT INTO dataops_owned_objects VALUES (?,?,?,?)',
@@ -686,6 +793,9 @@ class Execution:
         inputs = db_dbt._pinned(self, normalized['sources'])
         sql = _compile_model(normalized['sql'], normalized['sources'], execution=self, measurements=inputs)
         rows = self._execute('dbt_test', 'SELECT COUNT(*) FROM (' + sql + ') AS dbt_failures', 'test')['data']
+        for alias, ref in normalized['sources'].items():
+            if inputs[alias].get('kind') == 'VIEW':
+                db_dbt._view_binding(self, ref, expected=inputs[alias])
         if len(rows) != 1 or len(rows[0]) != 1 or type(rows[0][0]) is not int or rows[0][0] < 0:
             raise QueryError('INVALID_DBT_TEST_RESULT', 502)
         return rows[0][0]
@@ -1034,7 +1144,8 @@ class Execution:
                 FROM dataops_queries d JOIN query_records q ON q.id=d.query_id
                 JOIN query_execution_contexts e ON e.query_id=q.id WHERE d.operation_id=? ORDER BY q.created_at''', (self.id,))]
         return dict(id=self.id, state=row['state'], committed=bool(row['committed']),
-                    result=json.loads(row['result']) if row['result'] else None,
+                    result=({k: v for k, v in json.loads(row['result']).items() if not k.startswith('_')}
+                        if row['route'] == 'dbt-view-create' else json.loads(row['result'])) if row['result'] else None,
                     cleanup_error=row['cleanup_error'], queries=children, replayed=self.replayed)
 
     def reconcile_queries(self):

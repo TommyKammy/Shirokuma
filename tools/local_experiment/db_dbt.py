@@ -67,7 +67,7 @@ def _projects():
 
 def list_projects(principal, context):
     _access(principal, context)
-    projects = [dict(id=p['id'], name=p['name'], materializations=['table', 'ephemeral'],
+    projects = [dict(id=p['id'], name=p['name'], materializations=['table', 'ephemeral', 'view'],
         sql_subset='Offline compiled SELECT through the WAP read parser; built-in generic tests',
         staging_materializations=[None, 'table', 'ephemeral']) for p in _projects().values()]
     with control_store.connect() as db:
@@ -324,6 +324,13 @@ def _check_plan(db, run):
     return plan
 
 
+def _supported_contract(plan):
+    c = plan.get('compatibility')
+    return any(c == dict(version=v, executor='sql_wap', status='supported', issues=[]) for v in (1, 2)) and (
+        c['version'] == 2 or all(m['materialized'] in ('table', 'ephemeral') for m in plan['models'])) and all(
+        m.get('view_security') == 'INVOKER' for m in plan['models'] if m['materialized'] == 'view')
+
+
 def submit_run(principal, context, *, key, plan_id):
     _access(principal, context)
     route = '/api/v1/dbt/runs'
@@ -337,12 +344,13 @@ def submit_run(principal, context, *, key, plan_id):
         raise QueryError('CONTEXT_MISMATCH', 409)
     if plan['state'] != 'READY' or _hash_plan(plan) != plan['_plan_digest']:
         raise QueryError('DBT_PLAN_NOT_READY', 409)
-    if plan.get('compatibility') != dict(version=1, executor='sql_wap', status='supported', issues=[]):
+    if not _supported_contract(plan):
         raise QueryError('DBT_PLAN_RECOMPILE_REQUIRED', 409)
     record = _base(principal, context, 'run', plan)
     record.update(plan_id=plan_id, _plan_digest=plan['_plan_digest'], _pins=None, _phase=None, _node_id=None,
         models=[dict(unique_id=m['unique_id'], name=m['name'], materialized=m['materialized'],
-            table_properties=m['table_properties'], state='QUEUED',
+            table_properties=m['table_properties'],
+            **({'view_security': m['view_security']} if m['materialized'] == 'view' else {}), state='QUEUED',
             wap_model_id='dbt_' + record['id'].replace('-', '') + '_' + str(i), wap_version=None,
             build_id=None, candidate=None, operation_ids=[]) for i, m in enumerate(plan['models'])],
         tests=[dict(unique_id=t['unique_id'], name=t['name'], test_type=t['test_type'], state='QUEUED',
@@ -445,6 +453,7 @@ def _before_query(operation_id, principal, context):
         source = _row(db, run['parent_run_id'])[1] if run['kind'] == 'publication' else run
         plan = _check_plan(db, source)
     metadata = _access(principal, context)
+    _verify_views(metadata, source, complete=run['kind'] == 'publication')
     for binding in plan['source_bindings']:
         ref = registry.ResourceRef(**binding['ref'])
         current = metadata.wap_measure(ref)
@@ -478,12 +487,16 @@ def _pinned(execution, sources):
     pins = dict(run['_pins'])
     for model in run['models']:
         if model['candidate']:
-            pins[ds._json(model['candidate']['ref'])] = model['_measurement']
+            pins[ds._json(model['candidate']['ref'])] = model.get('_view_measurement', model.get('_measurement'))
     inputs = {}
     for alias, ref in sources.items():
         saved = pins.get(ds._json(asdict(ref)))
         if saved is None:
             raise QueryError('SOURCE_CHANGED', 409)
+        if saved.get('kind') == 'VIEW':
+            _view_binding(execution, ref, expected=saved)
+            inputs[alias] = saved
+            continue
         current = execution.wap_measure(ref)
         if any(current[k] != saved[k] for k in ('ref', 'schema_id', 'schema_fingerprint', 'columns')):
             raise QueryError('SOURCE_SCHEMA_CHANGED', 409)
@@ -491,6 +504,185 @@ def _pinned(execution, sources):
             raise QueryError('STAGE_CHANGED', 409)
         inputs[alias] = saved
     return inputs
+
+
+def _row_run(ident):
+    with control_store.connect() as db:
+        return _row(db, ident)[1]
+
+
+def _view_node(execution):
+    """Resolve action exclusively from the admitted node and immutable plan."""
+    scope = ds._dbt.get()
+    if scope is None or scope[:2] != (execution.principal, execution._context()) or scope[6] != 'build':
+        raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+    if _live.get(scope[5], ())[:5] != scope[:5]:
+        raise QueryError('DBT_OWNER_LOST', 409)
+    with control_store.connect() as db:
+        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        _check_operation(db, execution.id)
+        link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
+        if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]:
+            raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+        _, run = _row(db, scope[5])
+        plan = _check_plan(db, run)
+        if run.get('_source_bindings') != plan['source_bindings'] or run.get('_models') != plan['models']:
+            raise QueryError('DBT_PLAN_CHANGED', 409)
+    operation = execution._row()
+    expected = ds._json(dict(payload=dict(run_id=run['id'], node_id=scope[7]), context=run['context']))
+    if (operation['route'] != 'dbt-view-create' or operation['payload'] != expected
+            or operation['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()):
+        raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+    nodes = [m for m in plan['models'] if m['unique_id'] == scope[7] and m['materialized'] == 'view']
+    selected = next(m for m in run['models'] if m['unique_id'] == scope[7])
+    if (not _supported_contract(plan) or plan['compatibility']['version'] != 2 or len(nodes) != 1
+            or selected['state'] != 'BUILDING' or selected['operation_ids'] != [execution.id]):
+        raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+    locator = registry.DestinationLocator(run['context']['database_id'],
+        run['context']['schema_id'], 'dbtv_' + hashlib.sha256(execution.id.encode()).hexdigest()[:24])
+    if selected['_view_locator'] != asdict(locator):
+        raise QueryError('DBT_VIEW_CHANGED', 409)
+    return run, nodes[0], locator
+
+
+def _view_saved(db, run, model):
+    """A run descriptor cannot substitute for its exact finished owned child."""
+    saved = model.get('_view_measurement')
+    ids = model.get('operation_ids', [])
+    child = db.execute('SELECT o.*,l.phase,l.node_id FROM dataops_operations o JOIN dbt_run_operations l '
+        'ON l.operation_id=o.id WHERE l.run_id=? AND o.id=?',
+        (run['id'], ids[0] if len(ids) == 1 else '')).fetchone()
+    expected = ds._json(dict(payload=dict(run_id=run['id'], node_id=model['unique_id']), context=run['context']))
+    if (not saved or saved.get('kind') != 'VIEW' or model['state'] != 'BUILT' or child is None
+            or child['phase'] != 'build' or child['node_id'] != model['unique_id']
+            or child['route'] != 'dbt-view-create' or child['state'] != 'FINISHED' or not child['committed'] or child['cleanup_error']
+            or child['actor'] != run['actor'] or json.loads(child['context']) != run['context']
+            or child['payload'] != expected or child['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()
+            or json.loads(child['result'] or '{}').get('view_digest') != hashlib.sha256(ds._json(saved).encode()).hexdigest()
+            or json.loads(child['result'] or '{}').get('view') != _view_public(saved)
+            or model['candidate'] != _view_public(saved)):
+        raise QueryError('DBT_VIEW_CHANGED', 409)
+    ref = registry.ResourceRef(**saved['ref'])
+    obj = registry.get_object(db, ref.object_id)
+    owned = db.execute('SELECT * FROM dataops_owned_objects WHERE operation_id=? AND object_id=?',
+        (child['id'], ref.object_id)).fetchone()
+    locator = model['_view_locator']
+    if (obj is None or obj.kind != 'VIEW' or obj.backend_identity != saved['view_uuid']
+            or obj.schema_id != ref.schema_id or obj.incarnation != ref.incarnation
+            or owned is None or owned['incarnation'] != ref.incarnation
+            or ref.database_id != run['context']['database_id'] or ref.schema_id != run['context']['schema_id']
+            or locator != dict(database_id=ref.database_id, schema_id=ref.schema_id, physical_name=obj.physical_name)):
+        raise QueryError('DBT_VIEW_CHANGED', 409)
+    return saved
+
+
+def _view_public(saved):
+    return {k: saved[k] for k in ('kind', 'ref', 'view_uuid', 'version', 'security')}
+
+
+def _view_receipts(db, run, plan, *, complete=False):
+    planned = {m['unique_id'] for m in plan['models'] if m['materialized'] == 'view'}
+    views = [m for m in run['models'] if m['materialized'] == 'view']
+    if len(views) != len(planned) or {m['unique_id'] for m in views} != planned:
+        raise QueryError('DBT_VIEW_CHANGED', 409)
+    if any(m.get('view_security') != 'INVOKER' for m in views):
+        raise QueryError('DBT_VIEW_CHANGED', 409)
+    if complete:
+        declared = {m['unique_id']: m['materialized'] for m in plan['models']}
+        if (len(run['models']) != len(declared)
+                or {m['unique_id']: m['materialized'] for m in run['models']} != declared
+                or any(m['state'] != ('EPHEMERAL' if m['materialized'] == 'ephemeral' else 'BUILT')
+                    for m in run['models'])):
+            raise QueryError('DBT_TEST_GATE_FAILED', 409)
+    return [_view_saved(db, run, m) for m in views
+        if complete or m['state'] == 'BUILT' or m.get('_view_measurement')]
+
+
+def _verify_views(metadata, run, *, complete=False):
+    # During BUILDING only earlier views exist. READY/publication require all
+    # declared models and owned VIEW receipts, including independent final views.
+    with control_store.connect() as db:
+        plan = _check_plan(db, run)
+        saved = _view_receipts(db, run, plan, complete=complete)
+    for expected in saved:
+        actual = metadata._dbt_measure_view(registry.ResourceRef(**expected['ref']))
+        if actual != expected:
+            raise QueryError('DBT_VIEW_CHANGED', 409)
+
+
+def _view_binding(execution, ref, *, expected=None):
+    """Private scoped read: no descriptors or general WAP VIEW inputs accepted."""
+    scope = ds._dbt.get()
+    if scope is None or scope[:2] != (execution.principal, execution._context()) or scope[6] not in ('build', 'test'):
+        raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+    if _live.get(scope[5], ())[:5] != scope[:5]:
+        raise QueryError('DBT_OWNER_LOST', 409)
+    with control_store.connect() as db:
+        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        if hasattr(execution, 'id'):
+            _check_operation(db, execution.id)
+            link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
+            if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]:
+                raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+        _, run = _row(db, scope[5])
+        plan = _check_plan(db, run)
+        node = next(n for n in plan['tests' if scope[6] == 'test' else 'models'] if n['unique_id'] == scope[7])
+        if run.get('_source_bindings') != plan['source_bindings'] or run.get('_models') != plan['models']:
+            raise QueryError('DBT_PLAN_CHANGED', 409)
+        normalized = _normalized(run, node)
+        if asdict(ref) not in [asdict(r) for r in normalized['sources'].values()]:
+            raise QueryError('INVALID_BINDING', 409)
+        matches = [m for m in run['models'] if (m.get('candidate') or {}).get('ref') == asdict(ref)]
+        if len(matches) != 1:
+            raise QueryError('DBT_VIEW_CHANGED', 409)
+        saved = _view_saved(db, run, matches[0])
+        if expected is not None and saved != expected:
+            raise QueryError('DBT_VIEW_CHANGED', 409)
+    if execution._dbt_measure_view(ref) != saved:
+        raise QueryError('DBT_VIEW_CHANGED', 409)
+    return saved
+
+
+def _build_view(ident, principal, context, parent, frozen, credential, uid):
+    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
+        execution = ds.begin(principal, context, route='dbt-view-create', idempotency_key=ident + ':' + uid,
+            payload=dict(run_id=ident, node_id=uid))
+        if execution.replayed:
+            raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
+        with ds._accepted(execution):
+            try:
+                with control_store.connect() as db:
+                    _, run = _row(db, ident)
+                    model = next(m for m in run['models'] if m['unique_id'] == uid)
+                    model.update(operation_ids=[execution.id], _view_locator=asdict(registry.DestinationLocator(
+                        context.database_id, context.schema_id, 'dbtv_' + hashlib.sha256(execution.id.encode()).hexdigest()[:24])))
+                    _write(db, run)
+                ref = execution._dbt_create_view()
+                # Preserve known identity even if the following REST measurement fails.
+                with control_store.connect() as db:
+                    _, run = _row(db, ident)
+                    next(m for m in run['models'] if m['unique_id'] == uid)['_created_view_ref'] = asdict(ref)
+                    _write(db, run)
+                measured = execution._dbt_measure_view(ref)
+                current = _row_run(ident)
+                selected = next(m for m in current['models'] if m['unique_id'] == uid)
+                if measured['_canonical_definition_digest'] != selected['_view_definition_digest']:
+                    raise QueryError('DBT_VIEW_CHANGED', 409)
+                execution.complete(dict(view=_view_public(measured),
+                    view_digest=hashlib.sha256(ds._json(measured).encode()).hexdigest()))
+                with control_store.connect() as db:
+                    _, run = _row(db, ident)
+                    model = next(m for m in run['models'] if m['unique_id'] == uid)
+                    model.update(state='BUILT', candidate=_view_public(measured), _view_measurement=measured)
+                    _write(db, run)
+            except Exception as error:
+                wap._settle_definite(execution, context, error)
+                if execution._row()['committed']:
+                    with control_store.connect() as db:
+                        _, run = _row(db, ident)
+                        next(m for m in run['models'] if m['unique_id'] == uid)['state'] = 'COMMITTED_RECORDING_FAILED'
+                        _write(db, run)
+                raise
 
 
 def _table_properties(execution, *, build=None):
@@ -521,7 +713,7 @@ def _table_properties(execution, *, build=None):
         plan = _check_plan(db, source)
         if 'compatibility' not in plan:
             return {}  # Historical admitted runs retain their original SQL semantics.
-        if plan['compatibility'] != dict(version=1, executor='sql_wap', status='supported', issues=[]):
+        if not _supported_contract(plan):
             raise QueryError('DBT_PLAN_CHANGED', 409)
         matches = [m for m in plan['models'] if m['unique_id'] == scope[7] and m['materialized'] == 'table']
         if len(matches) != 1 or matches[0].get('table_properties') not in ({}, {'format': 'PARQUET'}):
@@ -687,6 +879,9 @@ def _build_run(ident, principal, context, parent, frozen, credential):
         run = _phase(ident, 'BUILDING', 'build', uid)
         selected = next(m for m in run['models'] if m['unique_id'] == uid)
         normalized = _normalized(run, model)
+        if model['materialized'] == 'view':
+            _build_view(ident, principal, context, parent, frozen, credential, uid)
+            continue
         target = plan['_targets'][uid]
         target = registry.ResourceRef(**target) if 'object_id' in target else registry.DestinationLocator(**target)
         with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
@@ -698,6 +893,7 @@ def _build_run(ident, principal, context, parent, frozen, credential):
                 _write(db, run)
             child = wap.build(principal, context, key=ident + ':' + uid,
                 model_id=saved['model_id'], version=saved['version'])
+        _verify_views(metadata, run)
         built = (child.get('result') or {}).get('build')
         if child['state'] != 'FINISHED' or built is None:
             raise QueryError('DBT_CHILD_UNRESOLVED', 409)
@@ -718,6 +914,7 @@ def _build_run(ident, principal, context, parent, frozen, credential):
                 raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
             try:
                 count = execution._dbt_test()
+                _verify_views(metadata, _row_run(ident))
                 child = execution.complete(dict(failure_count=count))
             except Exception as error:
                 with control_store.connect() as db:
@@ -735,11 +932,13 @@ def _build_run(ident, principal, context, parent, frozen, credential):
             selected = next(t for t in run['tests'] if t['unique_id'] == uid)
             selected.update(state='PASSED' if count == 0 else 'FAILED', failure_count=count, operation_id=child['id'])
             _write(db, run)
+    _verify_views(metadata, _row_run(ident), complete=True)
     with control_store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         _, run = _row(db, ident)
         if run['cancel_requested']:
             raise QueryError('DBT_RUN_STOPPED', 409)
+        _view_receipts(db, run, _check_plan(db, run), complete=True)
         if any(t['state'] != 'PASSED' for t in run['tests']):
             raise QueryError('DBT_TEST_FAILED', 409)
         run.update(state='READY', _phase=None, _node_id=None)
@@ -749,6 +948,7 @@ def _build_run(ident, principal, context, parent, frozen, credential):
 def _publish_run(ident, principal, context, parent, frozen, credential):
     with control_store.connect() as db:
         _, publication = _row(db, ident)
+    _verify_views(_access(principal, context), _row_run(publication['parent_run_id']), complete=True)
     uid = publication['node_id']
     _phase(ident, 'AUDITING', 'audit', uid)
     with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'audit', uid):

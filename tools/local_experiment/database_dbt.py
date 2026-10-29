@@ -36,7 +36,7 @@ class DbtError(ValueError):
 
 
 def compatibility(issues=None, *, supported=True):
-    return dict(version=1, executor="sql_wap", status="supported" if supported else "blocked",
+    return dict(version=2, executor="sql_wap", status="supported" if supported else "blocked",
                 issues=issues or [])
 
 
@@ -263,8 +263,10 @@ def _semantic_config(nodes):
         if config.get('contract', {}).get('enforced'):
             issue(uid, code, prefix + 'contract')
         if kind == 'model':
-            if config.get('materialized') not in ('table', 'ephemeral'):
+            if config.get('materialized') not in ('table', 'ephemeral', 'view'):
                 issue(uid, 'UNSUPPORTED_MATERIALIZATION', 'materialized')
+            if config.get('materialized') == 'view' and config.get('view_security') not in (None, 'invoker'):
+                issue(uid, 'UNSUPPORTED_VIEW_SECURITY', 'view_security')
             if config.get('on_table_exists') is not None:
                 issue(uid, code, 'on_table_exists')
             for setting, default in (('on_schema_change', 'ignore'),
@@ -277,7 +279,9 @@ def _semantic_config(nodes):
             props = config.get('properties')
             properties[uid] = {}
             if props not in (None, {}):
-                if (isinstance(props, dict) and set(props) == {'format'}
+                if config.get('materialized') == 'view':
+                    issue(uid, 'UNSUPPORTED_VIEW_PROPERTIES', 'properties')
+                elif (isinstance(props, dict) and set(props) == {'format'}
                         and isinstance(props['format'], str)
                         and re.fullmatch(r"\s*'PARQUET'\s*", props['format'], re.IGNORECASE)):
                     if config.get('materialized') == 'table':
@@ -294,8 +298,7 @@ def _semantic_config(nodes):
                 issue(uid, code, 'test.limit')
     if issues:
         raise DbtError(issues[0]['code'],
-            'SQL/WAP supports table and explicitly selected ephemeral models with zero-failure COUNT tests; '
-            'remove unsupported execution settings or explicitly select ephemeral for staging views', issues)
+            'SQL/WAP supports table, sandbox invoker view and ephemeral models with zero-failure COUNT tests', issues)
     return properties
 
 
@@ -341,8 +344,8 @@ def _validate_manifest(manifest, *, catalog, source_schema):
                     'depends_on': sorted(dependencies), 'compiled_sql': sql}
         if kind == 'model':
             materialized = config.get('materialized')
-            if materialized not in ('table', 'ephemeral'):
-                _fail('UNSUPPORTED_MATERIALIZATION', 'only table and explicitly selected ephemeral models supported')
+            if materialized not in ('table', 'ephemeral', 'view'):
+                _fail('UNSUPPORTED_MATERIALIZATION', 'only table, sandbox invoker view and ephemeral models supported')
             relation = (node.get('database'), node.get('schema'), node.get('alias'))
             _validate_relation(relation, catalog)
             if relation[1] != 'sandbox':
@@ -352,7 +355,9 @@ def _validate_manifest(manifest, *, catalog, source_schema):
             # Ephemeral identities still cannot collide with physical resources.
             relations[relation] = uid
             selected.update(materialized=materialized, table_properties=table_properties[uid],
-                            relation=list(relation) if materialized == 'table' else None)
+                            relation=list(relation) if materialized != 'ephemeral' else None)
+            if materialized == 'view':
+                selected['view_security'] = 'INVOKER'
             models.append(selected)
         else:
             metadata = node.get('test_metadata', {})
@@ -388,6 +393,17 @@ def _validate_manifest(manifest, *, catalog, source_schema):
         tree = _sql_tree(item['compiled_sql'])
         used = {_identity(table) for _, table in _physical(tree)}
         permitted = ancestors(item['unique_id'])
+        view_deps, pending = set(), list(item['depends_on'])
+        while pending:
+            dep = model_by_id.get(pending.pop(), {})
+            if dep.get('materialized') == 'view':
+                view_deps.add(dep['unique_id'])
+            elif dep.get('materialized') == 'ephemeral':
+                pending.extend(dep['depends_on'])
+        if item.get('materialized') == 'view' and (view_deps or any(
+                model_by_id.get(physical_relations.get(rel), {}).get('materialized') == 'view' for rel in used)):
+            raise DbtError('UNSUPPORTED_VIEW_DEPENDENCY', 'VIEW to VIEW dependencies are unsupported',
+                [dict(node_id=item['unique_id'], code='UNSUPPORTED_VIEW_DEPENDENCY', setting='depends_on')])
         for relation in used:
             if relation not in physical_relations or physical_relations[relation] not in permitted:
                 _fail('INVALID_RELATION', 'unbound physical relation or undeclared dependency')

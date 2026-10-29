@@ -111,11 +111,16 @@ class HTTPRoutesTests(unittest.TestCase):
 
     def test_wap_dispatch_models_actions_and_metadata(self):
         ref = dict(database_id='db', schema_id='sc', object_id='obj', incarnation=1)
-        body = dict(context=asdict(C), model_id='arbitrary', sql='SELECT * FROM src', sources=dict(src=ref),
+        body = dict(context=asdict(C), model_id='arbitrary', sql='SELECT * FROM _source', sources={'_source': ref},
             target=dict(database_id='db', schema_id='sc', physical_name='model'), expected_version=None)
-        with patch.object(routes.manual_wap, 'save_model', return_value=dict(version=1)) as save:
-            self.assertEqual(self.request('/api/v1/wap/models', body), (200, dict(context=asdict(C), model=dict(version=1))))
-            self.assertEqual(save.call_args.kwargs['sources']['src'], registry.ResourceRef(**ref))
+        model = dict(version=1, sources=body['sources'], sql=body['sql'])
+        with patch.object(routes.manual_wap, 'save_model', return_value=model) as save:
+            self.assertEqual(self.request('/api/v1/wap/models', body), (200, dict(context=asdict(C), model=model)))
+            self.assertEqual(save.call_args.kwargs['sources']['_source'], registry.ResourceRef(**ref))
+        query = urlencode(dict(context=json.dumps(asdict(C)), model_id='arbitrary'))
+        with patch.object(routes.manual_wap, 'get_model', return_value=model):
+            self.assertEqual(self.request('/api/v1/wap/models?' + query),
+                (200, dict(context=asdict(C), model=model)))
         operation = dict(id='op', state='FINISHED', result={})
         for action, identifiers in [('build', dict(model_id='arbitrary', version=1)), ('audit', dict(build_id='b')),
                                     ('publish', dict(build_id='b', audit_id='a')), ('rollback', dict(publication_id='p'))]:
@@ -125,6 +130,94 @@ class HTTPRoutesTests(unittest.TestCase):
         query = urlencode(dict(context=json.dumps(asdict(C))))
         with patch.object(routes.manual_wap, 'get_publication', return_value=dict(id='p')):
             self.assertEqual(self.request('/api/v1/wap/publications/p?' + query)[1]['publication'], dict(id='p'))
+
+    def test_recursive_view_projection_at_operation_build_and_error_http_boundaries(self):
+        ref = dict(database_id='db', schema_id='sc', object_id='view-object', incarnation=1)
+        measurement = dict(kind='VIEW', ref=ref, view_uuid='synthetic-uuid', version=1,
+            security='INVOKER', _definition_digest='definition',
+            _canonical_definition_digest='canonical', _head_digest='head')
+        build = dict(id='build', input_refs={'_source': measurement})
+        operation = dict(id='op', state='FINISHED', committed=True,
+            result=dict(build=build, input_refs={'_source': measurement},
+                observations=[dict(nested=measurement)]))
+        original = json.loads(json.dumps(operation))
+        public_measurement = {k: v for k, v in measurement.items() if not k.startswith('_')}
+        query = urlencode(dict(context=json.dumps(asdict(C))))
+        execution = Mock()
+        execution._row.return_value = dict(context=json.dumps(asdict(C)))
+        for state in ('FINISHED', 'UNKNOWN'):
+            operation['state'] = state
+            execution.inspect.return_value = operation
+            with patch.object(routes.ds, 'Execution', return_value=execution):
+                status, reply = self.request('/api/v1/dataops/op?' + query)
+            self.assertEqual(status, 200, reply)
+            self.assertEqual(reply['operation']['state'], state)
+            self.assertEqual(reply['operation']['result']['build']['input_refs']['_source'], public_measurement)
+            self.assertEqual(reply['operation']['result']['input_refs']['_source'], public_measurement)
+            self.assertEqual(reply['operation']['result']['observations'][0]['nested'], public_measurement)
+        with patch.object(routes.manual_wap, 'get_build', return_value=build):
+            status, reply = self.request('/api/v1/wap/builds/build?' + query)
+        self.assertEqual(status, 200, reply)
+        self.assertEqual(reply['build']['input_refs']['_source'], public_measurement)
+        with patch.object(routes.manual_wap, 'audit', return_value=operation):
+            status, reply = self.request('/api/v1/wap/audit', dict(context=asdict(C), build_id='build'), key='audit')
+        self.assertEqual(status, 200, reply)
+        self.assertNotIn('_head_digest', json.dumps(reply))
+        error = QueryError('DBT_VIEW_CHANGED', 409, details=dict(build=build, observations=[operation]))
+        with patch.object(routes.manual_wap, 'get_build', side_effect=error):
+            status, reply = self.request('/api/v1/wap/builds/build?' + query)
+        self.assertEqual(status, 409, reply)
+        self.assertNotIn('_definition_digest', json.dumps(reply))
+        self.assertNotIn('_head_digest', json.dumps(reply))
+        # Projection must not rewrite shared/raw internal WAP records.
+        operation['state'] = 'FINISHED'
+        self.assertEqual(operation, original)
+        self.assertEqual(build['input_refs']['_source'], measurement)
+        # Committed intent has no measured UUID/version/head and stays intent.
+        receipt = dict(view_created=True, _view_locator=dict(database_id='db', schema_id='sc', physical_name='private'))
+        execution.inspect.return_value = dict(id='op', state='FAILED', committed=True, result=receipt)
+        with patch.object(routes.ds, 'Execution', return_value=execution):
+            status, reply = self.request('/api/v1/dataops/op?' + query)
+        self.assertEqual(reply['operation']['result'], {'view_created': True})
+        self.assertIn('_view_locator', receipt)
+
+    def test_audit_preserves_underscore_column_null_counts(self):
+        audit = dict(id='audit', null_counts={'_id': 1, '_head_digest': 0, 'label': 2})
+        operation = dict(id='op', state='FINISHED', result=dict(audit=audit))
+        with patch.object(routes.manual_wap, 'audit', return_value=operation):
+            status, reply = self.request('/api/v1/wap/audit',
+                dict(context=asdict(C), build_id='build'), key='audit')
+        self.assertEqual((status, reply['operation']), (200, operation))
+        query = urlencode(dict(context=json.dumps(asdict(C))))
+        with patch.object(routes.manual_wap, 'get_audit', return_value=audit):
+            status, reply = self.request('/api/v1/wap/audits/audit?' + query)
+        self.assertEqual((status, reply['audit']), (200, audit))
+
+    def test_operation_error_details_project_nested_views_without_mutating_receipts(self):
+        measurement = dict(kind='VIEW', ref=dict(database_id='db', schema_id='sc', object_id='view', incarnation=1),
+            view_uuid='uuid', version=1, security='INVOKER', _head_digest='head', _definition_digest='definition',
+            _canonical_definition_digest='canonical')
+        operation = dict(id='op', state='FAILED', result=dict(input_refs={'_source': measurement},
+            observations=[dict(nested=measurement)], audit=dict(null_counts={'_id': 1})))
+        original = json.loads(json.dumps(operation))
+        details = dict(sources={'_source': measurement['ref']}, null_counts={'_id': 1})
+        execution = Mock()
+        execution._row.return_value = dict(context=json.dumps(asdict(C)))
+        execution.inspect.return_value = operation
+        with patch.object(routes.control_store, 'connect') as connect, \
+                patch.object(routes.ds, 'Execution', return_value=execution), \
+                patch.object(routes.manual_wap, 'audit', side_effect=QueryError('DBT_VIEW_CHANGED', 409, details=details)):
+            connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = ('op',)
+            status, reply = self.request('/api/v1/wap/audit', dict(context=asdict(C), build_id='build'), key='audit')
+        self.assertEqual((status, reply['code']), (409, 'DBT_VIEW_CHANGED'))
+        self.assertEqual(reply['details']['sources'], details['sources'])
+        self.assertEqual(reply['details']['null_counts'], {'_id': 1})
+        public = {k: v for k, v in measurement.items() if not k.startswith('_')}
+        result = reply['details']['operation']['result']
+        self.assertEqual(result['input_refs'], {'_source': public})
+        self.assertEqual(result['observations'], [dict(nested=public)])
+        self.assertEqual(result['audit']['null_counts'], {'_id': 1})
+        self.assertEqual(operation, original)
 
     def test_inspect_checks_saved_context_and_current_grants(self):
         execution = Mock()

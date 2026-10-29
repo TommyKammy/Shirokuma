@@ -52,3 +52,5 @@ TABLEでは働かないview_security、contract.enforced=falseでの型・制約
 ## C2へ残す設計
 
 標準executorはSQL transportだけの変更では成立しない。最初にnativeのDDL／introspection／schema操作の全体、viewのINVOKER／DEFINERと閲覧者の基底relation権限、Tableと異なるview versionの公開・取消・復旧を定義する。型付きadapterの実証なしに任意DDL、管理者credential fallback、暗黙Schema作成を開放しない。DB-P6-3全体とM1本人受入は未完了である。
+
+2026-10-30の[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)で、run専用SANDBOXの真のINVOKER VIEW、元TABLE Snapshot固定、VIEW head照合と下流TABLE／testを実装し、実機確認を完了した。互換性契約version 2とし、C1のversion 1 TABLE／EPHEMERAL履歴・受入済み公開と元key回収を保持する。標準executor、VIEW→VIEWと正式VIEW公開は引き続き残件である。

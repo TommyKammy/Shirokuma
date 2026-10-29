@@ -96,7 +96,28 @@ def _cancel_unknown(execution):
     return False
 
 
+def _public_fields(value):
+    """HTTP projection only; internal WAP receipts retain exact VIEW measurements."""
+    if isinstance(value, dict):
+        measurement = (value.get('kind') == 'VIEW'
+            and {'ref', 'view_uuid', 'version', 'security'} <= value.keys())
+        return {k: _public_fields(v) for k, v in value.items()
+            if not (measurement and k.startswith('_'))
+            and not (value.get('view_created') is True and k == '_view_locator')}
+    if isinstance(value, list):
+        return [_public_fields(v) for v in value]
+    return value
+
+
 def dispatch(handler, method, path, params, principal, role):
+    try:
+        return _dispatch(handler, method, path, params, principal, role)
+    except QueryError as error:
+        error.details = _public_fields(error.details)
+        raise
+
+
+def _dispatch(handler, method, path, params, principal, role):
     """Return False only for routes outside this adapter; otherwise respond once."""
     if not any(path == '/api/v1/' + prefix or path.startswith('/api/v1/' + prefix + '/')
                for prefix in ('ingests', 'wap', 'table-exports', 'dataops')):
@@ -149,7 +170,7 @@ def dispatch(handler, method, path, params, principal, role):
             envelope['operation'] = execution.inspect()
         else:
             raise QueryError('NOT_FOUND', 404)
-        handler.respond(envelope)
+        handler.respond(_public_fields(envelope))
         return True
     current_context(principal, context)
     if method == 'POST' and path in ('/api/v1/ingests', '/api/v1/ingests/preview'):
@@ -231,7 +252,7 @@ def dispatch(handler, method, path, params, principal, role):
         envelope['receipt'] = manual_export.get_export(principal, context, export_id=export_id)
     else:
         raise QueryError('NOT_FOUND', 404)
-    handler.respond(envelope)
+    handler.respond(_public_fields(envelope))
     return True
 
 

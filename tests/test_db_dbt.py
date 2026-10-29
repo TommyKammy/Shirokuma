@@ -1,5 +1,6 @@
 """Durable dbt workflow using real WAP/admission and the existing SQL harness."""
 from dataclasses import asdict, replace
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -99,6 +100,431 @@ class DbtTests(unittest.TestCase):
             fn(record)
             dbt._write(db, record)
 
+    def view_project(self):
+        def summary(*args, **kwargs):
+            result = self.summary(*args, **kwargs)
+            result['models'][1].update(materialized='view', table_properties={}, view_security='INVOKER')
+            return result
+        self.compile.side_effect = summary
+
+    def view_metadata(self):
+        return [value for key, value in self.b.objects.items() if key[3] == 'views'][-1]
+
+    def test_true_view_pins_original_source_downstream_table_and_tests(self):
+        self.view_project()
+        source = self.sources[self.context.database_id]
+        original = str(self.w.metadata(source)['current-snapshot-id'])
+        transport = self.w.transport
+        def append(url, method, pin, body=None):
+            result = transport(url, method, pin, body)
+            if body.decode().startswith('CREATE VIEW '):
+                with control_store.connect() as db:
+                    child = db.execute("SELECT o.id,l.run_id,l.node_id FROM dataops_operations o JOIN dbt_run_operations l ON l.operation_id=o.id WHERE o.route='dbt-view-create'").fetchone()
+                    self.assertEqual(child['node_id'], 'model.first')
+                    self.assertIsNotNone(db.execute('SELECT query_id FROM dataops_queries WHERE operation_id=?', (child['id'],)).fetchone())
+                self.w.snapshot(self.w.metadata(source), [(9, 'new')])
+            return result
+        with patch.object(qs, '_transport', side_effect=append):
+            run = self.build_run()
+        self.assertEqual(run['state'], 'READY', run)
+        view, table = run['models'][1:]
+        self.assertEqual(view['candidate']['kind'], 'VIEW')
+        self.assertEqual(view['candidate']['version'], 1)
+        self.assertNotIn('snapshot', view['candidate'])
+        self.assertEqual(view['candidate']['security'], 'INVOKER')
+        self.assertEqual(view['view_security'], 'INVOKER')
+        self.assertIsNone(view['build_id'])
+        sql = self.view_metadata()['versions'][0]['representations'][0]['sql']
+        self.assertIn('FOR VERSION AS OF ' + original, sql)
+        create = [s for s, _ in self.w.posts if s.startswith('CREATE VIEW ')]
+        self.assertEqual(len(create), 1)
+        self.assertIn(' SECURITY INVOKER AS ', create[0])
+        self.assertNotIn('format=', create[0])
+        downstream = next(s for s, _ in self.w.posts if s.startswith('CREATE TABLE '))
+        self.assertIn('dbtv_', downstream)
+        self.assertNotIn('FOR VERSION AS OF', downstream)
+        self.assertIn("WITH (format='PARQUET')", downstream)
+        view_tests = [s for s, _ in self.w.posts if s.startswith('SELECT COUNT(*)') and 'dbtv_' in s]
+        self.assertEqual(len(view_tests), 1)
+        self.assertNotIn('FOR VERSION AS OF', view_tests[0])
+        raw_build = wap.get_build(self.engineer, self.context, build_id=table['build_id'])
+        self.assertEqual(next(iter(raw_build['input_refs'].values())),
+            self.record(run['id'])['models'][1]['_view_measurement'])
+        self.assertEqual([t['state'] for t in run['tests']], ['PASSED', 'PASSED'])
+        stage = self.w.metadata(dm.ResourceRef(**table['candidate']['ref']))
+        self.assertEqual(self.w.snapshots[(stage['table-uuid'], stage['current-snapshot-id'])], [(1, 'one'), (2, 'two')])
+        self.code('DBT_NODE_NOT_FOUND', dbt.submit_publication, self.admin, self.admin_context,
+            run['id'], key='no-view-publish', node_id='model.first')
+        self.code('SQL_PERMISSION_DENIED', dbt.submit_publication, self.engineer, self.context,
+            run['id'], key='no-engineer-publish', node_id='model.second')
+        self.assertEqual(self.publish(run, uid='model.second')['state'], 'PUBLISHED')
+        public = json.dumps(dbt.get_run(self.engineer, self.context, run['id']))
+        self.assertNotIn('_head_digest', public)
+        self.assertNotIn('_definition_digest', public)
+
+    def test_canonical_invoker_metadata_pointer_and_effective_security(self):
+        from contextlib import contextmanager
+        self.view_project()
+        run = self.build_run()
+        self.assertEqual(run['state'], 'READY', run)
+        view = self.view_metadata()
+        self.assertNotIn('properties', view)
+        saved = self.record(run['id'])['models'][1]['_view_measurement']
+        ref = dm.ResourceRef(**saved['ref'])
+        metadata = wap._access(self.engineer, self.context)
+        self.assertEqual(metadata._dbt_measure_view(ref), saved)
+        self.assertEqual(saved['view_uuid'], view['view-uuid'])
+        self.assertEqual(saved['version'], view['current-version-id'])
+        for properties in ({'trino.run-as-owner': 'true'}, {'trino.run-as-owner': 'false'},
+                {'trino.run-as-owner': False}, {'trino.run-as-owner': None},
+                {'trino.security': 'DEFINER'}, {'trino.owner': 'someone'}, {'owner': 'someone'}, None, []):
+            with self.subTest(properties=properties):
+                view['properties'] = properties
+                self.code('DBT_VIEW_CHANGED', metadata._dbt_measure_view, ref)
+        view.pop('properties')
+        catalog = self.b.catalog
+        for pointer in (None, '', '  ', 7, []):
+            @contextmanager
+            def malformed(database, binding):
+                with catalog(database, binding) as api:
+                    yield lambda path: dict(api(path), **{'metadata-location': pointer})
+            with self.subTest(pointer=pointer), patch.object(ds.inventory, 'catalog_api', malformed):
+                self.code('DBT_VIEW_CHANGED', metadata._dbt_measure_view, ref)
+        with patch.object(ds.inventory, 'catalog_api', catalog):
+            self.code('DBT_VIEW_CHANGED', metadata._dbt_measure_view, ref)
+
+    def test_view_only_and_independent_final_view_require_fresh_ready_head(self):
+        complete = ds.Execution.complete
+        for only_view in (True, False):
+            for drift in (False, True):
+                with self.subTest(only_view=only_view, drift=drift):
+                    def summary(*args, **kwargs):
+                        result = self.summary(*args, **kwargs)
+                        # An independent last VIEW, with no downstream query/test.
+                        view = dict(result['models'][1], materialized='view', depends_on=['source.rows'],
+                            table_properties={}, view_security='INVOKER')
+                        result['models'] = [view] if only_view else [result['models'][0], result['models'][1],
+                            dict(view, unique_id='model.final', name='final',
+                                relation=[kwargs['catalog'], 'sandbox', 'final'])]
+                        result['tests'] = []
+                        return result
+                    self.compile.side_effect = summary
+                    plan = self.plan(key=f'final-plan-{only_view}-{drift}')
+                    view_ids = {m['unique_id'] for m in plan['models'] if m['materialized'] == 'view'}
+                    self.assertTrue(all(m['view_security'] == 'INVOKER' for m in plan['models']
+                        if m['materialized'] == 'view'))
+                    self.assertFalse(view_ids & set(self.record(plan['id'])['_targets']))
+                    def change_after_observation(execution, result=None):
+                        child = complete(execution, result)
+                        if drift and execution._row()['route'] == 'dbt-view-create':
+                            self.view_metadata()['version-log'].append({'version-id': 1, 'timestamp-ms': 2000})
+                        return child
+                    with patch.object(ds.Execution, 'complete', change_after_observation):
+                        run = self.build_run(plan, key=f'final-run-{only_view}-{drift}')
+                    self.assertEqual(run['state'], 'FAILED' if drift else 'READY', run)
+                    if drift:
+                        self.assertEqual(run['error_code'], 'DBT_VIEW_CHANGED')
+                    else:
+                        self.assertTrue(all(m['state'] in ('BUILT', 'EPHEMERAL') for m in run['models']))
+
+    def test_complete_verification_requires_declared_models_and_view_receipts(self):
+        self.view_project()
+        run = self.build_run()
+        metadata = wap._access(self.admin, self.admin_context)
+        original = self.record(run['id'])
+        mutations = [lambda r: r['models'].pop(1),
+            lambda r: r['models'][1].pop('_view_measurement'),
+            lambda r: r['models'][1].update(materialized='ephemeral'),
+            lambda r: r['models'][2].update(state='QUEUED'),
+            lambda r: r['models'][1].update(view_security='DEFINER')]
+        for mutate in mutations:
+            altered = json.loads(json.dumps(original))
+            mutate(altered)
+            with self.assertRaises(QueryError):
+                dbt._verify_views(metadata, altered, complete=True)
+        # Partial BUILDING verification does not require a future VIEW receipt.
+        partial = json.loads(json.dumps(original))
+        partial['state'] = 'BUILDING'
+        partial['models'][1].update(state='QUEUED', candidate=None)
+        partial['models'][1].pop('_view_measurement')
+        dbt._verify_views(metadata, partial)
+
+    def test_publication_uses_original_engineer_receipt_and_rejects_child_link_tampering(self):
+        self.view_project()
+        run = self.build_run()
+        saved = self.record(run['id'])['models'][1]['_view_measurement']
+        # The independent admin gets original E refs, with original child ownership.
+        metadata = wap._access(self.admin, self.admin_context)
+        with patch.object(metadata, '_dbt_measure_view', wraps=metadata._dbt_measure_view) as observe:
+            dbt._verify_views(metadata, self.record(run['id']), complete=True)
+        self.assertEqual(asdict(observe.call_args.args[0]), saved['ref'])
+        self.assertEqual(metadata.principal, self.admin)
+        for field, value in (('actor', self.admin.principal_id), ('context', ds._json(asdict(self.admin_context))),
+                ('result', ds._json({'view_created': True})),
+                ('result', ds._json(dict(view=dict(dbt._view_public(saved), version=999),
+                    view_digest=hashlib.sha256(ds._json(saved).encode()).hexdigest()))),
+                ('state', 'UNKNOWN')):
+            with self.subTest(field=field):
+                child_id = self.record(run['id'])['models'][1]['operation_ids'][0]
+                with control_store.connect() as db:
+                    original = db.execute('SELECT ' + field + ' FROM dataops_operations WHERE id=?', (child_id,)).fetchone()[0]
+                    db.execute('UPDATE dataops_operations SET ' + field + '=? WHERE id=?', (value, child_id))
+                self.code('DBT_VIEW_CHANGED', dbt._verify_views, metadata, self.record(run['id']), complete=True)
+                with control_store.connect() as db:
+                    db.execute('UPDATE dataops_operations SET ' + field + '=? WHERE id=?', (original, child_id))
+        with control_store.connect() as db:
+            db.execute("UPDATE dbt_run_operations SET node_id='model.other' WHERE operation_id=?", (child_id,))
+        count = len(self.w.posts)
+        publication = self.publish(run, uid='model.second')
+        self.assertEqual(publication['error_code'], 'DBT_VIEW_CHANGED', publication)
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_views_are_private_scoped_only_and_not_general_wap_inputs(self):
+        self.view_project()
+        run = self.build_run()
+        ref = dm.ResourceRef(**run['models'][1]['candidate']['ref'])
+        metadata = wap._access(self.engineer, self.context)
+        self.code('DBT_CONTINUATION_REQUIRED', metadata._dbt_read_ref, ref)
+        self.code('STALE_RESOURCE', metadata._ref, ref)
+        self.code('STALE_RESOURCE', metadata.wap_measure, ref)
+        self.code('STALE_RESOURCE', wap.save_model, self.engineer, self.context, model_id='external-view',
+            sql='SELECT id FROM v', sources={'v': ref}, target=self.b.locator('external', schema='marts'), expected_version=None)
+        execution = ds.begin(self.engineer, self.context, route='outside', idempotency_key='outside', payload={})
+        self.code('DBT_CONTINUATION_REQUIRED', execution._dbt_create_view)
+        execution.fail()
+
+    def test_view_head_drift_before_after_build_and_after_test_never_passes(self):
+        for moment in ('before_build', 'after_build', 'after_test'):
+            with self.subTest(moment=moment):
+                self.view_project()
+                plan = self.plan(key='plan-' + moment)
+                ack = dbt.submit_run(self.engineer, self.context, key=moment, plan_id=plan['id'])
+                phase, transport = dbt._phase, self.w.transport
+                def drift():
+                    view = list(v for k, v in self.b.objects.items() if k[3] == 'views')[-1]
+                    view['current-version-id'] += 1
+                    view['versions'].append(dict(view['versions'][-1], **{'version-id': view['current-version-id']}))
+                def before(*args):
+                    if args[1:4] == ('BUILDING', 'build', 'model.second') and moment == 'before_build':
+                        drift()
+                    return phase(*args)
+                def after(url, method, pin, body=None):
+                    result = transport(url, method, pin, body)
+                    sql = body.decode()
+                    if moment == 'after_build' and sql.startswith('CREATE TABLE ') or moment == 'after_test' and sql.startswith('SELECT COUNT(*)'):
+                        drift()
+                    return result
+                with patch.object(dbt, '_phase', side_effect=before), patch.object(qs, '_transport', side_effect=after):
+                    dbt._execute(ack['id'])
+                run = dbt.get_run(self.engineer, self.context, ack['id'])
+                self.assertEqual(run['state'], 'FAILED', run)
+                self.assertEqual(run['error_code'], 'DBT_VIEW_CHANGED', run)
+                self.assertFalse(any(t['state'] == 'PASSED' for t in run['tests']))
+                self.code('DBT_TEST_GATE_FAILED', dbt.submit_publication, self.admin, self.admin_context,
+                    run['id'], key='blocked-' + moment, node_id='model.second')
+
+    def test_view_saved_uuid_version_and_head_tampering_blocks_publication(self):
+        self.view_project()
+        for field, value in (('view_uuid', '00000000-0000-0000-0000-000000000000'), ('version', 2),
+                ('_head_digest', 'other'), ('security', 'DEFINER')):
+            with self.subTest(field=field):
+                run = self.build_run(key='tamper-' + field)
+                self.assertEqual(run['state'], 'READY', run)
+                self.mutate(run['id'], lambda r: r['models'][1]['_view_measurement'].update({field: value}))
+                count = len(self.w.posts)
+                publication = self.publish(run, uid='model.second', key='publish-' + field)
+                self.assertEqual(publication['state'], 'FAILED', publication)
+                self.assertEqual(publication['error_code'], 'DBT_VIEW_CHANGED')
+                self.assertEqual(len(self.w.posts), count)
+
+    def test_view_location_aba_and_security_drift_block_publication(self):
+        from contextlib import contextmanager
+        catalog = self.b.catalog
+        location = ['private-metadata-1']
+        @contextmanager
+        def with_location(database, binding):
+            with catalog(database, binding) as api:
+                def get(path):
+                    response = api(path)
+                    return dict(response, **{'metadata-location': location[0]}) if '/views/' in path else response
+                yield get
+        self.view_project()
+        with patch.object(ds.inventory, 'catalog_api', with_location):
+            run = self.build_run()
+            self.assertEqual(run['state'], 'READY', run)
+            location[0] = 'private-metadata-2'  # Same UUID/version/definition, different full head.
+            count = len(self.w.posts)
+            publication = self.publish(run, uid='model.second')
+            self.assertEqual(publication['error_code'], 'DBT_VIEW_CHANGED')
+            self.assertEqual(len(self.w.posts), count)
+            self.assertNotIn('private-metadata', json.dumps(run))
+        run = self.build_run(key='security-drift')
+        self.assertEqual(run['state'], 'READY', run)
+        self.view_metadata()['properties'] = {'trino.run-as-owner': 'true'}
+        count = len(self.w.posts)
+        publication = self.publish(run, uid='model.second', key='publish-security')
+        self.assertEqual(publication['error_code'], 'DBT_VIEW_CHANGED')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_view_postcommit_metadata_uncertainty_retains_commit_without_replay(self):
+        self.view_project()
+        original = ds.Execution._dbt_measure_view
+        def fail(execution, ref):
+            if hasattr(execution, 'id'):
+                raise QueryError('CATALOG_UNAVAILABLE', 502)
+            return original(execution, ref)
+        with patch.object(ds.Execution, '_dbt_measure_view', fail):
+            run = self.build_run()
+        self.assertEqual(run['state'], 'FAILED', run)
+        saved = self.record(run['id'])['models'][1]
+        self.assertTrue(saved['_created_view_ref'])
+        self.assertEqual(saved['state'], 'COMMITTED_RECORDING_FAILED')
+        op = ds.Execution(self.engineer, saved['operation_ids'][0]).inspect()
+        self.assertTrue(op['committed'])
+        self.assertEqual(op['cleanup_error'], 'CATALOG_UNAVAILABLE')
+        self.assertEqual(op['result'], {'view_created': True})
+        count = len(self.w.posts)
+        dbt.get_run(self.engineer, self.context, run['id'])
+        dbt.submit_run(self.engineer, self.context, key='run', plan_id=run['plan_id'])
+        self.assertEqual(len(self.w.posts), count)
+        self.assertTrue(self.view_metadata())
+
+    def test_view_lost_ack_owner_observation_and_cancel_retain_known_view(self):
+        self.view_project()
+        plan = self.plan()
+        ack = dbt.submit_run(self.engineer, self.context, key='lost-view', plan_id=plan['id'])
+        transport = self.w.transport
+        def lose(url, method, pin, body=None):
+            transport(url, method, pin, body)
+            raise OSError('response lost')
+        with patch.object(qs, '_transport', side_effect=lose):
+            dbt._execute(ack['id'])
+        run = dbt.get_run(self.engineer, self.context, ack['id'])
+        self.assertEqual(run['state'], 'UNKNOWN', run)
+        self.assertTrue(self.view_metadata())
+        count = len(self.w.posts)
+        for op in run['operations']:
+            live = ds._live.pop(op['id'], None)
+            if live:
+                live[2].close()
+        dbt.get_run(self.engineer, self.context, ack['id'])
+        dbt.submit_run(self.engineer, self.context, key='lost-view', plan_id=plan['id'])
+        dbt.cancel_run(self.engineer, self.context, run['id'], key='cancel-unknown')
+        self.assertEqual(len(self.w.posts), count)
+        self.assertTrue(self.view_metadata())
+        self.code('DBT_TEST_GATE_FAILED', dbt.submit_publication, self.admin, self.admin_context,
+            run['id'], key='no-lost-view-publish', node_id='model.second')
+
+    def test_view_cancel_after_create_retains_identity_and_sends_no_downstream_sql(self):
+        self.view_project()
+        plan = self.plan()
+        ack = dbt.submit_run(self.engineer, self.context, key='cancel-view', plan_id=plan['id'])
+        transport = self.w.transport
+        def cancel(url, method, pin, body=None):
+            result = transport(url, method, pin, body)
+            if body.decode().startswith('CREATE VIEW '):
+                dbt.cancel_run(self.engineer, self.context, ack['id'], key='cancel-created')
+            return result
+        with patch.object(qs, '_transport', side_effect=cancel):
+            dbt._execute(ack['id'])
+        run = dbt.get_run(self.engineer, self.context, ack['id'])
+        self.assertTrue(run['cancel_requested'])
+        self.assertIn(run['state'], ('CANCELED', 'UNKNOWN'))
+        self.assertEqual(len(self.w.posts), 1)
+        self.assertTrue(self.view_metadata())
+        self.assertFalse(any(t['state'] == 'PASSED' for t in run['tests']))
+        dbt.get_run(self.engineer, self.context, run['id'])
+        self.assertEqual(len(self.w.posts), 1)
+
+    def test_missing_saved_view_measurement_cannot_bypass_publication_guard(self):
+        self.view_project()
+        run = self.build_run()
+        self.assertEqual(run['state'], 'READY', run)
+        self.mutate(run['id'], lambda r: r['models'][1].pop('_view_measurement'))
+        count = len(self.w.posts)
+        publication = self.publish(run, uid='model.second')
+        self.assertEqual(publication['state'], 'FAILED', publication)
+        self.assertEqual(publication['error_code'], 'DBT_VIEW_CHANGED')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_view_owner_loss_after_known_create_is_observation_only(self):
+        self.view_project()
+        plan = self.plan()
+        ack = dbt.submit_run(self.engineer, self.context, key='owner-view', plan_id=plan['id'])
+        complete = ds.Execution.complete
+        def stop(execution, result=None):
+            if execution._row()['route'] == 'dbt-view-create':
+                raise SystemExit('owner exited after SQL and metadata observation')
+            return complete(execution, result)
+        with patch.object(ds.Execution, 'complete', stop), self.assertRaises(SystemExit):
+            dbt._execute(ack['id'])
+        saved = self.record(ack['id'])['models'][1]
+        self.assertTrue(saved['_created_view_ref'])
+        self.assertTrue(self.view_metadata())
+        for op in saved['operation_ids']:
+            live = ds._live.pop(op, None)
+            if live:
+                live[2].close()
+        count = len(self.w.posts)
+        run = dbt.get_run(self.engineer, self.context, ack['id'])
+        self.assertNotEqual(run['state'], 'READY', run)
+        dbt.submit_run(self.engineer, self.context, key='owner-view', plan_id=plan['id'])
+        dbt.get_run(self.engineer, self.context, ack['id'])
+        self.assertEqual(len(self.w.posts), count)
+        self.assertEqual(count, 1)
+        self.code('DBT_TEST_GATE_FAILED', dbt.submit_publication, self.admin, self.admin_context,
+            run['id'], key='no-owner-publish', node_id='model.second')
+
+    def test_initial_view_definition_substitution_is_not_adopted(self):
+        self.view_project()
+        transport = self.w.transport
+        def replace_definition(url, method, pin, body=None):
+            result = transport(url, method, pin, body)
+            if body.decode().startswith('CREATE VIEW '):
+                self.view_metadata()['versions'][0]['representations'][0]['sql'] = 'SELECT 99 AS id'
+            return result
+        with patch.object(qs, '_transport', side_effect=replace_definition):
+            run = self.build_run()
+        self.assertEqual(run['state'], 'FAILED', run)
+        self.assertEqual(run['error_code'], 'DBT_VIEW_CHANGED')
+        self.assertEqual(run['models'][1]['state'], 'COMMITTED_RECORDING_FAILED')
+        self.assertEqual(len(self.w.posts), 1)
+        self.assertFalse(any(t['state'] == 'PASSED' for t in run['tests']))
+
+    def test_view_action_validates_saved_child_request_before_sql(self):
+        self.view_project()
+        create = ds.Execution._dbt_create_view
+        for field, value in (('route', 'outside'), ('payload', '{}'), ('fingerprint', 'forged')):
+            with self.subTest(field=field):
+                def tamper(execution):
+                    with control_store.connect() as db:
+                        db.execute('UPDATE dataops_operations SET ' + field + '=? WHERE id=?', (value, execution.id))
+                    return create(execution)
+                before = len(self.w.posts)
+                with patch.object(ds.Execution, '_dbt_create_view', tamper):
+                    run = self.build_run(key='intent-' + field)
+                self.assertEqual(run['state'], 'FAILED', run)
+                self.assertEqual(run['error_code'], 'DBT_CONTINUATION_REQUIRED')
+                self.assertEqual(len(self.w.posts), before)
+
+    def test_c1_explicit_table_plan_still_admitted_with_original_properties(self):
+        plan = self.plan()
+        def c1(record):
+            record['compatibility']['version'] = 1
+            record['_plan_digest'] = dbt._hash_plan(record)
+        self.mutate(plan['id'], c1)
+        run = self.build_run(plan)
+        self.assertEqual(run['state'], 'READY', run)
+        publication = self.publish(run)
+        self.assertEqual(publication['state'], 'PUBLISHED')
+        before = len(self.w.posts)
+        self.assertEqual(dbt.submit_run(self.engineer, self.context, key='run', plan_id=plan['id']),
+            dbt.get_run(self.engineer, self.context, run['id']))
+        self.assertEqual(dbt.submit_publication(self.admin, self.admin_context, run['id'],
+            key='publish', node_id='model.first'), publication)
+        self.assertEqual(len(self.w.posts), before)
+        self.assertTrue(all("WITH (format='PARQUET')" in sql for sql, _ in self.w.posts if sql.startswith('CREATE ')))
+
     def test_general_two_model_workflow_and_independent_admin_publication(self):
         run = self.build_run()
         self.assertEqual(run['state'], 'READY', run)
@@ -157,7 +583,7 @@ class DbtTests(unittest.TestCase):
         self.assertFalse(any('WITH (format=' in sql for sql, _ in self.w.posts))
 
     def test_compile_blocked_contract_is_saved_without_admission_or_children(self):
-        cases = [('model', {'materialized': 'view'}, 'UNSUPPORTED_MATERIALIZATION'),
+        cases = [('model', {'materialized': 'view', 'view_security': 'definer'}, 'UNSUPPORTED_VIEW_SECURITY'),
             ('model', {'materialized': 'table', 'properties': {'format': "'ORC'"}}, 'UNSUPPORTED_TABLE_PROPERTIES'),
             ('model', {'materialized': 'table', 'on_table_exists': 'drop'}, 'UNSUPPORTED_MODEL_CONFIG'),
             ('test', {'severity': 'warn'}, 'UNSUPPORTED_TEST_CONFIG')]

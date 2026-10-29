@@ -4,8 +4,8 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-29
-version: "7.7.0"
+updated: 2026-10-30
+version: "7.8.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-30 — DB-P6-3C2A sandbox INVOKER VIEWs
+
+- Added actual run-specific VIEWs with TABLE snapshot pins, separate VIEW identity/head receipts, before/after dependency checks and TABLE-only admin publication. See the [contract and evidence](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md).
+- Live API/CLI/UI checks passed, including two-database test failure, metadata failure, cancellation, head mutation and abrupt owner death without SQL replay. Only same-catalog SANDBOX CreateView was added for scoped admin; credentials, grants and original data were preserved. Technical acceptance passed: 3,219 Python tests with 34 optional skips, Go and design checks.
+- Standard dbt executor, VIEW chains/formal VIEW publication, full DB-P6-3 and M1 owner acceptance remain open.
 
 ### 2026-10-29 — DB-P6-3C1 SQL/WAP configuration compatibility
 

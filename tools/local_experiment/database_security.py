@@ -191,6 +191,15 @@ allow if {
     input.action.resource.table.tableName != ""
 }
 
+allow if {
+    catalog := scoped_admin_catalogs[input.context.identity.user]
+    input.action.operation == "CreateView"
+    input.action.resource.table.catalogName == catalog
+    input.action.resource.table.schemaName == "sandbox"
+    is_string(input.action.resource.table.tableName)
+    input.action.resource.table.tableName != ""
+}
+
 # Catalog-local metadata reads support normal schema discovery and verification.
 # They confer no metadata write, system catalog, or other database authority.
 allow if {
