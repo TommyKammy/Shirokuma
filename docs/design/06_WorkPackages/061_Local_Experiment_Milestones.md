@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-29
-version: "7.4.0"
+version: "7.5.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-29 — DB-P6-3A dbt compile and WAP feasibility
+
+- Added a private offline SQL compiler and exact same-DB relation bindings, with table/ephemeral support and unchanged legacy defaults. See the [feasibility record](../../guides/database-p6-3a-dbt-feasibility-2026-10-29.md).
+- Two dedicated databases each built two WAP candidates and passed all seven compiled tests; explicit audit/publication preserved separate values. A failing accepted-values test left published snapshot lists and values unchanged.
+- Continue with DB-P6-3B durable runs, server-enforced test gates and normal API/CLI/UI. Native dbt build, view materialization and M1 acceptance remain open.
 
 ### 2026-10-29 — DB-P6-2 shared LOCAL lifecycle — technically accepted
 

@@ -1,8 +1,8 @@
 version: 2
 sources:
   - name: tpch_tiny
-    database: iceberg
-    schema: tpch_tiny
+    database: "{{ var('shirokuma_source_database', 'iceberg') }}"
+    schema: "{{ var('shirokuma_source_schema', 'tpch_tiny') }}"
     tables:
       - name: orders
       - name: customer

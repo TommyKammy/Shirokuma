@@ -6,7 +6,7 @@ model-paths: ['models']
 models:
   shirokuma_lake_marts:
     staging:
-      +materialized: view
+      +materialized: "{{ var('shirokuma_staging_materialization', 'view') }}"
       +schema: staging
     marts:
       +materialized: table

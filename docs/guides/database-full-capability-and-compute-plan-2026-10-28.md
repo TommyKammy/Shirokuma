@@ -32,7 +32,7 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 | 自動休止・自動復帰 | `logical_v1`の既存server lifecycleと共通SQL経路へ接続。技術受入は完了、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 元intent・現在権限・admissionを維持し、queued取消とUNKNOWNを保護。未接続dbt／AIは後続 |
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
-| データ変換 | 手動WAP・管理MartはDB対応済み。旧dbt profileは`iceberg`固定 | 既存操作を保ち、dbt実行を共通境界へ接続する |
+| データ変換 | 手動WAP・管理MartはDB対応済み。旧dbt実行は`iceberg`固定。DB-P6-3Aでoffline compileと2DBのWAP接続を先行実証 | 次のDB-P6-3Bで耐久run・test gate・通常導線へ統合する |
 | AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview、Bears／Copilotは未接続 | telemetryと耐久監査を分離。AIはDB-P6-4で認可／WAPへ接続する |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
@@ -121,6 +121,8 @@ Auto-Chillは画面の有無に依存しない既存server lifecycleへ統合す
 UIは受付・起動中・利用可能・停止中・失敗を表示し、通常の起動待ち時間と次の操作を案内する。休止はVM／storage停止と区別する。cold startの`SELECT 1`とwarm queryの受付overheadを別計測し、提案予算は各30回の標本p95でcold 30秒以内、warm追加250ms以内とする。DB-P6-0で現環境baselineと条件を固定し、目標変更は理由を記録する。
 
 ### DB-P6-3 データ変換とdbt
+
+2026-10-29：[DB-P6-3Aの先行実証](database-p6-3a-dbt-feasibility-2026-10-29.md)で、資格情報なしのoffline compile、2DBの候補・各7 test・明示WAP公開とtest失敗時の公開先保全を確認した。table／ephemeralだけを候補とし、viewや標準dbt build executorを対応済みとしない。続くDB-P6-3Bで耐久run・版固定・サーバー側test gate・通常API／CLI／UIと故障時の受入を扱い、DB-P6-3全体は未完了とする。
 
 手動WAPと管理Martを既存の基準動作として残し、信頼するローカルprojectのモデル一覧・compile・build／test・結果・lineageをDatabase対応へ移す。`iceberg`固定profile、暗黙Schema作成、管理者credentialへのfallbackを除く。最初はSQLモデルと明示したmaterializationを対象とし、Pythonモデル・任意shell・外部package実行は含めない。
 
@@ -256,7 +258,7 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 
-DB-P6-0の機能棚卸し・表示契約とDB-P6-1の保存metadata監査は技術受入済みである。現在のDB-P6-2は技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。次のunitは**DB-P6-3**のdbt先行実証とする。Bears／Copilot・SRE／Policy、残る探索操作、実サイズ変更と用途別Warehouseは各後続unitへ残す。M1の全必須行の対応と本人受入は未完了である。
+DB-P6-0の機能棚卸し・表示契約とDB-P6-1の保存metadata監査は技術受入済みである。DB-P6-2は技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒、30回すべて成功）。現在のunitは**DB-P6-3A**のdbt先行実証であり、次は**DB-P6-3B**の耐久runと通常導線への統合を進める。Bears／Copilot・SRE／Policy、残る探索操作、実サイズ変更と用途別Warehouseは各後続unitへ残す。M1の全必須行の対応と本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 
