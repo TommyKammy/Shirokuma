@@ -60,3 +60,5 @@ generic DataOps／WAP HTTPでもVIEW測定値の非公開digestを除去する�
 `make verify-local-experiment PYTHON=tools/local_experiment/dataops/.venv/bin/python3`はexit 0、83 recipe・3,253件中3,219成功・34 skip・失敗0だった。標準PythonにYAML依存がなく途中停止した初回ログと、worker／focusedの重複件数は合算していない。最終HTTP境界23件・dbt画面45件、Go、design-context、差分・衛生チェックも成功。doctorは作業前後ともhealthyで、通常native SQL protocolのSELECTも別に成功した。
 
 実機のCREATE後owner停止と、fixtureで検証した未閉鎖queryのUNKNOWN／ACK喪失は区別し、実機UNKNOWNを実施したとは扱わない。標準executor／VIEW連鎖・正式VIEW公開とM1本人受入は引き続き後続である。
+
+同日の[C2B1](database-p6-3c2b-native-materialization-2026-10-30.md)では、標準TABLE macroとDataOps childの接続を新規SANDBOX候補で実証した。通常RunTask／native VIEWの対応ではなく、C2Aのv2 SQL/WAP実行とVIEW契約は保持する。

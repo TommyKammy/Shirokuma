@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-30
-version: "2.8.0"
+version: "2.9.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -23,7 +23,7 @@ tags: [shirokuma, local, handoff, gates]
 後続計画は[Databaseコア機能統合とコンピュート拡張](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を参照する。DB作成導線は[本人の条件付き受入](../../guides/database-logical-create-owner-acceptance-2026-10-28.md)に進み、待ち時間改善を継続する。
 2026-10-29、DB-P6-0の[表示契約](../../guides/database-p6-0-implementation-2026-10-29.md)、DB-P6-1の[保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
 [DB-P6-2の共有LOCAL管理](../../guides/database-p6-2-implementation-2026-10-29.md)は実装済み、技術受入は完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。read-only UNKNOWNは結果を変えず実行閉鎖・OPENまで照合し、元の138 DB／552 Schemaとbindingを保持した。
-[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)と[C1設定互換性](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)は技術受入済み。[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)でrun専用SANDBOX INVOKER VIEW・版照合・下流TABLE／testを実装し、通常API／CLI／画面と実owner停止まで実機確認した。この範囲の技術受入を完了した。次は標準dbt executorの型付き操作契約と実証を進め、正式VIEW公開の権限は別に設計する。DB-P6-3全体、Bears／SRE／Policy、実サイズ／multi-WarehouseとM1本人受入は未完了である。
+[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)は技術受入済み。[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)で、installed標準TABLE macroを既存DataOps childへ接続し、新規SANDBOX候補の実機確認を完了した。この限定した接続実証の技術受入を完了した。private ModelRunner実証として扱い、通常RunTask／native test・置換と通常導線への接続は後続とする。DB-P6-3全体、Bears／SRE／Policy、実サイズ／multi-WarehouseとM1本人受入は未完了である。
 DB-P7〜9は後続計画であり、下表の旧PhaseのCompletedから新Database対応・実サイズ変更・用途別Warehouseの完了を推定しない。
 
 | Phase / WP | Gate Objective | Current Status |

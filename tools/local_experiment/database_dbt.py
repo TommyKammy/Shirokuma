@@ -11,6 +11,7 @@ Local project macros are trusted code, not an upload security boundary. External
 packages, custom materializations and SQL-executing custom macros are outside the
 supported subset. This module provides no execution, credentials or runtime API.
 """
+from contextlib import contextmanager
 import hashlib
 import importlib.metadata
 import json
@@ -423,7 +424,8 @@ def _validate_relation(relation, catalog):
         _fail('INVALID_RELATION', 'exact current-catalog non-system relation required')
 
 
-def compile_project(project, *, catalog, source_schema, staging_materialization=None):
+@contextmanager
+def _compiled_project(project, *, catalog, source_schema, staging_materialization=None):
     """Compile copied trusted SQL sources with installed dbt and return JSON data.
 
     No runtime profile is read. A mode-0600 dummy localhost:9/no-auth profile,
@@ -471,8 +473,10 @@ def compile_project(project, *, catalog, source_schema, staging_materialization=
         env = {'PATH': str(dbt.parent) + os.pathsep + '/usr/bin:/bin',
                'HOME': str(work), 'TMPDIR': str(work), 'LANG': 'en_US.UTF-8',
                'DBT_SEND_ANONYMOUS_USAGE_STATS': 'false', 'DO_NOT_TRACK': '1',
+               'PYTHON_DOTENV_DISABLED': '1',
                'DBT_PROFILES_DIR': str(profiles)}
         command = [str(dbt), 'compile', '--project-dir', str(copied),
+                   '--profile', 'offline', '--target', 'offline',
                    '--profiles-dir', str(profiles), '--target-path', str(work / 'target'),
                    '--log-path', str(work / 'logs'), '--no-introspect',
                    '--no-populate-cache', '--no-partial-parse', '--threads', '1',
@@ -492,4 +496,11 @@ def compile_project(project, *, catalog, source_schema, staging_materialization=
         summary['versions'] = {'dbt': manifest.get('metadata', {}).get('dbt_version'),
                                'dbt_trino': importlib.metadata.version('dbt-trino'),
                                'sqlglot': importlib.metadata.version('sqlglot')}
-        return summary
+        yield summary, manifest, command, env
+
+
+def compile_project(project, *, catalog, source_schema, staging_materialization=None):
+    """Compile trusted copied sources offline; return only the validated summary."""
+    with _compiled_project(project, catalog=catalog, source_schema=source_schema,
+                           staging_materialization=staging_materialization) as artifacts:
+        return artifacts[0]

@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-30
-version: "7.8.0"
+version: "7.9.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-30 — DB-P6-3C2B1 native TABLE materialization bridge
+
+- Added a private installed ModelRunner/TABLE macro callback into existing DataOps children for one fresh SANDBOX candidate. See the [scope and proof](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md).
+- Real E/A and two-database candidates, pinned source after append, target rejection, post-CREATE failure/cancel and abrupt owner recovery passed without replay; credentials, policy and original data stayed unchanged. Technical proof acceptance passed: 3,244 Python tests with 34 existing skips, Go and design checks.
+- This proves native materialization only. Standard RunTask/schema/cache/graph, native tests, replacement and normal API/CLI/UI exposure remain separate; full DB-P6-3 and M1 owner acceptance stay open.
 
 ### 2026-10-30 — DB-P6-3C2A sandbox INVOKER VIEWs
 
