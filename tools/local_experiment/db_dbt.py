@@ -25,6 +25,7 @@ import warehouse_admission as admission
 _live = {}
 _ACTIVE = {'QUEUED', 'BUILDING', 'TESTING', 'AUDITING', 'PUBLISHING', 'CANCELING', 'COMPILING'}
 _REPO = Path(__file__).resolve().parents[2]
+_UNREVIEWED = object()
 
 
 def _access(principal, context, *, admin=False):
@@ -110,6 +111,12 @@ def _authorized(db, principal, context, ident, kind=None):
 
 def _public(db, record):
     result = {k: v for k, v in record.items() if not k.startswith('_')}
+    if record.get('executor') == 'native_table' and record['kind'] == 'run':
+        try:
+            _native_publication_gate(db, record, record['selected_node_id'])
+            result['publication_allowed'] = True
+        except (QueryError, KeyError, TypeError, ValueError):
+            result['publication_allowed'] = False
     links = [dict(id=r['operation_id'], phase=r['phase'], node_id=r['node_id'], state=r['state'],
         committed=bool(r['committed'])) for r in db.execute('SELECT l.*,o.state,o.committed FROM dbt_run_operations l '
             'JOIN dataops_operations o ON o.id=l.operation_id WHERE l.run_id=? ORDER BY l.rowid', (record['id'],))]
@@ -516,6 +523,14 @@ def _check_operation(db, operation_id):
         _source_identities(db, _check_plan(db, source))
         if run['kind'] == 'publication':
             _gate(db, source, link['node_id'], publication=run['id'])
+            if run.get('origin') == 'native_table':
+                _native_publisher(db, principal=live[0], context=live[1], run=source)
+                if (link['phase'] not in ('audit', 'publish') or link['node_id'] != run['node_id']
+                        or op['route'] != 'dbt-native-' + link['phase']
+                        or op['payload'] != ds._json(dict(payload=_native_child_payload(run, link['phase']), context=run['context']))):
+                    raise QueryError('DBT_NATIVE_CHILD_INVALID', 409)
+                if link['phase'] == 'publish' and _native_audit_saved(db, run) is None:
+                    raise QueryError('AUDIT_MISMATCH', 409)
 
 
 def _before_query(operation_id, principal, context):
@@ -527,7 +542,13 @@ def _before_query(operation_id, principal, context):
         _, run = _row(db, link['run_id'])
         source = _row(db, run['parent_run_id'])[1] if run['kind'] == 'publication' else run
         plan = _check_plan(db, source)
+        sent = db.execute('SELECT 1 FROM dataops_queries d JOIN query_execution_contexts e ON e.query_id=d.query_id '
+            "WHERE d.operation_id=? AND e.backend_query_id IS NOT NULL AND e.backend_query_id<>''", (operation_id,)).fetchone()
     metadata = _access(principal, context)
+    if run.get('origin') == 'native_table' and not sent:
+        # This is the final initial send (after wake). Once accepted by Trino,
+        # polling must be able to observe our own write changing the target.
+        _native_publication_live(metadata, run)
     if source.get('executor') != 'native_table':
         _verify_views(metadata, source, complete=run['kind'] == 'publication')
     for binding in plan['source_bindings']:
@@ -814,7 +835,7 @@ def _test_select(execution):
 
 def _gate(db, run, node_id, publication=None):
     if run.get('executor') == 'native_table':
-        raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
+        return _native_publication_gate(db, run, node_id, publication)
     plan = _check_plan(db, run)
     expected = {t['unique_id'] for t in plan['tests']}
     actual = [t['unique_id'] for t in run['tests']]
@@ -892,23 +913,192 @@ def _guard(principal, context, action, *, model_id=None, build=None):
                 raise QueryError('DBT_CANDIDATE_CHANGED', 409)
 
 
-def submit_publication(principal, context, run_id, *, key, node_id):
-    _access(principal, context, admin=True)
+def _native_publication_gate(db, run, node_id, publication=None):
+    """Saved native evidence, never manual-WAP artifacts or live catalog calls."""
+    if (run['kind'] != 'run' or run.get('executor') != 'native_table'
+            or run['state'] != 'NATIVE_VERIFIED' or run.get('native_verified') is not True
+            or run.get('native_tests') is not True or run.get('tests_status') != 'PASSED'
+            or run['cancel_requested'] or not run['tests']
+            or any(t['state'] != 'PASSED' or type(t['failure_count']) is not int
+                or t['failure_count'] != 0 for t in run['tests'])):
+        raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
+    plan = _check_plan(db, run)
+    if len(run['models']) != 1 or node_id != run['selected_node_id']:
+        raise QueryError('DBT_NODE_NOT_FOUND', 404)
+    model = run['models'][0]
+    if (model['unique_id'] != node_id or model['materialized'] != 'table'
+            or model['state'] != 'NATIVE_VERIFIED'):
+        raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
+    ids = model.get('operation_ids', [])
+    proof = _native_saved(db, run, ids[0]) if len(ids) == 1 else None
+    if proof is None or not _native_quality_saved(db, run, proof):
+        raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
+    if model.get('publication_id') and model['publication_id'] != publication:
+        raise QueryError('DBT_PUBLICATION_EXISTS', 409)
+    target = plan['_targets'][node_id]
+    schema = registry.get_schema(db, target['schema_id'])
+    sandbox = registry.get_schema(db, run['context']['schema_id'])
+    if (schema is None or schema.database_id != run['context']['database_id']
+            or target['database_id'] != schema.database_id or schema.purpose != 'marts'
+            or sandbox is None or sandbox.purpose != 'sandbox'
+            or sandbox.sql_name != 'sandbox'):
+        raise QueryError('DBT_NATIVE_TARGET_FORBIDDEN', 409)
+    return model, proof
+
+
+def _native_publisher(db, principal, context, run):
+    revalidate_admission(db, principal, context)
+    if context.selected_role != 'admin':
+        raise QueryError('SQL_PERMISSION_DENIED', 403)
+    if any(v != asdict(context)[k] for k, v in run['context'].items()
+            if k not in ('selected_role', 'grant_revision')):
+        raise QueryError('CONTEXT_MISMATCH', 409)
+    # Validate the source's current authority without capturing/reusing its credentials.
+    account = ds.request_auth._principal_accounts().get(run['actor'])
+    if account is None:
+        raise QueryError('DB_ACCESS_REVOKED', 403)
+    actor = ds.request_auth.AuthenticatedPrincipal(run['actor'], account['role'], account['platform_admin'])
+    ids = run['models'][0]['operation_ids']
+    op = db.execute('SELECT backend_username FROM dataops_operations WHERE id=?', (ids[0],)).fetchone()
+    revalidate_admission(db, actor, ResolvedQueryContext(**run['context']), backend_username=op['backend_username'])
+
+
+def _native_target(destination):
+    return (registry.ResourceRef(**destination) if 'object_id' in destination
+        else registry.DestinationLocator(**destination))
+
+
+def _native_review(metadata, proof, destination):
+    if metadata.wap_measure(registry.ResourceRef(**proof['candidate']['ref'])) != proof['candidate']:
+        raise QueryError('DBT_CANDIDATE_CHANGED', 409)
+    target = _native_target(destination)
+    if type(target) is registry.ResourceRef:
+        with control_store.connect() as db:
+            obj = registry.get_object(db, target.object_id)
+        if obj is None or not obj.current or obj.incarnation != target.incarnation:
+            raise QueryError('STALE_RESOURCE', 409)
+        measured = metadata.wap_measure(target)
+    else:
+        metadata._absent(target)  # Both TABLE and VIEW; never adopt a new object.
+        measured = None
+    return dict(version=1, destination=destination, target=measured)
+
+
+def _native_descriptor(expected, destination):
+    """Strict JSON descriptor; measurements are compared whole, without coercion."""
+    if (not isinstance(expected, dict) or set(expected) != {'version', 'destination', 'target'}
+            or type(expected['version']) is not int or expected['version'] != 1
+            or ds._json(expected['destination']) != ds._json(destination)):
+        raise QueryError('DBT_PUBLICATION_REVIEW_REQUIRED', 400)
+    target = expected['target']
+    if 'object_id' in destination:
+        if (not isinstance(target, dict) or set(target) != {'ref', 'snapshot', 'schema_id', 'columns', 'schema_fingerprint'}
+                or ds._json(target['ref']) != ds._json(destination) or not isinstance(target['snapshot'], str)
+                or not re.fullmatch('[0-9]+', target['snapshot']) or type(target['schema_id']) is not int
+                or target['schema_id'] < 0 or not isinstance(target['columns'], list) or not target['columns']
+                or not isinstance(target['schema_fingerprint'], str)
+                or not re.fullmatch('[0-9a-f]{64}', target['schema_fingerprint'])
+                or any(not isinstance(c, dict) or set(c) != {'name', 'type'}
+                    or not isinstance(c['name'], str) or not c['name'] or not isinstance(c['type'], (str, dict))
+                    for c in target['columns'])):
+            raise QueryError('DBT_PUBLICATION_REVIEW_REQUIRED', 400)
+    elif target is not None:
+        raise QueryError('DBT_PUBLICATION_REVIEW_REQUIRED', 400)
+    try:
+        ds._json(expected)
+    except (ValueError, TypeError):
+        raise QueryError('DBT_PUBLICATION_REVIEW_REQUIRED', 400) from None
+
+
+def get_publication_preview(principal, context, run_id, *, node_id):
+    metadata = _access(principal, context, admin=True)
+    with control_store.connect() as db:
+        run = _authorized(db, principal, context, run_id, 'run')
+        _, proof = _native_publication_gate(db, run, node_id)
+        _native_publisher(db, principal, context, run)
+        plan = _check_plan(db, run)
+        destination = plan['_targets'][node_id]
+        schema = registry.get_schema(db, destination['schema_id'])
+        node = next(m for m in plan['models'] if m['unique_id'] == node_id)
+        target = dict(catalog=context.sql_catalog, schema=schema.sql_name, name=node['relation'][2])
+    expected = _native_review(metadata, proof, destination)
+    return dict(version=1, origin='native_table', run_id=run_id, plan_id=run['plan_id'], node_id=node_id,
+        source_digest=run['source_digest'], context=asdict(context), source_actor=run['actor'],
+        publisher_actor=principal.principal_id, source_context=run['context'], candidate=proof['candidate'],
+        quality=dict(status='PASSED', count=len(run['tests']), test_ids=[t['unique_id'] for t in run['tests']]),
+        target=target, expected_target=expected)
+
+
+def _native_intent(run, node_id, proof, expected, context, actor):
+    return dict(origin='native_table', run_id=run['id'], plan_id=run['plan_id'], node_id=node_id,
+        source_digest=run['source_digest'], plan_digest=run['_plan_digest'], source_actor=run['actor'],
+        source_context=run['context'], build_operation_id=run['models'][0]['operation_ids'][0],
+        build=proof, candidate=proof['candidate'], quality=[t['native_receipt'] for t in run['tests']],
+        expected_target=expected, audit_policy=dict(min_rows=1), context=asdict(context), publisher_actor=actor)
+
+
+def _native_publication_live(metadata, publication):
+    with control_store.connect() as db:
+        source = _row(db, publication['parent_run_id'])[1]
+        _, proof = _native_publication_gate(db, source, publication['node_id'], publication['id'])
+        _native_publisher(db, metadata.principal, metadata._context(), source)
+        destination = _check_plan(db, source)['_targets'][publication['node_id']]
+        if publication['_native_intent'] != _native_intent(source, publication['node_id'], proof,
+                publication['expected_target'], metadata._context(), metadata.principal.principal_id):
+            raise QueryError('DBT_NATIVE_PUBLICATION_INVALID', 409)
+    actual = _native_review(metadata, proof, destination)
+    if actual != publication['expected_target']:
+        raise QueryError('TARGET_CHANGED', 409)
+
+
+def submit_publication(principal, context, run_id, *, key, node_id, expected_target=_UNREVIEWED):
+    metadata = _access(principal, context, admin=True)
     route = '/api/v1/dbt/runs/' + run_id + '/publish'
-    payload = ds._json(dict(context=asdict(context), node_id=node_id))
+    body = dict(context=asdict(context), node_id=node_id)
+    if expected_target is not _UNREVIEWED:
+        body['expected_target'] = expected_target
+    payload = ds._json(body)
     with control_store.connect() as db:
         run = _authorized(db, principal, context, run_id, 'run')
         replay = _request(db, principal, context, route, key, payload)
         if replay:
             return replay
-        model, _ = _gate(db, run, node_id)
+        model, proof = _gate(db, run, node_id)
+        native = run.get('executor') == 'native_table'
+        if native:
+            _native_publisher(db, principal, context, run)
+            destination = _check_plan(db, run)['_targets'][node_id]
+            _native_descriptor(expected_target, destination)
+        elif expected_target is not _UNREVIEWED:
+            raise QueryError('DBT_PUBLICATION_REVIEW_UNEXPECTED', 400)
+    if native:
+        try:
+            if _native_review(metadata, proof, destination) != expected_target:
+                raise QueryError('TARGET_CHANGED', 409)
+        except QueryError as error:
+            if error.code not in ('DBT_CANDIDATE_CHANGED', 'STALE_RESOURCE', 'DESTINATION_EXISTS',
+                    'TARGET_CHANGED', 'SNAPSHOT_REQUIRED', 'SCHEMA_REQUIRED'):
+                raise
+            raise QueryError('DBT_PUBLICATION_REVIEW_CHANGED', 409) from None
+        except inventory.InventoryError as error:
+            if error.status != 404:
+                raise
+            raise QueryError('DBT_PUBLICATION_REVIEW_CHANGED', 409) from None
     record = _base(principal, context, 'publication', run)
     record.update(run_id=run_id, parent_run_id=run_id, plan_id=run['plan_id'], _plan_digest=run['_plan_digest'],
-        node_id=node_id, build_id=model['build_id'], audit_id=None, publication_id=None,
+        node_id=node_id, build_id=model.get('build_id'), audit_id=None, publication_id=None,
         _phase=None, _node_id=node_id, committed=False)
+    if native:
+        record.update(origin='native_table', expected_target=expected_target,
+            _native_intent=_native_intent(run, node_id, proof, expected_target, context, principal.principal_id))
     def check(db):
         current = _authorized(db, principal, context, run_id, 'run')
-        selected, _ = _gate(db, current, node_id)
+        selected, current_proof = _gate(db, current, node_id)
+        if native:
+            _native_publisher(db, principal, context, current)
+            if record['_native_intent'] != _native_intent(current, node_id, current_proof,
+                    expected_target, context, principal.principal_id):
+                raise QueryError('DBT_NATIVE_PUBLICATION_INVALID', 409)
         selected['publication_id'] = record['id']
         _write(db, current)
     return _accept(principal, context, route, key, payload, record, check)
@@ -1287,9 +1477,222 @@ def _build_run(ident, principal, context, parent, frozen, credential):
         _write(db, run)
 
 
+def _native_child_payload(publication, phase):
+    return dict(publication_id=publication['id'], phase=phase, intent=publication['_native_intent'])
+
+
+def _native_execution_intent(execution, phase):
+    """No caller data: resolve only an admitted, owned, exact phase continuation."""
+    scope = ds._dbt.get()
+    if scope is None or scope[6] != phase:
+        raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+    with control_store.connect() as db:
+        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        _check_operation(db, execution.id)
+        link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
+        publication = _row(db, scope[5])[1]
+        if (publication.get('origin') != 'native_table' or publication['kind'] != 'publication'
+                or link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]):
+            raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+        if phase == 'publish' and _native_audit_saved(db, publication) is None:
+            raise QueryError('AUDIT_MISMATCH', 409)
+    _native_publication_live(execution, publication)
+    return publication
+
+
+def _native_child_saved(db, publication, phase):
+    """Exact closed child/query lineage, independent of subsequent catalog heads."""
+    from db_marts import _closed_child
+    ops = list(db.execute('SELECT o.*,l.node_id FROM dataops_operations o JOIN dbt_run_operations l '
+        'ON l.operation_id=o.id WHERE l.run_id=? AND l.phase=?', (publication['id'], phase)))
+    if len(ops) != 1:
+        return None
+    op = ops[0]
+    payload = ds._json(dict(payload=_native_child_payload(publication, phase), context=publication['context']))
+    parent = _row(db, publication['id'])[0]
+    child = db.execute("SELECT * FROM warehouse_admissions WHERE kind='dataops' AND subject_id=?", (op['id'],)).fetchone()
+    if (op['route'] != 'dbt-native-' + phase or op['node_id'] != publication['node_id']
+            or op['state'] != 'FINISHED' or phase == 'audit' and op['cleanup_error']
+            or bool(op['committed']) != (phase == 'publish')
+            or op['actor'] != publication['actor'] or json.loads(op['context']) != publication['context']
+            or op['payload'] != payload or op['fingerprint'] != hashlib.sha256(payload.encode()).hexdigest()
+            or child is None or child['parent_id'] != parent['admission_id'] or child['actor'] != publication['actor']
+            or child['state'] != 'FINISHED' or not _closed_child(db, op['id'])):
+        return None
+    rows = list(db.execute('SELECT d.step,d.action,d.commit_result,q.*,e.* FROM dataops_queries d '
+        'JOIN query_records q ON q.id=d.query_id JOIN query_execution_contexts e ON e.query_id=q.id '
+        'WHERE d.operation_id=?', (op['id'],)))
+    if len(rows) != 1:
+        return None
+    query = rows[0]
+    if (query['step'] != phase or query['action'] != 'wap_' + phase or query['state'] != 'FINISHED'
+            or not query['backend_query_id'] or not query['backend_query_id'].strip()
+            or query['actor'] != publication['actor'] or query['mode'] != 'dataops'
+            or query['request_id'] != op['id'] or query['worksheet_id'] != phase
+            or any(query[k] != v for k, v in publication['context'].items())
+            or query['backend_username'] != op['backend_username']
+            or query['credential_snapshot_ref'] != op['credential_snapshot_ref']):
+        return None
+    intent = publication['_native_intent']
+    candidate = intent['candidate']
+    locator = intent['build']['candidate_locator']
+    source = '.'.join(ds._identifier(n) for n in (publication['context']['sql_catalog'],
+        publication['context']['sql_schema'], locator['physical_name']))
+    source += ' FOR VERSION AS OF ' + candidate['snapshot']
+    if phase == 'audit':
+        sql = 'SELECT COUNT(*) FROM ' + source
+    else:
+        destination = publication['expected_target']['destination']
+        schema = registry.get_schema(db, destination['schema_id'])
+        if 'object_id' in destination:
+            original = db.execute('SELECT * FROM object_bindings WHERE id=?', (destination['object_id'],)).fetchone()
+            if original is None or original['incarnation'] != destination['incarnation']:
+                return None
+            name, prefix = original['physical_name'], 'CREATE OR REPLACE TABLE '
+        else:
+            name, prefix = destination['physical_name'], 'CREATE TABLE '
+        target = '.'.join(ds._identifier(n) for n in (publication['context']['sql_catalog'], schema.sql_name, name))
+        sql = prefix + target + " WITH (format='PARQUET') AS SELECT " + ', '.join(
+            ds._column(c['name']) for c in candidate['columns']) + ' FROM ' + source
+    if query['sql'] != sql:
+        return None
+    return op, query, json.loads(op['result'] or '{}')
+
+
+def _native_audit_saved(db, publication):
+    try:
+        saved = _native_child_saved(db, publication, 'audit')
+        if saved is None:
+            return None
+        op, query, result = saved
+        receipt = result['audit']
+        expected = dict(id=publication['audit_id'], origin='native_table', publication_id=publication['id'],
+            intent=publication['_native_intent'], operation_id=op['id'], query_id=query['id'],
+            count=receipt['count'], passed=True)
+        if (type(receipt['count']) is not int or receipt['count'] < 1 or receipt.get('passed') is not True or receipt != expected
+                or result != dict(audit_id=receipt['id'], audit=receipt)
+                or publication.get('native_audit') != receipt or query['commit_result'] is not None):
+            return None
+        return receipt
+    except (KeyError, TypeError, ValueError, QueryError):
+        return None
+
+
+def _native_publication_saved(db, publication):
+    try:
+        links = list(db.execute('SELECT phase,node_id FROM dbt_run_operations WHERE run_id=?', (publication['id'],)))
+        if sorted((r['phase'], r['node_id']) for r in links) != [('audit', publication['node_id']), ('publish', publication['node_id'])]:
+            return None
+        saved = _native_child_saved(db, publication, 'publish')
+        audit = _native_audit_saved(db, publication)
+        if saved is None or audit is None:
+            return None
+        op, query, result = saved
+        audit_op = db.execute('SELECT o.* FROM dataops_operations o JOIN dbt_run_operations l '
+            "ON l.operation_id=o.id WHERE l.run_id=? AND l.phase='audit'", (publication['id'],)).fetchone()
+        if any(op[k] != audit_op[k] for k in ('backend_username', 'credential_snapshot_ref')):
+            return None
+        intent = _native_publish_intent(publication, op['id'])
+        receipt = result['publication']
+        target = receipt['target']
+        if (result != dict(intent, publication=receipt) or query['commit_result'] != ds._json(intent)
+                or receipt != dict(intent, id=publication['id'], actor=publication['actor'],
+                    context=publication['context'], query_id=query['id'], target=target)
+                or target['ref']['database_id'] != publication['context']['database_id']
+                or target['ref']['schema_id'] != publication['expected_target']['destination']['schema_id']
+                or not target['snapshot'] or type(target['schema_id']) is not int
+                or target['columns'] != publication['_native_intent']['candidate']['columns']
+                or set(target) != {'ref', 'snapshot', 'schema_id', 'columns', 'schema_fingerprint'}):
+            return None
+        registry.ResourceRef(**target['ref'])
+        _native_descriptor(dict(version=1, destination=target['ref'], target=target), target['ref'])
+        # Retired object rows remain valid historical identity evidence. Neither
+        # a later snapshot nor replacement of this destination invalidates it.
+        obj = db.execute('SELECT * FROM object_bindings WHERE id=?', (target['ref']['object_id'],)).fetchone()
+        destination = publication['expected_target']['destination']
+        if 'object_id' in destination:
+            original = db.execute('SELECT physical_name FROM object_bindings WHERE id=?', (destination['object_id'],)).fetchone()
+            name = original['physical_name'] if original else None
+        else:
+            name = destination['physical_name']
+        if (obj is None or obj['kind'] != 'TABLE' or obj['schema_id'] != target['ref']['schema_id']
+                or obj['incarnation'] != target['ref']['incarnation'] or obj['physical_name'] != name):
+            return None
+        # Once saved, the parent receipt anchors historical proof, including
+        # JSON value types, even if this FQN is later recreated.
+        if ('native_publication' in publication
+                and ds._json(publication['native_publication']) != ds._json(receipt)):
+            return None
+        return receipt
+    except (KeyError, TypeError, ValueError, AttributeError, QueryError):
+        return None
+
+
+def _native_publish_intent(publication, operation_id):
+    return dict(origin='native_table', publication_id=publication['id'], audit_id=publication['audit_id'],
+        operation_id=operation_id, intent=publication['_native_intent'])
+
+
+def _native_publication_child(ident, principal, context, phase):
+    publication = _row_run(ident)
+    execution = ds.begin(principal, context, route='dbt-native-' + phase,
+        idempotency_key=ident + ':' + phase, payload=_native_child_payload(publication, phase))
+    if execution.replayed:
+        return execution.inspect()
+    with ds._accepted(execution):
+        try:
+            if phase == 'audit':
+                result = execution._dbt_native_audit()
+            else:
+                result = execution._dbt_native_publish()
+            return execution.complete(result)
+        except Exception as error:
+            # Same durable query/commit behavior as manual WAP; never retry a send.
+            row = execution._row()
+            if row['state'] == 'ACTIVE':
+                try:
+                    if row['committed']:
+                        with control_store.connect() as db:
+                            db.execute('UPDATE dataops_operations SET cleanup_error=? WHERE id=?',
+                                (getattr(error, 'code', type(error).__name__), execution.id))
+                        return execution.complete()
+                    execution.fail()
+                except Exception:
+                    wap._settle_definite(execution, context, error)
+            if row['committed'] or row['state'] == 'UNKNOWN':
+                return execution._inspect()
+            raise
+
+
+def _native_publish_run(ident, principal, context, parent, frozen, credential):
+    publication = _row_run(ident)
+    uid = publication['node_id']
+    _phase(ident, 'AUDITING', 'audit', uid)
+    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'audit', uid):
+        child = _native_publication_child(ident, principal, context, 'audit')
+    audited = (child.get('result') or {}).get('audit')
+    with control_store.connect() as db:
+        _, publication = _row(db, ident)
+        if audited:
+            publication.update(audit_id=child['result']['audit_id'], native_audit=audited)
+            _write(db, publication)
+    # Preserve the observed audit even when it prevents publication.
+    if child['state'] != 'FINISHED' or not audited or not audited['passed']:
+        raise QueryError('DBT_AUDIT_FAILED', 409)
+    with control_store.connect() as db:
+        if _native_audit_saved(db, publication) is None:
+            raise QueryError('AUDIT_MISMATCH', 409)
+    _phase(ident, 'PUBLISHING', 'publish', uid)
+    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'publish', uid):
+        _native_publication_child(ident, principal, context, 'publish')
+    # _settle consumes the closed canonical receipt, even after a parent write failure.
+
+
 def _publish_run(ident, principal, context, parent, frozen, credential):
     with control_store.connect() as db:
         _, publication = _row(db, ident)
+    if publication.get('origin') == 'native_table':
+        return _native_publish_run(ident, principal, context, parent, frozen, credential)
     _verify_views(_access(principal, context), _row_run(publication['parent_run_id']), complete=True)
     uid = publication['node_id']
     _phase(ident, 'AUDITING', 'audit', uid)
@@ -1374,9 +1777,15 @@ def _settle(ident, *, owner_lost=False):
         if run['kind'] == 'publication' and committed:
             receipt = json.loads(committed['result'] or '{}')
             run.update(committed=True, publication_id=receipt.get('publication_id'))
-            artifact = db.execute('SELECT id FROM wap_publications WHERE id=? AND operation_id=?',
-                (receipt.get('publication_id'), committed['id'])).fetchone()
-            run['state'] = 'PUBLISHED' if artifact and closed and not committed['cleanup_error'] else 'COMMITTED_RECORDING_FAILED'
+            if run.get('origin') == 'native_table':
+                artifact = _native_publication_saved(db, run)
+                if artifact:
+                    run['native_publication'] = artifact
+            else:
+                artifact = db.execute('SELECT id FROM wap_publications WHERE id=? AND operation_id=?',
+                    (receipt.get('publication_id'), committed['id'])).fetchone()
+            recorded = artifact and closed and (run.get('origin') == 'native_table' or not committed['cleanup_error'])
+            run['state'] = 'PUBLISHED' if recorded else 'COMMITTED_RECORDING_FAILED'
         elif not closed:
             run['state'] = 'UNKNOWN'
         elif run['cancel_requested']:

@@ -10,7 +10,7 @@ import (
 
 func newDbtCommand(runner commandRunner) *cobra.Command {
 	parent := &cobra.Command{Use: "dbt", Short: "Compile SQL candidates, test and publish through authenticated HTTP", SilenceUsage: true, SilenceErrors: true}
-	for _, action := range []string{"projects", "compile", "plans", "plan", "run", "runs", "status", "cancel", "reconcile", "publish", "publication"} {
+	for _, action := range []string{"projects", "compile", "plans", "plan", "run", "runs", "status", "cancel", "reconcile", "publish", "publish-preview", "publication"} {
 		action := action
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		flags := cmd.Flags()
@@ -47,11 +47,15 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 			add("executor", "sql_wap", false)
 			add("node-id", "", false)
 		}
-		if action == "status" || action == "cancel" || action == "reconcile" || action == "publish" {
+		if action == "status" || action == "cancel" || action == "reconcile" || action == "publish" || action == "publish-preview" {
 			add("run-id", "", true)
 		}
-		if action == "publish" {
+		if action == "publish" || action == "publish-preview" {
 			add("node-id", "", true)
+		}
+		if action == "publish" {
+			add("expected-target-file", "", false)
+			flags.Lookup("expected-target-file").Usage = "JSON returned by publish-preview"
 		}
 		if action == "publication" {
 			add("publication-id", "", true)
@@ -71,6 +75,9 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 			saved := value("context") != "" || value("context-file") != ""
 			if value("context") != "" && value("context-file") != "" || saved && (flags.Changed("database") || flags.Changed("schema")) {
 				return fmt.Errorf("context conflicts with database/schema")
+			}
+			if action == "publish-preview" && !saved {
+				return fmt.Errorf("explicit saved context required for publication review")
 			}
 			if !saved && value("database") == "" {
 				return fmt.Errorf("explicit database or context required")

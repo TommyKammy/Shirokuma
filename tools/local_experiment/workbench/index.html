@@ -5040,7 +5040,7 @@ Object.assign(i18n.ja,{
 });
 for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
 Object.assign(i18n.ja,{
- 'Creates one new same-DB SANDBOX candidate and runs the complete attached quality suite. Publication is unavailable. Execution revalidates current project, policy and sources.':'同じ DB の SANDBOX に新しい候補を1モデル作成し、付属する品質テスト一式を実行します。公開はできません。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。',
+ 'Creates one new same-DB SANDBOX candidate and runs the complete attached quality suite. After quality PASSED, admin may explicitly review MARTS publication with row audit >= 1. Execution revalidates current project, policy and sources.':'同じ DB の SANDBOX に新しい候補を1モデル作成し、付属する品質テスト一式を実行します。品質 PASSED 後、管理者が MARTS 公開を明示確認し、行数監査 >= 1 を行います。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。',
  'Run quality tests':'品質テストを実行','Run native TABLE and test':'Native TABLE と品質テストを実行','Attached tests':'付属テスト数','Quality tests':'品質テスト','Publication unavailable':'公開不可','Native TABLE verified':'Native TABLE 検証済み','Native TABLE not verified':'Native TABLE 未検証',
  'Recompile this saved plan to validate attached test ownership.':'付属テストの所有関係を検証するため保存プランを再コンパイルしてください。',
  'No attached quality tests for this model.':'このモデルに付属する品質テストはありません。',
@@ -5053,8 +5053,10 @@ Object.assign(i18n.ja,{
  'Quality test availability is not validated. Inspect or recompile the saved plan.':'品質テストの可用性が未検証です。保存プランを確認または再コンパイルしてください。',
  'Complete attached suite available':'付属テスト一式を実行できます',
  'The complete attached test suite is unavailable. Inspect or recompile the saved plan.':'付属テスト一式を実行できません。保存プランを確認または再コンパイルしてください。',
- 'Select Run quality tests to run the complete attached suite against the new candidate. Build-only tests are NOT_RUN. Publication remains unavailable.':'「品質テストを実行」を選択すると、新しい候補に付属テスト一式を実行します。ビルドのみの場合は NOT_RUN です。公開はできません。'
+ 'Select Run quality tests to run the complete attached suite against the new candidate. Build-only tests are NOT_RUN. Quality PASSED enables explicit admin review for same-DB MARTS publication and row audit >= 1.':'「品質テストを実行」を選択すると、新しい候補に付属テスト一式を実行します。ビルドのみの場合は NOT_RUN です。品質 PASSED 後、管理者が同じ DB の MARTS 公開を明示確認し、行数監査 >= 1 を行います。'
 });
+for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
+Object.assign(i18n.ja,{"Builder": "ビルダー", "Publisher": "公開者", "New target (reviewed absent)": "新規公開先（不在を確認済み）", "Replace reviewed target": "確認済みの公開先を置換", "Native publication requires admin confirmation, quality PASSED and a fresh row audit >= 1. Same-DB MARTS only.": "Native 公開には管理者の明示確認、品質 PASSED、新規の行数監査 >= 1 が必要です。同じ DB の MARTS のみ対応します。", "Native quality passed. Admin may review explicit MARTS publication with row audit >= 1.": "Native 品質テスト成功。管理者が MARTS 公開を明示確認し、行数監査 >= 1 を実行できます。"});
 for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
 function dbDbtOwner(){return JSON.parse(dbPrincipal||'[]')[0];}
 function dbDbtAllowed(){
@@ -5063,7 +5065,7 @@ function dbDbtAllowed(){
  return !!(d&&s&&d.state==='READY'&&d.allowed_roles?.includes(p.role)&&d.capabilities?.query===true&&s.capabilities?.write===true&&s.capabilities?.query===true&&String(s.purpose||s.sql_name).toUpperCase()==='SANDBOX'&&d.binding_revision===c.binding_revision&&d.generation_id===c.generation_id&&(d.grant_revision??null)===c.grant_revision);
 }
 function dbDbtPurge(){
- const p=dbDbt;if(!p.installed)return;++p.epoch;++p.request;clearTimeout(p.timer);p.timer=null;p.pending=false;p.invalid=true;p.context=null;p.databases=[];p.schemas=[];p.plan=null;p.run=null;p.plans=[];p.runs=[];p.projects=[];p.publications={};p.review=null;p.runOptions=null;p.node='';p.method='sql_wap';p.nativeTests=false;
+ const p=dbDbt;if(!p.installed)return;++p.epoch;++p.request;clearTimeout(p.timer);p.timer=null;p.pending=false;p.invalid=true;p.context=null;p.databases=[];p.schemas=[];p.plan=null;p.run=null;p.plans=[];p.runs=[];p.projects=[];p.publications={};p.review=null;p.preview=null;p.runOptions=null;p.node='';p.method='sql_wap';p.nativeTests=false;
  if(p.intent&&(p.intent.principal!==dbPrincipal||p.intent.header!==currentRole))p.intentBlocked=true;
  for(const name of ['plan-detail','models','sql','run-detail','candidates','tests','publications','confirmation','history'])dbDbtNode(name).replaceChildren();
  ui(p.status,p.role==='bi_viewer'||!dbRoleWithinHeader('data_engineer')?'Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'Refresh an authorized Database and SANDBOX context.');dbDbtRender();
@@ -5162,7 +5164,7 @@ function dbDbtOptionsValid(o,a=dbDbt.plan){
  return a.state==='READY'&&a.compatibility?.version===2&&dbDbtCompatibility(a)==='supported'&&o.nodes.length===ids.length&&new Set(o.nodes.map(n=>n.node_id)).size===ids.length&&o.nodes.every(n=>ids.includes(n.node_id)&&gate(n));
 }
 function dbDbtSelectPlan(a,options){
- const p=dbDbt;if(p.plan?.id!==a.id||p.plan?.source_digest!==a.source_digest){p.node='';p.method='sql_wap';p.nativeTests=false;}
+ const p=dbDbt;p.review=null;p.preview=null;if(p.plan?.id!==a.id||p.plan?.source_digest!==a.source_digest){p.node='';p.method='sql_wap';p.nativeTests=false;}
  p.plan=dataopsFreeze(dataopsClone(a));p.runOptions=dbDbtOptionsValid(options,a)?dataopsFreeze(dataopsClone(options)):null;
  if(!p.runOptions?.nodes.some(n=>n.node_id===p.node&&n.eligible))p.node='';
 }
@@ -5212,11 +5214,32 @@ async function dbDbtRefreshPublications(current){
  for(const id of ids){const reply=await dbDbtRequest(dbDbtPath('publications',id),context);if(!current()||p.run!==run)return;const a=reply.publication;if(!dbDbtOwnPublication(a)||a.id!==id)throw Error('publication');p.publications[a.node_id]=dataopsFreeze(dataopsClone(a));}
 }
 function dbDbtTestsPassed(){const p=dbDbt,r=p.run,a=p.plan;if(r?.executor==='native_table'||!r||!a||r.plan_id!==a.id||r.state!=='READY'||r.cancel_requested||!Array.isArray(r.tests)||!Array.isArray(a.tests))return false;const ids=a.tests.map(t=>t.unique_id);return new Set(ids).size===ids.length&&r.tests.length===ids.length&&new Set(r.tests.map(t=>t.unique_id)).size===ids.length&&r.tests.every(t=>ids.includes(t.unique_id)&&t.state==='PASSED'&&t.failure_count===0);}
-function dbDbtCanPublish(m){const p=dbDbt;return p.run?.executor!=='native_table'&&dbDbtAllowed()&&p.role==='admin'&&p.schemas.some(s=>s.id===p.plan?.target_schema&&s.capabilities?.write===true)&&dbDbtTestsPassed()&&!p.intent&&m?.materialized==='table'&&m.state==='BUILT'&&!!m.build_id&&m.candidate?.ref?.database_id===p.context.database_id&&m.candidate.snapshot!=null&&!m.publication_id&&!p.publications[m.unique_id];}
+function dbDbtEqual(a,b){if(a===b)return true;if(!a||!b||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;const keys=Object.keys(a);return keys.length===Object.keys(b).length&&keys.every(k=>Object.hasOwn(b,k)&&dbDbtEqual(a[k],b[k]));}
+function dbDbtNativePublishable(r=dbDbt.run){
+ const a=dbDbt.plan;if(!r||!a||r.plan_id!==a.id||r.source_digest!==a.source_digest||r.executor!=='native_table'||r.state!=='NATIVE_VERIFIED'||r.native_verified!==true||r.native_tests!==true||r.tests_status!=='PASSED'||r.publication_allowed!==true||r.cancel_requested||r.models?.length!==1||r.models[0].unique_id!==r.selected_node_id||!Array.isArray(r.tests)||!r.tests.length)return false;
+ // The server proves suite ownership/completeness; dependencies may reference other models' tests.
+ const ids=r.tests.map(t=>t.unique_id);
+ return ids.every(id=>typeof id==='string'&&!!id)&&new Set(ids).size===ids.length&&r.tests.every(t=>t.state==='PASSED'&&t.failure_count===0);
+}
+function dbDbtCanPublish(m){const p=dbDbt,native=p.run?.executor==='native_table';return dbDbtAllowed()&&p.role==='admin'&&p.schemas.some(s=>s.id===p.plan?.target_schema&&s.capabilities?.write===true&&(!native||String(s.purpose||s.sql_name).toUpperCase()==='MARTS'))&&(native?dbDbtNativePublishable():dbDbtTestsPassed())&&!p.intent&&m?.materialized==='table'&&(native?m.state==='NATIVE_VERIFIED':m.state==='BUILT'&&!!m.build_id)&&m.candidate?.ref?.database_id===p.context.database_id&&m.candidate.snapshot!=null&&!m.publication_id&&!p.publications[m.unique_id];}
+function dbDbtPreviewValid(v,m){
+ const p=dbDbt,r=p.run,a=p.plan,d=v?.expected_target,relation=a?.models?.find(x=>x.unique_id===m?.unique_id)?.relation,target=p.schemas.find(s=>s.id===a?.target_schema);
+ if(!dbDbtCanPublish(m)||!v||v.version!==1||v.origin!=='native_table'||v.run_id!==r.id||v.plan_id!==a.id||v.node_id!==m.unique_id||v.source_digest!==r.source_digest||!dataopsSameContext(v.context,p.context)||v.source_actor!==r.actor||v.publisher_actor!==dbDbtOwner()||!dataopsSameContext(v.source_context,r.context)||!dbDbtEqual(v.candidate,m.candidate)||v.quality?.status!=='PASSED'||v.quality.count!==r.tests.length||!Array.isArray(v.quality.test_ids)||!dbDbtEqual([...v.quality.test_ids].sort(),r.tests.map(t=>t.unique_id).sort())||!dbDbtEqual(v.target,{catalog:p.context.sql_catalog,schema:target?.sql_name,name:relation?.[2]})||!d||d.version!==1||Object.keys(d).sort().join(',')!=='destination,target,version')return false;
+ const dest=d.destination,t=d.target;if(!dest||dest.database_id!==p.context.database_id||dest.schema_id!==a.target_schema)return false;
+ if(Object.hasOwn(dest,'object_id'))return Object.keys(dest).sort().join(',')==='database_id,incarnation,object_id,schema_id'&&typeof dest.object_id==='string'&&!!dest.object_id&&Number.isSafeInteger(dest.incarnation)&&dest.incarnation>0&&!!t&&Object.keys(t).sort().join(',')==='columns,ref,schema_fingerprint,schema_id,snapshot'&&dbDbtEqual(t.ref,dest)&&typeof t.snapshot==='string'&&/^[0-9]+$/.test(t.snapshot)&&Number.isSafeInteger(t.schema_id)&&t.schema_id>=0&&Array.isArray(t.columns)&&t.columns.length>0&&t.columns.every(c=>c&&Object.keys(c).sort().join(',')==='name,type'&&typeof c.name==='string'&&!!c.name&&(typeof c.type==='string'||c.type&&typeof c.type==='object'&&!Array.isArray(c.type)))&&typeof t.schema_fingerprint==='string'&&/^[a-f0-9]{64}$/.test(t.schema_fingerprint);
+ return Object.keys(dest).sort().join(',')==='database_id,physical_name,schema_id'&&dest.physical_name===relation?.[2]&&t===null;
+}
+async function dbDbtReview(m){
+ const p=dbDbt;if(p.pending||!dbDbtCanPublish(m))return;p.review=null;p.preview=null;
+ if(p.run.executor!=='native_table'){p.review=m.unique_id;dbDbtRender();return;}
+ const current=dbDbtGuard(),run=p.run,plan=p.plan,context=p.context,node=p.node;p.pending=true;dbDbtRender();
+ try{const reply=await dbDbtRequest(dbDbtPath('runs',run.id)+'/publication-preview?node_id='+encodeURIComponent(m.unique_id),context);if(!current()||p.run!==run||p.plan!==plan||p.node!==node)return;if(!dbDbtPreviewValid(reply.preview,m))throw Error('preview');p.preview=dataopsFreeze(dataopsClone(reply.preview));p.review=m.unique_id;}
+ catch(error){if(current())dbDbtError(error);}finally{if(current()){p.pending=false;dbDbtRender();}}
+}
 function dbDbtIntentValid(i){return !!i&&typeof i.key==='string'&&!!i.key&&!!i.body&&i.context&&typeof i.path==='string'&&/^\/api\/v1\/dbt\/(plans|runs)(\/[a-zA-Z0-9_-]+\/(cancel|reconcile|publish))?$/.test(i.path)&&['plan','run','publication'].includes(i.kind);}
 function dbDbtCanRecover(){const p=dbDbt,i=p.intent;return dbDbtAllowed()&&dbDbtIntentValid(i)&&!p.intentBlocked&&i.principal===dbPrincipal&&i.header===currentRole&&dataopsSameContext(i.context,p.context);}
-function dbDbtCanCloseRejected(){const i=dbDbt.intent;return dbDbtCanRecover()&&i.action==='compile'&&i.path===dbDbtPath('plans')&&i.rejection==='DBT_PROJECT_NOT_FOUND';}
-function dbDbtCloseRejected(){const p=dbDbt;if(p.pending||!dbDbtCanCloseRejected())return;p.rejectedIntent=p.intent;try{writeStorage(dbDbtKey+'.rejected',p.rejectedIntent);}catch{}p.intent=null;p.intentBlocked=false;dbDbtRemember();ui(p.status,'Choose an approved project and explicit registered source and target schemas.');dbDbtRender();}
+function dbDbtCanCloseRejected(){const i=dbDbt.intent;return dbDbtCanRecover()&&(i.action==='compile'&&i.path===dbDbtPath('plans')&&i.rejection==='DBT_PROJECT_NOT_FOUND'||i.action==='publish'&&i.body.expected_target&&i.rejection==='DBT_PUBLICATION_REVIEW_CHANGED');}
+function dbDbtCloseRejected(){const p=dbDbt;if(p.pending||!dbDbtCanCloseRejected())return;p.rejectedIntent=p.intent;try{writeStorage(dbDbtKey+'.rejected',p.rejectedIntent);}catch{}p.intent=null;p.intentBlocked=false;p.review=null;p.preview=null;dbDbtRemember();ui(p.status,'Choose an approved project and explicit registered source and target schemas.');dbDbtRender();}
 function dbDbtRemember(){try{if(dbDbt.intent)writeStorage(dbDbtKey,dbDbt.intent);else localStorage.removeItem(dbDbtKey);}catch{/* The in-session frozen receipt remains available. */}}
 async function dbDbtSubmit(action,nodeId){
  const p=dbDbt;dbDbtRender();if(p.pending||p.intent||!dbDbtAllowed())return;let path,body,kind,id;
@@ -5224,10 +5247,10 @@ async function dbDbtSubmit(action,nodeId){
   if(dbDbtNode('compile').disabled)return;path=dbDbtPath('plans');kind='plan';body={project_id:dbDbtNode('project').value,source_schema:dbDbtNode('source').value,target_schema:dbDbtNode('target').value,staging_materialization:dbDbtNode('materialization').value||null};
  }else if(action==='build'){if(!dbDbtCanRun())return;path=dbDbtPath('runs');kind='run';body={plan_id:p.plan.id};if(dbDbtMethod()==='native_table'){Object.assign(body,{executor:'native_table',node_id:p.node});if(dbDbtQuality())body.native_tests=true;}}
  else{if(!p.run)return;id=p.run.id;path=dbDbtPath('runs',id)+'/'+action;body={};kind=action==='publish'?'publication':'run';
-  if(action==='publish'){const m=p.run.models?.find(m=>m.unique_id===nodeId);if(p.review!==nodeId||!dbDbtCanPublish(m))return;body.node_id=nodeId;}
+  if(action==='publish'){const m=p.run.models?.find(m=>m.unique_id===nodeId);if(p.review!==nodeId||!dbDbtCanPublish(m))return;body.node_id=nodeId;if(p.run.executor==='native_table'){if(!dbDbtPreviewValid(p.preview,m))return;body.expected_target=dataopsClone(p.preview.expected_target);}}
   else if(action==='cancel'? !dbDbtOwnRun()||['FAILED','CANCELED','UNKNOWN','CANCELING'].includes(p.run.state)||p.run.cancel_requested : action!=='reconcile'||!dbDbtCanReconcile())return;
  }
- p.intent=dataopsFreeze({path,body:dataopsClone(body),key:crypto.randomUUID(),context:dataopsClone(p.context),principal:dbPrincipal,header:currentRole,kind,id,action,...(action==='reconcile'?{parent:{actor:p.run.actor,context:dataopsClone(p.run.context)}}:{})});p.intentBlocked=false;dbDbtRemember();await dbDbtRecover(true);
+ p.intent=dataopsFreeze({path,body:dataopsClone(body),key:crypto.randomUUID(),context:dataopsClone(p.context),principal:dbPrincipal,header:currentRole,kind,id,action,...(action==='publish'?{plan_id:p.run.plan_id}:{}),...(action==='reconcile'?{parent:{actor:p.run.actor,context:dataopsClone(p.run.context)}}:{})});p.intentBlocked=false;dbDbtRemember();await dbDbtRecover(true);
 }
 async function dbDbtRecover(fresh=false){
  const p=dbDbt,i=p.intent;if(p.pending||!dbDbtCanRecover()||dbDbtCanCloseRejected())return;const current=dbDbtGuard();p.pending=true;ui(p.status,'Request in progress. Inputs and receipt are fixed.');dbDbtRender();
@@ -5236,13 +5259,14 @@ async function dbDbtRecover(fresh=false){
  const provenance=i.action==='reconcile'&&i.parent?a?.actor===i.parent.actor&&dataopsSameContext(a?.context,i.parent.context):a?.actor===dbDbtOwner()&&dataopsSameContext(a?.context,i.context);
  const methodMatches=i.action!=='build'||(i.body.executor==='native_table'?a?.executor==='native_table'&&a.selected_node_id===i.body.node_id:(a?.executor===undefined||a.executor==='sql_wap')&&a.selected_node_id==null);
  const qualityMatches=i.action!=='build'||((a?.native_tests===undefined||typeof a.native_tests==='boolean')&&(a?.native_tests??false)===(i.body.native_tests===true));
- if(!qualityMatches||!methodMatches||!provenance||!dbDbtArtifact(a,i.kind,i.context,i.kind==='run'&&i.id?i.id:undefined)||i.body.plan_id&&a.plan_id!==i.body.plan_id||i.kind==='publication'&&(a.run_id!==i.id||a.node_id!==i.body.node_id)||i.kind==='plan'&&(a.project_id!==i.body.project_id||a.source_schema!==i.body.source_schema||a.target_schema!==i.body.target_schema||a.staging_materialization!==i.body.staging_materialization))throw Error('receipt');
+ const publicationMatches=i.kind!=='publication'||(a?.parent_run_id===i.id&&(!i.plan_id||a?.plan_id===i.plan_id)&&(!i.body.expected_target||a?.origin==='native_table'&&dbDbtEqual(a.expected_target,i.body.expected_target)));
+ if(!publicationMatches||!qualityMatches||!methodMatches||!provenance||!dbDbtArtifact(a,i.kind,i.context,i.kind==='run'&&i.id?i.id:undefined)||i.body.plan_id&&a.plan_id!==i.body.plan_id||i.kind==='publication'&&(a.run_id!==i.id||a.node_id!==i.body.node_id)||i.kind==='plan'&&(a.project_id!==i.body.project_id||a.source_schema!==i.body.source_schema||a.target_schema!==i.body.target_schema||a.staging_materialization!==i.body.staging_materialization))throw Error('receipt');
  if(i.kind==='plan'){p.method='sql_wap';p.node='';p.nativeTests=false;dbDbtSelectPlan(a,null);p.run=null;p.publications={};}
- if(i.kind==='run'){p.run=dataopsFreeze(dataopsClone(a));p.review=null;}
- if(i.kind==='publication'){p.publications[a.node_id]=dataopsFreeze(dataopsClone(a));p.review=null;}
+ if(i.kind==='run'){p.run=dataopsFreeze(dataopsClone(a));p.review=null;p.preview=null;}
+ if(i.kind==='publication'){p.publications[a.node_id]=dataopsFreeze(dataopsClone(a));p.review=null;p.preview=null;}
  p.intent=null;dbDbtRemember();if(i.action==='reconcile')await dbDbtRefreshPublications(current);if(!current())return;dbDbtURL(true);ui(p.status,i.action==='compile'?'Compile may take a few minutes. It does not execute engine SQL.':i.action==='build'?(i.body.executor==='native_table'?'Native execution may take a few minutes. This view only polls saved state.':'Candidate builds and tests may take a few minutes. This view only polls saved state.'):'Observe saved state');
  }catch(error){if(current()){
- if(fresh&&p.intent===i&&i.action==='compile'&&i.path===dbDbtPath('plans')&&error.status===404&&error.code==='DBT_PROJECT_NOT_FOUND'){p.intent=dataopsFreeze({...i,rejection:error.code});dbDbtRemember();ui(p.status,'Request rejected before acceptance. Close it explicitly to choose again; the original receipt is retained.');}
+ if(p.intent===i&&(fresh&&i.action==='compile'&&i.path===dbDbtPath('plans')&&error.status===404&&error.code==='DBT_PROJECT_NOT_FOUND'||i.action==='publish'&&i.body.expected_target&&error.status===409&&error.code==='DBT_PUBLICATION_REVIEW_CHANGED')){p.intent=dataopsFreeze({...i,rejection:error.code});dbDbtRemember();ui(p.status,'Request rejected before acceptance. Close it explicitly to choose again; the original receipt is retained.');}
  else dbDbtError(error,p.intent===i);
  }}finally{if(current()){p.pending=false;dbDbtRender();dbDbtSchedule();}}
 }
@@ -5253,8 +5277,8 @@ async function dbDbtObserve(kind,id,expectedPlan){
  if(kind==='run'){
   if(typeof a.plan_id!=='string'||!a.plan_id||expectedPlan&&a.plan_id!==expectedPlan)throw Error('plan');
   let plan=p.plan,options=null;if(plan?.id!==a.plan_id){const result=await dbDbtRequest(dbDbtPath('plans',a.plan_id),context);if(!current())return;plan=result.plan;options=result.run_options;if(!dbDbtArtifact(plan,'plan',context,a.plan_id))throw Error('plan');}
-  if(a.actor!==plan.actor||!dataopsSameContext(a.context,plan.context))throw Error('plan owner');if(p.run?.id!==a.id)p.publications={};dbDbtSelectPlan(plan,options);p.run=dataopsFreeze(dataopsClone(a));p.review=null;
- }else if(kind==='plan'){dbDbtSelectPlan(a,reply.run_options);p.run=null;p.publications={};p.review=null;}
+  if(a.actor!==plan.actor||!dataopsSameContext(a.context,plan.context))throw Error('plan owner');if(p.run?.id!==a.id)p.publications={};dbDbtSelectPlan(plan,options);p.run=dataopsFreeze(dataopsClone(a));p.review=null;p.preview=null;
+ }else if(kind==='plan'){dbDbtSelectPlan(a,reply.run_options);p.run=null;p.publications={};p.review=null;p.preview=null;}
  else{if(Object.values(p.publications).some(v=>v.id===id&&v.node_id!==a.node_id)||!dbDbtPublicationAssociated(a))throw Error('publication');p.publications[a.node_id]=dataopsFreeze(dataopsClone(a));}
  dbDbtURL(true);ui(p.status,'Observe saved state');
  }catch(error){if(current())dbDbtError(error);}finally{if(current()){p.pending=false;dbDbtRender();dbDbtSchedule();}}
@@ -5276,7 +5300,7 @@ function dbDbtState(a){if(a?.kind==='run'&&a.executor==='native_table'){
  if(a.native_tests!==true)return ['native_table',a.selected_node_id||'',a.state,a.state==='NATIVE_VERIFIED'?t('Native TABLE verified; tests not run; publication unavailable'):t('Tests not run; publication unavailable')].join(' · ');
  const status=['QUEUED','RUNNING','PASSED','FAILED','ERROR','CANCELED','UNKNOWN'].includes(a.tests_status)?a.tests_status:'UNKNOWN';
  const counts=(a.tests||[]).map(x=>x.failure_count).filter(x=>Number.isSafeInteger(x)&&x>=0);
- return ['native_table',a.selected_node_id||'',a.state,t(verified?'Native TABLE verified':'Native TABLE not verified'),t('Quality tests')+': '+t(status),...(counts.length?[t('Failure count')+': '+counts.reduce((n,x)=>n+x,0)]:[]),t('Publication unavailable')].join(' · ');
+ return ['native_table',a.selected_node_id||'',a.state,t(verified?'Native TABLE verified':'Native TABLE not verified'),t('Quality tests')+': '+t(status),...(counts.length?[t('Failure count')+': '+counts.reduce((n,x)=>n+x,0)]:[]),t(a.publication_allowed===true?'Native quality passed. Admin may review explicit MARTS publication with row audit >= 1.':'Publication unavailable')].join(' · ');
  }return a?.state==='COMMITTED_RECORDING_FAILED'?'Publication committed; recording failed. Do not republish.':a?.kind==='run'&&a.state==='READY'?'Tests passed, awaiting publication':a?.state==='PUBLISHED'?'Published':a?.state==='UNKNOWN'?'Backend outcome unknown. Reconcile existing operations; publication is blocked.':a?.state||'';}
 function dbDbtTable(parent,columns,rows){const table=dataopsNode('table','',parent),head=dataopsNode('thead','',table),tr=dataopsNode('tr','',head);for(const col of columns)dataopsNode('th','',tr,col).setAttribute('scope','col');const body=dataopsNode('tbody','',table);for(const row of rows){const tr=dataopsNode('tr','',body);for(const cell of row){const td=dataopsNode('td','',tr);if(typeof cell==='function')cell(td);else td.textContent=String(cell??'');}}}
 function dbDbtCandidateVersion(m){
@@ -5289,10 +5313,31 @@ function dbDbtCandidateDetails(parent,m){
  const detail=dataopsNode('details','',parent);dataopsNode('summary','',detail,'Candidate Ref details');
  dataopsNode('pre','',detail).textContent=JSON.stringify({node_id:m.unique_id,...m.candidate,wap_model_id:m.wap_model_id,wap_version:m.wap_version,build_id:m.build_id},null,2);
 }
+Object.assign(i18n.ja,{'Native proof details':'Native 証跡の詳細','Origin':'実行元','Candidate Snapshot':'候補 Snapshot','Reviewed target Snapshot':'確認済み公開先 Snapshot','Published Snapshot':'公開済み Snapshot','Row audit':'行数監査','Minimum rows':'最小行数','Publication status':'公開状態','Committed':'コミット済み','Test count':'テスト数'});
+function dbDbtNativeFacts(parent,v){
+ const missing=t('Not recorded'),fact=(label,value)=>{dataopsNode('p','',parent).textContent=t(label)+': '+(value??missing);};
+ fact('Target FQN',v.target?[v.target.catalog,v.target.schema,v.target.name].join('.'):null);
+ fact('Origin',v.origin);fact('Builder',v.source_actor);fact('Publisher',v.publisher_actor);
+ fact('Quality tests',v.quality?v.quality.status+' · '+t('Test count')+': '+v.quality.count:null);
+ fact('Candidate Snapshot',v.candidate?.snapshot);
+ fact('Reviewed target Snapshot',v.expected_target?.target===null?t('New target (reviewed absent)'):v.expected_target?.target?.snapshot);
+ fact('Row audit',(v.audit?.count??missing)+' · '+t('Minimum rows')+': 1');
+}
+function dbDbtNativeProof(parent,proof){
+ const detail=dataopsNode('details','',parent);dataopsNode('summary','',detail,'Native proof details');
+ dataopsNode('pre','',detail).textContent=JSON.stringify(proof,null,2);
+}
 function dbDbtSummary(parent,a){
  const p=dbDbt;dataopsNode('p','',parent).textContent=a.id+' · '+a.actor+' · '+(a.created_at||'');
  dataopsNode('p','',parent,'Saved context');dataopsNode('p','',parent).textContent=[a.context.database_id,a.context.sql_catalog,a.context.schema_id,a.context.sql_schema,a.context.selected_role].join(' / ');
  dataopsNode('p','',parent,dbDbtState(a));if(a.error_code){dataopsNode('p','',parent).textContent=a.error_code;if(['STALE_RESOURCE','DBT_SOURCE_CHANGED','DBT_CANDIDATE_CHANGED','INVALID_BINDING','TARGET_CHANGED','SCHEMA_NOT_FOUND'].includes(a.error_code))dataopsNode('p','',parent,'Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.');}
+ if(a.kind==='publication'&&a.origin==='native_table'){
+  const intent=a.native_publication?.intent||a.native_audit?.intent,run=p.run?.id===a.run_id?p.run:null,model=run?.models?.find(m=>m.unique_id===a.node_id),plan=p.plan?.id===a.plan_id?p.plan:null,pm=plan?.models?.find(m=>m.unique_id===a.node_id),schema=p.schemas.find(s=>s.id===plan?.target_schema);
+  dbDbtNativeFacts(parent,{origin:a.origin,target:pm&&schema?{catalog:a.context.sql_catalog,schema:schema.sql_name,name:pm.relation?.[2]}:null,source_actor:intent?.source_actor??run?.actor,publisher_actor:intent?.publisher_actor??a.actor,candidate:intent?.candidate??model?.candidate,quality:intent?.quality?{status:intent.quality.length>0&&intent.quality.every(t=>t.status==='PASSED')?'PASSED':t('Not recorded'),count:intent.quality.length}:run?{status:run.tests_status,count:run.tests?.length??0}:null,expected_target:a.expected_target,audit:a.native_audit});
+  dataopsNode('p','',parent).textContent=t('Publication status')+': '+a.state+' · '+t('Committed')+': '+(typeof a.committed==='boolean'?String(a.committed):t('Not recorded'));
+  dataopsNode('p','',parent).textContent=t('Published Snapshot')+': '+(a.native_publication?.target?.snapshot??t('Not recorded'));
+  dbDbtNativeProof(parent,{origin:a.origin,expected_target:a.expected_target,audit_id:a.audit_id,publication_id:a.publication_id,operations:a.operations,target:a.target,committed:a.committed,native_audit:a.native_audit,native_publication:a.native_publication});
+ }
  const operations=(a.operations||[]).filter(op=>typeof op.id==='string');
  if(operations.length){
   const detail=dataopsNode('details','',parent),summary=dataopsNode('summary','',detail),states=new Map();
@@ -5321,7 +5366,7 @@ function dbDbtRender(){
  if(selected&&p.intent&&!Array.from(select.options).some(o=>o.value===selected)){const frozen=new Option(selected,selected);frozen.disabled=true;select.add(frozen);}
  select.value=selected;select.disabled=locked||!allowed||!native||!dbDbtOptionsValid(p.runOptions)||!p.runOptions.eligible||!p.runOptions.nodes.some(n=>n.eligible);select.setAttribute('aria-describedby','db-dbt-native-reason');
  ui(dbDbtNode('native-reason'),dbDbtNativeReason(selected));
- ui(dbDbtNode('native-help'),dbDbtQuality()?'Creates one new same-DB SANDBOX candidate and runs the complete attached quality suite. Publication is unavailable. Execution revalidates current project, policy and sources.':'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.');
+ ui(dbDbtNode('native-help'),dbDbtQuality()?'Creates one new same-DB SANDBOX candidate and runs the complete attached quality suite. After quality PASSED, admin may explicitly review MARTS publication with row audit >= 1. Execution revalidates current project, policy and sources.':'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.');
  const quality=dbDbtNode('native-tests');quality.checked=allowed&&dbDbtQuality();quality.disabled=locked||!allowed||!native;
  const testability=dbDbtTestability(selected);ui(dbDbtNode('native-tests-reason'),dbDbtQualityReason(selected));if(testability)dbDbtNode('native-tests-reason').textContent+=' · '+t('Attached tests')+': '+testability.count;
  ui(dbDbtNode('build'),native?(dbDbtQuality()?'Run native TABLE and test':'Run native TABLE'):'Build candidates and test');dbDbtNode('build').disabled=locked||!dbDbtCanRun();
@@ -5341,14 +5386,16 @@ function dbDbtRender(){
  }else dataopsNode('p','',dbDbtNode('plan-detail'),'Choose a saved plan or compile an approved project.');
  if(r){dbDbtSummary(dbDbtNode('run-detail'),r);if(!locked&&['READY','NATIVE_VERIFIED','FAILED','CANCELED','PUBLISHED'].includes(r.state)){dataopsNode('p','',dbDbtNode('run-detail'),'Inspect the saved plan again to prepare a different explicit run.');dataopsButton(dbDbtNode('run-detail'),'','Inspect plan',()=>dbDbtObserve('plan',r.plan_id));}else if(r.state==='UNKNOWN'&&r.executor==='native_table')dataopsNode('p','',dbDbtNode('run-detail'),'Backend outcome unknown. Reconcile existing operations; publication is blocked.');dbDbtTable(dbDbtNode('candidates'),['Model','Status','Applied table format','TABLE snapshot / VIEW version','Candidate Ref details'],(r.models||[]).map(m=>[m.name,m.state,dbDbtFormat(m),dbDbtCandidateVersion(m),parent=>dbDbtCandidateDetails(parent,m)]));
  dbDbtTable(dbDbtNode('tests'),['Model','Status','Failure count',...(r.native_tests===true?['Operation ID']:[])],(r.tests||[]).map(x=>[x.unique_id+' · '+x.name,x.state,x.failure_count??'',...(r.native_tests===true?[x.operation_id||'']:[])]));
- for(const m of r.models||[]){if(r.executor==='native_table'||m.materialized!=='table')continue;const row=dataopsNode('div','',dbDbtNode('publications'));dataopsNode('p','',row).textContent=m.name;
+ for(const m of r.models||[]){if(m.materialized!=='table')continue;const row=dataopsNode('div','',dbDbtNode('publications'));dataopsNode('p','',row).textContent=m.name;
  const pub=p.publications[m.unique_id];if(pub)dbDbtSummary(row,pub);
- const button=dataopsButton(row,'','Review publication',()=>{if(!dbDbtCanPublish(m)||p.pending)return;p.review=m.unique_id;dbDbtRender();});button.disabled=locked||!dbDbtCanPublish(m);
+ const button=dataopsButton(row,'','Review publication',()=>dbDbtReview(m));button.disabled=locked||!dbDbtCanPublish(m);
  if(pub||m.publication_id)dataopsButton(row,'','Observe saved state',()=>dbDbtObserve('publication',pub?.id||m.publication_id)).disabled=locked;
- if(p.review===m.unique_id&&dbDbtCanPublish(m)){
+ if(p.review===m.unique_id&&dbDbtCanPublish(m)&&(r.executor!=='native_table'||dbDbtPreviewValid(p.preview,m))){
   const target=p.schemas.find(s=>s.id===a?.target_schema),pm=a?.models?.find(x=>x.unique_id===m.unique_id),name=Array.isArray(pm?.relation)?pm.relation[2]:null;
-  const review=dbDbtNode('confirmation');review.className='db-dbt-confirm';dataopsNode('h3','',review,'Review publication');dataopsNode('p','',review,'Target FQN');dataopsNode('p','',review).textContent=target&&name?[a.context.sql_catalog,target.sql_name,name].join('.'):'Unavailable';dataopsNode('pre','',review).textContent=JSON.stringify({node_id:m.unique_id,candidate:m.candidate,wap_version:m.wap_version},null,2);dataopsNode('p','',review,'Publication requires admin and every planned test to pass. Each model publishes independently.');
-  const publish=dataopsButton(review,'db-dbt-publish','Audit and publish',()=>dbDbtSubmit('publish',m.unique_id));publish.className='primary';publish.disabled=locked||!target||!name;dataopsButton(review,'','Close publication review',()=>{p.review=null;dbDbtRender();});
+  const review=dbDbtNode('confirmation');review.className='db-dbt-confirm';dataopsNode('h3','',review,'Review publication');
+  if(r.executor==='native_table'){const v=p.preview;dbDbtNativeFacts(review,v);dataopsNode('p','',review,'Native publication requires admin confirmation, quality PASSED and a fresh row audit >= 1. Same-DB MARTS only.');dataopsNode('p','',review,v.expected_target.target===null?'New target (reviewed absent)':'Replace reviewed target');dbDbtNativeProof(review,v);}
+  else{dataopsNode('p','',review,'Target FQN');dataopsNode('p','',review).textContent=target&&name?[a.context.sql_catalog,target.sql_name,name].join('.'):'Unavailable';dataopsNode('pre','',review).textContent=JSON.stringify({node_id:m.unique_id,candidate:m.candidate,wap_version:m.wap_version},null,2);dataopsNode('p','',review,'Publication requires admin and every planned test to pass. Each model publishes independently.');}
+  const publish=dataopsButton(review,'db-dbt-publish','Audit and publish',()=>dbDbtSubmit('publish',m.unique_id));publish.className='primary';publish.disabled=locked||!target||!name;dataopsButton(review,'','Close publication review',()=>{p.review=null;p.preview=null;dbDbtRender();});
  }
  }
  }else dataopsNode('p','',dbDbtNode('run-detail'),'Choose a saved run or build a ready plan.');
@@ -5377,13 +5424,13 @@ function dbDbtInstall(){
  dataopsNode('p','',body,'Project and schema inputs apply to the next compile. Build and publish use the selected saved artifacts.').className='help';
  dataopsNode('p','',body,'Project defaults to views are supported as run-specific SANDBOX INVOKER VIEWs. Only TABLE candidates can be published.').className='help';
  const saved=dataopsNode('div','',body);saved.className='toolbar';saved.setAttribute('role','group');saved.setAttribute('aria-labelledby','db-dbt-run-label');dataopsNode('span','db-dbt-run-label',saved,'Run saved plan');
- dataopsField(saved,'db-dbt-method','Execution method','select',[['sql_wap','SQL / WAP'],['native_table','Native TABLE']]).onchange=()=>{if(p.pending||p.intent)return;const value=dbDbtNode('method').value;if(!['sql_wap','native_table'].includes(value))return;p.method=value;p.node='';p.nativeTests=false;dbDbtRender();};
+ dataopsField(saved,'db-dbt-method','Execution method','select',[['sql_wap','SQL / WAP'],['native_table','Native TABLE']]).onchange=()=>{if(p.pending||p.intent)return;const value=dbDbtNode('method').value;if(!['sql_wap','native_table'].includes(value))return;p.review=null;p.preview=null;p.method=value;p.node='';p.nativeTests=false;dbDbtRender();};
  const native=dataopsNode('div','db-dbt-native-controls',saved);native.className='toolbar';
- dataopsField(native,'db-dbt-node','Target model','select').onchange=()=>{if(p.pending||p.intent)return;p.node=dbDbtNode('node').value;dbDbtRender();};
+ dataopsField(native,'db-dbt-node','Target model','select').onchange=()=>{if(p.pending||p.intent)return;p.review=null;p.preview=null;p.node=dbDbtNode('node').value;dbDbtRender();};
  const qualityLabel=dataopsNode('label','',native);const quality=dataopsNode('input','db-dbt-native-tests',qualityLabel);quality.type='checkbox';quality.setAttribute('aria-describedby','db-dbt-native-tests-reason');dataopsNode('span','',qualityLabel,'Run quality tests');quality.onchange=()=>{if(p.pending||p.intent)return;p.nativeTests=quality.checked===true;dbDbtRender();};
  dataopsNode('p','db-dbt-native-tests-reason',native).setAttribute('aria-live','polite');
  dataopsNode('p','db-dbt-native-reason',native).setAttribute('aria-live','polite');
- dataopsNode('p','db-dbt-native-quality-help',body,'Select Run quality tests to run the complete attached suite against the new candidate. Build-only tests are NOT_RUN. Publication remains unavailable.').className='help';
+ dataopsNode('p','db-dbt-native-quality-help',body,'Select Run quality tests to run the complete attached suite against the new candidate. Build-only tests are NOT_RUN. Quality PASSED enables explicit admin review for same-DB MARTS publication and row audit >= 1.').className='help';
  dataopsNode('p','db-dbt-native-help',body,'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.').className='help';
  const actions=dataopsNode('div','',body);actions.className='toolbar';for(const [name,label,fn] of [['compile','Compile project',()=>dbDbtSubmit('compile')],['build','Build candidates and test',()=>dbDbtSubmit('build')],['observe','Observe saved state',()=>dbDbtObserve()],['recover','Recover original receipt',()=>dbDbtRecover()],['close-rejected','Close rejected request and choose again',dbDbtCloseRejected],['cancel','Cancel saved run',()=>dbDbtSubmit('cancel')],['reconcile','Reconcile existing operations',()=>dbDbtSubmit('reconcile')]])dataopsButton(actions,'db-dbt-'+name,label,fn);
  p.status=dataopsNode('p','db-dbt-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');dataopsNode('p','db-dbt-reason',body);dataopsNode('p','db-dbt-receipt',body);

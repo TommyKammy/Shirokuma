@@ -44,3 +44,5 @@ TABLE作成の検証と品質結果を区別する。作成済み候補のRef／
 通常サーバーは検証projectの一時登録を外して復元し、doctorはhealthy・46 checkだった。直接リンクの初回読込／reloadと履歴は参照だけを行う。同じtabのhashだけの変更には既存どおり再読込が必要である。
 
 DB-P6-3全体とM1本人受入は未完了である。
+
+2026年10月31日の後続[C2B5](database-p6-3c2b5-native-publication-2026-10-31.md)で、品質成功済みnative TABLEの明示的なMARTS公開を追加した。本書の公開不可はC2B4受入時点の状態を記録している。

@@ -4,8 +4,8 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-30
-version: "7.12.0"
+updated: 2026-10-31
+version: "7.13.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,11 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-31 — DB-P6-3C2B5 explicit native TABLE publication
+
+- Added metadata-only publication preview and exact reviewed target through Workbench/API/CLI. A publishes an E-built native quality-PASSED candidate to same-Database MARTS after a real min-one-row audit. Native origin remains distinct in dbt/DataOps receipts, without forged manual-WAP artifacts. See the [contract and evidence](../../guides/database-p6-3c2b5-native-publication-2026-10-31.md).
+- E/A, two databases, new and existing targets, empty audit/cold resume, exact-request replay, JA/EN/viewer and preservation passed runtime acceptance. All 83 canonical test groups passed in stages after updating one obsolete B4 assertion; the final workflow module passed 90 tests. Current scope: 3,272 passed and 34 existing skips; Go/design checks passed. Full graph/RunTask, native VIEW, direct SDK candidate replacement, manual-WAP rollback integration, full DB-P6-3 and M1 owner acceptance remain separate.
 
 ### 2026-10-30 — DB-P6-3C2B4 native quality tests
 

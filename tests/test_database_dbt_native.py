@@ -1165,7 +1165,8 @@ class NativeQualityTests(unittest.TestCase):
         self.assertTrue(passed['native_verified'])
         self.assertEqual(passed['tests_status'], 'PASSED')
         self.assertEqual([t['state'] for t in passed['tests']], ['PASSED', 'PASSED'])
-        self.assertFalse(passed['publication_allowed'])
+        # Eligible for publication review; publication still requires authorization.
+        self.assertTrue(passed['publication_allowed'])
         self.assertEqual(len(self.w.posts), 3)
         for sql, headers in self.w.posts[1:]:
             self.assertIn('FOR VERSION AS OF', sql)
@@ -1185,6 +1186,7 @@ class NativeQualityTests(unittest.TestCase):
             failed = self.quality_run('quality-failed')
         self.assertEqual(failed['state'], 'FAILED', failed)
         self.assertEqual(failed['tests_status'], 'FAILED')
+        self.assertFalse(failed['publication_allowed'])
         self.assertTrue(failed['native_verified'])
         self.assertEqual([t['state'] for t in failed['tests']], ['FAILED', 'FAILED'])
         self.assertEqual([t['failure_count'] for t in failed['tests']], [2, 2])

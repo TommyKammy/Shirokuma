@@ -801,6 +801,63 @@ class Execution:
         return rows[0][0]
 
     @_serialized
+    def _dbt_native_audit(self):
+        """Audit only the candidate in this accepted native publication."""
+        import db_dbt
+        publication = db_dbt._native_execution_intent(self, 'audit')
+        intent = publication['_native_intent']
+        receipt_id = str(uuid.uuid4())
+        pending = dict(origin='native_table', audit_id=receipt_id, intent=intent)
+        with control_store.connect() as db:
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (_json(pending), self.id))
+        candidate = intent['candidate']
+        source = self._ref(registry.ResourceRef(**candidate['ref']))
+        snapshot = candidate['snapshot']
+        if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
+            raise QueryError('DBT_CANDIDATE_CHANGED', 409)
+        page = self._execute('wap_audit', 'SELECT COUNT(*) FROM ' + source + ' FOR VERSION AS OF ' + snapshot, 'audit')
+        rows = page['data']
+        if (len(rows) != 1 or len(rows[0]) != 1 or type(rows[0][0]) is not int or rows[0][0] < 0):
+            raise QueryError('INVALID_AUDIT_RESULT', 502)
+        receipt = dict(id=receipt_id, origin='native_table', publication_id=publication['id'], intent=intent,
+            operation_id=self.id, query_id=page['id'], count=rows[0][0], passed=rows[0][0] >= intent['audit_policy']['min_rows'])
+        return dict(audit_id=receipt_id, audit=receipt)
+
+    @_serialized
+    def _dbt_native_publish(self):
+        """One PARQUET CTAS/CRTA from an accepted, positively audited snapshot."""
+        import db_dbt
+        publication = db_dbt._native_execution_intent(self, 'publish')
+        intent = publication['_native_intent']
+        candidate = intent['candidate']
+        target = db_dbt._native_target(intent['expected_target']['destination'])
+        locator = self.wap_claim(target)
+        if type(target) is registry.ResourceRef:
+            name, prefix = self._ref(target, write=True, admin=True), 'CREATE OR REPLACE TABLE '
+        else:
+            name, prefix = self._locator(target, admin=True), 'CREATE TABLE '
+        source = self._ref(registry.ResourceRef(**candidate['ref']))
+        snapshot = candidate['snapshot']
+        if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
+            raise QueryError('DBT_CANDIDATE_CHANGED', 409)
+        columns = ', '.join(_column(c['name']) for c in candidate['columns'])
+        result = db_dbt._native_publish_intent(publication, self.id)
+        with control_store.connect() as db:
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (_json(result), self.id))
+        page = self._execute('wap_publish', prefix + name + " WITH (format='PARQUET') AS SELECT " + columns
+            + ' FROM ' + source + ' FOR VERSION AS OF ' + snapshot, 'publish', commit_result=result)
+        # Query completion already committed the write marker. Observation failure
+        # must retain it, and cannot turn table existence into publication proof.
+        ref = self._observe(locator)
+        measured = self.wap_measure(ref)
+        receipt = dict(result, id=publication['id'], actor=self.principal.principal_id,
+            context=asdict(self._context()), query_id=page['id'], target=measured)
+        result = dict(result, publication=receipt)
+        with control_store.connect() as db:
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (_json(result), self.id))
+        return result
+
+    @_serialized
     def wap_audit(self, build, not_null, *, step):
         """Count rows/nulls using the measured build's exact snapshot."""
         ref = self._wap_owned(build)

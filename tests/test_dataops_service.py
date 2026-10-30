@@ -29,6 +29,36 @@ import warehouse_admission as admission
 
 class DataOpsTests(unittest.TestCase):
 
+    def test_native_publication_typed_methods_require_private_accepted_scope(self):
+        execution = self.begin()
+        for method in (execution._dbt_native_audit, execution._dbt_native_publish):
+            with self.subTest(method=method.__name__), self.assertRaises(QueryError) as denied:
+                method()
+            self.assertEqual(denied.exception.code, 'DBT_CONTINUATION_REQUIRED')
+        self.assertFalse(self.calls)
+        execution.fail()
+
+    def test_native_audit_rejects_malformed_counts_and_preserves_minimum_one(self):
+        import db_dbt
+        from dataclasses import asdict
+        execution = self.begin()
+        ref = self.existing()
+        accepted = dict(id='publication', _native_intent=dict(candidate=dict(ref=asdict(ref), snapshot='1'),
+            audit_policy=dict(min_rows=1)))
+        with patch.object(db_dbt, '_native_execution_intent', return_value=accepted):
+            for rows in ([], [[True]], [[-1]], [[1.0]], [[None]], [[1, 2]], [[1], [2]]):
+                with self.subTest(rows=rows), patch.object(execution, '_execute', return_value=dict(id='query', data=rows)), \
+                        self.assertRaises(QueryError) as invalid:
+                    execution._dbt_native_audit()
+                self.assertEqual(invalid.exception.code, 'INVALID_AUDIT_RESULT')
+            for count in (0, 1, 500):
+                with self.subTest(count=count), patch.object(execution, '_execute', return_value=dict(id='query', data=[[count]])):
+                    result = execution._dbt_native_audit()
+                self.assertEqual(result['audit']['count'], count)
+                self.assertEqual(result['audit']['passed'], count >= 1)
+        self.assertFalse(self.calls)
+        execution.fail()
+
     def test_standalone_execution_has_no_dbt_property_contract(self):
         import db_dbt
         execution = self.begin()

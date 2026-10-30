@@ -67,6 +67,39 @@ class Routes(unittest.TestCase):
             routes.dispatch(h, 'GET', h.path, dict(context=[json.dumps(asdict(C))], plan_id=[ID]), 'actor', C.selected_role)
             self.assertEqual(call.call_args.kwargs, {'plan_id': ID})
 
+    def test_publication_preview_strict_get_and_descriptor_forwarding(self):
+        context = dict(asdict(C), selected_role='admin')
+        path = BASE + 'runs/' + ID + '/publication-preview'
+        params = dict(context=[json.dumps(context)], node_id=['model.demo.alias'])
+        with patch.object(routes.dbt, 'get_publication_preview', return_value={'origin': 'native_table'}) as preview:
+            h = self.handler(path)
+            routes.dispatch(h, 'GET', path, params, 'publisher', 'admin')
+            self.assertEqual(preview.call_args.args[0], 'publisher')
+            self.assertEqual(preview.call_args.args[1].selected_role, 'admin')
+            self.assertEqual(preview.call_args.kwargs, {'node_id': 'model.demo.alias'})
+            h.database_body.assert_not_called()
+            h.respond.assert_called_once_with(dict(context=context, preview={'origin': 'native_table'}), 200)
+        for bad, headers in [(dict(context=params['context']), {}), (dict(params, node_id=['a', 'b']), {}),
+                (dict(params, extra=['x']), {}), (dict(params, node_id=['bad node']), {}),
+                (params, {'Content-Length': ['0', '0']}), (params, {'Content-Length': '1'}),
+                (params, {'Transfer-Encoding': 'chunked'})]:
+            with patch.object(routes.dbt, 'get_publication_preview') as preview:
+                with self.assertRaises((ValueError, QueryError)):
+                    routes.dispatch(self.handler(path, headers=headers), 'GET', path, bad, 'publisher', 'admin')
+                preview.assert_not_called()
+        descriptor = dict(version=1, destination={'database_id': 'db', 'schema_id': 'marts', 'physical_name': 'alias'}, target=None)
+        for include in (False, True):
+            body = dict(context=context, node_id='model.demo.alias')
+            if include:
+                body['expected_target'] = descriptor
+            h = self.handler(BASE + 'runs/' + ID + '/publish', body, {'Content-Type': 'application/json', 'Idempotency-Key': 'key'})
+            with patch.object(routes.dbt, 'submit_publication', return_value={}) as publish:
+                routes.dispatch(h, 'POST', h.path, {}, 'publisher', 'admin')
+                expected = dict(key='key', node_id='model.demo.alias')
+                if include:
+                    expected['expected_target'] = descriptor
+                self.assertEqual(publish.call_args.kwargs, expected)
+
     def test_reject_before_service(self):
         for path, method, params, body, headers in [
             ('runs/' + ID + '/extra', 'GET', {}, {}, {}),

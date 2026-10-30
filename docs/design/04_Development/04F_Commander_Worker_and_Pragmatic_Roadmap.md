@@ -4,8 +4,8 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-10-30
-version: "1.27"
+updated: 2026-10-31
+version: "1.28"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -22,7 +22,9 @@ DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse�
 
 2026-10-29、DB-P6-0の[89項目の表示契約](../../guides/database-capability-matrix-2026-10-29.md)と[DB-P6-1の保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
 [DB-P6-2の共有LOCAL休止・自動復帰](../../guides/database-p6-2-implementation-2026-10-29.md)はAPI／CLI／UIを実装し、技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。warm各30回の標本p95差は35.3ms、限定復旧は元UNKNOWNを保持して実行だけを閉鎖した。
-[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)・[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)・[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)・[C2B3](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md)は各限定範囲の技術受入済み。[C2B4](../../guides/database-p6-3c2b4-native-quality-tests-2026-10-30.md)で新規native TABLE 1件に付属する品質test一式を明示選択でき、TABLE作成の検証と品質結果を分離した。API／実CLI／画面、E／A・2DB・休止復帰・品質失敗・SDK停止／取消／owner喪失と保全を実機確認した。この限定範囲の技術受入を完了した。通常RunTask／全graph、置換、native VIEW・正式公開、DB-P6-3全体とM1本人受入は後続である。
+[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)・[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)・[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)・[C2B3](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md)は各限定範囲の技術受入済み。[C2B4](../../guides/database-p6-3c2b4-native-quality-tests-2026-10-30.md)で新規native TABLE 1件に付属する品質test一式を明示選択でき、TABLE作成の検証と品質結果を分離した。API／実CLI／画面、E／A・2DB・休止復帰・品質失敗・SDK停止／取消／owner喪失と保全を実機確認した。この限定範囲の技術受入を完了した。通常RunTask／全graph、native SDKの候補直接置換、native VIEW、DB-P6-3全体とM1本人受入は後続である。
+
+2026-10-31、[C2B5](../../guides/database-p6-3c2b5-native-publication-2026-10-31.md)で、品質成功済みnative TABLEの明示公開を実装した。Aが固定した公開先を確認し、最低1行の監査を経て同じDatabaseのMARTSへ公開する。E作成／A公開と元key回収を実機確認し、この限定範囲の技術受入を完了した。通常RunTask／全graph・native VIEW、native SDKによる既存候補の直接置換、manual-WAP rollback統合、DB-P6-3全体とM1本人受入は後続である。
 
 ---
 

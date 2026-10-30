@@ -46,6 +46,16 @@ class DbtClient(Client):
                     raise ValueError('incomplete response')
                 return json.loads(raw)
         except HTTPError as error:
+            if method == 'POST' and body and 'expected_target' in body:
+                try:
+                    payload = json.loads(error.read())
+                    code = payload.get('error', payload.get('code')) if isinstance(payload, dict) else None
+                    code = code.get('code') if isinstance(code, dict) else code
+                except (ValueError, OSError):
+                    code = None
+                if error.code == 409 and code == 'DBT_PUBLICATION_REVIEW_CHANGED':
+                    raise RequestRejected(code) from None
+                raise RequestUncertain() from None
             if method == 'POST' and error.code >= 500:
                 raise RequestUncertain() from None
             raise RequestRejected('DBT_REQUEST_FAILED') from None
@@ -104,6 +114,9 @@ def artifact(value, context, kind, principal, expected=None, *, observe=False):
 
 def validate_reply(reply, context, kind, expected, args, principal):
     action = args.action
+    if action == 'publish-preview':
+        publication_preview(reply, context, args.run_id, args.node_id)
+        return reply
     if action == 'projects':
         if not isinstance(reply.get('projects'), list) or any(not isinstance(p, dict) or not isinstance(p.get('id'), str) for p in reply['projects']):
             raise ValueError('invalid projects')
@@ -127,13 +140,58 @@ def validate_reply(reply, context, kind, expected, args, principal):
                     raise ValueError('executor/node association mismatch')
             if action == 'publish' and (record.get('run_id') != args.run_id or record.get('node_id') != args.node_id):
                 raise ValueError('publication association mismatch')
+            if action == 'publish' and hasattr(args, 'expected_target') and (record.get('origin') != 'native_table'
+                    or json.dumps(record.get('expected_target'), sort_keys=True) != json.dumps(args.expected_target, sort_keys=True) or record.get('parent_run_id') != args.run_id
+                    or record.get('plan_id') != args.review_plan_id):
+                raise ValueError('native publication review ACK mismatch')
     return reply
+
+
+def publication_preview(value, context, run_id, node_id):
+    """Validate a saved review without refreshing or changing its descriptor."""
+    if not isinstance(value, dict):
+        raise ValueError('invalid publication preview')
+    if 'preview' in value:
+        if value.get('context') != context:
+            raise ValueError('preview context mismatch')
+        value = value['preview']
+    if (not isinstance(value, dict) or type(value.get('version')) is not int or value['version'] != 1
+            or value.get('origin') != 'native_table' or value.get('run_id') != run_id
+            or value.get('node_id') != node_id or value.get('context') != context):
+        raise ValueError('preview association mismatch')
+    identifier(value.get('plan_id'))
+    d = value.get('expected_target')
+    if (not isinstance(d, dict) or set(d) != {'version', 'destination', 'target'}
+            or type(d['version']) is not int or d['version'] != 1
+            or not isinstance(d['destination'], dict)):
+        raise ValueError('invalid reviewed target')
+    dest, target = d['destination'], d['target']
+    if dest.get('database_id') != context['database_id'] or not isinstance(dest.get('schema_id'), str) or not dest['schema_id']:
+        raise ValueError('invalid reviewed destination')
+    if 'object_id' in dest:
+        if (set(dest) != {'database_id', 'schema_id', 'object_id', 'incarnation'}
+                or not isinstance(dest['object_id'], str) or not dest['object_id']
+                or type(dest['incarnation']) is not int or dest['incarnation'] < 1
+                or not isinstance(target, dict) or set(target) != {'ref', 'snapshot', 'schema_id', 'columns', 'schema_fingerprint'}
+                or target.get('ref') != dest or not isinstance(target.get('snapshot'), str)
+                or not re.fullmatch(r'[0-9]+', target['snapshot'])
+                or not isinstance(target.get('columns'), list) or not target['columns']
+                or type(target.get('schema_id')) is not int or target['schema_id'] < 0
+                or not isinstance(target.get('schema_fingerprint'), str)
+                or not re.fullmatch(r'[0-9a-f]{64}', target['schema_fingerprint'])
+                or any(not isinstance(c, dict) or set(c) != {'name', 'type'}
+                    or not isinstance(c['name'], str) or not c['name'] or not isinstance(c['type'], (str, dict))
+                    for c in target['columns'])):
+            raise ValueError('invalid reviewed measurement')
+    elif set(dest) != {'database_id', 'schema_id', 'physical_name'} or target is not None or not isinstance(dest.get('physical_name'), str) or not dest['physical_name']:
+        raise ValueError('invalid absent destination')
+    return value
 
 
 def parser():
     root = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     commands = root.add_subparsers(dest='action', required=True)
-    for action in ('projects', 'compile', 'plans', 'plan', 'run', 'runs', 'status', 'cancel', 'reconcile', 'publish', 'publication'):
+    for action in ('projects', 'compile', 'plans', 'plan', 'run', 'runs', 'status', 'cancel', 'reconcile', 'publish', 'publish-preview', 'publication'):
         p = commands.add_parser(action, allow_abbrev=False)
         p.add_argument('--database')
         p.add_argument('--schema', default=None, help='schema name or ID (default: sandbox)')
@@ -150,14 +208,16 @@ def parser():
             p.add_argument('--staging-materialization', choices=('default', 'ephemeral', 'table'), default='default')
         if action in ('plan', 'run', 'runs'):
             p.add_argument('--plan-id', required=action != 'runs')
-        if action in ('status', 'cancel', 'reconcile', 'publish'):
+        if action in ('status', 'cancel', 'reconcile', 'publish', 'publish-preview'):
             p.add_argument('--run-id', required=True)
         if action == 'run':
             p.add_argument('--executor', choices=('sql_wap', 'native_table'), default='sql_wap')
             p.add_argument('--node-id')
             p.add_argument('--native-tests', action='store_true')
-        if action == 'publish':
+        if action in ('publish', 'publish-preview'):
             p.add_argument('--node-id', required=True)
+        if action == 'publish':
+            p.add_argument('--expected-target-file', help='JSON returned by publish-preview')
         if action == 'publication':
             p.add_argument('--publication-id', required=True)
     return root
@@ -169,6 +229,8 @@ def main(argv=None, *, profile=None):
         raise ValueError('nonempty flags required')
     if (args.context or args.context_file) and (args.database is not None or args.schema is not None):
         raise ValueError('context conflicts with database/schema')
+    if args.action == 'publish-preview' and not (args.context or args.context_file):
+        raise ValueError('explicit saved context required for publication review')
     if args.action == 'run':
         if args.native_tests and args.executor != 'native_table':
             raise ValueError('native tests require native executor')
@@ -225,11 +287,18 @@ def main(argv=None, *, profile=None):
         else:
             expected = identifier(args.run_id)
             path += '/' + expected
-            if action in ('cancel', 'reconcile', 'publish'):
-                path += '/' + action
+            if action in ('cancel', 'reconcile', 'publish', 'publish-preview'):
+                path += '/' + ('publication-preview' if action == 'publish-preview' else action)
             if action == 'publish':
                 kind, expected = 'publication', None
                 body['node_id'] = args.node_id
+                if args.expected_target_file:
+                    preview = publication_preview(json.loads(Path(args.expected_target_file).read_text()), context, args.run_id, args.node_id)
+                    args.review_plan_id = preview['plan_id']
+                    args.expected_target = preview['expected_target']
+                    body['expected_target'] = args.expected_target
+            if action == 'publish-preview':
+                params['node_id'] = args.node_id
     mutation = action in ('compile', 'run', 'cancel', 'reconcile', 'publish')
     if mutation:
         key = args.idempotency_key or str(uuid.uuid4())

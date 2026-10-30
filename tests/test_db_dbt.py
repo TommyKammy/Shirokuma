@@ -1,11 +1,13 @@
 """Durable dbt workflow using real WAP/admission and the existing SQL harness."""
 from dataclasses import asdict, replace
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
 import sys
 import threading
 import unittest
+import uuid
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
@@ -1508,6 +1510,491 @@ class DbtTests(unittest.TestCase):
         for field in ('candidate', 'candidate_locator', 'pins', 'native_receipt'):
             self.assertNotIn(field, receipt)
         self.assertEqual(receipt['models'], [])
+
+
+class NativePublicationTests(unittest.TestCase):
+    """Real native SDK receipts plus the existing persistent SQL/catalog harness."""
+    from test_database_dbt_native import NativeQualityTests as _Fixture
+    setUp = _Fixture.setUp
+    clear_live = _Fixture.clear_live
+    quality_run = _Fixture.quality_run
+    quality_transport = _Fixture.quality_transport
+    mutate_plan = _Fixture.mutate_plan
+    code = DbtTests.code
+    record = DbtTests.record
+    mutate = DbtTests.mutate
+
+    def candidate(self):
+        with patch.object(qs, '_transport', side_effect=self.quality_transport):
+            run = self.quality_run()
+        self.assertEqual(run['state'], 'NATIVE_VERIFIED', run)
+        self.assertTrue(run['publication_allowed'], run)
+        return run
+
+    def publisher(self):
+        return self.w.owner, self.b.context(schema='sandbox', principal=self.w.owner, role='admin')
+
+    def preview(self, run):
+        return dbt.get_publication_preview(*self.publisher(), run['id'], node_id=self.uid)
+
+    def accept(self, run, expected, key='publish'):
+        with patch.object(dbt, '_start'):
+            return dbt.submit_publication(*self.publisher(), run['id'], key=key, node_id=self.uid,
+                expected_target=expected)
+
+    def finish(self, ack):
+        dbt._execute(ack['id'])
+        return dbt.get_publication(*self.publisher(), ack['id'])
+
+    def test_preview_is_metadata_only_old_quality_eligible_and_engineer_denied(self):
+        run = self.candidate()
+        before = len(self.w.posts)
+        with control_store.connect() as db:
+            counts = [db.execute('SELECT count(*) FROM ' + table).fetchone()[0] for table in
+                ('dbt_runs', 'dataops_operations', 'warehouse_admissions', 'dbt_requests', 'dataops_target_claims')]
+        with patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')), \
+                patch.object(qs, '_transport', side_effect=AssertionError('SQL')), \
+                patch.object(compiler, '_compiled_project', side_effect=AssertionError('compile')):
+            first = self.preview(run)
+            self.assertEqual(first, self.preview(run))
+            self.assertTrue(dbt.get_run(self.principal, self.context, run['id'])['publication_allowed'])
+            self.code('SQL_PERMISSION_DENIED', dbt.get_publication_preview, self.principal, self.context,
+                run['id'], node_id=self.uid)
+            self.code('SQL_PERMISSION_DENIED', dbt.submit_publication, self.principal, self.context,
+                run['id'], key='engineer', node_id=self.uid, expected_target=first['expected_target'])
+        self.assertEqual(first['candidate'], run['native_receipt']['candidate'])
+        self.assertEqual(first['source_context'], asdict(self.context))
+        self.assertEqual(first['quality']['status'], 'PASSED')
+        self.assertEqual(first['quality']['count'], 2)
+        self.assertIsNone(first['expected_target']['target'])
+        self.assertEqual(first['target']['name'], 'arbitrary_result')
+        with control_store.connect() as db:
+            self.assertEqual(counts, [db.execute('SELECT count(*) FROM ' + table).fetchone()[0] for table in
+                ('dbt_runs', 'dataops_operations', 'warehouse_admissions', 'dbt_requests', 'dataops_target_claims')])
+            self.assertFalse(dbt._row(db, run['id'])[1]['publication_allowed'])
+        self.assertEqual(len(self.w.posts), before)
+
+    def test_publication_audits_exact_snapshot_with_admin_credentials_no_sdk_or_wap_forgery(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        before = len(self.w.posts)
+        source = self.record(run['id'])
+        self.b.credential = 'Basic publisher-secret'
+        ack = self.accept(run, expected)
+        self.b.credential = 'Basic rotated-after-acceptance'
+        self.assertEqual(ack['origin'], 'native_table')
+        self.assertEqual(ack['expected_target'], expected)
+        with patch.object(compiler, '_compiled_project', side_effect=AssertionError('SDK rebuild')):
+            publication = self.finish(ack)
+        self.assertEqual(publication['state'], 'PUBLISHED', publication)
+        self.assertTrue(publication['committed'])
+        self.assertEqual([o['phase'] for o in publication['operations']], ['audit', 'publish'])
+        self.assertEqual([o['node_id'] for o in publication['operations']], [self.uid, self.uid])
+        posts = self.w.posts[before:]
+        self.assertEqual(len(posts), 2)
+        self.assertTrue(posts[0][0].startswith('SELECT COUNT(*) FROM '))
+        self.assertIn("WITH (format='PARQUET') AS SELECT \"id\", \"label\"", posts[1][0])
+        for sql, headers in posts:
+            self.assertIn('FOR VERSION AS OF ' + run['native_receipt']['candidate']['snapshot'], sql)
+            self.assertEqual(headers['Authorization'], 'Basic publisher-secret')
+        with control_store.connect() as db:
+            source_op = db.execute('SELECT * FROM dataops_operations WHERE id=?', (source['models'][0]['operation_ids'][0],)).fetchone()
+            children = list(db.execute('SELECT o.* FROM dataops_operations o JOIN dbt_run_operations l ON l.operation_id=o.id WHERE l.run_id=?', (ack['id'],)))
+            self.assertEqual({c['actor'] for c in children}, {self.w.owner.principal_id})
+            self.assertTrue(all(c['credential_snapshot_ref'] != source_op['credential_snapshot_ref'] for c in children))
+            for table in ('wap_models', 'wap_builds', 'wap_audits', 'wap_publications'):
+                self.assertEqual(db.execute('SELECT count(*) FROM ' + table).fetchone()[0], 0)
+            self.assertEqual(dbt._native_publication_saved(db, self.record(ack['id'])), publication['native_publication'])
+        self.assertEqual(self.record(run['id'])['native_receipt'], source['native_receipt'])
+        self.assertFalse(dbt.get_run(self.principal, self.context, run['id'])['publication_allowed'])
+        count = len(self.w.posts)
+        # Same key remains recoverable after both heads advance; new key cannot release the latch.
+        for measured in (run['native_receipt']['candidate'], publication['native_publication']['target']):
+            self.w.snapshot(self.w.metadata(dm.ResourceRef(**measured['ref'])), [(9, 'later')])
+        self.assertEqual(self.accept(run, expected)['id'], ack['id'])
+        self.assertEqual(dbt.get_publication(*self.publisher(), ack['id'])['state'], 'PUBLISHED')
+        # Replacement retires registry identities too; saved publication evidence
+        # remains historical proof and must not require current candidates.
+        for measured in (run['native_receipt']['candidate'], publication['native_publication']['target']):
+            ref = dm.ResourceRef(**measured['ref'])
+            with control_store.connect() as db:
+                obj = dm.get_object(db, ref.object_id)
+                dm.observe_object(db, ref.schema_id, obj.physical_name, 'TABLE', str(uuid.uuid4()), obj.display_name)
+        dbt._settle(ack['id'])
+        self.assertEqual(dbt.get_publication(*self.publisher(), ack['id'])['state'], 'PUBLISHED')
+        self.assertEqual(self.accept(run, expected)['id'], ack['id'])
+        self.code('IDEMPOTENCY_CONFLICT', self.accept, run, dict(expected, version=2))
+        # The retired build itself now denies a fresh publication as well.
+        self.code('DBT_NATIVE_PUBLICATION_FORBIDDEN', self.accept, run, expected, key='new-key')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_review_descriptor_and_preacceptance_candidate_drift_have_no_reservation(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        for descriptor in (None, {}, dict(expected, version=True), dict(expected, target={}),
+                dict(expected, destination=dict(expected['destination'], physical_name='other'))):
+            self.code('DBT_PUBLICATION_REVIEW_REQUIRED', self.accept, run, descriptor)
+        self.code('DBT_PUBLICATION_REVIEW_REQUIRED', dbt.submit_publication, *self.publisher(),
+            run['id'], key='missing', node_id=self.uid)
+        count = len(self.w.posts)
+        self.w.snapshot(self.w.metadata(dm.ResourceRef(**run['native_receipt']['candidate']['ref'])), [(7, 'drift')])
+        self.code('DBT_PUBLICATION_REVIEW_CHANGED', self.accept, run, expected)
+        self.assertNotIn('publication_id', self.record(run['id'])['models'][0])
+        with control_store.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM dbt_requests WHERE idempotency_key='publish'").fetchone()[0], 0)
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_locator_never_adopts_new_table_or_view(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        ref = self.w.existing('arbitrary_result', schema='marts')
+        self.code('DBT_PUBLICATION_REVIEW_CHANGED', self.accept, run, expected)
+        metadata = self.w.metadata(ref)
+        metadata['view-uuid'] = str(uuid.uuid4())
+        key = (self.context.sql_catalog, 'marts', 'arbitrary_result', 'tables')
+        self.b.objects.pop(key)
+        self.b.objects[(*key[:3], 'views')] = metadata
+        self.code('DBT_PUBLICATION_REVIEW_CHANGED', self.accept, run, expected)
+
+    def test_post_acceptance_candidate_drift_fails_without_sql_and_latch_remains(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        ack = self.accept(run, expected)
+        count = len(self.w.posts)
+        self.w.snapshot(self.w.metadata(dm.ResourceRef(**run['native_receipt']['candidate']['ref'])), [(5, 'late')])
+        result = self.finish(ack)
+        self.assertEqual(result['state'], 'FAILED', result)
+        self.assertEqual(result['error_code'], 'DBT_CANDIDATE_CHANGED')
+        self.assertEqual(len(self.w.posts), count)
+        self.code('DBT_PUBLICATION_EXISTS', self.accept, run, expected, key='again')
+
+    def test_empty_or_malformed_audit_never_publishes(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        transport = self.w.transport
+        def empty(url, method, pin, body=None):
+            result = transport(url, method, pin, body)
+            if body and body.decode().startswith('SELECT COUNT(*) FROM '):
+                result['data'] = [[0]]
+            return result
+        ack = self.accept(run, expected)
+        count = len(self.w.posts)
+        with patch.object(qs, '_transport', side_effect=empty):
+            result = self.finish(ack)
+        self.assertEqual(result['state'], 'FAILED', result)
+        self.assertEqual(result['error_code'], 'DBT_AUDIT_FAILED')
+        self.assertEqual(len(self.w.posts), count + 1)
+        self.assertEqual([o['phase'] for o in result['operations']], ['audit'])
+        with control_store.connect() as db:
+            child = db.execute('SELECT * FROM dataops_operations WHERE id=?',
+                (result['operations'][0]['id'],)).fetchone()
+            receipt = json.loads(child['result'])
+            self.assertEqual(child['state'], 'FINISHED')
+            self.assertEqual(result['audit_id'], receipt['audit_id'])
+            self.assertEqual(result['native_audit'], receipt['audit'])
+            self.assertEqual(result['native_audit']['count'], 0)
+            self.assertIs(result['native_audit']['passed'], False)
+            self.assertIsNone(dbt._native_audit_saved(db, self.record(ack['id'])))
+        self.assertEqual(self.record(ack['id'])['native_audit'], result['native_audit'])
+        source = self.record(run['id'])
+        self.assertEqual(source['models'][0]['publication_id'], ack['id'])
+        self.assertEqual(source['native_receipt'], run['native_receipt'])
+        self.assertEqual(self.accept(run, expected)['id'], ack['id'])
+        self.assertEqual(dbt.get_publication(*self.publisher(), ack['id']), result)
+        self.code('DBT_PUBLICATION_EXISTS', self.accept, run, expected, key='retry-empty')
+        self.assertEqual(self.record(run['id']), source)
+        self.assertEqual(len(self.w.posts), count + 1)
+
+    def test_malformed_audit_does_not_claim_normal_receipt(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        transport = self.w.transport
+        def malformed(url, method, pin, body=None):
+            result = transport(url, method, pin, body)
+            if body and body.decode().startswith('SELECT COUNT(*) FROM '):
+                result['data'] = [['invalid']]
+            return result
+        ack = self.accept(run, expected)
+        count = len(self.w.posts)
+        with patch.object(qs, '_transport', side_effect=malformed):
+            result = self.finish(ack)
+        self.assertEqual(result['state'], 'FAILED', result)
+        self.assertEqual(result['error_code'], 'INVALID_AUDIT_RESULT')
+        self.assertIsNone(result.get('audit_id'))
+        self.assertIsNone(result.get('native_audit'))
+        self.assertEqual([o['phase'] for o in result['operations']], ['audit'])
+        self.assertEqual(self.record(run['id'])['models'][0]['publication_id'], ack['id'])
+        self.assertEqual(self.accept(run, expected)['id'], ack['id'])
+        self.code('DBT_PUBLICATION_EXISTS', self.accept, run, expected, key='retry-malformed')
+        self.assertEqual(len(self.w.posts), count + 1)
+
+    def test_publish_ack_loss_is_unknown_and_same_key_does_not_send_again(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        ack = self.accept(run, expected)
+        transport = self.w.transport
+        def lose(url, method, pin, body=None):
+            if body and body.decode().startswith('CREATE TABLE '):
+                raise OSError('lost publish ACK')
+            return transport(url, method, pin, body)
+        with patch.object(qs, '_transport', side_effect=lose):
+            result = self.finish(ack)
+        self.assertEqual(result['state'], 'UNKNOWN', result)
+        self.assertFalse(result['committed'])
+        count = len(self.w.posts)
+        self.assertEqual(self.accept(run, expected)['id'], ack['id'])
+        self.assertEqual(dbt.get_publication(*self.publisher(), ack['id'])['state'], 'UNKNOWN')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_known_commit_measure_failure_is_recording_failed(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        ack = self.accept(run, expected)
+        observe = ds.Execution._observe
+        def fail(execution, locator):
+            if locator.schema_id == expected['destination']['schema_id']:
+                raise OSError('postcommit measure')
+            return observe(execution, locator)
+        with patch.object(ds.Execution, '_observe', fail):
+            result = self.finish(ack)
+        self.assertEqual(result['state'], 'COMMITTED_RECORDING_FAILED', result)
+        self.assertTrue(result['committed'])
+        count = len(self.w.posts)
+        self.assertEqual(self.accept(run, expected)['id'], ack['id'])
+        self.assertEqual(dbt.get_publication(*self.publisher(), ack['id'])['state'], 'COMMITTED_RECORDING_FAILED')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_source_flags_suite_and_target_purpose_cannot_forge_eligibility(self):
+        run = self.candidate()
+        saved = self.record(run['id'])
+        changes = [lambda r: r.update(native_tests=False), lambda r: r.update(tests_status='NOT_RUN'),
+            lambda r: r.update(state='FAILED'), lambda r: r.update(state='UNKNOWN'),
+            lambda r: r.update(cancel_requested=True), lambda r: r['tests'].pop(),
+            lambda r: r['tests'][0].update(failure_count=1),
+            lambda r: r['tests'][0]['native_receipt'].update(query_id='forged')]
+        for change in changes:
+            with self.subTest(change=change):
+                self.mutate(run['id'], change)
+                with control_store.connect() as db:
+                    current = dbt._row(db, run['id'])[1]
+                    self.assertFalse(dbt._public(db, current)['publication_allowed'])
+                    db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds._json(saved), run['id']))
+        target = self.preview(run)['expected_target']['destination']
+        with control_store.connect() as db:
+            db.execute("UPDATE schemas SET purpose='raw' WHERE id=?", (target['schema_id'],))
+        self.code('DBT_NATIVE_TARGET_FORBIDDEN', self.preview, run)
+
+    def test_existing_target_review_alias_head_and_uuid_compare_then_replace(self):
+        self.artifact_patch.stop()
+        model_file = self.project / 'models/arbitrary_result.sql'
+        model_file.write_text("{{ config(alias='formal_alias') }} " + model_file.read_text())
+        artifacts = compiler._compiled_project(self.project, catalog=self.context.sql_catalog, source_schema='raw')
+        self.artifacts = artifacts.__enter__()
+        self.addCleanup(artifacts.__exit__, None, None, None)
+        ref = self.w.existing('formal_alias', schema='marts')
+        with patch.object(dbt, '_start'), patch.object(compiler, 'compile_project', return_value=self.artifacts[0]):
+            plan = dbt.submit_plan(self.principal, self.context, key='alias-plan', project_id='general',
+                source_schema='raw', target_schema='marts', staging_materialization=None)
+            dbt._execute(plan['id'])
+        self.plan_id = plan['id']
+        self.artifact_patch.start()
+        run = self.candidate()
+        preview = self.preview(run)
+        self.assertEqual(preview['target']['name'], 'formal_alias')
+        expected = preview['expected_target']
+        self.w.snapshot(self.w.metadata(ref), [(8, 'advanced')])
+        self.code('DBT_PUBLICATION_REVIEW_CHANGED', self.accept, run, expected)
+        expected = self.preview(run)['expected_target']
+        self.assertNotEqual(expected, preview['expected_target'])
+        metadata = self.w.metadata(ref)
+        original = metadata['table-uuid']
+        metadata['table-uuid'] = str(uuid.uuid4())
+        self.code('DBT_PUBLICATION_REVIEW_CHANGED', self.accept, run, expected)
+        metadata['table-uuid'] = original
+        result = self.finish(self.accept(run, expected))
+        self.assertEqual(result['state'], 'PUBLISHED', result)
+        self.assertTrue(self.w.posts[-1][0].startswith('CREATE OR REPLACE TABLE '))
+        self.assertEqual(result['native_publication']['intent']['expected_target'], expected)
+
+    def test_final_send_after_wake_rechecks_target_before_any_sql(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        ack = self.accept(run, expected)
+        wake = qs._ensure_query_awake
+        def changed(*args, **kwargs):
+            value = wake(*args, **kwargs)
+            self.w.existing('arbitrary_result', schema='marts')
+            return value
+        count = len(self.w.posts)
+        with patch.object(qs, '_ensure_query_awake', side_effect=changed):
+            result = self.finish(ack)
+        self.assertEqual(result['state'], 'FAILED', result)
+        self.assertEqual(result['error_code'], 'DESTINATION_EXISTS')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_publisher_or_source_privilege_loss_denies_publication_before_sql(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        ack = self.accept(run, expected)
+        count = len(self.w.posts)
+        with control_store.connect() as db:
+            db.execute('DELETE FROM grants WHERE principal_id=? AND database_id=?',
+                (self.principal.principal_id, self.context.database_id))
+        dbt._execute(ack['id'])
+        result = self.record(ack['id'])
+        self.assertEqual(result['state'], 'FAILED', result)
+        self.assertEqual(result['error_code'], 'DB_ACCESS_REVOKED')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_publish_final_send_after_wake_rechecks_candidate_and_keeps_positive_audit(self):
+        run = self.candidate()
+        ack = self.accept(run, self.preview(run)['expected_target'])
+        wake = qs._ensure_query_awake
+        def changed(principal, query_id):
+            value = wake(principal, query_id)
+            with control_store.connect() as db:
+                step = db.execute('SELECT step FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()[0]
+            if step == 'publish':
+                self.w.snapshot(self.w.metadata(dm.ResourceRef(**run['native_receipt']['candidate']['ref'])), [(4, 'late')])
+            return value
+        before = len(self.w.posts)
+        with patch.object(qs, '_ensure_query_awake', side_effect=changed):
+            result = self.finish(ack)
+        self.assertEqual(result['state'], 'FAILED', result)
+        self.assertEqual(result['error_code'], 'DBT_CANDIDATE_CHANGED')
+        self.assertEqual(len(self.w.posts), before + 1)
+        self.assertTrue(result['native_audit']['passed'])
+
+    def test_owner_loss_before_audit_is_observation_only_and_reservation_persists(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        ack = self.accept(run, expected)
+        dbt._live.pop(ack['id'])[-1].close()
+        count = len(self.w.posts)
+        result = dbt.get_publication(*self.publisher(), ack['id'])
+        self.assertEqual(result['state'], 'FAILED', result)
+        self.assertEqual(result['error_code'], 'DBT_OWNER_LOST')
+        self.assertEqual(self.accept(run, expected)['id'], ack['id'])
+        self.code('DBT_PUBLICATION_EXISTS', self.accept, run, expected, key='owner-retry')
+        self.assertEqual(len(self.w.posts), count)
+
+    def test_positive_receipt_recovers_parent_record_loss_and_rejects_forged_origin(self):
+        run = self.candidate()
+        ack = self.accept(run, self.preview(run)['expected_target'])
+        write = dbt._write
+        def fail_once(db, record):
+            if record['id'] == ack['id'] and record.get('native_publication') and not failed:
+                failed.append(True)
+                raise OSError('parent record')
+            return write(db, record)
+        failed = []
+        with patch.object(dbt, '_write', side_effect=fail_once), self.assertRaises(OSError):
+            dbt._execute(ack['id'])
+        self.assertTrue(failed)
+        result = dbt.get_publication(*self.publisher(), ack['id'])
+        self.assertEqual(result['state'], 'PUBLISHED', result)
+        before = len(self.w.posts)
+        child_id = next(o['id'] for o in result['operations'] if o['phase'] == 'publish')
+        other = self.w.existing('unrelated', schema='marts')
+        with control_store.connect() as db:
+            receipt = json.loads(db.execute('SELECT result FROM dataops_operations WHERE id=?', (child_id,)).fetchone()[0])
+            original_ref = receipt['publication']['target']['ref']
+            receipt['publication']['target']['ref'] = asdict(other)
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            self.assertIsNone(dbt._native_publication_saved(db, self.record(ack['id'])))
+            receipt['publication']['target']['ref'] = original_ref
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            publication = self.record(ack['id'])
+            publication['native_publication']['target']['schema_id'] = float(receipt['publication']['target']['schema_id'])
+            self.assertIsNone(dbt._native_publication_saved(db, publication))
+            original = dm.get_object(db, original_ref['object_id'])
+            recreated = dm.observe_object(db, original_ref['schema_id'], original.physical_name,
+                'TABLE', str(uuid.uuid4()), original.display_name)
+            receipt['publication']['target']['ref'] = asdict(dm.ResourceRef(
+                original_ref['database_id'], original_ref['schema_id'], recreated.id, recreated.incarnation))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            self.assertIsNone(dbt._native_publication_saved(db, self.record(ack['id'])))
+            receipt['publication']['target']['ref'] = original_ref
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            self.assertEqual(dbt._native_publication_saved(db, self.record(ack['id'])), result['native_publication'])
+            query_id = receipt['publication']['query_id']
+            sql = db.execute('SELECT sql FROM query_execution_contexts WHERE query_id=?', (query_id,)).fetchone()[0]
+            db.execute("UPDATE query_execution_contexts SET sql='SELECT 1' WHERE query_id=?", (query_id,))
+            self.assertIsNone(dbt._native_publication_saved(db, self.record(ack['id'])))
+            db.execute('UPDATE query_execution_contexts SET sql=? WHERE query_id=?', (sql, query_id))
+            receipt['publication']['origin'] = 'sql_wap'
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+        dbt._settle(ack['id'])
+        self.assertEqual(self.record(ack['id'])['state'], 'COMMITTED_RECORDING_FAILED')
+        self.assertEqual(len(self.w.posts), before)
+
+    def test_native_publish_poll_can_observe_its_own_changed_target(self):
+        run = self.candidate()
+        ack = self.accept(run, self.preview(run)['expected_target'])
+        transport = self.w.transport
+        pending = []
+        def paged(url, method, pin, body=None):
+            if method == 'GET' and pending:
+                return pending.pop()
+            page = transport(url, method, pin, body)
+            if body and body.decode().startswith('CREATE TABLE '):
+                pending.append(page)
+                return dict(id=page['id'], nextUri='http://127.0.0.1:1234/v1/statement/' + page['id'] + '/1')
+            return page
+        with patch.object(qs, '_transport', side_effect=paged):
+            result = self.finish(ack)
+        self.assertEqual(result['state'], 'PUBLISHED', result)
+
+    def test_concurrent_keys_reserve_one_source_and_identical_key_replays(self):
+        run = self.candidate()
+        review = dbt._native_review
+        for keys in (('same', 'same'), ('first', 'second')):
+            if keys[0] != 'same':
+                with patch.object(qs, '_transport', side_effect=self.quality_transport):
+                    run = self.quality_run('second-source')
+            expected = self.preview(run)['expected_target']
+            barrier = threading.Barrier(2)
+            def reviewed(*args):
+                result = review(*args)
+                barrier.wait(timeout=15)
+                return result
+            def accept(key):
+                try:
+                    return dbt.submit_publication(*self.publisher(), run['id'], key=key,
+                        node_id=self.uid, expected_target=expected)
+                except QueryError as error:
+                    return error.code
+            with patch.object(dbt, '_start') as start, patch.object(dbt, '_native_review', side_effect=reviewed), \
+                    ThreadPoolExecutor(max_workers=2) as workers:
+                results = list(workers.map(accept, keys))
+            self.assertEqual(start.call_count, 1)
+            if keys[0] == 'same':
+                self.assertEqual(results[0]['id'], results[1]['id'])
+            else:
+                self.assertEqual(sum(isinstance(r, dict) for r in results), 1)
+                self.assertIn('DBT_PUBLICATION_EXISTS', results)
+            with control_store.connect() as db:
+                self.assertEqual(db.execute("SELECT count(*) FROM dbt_runs WHERE json_extract(record,'$.parent_run_id')=?",
+                    (run['id'],)).fetchone()[0], 1)
+            accepted = next(r for r in results if isinstance(r, dict))
+            dbt.cancel_run(self.principal, self.context, run['id'], key='cancel-' + keys[0])
+            dbt._execute(accepted['id'])
+            self.assertEqual(self.record(accepted['id'])['state'], 'CANCELED')
+
+    def test_publisher_account_loss_after_acceptance_blocks_sql_and_replay(self):
+        run = self.candidate()
+        expected = self.preview(run)['expected_target']
+        ack = self.accept(run, expected)
+        before = len(self.w.posts)
+        del self.b.fixture.users[self.w.owner.principal_id]
+        self.b.fixture.save()
+        dbt._execute(ack['id'])
+        result = self.record(ack['id'])
+        self.assertEqual(result['state'], 'FAILED', result)
+        self.assertEqual(result['error_code'], 'DB_ACCESS_REVOKED')
+        with self.assertRaises((QueryError, PermissionError)):
+            self.accept(run, expected)
+        self.assertEqual(len(self.w.posts), before)
 
 
 if __name__ == '__main__':

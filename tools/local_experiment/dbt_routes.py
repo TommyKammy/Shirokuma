@@ -15,18 +15,21 @@ def dispatch(handler, method, path, params, principal, role):
         return False
     if '#' in handler.path or handler.headers.get('Transfer-Encoding'):
         raise ValueError('invalid framing')
-    match = re.fullmatch(r'/api/v1/dbt/(projects|plans|runs|publications)(?:/' + _ID + r'(?:/(cancel|reconcile|publish))?)?', path)
+    match = re.fullmatch(r'/api/v1/dbt/(projects|plans|runs|publications)(?:/' + _ID + r'(?:/(cancel|reconcile|publish|publication-preview))?)?', path)
     if not match:
         raise QueryError('NOT_FOUND', 404)
     family, ident, action = match.groups()
     if method == 'GET':
         if handler.headers.get_all('Content-Length', []) not in ([], ['0']):
             raise ValueError('GET body forbidden')
-        allowed = {'context', 'plan_id'} if family == 'runs' and not ident else {'context'}
+        preview = family == 'runs' and ident and action == 'publication-preview'
+        allowed = {'context', 'node_id'} if preview else {'context', 'plan_id'} if family == 'runs' and not ident else {'context'}
         if set(params) - allowed or 'context' not in params or any(len(v) != 1 for v in params.values()):
             raise ValueError('exact parameters required')
-        if action or family == 'projects' and ident or family == 'publications' and not ident:
+        if action and not preview or family == 'projects' and ident or family == 'publications' and not ident:
             raise QueryError('NOT_FOUND', 404)
+        if preview and ('node_id' not in params or not re.fullmatch(r'[A-Za-z0-9_.-]{1,512}', params['node_id'][0])):
+            raise ValueError('node ID required')
         plan_id = params.get('plan_id', [None])[0]
         if plan_id is not None and not re.fullmatch(_ID, plan_id):
             raise ValueError('invalid plan ID')
@@ -47,9 +50,9 @@ def dispatch(handler, method, path, params, principal, role):
                 required.add('node_id')
         else:
             raise QueryError('NOT_FOUND', 404)
-        optional = {'executor', 'node_id', 'native_tests'} if family == 'runs' and not ident else set()
+        optional = {'executor', 'node_id', 'native_tests'} if family == 'runs' and not ident else {'expected_target'} if action == 'publish' else set()
         common._keys(body, required, optional)
-        if optional:
+        if family == 'runs' and not ident:
             dbt._run_arguments(body.get('executor', 'sql_wap'), body.get('node_id'))
             if type(body.get('native_tests', False)) is not bool or body.get('native_tests', False) and body.get('executor') != 'native_table':
                 raise ValueError('native tests require boolean and native executor')
@@ -84,7 +87,9 @@ def dispatch(handler, method, path, params, principal, role):
                 else:
                     envelope['items'] = dbt.list_plans(principal, context)
             elif family == 'runs':
-                if ident:
+                if preview:
+                    envelope['preview'] = dbt.get_publication_preview(principal, context, ident, node_id=params['node_id'][0])
+                elif ident:
                     envelope['run'] = dbt.get_run(principal, context, ident)
                 else:
                     envelope['items'] = dbt.list_runs(principal, context, plan_id=plan_id)
@@ -99,7 +104,8 @@ def dispatch(handler, method, path, params, principal, role):
                 **{k: body[k] for k in ('executor', 'node_id', 'native_tests') if k in body})
             status = 202
         elif action == 'publish':
-            envelope['publication'] = dbt.submit_publication(principal, context, ident, key=key, node_id=body['node_id'])
+            envelope['publication'] = dbt.submit_publication(principal, context, ident, key=key, node_id=body['node_id'],
+                **{k: body[k] for k in ('expected_target',) if k in body})
             status = 202
         else:
             function = dbt.cancel_run if action == 'cancel' else dbt.reconcile_run

@@ -10,7 +10,7 @@ import (
 )
 
 func TestDbtForwarding(t *testing.T) {
-	for _, action := range []string{"projects", "compile", "plans", "plan", "run", "runs", "status", "cancel", "reconcile", "publish", "publication"} {
+	for _, action := range []string{"projects", "compile", "plans", "plan", "run", "runs", "status", "cancel", "reconcile", "publish", "publish-preview", "publication"} {
 		t.Run(action, func(t *testing.T) {
 			runner := &fakeRunner{responses: []fakeResponse{{output: "{}"}}}
 			cmd := newRootCommand(&bytes.Buffer{}, runner)
@@ -18,10 +18,10 @@ func TestDbtForwarding(t *testing.T) {
 			if action == "run" || action == "plan" || action == "runs" {
 				args = append(args, "--plan-id=plan")
 			}
-			if action == "status" || action == "cancel" || action == "reconcile" || action == "publish" {
+			if action == "status" || action == "cancel" || action == "reconcile" || action == "publish" || action == "publish-preview" {
 				args = append(args, "--run-id=run")
 			}
-			if action == "publish" {
+			if action == "publish" || action == "publish-preview" {
 				args = append(args, "--node-id=model.lake.orders")
 			}
 			if action == "publication" {
@@ -180,9 +180,9 @@ func TestDbtRunRejectsInvalidExecutorFlags(t *testing.T) {
 }
 
 func TestDbtExecutorFlagsRunScope(t *testing.T) {
-	for _, action := range []string{"projects", "compile", "plans", "plan", "runs", "status", "cancel", "reconcile", "publish", "publication"} {
+	for _, action := range []string{"projects", "compile", "plans", "plan", "runs", "status", "cancel", "reconcile", "publish", "publish-preview", "publication"} {
 		for _, flag := range []string{"executor", "node-id"} {
-			if action == "publish" && flag == "node-id" {
+			if (action == "publish" || action == "publish-preview") && flag == "node-id" {
 				continue // Existing publish node forwarding is covered by TestDbtForwarding.
 			}
 			t.Run(action+"/"+flag, func(t *testing.T) {
@@ -198,5 +198,18 @@ func TestDbtExecutorFlagsRunScope(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestDbtExpectedTargetForwarding(t *testing.T) {
+	runner := &fakeRunner{responses: []fakeResponse{{output: "{}"}}}
+	cmd := newDbtCommand(runner)
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetArgs([]string{"publish", "--context-file=context.json", "--run-id=run", "--node-id=model.demo.alias", "--expected-target-file=review.json", "--idempotency-key=original"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.calls) != 1 || !strings.Contains(strings.Join(runner.calls[0], " "), "--expected-target-file=review.json") {
+		t.Fatal(runner.calls)
 	}
 }

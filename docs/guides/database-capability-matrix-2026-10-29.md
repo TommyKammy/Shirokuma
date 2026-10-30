@@ -1,6 +1,6 @@
 # Databaseモードの機能一覧と利用条件
 
-2026年10月30日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理と[C2AのSANDBOX VIEW](database-p6-3c2-sandbox-views-2026-10-30.md)の実装を反映した。現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
+2026年10月31日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEWとnative TABLEの実装を反映した。現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
 
 ## 利用条件と表示の意味
 
@@ -90,7 +90,7 @@
 | TRF-08 | 変更確認、無条件／条件付き全件更新 | 対応、上記条件。変更確認はwatch sourceが必要 | M、source Ref／Snapshot集合 | Mart check／refresh |
 | TRF-09 | Mart照会・履歴 | 対応、元owner／context | M、未知操作再送なし | Mart runs |
 | TRF-10 | Mart予定のLoad・新規・保存・有効化・停止・tick | 対応、A、監視sourceあり | M＋T、保存版で実行 | schedules |
-| TRF-11 | dbt一覧・model SQL・build／test | SQL／WAPのcompile・候補build／test・公開をAPI／CLI／Workbenchで提供。native TABLE 1件と、その付属品質test一式もAPI／CLI／Workbenchで明示選択できる | SQL／WAPは既定で、TABLE／EPHEMERALとrun専用SANDBOX INVOKER VIEWに対応。nativeは元本人・READY v2 plan・RAW／展開済EPHEMERAL依存・固定PARQUET・新規SANDBOX限定。品質は付属先の情報を持つ再compile済planでopt-inし、別materialized依存・空suiteを拒否。未指定は従来NOT_RUN、品質成功後も正式公開不可。通常RunTask／全graph・置換・native VIEWは後続 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C1](database-p6-3c-dbt-compatibility-2026-10-29.md)、[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)、[C2B3](database-p6-3c2b3-native-ui-2026-10-30.md)、[C2B4](database-p6-3c2b4-native-quality-tests-2026-10-30.md) |
+| TRF-11 | dbt一覧・model SQL・build／test | SQL／WAPのcompile・候補build／test・公開をAPI／CLI／Workbenchで提供。native TABLE 1件・付属品質test一式と、品質成功後の明示MARTS公開を実装（C2B5技術受入済み） | SQL／WAPは既定で、TABLE／EPHEMERALとrun専用SANDBOX INVOKER VIEWに対応。nativeは元本人・READY v2 plan・RAW／展開済EPHEMERAL依存・固定PARQUET・新規SANDBOX限定。品質は付属先を持つplanでopt-inし、別materialized依存・空suiteを拒否。未指定は従来NOT_RUN。公開は現在のAが固定previewと全品質成功を確認し、最低1行の監査後に同じDBのMARTSへ反映。E作成／A公開を区別。通常RunTask／全graph・native候補直接置換・native VIEW・manual-WAP rollback統合は後続 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C1](database-p6-3c-dbt-compatibility-2026-10-29.md)、[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)、[C2B4](database-p6-3c2b4-native-quality-tests-2026-10-30.md)、[C2B5](database-p6-3c2b5-native-publication-2026-10-31.md) |
 | TRF-12 | 旧dynamic WAP一覧・refresh widget | 未接続の旧widget | 手動WAP／Managed Martを使用 | 変換の新パネル |
 | JOB-01 | Job新規・一覧・Load・再Load・定義／引数保存 | 対応、E／A | J、owner＋保存role＋context、CAS | `/api/v1/jobs` |
 | JOB-02 | SQL／alert step | 対応、E／A、既存SQL policy | J、alertはread-only | typed Job step |

@@ -59,7 +59,9 @@ class ClientTests(unittest.TestCase):
                     if field == 'plan': record.update(id=PLAN, kind='plan')
                     if field == 'publication' or url.path.endswith('/publish'):
                         field = 'publication'
-                        record.update(id=PUB, kind='publication', run_id=ID, node_id='model.lake.orders')
+                        record.update(id=PUB, kind='publication', run_id=ID, parent_run_id=ID, node_id='model.lake.orders')
+                        if body and 'expected_target' in body:
+                            record.update(origin='native_table', expected_target=deepcopy(body['expected_target']))
                     if body and body.get('executor') == 'native_table':
                         record.update(executor=body['executor'], selected_node_id=body['node_id'])
                         if body.get('native_tests') is True:
@@ -119,6 +121,93 @@ class ClientTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.call('run', '--plan-id=' + PLAN, '--native-tests')
         self.assertEqual(len(self.calls), before)
+
+    def test_native_publication_ack_nested_bool_integer_mismatch_retains_request(self):
+        admin = dict(C, selected_role='admin')
+        ref = dict(database_id='db', schema_id='marts', object_id='target', incarnation=1)
+        descriptor = dict(version=1, destination=ref, target=dict(ref=ref, snapshot='7',
+            schema_id=0, columns=[dict(name='id', type='BIGINT')], schema_fingerprint='f' * 64))
+        preview = dict(version=1, origin='native_table', run_id=ID, plan_id=PLAN,
+            node_id='model.lake.orders', context=admin, expected_target=descriptor)
+        path = Path(self.temp.name) / 'review.json'
+        path.write_text(json.dumps(preview))
+        flags = ['--run-id=' + ID, '--node-id=model.lake.orders',
+                 '--expected-target-file=' + str(path), '--idempotency-key=original-review']
+        for change in (lambda d: d.update(version=True),
+                       lambda d: d['destination'].update(incarnation=True),
+                       lambda d: d['target']['ref'].update(incarnation=True),
+                       lambda d: d['target'].update(schema_id=False)):
+            with self.subTest(change=change):
+                self.corrupt = lambda record: change(record['expected_target'])
+                before = len(self.calls)
+                result = self.call('publish', *flags, context=admin)
+                self.assertEqual(len(self.calls), before + 1)
+                self.assertTrue(result['request_uncertain'])
+                self.assertEqual(result['retry']['body'], dict(context=admin,
+                    node_id='model.lake.orders', expected_target=descriptor))
+                self.assertEqual(result['retry']['intent']['expected_target'], descriptor)
+                self.assertEqual(result['retry']['idempotency_key'], 'original-review')
+        self.corrupt = None
+        result = self.call('publish', *flags, context=admin)
+        self.assertEqual(result['publication']['expected_target'], descriptor)
+        self.assertEqual(self.calls[-1][4]['Idempotency-Key'], 'original-review')
+
+    def test_native_preview_file_exact_descriptor_ack_and_recovery(self):
+        admin = dict(C, selected_role='admin')
+        preview = dict(version=1, origin='native_table', run_id=ID, plan_id=PLAN, node_id='model.lake.orders',
+                       context=admin, expected_target=dict(version=1,
+                       destination=dict(database_id='db', schema_id='marts', physical_name='saved_alias'), target=None))
+        self.envelope = lambda reply: dict(context=admin, preview=deepcopy(preview))
+        result = self.call('publish-preview', '--run-id=' + ID, '--node-id=model.lake.orders', context=admin)
+        self.assertEqual(result['preview'], preview)
+        self.assertEqual(self.calls[-1][0], 'GET')
+        self.assertIsNone(self.calls[-1][3])
+        self.assertEqual(self.calls[-1][2]['node_id'], ['model.lake.orders'])
+        self.assertNotIn('Idempotency-Key', self.calls[-1][4])
+        self.envelope = None
+        path = Path(self.temp.name) / 'review.json'
+        flags = ['--run-id=' + ID, '--node-id=model.lake.orders', '--expected-target-file=' + str(path)]
+        for envelope in (preview, dict(context=admin, preview=preview)):
+            path.write_text(json.dumps(envelope))
+            result = self.call('publish', *flags, context=admin)
+            self.assertEqual(result['publication']['expected_target'], preview['expected_target'])
+            self.assertEqual(set(self.calls[-1][3]), {'node_id', 'context', 'expected_target'})
+        original = deepcopy(preview['expected_target'])
+        ref = dict(database_id='db', schema_id='marts', object_id='target', incarnation=1)
+        preview['expected_target'] = dict(version=1, destination=ref, target=dict(ref=ref, snapshot='7',
+            schema_id=0, columns=[dict(name='id', type='BIGINT')], schema_fingerprint='f' * 64))
+        path.write_text(json.dumps(preview))
+        result = self.call('publish', *flags, context=admin)
+        self.assertEqual(result['publication']['expected_target'], preview['expected_target'])
+        preview['expected_target'] = original
+        for field, value in [('origin', 'sql_wap'), ('run_id', PLAN), ('node_id', 'model.other'),
+                             ('version', True), ('context', C), ('expected_target', {})]:
+            path.write_text(json.dumps(dict(preview, **{field: value})))
+            before = len(self.calls)
+            with self.assertRaises(ValueError):
+                self.call('publish', *flags, context=admin)
+            self.assertEqual(len(self.calls), before)
+        path.write_text(json.dumps(preview))
+        for change in (lambda r: r.update(origin='sql_wap'), lambda r: r.update(expected_target={}),
+                       lambda r: r.update(plan_id=ID), lambda r: r.update(parent_run_id=PLAN),
+                       lambda r: r['expected_target'].update(version=True)):
+            self.corrupt = change
+            result = self.call('publish', *flags, '--idempotency-key=retained', context=admin)
+            self.assertTrue(result['request_uncertain'])
+            self.assertEqual(result['retry']['body'], self.calls[-1][3])
+            self.assertEqual(result['retry']['intent']['expected_target'], preview['expected_target'])
+            self.assertEqual(result['retry']['idempotency_key'], 'retained')
+        self.corrupt = None
+        self.drop = True
+        result = self.call('publish', *flags, '--idempotency-key=lost-publication', context=admin)
+        before = len(self.calls)
+        self.assertTrue(result['request_uncertain'])
+        self.call('status', '--run-id=' + ID, context=admin)
+        self.assertEqual(len(self.calls), before + 1)
+        self.assertEqual(self.calls[-1][0], 'GET')
+        self.http_status = 409
+        result = self.call('publish', *flags, '--idempotency-key=lost-publication', context=admin)
+        self.assertTrue(result['request_uncertain'])
 
     def test_commands_and_saved_auth(self):
         cases = [('projects', []), ('compile', []), ('plans', []), ('plan', ['--plan-id=' + PLAN]),

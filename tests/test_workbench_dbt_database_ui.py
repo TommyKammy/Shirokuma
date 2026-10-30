@@ -66,10 +66,161 @@ function text(node){return node.textContent+' '+node.children.map(text).join(' '
 function review(node=ids[1]){p.review=node;dbDbtRender();assert.ok(dbDbtNode('publish'));}
 """
 
+NATIVE_PUBLICATION = r"""
+async function nativeSource(){
+ await compile();plan.compatibility.version=2;plan.models[1].relation=['sales','marts','formal_alias'];
+ plan.actor='engineer';plan.context={...plan.context,selected_role:'data_engineer',grant_revision:2};
+ run=makeRun(plan.context,{actor:'engineer',executor:'native_table',selected_node_id:ids[1],source_digest:plan.source_digest,state:'NATIVE_VERIFIED',native_verified:true,native_tests:true,tests_status:'PASSED',publication_allowed:true});
+ run.models=[{...run.models[1],state:'NATIVE_VERIFIED'}];run.tests=[run.tests[0]];p.plan=null;
+ await dbDbtObserve('run',run.id);assert.equal(dbDbtCanPublish(p.run.models[0]),true);
+}
+function nativePreview(){return {version:1,origin:'native_table',run_id:run.id,plan_id:plan.id,node_id:ids[1],source_digest:run.source_digest,context:structuredClone(p.context),source_context:structuredClone(run.context),source_actor:'engineer',publisher_actor:dbDbtOwner(),candidate:structuredClone(run.models[0].candidate),quality:{status:'PASSED',count:1,test_ids:['test.first']},target:{catalog:'sales',schema:'marts',name:'formal_alias'},expected_target:{version:1,destination:{database_id:'db',schema_id:'schema',physical_name:'formal_alias'},target:null}};}
+const legacyRoute=route;let previewChange=null,previewHold=null,publishError=null;
+route=async(path,options)=>{
+ if(path.includes('/publication-preview?')){
+  if(previewHold)await previewHold.promise;
+  const v=nativePreview();if(previewChange)previewChange(v);
+  return {context:structuredClone(p.context),preview:v};
+ }
+ if(path.endsWith('/publish')&&publishError)throw Object.assign(Error('rejected'),publishError);
+ const reply=await legacyRoute(path,options);
+ if(reply?.publication&&options?.body){const b=JSON.parse(options.body);if(b.expected_target){reply.publication.origin='native_table';reply.publication.expected_target=structuredClone(b.expected_target);run.models[0].publication_id=reply.publication.id;run.publication_allowed=false;}}
+ return reply;
+};
+"""
+
 
 class DbtDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
+
+    def test_native_presentation_concise_facts_and_closed_full_proofs(self):
+        self.javascript(NATIVE_PUBLICATION + r"""
+function visible(n){return n.textContent+' '+(n.tagName==='DETAILS'&&!n.open?n.children.filter(c=>c.tagName==='SUMMARY'):n.children).map(visible).join(' ');}
+function proof(n){const pre=n.descendants().filter(c=>c.tagName==='PRE');assert.equal(pre.length,1);assert.equal(pre[0].parentElement.tagName,'DETAILS');assert.ok(!pre[0].parentElement.open);return pre[0];}
+await nativeSource();const before=posts().length,m=p.run.models[0];await dbDbtReview(m);
+const preview=JSON.stringify(p.preview),reviewNode=dbDbtNode('confirmation');
+assert.match(visible(reviewNode),/Target FQN: sales.marts.formal_alias/);
+assert.match(visible(reviewNode),/Origin: native_table/);assert.match(visible(reviewNode),/Builder: engineer/);
+assert.match(visible(reviewNode),/Quality tests: PASSED · Test count: 1/);
+assert.match(visible(reviewNode),/Candidate Snapshot: snap-1/);assert.match(visible(reviewNode),/reviewed absent/);
+assert.deepEqual(JSON.parse(proof(reviewNode).textContent),p.preview);
+assert.doesNotMatch(visible(reviewNode),/source_digest|test_ids|object_id/);
+language='ja';dbDbtRender();assert.match(visible(dbDbtNode('confirmation')),/候補 Snapshot: snap-1/);
+assert.match(visible(dbDbtNode('confirmation')),/品質テスト: PASSED/);
+assert.equal(JSON.stringify(p.preview),preview);assert.equal(posts().length,before);
+language='en';dbDbtRender();await dbDbtSubmit('publish',m.unique_id);
+assert.deepEqual(readBody(posts().at(-1)),{context:p.context,node_id:m.unique_id,expected_target:JSON.parse(preview).expected_target});
+const saved=p.publications[m.unique_id],intent={source_actor:'engineer',publisher_actor:dbDbtOwner(),candidate:m.candidate,quality:[{status:'PASSED',failures:0,proof:{nested:'full-quality-proof'}}],build:{pins:{nested:'full-build-proof'}}};
+for(const state of ['PUBLISHED','COMMITTED_RECORDING_FAILED','UNKNOWN']){
+ const publication={...saved,state,committed:state!=='UNKNOWN',operations:[{id:'publish-op',state:'FINISHED'}],native_audit:{intent,count:48,passed:true},native_publication:{intent,target:{snapshot:'published-snapshot'}}};
+ p.publications[m.unique_id]=publication;dbDbtRender();const node=dbDbtNode('publications'),raw=proof(node),shown=visible(node);
+ assert.match(shown,/sales.marts.formal_alias/);assert.match(shown,/Quality tests: PASSED · Test count: 1/);
+ assert.match(shown,/Row audit: 48 · Minimum rows: 1/);assert.ok(shown.includes('Publication status: '+state));
+ assert.ok(shown.includes('Committed: '+publication.committed));assert.match(shown,/Published Snapshot: published-snapshot/);
+ assert.doesNotMatch(shown,/full-quality-proof|full-build-proof|publish-op/);
+ assert.deepEqual(JSON.parse(raw.textContent).native_publication,publication.native_publication);
+ raw.parentElement.open=true;assert.match(visible(node),/full-build-proof/);
+ const operations=node.descendants().find(n=>n.tagName==='DETAILS'&&text(n).includes('Operation IDs'));assert.ok(operations);assert.ok(!operations.open);
+}
+const standalone=document.createElement('div');dbDbtNativeFacts(standalone,{...JSON.parse(preview),expected_target:{target:{snapshot:'reviewed-snapshot'}}});
+assert.match(visible(standalone),/Reviewed target Snapshot: reviewed-snapshot/);
+clearTimeout(p.timer);
+""")
+
+    def test_native_publication_review_freeze_ack_recovery_and_observation(self):
+        self.javascript(NATIVE_PUBLICATION + r"""
+await nativeSource();const m=p.run.models[0],before=posts().length;
+await dbDbtReview(m);assert.equal(posts().length,before);assert.equal(p.intent,null);assert.equal(p.review,m.unique_id);
+assert.equal(Object.isFrozen(p.preview.expected_target.destination),true);
+assert.match(text(dbDbtNode('confirmation')),/engineer/);assert.match(text(dbDbtNode('confirmation')),/formal_alias/);
+assert.match(text(dbDbtNode('confirmation')),/New target/);assert.match(text(dbDbtNode('confirmation')),/row audit >= 1/);
+lose=true;await dbDbtSubmit('publish',m.unique_id);const intent=p.intent,first=posts().at(-1);
+assert.deepEqual(readBody(first).expected_target,intent.body.expected_target);assert.deepEqual(readBody(first).context,p.context);assert.equal(readBody(first).context.selected_role,'admin');assert.equal(p.preview.source_context.selected_role,'data_engineer');assert.equal(Object.isFrozen(intent.body.expected_target.destination),true);
+assert.equal(dbDbtNode('role').disabled,false);assert.equal(dbDbtNode('node').disabled,true);
+const count=posts().length;p.intent=null;await dbDbtRefresh();assert.deepEqual(p.intent,JSON.parse(JSON.stringify(intent)));assert.equal(posts().length,count);
+lose=false;const originalRoute=route;route=async(path,options)=>{const reply=await originalRoute(path,options);if(reply.publication)reply.publication.expected_target={};return reply;};
+await dbDbtRecover();assert.ok(p.intent);assert.equal(posts().at(-1).options.body,first.options.body);
+route=originalRoute;await dbDbtRecover();assert.equal(p.intent,null);assert.equal(posts().at(-1).options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);
+const saved=p.publications[ids[1]];await dbDbtObserve('run',run.id);assert.equal(dbDbtCanPublish(p.run.models[0]),false);
+for(const state of ['UNKNOWN','COMMITTED_RECORDING_FAILED','PUBLISHED']){
+ pubs[saved.id]={...saved,state,origin:'native_table',committed:state!=='UNKNOWN',native_publication:{target:{snapshot:'new-snapshot'}}};
+ const n=posts().length;await dbDbtObserve('publication',saved.id);assert.equal(posts().length,n);assert.equal(dbDbtCanPublish(p.run.models[0]),false);
+ assert.match(text(dbDbtNode('publications')),/native_table/);
+}
+clearTimeout(p.timer);
+""")
+
+    def test_native_saved_suite_ignores_other_model_relationship_dependencies(self):
+        self.javascript(NATIVE_PUBLICATION + r"""
+await nativeSource();
+plan.tests.push({unique_id:'test.other_relationship',name:'relationships',test_type:'relationships',attached_node:ids[2],depends_on:[ids[2],ids[1]]});
+plan.test_owners={'test.first':ids[1],'test.second':ids[2],'test.other_relationship':ids[2]};
+p.plan=dataopsFreeze(structuredClone(plan));
+const m=p.run.models[0],before=posts().length;
+assert.equal(dbDbtCanPublish(m),true);
+for(const change of [v=>v.quality.test_ids=['test.other_relationship'],v=>{v.quality.count=2;v.quality.test_ids.push('test.other_relationship');},v=>v.quality.test_ids=[],v=>v.quality.count=2]){
+ previewChange=change;await dbDbtReview(m);assert.equal(p.preview,null);assert.equal(p.review,null);assert.equal(p.intent,null);assert.equal(posts().length,before);
+}
+const saved=p.run;
+for(const tests of [[],[...saved.tests,...saved.tests],saved.tests.map(t=>({...t,state:'FAILED'})),saved.tests.map(t=>({...t,failure_count:1})),saved.tests.map(t=>({...t,failure_count:false}))]){
+ p.run={...saved,tests};assert.equal(dbDbtCanPublish(m),false);
+}
+p.run=saved;previewChange=null;await dbDbtReview(m);assert.equal(p.review,m.unique_id);
+assert.deepEqual(p.preview.quality.test_ids,['test.first']);
+await dbDbtSubmit('publish',m.unique_id);assert.equal(posts().length,before+1);assert.equal(p.intent,null);assert.equal(p.publications[m.unique_id].origin,'native_table');
+clearTimeout(p.timer);
+""")
+
+    def test_native_uncertain_publication_original_context_reselection(self):
+        self.javascript(NATIVE_PUBLICATION + r"""
+await nativeSource();await dbDbtReview(p.run.models[0]);
+gate=deferred();lose=true;const pending=dbDbtSubmit('publish',ids[1]);await tick();
+assert.equal(dbDbtNode('role').disabled,true);assert.equal(dbDbtNode('database').disabled,true);
+gate.resolve();await pending;gate=null;
+const intent=p.intent,first=posts().at(-1),before=posts().length;
+assert.equal(dbDbtNode('role').disabled,false);assert.equal(dbDbtNode('database').disabled,false);
+inventory.push({...inventory[0],id:'other',display_name:'Other',sql_catalog:'other'});
+schemasRoute=async(path)=>({items:schemas.map(s=>({...s,database_id:path.includes('/other/')?'other':'db'}))});
+dbDbtNode('role').value='data_engineer';await dbDbtNode('role').onchange();
+dbDbtNode('database').value='other';await dbDbtNode('database').onchange();
+assert.equal(dbDbtAllowed(),true);assert.equal(p.context.database_id,'other');assert.equal(p.context.selected_role,'data_engineer');
+assert.equal(dbDbtCanRecover(),false);assert.equal(dbDbtNode('recover').disabled,true);
+await dbDbtRecover();await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,before);assert.equal(p.intent,intent);
+assert.equal(dbDbtNode('role').disabled,false);assert.equal(dbDbtNode('database').disabled,false);
+dbDbtNode('role').value='admin';await dbDbtNode('role').onchange();assert.equal(dbDbtCanRecover(),false);
+dbDbtNode('database').value='db';await dbDbtNode('database').onchange();
+assert.equal(dbDbtCanRecover(),true);assert.equal(dbDbtNode('recover').disabled,false);assert.equal(p.intent,intent);
+assert.deepEqual(p.context,intent.context);assert.equal(Object.isFrozen(intent.body.expected_target.destination),true);assert.equal(posts().length,before);
+lose=false;await dbDbtRecover();assert.equal(posts().length,before+1);assert.deepEqual(posts().at(-1),first);assert.equal(p.intent,null);
+clearTimeout(p.timer);
+""")
+
+    def test_native_preview_rejects_stale_malformed_and_shows_replace(self):
+        self.javascript(NATIVE_PUBLICATION + r"""
+await nativeSource();const m=p.run.models[0],before=posts().length;
+for(const change of [v=>v.run_id='other',v=>v.plan_id='other',v=>v.node_id=ids[2],v=>v.source_digest='other',v=>v.context.selected_role='data_engineer',v=>v.source_actor='other',v=>v.publisher_actor='engineer',v=>v.candidate.snapshot='other',v=>v.quality.count=0,v=>v.quality.test_ids=[],v=>v.target.name='first',v=>v.expected_target.destination.physical_name='n_candidate',v=>v.expected_target.target={}]){
+ previewChange=change;await dbDbtReview(m);assert.equal(p.review,null);assert.equal(p.preview,null);assert.equal(p.intent,null);
+}
+previewChange=null;previewHold=deferred();const pending=dbDbtReview(m);await tick();p.node=ids[2];previewHold.resolve();await pending;assert.equal(p.review,null);assert.equal(p.pending,false);
+previewHold=null;previewChange=v=>{const ref={database_id:'db',schema_id:'schema',object_id:'formal-ref',incarnation:1};v.expected_target={version:1,destination:ref,target:{ref,snapshot:'7',schema_id:0,columns:[{name:'x',type:'BIGINT'}],schema_fingerprint:'f'.repeat(64)}};};
+await dbDbtReview(m);assert.equal(p.review,m.unique_id);assert.match(text(dbDbtNode('confirmation')),/Replace reviewed target/);assert.match(text(dbDbtNode('confirmation')),/formal-ref/);
+dbDbtNode('node').value=ids[1];dbDbtNode('node').onchange();assert.equal(p.preview,null);assert.equal(p.review,null);
+assert.equal(posts().length,before);
+for(const change of [{publication_allowed:false},{native_tests:false},{tests_status:'FAILED'},{state:'UNKNOWN'},{cancel_requested:true}]){const saved=p.run;p.run={...saved,...change};assert.equal(dbDbtCanPublish(p.run.models[0]),false);p.run=saved;}
+const saved=p.run;p.run={...saved,tests:[]};assert.equal(dbDbtCanPublish(p.run.models[0]),false);p.run=saved;
+clearTimeout(p.timer);
+""")
+
+    def test_native_review_changed_closes_only_dedicated_rejection(self):
+        self.javascript(NATIVE_PUBLICATION + r"""
+await nativeSource();await dbDbtReview(p.run.models[0]);publishError={status:409,code:'TARGET_CHANGED'};
+await dbDbtSubmit('publish',ids[1]);const key=p.intent.key;assert.equal(dbDbtCanCloseRejected(),false);
+for(const code of ['CONTEXT_MISMATCH','IDEMPOTENCY_CONFLICT']){publishError={status:409,code};await dbDbtRecover();assert.equal(p.intent.key,key);assert.equal(dbDbtCanCloseRejected(),false);if(p.invalid)await dbDbtRefresh();}
+publishError={status:409,code:'DBT_PUBLICATION_REVIEW_CHANGED'};await dbDbtRecover();assert.equal(dbDbtCanCloseRejected(),true);
+const before=posts().length;dbDbtCloseRejected();assert.equal(p.intent,null);assert.equal(p.review,null);assert.equal(p.preview,null);assert.equal(p.rejectedIntent.key,key);assert.equal(posts().length,before);
+publishError=null;await dbDbtObserve('run',run.id);await dbDbtReview(p.run.models[0]);assert.ok(p.preview);assert.equal(p.intent,null);clearTimeout(p.timer);
+""")
 
     def test_quality_optional_metadata_uncheck_and_saved_projection(self):
         self.javascript(r"""
@@ -105,8 +256,8 @@ for(const lang of ['ja','en']){
   dbDbtNode('native-tests').checked=selected;dbDbtNode('native-tests').onchange();assert.equal(p.nativeTests,selected);
   assert.equal(dbDbtNode('build').textContent,t(selected?'Run native TABLE and test':'Run native TABLE'));
   assert.equal(text(dbDbtNode('native-help')).trim(),lang==='ja'
-   ?selected?'同じ DB の SANDBOX に新しい候補を1モデル作成し、付属する品質テスト一式を実行します。公開はできません。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。':'同じ DB の SANDBOX に新しい候補を1モデル作成します。テストは実行せず、公開できません。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。'
-   :selected?'Creates one new same-DB SANDBOX candidate and runs the complete attached quality suite. Publication is unavailable. Execution revalidates current project, policy and sources.':'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.');
+   ?selected?'同じ DB の SANDBOX に新しい候補を1モデル作成し、付属する品質テスト一式を実行します。品質 PASSED 後、管理者が MARTS 公開を明示確認し、行数監査 >= 1 を行います。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。':'同じ DB の SANDBOX に新しい候補を1モデル作成します。テストは実行せず、公開できません。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。'
+   :selected?'Creates one new same-DB SANDBOX candidate and runs the complete attached quality suite. After quality PASSED, admin may explicitly review MARTS publication with row audit >= 1. Execution revalidates current project, policy and sources.':'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.');
   assert.ok(text(dbDbtNode('native-tests').parentElement).includes(t('Run quality tests')));
  }
 }
@@ -156,7 +307,7 @@ for(const status of ['QUEUED','RUNNING','PASSED','FAILED','ERROR','CANCELED','UN
  run={...run,native_tests:true,native_verified:true,tests_status:status,state:status==='PASSED'?'NATIVE_VERIFIED':status==='RUNNING'?'TESTING':'FAILED',tests:[{unique_id:'test.first',name:'not_null',state:status,failure_count:status==='FAILED'?3:0,operation_id:'test-op'}]};
  await dbDbtObserve('run',run.id);assert.match(text(dbDbtNode('run-detail')),new RegExp(status));
  assert.match(text(dbDbtNode('run-detail')),/Native TABLE verified/);assert.match(text(dbDbtNode('run-detail')),/Publication unavailable/);
- assert.equal(dbDbtCanPublish(p.run.models[1]),false);assert.equal(dbDbtNode('publications').children.length,0);assert.match(text(dbDbtNode('tests')),/test-op/);
+ assert.equal(dbDbtCanPublish(p.run.models[1]),false);assert.equal(dbDbtNode('publications').children.filter(row=>row.children.some(n=>n.tagName==='BUTTON'&&!n.disabled&&n.textContent===t('Review publication'))).length,0);assert.match(text(dbDbtNode('tests')),/test-op/);
  if(status==='FAILED')assert.match(text(dbDbtNode('run-detail')),/Failure count: 3/);
  await dbDbtHistory();assert.match(text(dbDbtNode('history')),new RegExp(status));
 }
@@ -402,7 +553,7 @@ const baseRoute=route,child=deferred();let reading=false;
 route=async(path,options)=>{if(!options?.method&&path.includes('/publications/')){reading=true;await child.promise;}return baseRoute(path,options);};
 const pending=dbDbtSubmit('reconcile');await tick();assert.equal(reading,true);
 p.database='other';dbDbtPurge();child.resolve();await pending;
-assert.equal(p.run,null);assert.deepEqual(p.publications,{});assert.equal(dbDbtNode('publications').children.length,0);
+assert.equal(p.run,null);assert.deepEqual(p.publications,{});assert.equal(dbDbtNode('publications').children.filter(row=>row.children.some(n=>n.tagName==='BUTTON'&&!n.disabled&&n.textContent===t('Review publication'))).length,0);
 assert.equal(posts().filter(c=>c.path.endsWith('/publish')).length,1);assert.equal(posts().filter(c=>c.path.endsWith('/reconcile')).length,1);
 """)
 
