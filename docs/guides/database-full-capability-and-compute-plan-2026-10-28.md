@@ -125,6 +125,7 @@ UIは受付・起動中・利用可能・停止中・失敗を表示し、通常
 2026-10-29：[DB-P6-3Aの先行実証](database-p6-3a-dbt-feasibility-2026-10-29.md)を経て、[DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)で耐久plan／run、版固定、サーバー側test gate、通常API／CLI／Workbenchを実装した。table／ephemeral SELECTの技術受入後、[C1](database-p6-3c-dbt-compatibility-2026-10-29.md)でPARQUETの実適用とmodel／test設定の診断を接続した。
 2026-10-30：[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)で真のrun専用SANDBOX INVOKER VIEW、TABLE Snapshot固定、VIEW head検査と下流TABLE／testを実装し、実機確認を完了した。この範囲の技術受入を完了した。標準dbt executorの型付き操作、VIEW→VIEWと正式VIEW公開は残件とし、DB-P6-3全体は未完了とする。
 同日の[C2B1](database-p6-3c2b-native-materialization-2026-10-30.md)でinstalled標準TABLE macro→DataOps childのprivate接続を実装し、新規SANDBOX候補のE／A・2DB・Snapshot・取消／owner停止を実機確認した。この限定した接続実証の技術受入を完了した。通常RunTaskのschema／cache／graph、native test・置換と通常導線への接続は引き続き後続であり、このprivate実証だけで標準dbt buildを利用可能とはしない。
+同日の[C2B2](database-p6-3c2b2-native-runs-2026-10-30.md)でnative TABLE 1件を保存run／API／CLIへ接続した。元の資格情報を持つDataOpsとSDK processを分離し、NATIVE_VERIFIEDをテスト未実行・公開不可として履歴表示する。画面からのnative実行選択と、通常RunTask／graph・native test・置換は後続である。
 
 手動WAPと管理Martを既存の基準動作として残し、信頼するローカルprojectのモデル一覧・compile・build／test・結果・lineageをDatabase対応へ移す。`iceberg`固定profile、暗黙Schema作成、管理者credentialへのfallbackを除く。最初はSQLモデルと明示したmaterializationを対象とし、Pythonモデル・任意shell・外部package実行は含めない。
 
@@ -260,7 +261,7 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 
-DB-P6-0／1／2とDB-P6-3B／C1／C2Aは各範囲の技術受入済みである。現在のunit **DB-P6-3C2B1**では、標準TABLE materializationと既存DataOpsのprivate接続を実装し、新規SANDBOX候補の実機確認を完了した。この限定した接続実証の技術受入を完了した。次は保存run／通常導線へつなぐexecutor契約と、残るschema／cache／graph・native test・置換の範囲を定める。Bears／Copilot・SRE／Policy、残る探索操作、実サイズ変更と用途別Warehouseは各後続unitへ残す。M1の全必須行の対応と本人受入は未完了である。
+DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1は各範囲の技術受入済みである。現在のunit **DB-P6-3C2B2**では、native TABLE 1件の明示選択を保存run／API／CLIへ接続し、履歴でテスト未実行・公開不可を区別した。E／A・2DB・休止復帰・Snapshot・取消／停止を確認し、この限定範囲の技術受入を完了した。次は画面でのnative実行選択と利用条件の表示へ進む。Bears／Copilot・SRE／Policy、残る探索操作、実サイズ変更と用途別Warehouseは各後続unitへ残す。M1の全必須行の対応と本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

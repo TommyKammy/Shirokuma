@@ -1187,6 +1187,63 @@ class DbtTests(unittest.TestCase):
         self.code('SQL_PERMISSION_DENIED', dbt.submit_publication, self.engineer, self.context,
             'not-owned', key='engineer', node_id='model.first')
 
+    def test_native_arguments_reject_before_capture_and_acceptance(self):
+        for executor, node in [('unknown', None), (None, None), ([], 'model.first'),
+                ('native_table', None), ('native_table', ''), ('native_table', []),
+                ('native_table', 'bad node'), ('sql_wap', 'model.first')]:
+            with self.subTest(executor=executor, node=node), \
+                    patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')), \
+                    self.assertRaises(ValueError):
+                dbt.submit_run(self.engineer, self.context, key='invalid', plan_id='unused', executor=executor, node_id=node)
+        with control_store.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM dbt_runs').fetchone()[0], 0)
+
+    def test_legacy_exact_payload_default_and_explicit_executor_replay(self):
+        plan = self.plan()
+        first = dbt.submit_run(self.engineer, self.context, key='old-key', plan_id=plan['id'])
+        with control_store.connect() as db:
+            payload = db.execute("SELECT payload FROM dbt_requests WHERE route='/api/v1/dbt/runs'").fetchone()[0]
+        self.assertEqual(payload, ds._json(dict(context=asdict(self.context), plan_id=plan['id'])))
+        with patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')):
+            explicit = dbt.submit_run(self.engineer, self.context, key='old-key', plan_id=plan['id'], executor='sql_wap')
+        self.assertEqual(first, explicit)
+        self.assertNotIn('executor', first)
+        self.code('IDEMPOTENCY_CONFLICT', dbt.submit_run, self.engineer, self.context,
+                  key='old-key', plan_id=plan['id'], executor='native_table', node_id='model.first')
+
+    def test_native_selection_publication_and_full_context_guards(self):
+        plan = self.plan()
+        for actor, context in [(self.admin, self.admin_context),
+                (self.engineer, replace(self.context, grant_revision=self.context.grant_revision + 1)),
+                (self.engineer, self.b.context(schema='sandbox', database=self.b.databases[1])),
+                (self.engineer, replace(self.context, selected_role='bi_viewer'))]:
+            with self.subTest(context=context), patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')), self.assertRaises((QueryError, PermissionError)):
+                dbt.submit_run(actor, context, key='foreign', plan_id=plan['id'], executor='native_table', node_id='model.first')
+        for node in ('model.stage', 'model.second', 'model.unknown'):
+            with self.subTest(node=node), patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')), self.assertRaises(QueryError):
+                dbt.submit_run(self.engineer, self.context, key=node, plan_id=plan['id'], executor='native_table', node_id=node)
+        run = dbt.submit_run(self.engineer, self.context, key='native', plan_id=plan['id'], executor='native_table', node_id='model.first')
+        self.assertEqual([m['unique_id'] for m in run['models']], ['model.first'])
+        self.mutate(run['id'], lambda r: r.update(state='READY', tests=[]))
+        self.code('DBT_NATIVE_PUBLICATION_FORBIDDEN', dbt.submit_publication, self.admin, self.admin_context,
+                  run['id'], key='forbidden', node_id='model.first')
+        self.mutate(plan['id'], lambda p: p.update(state='FAILED', source_digest='changed'))
+        with patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')):
+            self.assertEqual(dbt.submit_run(self.engineer, self.context, key='native', plan_id=plan['id'], executor='native_table', node_id='model.first')['id'], run['id'])
+        self.code('IDEMPOTENCY_CONFLICT', dbt.submit_run, self.engineer, self.context,
+                  key='native', plan_id=plan['id'], executor='native_table', node_id='model.second')
+
+    def test_native_cleanup_only_receipt_redacts_all_candidate_evidence(self):
+        plan = self.plan()
+        run = dbt.submit_run(self.engineer, self.context, key='native', plan_id=plan['id'], executor='native_table', node_id='model.first')
+        self.mutate(run['id'], lambda r: r.update(candidate={'secret': True}, candidate_locator={'name': 'private'},
+            pins={'source': 'private'}, native_receipt={'candidate_locator': 'private', 'pins': 'private'}))
+        with patch.object(dbt, '_access', side_effect=QueryError('DB_ACCESS_REVOKED', 403)), control_store.connect() as db:
+            receipt = dbt._cancel_receipt(db, self.engineer, self.context, dbt._row(db, run['id'])[1])
+        for field in ('candidate', 'candidate_locator', 'pins', 'native_receipt'):
+            self.assertNotIn(field, receipt)
+        self.assertEqual(receipt['models'], [])
+
 
 if __name__ == '__main__':
     unittest.main()

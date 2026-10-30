@@ -634,7 +634,7 @@ for(const lang of ['ja','en']){
  setLanguage(lang);
  const detail=text(dbDbtNode('compatibility'));
  assert.match(detail,/SQL \/ WAP/);assert.match(detail,/COUNT\(\*\)/);
- assert.match(detail,lang==='ja'?/標準 executor と view は未対応/:/Native executor and views are unsupported/);
+ assert.match(detail,lang==='ja'?/API／CLI は1ノードの native TABLE 実行に対応/:/API\/CLI supports native TABLE execution for one node/);
  assert.match(text(dbDbtNode('models')),lang==='ja'?/適用テーブル形式/:/Applied table format/);
  assert.match(text(dbDbtNode('models')),/PARQUET/);
  assert.match(text(dbDbtNode('models')),lang==='ja'?/コネクタ既定/:/Connector default/);
@@ -758,6 +758,36 @@ assert.equal(posts().length,1);
 """)
         self.assertIn('#db-dbt-panel :is(p,td,th,summary){overflow-wrap:anywhere}', harness.HTML)
         self.assertIn('#db-dbt-panel .table-wrap{max-width:100%;overflow-x:auto}', harness.HTML)
+
+    def test_native_saved_history_detail_localization_and_publication_block(self):
+        self.javascript(r"""
+await compile();run=makeRun(p.context,{executor:'native_table',selected_node_id:ids[1],state:'NATIVE_VERIFIED',native_verified:true,tests_status:'NOT_RUN',publication_allowed:false,tests:[]});
+run.models=[run.models[1]];await dbDbtHistory();await dbDbtObserve('run',run.id);
+assert.equal(p.plan.compatibility.executor,'sql_wap');assert.equal(p.run.executor,'native_table');
+for(const node of ['run-detail','history']){assert.match(text(dbDbtNode(node)),/native_table/);assert.match(text(dbDbtNode(node)),/model.demo.first/);assert.match(text(dbDbtNode(node)),/Native TABLE verified; tests not run; publication unavailable/);}
+assert.equal(dbDbtTestsPassed(),false);assert.equal(dbDbtCanPublish(p.run.models[0]),false);
+setLanguage('ja');for(const node of ['run-detail','history'])assert.match(text(dbDbtNode(node)),/Native TABLE 検証済み。テスト未実行、公開不可/);
+setLanguage('en');const count=posts().length;
+run={...run,state:'READY',tests:structuredClone(plan.tests).map(t=>({...t,state:'PASSED',failure_count:0}))};
+await dbDbtObserve('run',run.id);assert.equal(dbDbtTestsPassed(),false);assert.equal(dbDbtCanPublish(p.run.models[0]),false);
+p.review=ids[1];await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,count);
+assert.doesNotMatch(text(dbDbtNode('run-detail')),/Tests passed, awaiting publication/);
+for(const state of ['BUILDING','UNKNOWN','FAILED']){run={...run,state};await dbDbtObserve('run',run.id);assert.match(text(dbDbtNode('run-detail')),new RegExp(state));assert.match(text(dbDbtNode('run-detail')),/Tests not run; publication unavailable/);}
+run={...run,state:'BUILDING'};await dbDbtObserve('run',run.id);assert.equal(dbDbtNode('cancel').disabled,false);
+await dbDbtSubmit('cancel');assert.equal(readBody(posts().at(-1)).context.database_id,p.context.database_id);
+run={...run,state:'UNKNOWN'};await dbDbtObserve('run',run.id);assert.equal(dbDbtNode('reconcile').disabled,false);
+await dbDbtSubmit('reconcile');assert.match(posts().at(-1).path,/reconcile$/);
+assert.ok(!text(dbDbtNode('panel')).includes('Native dbt execution is unsupported.'));
+clearTimeout(p.timer);
+""")
+
+    def test_native_history_plan_mismatch_does_not_replace_selected_run(self):
+        self.javascript(r"""
+await build();const saved=p.run;
+run=makeRun(p.context,{id:'native-run',executor:'native_table',selected_node_id:ids[1],state:'NATIVE_VERIFIED',plan_id:'different-plan'});
+await dbDbtObserve('run',run.id,'plan-1');assert.equal(p.run,saved);
+assert.match(p.status.textContent,/failed/i);assert.equal(posts().length,2);
+""")
 
     def test_japanese_english_state_copy_and_native_responsive_structure(self):
         self.javascript(r"""

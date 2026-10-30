@@ -159,6 +159,27 @@ class Routes(unittest.TestCase):
                         self.assertEqual(response.status, expected, reply)
                         self.assertEqual(call.call_count, int(expected == 202))
 
+    def test_native_run_strict_optional_fields_before_service(self):
+        good = dict(context=asdict(C), plan_id=ID, executor='native_table', node_id='model.arbitrary.table')
+        h = self.handler(BASE + 'runs', good, {'Content-Type': 'application/json', 'Idempotency-Key': 'native'})
+        with patch.object(routes.dbt, 'submit_run', return_value={}) as run:
+            routes.dispatch(h, 'POST', h.path, {}, 'actor', C.selected_role)
+            run.assert_called_once_with('actor', C, key='native', plan_id=ID, executor='native_table', node_id='model.arbitrary.table')
+        for changes in [dict(executor='unknown'), dict(executor=None), dict(executor=[]), dict(node_id=None),
+                dict(node_id=2), dict(node_id=[]), dict(node_id=''), dict(node_id='bad node'), dict(executor='sql_wap')]:
+            with self.subTest(changes=changes), patch.object(routes.dbt, 'submit_run') as run:
+                h = self.handler(BASE + 'runs', dict(good, **changes), {'Content-Type': 'application/json', 'Idempotency-Key': 'native'})
+                with self.assertRaises(ValueError):
+                    routes.dispatch(h, 'POST', h.path, {}, 'actor', C.selected_role)
+                run.assert_not_called()
+        for body in [dict(context=asdict(C), plan_id=ID, executor='native_table'),
+                     dict(context=asdict(C), plan_id=ID, node_id='model.arbitrary.table'),
+                     dict(context=asdict(C), plan_id=ID, node_id=None)]:
+            h = self.handler(BASE + 'runs', body, {'Content-Type': 'application/json', 'Idempotency-Key': 'native'})
+            with patch.object(routes.dbt, 'submit_run') as run, self.assertRaises(ValueError):
+                routes.dispatch(h, 'POST', h.path, {}, 'actor', C.selected_role)
+            run.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

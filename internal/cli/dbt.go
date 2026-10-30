@@ -41,6 +41,10 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 		if action == "plan" || action == "run" || action == "runs" {
 			add("plan-id", "", action != "runs")
 		}
+		if action == "run" {
+			add("executor", "sql_wap", false)
+			add("node-id", "", false)
+		}
 		if action == "status" || action == "cancel" || action == "reconcile" || action == "publish" {
 			add("run-id", "", true)
 		}
@@ -75,6 +79,20 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 					return fmt.Errorf("invalid staging-materialization")
 				}
 			}
+			if action == "run" {
+				switch value("executor") {
+				case "sql_wap":
+					if value("node-id") != "" {
+						return fmt.Errorf("node-id requires native_table executor")
+					}
+				case "native_table":
+					if strings.TrimSpace(value("node-id")) == "" {
+						return fmt.Errorf("nonempty node-id required for native_table executor")
+					}
+				default:
+					return fmt.Errorf("invalid executor")
+				}
+			}
 			repository, err := resolveRepositoryRoot("")
 			if err != nil {
 				return err
@@ -85,6 +103,9 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 			}
 			args := []string{filepath.Join(repository, "tools", "local_experiment", "dbt_client.py"), action}
 			for _, name := range names {
+				if action == "run" && value("executor") == "sql_wap" && (name == "executor" || name == "node-id") {
+					continue
+				}
 				if saved && name == "schema" && !flags.Changed(name) {
 					continue
 				}

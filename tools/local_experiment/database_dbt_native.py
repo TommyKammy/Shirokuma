@@ -1,9 +1,9 @@
-"""Private operator TABLE feasibility bridge, not dbt run/build or a WAP artifact.
+"""Single TABLE SDK bridge for durable native runs and private operator proof.
 
-Call materialize in an isolated operator process with no other dbt invocation.
-Only ModelRunner.execute and the installed table macro run; RunTask, native
-schema/cache/global-graph setup, tests, replacement and publication do not.
-Receipts are ordinary DataOps observations and can never resume this helper.
+Only ModelRunner.execute and the installed TABLE macro run. The normal durable
+path isolates SDK globals in a fresh process; parent DataOps owns all backend
+work. The standalone operator retains its serial, exclusive admission contract.
+Neither path creates a WAP publication artifact or resumes saved receipts.
 """
 from contextlib import contextmanager
 from copy import deepcopy
@@ -12,6 +12,10 @@ import importlib.metadata
 import json
 import os
 import threading
+import subprocess
+import selectors
+import time
+from pathlib import Path
 
 import control_store
 import database_dbt as compiler
@@ -26,6 +30,9 @@ _ROUTE = 'dbt-native-feasibility'
 _PROVENANCE = dict(experimental=True, executor='dbt_native_model_runner',
                    materialization='materialization_table_trino')
 _process = threading.Lock()
+_SDK_TIMEOUT = 120
+_SDK_MESSAGE_LIMIT = 1024 * 1024
+_SDK_REQUEST_LIMIT = 32 * 1024 * 1024
 
 
 def _reject(code='DBT_NATIVE_UNSUPPORTED'):
@@ -120,7 +127,8 @@ def _check_inputs(execution, inputs, sources):
 
 class _Bridge:
     """One caller-thread capability, one native callback, one fixed write step."""
-    def __init__(self, execution, locator, bindings, approved, receipt):
+    def __init__(self, execution, locator, bindings, approved, receipt, *, wire=False):
+        self.wire = wire
         self.execution, self.locator = execution, locator
         self.bindings, self.approved, self.receipt = bindings, approved, receipt
         self.thread = threading.get_ident()
@@ -129,7 +137,8 @@ class _Bridge:
         self.candidate_ref = None
         context = execution._context()
         self.target = (context.sql_catalog, execution._schema(locator.schema_id, write=True).sql_name, locator.physical_name)
-        self.inputs = {alias: execution.wap_measure(ref) for alias, ref in approved['sources'].items()}
+        self.inputs = (db_dbt._pinned(execution, approved['sources']) if ds._dbt.get() else
+                       {alias: execution.wap_measure(ref) for alias, ref in approved['sources'].items()})
         self.receipt.update(candidate_locator=asdict(locator), pins=self.inputs)
 
     def _scope(self):
@@ -181,6 +190,9 @@ class _Bridge:
             with control_store.connect() as db:
                 db.execute('INSERT INTO dataops_owned_objects VALUES (?,?,?,?)',
                            (self.execution.id, self.candidate_ref.object_id, self.candidate_ref.incarnation, 'stage'))
+            if self.wire:
+                self.response = dict(_message='CREATE TABLE', code='CREATE TABLE', rows_affected=page.get('update_count'))
+                return self.response
             from dbt.adapters.contracts.connection import AdapterResponse
             import agate
             self.response = AdapterResponse(_message='CREATE TABLE', code='CREATE TABLE',
@@ -306,6 +318,131 @@ def _run_native(artifacts, node_id, bridge):
             raise
 
 
+def _run_subprocess(artifacts, node_id, bridge):
+    """SDK only in a fresh process; typed callbacks stay on this owning thread."""
+    _, raw, command, env = artifacts
+    worker = Path(__file__).with_name('database_dbt_native_worker.py')
+    request = dict(manifest=_builtin_manifest(raw), command=command, node_id=node_id,
+        target=bridge.target, database_id=bridge.locator.database_id,
+        bindings=[dict(relation=k, ref=asdict(v)) for k, v in bridge.bindings.items()],
+        approved=dict(bridge.approved, sources={k: asdict(v) for k, v in bridge.approved['sources'].items()}))
+    child = None
+    deadline = time.monotonic() + _SDK_TIMEOUT
+    buffered = bytearray()
+    eof = object()
+
+    def check():
+        bridge._scope()
+        if time.monotonic() >= deadline:
+            _reject('DBT_NATIVE_SDK_TIMEOUT')
+
+    def callback(function, *args):
+        nonlocal deadline
+        started = time.monotonic()
+        try:
+            return function(*args)
+        finally:
+            # Parent SQL/metadata work has its own DS query/cancel checks.
+            # Only SDK communication and child waiting consume this budget.
+            deadline += time.monotonic() - started
+
+    def send(value):
+        data = memoryview((json.dumps(value, allow_nan=False) + '\n').encode())
+        if len(data) > _SDK_REQUEST_LIMIT:
+            _reject('DBT_NATIVE_PROTOCOL_FAILED')
+        with selectors.DefaultSelector() as ready:
+            ready.register(child.stdin, selectors.EVENT_WRITE)
+            while data:
+                check()
+                if ready.select(.2):
+                    try:
+                        data = data[os.write(child.stdin.fileno(), data[:65536]):]
+                    except BlockingIOError:
+                        pass
+
+    def receive():
+        with selectors.DefaultSelector() as ready:
+            ready.register(child.stdout, selectors.EVENT_READ)
+            while True:
+                check()
+                if b'\n' in buffered:
+                    line, _, rest = buffered.partition(b'\n')
+                    buffered[:] = rest
+                    if len(line) > _SDK_MESSAGE_LIMIT:
+                        _reject('DBT_NATIVE_PROTOCOL_FAILED')
+                    return json.loads(line)
+                if len(buffered) > _SDK_MESSAGE_LIMIT:
+                    _reject('DBT_NATIVE_PROTOCOL_FAILED')
+                if ready.select(.2):
+                    try:
+                        chunk = os.read(child.stdout.fileno(), 65536)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        if buffered:
+                            _reject('DBT_NATIVE_PROTOCOL_FAILED')
+                        return eof
+                    buffered.extend(chunk)
+
+    try:
+        check()
+        child = subprocess.Popen([str(Path(command[0]).with_name('python3')), str(worker)],
+            cwd=env['HOME'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, bufsize=0)
+        os.set_blocking(child.stdin.fileno(), False)
+        os.set_blocking(child.stdout.fileno(), False)
+        send(request)
+        while True:
+            message = receive()
+            if not isinstance(message, dict):
+                _reject('DBT_NATIVE_PROTOCOL_FAILED')
+            if message == {'op': 'done', 'status': 'success'}:
+                child.stdin.close()
+                if receive() is not eof:
+                    _reject('DBT_NATIVE_PROTOCOL_FAILED')
+                while child.poll() is None:
+                    check()
+                    try:
+                        child.wait(timeout=.2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                if child.returncode != 0 or bridge.aborted or not bridge.called or bridge.response is None:
+                    _reject('DBT_NATIVE_RUNNER_FAILED')
+                return
+            if set(message) == {'op', 'database', 'schema', 'identifier'} and message['op'] == 'get_relation':
+                if any(type(message[k]) is not str for k in ('database', 'schema', 'identifier')):
+                    _reject('DBT_NATIVE_PROTOCOL_FAILED')
+                callback(bridge.relation, message['database'], message['schema'], message['identifier'])
+                response = dict(result=None)
+            elif set(message) == {'op', 'sql', 'auto_begin', 'fetch', 'limit'} and message['op'] == 'execute':
+                if (type(message['sql']) is not str or type(message['auto_begin']) is not bool
+                        or type(message['fetch']) is not bool or message['limit'] is not None):
+                    _reject('DBT_NATIVE_PROTOCOL_FAILED')
+                response = dict(result=callback(bridge.execute, message['sql'], message['auto_begin'], message['fetch'], message['limit']))
+            else:
+                _reject('DBT_NATIVE_PROTOCOL_FAILED')
+            send(response)
+    except BaseException as error:
+        bridge.aborted = True
+        if isinstance(error, (QueryError, KeyboardInterrupt, SystemExit)):
+            raise
+        _reject('DBT_NATIVE_PROTOCOL_FAILED')
+    finally:
+        if child is not None:
+            for pipe in (child.stdin, child.stdout):
+                if pipe is not None and not pipe.closed:
+                    pipe.close()
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait(timeout=5)
+            else:
+                child.wait(timeout=5)
+
+
 def _idle():
     import warehouse_resident
     warehouse_resident.check_lifecycle()
@@ -326,6 +463,59 @@ def _replay(principal, context, plan_id, node_id, key):
     if old['payload'] != ds._json(dict(payload=payload, context=asdict(context))):
         _reject('IDEMPOTENCY_CONFLICT')
     return ds.Execution(principal, old['id'], replayed=True).inspect()
+
+
+def materialize_accepted(execution, principal, context, plan, node, bindings, approved, payload, *, isolated=False):
+    """Execute one accepted child; caller owns admission, authority and lifetime."""
+    plan_id, node_id = plan['id'], node['unique_id']
+    runner = _run_subprocess if isolated else _run_native
+    bridge = None
+    try:
+        with ds._accepted(execution):
+            fresh = _plan(principal, context, plan_id, node_id)
+            if fresh != (plan, node, bindings, approved):
+                _reject('DBT_PLAN_CHANGED')
+            project = db_dbt._projects().get(plan['project_id'])
+            if project is None:
+                _reject('DBT_PROJECT_NOT_FOUND')
+            with compiler._compiled_project(project['path'], catalog=context.sql_catalog,
+                    source_schema=plan['_source_sql_schema'],
+                    staging_materialization=plan['staging_materialization']) as artifacts:
+                summary = artifacts[0]
+                if (summary['source_digest'] != plan['source_digest'] or summary['models'] != plan['models']
+                        or summary['tests'] != plan['tests'] or summary['compatibility'] != plan['compatibility']
+                        or summary['sources'] != [{k: v for k, v in s.items() if k != 'ref'}
+                                                 for s in plan['source_bindings']]):
+                    _reject('DBT_PLAN_CHANGED')
+                locator = registry.DestinationLocator(context.database_id, context.schema_id,
+                                                     'n_' + execution.id.replace('-', '')[:17])
+                receipt = dict(payload, native_verified=False)
+                bridge = _Bridge(execution, locator, bindings, approved, receipt, wire=isolated)
+                runner(artifacts, node_id, bridge)
+                # The callback registered the exact created UUID. A
+                # positive backend response alone never verifies it.
+                if bridge.candidate_ref is None:
+                    _reject('TABLE_OBSERVATION_REQUIRED')
+                candidate = execution.wap_measure(bridge.candidate_ref)
+                _check_inputs(execution, bridge.inputs, approved['sources'])
+                _plan(principal, context, plan_id, node_id)
+                return execution.complete(dict(receipt, native_verified=True, candidate=candidate))
+    except BaseException:
+        if bridge is not None:
+            bridge.aborted = True
+        # Generic reconciliation preserves UNKNOWN/cancel/owner loss.
+        # Never clean up, retry, resume or claim native verification.
+        try:
+            if execution._row()['state'] == 'ACTIVE':
+                execution.fail()
+        except (QueryError, admission.AdmissionConflict):
+            pass
+        finally:
+            live = ds._live.pop(execution.id, None)
+            if live is not None:
+                live[2].close()
+            execution._inspect()
+        raise
 
 
 def materialize(principal, context, *, plan_id, node_id, key):
@@ -357,52 +547,6 @@ def materialize(principal, context, *, plan_id, node_id, key):
             execution = ds.begin(principal, context, route=_ROUTE, idempotency_key=key, payload=payload)
             if execution.replayed:
                 return execution.inspect()
-            bridge = None
-            try:
-                with ds._accepted(execution):
-                    fresh = _plan(principal, context, plan_id, node_id)
-                    if fresh != (plan, node, bindings, approved):
-                        _reject('DBT_PLAN_CHANGED')
-                    project = db_dbt._projects().get(plan['project_id'])
-                    if project is None:
-                        _reject('DBT_PROJECT_NOT_FOUND')
-                    with compiler._compiled_project(project['path'], catalog=context.sql_catalog,
-                            source_schema=plan['_source_sql_schema'],
-                            staging_materialization=plan['staging_materialization']) as artifacts:
-                        summary = artifacts[0]
-                        if (summary['source_digest'] != plan['source_digest'] or summary['models'] != plan['models']
-                                or summary['tests'] != plan['tests'] or summary['compatibility'] != plan['compatibility']
-                                or summary['sources'] != [{k: v for k, v in s.items() if k != 'ref'}
-                                                         for s in plan['source_bindings']]):
-                            _reject('DBT_PLAN_CHANGED')
-                        locator = registry.DestinationLocator(context.database_id, context.schema_id,
-                                                             'n_' + execution.id.replace('-', '')[:17])
-                        receipt = dict(payload, native_verified=False)
-                        bridge = _Bridge(execution, locator, bindings, approved, receipt)
-                        _run_native(artifacts, node_id, bridge)
-                        # The callback registered the exact created UUID. A
-                        # positive backend response alone never verifies it.
-                        if bridge.candidate_ref is None:
-                            _reject('TABLE_OBSERVATION_REQUIRED')
-                        candidate = execution.wap_measure(bridge.candidate_ref)
-                        _check_inputs(execution, bridge.inputs, approved['sources'])
-                        _plan(principal, context, plan_id, node_id)
-                        return execution.complete(dict(receipt, native_verified=True, candidate=candidate))
-            except BaseException:
-                if bridge is not None:
-                    bridge.aborted = True
-                # Generic reconciliation preserves UNKNOWN/cancel/owner loss.
-                # Never clean up, retry, resume or claim native verification.
-                try:
-                    if execution._row()['state'] == 'ACTIVE':
-                        execution.fail()
-                except (QueryError, admission.AdmissionConflict):
-                    pass
-                finally:
-                    live = ds._live.pop(execution.id, None)
-                    if live is not None:
-                        live[2].close()
-                    execution._inspect()
-                raise
+            return materialize_accepted(execution, principal, context, plan, node, bindings, approved, payload)
     finally:
         _process.release()

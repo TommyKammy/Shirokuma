@@ -119,6 +119,10 @@ def validate_reply(reply, context, kind, expected, args, principal):
             if action == 'run' or action == 'runs' and args.plan_id:
                 if record.get('plan_id') != args.plan_id:
                     raise ValueError('plan association mismatch')
+            if action == 'run':
+                if (record.get('executor', 'sql_wap') != args.executor
+                        or record.get('selected_node_id') != args.node_id):
+                    raise ValueError('executor/node association mismatch')
             if action == 'publish' and (record.get('run_id') != args.run_id or record.get('node_id') != args.node_id):
                 raise ValueError('publication association mismatch')
     return reply
@@ -146,6 +150,9 @@ def parser():
             p.add_argument('--plan-id', required=action != 'runs')
         if action in ('status', 'cancel', 'reconcile', 'publish'):
             p.add_argument('--run-id', required=True)
+        if action == 'run':
+            p.add_argument('--executor', choices=('sql_wap', 'native_table'), default='sql_wap')
+            p.add_argument('--node-id')
         if action == 'publish':
             p.add_argument('--node-id', required=True)
         if action == 'publication':
@@ -159,6 +166,12 @@ def main(argv=None, *, profile=None):
         raise ValueError('nonempty flags required')
     if (args.context or args.context_file) and (args.database is not None or args.schema is not None):
         raise ValueError('context conflicts with database/schema')
+    if args.action == 'run':
+        if args.executor == 'native_table':
+            if args.node_id is None or not re.fullmatch(r'[A-Za-z0-9_.-]{1,512}', args.node_id):
+                raise ValueError('native node ID required')
+        elif args.node_id is not None:
+            raise ValueError('node ID requires native executor')
     profile = profile or configured_profile()
     if profile is None:
         raise ValueError('configured private profile required')
@@ -197,6 +210,8 @@ def main(argv=None, *, profile=None):
         kind = 'run'
         if action == 'run':
             body = dict(plan_id=identifier(args.plan_id))
+            if args.executor == 'native_table':
+                body.update(executor=args.executor, node_id=args.node_id)
         elif action == 'runs':
             if args.plan_id:
                 params['plan_id'] = identifier(args.plan_id)

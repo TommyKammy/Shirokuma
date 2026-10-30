@@ -60,6 +60,8 @@ class ClientTests(unittest.TestCase):
                     if field == 'publication' or url.path.endswith('/publish'):
                         field = 'publication'
                         record.update(id=PUB, kind='publication', run_id=ID, node_id='model.lake.orders')
+                    if body and body.get('executor') == 'native_table':
+                        record.update(executor=body['executor'], selected_node_id=body['node_id'])
                     if self.command == 'POST':
                         key = self.headers['Idempotency-Key']
                         record = outer.receipts.setdefault(key, record)
@@ -255,6 +257,35 @@ class ClientTests(unittest.TestCase):
         self.http_status = 503
         reply = self.call('run', '--plan-id=' + PLAN)
         self.assertTrue(reply['request_uncertain'])
+
+    def test_native_flags_validate_locally_and_preserve_uncertain_intent(self):
+        for flags in [[], ['--node-id=bad node'], ['--node-id=']]:
+            with self.subTest(flags=flags), self.assertRaises(ValueError):
+                self.call('run', '--plan-id=' + PLAN, '--executor=native_table', *flags)
+        with self.assertRaises(ValueError):
+            self.call('run', '--plan-id=' + PLAN, '--node-id=model.any.table')
+        self.assertEqual(self.calls, [])
+        self.drop = True
+        result = self.call('run', '--plan-id=' + PLAN, '--executor=native_table', '--node-id=model.any.table')
+        self.assertTrue(result['request_uncertain'])
+        retry = result['retry']
+        self.assertEqual(retry['intent'], dict(plan_id=PLAN, executor='native_table', node_id='model.any.table'))
+        self.assertEqual(retry['body'], dict(retry['intent'], context=C))
+        reply = self.call('run', '--plan-id=' + PLAN, '--executor=native_table', '--node-id=model.any.table',
+                          '--idempotency-key=' + retry['idempotency_key'])
+        self.assertEqual(reply['run']['selected_node_id'], 'model.any.table')
+        self.assertEqual(self.calls[0][3], self.calls[1][3])
+        self.assertEqual(len(self.receipts), 1)
+
+    def test_native_returned_executor_and_selected_node_must_match_intent(self):
+        for index, change in enumerate([lambda r: r.update(executor='sql_wap'),
+                lambda r: r.pop('executor'), lambda r: r.update(selected_node_id='model.foreign.table'),
+                lambda r: r.pop('selected_node_id')]):
+            self.corrupt = change
+            result = self.call('run', '--plan-id=' + PLAN, '--executor=native_table', '--node-id=model.any.table',
+                               '--idempotency-key=association-' + str(index))
+            self.assertTrue(result['request_uncertain'])
+            self.assertEqual(result['retry']['intent']['node_id'], 'model.any.table')
 
 
 if __name__ == '__main__': unittest.main()

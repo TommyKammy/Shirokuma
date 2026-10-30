@@ -2,12 +2,14 @@
 from contextlib import contextmanager
 from dataclasses import asdict, replace
 import json
+from copy import deepcopy
 import os
 from pathlib import Path
 import sys
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -575,6 +577,431 @@ class NativeTests(unittest.TestCase):
             self.run_native()
         self.assertEqual(caught.exception.code, 'DBT_NATIVE_MATERIALIZED_DEPENDENCY')
         self.assertEqual(self.w.posts, [])
+
+    def normal_run(self, key='normal', *, execute=True):
+        with patch.object(db_dbt, '_start'):
+            run = db_dbt.submit_run(self.principal, self.context, key=key,
+                plan_id=self.plan_id, executor='native_table', node_id=self.uid)
+        if execute:
+            thread = threading.Thread(target=db_dbt._execute, args=(run['id'],))
+            thread.start()
+            thread.join(timeout=45)
+            self.assertFalse(thread.is_alive())
+            run = db_dbt.get_run(self.principal, self.context, run['id'])
+        return run
+
+    def test_normal_installed_subprocess_owns_callbacks_and_original_credentials(self):
+        from dbt.flags import get_flags
+        from dbt.adapters.factory import FACTORY
+        flags, adapters = get_flags(), dict(FACTORY.adapters)
+        environment = dict(os.environ)
+        transport = self.w.transport
+        seen = []
+        popen = subprocess.Popen
+        def sdk_child(args, **kwargs):
+            env = kwargs['env']
+            self.assertFalse(any(k.startswith('SHIROKUMA') for k in env))
+            self.assertEqual(env, self.artifacts[3])
+            self.assertNotIn('original-secret', repr(args))
+            self.assertIs(kwargs['stderr'], subprocess.DEVNULL)
+            return popen(args, **kwargs)
+        def post(url, method, pin, body=None):
+            with control_store.connect() as db:
+                op = db.execute("SELECT o.*,l.node_id,l.phase,l.run_id FROM dataops_operations o "
+                    "JOIN dbt_run_operations l ON l.operation_id=o.id WHERE o.route='dbt-native-table'").fetchone()
+                self.assertEqual(op['phase'], 'build')
+                self.assertEqual(op['node_id'], self.uid)
+                self.assertEqual(op['actor'], self.principal.principal_id)
+                self.assertEqual(json.loads(op['context']), asdict(self.context))
+                self.assertTrue(db.execute('SELECT 1 FROM dataops_queries WHERE operation_id=?', (op['id'],)).fetchone())
+                self.assertIs(ds._live[op['id']][0], db_dbt._live[op['run_id']][3])
+                self.assertEqual(op['credential_snapshot_ref'], db_dbt._live[op['run_id']][4])
+                seen.append(op['id'])
+            self.assertEqual(threading.current_thread().name.startswith('Thread-'), True)
+            return transport(url, method, pin, body)
+        with patch.object(native, '_runtime', side_effect=AssertionError('parent SDK')), \
+                patch.object(native, '_idle', side_effect=AssertionError('parent idle')), \
+                patch.object(native.subprocess, 'Popen', side_effect=sdk_child), \
+                patch.object(queries, '_transport', side_effect=post), \
+                patch.object(db_dbt, '_before_query', wraps=db_dbt._before_query) as final_send:
+            run = self.normal_run()
+        self.assertTrue(final_send.called)
+        self.assertEqual(run['state'], 'NATIVE_VERIFIED', run)
+        self.assertTrue(run['native_verified'])
+        self.assertFalse(run['publication_allowed'])
+        self.assertEqual(run['tests_status'], 'NOT_RUN')
+        self.assertEqual(run['tests'], [])
+        self.assertEqual([m['unique_id'] for m in run['models']], [self.uid])
+        self.assertNotIn('build_id', run['models'][0])
+        self.assertEqual(run['models'][0]['operation_ids'], seen)
+        self.assertTrue(run['models'][0]['candidate']['snapshot'])
+        self.assertIs(get_flags(), flags)
+        self.assertEqual(FACTORY.adapters, adapters)
+        self.assertEqual(dict(os.environ), environment)
+        self.assertEqual(len(self.w.posts), 1)
+        with control_store.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM wap_builds').fetchone()[0], 0)
+        self.mutate_plan(lambda p: p.update(state='FAILED', source_digest='changed'))
+        with patch.object(db_dbt, '_projects', side_effect=AssertionError('projects')), \
+                patch.object(native, '_plan', side_effect=AssertionError('plan')), \
+                patch.object(queries, '_capture_dataops', side_effect=AssertionError('capture')):
+            self.assertEqual(self.normal_run(execute=False)['id'], run['id'])
+
+    def test_normal_selects_only_table_even_with_unselected_view_and_models(self):
+        self.artifact_patch.stop()
+        config = yaml.safe_load((self.project / 'dbt_project.yml').read_text())
+        config['models']['general_native'] = {'+materialized': 'table',
+            'arbitrary_result': {'+properties': {'format': "'PARQUET'"}},
+            'unselected_table': {'+properties': {'format': "'PARQUET'"}}}
+        (self.project / 'dbt_project.yml').write_text(yaml.safe_dump(config))
+        (self.project / 'models/unselected_view.sql').write_text(
+            "{{ config(materialized='view') }} SELECT id, label FROM {{ source('registered', 'registered_input') }}")
+        (self.project / 'models/unselected_table.sql').write_text(
+            "SELECT id, label FROM {{ source('registered', 'registered_input') }}")
+        with compiler._compiled_project(self.project, catalog=self.context.sql_catalog, source_schema='raw') as artifacts:
+            self.artifacts = artifacts
+            with patch.object(db_dbt, '_start'), patch.object(compiler, 'compile_project', return_value=artifacts[0]):
+                plan = db_dbt.submit_plan(self.principal, self.context, key='mixed-plan', project_id='general',
+                    source_schema='raw', target_schema='marts', staging_materialization=None)
+                db_dbt._execute(plan['id'])
+            self.plan_id = plan['id']
+            self.artifact_patch.start()
+            run = self.normal_run()
+        self.assertEqual(run['state'], 'NATIVE_VERIFIED', run)
+        self.assertEqual([m['unique_id'] for m in run['models']], [self.uid])
+        self.assertEqual(len(self.w.posts), 1)
+        self.assertTrue(self.w.posts[0][0].startswith('CREATE TABLE '))
+
+    def test_normal_sdk_child_eof_invalid_protocol_and_target_never_send(self):
+        popen = subprocess.Popen
+        scripts = ["pass", "print('not json')", "print('{\"op\":\"get_relation\",\"database\":\"foreign\",\"schema\":\"raw\",\"identifier\":\"x\"}')"]
+        for index, script in enumerate(scripts):
+            children = []
+            def child(args, **kwargs):
+                args = [args[0], '-c', script]
+                process = popen(args, **kwargs)
+                children.append(process)
+                return process
+            with self.subTest(index=index), patch.object(native.subprocess, 'Popen', side_effect=child):
+                run = self.normal_run('invalid-' + str(index))
+            self.assertEqual(run['state'], 'FAILED', run)
+            self.assertFalse(run['native_verified'])
+            self.assertTrue(all(c.poll() is not None for c in children))
+        self.assertEqual(self.w.posts, [])
+
+    def test_normal_owned_child_failure_after_create_is_unverified_and_reaped(self):
+        popen = subprocess.Popen
+        scripts = [
+            "import json,sys\nr=json.loads(sys.stdin.readline())\n"
+            "sql=\"CREATE TABLE \"+'.'.join(r['target'])+\" WITH (format='PARQUET') AS (\"+r['manifest']['nodes'][r['node_id']]['compiled_code']+')'\n"
+            "print(json.dumps(dict(op='execute',sql=sql,auto_begin=True,fetch=False,limit=None)),flush=True)\n"
+            "sys.stdin.readline()\n" + end
+            for end in ("sys.exit(0)", "print('invalid protocol',flush=True)",
+                        "print(json.dumps(dict(op='done',status='error')),flush=True)",
+                        "print(json.dumps(dict(op='done',status='success')),flush=True);print('null',flush=True)",
+                        "print(json.dumps(dict(op='done',status='success')),flush=True);import time;time.sleep(30)")]
+        for index, script in enumerate(scripts):
+            children = []
+            def child(args, **kwargs):
+                process = popen([args[0], '-c', script], **kwargs)
+                children.append(process)
+                return process
+            with self.subTest(index=index), patch.object(native.subprocess, 'Popen', side_effect=child), \
+                    patch.object(native, '_SDK_TIMEOUT', 3):
+                run = self.normal_run('after-create-' + str(index))
+            self.assertEqual(run['state'], 'FAILED', run)
+            self.assertFalse(run['native_verified'])
+            self.assertTrue(run['operations'][0]['committed'])
+            self.assertFalse(run['native_receipt']['native_verified'])
+            self.assertTrue(run['models'][0]['candidate_locator'])
+            self.assertTrue(all(c.poll() is not None for c in children))
+            self.assertEqual(self.normal_run('after-create-' + str(index), execute=False)['id'], run['id'])
+        self.assertEqual(len(self.w.posts), len(scripts))
+
+    def test_parent_callbacks_do_not_consume_sdk_wait_budget(self):
+        popen = subprocess.Popen
+        execute, relation = native._Bridge.execute, native._Bridge.relation
+        durations = []
+        script = """
+import json, sys
+r = json.loads(sys.stdin.readline())
+print(json.dumps(dict(op='get_relation', database=r['target'][0],
+    schema=r['target'][1], identifier=r['target'][2])), flush=True)
+assert json.loads(sys.stdin.readline()) == dict(result=None)
+sql = 'CREATE TABLE ' + '.'.join(r['target']) + " WITH (format='PARQUET') AS (" + r['manifest']['nodes'][r['node_id']]['compiled_code'] + ')'
+print(json.dumps(dict(op='execute', sql=sql, auto_begin=True, fetch=False, limit=None)), flush=True)
+assert json.loads(sys.stdin.readline())['result']['code'] == 'CREATE TABLE'
+print(json.dumps(dict(op='done', status='success')), flush=True)
+"""
+        def child(args, **kwargs):
+            return popen([args[0], '-c', script], **kwargs)
+        def slow(function):
+            def call(*args, **kwargs):
+                started = time.monotonic()
+                time.sleep(.6)
+                result = function(*args, **kwargs)
+                durations.append(time.monotonic() - started)
+                return result
+            return call
+        with patch.object(native.subprocess, 'Popen', side_effect=child), \
+                patch.object(native, '_SDK_TIMEOUT', .5), \
+                patch.object(native._Bridge, 'relation', slow(relation)), \
+                patch.object(native._Bridge, 'execute', slow(execute)):
+            run = self.normal_run()
+        self.assertEqual(len(durations), 2)
+        self.assertTrue(all(duration > .5 for duration in durations))
+        self.assertEqual(run['state'], 'NATIVE_VERIFIED', run)
+        self.assertTrue(run['native_verified'])
+        self.assertEqual(len(self.w.posts), 1)
+
+    def test_normal_failure_after_create_retains_candidate_no_resend(self):
+        runner = native._run_subprocess
+        def fail(*args):
+            runner(*args)
+            raise QueryError('DBT_NATIVE_RUNNER_FAILED', 409)
+        with patch.object(native, '_run_subprocess', side_effect=fail):
+            run = self.normal_run()
+        self.assertEqual(run['state'], 'FAILED', run)
+        self.assertFalse(run['native_verified'])
+        self.assertFalse(run['native_receipt']['native_verified'])
+        self.assertTrue(run['models'][0]['candidate_locator'])
+        self.assertTrue(run['operations'][0]['committed'])
+        with patch.object(native, '_run_subprocess', side_effect=AssertionError('resend')):
+            self.assertEqual(self.normal_run(execute=False)['id'], run['id'])
+        self.assertEqual(len(self.w.posts), 1)
+
+    def test_normal_unknown_replay_without_plan_project_capture_or_sdk(self):
+        transport = self.w.transport
+        def lost(*args, **kwargs):
+            transport(*args, **kwargs)
+            raise OSError('lost create acknowledgement')
+        with patch.object(queries, '_transport', side_effect=lost):
+            run = self.normal_run()
+        self.assertEqual(run['state'], 'UNKNOWN', run)
+        self.assertFalse(run['native_verified'])
+        self.assertTrue(run['models'][0]['candidate_locator'])
+        self.mutate_plan(lambda p: p.update(state='FAILED', source_digest='changed'))
+        with patch.object(native, '_plan', side_effect=AssertionError('plan')), \
+                patch.object(db_dbt, '_projects', side_effect=AssertionError('project')), \
+                patch.object(queries, '_capture_dataops', side_effect=AssertionError('capture')), \
+                patch.object(native, '_run_subprocess', side_effect=AssertionError('SDK')):
+            self.assertEqual(self.normal_run(execute=False)['state'], 'UNKNOWN')
+        self.assertEqual(len(self.w.posts), 1)
+
+    def test_normal_cancel_and_owner_loss_after_create_do_not_verify(self):
+        runner = native._run_subprocess
+        for key in ('cancel', 'owner-loss'):
+            def stop(artifacts, uid, bridge):
+                runner(artifacts, uid, bridge)
+                if key == 'cancel':
+                    with control_store.connect() as db:
+                        link = db.execute('SELECT run_id FROM dbt_run_operations WHERE operation_id=?', (bridge.execution.id,)).fetchone()
+                    db_dbt.cancel_run(self.principal, self.context, link['run_id'], key='cancel-native')
+                else:
+                    ds._live.pop(bridge.execution.id)[2].close()
+                    raise QueryError('DBT_OWNER_LOST', 409)
+            with patch.object(native, '_run_subprocess', side_effect=stop):
+                run = self.normal_run(key)
+            self.assertEqual(run['state'], 'CANCELED' if key == 'cancel' else 'FAILED', run)
+            self.assertFalse(run['native_verified'])
+            self.assertTrue(run['models'][0]['candidate_locator'])
+            if key == 'owner-loss':
+                self.assertTrue(run['operations'][0]['committed'])
+                self.assertFalse(run['native_receipt']['native_verified'])
+                observed = db_dbt.reconcile_run(self.principal, self.context, run['id'], key='reconcile-native')
+                self.assertEqual(observed['state'], 'FAILED')
+                self.assertFalse(observed['native_verified'])
+        self.assertEqual(len(self.w.posts), 2)
+
+    def test_normal_parent_pins_precede_bridge_even_when_source_appends(self):
+        captured = self.w.metadata(self.source)['current-snapshot-id']
+        constructor = native._Bridge.__init__
+        def append(bridge, *args, **kwargs):
+            self.w.snapshot(self.w.metadata(self.source), [(1, 'one'), (2, 'two'), (3, 'three')])
+            constructor(bridge, *args, **kwargs)
+            self.assertEqual(next(iter(bridge.inputs.values()))['snapshot'], str(captured))
+        with patch.object(native._Bridge, '__init__', append):
+            run = self.normal_run()
+        self.assertEqual(run['state'], 'NATIVE_VERIFIED', run)
+        self.assertIn('FOR VERSION AS OF ' + str(captured), self.w.posts[0][0])
+        candidate = run['models'][0]['candidate']
+        metadata = self.w.metadata(registry.ResourceRef(**candidate['ref']))
+        self.assertEqual(len(self.w.snapshots[(metadata['table-uuid'], int(candidate['snapshot']))]), 2)
+
+    def test_normal_stalled_and_partial_sdk_and_blocked_input_are_cancelable(self):
+        popen = subprocess.Popen
+        scripts = ["import sys,time;sys.stdin.readline();time.sleep(30)",
+                   "import sys,time;sys.stdin.readline();sys.stdout.write('{');sys.stdout.flush();time.sleep(30)",
+                   "import time;time.sleep(30)"]
+        for index, script in enumerate(scripts):
+            children, timers, errors = [], [], []
+            def cancel():
+                try:
+                    with control_store.connect() as db:
+                        ident = db.execute("SELECT l.run_id FROM dbt_run_operations l JOIN dataops_operations o "
+                            "ON o.id=l.operation_id WHERE o.state='ACTIVE'").fetchone()[0]
+                    db_dbt.cancel_run(self.principal, self.context, ident, key='stalled-cancel-' + str(index))
+                except BaseException as error:
+                    errors.append(error)
+            def child(args, **kwargs):
+                process = popen([args[0], '-c', script], **kwargs)
+                children.append(process)
+                timer = threading.Timer(.5, cancel)
+                timers.append(timer)
+                timer.start()
+                return process
+            raw = deepcopy(self.artifacts[1])
+            raw['padding'] = 'x' * (2 * 1024 * 1024)
+            artifacts = (self.artifacts[0], raw, *self.artifacts[2:])
+            original = native._run_subprocess
+            def padded(_, uid, bridge):
+                return original(artifacts, uid, bridge)
+            with self.subTest(index=index), patch.object(native.subprocess, 'Popen', side_effect=child), \
+                    patch.object(native, '_run_subprocess', side_effect=padded), patch.object(native, '_SDK_TIMEOUT', 4):
+                run = self.normal_run('stall-' + str(index))
+            for timer in timers:
+                timer.join()
+            self.assertEqual(errors, [])
+            self.assertEqual(run['state'], 'CANCELED', run)
+            self.assertFalse(run['native_verified'])
+            self.assertTrue(all(c.poll() is not None for c in children))
+            with control_store.connect() as db:
+                parent = admission.get_for_subject(db, kind='dbt', subject_id=run['id'], warehouse_id=self.context.warehouse_id)
+                self.assertEqual(admission.check_execution(db, parent)['state'], 'FINISHED')
+        self.assertEqual(self.w.posts, [])
+
+    def test_normal_sdk_partial_reply_times_out_without_sql(self):
+        popen = subprocess.Popen
+        children = []
+        def child(args, **kwargs):
+            process = popen([args[0], '-c',
+                "import sys,time;sys.stdin.readline();sys.stdout.write('{');sys.stdout.flush();time.sleep(30)"], **kwargs)
+            children.append(process)
+            return process
+        with patch.object(native.subprocess, 'Popen', side_effect=child), patch.object(native, '_SDK_TIMEOUT', .5):
+            run = self.normal_run()
+        self.assertEqual(run['state'], 'FAILED', run)
+        self.assertFalse(run['native_verified'])
+        self.assertEqual(self.w.posts, [])
+        self.assertTrue(all(c.poll() is not None for c in children))
+
+    def test_native_settle_rechecks_canonical_saved_proof(self):
+        run = self.normal_run()
+        self.assertEqual(run['state'], 'NATIVE_VERIFIED', run)
+        op_id = run['models'][0]['operation_ids'][0]
+        with control_store.connect() as db:
+            saved_run = db.execute('SELECT record FROM dbt_runs WHERE id=?', (run['id'],)).fetchone()[0]
+            saved_op = dict(db.execute('SELECT * FROM dataops_operations WHERE id=?', (op_id,)).fetchone())
+            self.assertIsNotNone(db_dbt._native_saved(db, json.loads(saved_run), op_id))
+            self.assertIsNone(db_dbt._native_saved(db, json.loads(saved_run), 'wrong-operation'))
+        mutations = [lambda r: r.update(native_verified=False), lambda r: r.pop('native_verified'),
+                     lambda r: r.update(digest='wrong'), lambda r: r.update(node_id='wrong'),
+                     lambda r: r['candidate']['ref'].update(object_id=self.source.object_id),
+                     lambda r: r['candidate'].update(snapshot='wrong')]
+        for mutate in mutations:
+            receipt = json.loads(saved_op['result'])
+            mutate(receipt)
+            with control_store.connect() as db:
+                db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (saved_run, run['id']))
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), op_id))
+            with self.subTest(receipt=receipt), patch.object(db_dbt, '_access', side_effect=AssertionError('no metadata')):
+                db_dbt._settle(run['id'])
+            observed = db_dbt._row_run(run['id'])
+            self.assertEqual(observed['state'], 'FAILED')
+            self.assertFalse(observed['native_verified'])
+            self.assertFalse(observed['native_receipt']['native_verified'])
+            self.assertTrue(observed['models'][0]['candidate'])
+        for result in ('not json', 'null', '[]'):
+            with control_store.connect() as db:
+                db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (saved_run, run['id']))
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (result, op_id))
+            db_dbt._settle(run['id'])
+            self.assertFalse(db_dbt._row_run(run['id'])['native_verified'])
+        for field, value in (('phase', 'test'), ('node_id', 'wrong')):
+            with control_store.connect() as db:
+                db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (saved_run, run['id']))
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (saved_op['result'], op_id))
+                db.execute('UPDATE dbt_run_operations SET ' + field + '=? WHERE operation_id=?', (value, op_id))
+            db_dbt._settle(run['id'])
+            self.assertFalse(db_dbt._row_run(run['id'])['native_verified'])
+            with control_store.connect() as db:
+                db.execute("UPDATE dbt_run_operations SET phase='build',node_id=? WHERE operation_id=?", (self.uid, op_id))
+        with control_store.connect() as db:
+            db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (saved_run, run['id']))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (saved_op['result'], op_id))
+            db.execute("UPDATE dataops_owned_objects SET purpose='backup' WHERE operation_id=?", (op_id,))
+        db_dbt._settle(run['id'])
+        self.assertFalse(db_dbt._row_run(run['id'])['native_verified'])
+
+    def test_native_saved_rejects_tampered_query_evidence(self):
+        run = self.normal_run()
+        self.assertEqual(run['state'], 'NATIVE_VERIFIED', run)
+        run = db_dbt._row_run(run['id'])
+        op_id = run['models'][0]['operation_ids'][0]
+        with control_store.connect() as db:
+            query_id = db.execute('SELECT query_id FROM dataops_queries WHERE operation_id=?', (op_id,)).fetchone()[0]
+        changes = [
+            ('dataops_queries', 'step', 'wrong'),
+            ('dataops_queries', 'action', 'wrong'),
+            ('query_records', 'state', 'RUNNING'),
+            ('query_records', 'actor', 'wrong'),
+            ('query_execution_contexts', 'backend_query_id', None),
+            ('query_execution_contexts', 'backend_query_id', ''),
+            ('query_execution_contexts', 'backend_query_id', ' '),
+            ('query_execution_contexts', 'backend_username', 'wrong'),
+            ('query_execution_contexts', 'credential_snapshot_ref', 'wrong'),
+            ('query_execution_contexts', 'selected_role', 'wrong'),
+            ('query_execution_contexts', 'mode', 'worksheet'),
+            ('query_execution_contexts', 'sql_catalog', 'wrong'),
+            ('query_execution_contexts', 'sql_schema', 'wrong'),
+            ('query_execution_contexts', 'binding_revision', -1),
+            ('query_execution_contexts', 'grant_revision', -1),
+            ('query_execution_contexts', 'request_id', 'wrong'),
+            ('query_execution_contexts', 'worksheet_id', 'wrong'),
+        ]
+        with control_store.connect() as db, \
+                patch.object(queries, '_capture_dataops', side_effect=AssertionError('no credential capture')), \
+                patch.object(db_dbt, '_access', side_effect=AssertionError('no runtime metadata')):
+            self.assertIsNotNone(db_dbt._native_saved(db, run, op_id))
+            for table, field, value in changes:
+                key = 'operation_id' if table == 'dataops_queries' else 'id' if table == 'query_records' else 'query_id'
+                ident = op_id if table == 'dataops_queries' else query_id
+                with self.subTest(table=table, field=field, value=value):
+                    db.execute('SAVEPOINT tamper')
+                    db.execute(f'UPDATE {table} SET {field}=? WHERE {key}=?', (value, ident))
+                    self.assertIsNone(db_dbt._native_saved(db, run, op_id))
+                    db.execute('ROLLBACK TO tamper')
+                    db.execute('RELEASE tamper')
+            db.execute('DELETE FROM dataops_queries WHERE operation_id=?', (op_id,))
+            self.assertIsNone(db_dbt._native_saved(db, run, op_id))
+
+    def test_native_cleanup_receipt_redacts_saved_evidence(self):
+        run = self.normal_run(execute=False)
+        record = db_dbt._row_run(run['id'])
+        record.update(native_receipt={'candidate': 'private', 'pins': 'private'},
+                      candidate='private', candidate_locator='private', pins='private',
+                      _pins={'private': 'private'})
+        with control_store.connect() as db, patch.object(db_dbt, '_access', side_effect=QueryError('REVOKED', 403)):
+            redacted = db_dbt._cancel_receipt(db, self.principal, self.context, record)
+        for key in ('native_receipt', 'candidate', 'candidate_locator', 'pins', '_pins'):
+            self.assertNotIn(key, redacted)
+        for key in ('models', 'tests', 'operations', 'operation_ids'):
+            self.assertEqual(redacted[key], [])
+
+    def test_native_finish_reads_persisted_result_instead_of_return_value(self):
+        materialize = native.materialize_accepted
+        def tamper(*args, **kwargs):
+            child = materialize(*args, **kwargs)
+            receipt = dict(child['result'], digest='changed')
+            with control_store.connect() as db:
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child['id']))
+            return child
+        with patch.object(native, 'materialize_accepted', side_effect=tamper):
+            run = self.normal_run()
+        self.assertEqual(run['state'], 'FAILED', run)
+        self.assertFalse(run['native_verified'])
+        self.assertTrue(run['operations'][0]['committed'])
+        self.assertTrue(run['models'][0]['candidate'])
 
 
 if __name__ == '__main__':

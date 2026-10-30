@@ -89,7 +89,7 @@ def _write(db, record):
     old = db.execute('SELECT record FROM dbt_runs WHERE id=?', (record['id'],)).fetchone()
     if old and json.loads(old[0]).get('cancel_requested'):
         record['cancel_requested'] = True
-        if record['state'] in _ACTIVE or record['state'] == 'READY':
+        if record['state'] in _ACTIVE or record['state'] in ('READY', 'NATIVE_VERIFIED'):
             record['state'] = 'CANCELING'
     record['updated_at'] = admission._now()
     db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds._json(record), record['id']))
@@ -144,6 +144,8 @@ def _cancel_receipt(db, principal, context, record):
         for field in ('models', 'tests', 'source_bindings', 'operations', 'operation_ids'):
             if field in result:
                 result[field] = []
+        for field in ('candidate', 'candidate_locator', 'pins', 'native_receipt'):
+            result.pop(field, None)
         return result
 
 
@@ -331,15 +333,46 @@ def _supported_contract(plan):
         m.get('view_security') == 'INVOKER' for m in plan['models'] if m['materialized'] == 'view')
 
 
-def submit_run(principal, context, *, key, plan_id):
+def _run_arguments(executor, node_id):
+    if type(executor) is not str or executor not in ('sql_wap', 'native_table'):
+        raise ValueError('invalid executor')
+    if executor == 'native_table':
+        if type(node_id) is not str or not re.fullmatch(r'[A-Za-z0-9_.-]{1,512}', node_id):
+            raise ValueError('native node ID required')
+    elif node_id is not None:
+        raise ValueError('node ID requires native executor')
+
+
+def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=None):
+    _run_arguments(executor, node_id)
+    if type(plan_id) is not str or not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', plan_id):
+        raise ValueError('invalid plan ID')
     _access(principal, context)
     route = '/api/v1/dbt/runs'
-    payload = ds._json(dict(context=asdict(context), plan_id=plan_id))
+    intent = dict(context=asdict(context), plan_id=plan_id)
     with control_store.connect() as db:
-        plan = _authorized(db, principal, context, plan_id, 'plan')
+        if executor == 'native_table':
+            old = db.execute('SELECT payload FROM dbt_requests WHERE actor=? AND route=? AND idempotency_key=?',
+                (principal.principal_id, route, key)).fetchone()
+            intent.update(executor=executor, node_id=node_id,
+                          plan_digest=json.loads(old['payload']).get('plan_digest') if old else None)
+        payload = ds._json(intent)
         replay = _request(db, principal, context, route, key, payload)
         if replay:
             return replay
+        plan = _authorized(db, principal, context, plan_id, 'plan')
+    if executor == 'native_table':
+        import database_dbt_native as native
+        plan, node, _, _ = native._plan(principal, context, plan_id, node_id)
+        intent['plan_digest'] = plan['_plan_digest']
+        payload = ds._json(intent)
+        record = _base(principal, context, 'run', plan)
+        record.update(plan_id=plan_id, _plan_digest=plan['_plan_digest'], _pins=None, _phase=None, _node_id=None,
+            executor=executor, selected_node_id=node_id, tests_status='NOT_RUN', publication_allowed=False,
+            native_verified=False, tests=[], models=[dict(unique_id=node_id, name=node['name'],
+                materialized='table', table_properties=node['table_properties'], state='QUEUED',
+                candidate=None, operation_ids=[])])
+        return _accept(principal, context, route, key, payload, record)
     if plan['actor'] != principal.principal_id or plan['context'] != asdict(context):
         raise QueryError('CONTEXT_MISMATCH', 409)
     if plan['state'] != 'READY' or _hash_plan(plan) != plan['_plan_digest']:
@@ -418,6 +451,8 @@ def _check_child(db, principal, context, run_id, phase, node_id):
     nodes = plan['tests'] if phase == 'test' else plan['models']
     if node_id not in {n['unique_id'] for n in nodes}:
         raise QueryError('DBT_NODE_NOT_FOUND', 409)
+    if run.get('executor') == 'native_table' and (phase != 'build' or node_id != run['selected_node_id']):
+        raise QueryError('DBT_NODE_NOT_FOUND', 409)
     if phase == 'test' and run['state'] != 'TESTING' or phase == 'build' and run['state'] != 'BUILDING':
         raise QueryError('DBT_RUN_STOPPED', 409)
 
@@ -437,6 +472,8 @@ def _check_operation(db, operation_id):
         if (run['cancel_requested'] or run['state'] not in ('BUILDING', 'TESTING', 'AUDITING', 'PUBLISHING')
                 or run.get('_phase') != link['phase'] or run.get('_node_id') != link['node_id']):
             raise QueryError('DBT_RUN_STOPPED', 409)
+        if run.get('executor') == 'native_table' and (link['phase'] != 'build' or link['node_id'] != run['selected_node_id']):
+            raise QueryError('DBT_RUN_STOPPED', 409)
         source = _row(db, run['parent_run_id'])[1] if run['kind'] == 'publication' else run
         _source_identities(db, _check_plan(db, source))
         if run['kind'] == 'publication':
@@ -453,7 +490,8 @@ def _before_query(operation_id, principal, context):
         source = _row(db, run['parent_run_id'])[1] if run['kind'] == 'publication' else run
         plan = _check_plan(db, source)
     metadata = _access(principal, context)
-    _verify_views(metadata, source, complete=run['kind'] == 'publication')
+    if source.get('executor') != 'native_table':
+        _verify_views(metadata, source, complete=run['kind'] == 'publication')
     for binding in plan['source_bindings']:
         ref = registry.ResourceRef(**binding['ref'])
         current = metadata.wap_measure(ref)
@@ -737,6 +775,8 @@ def _test_select(execution):
 
 
 def _gate(db, run, node_id, publication=None):
+    if run.get('executor') == 'native_table':
+        raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
     plan = _check_plan(db, run)
     expected = {t['unique_id'] for t in plan['tests']}
     actual = [t['unique_id'] for t in run['tests']]
@@ -791,7 +831,7 @@ def _guard(principal, context, action, *, model_id=None, build=None):
         for row in db.execute("SELECT record FROM dbt_runs WHERE database_id=? AND json_extract(record,'$.kind')='run'",
                 (context.database_id,)):
             run = json.loads(row[0])
-            managed.extend((run, m) for m in run['models'] if m['wap_model_id'] == model_id)
+            managed.extend((run, m) for m in run['models'] if m.get('wap_model_id') == model_id)
         if not managed:
             return
         if len(managed) != 1:
@@ -848,6 +888,112 @@ def _phase(ident, state, phase, node):
             item['state'] = 'TESTING' if phase == 'test' else 'BUILDING'
         _write(db, run)
         return run
+
+
+def _native_saved(db, run, operation_id):
+    """Validate saved native proof only; settlement never measures or runs SQL."""
+    import database_dbt_native as native
+    try:
+        row, _ = _row(db, run['id'])
+        links = list(db.execute('SELECT o.*,l.phase,l.node_id FROM dbt_run_operations l '
+            'JOIN dataops_operations o ON o.id=l.operation_id WHERE l.run_id=?', (run['id'],)))
+        if (run.get('executor') != 'native_table' or run['kind'] != 'run' or len(links) != 1
+                or len(run['models']) != 1 or run['models'][0]['unique_id'] != run['selected_node_id']):
+            return None
+        op = links[0]
+        receipt = json.loads(op['result'] or '{}')
+        if not isinstance(receipt, dict):
+            return None
+        payload = dict(plan_id=run['plan_id'], node_id=run['selected_node_id'],
+                       digest=run['_plan_digest'], **native._PROVENANCE)
+        expected = ds._json(dict(payload=payload, context=run['context']))
+        child = db.execute("SELECT * FROM warehouse_admissions WHERE kind='dataops' AND subject_id=? AND warehouse_id=?",
+            (op['id'], run['context']['warehouse_id'])).fetchone()
+        if (op['id'] != operation_id or op['phase'] != 'build' or op['node_id'] != run['selected_node_id']
+                or op['route'] != 'dbt-native-table' or op['state'] != 'FINISHED'
+                or not op['committed'] or op['cleanup_error'] or op['actor'] != run['actor']
+                or json.loads(op['context']) != run['context'] or op['payload'] != expected
+                or op['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()
+                or child is None or child['parent_id'] != row['admission_id']
+                or child['actor'] != run['actor'] or child['state'] != 'FINISHED'
+                or receipt.get('native_verified') is not True
+                or any(receipt.get(k) != v for k, v in payload.items())):
+            return None
+        if run['state'] == 'NATIVE_VERIFIED' and (run.get('native_receipt') != receipt
+                or run['models'][0].get('candidate') != receipt.get('candidate')
+                or run['models'][0].get('operation_ids') != [op['id']]):
+            return None
+        queries = list(db.execute('SELECT d.step,d.action,q.*,e.* FROM dataops_queries d '
+            'LEFT JOIN query_records q ON q.id=d.query_id '
+            'LEFT JOIN query_execution_contexts e ON e.query_id=d.query_id '
+            'WHERE d.operation_id=?', (op['id'],)))
+        if len(queries) != 1:
+            return None
+        query = queries[0]
+        if (query['step'] != 'native-create' or query['action'] != 'dbt_native_create'
+                or query['state'] != 'FINISHED' or not query['backend_query_id']
+                or not query['backend_query_id'].strip() or query['actor'] != op['actor']
+                or any(query[k] != run['context'][k] for k in (
+                    'database_id', 'schema_id', 'warehouse_id', 'generation_id', 'selected_role',
+                    'sql_catalog', 'sql_schema', 'binding_revision', 'grant_revision'))
+                or query['mode'] != 'dataops' or query['request_id'] != op['id']
+                or query['worksheet_id'] != 'native-create'
+                or query['backend_username'] != op['backend_username']
+                or query['credential_snapshot_ref'] != op['credential_snapshot_ref']):
+            return None
+        candidate = receipt['candidate']
+        ref = registry.ResourceRef(**candidate['ref'])
+        obj = registry.get_object(db, ref.object_id)
+        schema = registry.get_schema(db, ref.schema_id)
+        owned = db.execute('SELECT * FROM dataops_owned_objects WHERE operation_id=? AND object_id=?',
+            (op['id'], ref.object_id)).fetchone()
+        locator = receipt['candidate_locator']
+        if (ref.database_id != run['context']['database_id'] or ref.schema_id != run['context']['schema_id']
+                or schema is None or schema.database_id != ref.database_id or schema.purpose != 'sandbox'
+                or obj is None or not obj.current or obj.kind != 'TABLE' or obj.schema_id != ref.schema_id
+                or obj.incarnation != ref.incarnation or not obj.backend_identity or not candidate.get('snapshot')
+                or owned is None or owned['incarnation'] != ref.incarnation or owned['purpose'] != 'stage'
+                or obj.physical_name != 'n_' + op['id'].replace('-', '')[:17]
+                or locator != dict(database_id=ref.database_id, schema_id=ref.schema_id, physical_name=obj.physical_name)):
+            return None
+        return receipt
+    except (KeyError, TypeError, ValueError, AttributeError, IndexError):
+        return None
+
+
+def _native_run(ident, principal, context, parent, frozen, credential):
+    import database_dbt_native as native
+    run = _row_run(ident)
+    uid = run['selected_node_id']
+    plan, node, bindings, approved = native._plan(principal, context, run['plan_id'], uid)
+    metadata = _access(principal, context)
+    pins = {ds._json(s['ref']): metadata.wap_measure(registry.ResourceRef(**s['ref']))
+            for s in plan['source_bindings']}
+    with control_store.connect() as db:
+        _, run = _row(db, ident)
+        _check_plan(db, run)
+        run['_pins'] = pins
+        _write(db, run)
+    _phase(ident, 'BUILDING', 'build', uid)
+    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
+        payload = dict(plan_id=plan['id'], node_id=uid, digest=plan['_plan_digest'], **native._PROVENANCE)
+        execution = ds.begin(principal, context, route='dbt-native-table', idempotency_key=ident + ':' + uid, payload=payload)
+        if execution.replayed:
+            raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
+        native.materialize_accepted(execution, principal, context, plan, node, bindings, approved, payload, isolated=True)
+    with control_store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        _, run = _row(db, ident)
+        revalidate_admission(db, principal, context)
+        _check_plan(db, run)
+        if run['cancel_requested']:
+            raise QueryError('DBT_RUN_STOPPED', 409)
+        receipt = _native_saved(db, run, execution.id)
+        if receipt is None:
+            raise QueryError('DBT_CHILD_UNRESOLVED', 409)
+        run['models'][0].update(state='NATIVE_VERIFIED', candidate=receipt['candidate'], operation_ids=[execution.id])
+        run.update(state='NATIVE_VERIFIED', native_verified=True, native_receipt=receipt, _phase=None, _node_id=None)
+        _write(db, run)
 
 
 def _build_run(ident, principal, context, parent, frozen, credential):
@@ -988,7 +1134,8 @@ def _execute(ident):
         else:
             with admission.accepted(parent):
                 if run['kind'] == 'run':
-                    _build_run(ident, principal, context, parent, frozen, credential)
+                    function = _native_run if run.get('executor') == 'native_table' else _build_run
+                    function(ident, principal, context, parent, frozen, credential)
                 else:
                     _publish_run(ident, principal, context, parent, frozen, credential)
     except Exception as error:
@@ -1022,6 +1169,11 @@ def _settle(ident, *, owner_lost=False):
         # Include orphan admissions, never infer closure from a partial link set.
         children = list(db.execute('SELECT subject_id,kind,state FROM warehouse_admissions WHERE parent_id=?', (parent.id,)))
         closed = closed and {c['subject_id'] for c in children} == {o['id'] for o in operations} and all(c['kind'] == 'dataops' and c['state'] in admission.TERMINAL for c in children)
+        # Owner-loss observation can retain existing proof, never promote a run.
+        native_proof = None
+        if run.get('executor') == 'native_table':
+            ids = run['models'][0].get('operation_ids', [])
+            native_proof = _native_saved(db, run, ids[0]) if len(ids) == 1 else None
         committed = next((op for op in operations if op['phase'] == 'publish' and op['committed']), None)
         if run['kind'] == 'publication' and committed:
             receipt = json.loads(committed['result'] or '{}')
@@ -1033,10 +1185,36 @@ def _settle(ident, *, owner_lost=False):
             run['state'] = 'UNKNOWN'
         elif run['cancel_requested']:
             run['state'] = 'CANCELED'
+        elif run['state'] == 'NATIVE_VERIFIED' and run.get('executor') == 'native_table' and run.get('native_verified') is True and native_proof is not None:
+            pass
         elif run['state'] not in ('READY', 'PUBLISHED', 'FAILED', 'CANCELED', 'COMMITTED_RECORDING_FAILED'):
             run['state'] = 'FAILED'
         if owner_lost and not run['error_code'] and run['state'] == 'FAILED':
             run['error_code'] = 'DBT_OWNER_LOST'
+        if run.get('executor') == 'native_table':
+            for op in operations:
+                try:
+                    receipt = json.loads(op['result'] or '{}')
+                except (TypeError, ValueError):
+                    receipt = {}
+                if not isinstance(receipt, dict):
+                    receipt = {}
+                if op['phase'] == 'build' and op['node_id'] == run['selected_node_id']:
+                    # Preserve committed evidence on failure without treating it as proof.
+                    run['native_receipt'] = native_proof if run['state'] == 'NATIVE_VERIFIED' else dict(run.get('native_receipt') or receipt, native_verified=False)
+                    model = run['models'][0]
+                    model['operation_ids'] = [op['id']]
+                    evidence = run['native_receipt']
+                    if evidence.get('candidate_locator'):
+                        model['candidate_locator'] = evidence['candidate_locator']
+                    if evidence.get('candidate'):
+                        model['candidate'] = evidence['candidate']
+            if run['state'] != 'NATIVE_VERIFIED':
+                run['native_verified'] = False
+                if run.get('native_receipt'):
+                    run['native_receipt']['native_verified'] = False
+                if run['models'][0]['state'] == 'NATIVE_VERIFIED':
+                    run['models'][0]['state'] = run['state']
         for item in run.get('models', []) + run.get('tests', []):
             if item['state'] in ('QUEUED', 'BUILDING', 'TESTING'):
                 item['state'] = 'CANCELED' if run['cancel_requested'] and closed else 'UNKNOWN' if not closed else 'FAILED'

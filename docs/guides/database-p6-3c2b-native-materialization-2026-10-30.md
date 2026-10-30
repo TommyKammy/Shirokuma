@@ -53,3 +53,5 @@ with logical_creations.lifetime() as provider:
 `make verify-local-experiment PYTHON=tools/local_experiment/dataops/.venv/bin/python3`はexit 0、84 recipe・3,278件中3,244成功・34既存skip・失敗0だった。nativeの25件を含む単一の全体実行だけを集計し、worker／focusedの重複件数は加算していない。Go・design-context・差分・衛生チェックも成功。doctorは作業前後ともhealthy、通常8888／8080を新しいコードで起動し、既定の3 VIEW／SQL-WAP planとnative SQL protocolのSELECTを別に確認した。
 
 標準RunTaskのschema／cache／graph、native test、置換・rename／drop、native VIEWと通常導線への接続は後続とする。C2AのSQL/WAP実行や正式公開gateをnative実行へ黙示変更せず、DB-P6-3全体とM1本人受入も未完了である。
+
+同日の後続[C2B2](database-p6-3c2b2-native-runs-2026-10-30.md)で、新規native TABLE 1件の明示選択を保存run／API／CLIへ接続した。SDKのprocess分離と履歴のテスト未実行・公開不可表示を追加し、通常RunTask／graph・native test・置換や画面からのnative実行選択とは区別する。

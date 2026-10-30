@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-30
-version: "7.9.0"
+version: "7.10.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-30 — DB-P6-3C2B2 saved native TABLE runs
+
+- Connected explicit single-node native TABLE selection to durable runs, API and the real CLI; isolated the SDK process while keeping original credentials and typed SQL in parent DataOps. See the [contract and evidence](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md).
+- E/A, two databases, cold resume, source pins, SDK failure/silence, cancellation and abrupt owner recovery passed without replay. History distinguishes NATIVE_VERIFIED, tests not run and publication unavailable; Technical acceptance passed: 3,268 Python tests, 34 existing skips, Go and design checks.
+- Native launch UI, standard RunTask/graph, native tests and replacement remain separate. Full DB-P6-3 and M1 owner acceptance stay open.
 
 ### 2026-10-30 — DB-P6-3C2B1 native TABLE materialization bridge
 

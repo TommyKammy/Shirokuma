@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-30
-version: "1.24"
+version: "1.25"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -22,7 +22,7 @@ DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse�
 
 2026-10-29、DB-P6-0の[89項目の表示契約](../../guides/database-capability-matrix-2026-10-29.md)と[DB-P6-1の保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
 [DB-P6-2の共有LOCAL休止・自動復帰](../../guides/database-p6-2-implementation-2026-10-29.md)はAPI／CLI／UIを実装し、技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。warm各30回の標本p95差は35.3ms、限定復旧は元UNKNOWNを保持して実行だけを閉鎖した。
-[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)は技術受入済み。[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)で標準TABLE materialization→型付きDataOps childのprivate接続を実装し、E／A・2DB・source追記・取消・実owner停止を実機確認した。この限定した接続実証の技術受入を完了した。次は保存run／通常導線へつなぐexecutor契約と、残るschema／cache／graph・native test・置換の範囲を定める。DB-P6-3全体、Bears／SRE／Policy、実サイズ変更・用途別Warehouse、M1本人受入は未完了である。
+[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)と[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)は各限定範囲の技術受入済み。[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)でnative TABLE 1件を保存run／API／実CLIへ接続し、SDKのprocess分離と履歴の検証状態を実装した。E／A・2DB・休止復帰・pin後追記・取消／停止を実機確認し、この限定範囲の技術受入を完了した。次は画面での明示選択と利用条件の表示を扱う。通常RunTaskのschema／cache／graph・native test・置換、DB-P6-3全体とM1本人受入は未完了である。
 
 ---
 

@@ -47,7 +47,12 @@ def dispatch(handler, method, path, params, principal, role):
                 required.add('node_id')
         else:
             raise QueryError('NOT_FOUND', 404)
-        common._keys(body, required)
+        optional = {'executor', 'node_id'} if family == 'runs' and not ident else set()
+        common._keys(body, required, optional)
+        if optional:
+            dbt._run_arguments(body.get('executor', 'sql_wap'), body.get('node_id'))
+            if 'node_id' in body and body['node_id'] is None:
+                raise ValueError('node ID must be a string')
         context = common.context_value(body['context'], role)
         for name in required - {'context', 'staging_materialization'}:
             if not isinstance(body[name], str) or not body[name].strip():
@@ -87,7 +92,8 @@ def dispatch(handler, method, path, params, principal, role):
                 **{k: body[k] for k in ('project_id', 'source_schema', 'target_schema', 'staging_materialization')})
             status = 202
         elif not ident:
-            envelope['run'] = dbt.submit_run(principal, context, key=key, plan_id=body['plan_id'])
+            envelope['run'] = dbt.submit_run(principal, context, key=key, plan_id=body['plan_id'],
+                **{k: body[k] for k in ('executor', 'node_id') if k in body})
             status = 202
         elif action == 'publish':
             envelope['publication'] = dbt.submit_publication(principal, context, ident, key=key, node_id=body['node_id'])
