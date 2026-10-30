@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.13.0"
+version: "7.14.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-31 — DB-P6-3C2C native RunTask graph
+
+- Added explicit native_graph execution of complete supported TABLE/EPHEMERAL DAGs through installed RunTask, with optional TestTask for the complete saved suite, including source tests and TABLE relationships. SQL/WAP and single-native/B5 publication remain. See the [contract and evidence](../../guides/database-p6-3c2c-native-graph-2026-10-31.md).
+- E/CLI/B passed 6 TABLEs and 10 tests from cold; A/UI passed 3 TABLEs/3 EPHEMERAL and completed all 10 tests, detecting one existing RAW value violation. SQL failure/SKIPPED, cancellation, owner loss, replay, two-Database results and preservation passed runtime acceptance. Original 22 RAW/MARTS heads and configurations remain; normal endpoints restored, doctor healthy.
+- Technical acceptance: all 85 canonical groups passed in stages, 3,379 passes and 34 existing skips, including final 33 graph tests; Go/design checks passed. Graph publication, native VIEW/incremental, parallel execution, full DB-P6-3 and M1 owner acceptance remain separate.
 
 ### 2026-10-31 — DB-P6-3C2B5 explicit native TABLE publication
 

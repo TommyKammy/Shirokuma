@@ -93,6 +93,9 @@ func TestDbtRunExecutorForwarding(t *testing.T) {
 		{"native_false", []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests=false"}, []string{"--executor=native_table", "--node-id=model.analytics.orders"}},
 		{"native_true", []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests"}, []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests"}},
 		{"native_true_equals", []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests=true"}, []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests"}},
+		{"graph_build", []string{"--executor=native_graph"}, []string{"--executor=native_graph"}},
+		{"graph_quality", []string{"--executor=native_graph", "--native-tests"}, []string{"--executor=native_graph", "--native-tests"}},
+		{"graph_false", []string{"--executor=native_graph", "--native-tests=false"}, []string{"--executor=native_graph"}},
 		{"explicit_sql_wap", []string{"--executor=sql_wap"}, nil},
 		{"native_table", []string{"--executor=native_table", "--node-id=model.analytics.orders"}, []string{"--executor=native_table", "--node-id=model.analytics.orders"}},
 	} {
@@ -147,11 +150,13 @@ func TestDbtRunRejectsInvalidExecutorFlags(t *testing.T) {
 		flags []string
 		want  string
 	}{
-		{"quality_sql", []string{"--native-tests"}, "native-tests requires native_table"},
+		{"quality_sql", []string{"--native-tests"}, "native-tests requires native_table or native_graph"},
 		{"quality_invalid_bool", []string{"--native-tests=truthy"}, "invalid"},
 		{"native_missing_node", []string{"--executor=native_table"}, "nonempty node-id"},
 		{"native_empty_node", []string{"--executor=native_table", "--node-id="}, "nonempty node-id"},
 		{"native_blank_node", []string{"--executor=native_table", "--node-id= \t"}, "nonempty node-id"},
+		{"graph_empty_node", []string{"--executor=native_graph", "--node-id="}, "nonempty node-id"},
+		{"graph_with_node", []string{"--executor=native_graph", "--node-id=model.analytics.orders"}, "node-id requires native_table"},
 		{"default_with_node", []string{"--node-id=model.analytics.orders"}, "node-id requires native_table"},
 		{"sql_wap_with_node", []string{"--executor=sql_wap", "--node-id=model.analytics.orders"}, "node-id requires native_table"},
 		{"default_empty_node", []string{"--node-id="}, "nonempty node-id"},

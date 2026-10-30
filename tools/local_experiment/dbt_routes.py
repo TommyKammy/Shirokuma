@@ -53,8 +53,12 @@ def dispatch(handler, method, path, params, principal, role):
         optional = {'executor', 'node_id', 'native_tests'} if family == 'runs' and not ident else {'expected_target'} if action == 'publish' else set()
         common._keys(body, required, optional)
         if family == 'runs' and not ident:
-            dbt._run_arguments(body.get('executor', 'sql_wap'), body.get('node_id'))
-            if type(body.get('native_tests', False)) is not bool or body.get('native_tests', False) and body.get('executor') != 'native_table':
+            if body.get('executor') == 'native_graph':
+                if 'node_id' in body:
+                    raise ValueError('graph forbids node ID')
+            else:
+                dbt._run_arguments(body.get('executor', 'sql_wap'), body.get('node_id'))
+            if type(body.get('native_tests', False)) is not bool or body.get('native_tests') is True and body.get('executor') not in ('native_table', 'native_graph'):
                 raise ValueError('native tests require boolean and native executor')
             if 'node_id' in body and body['node_id'] is None:
                 raise ValueError('node ID must be a string')
@@ -84,6 +88,7 @@ def dispatch(handler, method, path, params, principal, role):
                 if ident:
                     envelope['plan'] = dbt.get_plan(principal, context, ident)
                     envelope['run_options'] = dbt.get_run_options(principal, context, ident)
+                    envelope['graph_options'] = dbt.get_graph_options(principal, context, ident)
                 else:
                     envelope['items'] = dbt.list_plans(principal, context)
             elif family == 'runs':

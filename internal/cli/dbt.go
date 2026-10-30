@@ -43,9 +43,12 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 			add("plan-id", "", action != "runs")
 		}
 		if action == "run" {
-			nativeTests = flags.Bool("native-tests", false, "Run attached quality tests with native TABLE")
+			nativeTests = flags.Bool("native-tests", false, "Run native_table attached tests or native_graph complete saved suite")
 			add("executor", "sql_wap", false)
+			flags.Lookup("executor").Usage = "sql_wap, native_table, or native_graph (all saved TABLE/EPHEMERAL models)"
+			flags.Lookup("schema").Usage = "Saved execution schema (default: sandbox)"
 			add("node-id", "", false)
+			flags.Lookup("node-id").Usage = "Required only for native_table; forbidden for native_graph"
 		}
 		if action == "status" || action == "cancel" || action == "reconcile" || action == "publish" || action == "publish-preview" {
 			add("run-id", "", true)
@@ -89,10 +92,14 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 				}
 			}
 			if action == "run" {
-				if *nativeTests && value("executor") != "native_table" {
-					return fmt.Errorf("native-tests requires native_table executor")
+				if *nativeTests && value("executor") != "native_table" && value("executor") != "native_graph" {
+					return fmt.Errorf("native-tests requires native_table or native_graph executor")
 				}
 				switch value("executor") {
+				case "native_graph":
+					if flags.Changed("node-id") {
+						return fmt.Errorf("node-id requires native_table executor")
+					}
 				case "sql_wap":
 					if value("node-id") != "" {
 						return fmt.Errorf("node-id requires native_table executor")

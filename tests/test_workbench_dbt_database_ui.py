@@ -22,6 +22,7 @@ const readBody=c=>JSON.parse(c.options.body);
 const ids=['model.demo.stage','model.demo.first','model.demo.second'];
 function makePlan(context,body={}){return {id:'plan-1',kind:'plan',actor:dbDbtOwner(),context:structuredClone(context),state:'READY',compatibility:{version:1,executor:'sql_wap',status:'supported',issues:[]},project_id:'lake_marts',project_name:'Lake marts',source_digest:'bytes-digest',source_schema:'raw',target_schema:'schema',staging_materialization:'ephemeral',created_at:'2026-10-29T00:00:00Z',models:ids.map((id,i)=>({unique_id:id,name:['stage','first','second'][i],materialized:i?'table':'ephemeral',table_properties:i===1?{format:'PARQUET'}:{},relation:['sales','sandbox',['stage','first','second'][i]],depends_on:i?[ids[0]]:['source.demo.orders'],compiled_sql:i?'select * from orders':"select '<img src=x onerror=attack()>' from sales.raw.orders"})),tests:[{unique_id:'test.first',name:'not_null',test_type:'not_null',depends_on:[ids[1]]},{unique_id:'test.second',name:'unique',test_type:'unique',depends_on:[ids[2]]}],source_bindings:[{unique_id:'source.demo.orders',relation:['sales','raw','orders'],ref:{database_id:'db',schema_id:'raw',object_id:'orders',incarnation:1}}],...body};}
 function makeOptions(a){return {version:1,plan_id:a.id,source_digest:a.source_digest,executor:'native_table',eligible:true,reason_code:null,nodes:a.models.map((m,i)=>({node_id:m.unique_id,eligible:i===1,reason_code:i===1?null:i===0?'DBT_NATIVE_TABLE_REQUIRED':'DBT_NATIVE_PARQUET_REQUIRED'}))};}
+function makeGraphOptions(a){return {version:1,executor:'native_graph',plan_id:a.id,source_digest:a.source_digest,eligible:true,reason_code:null,models:a.models.map(m=>({node_id:m.unique_id,materialized:m.materialized,depends_on:structuredClone(m.depends_on)})),model_count:a.models.length,table_count:a.models.filter(m=>m.materialized==='table').length,testability:{eligible:a.tests.length>0,reason_code:a.tests.length?null:'DBT_NATIVE_TEST_EMPTY_SUITE',count:a.tests.length}};}
 function makeRun(context,body={}){return {id:'run-1',kind:'run',actor:dbDbtOwner(),context:structuredClone(context),plan_id:plan.id,state:'READY',cancel_requested:false,created_at:'2026-10-29T00:01:00Z',models:plan.models.map((m,i)=>({unique_id:m.unique_id,name:m.name,materialized:m.materialized,table_properties:structuredClone(m.table_properties),state:i?'BUILT':'EXPANDED',wap_model_id:'wap-'+i,wap_version:2,build_id:i?'build-'+i:null,candidate:i?{ref:{database_id:'db',schema_id:'sandbox',object_id:'candidate-'+i,incarnation:1},snapshot:'snap-'+i}:null,operation_ids:[]})),tests:plan.tests.map(t=>({...t,state:'PASSED',failure_count:0,operation_id:'op-'+t.unique_id})),operations:[{id:'safe-op',state:'FINISHED'}],...body};}
 route=async(path,options)=>{
  const url=new URL('http://local'+path),body=options?.body?JSON.parse(options.body):null,context=body?.context||JSON.parse(url.searchParams.get('context')||'null');
@@ -34,7 +35,7 @@ route=async(path,options)=>{
   let artifact=receipts.get(key);
   if(!artifact){
    if(url.pathname.endsWith('/plans')){plan=makePlan(context,{...body});delete plan.context.context;artifact={plan};}
-   else if(url.pathname.endsWith('/runs')){run=makeRun(context,body.executor==='native_table'?{executor:'native_table',selected_node_id:body.node_id,state:'QUEUED',tests:[],tests_status:body.native_tests===true?'QUEUED':'NOT_RUN',...(body.native_tests===true?{native_tests:true}:{}),publication_allowed:false}:{});artifact={run};}
+   else if(url.pathname.endsWith('/runs')){run=makeRun(context,body.executor==='native_table'?{executor:'native_table',selected_node_id:body.node_id,state:'QUEUED',tests:[],tests_status:body.native_tests===true?'QUEUED':'NOT_RUN',...(body.native_tests===true?{native_tests:true}:{}),publication_allowed:false}:{});if(body.executor==='native_graph'){run={...run,executor:'native_graph',source_digest:plan.source_digest,state:'QUEUED',native_tests:body.native_tests===true,native_verified:false,publication_allowed:false,tests_status:body.native_tests===true?'QUEUED':'NOT_RUN',models:run.models.map(m=>({...m,state:m.materialized==='ephemeral'?'EXPANDED':'QUEUED',candidate:null})),tests:body.native_tests===true?run.tests.map(t=>({...t,state:'QUEUED',failure_count:null})):[]};}artifact={run};}
    else if(url.pathname.endsWith('/cancel')){run={...run,state:'CANCELING',cancel_requested:true};artifact={run};}
    else if(url.pathname.endsWith('/reconcile')){artifact={run};}
    else if(url.pathname.endsWith('/publish')){const publication={id:'pub-'+body.node_id.split('.').at(-1),kind:'publication',actor:dbDbtOwner(),context,run_id:run.id,parent_run_id:run.id,plan_id:run.plan_id,node_id:body.node_id,state:'QUEUED',build_id:'build',audit_id:null,publication_id:null,operation_ids:[]};pubs[publication.id]=publication;artifact={publication};}
@@ -47,7 +48,7 @@ route=async(path,options)=>{
  if(url.pathname.endsWith('/projects'))return {context,projects:[{id:'lake_marts',name:'Lake marts'},{id:'approved_second',name:'Other approved project'}]};
  if(url.pathname.endsWith('/plans'))return {context,items:plan?[structuredClone(plan)]:[]};
  if(url.pathname.endsWith('/runs'))return {context,items:run?[structuredClone(run)]:[]};
- if(url.pathname.includes('/plans/'))return {context,plan:structuredClone(plan),run_options:makeOptions(plan),...wrong};
+ if(url.pathname.includes('/plans/'))return {context,plan:structuredClone(plan),run_options:makeOptions(plan),graph_options:makeGraphOptions(plan),...wrong};
  if(url.pathname.includes('/runs/'))return {context,run:structuredClone(run),...wrong};
  if(url.pathname.includes('/publications/'))return {context,publication:structuredClone(pubs[url.pathname.split('/').at(-1)]),...wrong};
  throw Error('Unexpected GET '+path);
@@ -93,6 +94,121 @@ route=async(path,options)=>{
 class DbtDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
+
+    def test_native_graph_options_exact_projection_gates_and_stale_absence(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;for(const m of plan.models)if(m.materialized==='table')m.table_properties={format:'PARQUET'};
+plan.models[2].depends_on=[ids[1]];
+plan.tests.push({unique_id:'test.source',name:'source test',depends_on:['source.demo.orders']},{unique_id:'test.unattached',name:'unattached',depends_on:[]});
+await dbDbtObserve('plan',plan.id);const good=p.graphOptions;assert.ok(dbDbtGraphOptionsValid(good));assert.ok(Object.isFrozen(good.models[0].depends_on));
+dbDbtNode('method').value='native_graph';dbDbtNode('method').onchange();assert.equal(p.node,'');assert.equal(dbDbtCanRun(),true);
+assert.equal(dbDbtNode('node').parentElement.hidden,true);assert.equal(dbDbtNode('native-controls').hidden,false);assert.equal(dbDbtNode('native-tests').disabled,false);
+assert.match(text(dbDbtNode('graph-counts')),/3 · TABLE: 2 · EPHEMERAL: 1 · Test count: 4/);
+assert.match(text(dbDbtNode('graph-reason')),/All saved/);assert.match(text(dbDbtNode('native-quality-help')),/source and unattached/);
+for(const change of [o=>o.version=true,o=>o.executor='native_table',o=>o.plan_id='other',o=>o.source_digest='other',o=>o.model_count=true,o=>o.table_count=3,o=>o.model_count=2,o=>o.models.pop(),o=>o.models[1].node_id=ids[0],o=>o.models[1].materialized='view',o=>o.models[1].depends_on=[],o=>o.models[1].depends_on.push(ids[0]),o=>o.testability.count=2,o=>o.testability.count='4',o=>o.eligible='true',o=>o.testability.eligible=1]){
+ const bad=structuredClone(good);change(bad);assert.equal(dbDbtGraphOptionsValid(bad),false);p.graphOptions=bad;assert.equal(dbDbtCanRun(),false);
+}
+const saved=structuredClone(p.plan),cyclic=structuredClone(saved);cyclic.models[0].depends_on=[ids[2]];assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(cyclic),cyclic),false);
+const missing=structuredClone(saved);missing.models[0].depends_on=['model.missing'];assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(missing),missing),false);
+const view=structuredClone(saved);view.models[1].materialized='view';assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(view),view),false);
+const denied=structuredClone(good);denied.eligible=false;denied.reason_code='DBT_NATIVE_GRAPH_UNSUPPORTED_MATERIALIZATION';assert.ok(dbDbtGraphOptionsValid(denied));p.graphOptions=denied;dbDbtRender();assert.equal(dbDbtCanRun(),false);assert.match(text(dbDbtNode('graph-reason')),/DBT_NATIVE_GRAPH_/);
+p.graphOptions=good;dbDbtNode('native-tests').checked=true;dbDbtNode('native-tests').onchange();assert.equal(dbDbtQuality(),true);
+const noTests={...saved,tests:[]};p.plan=noTests;p.graphOptions=makeGraphOptions(noTests);dbDbtRender();assert.equal(dbDbtNode('native-tests').disabled,true);assert.equal(dbDbtCanRun(),false);
+p.plan=saved;p.graphOptions=good;wrong={graph_options:undefined};await dbDbtObserve('plan',plan.id);assert.equal(p.graphOptions,null);assert.equal(dbDbtCanRun(),false);assert.match(text(dbDbtNode('graph-reason')),/Inspect or recompile/);
+wrong=null;await dbDbtObserve('plan',plan.id);assert.ok(p.graphOptions);
+observing=deferred();const pending=dbDbtObserve('plan',plan.id);await tick();dbDbtPurge();assert.equal(p.graphOptions,null);observing.resolve();await pending;assert.equal(p.graphOptions,null);assert.equal(p.plan,null);
+clearTimeout(p.timer);
+""")
+
+    def test_models_compatibility_follows_graph_mode_and_whole_graph_gate(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;
+for(const m of plan.models)if(m.materialized==='table')m.table_properties={format:'PARQUET'};
+plan.models[2].depends_on=[ids[1]];
+const single=makeOptions(plan);single.nodes[2].reason_code='DBT_NATIVE_MATERIALIZED_DEPENDENCY';
+wrong={run_options:single};await dbDbtObserve('plan',plan.id);
+const compatibility=()=>Array.from(dbDbtNode('models').querySelector('tbody').children).map(row=>text(row.children[4]).trim());
+const header=()=>text(dbDbtNode('models').querySelector('thead'));
+const selectMethod=method=>{dbDbtNode('method').value=method;dbDbtNode('method').onchange();};
+selectMethod('native_table');const perNode=compatibility();
+assert.match(perNode[0],/Native requires a TABLE model/);assert.match(perNode[2],/TABLE\/VIEW dependencies/);
+selectMethod('native_graph');assert.equal(dbDbtCanRun(),true);assert.match(header(),/Native graph compatibility/);
+assert.deepEqual(compatibility(),['Expanded into graph SQL; no separate SQL operation.','Graph TABLE candidate; TABLE dependencies supported.','Graph TABLE candidate; TABLE dependencies supported.']);
+assert.doesNotMatch(text(dbDbtNode('models')),/Native requires a TABLE|TABLE\/VIEW dependencies/);
+language='ja';dbDbtRender();assert.match(header(),/Native graph の互換性/);
+assert.match(compatibility()[0],/個別の SQL 実行なし/);assert.match(compatibility()[2],/TABLE への依存も対応/);
+language='en';selectMethod('native_table');assert.match(header(),/Native saved-plan compatibility/);assert.deepEqual(compatibility(),perNode);
+selectMethod('sql_wap');assert.deepEqual(compatibility(),perNode);
+selectMethod('native_graph');
+const good=p.graphOptions,denied=structuredClone(good);denied.eligible=false;denied.reason_code='DBT_NATIVE_RAW_REQUIRED';
+p.graphOptions=denied;dbDbtRender();assert.equal(dbDbtCanRun(),false);
+assert.deepEqual(compatibility(),plan.models.map(()=>dbDbtNativeReasons.DBT_NATIVE_RAW_REQUIRED));
+for(const options of [null,{...good,model_count:99}]){
+ p.graphOptions=options;dbDbtRender();assert.equal(dbDbtCanRun(),false);
+ assert.deepEqual(compatibility(),plan.models.map(()=> 'Inspect or recompile the saved plan to load full graph eligibility.'));
+}
+assert.equal(posts().length,1);clearTimeout(p.timer);
+""")
+
+    def test_malformed_graph_options_observation_preserves_existing_methods(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);
+for(const method of ['sql_wap','native_table']){
+ dbDbtNode('method').value=method;dbDbtNode('method').onchange();
+ if(method==='native_table'){dbDbtNode('node').value=ids[1];dbDbtNode('node').onchange();}
+ for(const entry of [null,1,true,'model.demo.first',[],[{}]]){
+  const bad=makeGraphOptions(plan);bad.models[1]=entry;
+  assert.equal(dbDbtGraphOptionsValid(bad,plan),false);
+  wrong={graph_options:bad};await dbDbtObserve('plan',plan.id);
+  assert.equal(p.plan.id,plan.id);assert.equal(p.graphOptions,null);
+  assert.equal(dbDbtMethod(),method);assert.equal(dbDbtCanRun(),true,method+' remains usable');
+  if(method==='native_table')assert.equal(p.node,ids[1]);
+ }
+}
+dbDbtNode('method').value='native_graph';dbDbtNode('method').onchange();assert.equal(dbDbtCanRun(),false);
+clearTimeout(p.timer);
+""")
+
+    def test_native_graph_lost_wrong_ack_frozen_suite_reload_and_context_recovery(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;for(const m of plan.models)if(m.materialized==='table')m.table_properties={format:'PARQUET'};
+plan.tests.push({unique_id:'test.source',name:'source only',depends_on:['source.demo.orders']},{unique_id:'test.unattached',name:'unattached',depends_on:[]});await dbDbtObserve('plan',plan.id);
+dbDbtNode('method').value='native_graph';dbDbtNode('method').onchange();dbDbtNode('native-tests').checked=true;dbDbtNode('native-tests').onchange();
+lose=true;gate=deferred();const submitting=dbDbtSubmit('build');await tick();assert.equal(dbDbtNode('role').disabled,true);assert.equal(dbDbtNode('database').disabled,true);gate.resolve();await submitting;gate=null;
+const intent=p.intent,first=posts().at(-1),before=posts().length;assert.equal(Object.isFrozen(intent.graphPlan.models),true);assert.equal(Object.isFrozen(intent.body),true);assert.equal(intent.graphPlan.tests.length,4);
+assert.deepEqual(readBody(first),{context:p.context,plan_id:plan.id,executor:'native_graph',native_tests:true});assert.ok(!Object.hasOwn(intent.body,'node_id'));
+assert.equal(dbDbtNode('method').disabled,true);assert.equal(dbDbtNode('native-tests').disabled,true);assert.equal(dbDbtNode('role').disabled,false);assert.equal(dbDbtNode('database').disabled,false);
+p.intent=null;await dbDbtRefresh();assert.deepEqual(p.intent,JSON.parse(JSON.stringify(intent)));assert.equal(posts().length,before);assert.equal(dbDbtMethod(),'native_graph');
+lose=false;
+for(const change of [r=>r.executor='sql_wap',r=>r.selected_node_id=ids[1],r=>r.native_tests=false,r=>r.native_tests=1,r=>r.plan_id='other',r=>r.source_digest='other',r=>r.actor='other',r=>r.context={...r.context,selected_role:'data_engineer'},r=>r.models.pop(),r=>r.models[1].unique_id=ids[0],r=>r.models[0].materialized='table',r=>r.tests.pop()]){
+ const bad=structuredClone(run);change(bad);wrong={run:bad};await dbDbtRecover();assert.ok(p.intent);assert.equal(posts().at(-1).options.body,first.options.body);assert.equal(posts().at(-1).options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);
+}
+wrong=null;const count=posts().length;
+inventory.push({...inventory[0],id:'other',display_name:'Other',sql_catalog:'other'});schemasRoute=async(path)=>({items:schemas.map(s=>({...s,database_id:path.includes('/other/')?'other':'db'}))});
+dbDbtNode('role').value='data_engineer';await dbDbtNode('role').onchange();dbDbtNode('database').value='other';await dbDbtNode('database').onchange();assert.equal(dbDbtCanRecover(),false);await dbDbtRecover();assert.equal(posts().length,count);
+dbDbtNode('role').value='admin';await dbDbtNode('role').onchange();dbDbtNode('database').value='db';await dbDbtNode('database').onchange();assert.equal(dbDbtCanRecover(),true);
+language='ja';await dbDbtRecover();assert.equal(p.intent,null);assert.deepEqual(posts().at(-1),first);assert.equal(receipts.size,2);assert.equal(p.run.executor,'native_graph');
+const statusKey=uiBindings.get(p.status).key;
+assert.equal(typeof statusKey,'string');assert.match(statusKey,/Native graph execution may take a few minutes/);
+assert.equal(p.status.textContent,t(statusKey));assert.match(p.status.textContent,/数分/);assert.doesNotMatch(p.status.textContent,/true|false/);
+language='en';assert.match(t(statusKey),/This view only polls saved state/);assert.doesNotMatch(t(statusKey),/true|false/);
+clearTimeout(p.timer);
+""")
+
+    def test_native_graph_build_quality_results_history_and_publication_blocked(self):
+        self.javascript(r"""
+function visible(n){return n.textContent+' '+(n.tagName==='DETAILS'&&!n.open?n.children.filter(c=>c.tagName==='SUMMARY'):n.children).map(visible).join(' ');}
+await compile();plan.compatibility.version=2;for(const m of plan.models)if(m.materialized==='table')m.table_properties={format:'PARQUET'};plan.models[2].depends_on=[ids[1]];await dbDbtObserve('plan',plan.id);
+dbDbtNode('method').value='native_graph';dbDbtNode('method').onchange();await dbDbtSubmit('build');assert.equal(p.intent,null);assert.equal(readBody(posts().at(-1)).executor,'native_graph');assert.ok(!Object.hasOwn(readBody(posts().at(-1)),'native_tests'));
+run=makeRun(plan.context,{executor:'native_graph',source_digest:plan.source_digest,state:'FAILED',native_verified:true,native_tests:true,tests_status:'FAILED',publication_allowed:false});run.models=run.models.map(m=>({...m,state:m.materialized==='ephemeral'?'EXPANDED':'NATIVE_VERIFIED',operation_ids:m.materialized==='table'?['graph-op-'+m.name]:[],native_receipt:{deep:'closed-proof'}}));run.tests[0].state='FAILED';run.tests[0].failure_count=3;
+const before=posts().length;p.plan=null;await dbDbtObserve('run',run.id);assert.equal(posts().length,before);assert.equal(p.run.models.length,3);assert.match(visible(dbDbtNode('run-detail')),/Graph build verified/);assert.match(visible(dbDbtNode('run-detail')),/Quality tests: FAILED/);assert.match(text(dbDbtNode('tests')),/3/);assert.match(text(dbDbtNode('candidates')),/EXPANDED/);assert.match(text(dbDbtNode('candidates')),/snap-1/);assert.match(text(dbDbtNode('candidates')),/graph-op-second/);assert.match(text(dbDbtNode('candidates')),/model.demo.first/);
+assert.doesNotMatch(visible(dbDbtNode('run-detail')),/closed-proof/);assert.ok(dbDbtNode('run-detail').descendants().some(n=>n.tagName==='DETAILS'&&!n.open&&text(n).includes('closed-proof')));
+assert.equal(dbDbtTestsPassed(),false);for(const m of p.run.models)assert.equal(dbDbtCanPublish(m),false);await dbDbtReview(p.run.models[1]);await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,before);assert.match(text(dbDbtNode('publications')),/Graph publication unavailable/);assert.ok(dbDbtNode('publications').descendants().filter(n=>n.tagName==='BUTTON').every(n=>n.disabled));
+run={...run,native_verified:false,native_tests:false,tests_status:'NOT_RUN',tests:[],models:run.models.map((m,i)=>({...m,state:i===1?'FAILED':i===2?'SKIPPED':'EXPANDED',candidate:null}))};await dbDbtObserve('run',run.id);assert.match(visible(dbDbtNode('run-detail')),/Graph build not verified/);assert.match(visible(dbDbtNode('run-detail')),/NOT_RUN/);assert.match(text(dbDbtNode('candidates')),/SKIPPED/);
+await dbDbtHistory();assert.equal(posts().length,before);assert.match(text(dbDbtNode('history')),/native_graph/);assert.match(text(dbDbtNode('history')),/NOT_RUN/);
+language='ja';dbDbtRender();assert.match(text(dbDbtNode('publications')),/グラフ公開/);assert.match(text(dbDbtNode('run-detail')),/グラフ構築は未検証/);assert.equal(posts().length,before);
+clearTimeout(p.timer);
+""")
 
     def test_native_presentation_concise_facts_and_closed_full_proofs(self):
         self.javascript(NATIVE_PUBLICATION + r"""

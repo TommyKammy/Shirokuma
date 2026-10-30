@@ -56,7 +56,7 @@ class DbtClient(Client):
                 if error.code == 409 and code == 'DBT_PUBLICATION_REVIEW_CHANGED':
                     raise RequestRejected(code) from None
                 raise RequestUncertain() from None
-            if method == 'POST' and error.code >= 500:
+            if method == 'POST' and (error.code == 409 or error.code >= 500):
                 raise RequestUncertain() from None
             raise RequestRejected('DBT_REQUEST_FAILED') from None
         except (URLError, OSError, http.client.HTTPException, ValueError):
@@ -109,6 +109,22 @@ def artifact(value, context, kind, principal, expected=None, *, observe=False):
             for child in item:
                 same_database(child)
     same_database(value)
+    if kind == 'run' and value.get('executor') == 'native_graph':
+        models, tests = value.get('models'), value.get('tests')
+        if (value.get('selected_node_id') is not None
+                or type(value.get('native_tests')) is not bool
+                or type(value.get('native_verified')) is not bool
+                or value.get('publication_allowed') is not False
+                or not isinstance(value.get('source_digest'), str) or not value['source_digest']
+                or not isinstance(models, list) or not models or not isinstance(tests, list)
+                or any(not isinstance(m, dict) or not isinstance(m.get('unique_id'), str) or not m['unique_id']
+                    or m.get('materialized') not in ('table', 'ephemeral') for m in models)
+                or len({m['unique_id'] for m in models}) != len(models)
+                or not any(m['materialized'] == 'table' for m in models)
+                or any(not isinstance(t, dict) or not isinstance(t.get('unique_id'), str) or not t['unique_id'] for t in tests)
+                or len({t['unique_id'] for t in tests}) != len(tests)
+                or (not value['native_tests'] and tests)):
+            raise ValueError('invalid graph receipt')
     return value
 
 
@@ -211,9 +227,9 @@ def parser():
         if action in ('status', 'cancel', 'reconcile', 'publish', 'publish-preview'):
             p.add_argument('--run-id', required=True)
         if action == 'run':
-            p.add_argument('--executor', choices=('sql_wap', 'native_table'), default='sql_wap')
-            p.add_argument('--node-id')
-            p.add_argument('--native-tests', action='store_true')
+            p.add_argument('--executor', choices=('sql_wap', 'native_table', 'native_graph'), default='sql_wap')
+            p.add_argument('--node-id', help='required only for native_table; forbidden for native_graph')
+            p.add_argument('--native-tests', action='store_true', help='native_table attached suite or native_graph complete saved suite')
         if action in ('publish', 'publish-preview'):
             p.add_argument('--node-id', required=True)
         if action == 'publish':
@@ -232,7 +248,7 @@ def main(argv=None, *, profile=None):
     if args.action == 'publish-preview' and not (args.context or args.context_file):
         raise ValueError('explicit saved context required for publication review')
     if args.action == 'run':
-        if args.native_tests and args.executor != 'native_table':
+        if args.native_tests and args.executor not in ('native_table', 'native_graph'):
             raise ValueError('native tests require native executor')
         if args.executor == 'native_table':
             if args.node_id is None or not re.fullmatch(r'[A-Za-z0-9_.-]{1,512}', args.node_id):
@@ -277,8 +293,10 @@ def main(argv=None, *, profile=None):
         kind = 'run'
         if action == 'run':
             body = dict(plan_id=identifier(args.plan_id))
-            if args.executor == 'native_table':
-                body.update(executor=args.executor, node_id=args.node_id)
+            if args.executor in ('native_table', 'native_graph'):
+                body.update(executor=args.executor)
+                if args.executor == 'native_table':
+                    body['node_id'] = args.node_id
                 if args.native_tests:
                     body['native_tests'] = True
         elif action == 'runs':

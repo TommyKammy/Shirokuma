@@ -62,8 +62,12 @@ class ClientTests(unittest.TestCase):
                         record.update(id=PUB, kind='publication', run_id=ID, parent_run_id=ID, node_id='model.lake.orders')
                         if body and 'expected_target' in body:
                             record.update(origin='native_table', expected_target=deepcopy(body['expected_target']))
-                    if body and body.get('executor') == 'native_table':
-                        record.update(executor=body['executor'], selected_node_id=body['node_id'])
+                    if body and body.get('executor') in ('native_table', 'native_graph'):
+                        record.update(executor=body['executor'])
+                        if body['executor'] == 'native_graph':
+                            record.update(source_digest='saved-digest', native_tests=body.get('native_tests', False), native_verified=False, publication_allowed=False, models=[dict(unique_id='model.graph.table', materialized='table'), dict(unique_id='model.graph.logical', materialized='ephemeral')], tests=[dict(unique_id='test.source')] if body.get('native_tests') else [])
+                        if body['executor'] == 'native_table':
+                            record['selected_node_id'] = body['node_id']
                         if body.get('native_tests') is True:
                             record['native_tests'] = True
                     if self.command == 'POST':
@@ -95,6 +99,66 @@ class ClientTests(unittest.TestCase):
 
     def call(self, action, *flags, context=C):
         return client.main([action, '--api-url=' + self.url, '--context=' + json.dumps(context), *flags], profile=self.profile)
+
+    def test_graph_request_ack_quality_and_verbatim_recovery(self):
+        flags = ['--plan-id=' + PLAN, '--executor=native_graph']
+        for quality in (False, True):
+            argv = flags + (['--native-tests'] if quality else [])
+            before = len(self.calls)
+            reply = self.call('run', *argv)
+            self.assertEqual(len(self.calls), before + 1)
+            self.assertEqual(reply['run']['executor'], 'native_graph')
+            self.assertNotIn('node_id', self.calls[-1][3])
+            self.assertEqual(self.calls[-1][3], dict(context=C, plan_id=PLAN, executor='native_graph', **({'native_tests': True} if quality else {})))
+            for change in (dict(executor='native_table'), dict(selected_node_id='model.wrong.node'), dict(native_tests=not quality), dict(native_tests=1), dict(plan_id=ID)):
+                self.corrupt = lambda r, c=change: r.update(c)
+                reply = self.call('run', *argv, '--idempotency-key=graph-' + str(quality))
+                self.assertTrue(reply['request_uncertain'])
+                self.assertEqual(reply['retry']['body'], self.calls[-1][3])
+                self.assertNotIn('node_id', reply['retry']['intent'])
+            self.corrupt = None
+        self.drop = True
+        reply = self.call('run', *flags, '--native-tests', '--idempotency-key=lost-graph')
+        self.assertTrue(reply['request_uncertain'])
+        first = self.calls[-1]
+        before = len(self.calls)
+        reply = self.call('run', *flags, '--native-tests', '--idempotency-key=lost-graph')
+        self.assertEqual(len(self.calls), before + 1)
+        self.assertEqual(first[3:], self.calls[-1][3:])
+        self.assertEqual(reply['run']['executor'], 'native_graph')
+        before = len(self.calls)
+        for node in ('model.valid.node', ''):
+            with self.assertRaises(ValueError):
+                self.call('run', *flags, '--node-id=' + node)
+        self.assertEqual(len(self.calls), before)
+        self.corrupt = lambda r: r.update(executor='native_graph', source_digest='saved-digest', native_tests=False, native_verified=False, publication_allowed=False, models=[dict(unique_id='model.graph.table', materialized='table')], tests=[])
+        for action, args in [('status', ['--run-id=' + ID]), ('runs', ['--plan-id=' + PLAN])]:
+            before = len(self.calls)
+            self.call(action, *args)
+            self.assertEqual(len(self.calls), before + 1)
+            self.assertEqual(self.calls[-1][0], 'GET')
+
+    def test_sqlwap_false_preserves_original_body_key_and_explicit_recovery(self):
+        for executor in (None, 'sql_wap'):
+            flags = ['--plan-id=' + PLAN, '--idempotency-key=original-sqlwap']
+            if executor:
+                flags.append('--executor=' + executor)
+            reply = self.call('run', *flags)
+            self.assertEqual(reply['run']['id'], ID)
+            self.assertEqual(self.calls[-1][3], dict(context=C, plan_id=PLAN))
+            self.assertEqual(self.calls[-1][4]['Idempotency-Key'], 'original-sqlwap')
+        api = client.DbtClient(self.profile, self.url)
+        api.context = deepcopy(C)
+        body = dict(plan_id=PLAN, native_tests=False)
+        self.drop = True
+        with self.assertRaises(client.RequestUncertain):
+            api.post('/api/v1/dbt/runs', body, 'original-sqlwap')
+        original = deepcopy(self.calls[-1])
+        reply = api.post('/api/v1/dbt/runs', body, 'original-sqlwap')
+        self.assertEqual(reply['run']['id'], ID)
+        self.assertEqual(self.calls[-1], original)
+        self.assertEqual(self.calls[-1][3], dict(context=C, **body))
+        self.assertNotIn('native_tests', reply['run'])
 
     def test_native_quality_boolean_ack_and_frozen_uncertainty(self):
         flags = ['--plan-id=' + PLAN, '--executor=native_table', '--node-id=model.lake.orders']
@@ -366,14 +430,16 @@ class ClientTests(unittest.TestCase):
                 with self.assertRaises(ValueError): self.call('status', '--run-id=' + ID)
 
     def test_deterministic_http_rejection_is_not_uncertain(self):
-        for status in (400, 401, 403, 404, 409, 422):
+        for status in (400, 401, 403, 404, 422):
             self.http_status = status
             with self.subTest(status=status), self.assertRaisesRegex(ValueError, 'DBT_REQUEST_FAILED'):
                 self.call('run', '--plan-id=' + PLAN)
         self.assertEqual(self.receipts, {})
-        self.http_status = 503
-        reply = self.call('run', '--plan-id=' + PLAN)
-        self.assertTrue(reply['request_uncertain'])
+        for status in (409, 503):
+            self.http_status = status
+            reply = self.call('run', '--plan-id=' + PLAN, '--executor=native_graph')
+            self.assertTrue(reply['request_uncertain'])
+            self.assertEqual(reply['retry']['body'], self.calls[-1][3])
 
     def test_native_flags_validate_locally_and_preserve_uncertain_intent(self):
         for flags in [[], ['--node-id=bad node'], ['--node-id=']]:

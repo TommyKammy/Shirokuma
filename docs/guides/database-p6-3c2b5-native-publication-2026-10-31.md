@@ -45,3 +45,7 @@ target claimはShirokumaの協調的なwriter間の競合を防ぐ。最終検�
 ## 後続範囲
 
 通常RunTask／全graph、native VIEW、native SDKによる既存候補の直接置換、manual-WAPの公開履歴／rollbackへのnative統合は別単位である。既存SQL/WAPによるTABLE／EPHEMERALとrun専用SANDBOX INVOKER VIEWを維持する。DB-P6-3全体とM1本人受入は未完了である。
+
+## 2026-10-31 C2C追補
+
+[C2C](database-p6-3c2c-native-graph-2026-10-31.md)で対応するTABLE／EPHEMERAL全graphの通常RunTaskと、保存全generic testの明示TestTaskを実装した。上記のRunTask／全graph残件はB5受入時点の記録である。C2Cのgraph候補は正式公開不可であり、B5の単一native TABLEの公開条件を拡張しない。native VIEW／incremental・並列実行・候補直接置換・manual-WAP rollback統合は後続である。

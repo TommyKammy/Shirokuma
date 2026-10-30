@@ -47,7 +47,7 @@ class Routes(unittest.TestCase):
             ('POST', 'runs/' + ID + '/reconcile', {}, 'reconcile_run', 'run', 200),
             ('POST', 'runs/' + ID + '/publish', dict(node_id='model.project.orders'), 'submit_publication', 'publication', 202)]
         for method, path, body, service, field, status in cases:
-            with self.subTest(service=service), patch.object(routes.dbt, service, return_value={'safe': True}) as call, patch.object(routes.dbt, 'get_run_options', return_value={'version': 1}) as options:
+            with self.subTest(service=service), patch.object(routes.dbt, service, return_value={'safe': True}) as call, patch.object(routes.dbt, 'get_run_options', return_value={'version': 1}) as options, patch.object(routes.dbt, 'get_graph_options', return_value={'executor': 'native_graph'}, create=True) as graph:
                 params = {'context': [json.dumps(asdict(C))]} if method == 'GET' else {}
                 h = self.handler(BASE + path, dict(context=asdict(C), **(body or {})),
                     {'Content-Type': 'application/json', 'Idempotency-Key': 'original'})
@@ -55,9 +55,12 @@ class Routes(unittest.TestCase):
                 expected = dict(context=asdict(C), **{field: {'safe': True}})
                 if method == 'GET' and service == 'get_plan':
                     expected['run_options'] = {'version': 1}
+                    expected['graph_options'] = {'executor': 'native_graph'}
+                    graph.assert_called_once_with('actor', C, ID)
                     options.assert_called_once_with('actor', C, ID)
                 else:
                     options.assert_not_called()
+                    graph.assert_not_called()
                 h.respond.assert_called_once_with(expected, status)
                 self.assertEqual(call.call_args.args[:2], ('actor', C))
                 if method == 'POST':
@@ -176,7 +179,12 @@ class Routes(unittest.TestCase):
             def makefile(self, *args): return self.incoming
             def sendall(self, data): self.outgoing.write(data)
         body = json.dumps(dict(context=asdict(C), plan_id=ID))
+        graph_body = dict(context=asdict(C), plan_id=ID, executor='native_graph')
         cases = [
+            (BASE + 'runs', json.dumps(graph_body), 'Idempotency-Key: graph\r\n', 202),
+            (BASE + 'runs', json.dumps(dict(graph_body, native_tests=True)), 'Idempotency-Key: graph\r\n', 202),
+            (BASE + 'runs', json.dumps(dict(graph_body, native_tests=1)), 'Idempotency-Key: graph\r\n', 400),
+            (BASE + 'runs', json.dumps(dict(graph_body, node_id=None)), 'Idempotency-Key: graph\r\n', 400),
             (BASE + 'runs', body, 'Idempotency-Key: k\r\n', 202),
             (BASE + 'runs', body, '', 400),
             (BASE + 'runs', body, 'Idempotency-Key: a\r\nIdempotency-Key: b\r\n', 400),
@@ -200,14 +208,16 @@ class Routes(unittest.TestCase):
 
     def test_native_quality_optional_strict_bool_and_executor(self):
         base = dict(context=asdict(C), plan_id=ID)
-        for executor in ('native_table', 'sql_wap'):
+        for executor in ('native_table', 'native_graph', 'sql_wap', None):
             for flag in ('missing', False, True, None, 0, 1, 'true', [], {}):
                 body = dict(base, executor=executor)
+                if executor is None:
+                    del body['executor']
                 if executor == 'native_table':
                     body['node_id'] = 'model.arbitrary.table'
                 if flag != 'missing':
                     body['native_tests'] = flag
-                valid = flag == 'missing' or type(flag) is bool and (not flag or executor == 'native_table')
+                valid = flag == 'missing' or type(flag) is bool and (not flag or executor in ('native_table', 'native_graph'))
                 with self.subTest(executor=executor, flag=flag), patch.object(routes.dbt, 'submit_run', return_value={}) as run:
                     h = self.handler(BASE + 'runs', body, {'Content-Type': 'application/json', 'Idempotency-Key': 'quality'})
                     if valid:
@@ -218,6 +228,34 @@ class Routes(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             routes.dispatch(h, 'POST', h.path, {}, 'actor', C.selected_role)
                         run.assert_not_called()
+
+    def test_sqlwap_false_replays_original_canonical_request(self):
+        principal = SimpleNamespace(principal_id='actor')
+        receipt = {'id': ID}
+        with patch.object(routes.dbt, '_access'), patch.object(routes.dbt.control_store, 'connect'), patch.object(routes.dbt, '_request', return_value=receipt) as request:
+            for executor in (None, 'sql_wap'):
+                for flag in ('missing', False):
+                    body = dict(context=asdict(C), plan_id=ID)
+                    if executor is not None:
+                        body['executor'] = executor
+                    if flag is False:
+                        body['native_tests'] = False
+                    h = self.handler(BASE + 'runs', body, {'Content-Type': 'application/json', 'Idempotency-Key': 'original'})
+                    routes.dispatch(h, 'POST', h.path, {}, principal, C.selected_role)
+                    args = request.call_args.args
+                    self.assertEqual(args[3:5], (BASE + 'runs', 'original'))
+                    self.assertEqual(json.loads(args[5]), dict(context=asdict(C), plan_id=ID))
+                    h.respond.assert_called_once_with(dict(context=asdict(C), run=receipt), 202)
+            self.assertEqual(len({call.args[5] for call in request.call_args_list}), 1)
+
+    def test_graph_forbids_any_node_id_before_service(self):
+        for node in (None, '', 'model.arbitrary.table', 1, [], {}):
+            with self.subTest(node=node), patch.object(routes.dbt, 'submit_run') as run:
+                body = dict(context=asdict(C), plan_id=ID, executor='native_graph', node_id=node)
+                h = self.handler(BASE + 'runs', body, {'Content-Type': 'application/json', 'Idempotency-Key': 'graph'})
+                with self.assertRaises(ValueError):
+                    routes.dispatch(h, 'POST', h.path, {}, 'actor', C.selected_role)
+                run.assert_not_called()
 
     def test_native_run_strict_optional_fields_before_service(self):
         good = dict(context=asdict(C), plan_id=ID, executor='native_table', node_id='model.arbitrary.table')

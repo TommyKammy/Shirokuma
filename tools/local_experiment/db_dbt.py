@@ -26,6 +26,7 @@ _live = {}
 _ACTIVE = {'QUEUED', 'BUILDING', 'TESTING', 'AUDITING', 'PUBLISHING', 'CANCELING', 'COMPILING'}
 _REPO = Path(__file__).resolve().parents[2]
 _UNREVIEWED = object()
+_ABSENT_NODE = object()
 
 
 def _access(principal, context, *, admin=False):
@@ -117,6 +118,8 @@ def _public(db, record):
             result['publication_allowed'] = True
         except (QueryError, KeyError, TypeError, ValueError):
             result['publication_allowed'] = False
+    if record.get('executor') == 'native_graph' and record['kind'] == 'run':
+        result['publication_allowed'] = False
     links = [dict(id=r['operation_id'], phase=r['phase'], node_id=r['node_id'], state=r['state'],
         committed=bool(r['committed'])) for r in db.execute('SELECT l.*,o.state,o.committed FROM dbt_run_operations l '
             'JOIN dataops_operations o ON o.id=l.operation_id WHERE l.run_id=? ORDER BY l.rowid', (record['id'],))]
@@ -347,7 +350,7 @@ def _supported_contract(plan):
 
 
 def _run_arguments(executor, node_id):
-    if type(executor) is not str or executor not in ('sql_wap', 'native_table'):
+    if type(executor) is not str or executor not in ('sql_wap', 'native_table', 'native_graph'):
         raise ValueError('invalid executor')
     if executor == 'native_table':
         if type(node_id) is not str or not re.fullmatch(r'[A-Za-z0-9_.-]{1,512}', node_id):
@@ -356,28 +359,51 @@ def _run_arguments(executor, node_id):
         raise ValueError('node ID requires native executor')
 
 
-def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=None, native_tests=False):
+def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=_ABSENT_NODE, native_tests=False):
+    if executor == 'native_graph' and node_id is not _ABSENT_NODE:
+        raise ValueError('native_graph requires absent node ID')
+    if node_id is _ABSENT_NODE:
+        node_id = None
     _run_arguments(executor, node_id)
-    if type(native_tests) is not bool or native_tests and executor != 'native_table':
+    if type(native_tests) is not bool or native_tests and executor not in ('native_table', 'native_graph'):
         raise ValueError('native_tests requires native executor and strict boolean')
     if type(plan_id) is not str or not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', plan_id):
         raise ValueError('invalid plan ID')
     _access(principal, context)
     route = '/api/v1/dbt/runs'
     intent = dict(context=asdict(context), plan_id=plan_id)
-    if native_tests:
-        intent['native_tests'] = True
+    if native_tests or executor == 'native_graph':
+        intent['native_tests'] = native_tests
     with control_store.connect() as db:
-        if executor == 'native_table':
+        if executor in ('native_table', 'native_graph'):
             old = db.execute('SELECT payload FROM dbt_requests WHERE actor=? AND route=? AND idempotency_key=?',
                 (principal.principal_id, route, key)).fetchone()
-            intent.update(executor=executor, node_id=node_id,
-                          plan_digest=json.loads(old['payload']).get('plan_digest') if old else None)
+            intent.update(executor=executor, plan_digest=json.loads(old['payload']).get('plan_digest') if old else None)
+            if executor == 'native_table':
+                intent['node_id'] = node_id
         payload = ds._json(intent)
         replay = _request(db, principal, context, route, key, payload)
         if replay:
             return replay
         plan = _authorized(db, principal, context, plan_id, 'plan')
+    if executor == 'native_graph':
+        import database_dbt_graph as graph
+        import database_dbt_native as native
+        metadata = _access(principal, context)
+        with control_store.connect() as db:
+            native._saved_plan(db, principal, context, plan)
+        graph.validate(metadata, context, plan, tests=native_tests)
+        intent['plan_digest'] = plan['_plan_digest']
+        record = _base(principal, context, 'run', plan)
+        record.update(plan_id=plan_id, _plan_digest=plan['_plan_digest'], _pins=None, _phase=None, _node_id=None,
+            executor=executor, native_tests=native_tests, native_verified=False, publication_allowed=False,
+            tests_status='QUEUED' if native_tests else 'NOT_RUN', task_receipts={},
+            models=[dict(unique_id=m['unique_id'], name=m['name'], materialized=m['materialized'],
+                table_properties=m['table_properties'], state='QUEUED', candidate=None, operation_ids=[])
+                for m in plan['models']],
+            tests=[dict(unique_id=t['unique_id'], name=t['name'], test_type=t['test_type'],
+                state='QUEUED', failure_count=None, operation_id=None) for t in plan['tests']] if native_tests else [])
+        return _accept(principal, context, route, key, ds._json(intent), record)
     if executor == 'native_table':
         import database_dbt_native as native
         plan, node, _, _ = native._plan(principal, context, plan_id, node_id)
@@ -455,6 +481,9 @@ def _source_identities(db, plan):
 
 
 def _native_node(db, run, phase, node_id):
+    if run.get('executor') == 'native_graph':
+        import database_dbt_graph as graph
+        return graph.node_allowed(db, run, phase, node_id)
     if phase == 'build':
         return node_id == run['selected_node_id']
     if phase == 'test' and run.get('native_tests') is True:
@@ -484,7 +513,7 @@ def _check_child(db, principal, context, run_id, phase, node_id):
     nodes = plan['tests'] if phase == 'test' else plan['models']
     if node_id not in {n['unique_id'] for n in nodes}:
         raise QueryError('DBT_NODE_NOT_FOUND', 409)
-    if run.get('executor') == 'native_table' and not _native_node(db, run, phase, node_id):
+    if run.get('executor') in ('native_table', 'native_graph') and not _native_node(db, run, phase, node_id):
         raise QueryError('DBT_NODE_NOT_FOUND', 409)
     if phase == 'test' and run['state'] != 'TESTING' or phase == 'build' and run['state'] != 'BUILDING':
         raise QueryError('DBT_RUN_STOPPED', 409)
@@ -505,7 +534,7 @@ def _check_operation(db, operation_id):
         if (run['cancel_requested'] or run['state'] not in ('BUILDING', 'TESTING', 'AUDITING', 'PUBLISHING')
                 or run.get('_phase') != link['phase'] or run.get('_node_id') != link['node_id']):
             raise QueryError('DBT_RUN_STOPPED', 409)
-        if run.get('executor') == 'native_table' and not _native_node(db, run, link['phase'], link['node_id']):
+        if run.get('executor') in ('native_table', 'native_graph') and not _native_node(db, run, link['phase'], link['node_id']):
             raise QueryError('DBT_RUN_STOPPED', 409)
         if run.get('executor') == 'native_table':
             import database_dbt_native as native
@@ -519,6 +548,9 @@ def _check_operation(db, operation_id):
                 expected['selected_node_id'] = run['selected_node_id']
             if op['payload'] != ds._json(dict(payload=expected, context=run['context'])):
                 raise QueryError('DBT_NATIVE_CHILD_INVALID', 409)
+        if run.get('executor') == 'native_graph':
+            import database_dbt_graph as graph
+            graph.check_operation(db, run, op, link)
         source = _row(db, run['parent_run_id'])[1] if run['kind'] == 'publication' else run
         _source_identities(db, _check_plan(db, source))
         if run['kind'] == 'publication':
@@ -549,7 +581,12 @@ def _before_query(operation_id, principal, context):
         # This is the final initial send (after wake). Once accepted by Trino,
         # polling must be able to observe our own write changing the target.
         _native_publication_live(metadata, run)
-    if source.get('executor') != 'native_table':
+    if source.get('executor') == 'native_graph':
+        import database_dbt_graph as graph
+        with control_store.connect() as db:
+            graph.check_verified(db, source)
+        graph.check_candidates(metadata, source)
+    if source.get('executor') not in ('native_table', 'native_graph'):
         _verify_views(metadata, source, complete=run['kind'] == 'publication')
     for binding in plan['source_bindings']:
         ref = registry.ResourceRef(**binding['ref'])
@@ -834,6 +871,8 @@ def _test_select(execution):
 
 
 def _gate(db, run, node_id, publication=None):
+    if run.get('executor') == 'native_graph':
+        raise QueryError('DBT_GRAPH_PUBLICATION_UNAVAILABLE', 409)
     if run.get('executor') == 'native_table':
         return _native_publication_gate(db, run, node_id, publication)
     plan = _check_plan(db, run)
@@ -1014,6 +1053,8 @@ def get_publication_preview(principal, context, run_id, *, node_id):
     metadata = _access(principal, context, admin=True)
     with control_store.connect() as db:
         run = _authorized(db, principal, context, run_id, 'run')
+        if run.get('executor') == 'native_graph':
+            raise QueryError('DBT_GRAPH_PUBLICATION_UNAVAILABLE', 409)
         _, proof = _native_publication_gate(db, run, node_id)
         _native_publisher(db, principal, context, run)
         plan = _check_plan(db, run)
@@ -1733,7 +1774,11 @@ def _execute(ident):
         else:
             with admission.accepted(parent):
                 if run['kind'] == 'run':
-                    function = _native_run if run.get('executor') == 'native_table' else _build_run
+                    if run.get('executor') == 'native_graph':
+                        import database_dbt_graph as graph
+                        function = graph.execute
+                    else:
+                        function = _native_run if run.get('executor') == 'native_table' else _build_run
                     function(ident, principal, context, parent, frozen, credential)
                 else:
                     _publish_run(ident, principal, context, parent, frozen, credential)
@@ -1768,6 +1813,13 @@ def _settle(ident, *, owner_lost=False):
         # Include orphan admissions, never infer closure from a partial link set.
         children = list(db.execute('SELECT subject_id,kind,state FROM warehouse_admissions WHERE parent_id=?', (parent.id,)))
         closed = closed and {c['subject_id'] for c in children} == {o['id'] for o in operations} and all(c['kind'] == 'dataops' and c['state'] in admission.TERMINAL for c in children)
+        if run.get('executor') == 'native_graph':
+            import database_dbt_graph as graph
+            graph.settle(db, run, operations, closed=closed, owner_lost=owner_lost)
+            _write(db, run)
+            admission.finish(db, parent, state='FINISHED' if closed else 'UNKNOWN',
+                evidence_ref='dbt-child-closure:' + ident if closed else None)
+            return
         # Owner-loss observation can retain existing proof, never promote a run.
         native_proof = None
         if run.get('executor') == 'native_table':
@@ -1885,6 +1937,14 @@ def get_run_options(principal, context, plan_id):
     with control_store.connect() as db:
         plan = _authorized(db, principal, context, plan_id, 'plan')
         return native.run_options(db, metadata, principal, context, plan)
+
+
+def get_graph_options(principal, context, plan_id):
+    import database_dbt_graph as graph
+    metadata = _access(principal, context)
+    with control_store.connect() as db:
+        plan = _authorized(db, principal, context, plan_id, 'plan')
+        return graph.options(db, metadata, principal, context, plan)
 
 
 def get_run(principal, context, run_id):

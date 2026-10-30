@@ -474,7 +474,7 @@ def _builtin_manifest(raw):
 
 
 @contextmanager
-def _runtime(artifacts):
+def _runtime(artifacts, *, manifest_filter=None):
     """Load actual installed objects with exclusively dummy configuration.
 
     The operator process is serial. No adapter/global connection cache is shared
@@ -508,7 +508,7 @@ def _runtime(artifacts):
         template_cache.clear()
         register_adapter(config, get_mp_context())
         adapter = get_adapter(config)
-        manifest = Manifest.from_dict(_builtin_manifest(raw))
+        manifest = Manifest.from_dict((manifest_filter or _builtin_manifest)(raw))
         adapter.set_macro_resolver(manifest)
         adapter.set_macro_context_generator(generate_runtime_macro_context)
         # CLI paths/profile are explicit and Jinja env_var sees only env.

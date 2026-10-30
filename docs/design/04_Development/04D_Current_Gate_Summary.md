@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-31
-version: "2.13.0"
+version: "2.14.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -23,10 +23,12 @@ tags: [shirokuma, local, handoff, gates]
 後続計画は[Databaseコア機能統合とコンピュート拡張](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を参照する。DB作成導線は[本人の条件付き受入](../../guides/database-logical-create-owner-acceptance-2026-10-28.md)に進み、待ち時間改善を継続する。
 2026-10-29、DB-P6-0の[表示契約](../../guides/database-p6-0-implementation-2026-10-29.md)、DB-P6-1の[保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
 [DB-P6-2の共有LOCAL管理](../../guides/database-p6-2-implementation-2026-10-29.md)は実装済み、技術受入は完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。read-only UNKNOWNは結果を変えず実行閉鎖・OPENまで照合し、元の138 DB／552 Schemaとbindingを保持した。
-[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)・[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)・[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)・[C2B3](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md)は各限定範囲の技術受入済み。[C2B4](../../guides/database-p6-3c2b4-native-quality-tests-2026-10-30.md)で新規native TABLE 1件に付属する品質test一式を明示選択でき、TABLE作成の検証と品質結果を分離した。API／実CLI／画面、E／A・2DB・休止復帰・品質失敗・SDK停止／取消／owner喪失と保全を実機確認した。この限定範囲の技術受入を完了した。通常RunTask／全graph、native SDKの候補直接置換、native VIEW、DB-P6-3全体とM1本人受入は後続である。
+[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)・[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)・[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)・[C2B3](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md)は各限定範囲の技術受入済み。[C2B4](../../guides/database-p6-3c2b4-native-quality-tests-2026-10-30.md)で新規native TABLE 1件に付属する品質test一式を明示選択でき、TABLE作成の検証と品質結果を分離した。API／実CLI／画面、E／A・2DB・休止復帰・品質失敗・SDK停止／取消／owner喪失と保全を実機確認した。この限定範囲の技術受入を完了した。C2B4時点の通常RunTask／全graphは後述のC2Cで扱う。native SDKの候補直接置換、native VIEW、DB-P6-3全体とM1本人受入は後続である。
 DB-P7〜9は後続計画であり、下表の旧PhaseのCompletedから新Database対応・実サイズ変更・用途別Warehouseの完了を推定しない。
 
-2026-10-31、[C2B5 native TABLEの明示公開](../../guides/database-p6-3c2b5-native-publication-2026-10-31.md)を実装した。付属品質test全件成功の候補について、Aが固定previewを確認し、行数監査>=1と同じDatabaseのMARTS公開を行う。E作成／A公開、API／実CLI／画面、元key回収と空監査の拒否を実機確認し、この限定範囲の技術受入を完了した。native SDKの再buildやmanual-WAP履歴の偽装を行わない。全graph・native VIEW・manual-WAP rollback統合、DB-P6-3全体とM1本人受入は後続である。
+2026-10-31、[C2B5 native TABLEの明示公開](../../guides/database-p6-3c2b5-native-publication-2026-10-31.md)を実装した。付属品質test全件成功の候補について、Aが固定previewを確認し、行数監査>=1と同じDatabaseのMARTS公開を行う。E作成／A公開、API／実CLI／画面、元key回収と空監査の拒否を実機確認し、この限定範囲の技術受入を完了した。native SDKの再buildやmanual-WAP履歴の偽装を行わない。graph候補の公開・native VIEW・manual-WAP rollback統合、DB-P6-3全体とM1本人受入は後続である。
+
+2026-10-31、[C2C native RunTask／全graph](../../guides/database-p6-3c2c-native-graph-2026-10-31.md)を実装した。対応する保存済みTABLE／EPHEMERAL全DAGを実際のRunTaskで構築し、明示選択時はsource test・TABLE間relationshipsを含む保存全testをTestTaskで実行する。画面／API／CLIに`native_graph`と利用条件を接続した。E／A・2DB・休止復帰・SQL失敗／SKIPPED・取消／owner停止と保全を実機確認し、この限定範囲の技術受入を完了した。graph候補の正式公開、native VIEW／incremental、並列実行は後続とし、C2B5の単一TABLE公開と既存SQL/WAPを維持する。
 
 | Phase / WP | Gate Objective | Current Status |
 |---|---|---|
