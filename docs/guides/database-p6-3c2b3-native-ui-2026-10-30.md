@@ -43,4 +43,4 @@ SQL／WAPの既存POSTは従来の`plan_id`だけを保持する。nativeでは�
 
 同じtabでURLのhash部分だけを変更した場合は、既存の起動時復元の制約により再読込が必要である。画面内の履歴選択は通常のinspect処理を使う。hash遷移時の復元は別課題として残す。
 
-RunTask／graph全体、native test、置換・rename／drop、native VIEWとnative成果物の正式公開は後続である。DB-P6-3全体とM1本人受入は未完了である。
+品質テストは後続の[C2B4](database-p6-3c2b4-native-quality-tests-2026-10-30.md)で選択TABLEの付属suiteを扱う。RunTask／graph全体、置換・rename／drop、native VIEWとnative成果物の正式公開は引き続き後続である。DB-P6-3全体とM1本人受入は未完了である。

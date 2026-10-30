@@ -232,6 +232,8 @@ def _hash_plan(plan):
               'models', 'tests', 'source_bindings', '_targets')
     if 'compatibility' in plan:
         fields += ('compatibility',)
+    if '_native_tests' in plan:
+        fields += ('_native_tests',)
     return hashlib.sha256(ds._json({k: plan[k] for k in fields}).encode()).hexdigest()
 
 
@@ -311,6 +313,10 @@ def _compile(ident, principal, context):
         targets[model['unique_id']] = asdict(target)
     plan.update(compatibility=summary['compatibility'], source_digest=summary['source_digest'], models=summary['models'], tests=summary['tests'],
         source_bindings=bindings, _targets=targets, compiler_versions=summary.get('versions'), state='READY')
+    owners = summary.get('test_owners')
+    if (isinstance(owners, dict) and set(owners) == {t['unique_id'] for t in summary['tests']}
+            and all(type(uid) is str and (owner is None or type(owner) is str) for uid, owner in owners.items())):
+        plan['_native_tests'] = dict(version=1, owners=owners)
     plan['_plan_digest'] = _hash_plan(plan)
     with control_store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
@@ -343,13 +349,17 @@ def _run_arguments(executor, node_id):
         raise ValueError('node ID requires native executor')
 
 
-def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=None):
+def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=None, native_tests=False):
     _run_arguments(executor, node_id)
+    if type(native_tests) is not bool or native_tests and executor != 'native_table':
+        raise ValueError('native_tests requires native executor and strict boolean')
     if type(plan_id) is not str or not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', plan_id):
         raise ValueError('invalid plan ID')
     _access(principal, context)
     route = '/api/v1/dbt/runs'
     intent = dict(context=asdict(context), plan_id=plan_id)
+    if native_tests:
+        intent['native_tests'] = True
     with control_store.connect() as db:
         if executor == 'native_table':
             old = db.execute('SELECT payload FROM dbt_requests WHERE actor=? AND route=? AND idempotency_key=?',
@@ -364,6 +374,7 @@ def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=
     if executor == 'native_table':
         import database_dbt_native as native
         plan, node, _, _ = native._plan(principal, context, plan_id, node_id)
+        suite = native.suite(plan, node_id) if native_tests else []
         intent['plan_digest'] = plan['_plan_digest']
         payload = ds._json(intent)
         record = _base(principal, context, 'run', plan)
@@ -372,6 +383,10 @@ def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=
             native_verified=False, tests=[], models=[dict(unique_id=node_id, name=node['name'],
                 materialized='table', table_properties=node['table_properties'], state='QUEUED',
                 candidate=None, operation_ids=[])])
+        if native_tests:
+            record.update(native_tests=True, _native_test_suite=suite, tests_status='QUEUED',
+                tests=[dict(unique_id=t['unique_id'], name=t['name'], test_type=t['test_type'],
+                    state='QUEUED', failure_count=None, operation_id=None) for t in suite])
         return _accept(principal, context, route, key, payload, record)
     if plan['actor'] != principal.principal_id or plan['context'] != asdict(context):
         raise QueryError('CONTEXT_MISMATCH', 409)
@@ -432,6 +447,17 @@ def _source_identities(db, plan):
             raise QueryError('STALE_RESOURCE', 409)
 
 
+def _native_node(db, run, phase, node_id):
+    if phase == 'build':
+        return node_id == run['selected_node_id']
+    if phase == 'test' and run.get('native_tests') is True:
+        import database_dbt_native as native
+        plan = _check_plan(db, run)
+        suite = native.suite(plan, run['selected_node_id'])
+        return suite == run.get('_native_test_suite') and node_id in {t['unique_id'] for t in suite}
+    return False
+
+
 def _check_child(db, principal, context, run_id, phase, node_id):
     row, run = _row(db, run_id)
     if (run['actor'] != principal.principal_id or run['context'] != asdict(context)
@@ -451,7 +477,7 @@ def _check_child(db, principal, context, run_id, phase, node_id):
     nodes = plan['tests'] if phase == 'test' else plan['models']
     if node_id not in {n['unique_id'] for n in nodes}:
         raise QueryError('DBT_NODE_NOT_FOUND', 409)
-    if run.get('executor') == 'native_table' and (phase != 'build' or node_id != run['selected_node_id']):
+    if run.get('executor') == 'native_table' and not _native_node(db, run, phase, node_id):
         raise QueryError('DBT_NODE_NOT_FOUND', 409)
     if phase == 'test' and run['state'] != 'TESTING' or phase == 'build' and run['state'] != 'BUILDING':
         raise QueryError('DBT_RUN_STOPPED', 409)
@@ -460,7 +486,7 @@ def _check_child(db, principal, context, run_id, phase, node_id):
 def _check_operation(db, operation_id):
     link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (operation_id,)).fetchone()
     if link:
-        op = db.execute('SELECT actor,context,backend_username,state FROM dataops_operations WHERE id=?', (operation_id,)).fetchone()
+        op = db.execute('SELECT * FROM dataops_operations WHERE id=?', (operation_id,)).fetchone()
         _, run = _row(db, link['run_id'])
         live = _live.get(run['id'])
         if live is None or op['state'] != 'ACTIVE':
@@ -472,8 +498,20 @@ def _check_operation(db, operation_id):
         if (run['cancel_requested'] or run['state'] not in ('BUILDING', 'TESTING', 'AUDITING', 'PUBLISHING')
                 or run.get('_phase') != link['phase'] or run.get('_node_id') != link['node_id']):
             raise QueryError('DBT_RUN_STOPPED', 409)
-        if run.get('executor') == 'native_table' and (link['phase'] != 'build' or link['node_id'] != run['selected_node_id']):
+        if run.get('executor') == 'native_table' and not _native_node(db, run, link['phase'], link['node_id']):
             raise QueryError('DBT_RUN_STOPPED', 409)
+        if run.get('executor') == 'native_table':
+            import database_dbt_native as native
+            links = list(db.execute('SELECT o.*,l.phase,l.node_id FROM dbt_run_operations l '
+                'JOIN dataops_operations o ON o.id=l.operation_id WHERE l.run_id=?', (run['id'],)))
+            if not _native_links(db, run, links):
+                raise QueryError('DBT_NATIVE_CHILD_INVALID', 409)
+            expected = dict(plan_id=run['plan_id'], node_id=link['node_id'], digest=run['_plan_digest'],
+                **(native._TEST_PROVENANCE if link['phase'] == 'test' else native._PROVENANCE))
+            if link['phase'] == 'test':
+                expected['selected_node_id'] = run['selected_node_id']
+            if op['payload'] != ds._json(dict(payload=expected, context=run['context'])):
+                raise QueryError('DBT_NATIVE_CHILD_INVALID', 409)
         source = _row(db, run['parent_run_id'])[1] if run['kind'] == 'publication' else run
         _source_identities(db, _check_plan(db, source))
         if run['kind'] == 'publication':
@@ -890,6 +928,24 @@ def _phase(ident, state, phase, node):
         return run
 
 
+def _native_links(db, run, links):
+    """Exact bounded child set; unfinished expected tests do not invalidate build proof."""
+    allowed = {('build', run['selected_node_id']): 'dbt-native-table'}
+    if run.get('native_tests') is True:
+        import database_dbt_native as native
+        suite = native.suite(_check_plan(db, run), run['selected_node_id'])
+        if suite != run.get('_native_test_suite') or [t['unique_id'] for t in suite] != [t['unique_id'] for t in run['tests']]:
+            return False
+        allowed.update({('test', t['unique_id']): 'dbt-native-test' for t in suite})
+    seen = set()
+    for link in links:
+        key = (link['phase'], link['node_id'])
+        if key in seen or link['route'] != allowed.get(key):
+            return False
+        seen.add(key)
+    return ('build', run['selected_node_id']) in seen
+
+
 def _native_saved(db, run, operation_id):
     """Validate saved native proof only; settlement never measures or runs SQL."""
     import database_dbt_native as native
@@ -897,10 +953,13 @@ def _native_saved(db, run, operation_id):
         row, _ = _row(db, run['id'])
         links = list(db.execute('SELECT o.*,l.phase,l.node_id FROM dbt_run_operations l '
             'JOIN dataops_operations o ON o.id=l.operation_id WHERE l.run_id=?', (run['id'],)))
-        if (run.get('executor') != 'native_table' or run['kind'] != 'run' or len(links) != 1
+        if (run.get('executor') != 'native_table' or run['kind'] != 'run' or not _native_links(db, run, links)
                 or len(run['models']) != 1 or run['models'][0]['unique_id'] != run['selected_node_id']):
             return None
-        op = links[0]
+        builds = [op for op in links if op['phase'] == 'build']
+        if len(builds) != 1:
+            return None
+        op = builds[0]
         receipt = json.loads(op['result'] or '{}')
         if not isinstance(receipt, dict):
             return None
@@ -919,7 +978,7 @@ def _native_saved(db, run, operation_id):
                 or receipt.get('native_verified') is not True
                 or any(receipt.get(k) != v for k, v in payload.items())):
             return None
-        if run['state'] == 'NATIVE_VERIFIED' and (run.get('native_receipt') != receipt
+        if (run['state'] == 'NATIVE_VERIFIED' or run.get('native_verified') is True) and (run.get('native_receipt') != receipt
                 or run['models'][0].get('candidate') != receipt.get('candidate')
                 or run['models'][0].get('operation_ids') != [op['id']]):
             return None
@@ -957,8 +1016,103 @@ def _native_saved(db, run, operation_id):
                 or locator != dict(database_id=ref.database_id, schema_id=ref.schema_id, physical_name=obj.physical_name)):
             return None
         return receipt
-    except (KeyError, TypeError, ValueError, AttributeError, IndexError):
+    except (KeyError, TypeError, ValueError, AttributeError, IndexError, QueryError):
         return None
+
+
+def _native_test_saved(db, run, uid, build):
+    """Verify one SDK test's saved parent, child and query evidence without execution."""
+    import database_dbt_native as native
+    try:
+        row, _ = _row(db, run['id'])
+        plan = _check_plan(db, run)
+        suite = native.suite(plan, run['selected_node_id'])
+        if suite != run.get('_native_test_suite') or run.get('native_tests') is not True:
+            return None
+        test = next(t for t in suite if t['unique_id'] == uid)
+        links = list(db.execute('SELECT o.*,l.phase,l.node_id FROM dbt_run_operations l '
+            'JOIN dataops_operations o ON o.id=l.operation_id WHERE l.run_id=?', (run['id'],)))
+        if not _native_links(db, run, links):
+            return None
+        op = next(o for o in links if o['phase'] == 'test' and o['node_id'] == uid)
+        receipt = json.loads(op['result'] or '{}')
+        payload = dict(plan_id=run['plan_id'], node_id=uid, selected_node_id=run['selected_node_id'],
+            digest=run['_plan_digest'], **native._TEST_PROVENANCE)
+        expected = ds._json(dict(payload=payload, context=run['context']))
+        child = db.execute("SELECT * FROM warehouse_admissions WHERE kind='dataops' AND subject_id=? AND warehouse_id=?",
+            (op['id'], run['context']['warehouse_id'])).fetchone()
+        build_op = next(o for o in links if o['phase'] == 'build')
+        if (op['route'] != 'dbt-native-test' or op['state'] != 'FINISHED' or op['committed'] or op['cleanup_error']
+                or op['actor'] != run['actor'] or json.loads(op['context']) != run['context']
+                or op['payload'] != expected or op['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()
+                or child is None or child['parent_id'] != row['admission_id']
+                or child['actor'] != run['actor'] or child['state'] != 'FINISHED'
+                or any(op[k] != build_op[k] for k in ('backend_username', 'credential_snapshot_ref'))
+                or not isinstance(receipt, dict) or receipt.get('test_verified') is not True
+                or any(receipt.get(k) != v for k, v in payload.items())
+                or type(receipt.get('failures')) is not int or receipt['failures'] < 0
+                or receipt.get('status') != ('PASSED' if receipt['failures'] == 0 else 'FAILED')
+                or receipt.get('candidate') != build['candidate']):
+            return None
+        # Match every input to original frozen measurements, including exact candidate head.
+        pins = receipt.get('pins')
+        if not isinstance(pins, dict):
+            return None
+        bindings, approved = native._test_plan(plan, test, build, ResolvedQueryContext(**run['context']))
+        if set(pins) != set(approved['sources']):
+            return None
+        if any(pins[alias].get('ref') != asdict(ref) for alias, ref in approved['sources'].items()):
+            return None
+        originals = dict(run['_pins'])
+        originals[ds._json(build['candidate']['ref'])] = build['candidate']
+        for pin in pins.values():
+            if not isinstance(pin, dict) or originals.get(ds._json(pin.get('ref'))) != pin:
+                return None
+        queries = list(db.execute('SELECT d.step,d.action,q.*,e.* FROM dataops_queries d '
+            'LEFT JOIN query_records q ON q.id=d.query_id '
+            'LEFT JOIN query_execution_contexts e ON e.query_id=d.query_id WHERE d.operation_id=?', (op['id'],)))
+        if len(queries) != 1:
+            return None
+        query = queries[0]
+        if (query['step'] != 'native-test' or query['action'] != 'dbt_test'
+                or query['state'] != 'FINISHED' or not query['backend_query_id'] or not query['backend_query_id'].strip()
+                or query['actor'] != run['actor'] or any(query[k] != run['context'][k] for k in (
+                    'database_id', 'schema_id', 'warehouse_id', 'generation_id', 'selected_role',
+                    'sql_catalog', 'sql_schema', 'binding_revision', 'grant_revision'))
+                or query['mode'] != 'dataops' or query['request_id'] != op['id'] or query['worksheet_id'] != 'native-test'
+                or query['backend_username'] != op['backend_username']
+                or query['credential_snapshot_ref'] != op['credential_snapshot_ref']):
+            return None
+        result = run.get('_native_test_results', {}).get(uid)
+        if (not isinstance(result, dict) or type(result.get('failures')) is not int
+                or type(result.get('should_warn')) is not bool or type(result.get('should_error')) is not bool
+                or result != dict(operation_id=op['id'], query_id=query['id'],
+                failures=receipt['failures'], should_warn=receipt['failures'] != 0,
+                should_error=receipt['failures'] != 0, pins=pins, candidate=build['candidate'])
+                or receipt.get('query_id') != query['id']):
+            return None
+        return receipt
+    except (KeyError, TypeError, ValueError, AttributeError, IndexError, StopIteration, QueryError):
+        return None
+
+
+def _native_quality_saved(db, run, build):
+    """Closure can retain exact quality proof; it can never create success."""
+    if not run.get('native_tests'):
+        return run.get('tests_status', 'NOT_RUN') == 'NOT_RUN' and not run['tests']
+    suite = run.get('_native_test_suite')
+    if not suite or [t['unique_id'] for t in suite] != [t['unique_id'] for t in run['tests']]:
+        return False
+    for test in run['tests']:
+        proof = _native_test_saved(db, run, test['unique_id'], build)
+        if (proof is None or test.get('native_receipt') != proof or test['state'] != proof['status']
+                or type(test.get('failure_count')) is not int or test['failure_count'] != proof['failures']):
+            return False
+        op = db.execute('SELECT node_id,phase FROM dbt_run_operations WHERE operation_id=? AND run_id=?',
+            (test.get('operation_id'), run['id'])).fetchone()
+        if op is None or op['phase'] != 'test' or op['node_id'] != test['unique_id']:
+            return False
+    return True
 
 
 def _native_run(ident, principal, context, parent, frozen, credential):
@@ -991,8 +1145,50 @@ def _native_run(ident, principal, context, parent, frozen, credential):
         receipt = _native_saved(db, run, execution.id)
         if receipt is None:
             raise QueryError('DBT_CHILD_UNRESOLVED', 409)
-        run['models'][0].update(state='NATIVE_VERIFIED', candidate=receipt['candidate'], operation_ids=[execution.id])
-        run.update(state='NATIVE_VERIFIED', native_verified=True, native_receipt=receipt, _phase=None, _node_id=None)
+        run['models'][0].update(state='NATIVE_VERIFIED', candidate=receipt['candidate'],
+            _measurement=receipt['candidate'], operation_ids=[execution.id])
+        run.update(state='TESTING' if run.get('native_tests') else 'NATIVE_VERIFIED',
+            native_verified=True, native_receipt=receipt, _phase=None, _node_id=None)
+        _write(db, run)
+    if not run.get('native_tests'):
+        return
+    for test in run['_native_test_suite']:
+        uid = test['unique_id']
+        _phase(ident, 'TESTING', 'test', uid)
+        with control_store.connect() as db:
+            _, current = _row(db, ident)
+            current['tests_status'] = 'RUNNING'
+            _write(db, current)
+        with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'test', uid):
+            payload = dict(plan_id=plan['id'], node_id=uid, selected_node_id=run['selected_node_id'],
+                digest=plan['_plan_digest'], **native._TEST_PROVENANCE)
+            execution = ds.begin(principal, context, route='dbt-native-test',
+                idempotency_key=ident + ':' + uid, payload=payload)
+            if execution.replayed:
+                raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
+            native.test_accepted(execution, principal, context, plan, test, receipt, payload, isolated=True)
+        with control_store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            _, current = _row(db, ident)
+            proof = _native_test_saved(db, current, uid, receipt)
+            if proof is None:
+                raise QueryError('DBT_NATIVE_TEST_RECEIPT_INVALID', 409)
+            selected = next(t for t in current['tests'] if t['unique_id'] == uid)
+            selected.update(state=proof['status'], failure_count=proof['failures'],
+                operation_id=execution.id, native_receipt=proof)
+            _write(db, current)
+    with control_store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        _, run = _row(db, ident)
+        revalidate_admission(db, principal, context)
+        _check_plan(db, run)
+        if run['cancel_requested']:
+            raise QueryError('DBT_RUN_STOPPED', 409)
+        if not _native_quality_saved(db, run, receipt):
+            raise QueryError('DBT_NATIVE_TEST_RECEIPT_INVALID', 409)
+        run['tests_status'] = 'FAILED' if any(t['state'] == 'FAILED' for t in run['tests']) else 'PASSED'
+        run.update(state='FAILED' if run['tests_status'] == 'FAILED' else 'NATIVE_VERIFIED',
+            error_code='DBT_TEST_FAILED' if run['tests_status'] == 'FAILED' else None, _phase=None, _node_id=None)
         _write(db, run)
 
 
@@ -1185,7 +1381,9 @@ def _settle(ident, *, owner_lost=False):
             run['state'] = 'UNKNOWN'
         elif run['cancel_requested']:
             run['state'] = 'CANCELED'
-        elif run['state'] == 'NATIVE_VERIFIED' and run.get('executor') == 'native_table' and run.get('native_verified') is True and native_proof is not None:
+        elif run['state'] == 'NATIVE_VERIFIED' and run.get('executor') == 'native_table' and run.get('native_verified') is True and native_proof is not None and _native_quality_saved(db, run, native_proof) and (
+                not run.get('native_tests') or run.get('tests_status') == 'PASSED'
+                and all(t['state'] == 'PASSED' for t in run['tests'])):
             pass
         elif run['state'] not in ('READY', 'PUBLISHED', 'FAILED', 'CANCELED', 'COMMITTED_RECORDING_FAILED'):
             run['state'] = 'FAILED'
@@ -1201,7 +1399,7 @@ def _settle(ident, *, owner_lost=False):
                     receipt = {}
                 if op['phase'] == 'build' and op['node_id'] == run['selected_node_id']:
                     # Preserve committed evidence on failure without treating it as proof.
-                    run['native_receipt'] = native_proof if run['state'] == 'NATIVE_VERIFIED' else dict(run.get('native_receipt') or receipt, native_verified=False)
+                    run['native_receipt'] = native_proof if native_proof is not None else dict(run.get('native_receipt') or receipt, native_verified=False)
                     model = run['models'][0]
                     model['operation_ids'] = [op['id']]
                     evidence = run['native_receipt']
@@ -1209,7 +1407,8 @@ def _settle(ident, *, owner_lost=False):
                         model['candidate_locator'] = evidence['candidate_locator']
                     if evidence.get('candidate'):
                         model['candidate'] = evidence['candidate']
-            if run['state'] != 'NATIVE_VERIFIED':
+            run['native_verified'] = native_proof is not None
+            if native_proof is None:
                 run['native_verified'] = False
                 if run.get('native_receipt'):
                     run['native_receipt']['native_verified'] = False
@@ -1218,6 +1417,25 @@ def _settle(ident, *, owner_lost=False):
         for item in run.get('models', []) + run.get('tests', []):
             if item['state'] in ('QUEUED', 'BUILDING', 'TESTING'):
                 item['state'] = 'CANCELED' if run['cancel_requested'] and closed else 'UNKNOWN' if not closed else 'FAILED'
+        if run.get('native_tests') is True:
+            pending_state = ('UNKNOWN' if not closed else 'CANCELED' if run['cancel_requested']
+                else 'UNKNOWN' if owner_lost else 'ERROR')
+            for test in run['tests']:
+                if test['state'] not in ('PASSED', 'FAILED', 'ERROR', 'CANCELED', 'UNKNOWN'):
+                    test['state'] = pending_state
+                elif test['state'] == 'FAILED' and test.get('failure_count') is None:
+                    test['state'] = pending_state
+            if not closed or run['cancel_requested']:
+                run['tests_status'] = pending_state
+            elif run['state'] != 'NATIVE_VERIFIED' and owner_lost:
+                run['tests_status'] = 'UNKNOWN'
+            elif run['state'] != 'NATIVE_VERIFIED' and not (run.get('tests_status') == 'PASSED'
+                    and native_proof is not None and _native_quality_saved(db, run, native_proof)
+                    and all(t['state'] == 'PASSED' for t in run['tests'])):
+                run['tests_status'] = (pending_state if any(t['state'] in ('ERROR', 'UNKNOWN', 'CANCELED') for t in run['tests'])
+                    else 'FAILED' if any(t['state'] == 'FAILED' for t in run['tests']) else 'ERROR')
+            if run['state'] == 'FAILED' and not run['error_code']:
+                run['error_code'] = 'DBT_NATIVE_TEST_INCOMPLETE'
         run.update(_phase=None, _node_id=None)
         _write(db, run)
         admission.finish(db, parent, state='FINISHED' if closed else 'UNKNOWN',

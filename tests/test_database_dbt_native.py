@@ -113,6 +113,97 @@ assert dict(os.environ) == saved
                 self.check(sql)
 
 
+class NativeSuiteTests(unittest.TestCase):
+    def setUp(self):
+        self.uid = 'model.project.selected'
+        self.model = dict(unique_id=self.uid, materialized='table', depends_on=[],
+                          relation=['catalog', 'sandbox', 'selected'])
+        self.test = dict(unique_id='test.project.arbitrary', name='arbitrary', test_type='not_null',
+                         relation=None, depends_on=[self.uid],
+                         compiled_sql='SELECT id FROM catalog.sandbox.selected WHERE id IS NULL')
+        self.plan = dict(models=[self.model], tests=[self.test], source_bindings=[],
+                          _native_tests=dict(version=1, owners={self.test['unique_id']: self.uid}))
+
+    def test_attached_ownership_not_shared_dependency_and_all_metadata_checked(self):
+        other = dict(self.model, unique_id='model.project.other', relation=['catalog', 'sandbox', 'other'])
+        relationship = dict(self.test, unique_id='test.project.relationship', depends_on=[self.uid, other['unique_id']])
+        self.plan['models'].append(other)
+        self.plan['tests'].append(relationship)
+        self.plan['_native_tests']['owners'][relationship['unique_id']] = other['unique_id']
+        self.assertEqual(native.suite(self.plan, self.uid), [self.test])
+        with self.assertRaises(QueryError) as caught:
+            native.suite(self.plan, other['unique_id'])
+        self.assertEqual(caught.exception.code, 'DBT_NATIVE_TEST_MATERIALIZED_DEPENDENCY')
+        for owner in ('model.project.missing', 1, self.uid):
+            self.plan['_native_tests']['owners'][relationship['unique_id']] = owner
+            if owner == self.uid:
+                relationship['depends_on'] = [other['unique_id']]
+            with self.subTest(owner=owner), self.assertRaises(QueryError) as caught:
+                native.suite(self.plan, self.uid)
+            self.assertEqual(caught.exception.code, 'DBT_NATIVE_TEST_OWNERS_INVALID')
+
+    def test_none_source_owner_does_not_block_complete_selected_table_suite(self):
+        second = dict(self.test, unique_id='test.project.selected_unique', test_type='unique')
+        source = dict(unique_id='source.project.raw', relation=['catalog', 'raw', 'input'])
+        source_test = dict(self.test, unique_id='test.project.source_not_null',
+            depends_on=[source['unique_id']], compiled_sql='SELECT id FROM catalog.raw.input WHERE id IS NULL')
+        self.plan['source_bindings'].append(source)
+        self.plan['tests'].extend([second, source_test])
+        self.plan['_native_tests']['owners'].update({second['unique_id']: self.uid, source_test['unique_id']: None})
+        self.assertEqual(native.suite(self.plan, self.uid), [self.test, second])
+        owners = deepcopy(self.plan['_native_tests']['owners'])
+        raw = dict(nodes={uid: dict(resource_type='test', attached_node=owner) for uid, owner in owners.items()})
+        native._verify_owners(self.plan, (dict(test_owners=owners), raw))
+        raw['nodes'][source_test['unique_id']]['attached_node'] = source['unique_id']
+        with self.assertRaises(QueryError) as caught:
+            native._verify_owners(self.plan, (dict(test_owners=owners), raw))
+        self.assertEqual(caught.exception.code, 'DBT_NATIVE_TEST_OWNERS_CHANGED')
+
+    def test_empty_legacy_unsupported_and_constant_suites(self):
+        self.plan.pop('_native_tests')
+        with self.assertRaises(QueryError) as caught:
+            native.suite(self.plan, self.uid)
+        self.assertEqual(caught.exception.code, 'DBT_NATIVE_TEST_RECOMPILE_REQUIRED')
+        self.plan.update(tests=[], _native_tests=dict(version=1, owners={}))
+        with self.assertRaises(QueryError) as caught:
+            native.suite(self.plan, self.uid)
+        self.assertEqual(caught.exception.code, 'DBT_NATIVE_TEST_EMPTY_SUITE')
+        self.plan.update(tests=[self.test], _native_tests=dict(version=1, owners={self.test['unique_id']: self.uid}))
+        self.test['compiled_sql'] = 'SELECT 7 AS id WHERE FALSE'
+        self.assertEqual(native.suite(self.plan, self.uid), [self.test])
+        self.test['test_type'] = 'custom'
+        with self.assertRaises(QueryError) as caught:
+            native.suite(self.plan, self.uid)
+        self.assertEqual(caught.exception.code, 'DBT_NATIVE_TEST_CONFIG_UNSUPPORTED')
+
+    def test_fresh_owners_match_summary_and_raw_while_legacy_ignores_extra_keys(self):
+        owners = deepcopy(self.plan['_native_tests']['owners'])
+        raw = dict(nodes={uid: dict(resource_type='test', attached_node=owner) for uid, owner in owners.items()})
+        summary = dict(test_owners=owners)
+        native._verify_owners(self.plan, (summary, raw))
+        for changed in (({}, raw), (summary, dict(nodes={self.test['unique_id']:
+                dict(resource_type='test', attached_node='model.project.other')}))):
+            with self.subTest(changed=changed), self.assertRaises(QueryError) as caught:
+                native._verify_owners(self.plan, changed)
+            self.assertEqual(caught.exception.code, 'DBT_NATIVE_TEST_OWNERS_CHANGED')
+        legacy = dict(self.plan)
+        legacy.pop('_native_tests')
+        native._verify_owners(legacy, ({}, {}))
+
+    def test_exact_wrapper_rejects_changed_body_shape_comments_and_second_queries(self):
+        ref = registry.ResourceRef('db', 'sandbox', 'candidate', 1)
+        bindings = {('catalog', 'sandbox', 'selected'): ref}
+        body = self.test['compiled_sql']
+        approved = compiler.normalize_select(body, bindings, database_id='db')
+        sql = native._test_wrapper(body)
+        self.assertEqual(native._native_test_select(sql, bindings, approved, 'db'), approved)
+        for changed in (sql.replace('COUNT(*)', 'COUNT(id)', 1), sql.replace('!= 0', '> 1', 1),
+                sql.replace('IS NULL', 'IS NOT NULL'), sql + '; SELECT 1', sql + ' -- comment',
+                sql.replace('dbt_internal_test', 'another'), sql + ' LIMIT 1'):
+            with self.subTest(sql=changed), self.assertRaises(QueryError):
+                native._native_test_select(changed, bindings, approved, 'db')
+
+
 class NativeTests(unittest.TestCase):
     def setUp(self):
         self.w = test_manual_wap.ManualWapTests()
@@ -1024,3 +1115,226 @@ print(json.dumps(dict(op='done', status='success')), flush=True)
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class NativeQualityTests(unittest.TestCase):
+    setUp = NativeTests.setUp
+    clear_live = NativeTests.clear_live
+    mutate_plan = NativeTests.mutate_plan
+    # Reuse fixture and helpers without running inherited build-only cases again.
+    def setUp(self):
+        NativeTests.setUp(self)
+        self.artifact_patch.stop()
+        (self.project / 'models/quality.yml').write_text(yaml.safe_dump(dict(version=2, models=[dict(
+            name='arbitrary_result', columns=[dict(name='id', data_tests=['not_null', 'unique'])]) ])))
+        compiled = compiler._compiled_project(self.project, catalog=self.context.sql_catalog, source_schema='raw')
+        self.artifacts = compiled.__enter__()
+        self.addCleanup(compiled.__exit__, None, None, None)
+        self.summary = self.artifacts[0]
+        with patch.object(db_dbt, '_start'), patch.object(compiler, 'compile_project', return_value=self.summary):
+            ack = db_dbt.submit_plan(self.principal, self.context, key='quality-plan', project_id='general',
+                source_schema='raw', target_schema='marts', staging_materialization=None)
+            db_dbt._execute(ack['id'])
+        self.plan_id = ack['id']
+        self.artifact_patch.start()
+
+    def quality_run(self, key='quality', *, execute=True):
+        with patch.object(db_dbt, '_start'):
+            ack = db_dbt.submit_run(self.principal, self.context, key=key, plan_id=self.plan_id,
+                executor='native_table', node_id=self.uid, native_tests=True)
+        if execute:
+            thread = threading.Thread(target=db_dbt._execute, args=(ack['id'],))
+            thread.start()
+            thread.join(timeout=60)
+            self.assertFalse(thread.is_alive())
+            return db_dbt.get_run(self.principal, self.context, ack['id'])
+        return ack
+
+    def quality_transport(self, url, method, pin, body=None):
+        page = self.w.transport(url, method, pin, body)
+        if body.decode().startswith('SELECT COUNT(*) AS failures'):
+            page['columns'] = [dict(name=n, type=t) for n, t in
+                [('failures', 'bigint'), ('should_warn', 'boolean'), ('should_error', 'boolean')]]
+            page['data'] = [[row[0], bool(row[1]), bool(row[2])] for row in page['data']]
+        return page
+
+    def test_quality_installed_runner_zero_and_positive_counts_no_replay(self):
+        with patch.object(queries, '_transport', side_effect=self.quality_transport):
+            passed = self.quality_run()
+        self.assertEqual(passed['state'], 'NATIVE_VERIFIED', passed)
+        self.assertTrue(passed['native_verified'])
+        self.assertEqual(passed['tests_status'], 'PASSED')
+        self.assertEqual([t['state'] for t in passed['tests']], ['PASSED', 'PASSED'])
+        self.assertFalse(passed['publication_allowed'])
+        self.assertEqual(len(self.w.posts), 3)
+        for sql, headers in self.w.posts[1:]:
+            self.assertIn('FOR VERSION AS OF', sql)
+            self.assertNotIn('sandbox"."arbitrary_result', sql)
+            self.assertEqual(headers['Authorization'], 'Basic original-secret')
+        with patch.object(native, '_run_subprocess', side_effect=AssertionError('no replay')), \
+                patch.object(queries, '_transport', side_effect=AssertionError('no GET SQL')):
+            self.assertEqual(self.quality_run(execute=False)['id'], passed['id'])
+            self.assertEqual(db_dbt.get_run(self.principal, self.context, passed['id'])['tests_status'], 'PASSED')
+        # A positive failure count is a successful query and a failed quality test.
+        def positive(*args, **kwargs):
+            page = self.quality_transport(*args, **kwargs)
+            if page.get('columns'):
+                page['data'] = [[2, True, True]]
+            return page
+        with patch.object(queries, '_transport', side_effect=positive):
+            failed = self.quality_run('quality-failed')
+        self.assertEqual(failed['state'], 'FAILED', failed)
+        self.assertEqual(failed['tests_status'], 'FAILED')
+        self.assertTrue(failed['native_verified'])
+        self.assertEqual([t['state'] for t in failed['tests']], ['FAILED', 'FAILED'])
+        self.assertEqual([t['failure_count'] for t in failed['tests']], [2, 2])
+        with control_store.connect() as db:
+            children = db.execute("SELECT o.state,l.phase FROM dataops_operations o JOIN dbt_run_operations l "
+                "ON o.id=l.operation_id WHERE l.run_id=?", (failed['id'],)).fetchall()
+        self.assertEqual([(r['state'], r['phase']) for r in children],
+                         [('FINISHED', 'build'), ('FINISHED', 'test'), ('FINISHED', 'test')])
+
+    def test_quality_malformed_results_retain_verified_build(self):
+        for index, data in enumerate(([[0, False]], [[-1, True, True]], [[False, False, False]],
+                [[0, 0, 0]], [[0, True, False]], [[1, True, False]], [[0, False, False], [0, False, False]])):
+            def malformed(*args, **kwargs):
+                page = self.quality_transport(*args, **kwargs)
+                if page.get('columns'):
+                    page['data'] = data
+                return page
+            with self.subTest(data=data), patch.object(queries, '_transport', side_effect=malformed):
+                run = self.quality_run('malformed-' + str(index))
+                self.assertEqual(run['state'], 'FAILED', run)
+                self.assertTrue(run['native_verified'])
+                self.assertEqual(run['tests_status'], 'ERROR')
+                self.assertNotIn('PASSED', [t['state'] for t in run['tests']])
+
+    def test_quality_candidate_drift_after_query_retains_original_build_proof(self):
+        def changed(*args, **kwargs):
+            page = self.quality_transport(*args, **kwargs)
+            if page.get('columns'):
+                with control_store.connect() as db:
+                    row = db.execute("SELECT record FROM dbt_runs ORDER BY rowid DESC LIMIT 1").fetchone()
+                run = json.loads(row[0])
+                candidate = run['models'][0]['candidate']
+                ref = registry.ResourceRef(**candidate['ref'])
+                self.w.snapshot(self.w.metadata(ref), [(9, 'changed')])
+            return page
+        with patch.object(queries, '_transport', side_effect=changed):
+            run = self.quality_run('changed')
+        self.assertEqual(run['state'], 'FAILED', run)
+        self.assertTrue(run['native_verified'])
+        self.assertNotEqual(run['tests_status'], 'PASSED')
+
+
+    def test_quality_owner_loss_cancel_and_backend_error_after_query_preserve_build(self):
+        runner = native._run_subprocess
+        for kind in ('cancel', 'owner-loss', 'backend-error'):
+            def after(artifacts, uid, bridge):
+                runner(artifacts, uid, bridge)
+                if not isinstance(bridge, native._TestBridge):
+                    return
+                if kind == 'cancel':
+                    with control_store.connect() as db:
+                        link = db.execute('SELECT run_id FROM dbt_run_operations WHERE operation_id=?',
+                                          (bridge.execution.id,)).fetchone()
+                    db_dbt.cancel_run(self.principal, self.context, link['run_id'], key='quality-cancel')
+                elif kind == 'owner-loss':
+                    ds._live.pop(bridge.execution.id)[2].close()
+                    raise QueryError('DBT_OWNER_LOST', 409)
+                else:
+                    raise QueryError('DBT_NATIVE_TEST_RESULT_INVALID', 409)
+            with self.subTest(kind=kind), patch.object(native, '_run_subprocess', side_effect=after), \
+                    patch.object(queries, '_transport', side_effect=self.quality_transport):
+                run = self.quality_run(kind)
+                self.assertTrue(run['native_verified'], run)
+                self.assertNotEqual(run['tests_status'], 'PASSED')
+                self.assertNotEqual(run['state'], 'NATIVE_VERIFIED')
+                if kind == 'cancel':
+                    self.assertEqual(run['state'], 'CANCELED')
+                with patch.object(native, '_run_subprocess', side_effect=AssertionError('no resume')):
+                    self.assertEqual(db_dbt.get_run(self.principal, self.context, run['id'])['state'], run['state'])
+
+    def test_quality_changed_sdk_status_reused_or_altered_callback_never_passes(self):
+        popen = subprocess.Popen
+        scripts = []
+        base = (
+            "import json,sys\nr=json.loads(sys.stdin.readline())\n"
+            "s=r['manifest']['nodes'][r['node_id']]['compiled_code']\n"
+            "sql='SELECT COUNT(*) AS failures, COUNT(*) != 0 AS should_warn, COUNT(*) != 0 AS should_error FROM ('+s+') dbt_internal_test'\n"
+            "msg=dict(op='execute',sql=sql,auto_begin=True,fetch=True,limit=None)\n"
+            "print(json.dumps(msg),flush=True)\n"
+            "sys.stdin.readline()\n")
+        scripts = [base + "print(json.dumps(dict(op='done',status='FAILED',failures=0)),flush=True)",
+            base + "print(json.dumps(dict(op='done',status='PASSED',failures=1)),flush=True)",
+            base + "print(json.dumps(msg),flush=True);sys.stdin.readline()",
+            base.replace("COUNT(*) AS failures", "SUM(1) AS failures") +
+                "print(json.dumps(dict(op='done',status='PASSED',failures=0)),flush=True)"]
+        for index, script in enumerate(scripts):
+            def child(args, **kwargs):
+                # Build remains the actual installed SDK, replacing only the test subprocess.
+                if not hasattr(child, 'called'):
+                    child.called = True
+                    return popen(args, **kwargs)
+                return popen([args[0], '-c', script], **kwargs)
+            with self.subTest(index=index), patch.object(native.subprocess, 'Popen', side_effect=child), \
+                    patch.object(queries, '_transport', side_effect=self.quality_transport):
+                run = self.quality_run('sdk-bad-' + str(index))
+                self.assertTrue(run['native_verified'], run)
+                self.assertEqual(run['tests_status'], 'ERROR')
+                self.assertNotEqual(run['state'], 'NATIVE_VERIFIED')
+
+
+    def test_quality_raw_relationship_uses_run_snapshot_after_source_append(self):
+        self.artifact_patch.stop()
+        config = dict(version=2, models=[dict(name='arbitrary_result', columns=[dict(name='id',
+            data_tests=[dict(relationships=dict(arguments=dict(to="source('registered', 'registered_input')", field='id')))])])])
+        (self.project / 'models/quality.yml').write_text(yaml.safe_dump(config))
+        compiled = compiler._compiled_project(self.project, catalog=self.context.sql_catalog, source_schema='raw')
+        self.artifacts = compiled.__enter__()
+        self.addCleanup(compiled.__exit__, None, None, None)
+        with patch.object(db_dbt, '_start'), patch.object(compiler, 'compile_project', return_value=self.artifacts[0]):
+            ack = db_dbt.submit_plan(self.principal, self.context, key='raw-quality-plan', project_id='general',
+                source_schema='raw', target_schema='marts', staging_materialization=None)
+            db_dbt._execute(ack['id'])
+        self.plan_id = ack['id']
+        self.artifact_patch.start()
+        original = native._TestBridge.__init__
+        snapshot = str(self.w.metadata(self.source)['current-snapshot-id'])
+        def append(bridge, *args, **kwargs):
+            self.w.snapshot(self.w.metadata(self.source), [(99, 'later')])
+            original(bridge, *args, **kwargs)
+        with patch.object(native._TestBridge, '__init__', append), \
+                patch.object(queries, '_transport', side_effect=self.quality_transport):
+            run = self.quality_run('raw-snapshot')
+        self.assertEqual(run['state'], 'NATIVE_VERIFIED', run)
+        self.assertEqual(run['tests_status'], 'PASSED')
+        self.assertIn('FOR VERSION AS OF ' + snapshot, self.w.posts[-1][0])
+        self.assertEqual(self.w.posts[-1][0].count('FOR VERSION AS OF'), 2)
+
+    def test_quality_saved_receipts_recheck_exact_suite_parent_count_and_child_evidence(self):
+        with patch.object(queries, '_transport', side_effect=self.quality_transport):
+            run = self.quality_run()
+        self.assertEqual(run['tests_status'], 'PASSED', run)
+        with control_store.connect() as db:
+            _, saved = db_dbt._row(db, run['id'])
+            build = saved['native_receipt']
+            self.assertTrue(db_dbt._native_quality_saved(db, saved, build))
+            test = saved['tests'][0]
+            uid, op_id = test['unique_id'], test['operation_id']
+            op_result = db.execute('SELECT result FROM dataops_operations WHERE id=?', (op_id,)).fetchone()[0]
+            for field, replacement in [('failures', 9), ('status', 'FAILED'), ('query_id', 'forged'),
+                                      ('candidate', {}), ('test_verified', False)]:
+                tampered = json.loads(op_result)
+                tampered[field] = replacement
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(tampered), op_id))
+                self.assertIsNone(db_dbt._native_test_saved(db, saved, uid, build))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (op_result, op_id))
+            tampered = deepcopy(saved)
+            tampered['_native_test_results'][uid]['failures'] = 3
+            self.assertIsNone(db_dbt._native_test_saved(db, tampered, uid, build))
+            tampered = deepcopy(saved)
+            tampered['_native_test_suite'].pop()
+            self.assertFalse(db_dbt._native_quality_saved(db, tampered, build))
+            db.execute("UPDATE dataops_queries SET step='other' WHERE operation_id=?", (op_id,))
+            self.assertIsNone(db_dbt._native_test_saved(db, saved, uid, build))

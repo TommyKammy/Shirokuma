@@ -19,7 +19,7 @@ def main():
     import agate
 
     class Callbacks:
-        aborted, called, response = False, False, None
+        aborted, called, response, failures = False, False, None, None
         target = tuple(request['target'])
         locator = SimpleNamespace(database_id=request['database_id'])
         bindings = {tuple(b['relation']): registry.ResourceRef(**b['ref']) for b in request['bindings']}
@@ -43,6 +43,12 @@ def main():
         def execute(self, sql, auto_begin=False, fetch=False, limit=None):
             result = self.call(dict(op='execute', sql=sql, auto_begin=auto_begin, fetch=fetch, limit=limit))
             self.called = True
+            if request.get('mode') == 'test':
+                self.response = AdapterResponse(**result['adapter_response'])
+                self.failures = result['data'][0][0]
+                return self.response, agate.Table(result['data'],
+                    column_names=['failures', 'should_warn', 'should_error'],
+                    column_types=[agate.Number(), agate.Boolean(), agate.Boolean()])
             self.response = AdapterResponse(**result)
             return self.response, agate.Table([])
 
@@ -54,8 +60,14 @@ def main():
         if native.importlib.metadata.version(package) != version:
             raise ValueError('SDK version')
     artifacts = (None, request['manifest'], request['command'], dict(os.environ))
-    native._run_native(artifacts, request['node_id'], Callbacks())
-    protocol.write(json.dumps(dict(op='done', status='success')) + '\n')
+    bridge = Callbacks()
+    if request.get('mode') == 'test':
+        native._run_test_native(artifacts, request['node_id'], bridge)
+        done = dict(op='done', status='PASSED' if bridge.failures == 0 else 'FAILED', failures=bridge.failures)
+    else:
+        native._run_native(artifacts, request['node_id'], bridge)
+        done = dict(op='done', status='success')
+    protocol.write(json.dumps(done) + '\n')
     protocol.flush()
     protocol.close()
 

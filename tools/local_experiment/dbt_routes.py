@@ -47,10 +47,12 @@ def dispatch(handler, method, path, params, principal, role):
                 required.add('node_id')
         else:
             raise QueryError('NOT_FOUND', 404)
-        optional = {'executor', 'node_id'} if family == 'runs' and not ident else set()
+        optional = {'executor', 'node_id', 'native_tests'} if family == 'runs' and not ident else set()
         common._keys(body, required, optional)
         if optional:
             dbt._run_arguments(body.get('executor', 'sql_wap'), body.get('node_id'))
+            if type(body.get('native_tests', False)) is not bool or body.get('native_tests', False) and body.get('executor') != 'native_table':
+                raise ValueError('native tests require boolean and native executor')
             if 'node_id' in body and body['node_id'] is None:
                 raise ValueError('node ID must be a string')
         context = common.context_value(body['context'], role)
@@ -94,7 +96,7 @@ def dispatch(handler, method, path, params, principal, role):
             status = 202
         elif not ident:
             envelope['run'] = dbt.submit_run(principal, context, key=key, plan_id=body['plan_id'],
-                **{k: body[k] for k in ('executor', 'node_id') if k in body})
+                **{k: body[k] for k in ('executor', 'node_id', 'native_tests') if k in body})
             status = 202
         elif action == 'publish':
             envelope['publication'] = dbt.submit_publication(principal, context, ident, key=key, node_id=body['node_id'])

@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-30
-version: "1.26"
+version: "1.27"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -22,7 +22,7 @@ DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse�
 
 2026-10-29、DB-P6-0の[89項目の表示契約](../../guides/database-capability-matrix-2026-10-29.md)と[DB-P6-1の保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
 [DB-P6-2の共有LOCAL休止・自動復帰](../../guides/database-p6-2-implementation-2026-10-29.md)はAPI／CLI／UIを実装し、技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。warm各30回の標本p95差は35.3ms、限定復旧は元UNKNOWNを保持して実行だけを閉鎖した。
-[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)と[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)は各限定範囲の技術受入済み。[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)でnative TABLE 1件を保存run／API／実CLIへ接続した。[C2B3](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md)で画面からの方式・モデル選択、対応条件と非対応理由、元要求の回収を実装し、この限定範囲の技術受入を完了した。通常RunTaskのschema／cache／graph・native test・置換、DB-P6-3全体とM1本人受入は未完了である。
+[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)・[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)・[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)・[C2B3](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md)は各限定範囲の技術受入済み。[C2B4](../../guides/database-p6-3c2b4-native-quality-tests-2026-10-30.md)で新規native TABLE 1件に付属する品質test一式を明示選択でき、TABLE作成の検証と品質結果を分離した。API／実CLI／画面、E／A・2DB・休止復帰・品質失敗・SDK停止／取消／owner喪失と保全を実機確認した。この限定範囲の技術受入を完了した。通常RunTask／全graph、置換、native VIEW・正式公開、DB-P6-3全体とM1本人受入は後続である。
 
 ---
 

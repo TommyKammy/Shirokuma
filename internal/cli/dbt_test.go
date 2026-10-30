@@ -89,6 +89,10 @@ func TestDbtRunExecutorForwarding(t *testing.T) {
 		want  []string
 	}{
 		{"implicit_sql_wap", nil, nil},
+		{"sql_false", []string{"--native-tests=false"}, nil},
+		{"native_false", []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests=false"}, []string{"--executor=native_table", "--node-id=model.analytics.orders"}},
+		{"native_true", []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests"}, []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests"}},
+		{"native_true_equals", []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests=true"}, []string{"--executor=native_table", "--node-id=model.analytics.orders", "--native-tests"}},
 		{"explicit_sql_wap", []string{"--executor=sql_wap"}, nil},
 		{"native_table", []string{"--executor=native_table", "--node-id=model.analytics.orders"}, []string{"--executor=native_table", "--node-id=model.analytics.orders"}},
 	} {
@@ -143,6 +147,8 @@ func TestDbtRunRejectsInvalidExecutorFlags(t *testing.T) {
 		flags []string
 		want  string
 	}{
+		{"quality_sql", []string{"--native-tests"}, "native-tests requires native_table"},
+		{"quality_invalid_bool", []string{"--native-tests=truthy"}, "invalid"},
 		{"native_missing_node", []string{"--executor=native_table"}, "nonempty node-id"},
 		{"native_empty_node", []string{"--executor=native_table", "--node-id="}, "nonempty node-id"},
 		{"native_blank_node", []string{"--executor=native_table", "--node-id= \t"}, "nonempty node-id"},

@@ -34,7 +34,7 @@ route=async(path,options)=>{
   let artifact=receipts.get(key);
   if(!artifact){
    if(url.pathname.endsWith('/plans')){plan=makePlan(context,{...body});delete plan.context.context;artifact={plan};}
-   else if(url.pathname.endsWith('/runs')){run=makeRun(context,body.executor==='native_table'?{executor:'native_table',selected_node_id:body.node_id,state:'QUEUED',tests:[],tests_status:'NOT_RUN',publication_allowed:false}:{});artifact={run};}
+   else if(url.pathname.endsWith('/runs')){run=makeRun(context,body.executor==='native_table'?{executor:'native_table',selected_node_id:body.node_id,state:'QUEUED',tests:[],tests_status:body.native_tests===true?'QUEUED':'NOT_RUN',...(body.native_tests===true?{native_tests:true}:{}),publication_allowed:false}:{});artifact={run};}
    else if(url.pathname.endsWith('/cancel')){run={...run,state:'CANCELING',cancel_requested:true};artifact={run};}
    else if(url.pathname.endsWith('/reconcile')){artifact={run};}
    else if(url.pathname.endsWith('/publish')){const publication={id:'pub-'+body.node_id.split('.').at(-1),kind:'publication',actor:dbDbtOwner(),context,run_id:run.id,parent_run_id:run.id,plan_id:run.plan_id,node_id:body.node_id,state:'QUEUED',build_id:'build',audit_id:null,publication_id:null,operation_ids:[]};pubs[publication.id]=publication;artifact={publication};}
@@ -70,6 +70,99 @@ function review(node=ids[1]){p.review=node;dbDbtRender();assert.ok(dbDbtNode('pu
 class DbtDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
+
+    def test_quality_optional_metadata_uncheck_and_saved_projection(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);p.method='native_table';p.node=ids[1];dbDbtRender();
+assert.equal(dbDbtNode('native-tests').checked,false);assert.equal(dbDbtNode('build').disabled,false);
+const old=structuredClone(p.runOptions);
+for(const metadata of [undefined,null,{},[],{eligible:1,count:2,reason_code:null},{eligible:true,count:0,reason_code:null},{eligible:true,count:-1,reason_code:null},{eligible:true,count:1,reason_code:'bad'},{eligible:true,count:1.5,reason_code:null},{eligible:false,count:0,reason_code:null}]){
+ p.runOptions=structuredClone(old);p.runOptions.nodes[1].testability=metadata;
+ assert.equal(dbDbtOptionsValid(p.runOptions),true);p.nativeTests=true;dbDbtRender();assert.equal(dbDbtNode('build').disabled,true);
+ assert.equal(dbDbtNode('native-tests').disabled,false);dbDbtNode('native-tests').checked=false;dbDbtNode('native-tests').onchange();assert.equal(dbDbtNode('build').disabled,false);
+}
+p.runOptions=structuredClone(old);p.runOptions=structuredClone(p.runOptions);p.runOptions.nodes[1].testability={eligible:true,count:2,reason_code:null};
+p.runOptions.nodes[2]={node_id:ids[2],eligible:true,reason_code:null,testability:{eligible:false,count:3,reason_code:'DBT_NATIVE_TEST_MATERIALIZED_DEPENDENCY'}};
+p.nativeTests=true;dbDbtRender();assert.equal(dbDbtNode('build').disabled,false);
+assert.match(dbDbtNode('native-tests-reason').textContent,/2/);
+dbDbtNode('node').value=ids[2];dbDbtNode('node').onchange();assert.equal(p.nativeTests,true);assert.equal(dbDbtNode('build').disabled,true);
+assert.match(dbDbtNode('native-tests-reason').textContent,/another TABLE\/VIEW/);assert.equal(dbDbtNode('native-tests').disabled,false);
+const before=posts().length;await dbDbtSubmit('build');assert.equal(posts().length,before);
+dbDbtNode('native-tests').checked=false;dbDbtNode('native-tests').onchange();assert.equal(dbDbtNode('build').disabled,false);
+for(const code of ['DBT_NATIVE_TEST_RECOMPILE_REQUIRED','DBT_NATIVE_TEST_EMPTY_SUITE','DBT_NATIVE_TEST_NEW_REASON']){
+ p.runOptions.nodes[2].testability={eligible:false,count:0,reason_code:code};dbDbtRender();assert.ok(dbDbtNode('native-tests-reason').textContent.length>10);
+}
+p.runOptions={...old,source_digest:'wrong'};p.nativeTests=true;dbDbtRender();assert.equal(dbDbtNode('build').disabled,true);
+""")
+
+    def test_quality_flag_resets_and_localized_controls(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);p.method='native_table';p.node=ids[1];
+p.runOptions=structuredClone(p.runOptions);p.runOptions.nodes[1].testability={eligible:true,count:2,reason_code:null};p.nativeTests=true;dbDbtRender();
+for(const lang of ['ja','en']){
+ setLanguage(lang);dbDbtRender();
+ for(const selected of [true,false,true]){
+  dbDbtNode('native-tests').checked=selected;dbDbtNode('native-tests').onchange();assert.equal(p.nativeTests,selected);
+  assert.equal(dbDbtNode('build').textContent,t(selected?'Run native TABLE and test':'Run native TABLE'));
+  assert.equal(text(dbDbtNode('native-help')).trim(),lang==='ja'
+   ?selected?'同じ DB の SANDBOX に新しい候補を1モデル作成し、付属する品質テスト一式を実行します。公開はできません。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。':'同じ DB の SANDBOX に新しい候補を1モデル作成します。テストは実行せず、公開できません。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。'
+   :selected?'Creates one new same-DB SANDBOX candidate and runs the complete attached quality suite. Publication is unavailable. Execution revalidates current project, policy and sources.':'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.');
+  assert.ok(text(dbDbtNode('native-tests').parentElement).includes(t('Run quality tests')));
+ }
+}
+setLanguage('en');for(const name of ['project','source','target','materialization','method']){p.nativeTests=true;dbDbtNode(name).onchange();assert.equal(p.nativeTests,false);}
+p.nativeTests=true;dbDbtSelectPlan({...plan,id:'another'},null);assert.equal(p.nativeTests,false);
+p.nativeTests=true;dbDbtSelectPlan({...plan,source_digest:'different'},null);assert.equal(p.nativeTests,false);
+p.nativeTests=true;dbDbtPurge();assert.equal(p.nativeTests,false);assert.equal(dbDbtNode('native-tests').checked,false);
+await dbDbtRefresh();p.nativeTests=true;p.role='bi_viewer';dbDbtPurge();assert.equal(p.nativeTests,false);assert.equal(dbDbtNode('native-controls').hidden,true);assert.equal(dbDbtNode('native-tests').disabled,true);
+""")
+
+    def test_quality_true_false_frozen_ack_mismatch_lost_reload_no_replay(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);
+for(const selected of [true,false]){
+ p.method='native_table';p.node=ids[1];p.runOptions=structuredClone(p.runOptions);p.runOptions.nodes[1].testability={eligible:true,count:2,reason_code:null};p.nativeTests=selected;lose=true;
+ await dbDbtSubmit('build');const original=p.intent,first=posts().at(-1),before=posts().length;
+ assert.equal(original.body.native_tests,selected?true:undefined);assert.equal(dbDbtNode('native-tests').disabled,true);
+ p.intent=null;await dbDbtRefresh();assert.deepEqual(p.intent,JSON.parse(JSON.stringify(original)));assert.equal(posts().length,before);assert.equal(dbDbtNode('native-tests').checked,selected);
+ lose=false;const saved=structuredClone(run);
+ for(const flag of [null,0,1,'true',!selected,...(selected?[undefined]:[])]){
+  wrong={run:{...saved,native_tests:flag}};await dbDbtRecover();assert.ok(p.intent);assert.equal(p.run,null);
+  assert.equal(posts().at(-1).options.body,first.options.body);assert.equal(posts().at(-1).options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);
+ }
+ wrong=null;await dbDbtRecover();assert.equal(p.intent,null);assert.equal(p.run.native_tests===true,selected);
+ await dbDbtObserve('plan',plan.id);
+}
+assert.equal(receipts.size,3);clearTimeout(p.timer);
+""")
+
+    def test_quality_stale_options_response_never_enables_action(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);
+p.method='native_table';p.node=ids[1];p.nativeTests=true;
+p.runOptions=structuredClone(p.runOptions);p.runOptions.nodes[1].testability={eligible:true,count:2,reason_code:null};dbDbtRender();assert.equal(dbDbtNode('build').disabled,false);
+const hold=deferred();observing=hold;const reading=dbDbtObserve('plan',plan.id);await tick();
+assert.equal(p.runOptions,null);assert.equal(dbDbtNode('build').disabled,true);assert.equal(dbDbtNode('native-tests').disabled,true);
+p.role='bi_viewer';dbDbtPurge();hold.resolve();await reading;
+assert.equal(p.runOptions,null);assert.equal(p.nativeTests,false);assert.equal(dbDbtNode('build').disabled,true);assert.equal(posts().length,1);
+""")
+
+    def test_quality_saved_result_independent_of_draft_and_materialization(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);
+p.method='native_table';p.node=ids[1];p.runOptions=structuredClone(p.runOptions);p.runOptions.nodes[1].testability={eligible:true,count:2,reason_code:null};p.nativeTests=true;
+await dbDbtSubmit('build');assert.equal(readBody(posts().at(-1)).native_tests,true);p.nativeTests=false;p.method='sql_wap';
+for(const status of ['QUEUED','RUNNING','PASSED','FAILED','ERROR','CANCELED','UNKNOWN']){
+ run={...run,native_tests:true,native_verified:true,tests_status:status,state:status==='PASSED'?'NATIVE_VERIFIED':status==='RUNNING'?'TESTING':'FAILED',tests:[{unique_id:'test.first',name:'not_null',state:status,failure_count:status==='FAILED'?3:0,operation_id:'test-op'}]};
+ await dbDbtObserve('run',run.id);assert.match(text(dbDbtNode('run-detail')),new RegExp(status));
+ assert.match(text(dbDbtNode('run-detail')),/Native TABLE verified/);assert.match(text(dbDbtNode('run-detail')),/Publication unavailable/);
+ assert.equal(dbDbtCanPublish(p.run.models[1]),false);assert.equal(dbDbtNode('publications').children.length,0);assert.match(text(dbDbtNode('tests')),/test-op/);
+ if(status==='FAILED')assert.match(text(dbDbtNode('run-detail')),/Failure count: 3/);
+ await dbDbtHistory();assert.match(text(dbDbtNode('history')),new RegExp(status));
+}
+run={...run,native_tests:undefined,tests_status:undefined,state:'NATIVE_VERIFIED'};p.nativeTests=true;await dbDbtObserve('run',run.id);
+assert.match(text(dbDbtNode('run-detail')),/tests not run; publication unavailable/);clearTimeout(p.timer);
+""")
 
     def test_native_saved_options_explicit_selection_payload_and_sql_default(self):
         self.javascript(r"""

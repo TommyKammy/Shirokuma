@@ -1301,6 +1301,157 @@ class DbtTests(unittest.TestCase):
         self.code('SQL_PERMISSION_DENIED', dbt.submit_publication, self.engineer, self.context,
             'not-owned', key='engineer', node_id='model.first')
 
+    def quality_plan(self):
+        def owned(*args, **kwargs):
+            summary = self.summary(*args, **kwargs)
+            summary['test_owners'] = {'test.first': 'model.first', 'test.second': 'model.second'}
+            return summary
+        self.compile.side_effect = owned
+        return self.plan()
+
+    def test_native_quality_strict_opt_in_preserves_false_payload_and_replay(self):
+        plan = self.quality_plan()
+        arguments = dict(plan_id=plan['id'], executor='native_table', node_id='model.first')
+        for value in (None, 0, 1, 'true', [], {}):
+            with self.subTest(value=value), patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')):
+                with self.assertRaises(ValueError):
+                    dbt.submit_run(self.engineer, self.context, key='invalid', native_tests=value, **arguments)
+        with self.assertRaises(ValueError):
+            dbt.submit_run(self.engineer, self.context, key='invalid', plan_id=plan['id'], native_tests=True)
+        old = dbt.submit_run(self.engineer, self.context, key='old-native', **arguments)
+        self.assertNotIn('native_tests', old)
+        self.assertEqual(old['tests_status'], 'NOT_RUN')
+        with patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')):
+            self.assertEqual(dbt.submit_run(self.engineer, self.context, key='old-native', native_tests=False, **arguments), old)
+            self.code('IDEMPOTENCY_CONFLICT', dbt.submit_run, self.engineer, self.context,
+                key='old-native', native_tests=True, **arguments)
+        dbt.cancel_run(self.engineer, self.context, old['id'], key='cancel-old')
+        dbt._execute(old['id'])
+        ack = dbt.submit_run(self.engineer, self.context, key='quality', native_tests=True, **arguments)
+        self.assertTrue(ack['native_tests'])
+        self.assertEqual(ack['tests_status'], 'QUEUED')
+        self.assertEqual([t['unique_id'] for t in ack['tests']], ['test.first'])
+        self.assertNotIn('_native_test_suite', ack)
+        with patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')):
+            self.assertEqual(dbt.submit_run(self.engineer, self.context, key='quality', native_tests=True, **arguments), ack)
+            self.code('IDEMPOTENCY_CONFLICT', dbt.submit_run, self.engineer, self.context,
+                key='quality', native_tests=False, **arguments)
+        with control_store.connect() as db:
+            saved = json.loads(db.execute("SELECT payload FROM dbt_requests WHERE idempotency_key='quality'").fetchone()[0])
+        self.assertIs(saved['native_tests'], True)
+
+    def test_native_quality_plan_contract_hash_and_legacy_readonly_options(self):
+        legacy = self.plan()
+        before = self.record(legacy['id'])
+        self.assertNotIn('_native_tests', before)
+        with patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')):
+            self.code('DBT_NATIVE_TEST_RECOMPILE_REQUIRED', dbt.submit_run, self.engineer, self.context,
+                key='quality', plan_id=legacy['id'], executor='native_table', node_id='model.first', native_tests=True)
+        opts = dbt.get_run_options(self.engineer, self.context, legacy['id'])
+        self.assertEqual(opts['nodes'][1]['testability']['reason_code'], 'DBT_NATIVE_TEST_RECOMPILE_REQUIRED')
+        def contract(p):
+            p['_native_tests'] = dict(version=1, owners={'test.first': 'model.first', 'test.second': 'model.second'})
+            self.assertNotEqual(dbt._hash_plan(p), before['_plan_digest'])
+            p['_plan_digest'] = dbt._hash_plan(p)
+        self.mutate(legacy['id'], contract)
+        opts = dbt.get_run_options(self.engineer, self.context, legacy['id'])
+        self.assertEqual(opts['nodes'][1]['testability'], dict(eligible=True, reason_code=None, count=1))
+        self.mutate(legacy['id'], lambda p: p['_native_tests']['owners'].update({'test.first': 'model.second'}))
+        self.code('DBT_PLAN_CHANGED', dbt.submit_run, self.engineer, self.context,
+            key='tampered', plan_id=legacy['id'], executor='native_table', node_id='model.first', native_tests=True)
+
+    def test_native_quality_child_boundary_uses_exact_saved_suite(self):
+        plan = self.quality_plan()
+        ack = dbt.submit_run(self.engineer, self.context, key='quality', plan_id=plan['id'],
+            executor='native_table', node_id='model.first', native_tests=True)
+        dbt._phase(ack['id'], 'TESTING', 'test', 'test.first')
+        with control_store.connect() as db:
+            dbt._check_child(db, self.engineer, self.context, ack['id'], 'test', 'test.first')
+            self.code('DBT_RUN_STOPPED', dbt._check_child, db, self.engineer, self.context, ack['id'], 'test', 'test.second')
+            current = dbt._row(db, ack['id'])[1]
+            self.assertFalse(dbt._native_node(db, current, 'test', 'test.second'))
+            build = dict(phase='build', node_id='model.first', route='dbt-native-table')
+            test = dict(phase='test', node_id='test.first', route='dbt-native-test')
+            self.assertTrue(dbt._native_links(db, current, [build]))
+            self.assertTrue(dbt._native_links(db, current, [build, test]))
+            for links in ([test], [build, build], [build, test, test],
+                    [build, dict(test, node_id='test.second')], [build, dict(test, route='dbt-test')]):
+                self.assertFalse(dbt._native_links(db, current, links))
+            legacy = dict(current, native_tests=False, tests=[], tests_status='NOT_RUN')
+            self.assertTrue(dbt._native_links(db, legacy, [build]))
+            self.assertFalse(dbt._native_links(db, legacy, [build, test]))
+            current['_native_test_suite'] = []
+            self.assertFalse(dbt._native_node(db, current, 'test', 'test.first'))
+
+    def quality_settlement_cutpoint(self, *, finalized=False, legacy=False):
+        plan = self.quality_plan()
+        ack = dbt.submit_run(self.engineer, self.context, key='settlement', plan_id=plan['id'],
+            executor='native_table', node_id='model.first', native_tests=not legacy)
+        proof = dict(native_verified=True, candidate={'snapshot_id': 'saved-build'})
+        def persisted(run):
+            run.update(state='NATIVE_VERIFIED' if finalized or legacy else 'TESTING',
+                native_verified=True, native_receipt=proof)
+            run['models'][0].update(state='NATIVE_VERIFIED', operation_ids=['saved-build'])
+            if not legacy:
+                run['tests_status'] = 'PASSED' if finalized else 'RUNNING'
+                for test in run['tests']:
+                    test.update(state='PASSED', failure_count=0, operation_id='saved-' + test['unique_id'],
+                        native_receipt=dict(test_verified=True, status='PASSED', failures=0))
+        self.mutate(ack['id'], persisted)
+        # Isolate settlement from the SDK: canonical receipt validators supply the
+        # already persisted evidence; settlement must never manufacture final success.
+        return ack['id'], proof
+
+    def test_native_quality_all_rows_saved_then_cancel_before_finalization(self):
+        ident, proof = self.quality_settlement_cutpoint()
+        before = self.record(ident)['tests']
+        with patch.object(dbt, '_native_saved', return_value=proof), \
+                patch.object(dbt, '_native_quality_saved', return_value=True):
+            for aggregate in ('RUNNING', 'PASSED'):
+                with self.subTest(aggregate=aggregate):
+                    self.mutate(ident, lambda r: r.update(state='TESTING', tests_status=aggregate, cancel_requested=True))
+                    dbt._settle(ident)
+                    run = self.record(ident)
+                    self.assertEqual((run['state'], run['tests_status']), ('CANCELED', 'CANCELED'))
+                    self.assertEqual(run['tests'], before)
+                    self.assertTrue(run['native_verified'])
+                    self.assertEqual(run['native_receipt'], proof)
+
+    def test_native_quality_all_rows_saved_then_owner_lost_before_finalization(self):
+        ident, proof = self.quality_settlement_cutpoint()
+        before = self.record(ident)['tests']
+        dbt._live.pop(ident)[-1].close()
+        with patch.object(dbt, '_native_saved', return_value=proof), \
+                patch.object(dbt, '_native_quality_saved', return_value=True):
+            for aggregate in ('RUNNING', 'PASSED'):
+                with self.subTest(aggregate=aggregate):
+                    self.mutate(ident, lambda r: r.update(state='TESTING', tests_status=aggregate, error_code=None))
+                    run = dbt.get_run(self.engineer, self.context, ident)
+                    self.assertEqual((run['state'], run['tests_status'], run['error_code']),
+                        ('FAILED', 'UNKNOWN', 'DBT_OWNER_LOST'))
+                    self.assertEqual(run['tests'], before)
+                    self.assertTrue(run['native_verified'])
+                    self.assertEqual(run['native_receipt'], proof)
+
+    def test_native_quality_finalized_pass_survives_owner_loss_settlement(self):
+        ident, proof = self.quality_settlement_cutpoint(finalized=True)
+        before = self.record(ident)['tests']
+        with patch.object(dbt, '_native_saved', return_value=proof), \
+                patch.object(dbt, '_native_quality_saved', return_value=True):
+            dbt._settle(ident, owner_lost=True)
+        run = self.record(ident)
+        self.assertEqual((run['state'], run['tests_status']), ('NATIVE_VERIFIED', 'PASSED'))
+        self.assertEqual(run['tests'], before)
+        self.assertTrue(run['native_verified'])
+
+    def test_native_quality_legacy_not_run_survives_settlement(self):
+        ident, proof = self.quality_settlement_cutpoint(legacy=True)
+        with patch.object(dbt, '_native_saved', return_value=proof), \
+                patch.object(dbt, '_native_quality_saved', return_value=True):
+            dbt._settle(ident, owner_lost=True)
+        run = self.record(ident)
+        self.assertEqual((run['state'], run['tests_status'], run['tests']), ('NATIVE_VERIFIED', 'NOT_RUN', []))
+
     def test_native_arguments_reject_before_capture_and_acceptance(self):
         for executor, node in [('unknown', None), (None, None), ([], 'model.first'),
                 ('native_table', None), ('native_table', ''), ('native_table', []),

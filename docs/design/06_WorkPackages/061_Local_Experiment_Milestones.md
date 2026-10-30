@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-30
-version: "7.11.0"
+version: "7.12.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-30 — DB-P6-3C2B4 native quality tests
+
+- Added explicit native_tests opt-in through API, real CLI and Workbench; installed TestRunner checks the complete attached suite against the original candidate snapshot. Build proof and quality status remain separate; legacy NOT_RUN requests and publication prohibition remain. See the [contract and evidence](../../guides/database-p6-3c2b4-native-quality-tests-2026-10-30.md).
+- E/A, two databases, cold resume, quality failure, SDK exit after SELECT, silent-SDK cancellation and owner loss passed actual runtime checks without replay. Preserved original metadata, credentials, WAP rows and 20 RAW/MARTS heads.
+- Technical acceptance passed: 3,307 Python tests, 34 existing skips, Go and design checks. Standard RunTask/full graph, replacement, native VIEW/publication, full DB-P6-3 and M1 owner acceptance remain separate.
 
 ### 2026-10-30 — DB-P6-3C2B3 Workbench native TABLE selection
 

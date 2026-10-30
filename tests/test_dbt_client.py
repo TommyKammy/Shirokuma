@@ -62,6 +62,8 @@ class ClientTests(unittest.TestCase):
                         record.update(id=PUB, kind='publication', run_id=ID, node_id='model.lake.orders')
                     if body and body.get('executor') == 'native_table':
                         record.update(executor=body['executor'], selected_node_id=body['node_id'])
+                        if body.get('native_tests') is True:
+                            record['native_tests'] = True
                     if self.command == 'POST':
                         key = self.headers['Idempotency-Key']
                         record = outer.receipts.setdefault(key, record)
@@ -91,6 +93,32 @@ class ClientTests(unittest.TestCase):
 
     def call(self, action, *flags, context=C):
         return client.main([action, '--api-url=' + self.url, '--context=' + json.dumps(context), *flags], profile=self.profile)
+
+    def test_native_quality_boolean_ack_and_frozen_uncertainty(self):
+        flags = ['--plan-id=' + PLAN, '--executor=native_table', '--node-id=model.lake.orders']
+        for selected in (False, True):
+            argv = flags + (['--native-tests'] if selected else [])
+            reply = self.call('run', *argv)
+            self.assertIs(reply['run'].get('native_tests', False), selected)
+            self.assertEqual('native_tests' in self.calls[-1][3], selected)
+            for value in (None, 0, 1, 'true', not selected):
+                self.corrupt = lambda r, v=value: r.update(native_tests=v)
+                before = len(self.calls)
+                reply = self.call('run', *argv, '--idempotency-key=quality-' + str(selected))
+                self.assertTrue(reply['request_uncertain'])
+                self.assertEqual(len(self.calls), before + 1)
+                self.assertIs(reply['retry']['intent'].get('native_tests', False), selected)
+                self.assertEqual(reply['retry']['body'], self.calls[-1][3])
+            self.corrupt = None
+        self.drop = True
+        reply = self.call('run', *flags, '--native-tests', '--idempotency-key=lost-quality')
+        self.assertTrue(reply['request_uncertain'])
+        self.assertIs(reply['retry']['intent']['native_tests'], True)
+        self.assertEqual(reply['retry']['idempotency_key'], 'lost-quality')
+        before = len(self.calls)
+        with self.assertRaises(ValueError):
+            self.call('run', '--plan-id=' + PLAN, '--native-tests')
+        self.assertEqual(len(self.calls), before)
 
     def test_commands_and_saved_auth(self):
         cases = [('projects', []), ('compile', []), ('plans', []), ('plan', ['--plan-id=' + PLAN]),

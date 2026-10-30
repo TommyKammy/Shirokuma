@@ -121,7 +121,9 @@ def validate_reply(reply, context, kind, expected, args, principal):
                     raise ValueError('plan association mismatch')
             if action == 'run':
                 if (record.get('executor', 'sql_wap') != args.executor
-                        or record.get('selected_node_id') != args.node_id):
+                        or record.get('selected_node_id') != args.node_id
+                        or type(record.get('native_tests', False)) is not bool
+                        or record.get('native_tests', False) is not args.native_tests):
                     raise ValueError('executor/node association mismatch')
             if action == 'publish' and (record.get('run_id') != args.run_id or record.get('node_id') != args.node_id):
                 raise ValueError('publication association mismatch')
@@ -153,6 +155,7 @@ def parser():
         if action == 'run':
             p.add_argument('--executor', choices=('sql_wap', 'native_table'), default='sql_wap')
             p.add_argument('--node-id')
+            p.add_argument('--native-tests', action='store_true')
         if action == 'publish':
             p.add_argument('--node-id', required=True)
         if action == 'publication':
@@ -167,6 +170,8 @@ def main(argv=None, *, profile=None):
     if (args.context or args.context_file) and (args.database is not None or args.schema is not None):
         raise ValueError('context conflicts with database/schema')
     if args.action == 'run':
+        if args.native_tests and args.executor != 'native_table':
+            raise ValueError('native tests require native executor')
         if args.executor == 'native_table':
             if args.node_id is None or not re.fullmatch(r'[A-Za-z0-9_.-]{1,512}', args.node_id):
                 raise ValueError('native node ID required')
@@ -212,6 +217,8 @@ def main(argv=None, *, profile=None):
             body = dict(plan_id=identifier(args.plan_id))
             if args.executor == 'native_table':
                 body.update(executor=args.executor, node_id=args.node_id)
+                if args.native_tests:
+                    body['native_tests'] = True
         elif action == 'runs':
             if args.plan_id:
                 params['plan_id'] = identifier(args.plan_id)

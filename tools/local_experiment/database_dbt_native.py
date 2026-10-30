@@ -1,6 +1,6 @@
 """Single TABLE SDK bridge for durable native runs and private operator proof.
 
-Only ModelRunner.execute and the installed TABLE macro run. The normal durable
+Only ModelRunner/TestRunner.execute and the installed TABLE/test macros run. The normal durable
 path isolates SDK globals in a fresh process; parent DataOps owns all backend
 work. The standalone operator retains its serial, exclusive admission contract.
 Neither path creates a WAP publication artifact or resumes saved receipts.
@@ -29,6 +29,8 @@ import warehouse_admission as admission
 _ROUTE = 'dbt-native-feasibility'
 _PROVENANCE = dict(experimental=True, executor='dbt_native_model_runner',
                    materialization='materialization_table_trino')
+_TEST_PROVENANCE = dict(experimental=True, executor='dbt_native_test_runner',
+                        materialization='materialization_test_default')
 _process = threading.Lock()
 _SDK_TIMEOUT = 120
 _SDK_MESSAGE_LIMIT = 1024 * 1024
@@ -92,8 +94,77 @@ def _plan(principal, context, plan_id, node_id):
     return (plan, *_node_plan(metadata, context, plan, node_id))
 
 
+def suite(plan, node_id):
+    """Pure complete attached-suite selection using saved manifest ownership."""
+    contract = plan.get('_native_tests')
+    if (not isinstance(contract, dict) or type(contract.get('version')) is not int
+            or contract['version'] != 1):
+        _reject('DBT_NATIVE_TEST_RECOMPILE_REQUIRED')
+    tests = plan.get('tests', [])
+    owners = contract.get('owners')
+    models = {m['unique_id']: m for m in plan['models']}
+    sources = {s['unique_id']: s for s in plan['source_bindings']}
+    if (set(contract) != {'version', 'owners'} or not isinstance(owners, dict) or len(tests) != len({t['unique_id'] for t in tests})
+            or set(owners) != {t['unique_id'] for t in tests}
+            or any(owner is not None and (type(owner) is not str or owner not in models.keys() | sources.keys())
+                   for owner in owners.values())
+            or any(owners[t['unique_id']] is not None and owners[t['unique_id']] not in t['depends_on'] for t in tests)):
+        _reject('DBT_NATIVE_TEST_OWNERS_INVALID')
+    selected = [deepcopy(t) for t in tests if owners[t['unique_id']] == node_id]
+    if not selected:
+        _reject('DBT_NATIVE_TEST_EMPTY_SUITE')
+    if node_id not in models or models[node_id]['materialized'] != 'table':
+        _reject('DBT_NATIVE_TEST_TABLE_REQUIRED')
+    for test in selected:
+        if test.get('test_type') not in compiler._TESTS or test.get('relation') is not None:
+            _reject('DBT_NATIVE_TEST_CONFIG_UNSUPPORTED')
+        pending, seen = list(test['depends_on']), set()
+        while pending:
+            uid = pending.pop()
+            if uid in seen:
+                continue
+            seen.add(uid)
+            if uid in sources:
+                continue
+            dep = models.get(uid)
+            if dep is None or (uid != node_id and dep['materialized'] != 'ephemeral'):
+                _reject('DBT_NATIVE_TEST_MATERIALIZED_DEPENDENCY')
+            pending.extend(dep['depends_on'])
+        relations = {tuple(s['relation']): registry.ResourceRef('offline', 'raw', uid, 1)
+                     for uid, s in sources.items() if uid in seen}
+        relations[tuple(models[node_id]['relation'])] = registry.ResourceRef('offline', 'sandbox', node_id, 1)
+        try:
+            used = {compiler._identity(t) for _, t in compiler._physical(compiler._sql_tree(test['compiled_sql']))}
+            compiler.normalize_select(test['compiled_sql'], {r: relations[r] for r in used}, database_id='offline')
+        except (compiler.DbtError, KeyError):
+            _reject('DBT_NATIVE_TEST_SELECT_UNSUPPORTED')
+    return selected
+
+
+def _verify_owners(plan, artifacts):
+    """Legacy builds ignore extra summary keys; new plans attest raw ownership."""
+    if '_native_tests' not in plan:
+        return
+    contract = plan['_native_tests']
+    summary, raw = artifacts[:2]
+    owners = {uid: node.get('attached_node') for uid, node in raw['nodes'].items()
+              if node.get('resource_type') == 'test'}
+    if (contract != dict(version=1, owners=owners) or summary.get('test_owners') != owners):
+        _reject('DBT_NATIVE_TEST_OWNERS_CHANGED')
+
+
+def _fresh_summary(plan, artifacts):
+    summary = artifacts[0]
+    if (summary['source_digest'] != plan['source_digest'] or summary['models'] != plan['models']
+            or summary['tests'] != plan['tests'] or summary['compatibility'] != plan['compatibility']
+            or summary['sources'] != [{k: v for k, v in s.items() if k != 'ref'}
+                                     for s in plan['source_bindings']]):
+        _reject('DBT_PLAN_CHANGED')
+    _verify_owners(plan, artifacts)
+
+
 def run_options(db, metadata, principal, context, plan):
-    """Readonly projection. No SDK import, owners, credentials or runtime probes."""
+    """Readonly projection using saved metadata; no SDK, credentials or runtime probes."""
     result = dict(version=1, plan_id=plan['id'], source_digest=plan.get('source_digest'),
                   executor='native_table', eligible=False, reason_code=None, nodes=[])
     try:
@@ -109,7 +180,16 @@ def run_options(db, metadata, principal, context, plan):
             reason = error.code
         except compiler.DbtError:
             reason = 'DBT_NATIVE_SELECT_REQUIRED'
-        result['nodes'].append(dict(node_id=model['unique_id'], eligible=reason is None, reason_code=reason))
+        test_reason = None
+        contract = plan.get('_native_tests')
+        owners = contract.get('owners', {}) if isinstance(contract, dict) else {}
+        count = sum(owner == model['unique_id'] for owner in owners.values()) if isinstance(owners, dict) else 0
+        try:
+            suite(plan, model['unique_id'])
+        except QueryError as error:
+            test_reason = error.code
+        result['nodes'].append(dict(node_id=model['unique_id'], eligible=reason is None, reason_code=reason,
+            testability=dict(eligible=test_reason is None, reason_code=test_reason, count=count)))
     # Global eligibility describes the saved plan gate, separately from nodes.
     result['eligible'] = True
     return result
@@ -242,6 +322,128 @@ class _Bridge:
             raise
 
 
+def _test_wrapper(body):
+    return ('SELECT COUNT(*) AS failures, COUNT(*) != 0 AS should_warn, '
+            'COUNT(*) != 0 AS should_error FROM (' + body + ') dbt_internal_test')
+
+
+def _native_test_select(sql, bindings, approved, database_id):
+    """One exact builtin COUNT wrapper around the saved normalized SELECT."""
+    import sqlglot
+    from sqlglot import exp
+    try:
+        trees = sqlglot.parse(sql, read='trino', error_level=sqlglot.ErrorLevel.RAISE)
+        if len(trees) != 1 or not isinstance(trees[0], exp.Select):
+            _reject('DBT_NATIVE_TEST_WRAPPER_CHANGED')
+        tree = trees[0]
+        if any(n.comments for n in tree.walk()):
+            _reject('DBT_NATIVE_TEST_WRAPPER_CHANGED')
+        body = tree.args.get('from_').this
+        if not isinstance(body, exp.Subquery):
+            _reject('DBT_NATIVE_TEST_WRAPPER_CHANGED')
+        normalized = compiler.normalize_select(body.this.sql(dialect='trino'), bindings, database_id=database_id)
+        if normalized != approved:
+            _reject('DBT_NATIVE_TEST_BODY_CHANGED')
+        body.set('this', sqlglot.parse_one('SELECT 1', read='trino'))
+        if tree != sqlglot.parse_one(_test_wrapper('SELECT 1'), read='trino'):
+            _reject('DBT_NATIVE_TEST_WRAPPER_CHANGED')
+        return normalized
+    except (sqlglot.errors.SqlglotError, ValueError, AttributeError, compiler.DbtError):
+        _reject('DBT_NATIVE_TEST_WRAPPER_CHANGED')
+
+
+def _test_plan(plan, test, build_receipt, context, node_id=None):
+    node_id = node_id or build_receipt['node_id']
+    target = tuple(next(m['relation'] for m in plan['models'] if m['unique_id'] == node_id))
+    relations = {tuple(s['relation']): registry.ResourceRef(**s['ref']) for s in plan['source_bindings']}
+    relations[target] = registry.ResourceRef(**build_receipt['candidate']['ref'])
+    used = {compiler._identity(t) for _, t in compiler._physical(compiler._sql_tree(test['compiled_sql']))}
+    bindings = {r: relations[r] for r in used}
+    return bindings, compiler.normalize_select(test['compiled_sql'], bindings, database_id=context.database_id)
+
+
+class _TestBridge(_Bridge):
+    """One readonly test query against the exact build candidate and run pins."""
+    def __init__(self, execution, plan, test, build, payload, *, wire=False):
+        self.execution, self.plan, self.test, self.build = execution, plan, test, build
+        self.wire = wire
+        self.thread, self.parent = threading.get_ident(), admission.current()
+        self.aborted, self.called, self.response, self.failures = False, False, None, None
+        self.locator = registry.DestinationLocator(**build['candidate_locator'])
+        self.target = tuple(next(m['relation'] for m in plan['models']
+                                 if m['unique_id'] == payload['selected_node_id']))
+        self.bindings, self.approved = _test_plan(plan, test, build, execution._context(), payload['selected_node_id'])
+        self.inputs = db_dbt._pinned(execution, self.approved['sources'])
+        self.receipt = dict(payload, test_verified=False, candidate=deepcopy(build['candidate']), pins=self.inputs)
+        self._candidate()
+
+    def relation(self, *args, **kwargs):
+        self.deny()
+
+    def _candidate(self):
+        if self.execution.wap_measure(registry.ResourceRef(**self.build['candidate']['ref'])) != self.build['candidate']:
+            _reject('DBT_NATIVE_TEST_CANDIDATE_CHANGED')
+
+    def execute(self, sql, auto_begin=False, fetch=False, limit=None):
+        try:
+            self._scope()
+            if self.called or limit is not None or auto_begin is not True or fetch is not True:
+                _reject('DBT_NATIVE_TEST_CALLBACK_REUSED')
+            self.called = True
+            context = self.execution._context()
+            plan = _plan(self.execution.principal, context, self.plan['id'], self.receipt['selected_node_id'])[0]
+            if plan != self.plan or self.test not in suite(plan, self.receipt['selected_node_id']):
+                _reject('DBT_PLAN_CHANGED')
+            _native_test_select(sql, self.bindings, self.approved, context.database_id)
+            self._candidate()
+            _check_inputs(self.execution, self.inputs, self.approved['sources'])
+            generated = manual_wap._compile_model(**self.approved, execution=self.execution, measurements=self.inputs)
+            with control_store.connect() as db:
+                db.execute("UPDATE dataops_operations SET result=? WHERE id=? AND state='ACTIVE'",
+                           (ds._json(self.receipt), self.execution.id))
+            page = self.execution._execute('dbt_test', _test_wrapper(generated), 'native-test')
+            self._scope()
+            self._candidate()
+            _check_inputs(self.execution, self.inputs, self.approved['sources'])
+            data, columns = page.get('data'), page.get('columns')
+            if (not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], list)
+                    or len(data[0]) != 3 or not isinstance(columns, list)
+                    or any(not isinstance(c, dict) for c in columns)
+                    or [c.get('name') for c in columns] != ['failures', 'should_warn', 'should_error']):
+                _reject('DBT_NATIVE_TEST_RESULT_INVALID')
+            count, warn, error = data[0]
+            if (type(count) is not int or count < 0 or type(warn) is not bool or type(error) is not bool
+                    or warn != (count != 0) or error != (count != 0)):
+                _reject('DBT_NATIVE_TEST_RESULT_INVALID')
+            self.failures = count
+            self.receipt['query_id'] = page['id']
+            scope = ds._dbt.get()
+            if scope is None:
+                _reject('DBT_CONTINUATION_REQUIRED')
+            with control_store.connect() as db:
+                db_dbt._check_child(db, self.execution.principal, context, *scope[5:])
+                _, run = db_dbt._row(db, scope[5])
+                results = run.setdefault('_native_test_results', {})
+                if self.test['unique_id'] in results:
+                    _reject('DBT_NATIVE_TEST_CALLBACK_REUSED')
+                results[self.test['unique_id']] = dict(operation_id=self.execution.id, query_id=page['id'],
+                    failures=count, should_warn=warn, should_error=error, pins=deepcopy(self.inputs),
+                    candidate=deepcopy(self.build['candidate']))
+                db_dbt._write(db, run)
+            response = dict(_message='SELECT', code='SELECT', rows_affected=1)
+            if self.wire:
+                self.response = response
+                return dict(adapter_response=response, data=data)
+            from dbt.adapters.contracts.connection import AdapterResponse
+            import agate
+            self.response = AdapterResponse(**response)
+            return self.response, agate.Table(data, column_names=['failures', 'should_warn', 'should_error'],
+                column_types=[agate.Number(), agate.Boolean(), agate.Boolean()])
+        except BaseException:
+            self.aborted = True
+            raise
+
+
 @contextmanager
 def _without_dotenv():
     """Suppress dbt.cli.main's import-time dotenv loader, changing one key only."""
@@ -356,6 +558,48 @@ def _run_native(artifacts, node_id, bridge):
             raise
 
 
+def _run_test_native(artifacts, node_id, bridge):
+    """Installed TestRunner and default test macro with no adapter I/O escape."""
+    with _runtime(artifacts) as (config, manifest, adapter):
+        from dbt.task.test import TestRunner
+        from dbt.artifacts.schemas.results import TestStatus
+        node = manifest.nodes[node_id]
+        raw = artifacts[1]['nodes'][node_id]
+        compiler._semantic_config({node_id: raw})
+        if (raw.get('test_metadata', {}).get('name') not in compiler._TESTS
+                or raw.get('test_metadata', {}).get('namespace') not in (None, 'dbt')
+                or raw.get('config', {}).get('materialized') != 'test'):
+            _reject('DBT_NATIVE_TEST_CONFIG_UNSUPPORTED')
+        if compiler.normalize_select(node.compiled_code, bridge.bindings,
+                database_id=bridge.locator.database_id) != bridge.approved:
+            _reject('DBT_NATIVE_TEST_BODY_CHANGED')
+        macro = manifest.find_materialization_macro_by_name(config.project_name, node.get_materialization(), adapter.type())
+        if macro.unique_id != 'macro.dbt.materialization_test_default':
+            _reject('DBT_NATIVE_TEST_MACRO_ORIGIN')
+        adapter.execute = bridge.execute
+        adapter.get_relation = bridge.deny
+        for name in ('open', 'add_query', 'execute', 'commit', 'begin', 'clear_transaction'):
+            setattr(adapter.connections, name, bridge.deny)
+        for name in ('create_schema', 'drop_schema', 'drop_relation', 'rename_relation',
+                     'get_columns_in_relation', 'list_relations_without_caching', 'cache_added',
+                     'cache_dropped', 'cache_renamed', 'commit_if_has_connection'):
+            setattr(adapter, name, bridge.deny)
+        try:
+            result = TestRunner(config, adapter, node, 1, 1).execute(node, manifest)
+            expected = TestStatus.Pass if bridge.failures == 0 else TestStatus.Fail
+            if (bridge.aborted or not bridge.called or bridge.failures is None or result.status != expected
+                    or result.failures != bridge.failures or isinstance(result.failures, bool)
+                    or bridge.response is None or result.adapter_response != bridge.response.to_dict(omit_none=True)):
+                _reject('DBT_NATIVE_TEST_RUNNER_FAILED')
+            if compiler.normalize_select(node.compiled_code, bridge.bindings,
+                    database_id=bridge.locator.database_id) != bridge.approved:
+                _reject('DBT_NATIVE_TEST_BODY_CHANGED')
+            return result
+        except BaseException:
+            bridge.aborted = True
+            raise
+
+
 def _run_subprocess(artifacts, node_id, bridge):
     """SDK only in a fresh process; typed callbacks stay on this owning thread."""
     _, raw, command, env = artifacts
@@ -364,6 +608,9 @@ def _run_subprocess(artifacts, node_id, bridge):
         target=bridge.target, database_id=bridge.locator.database_id,
         bindings=[dict(relation=k, ref=asdict(v)) for k, v in bridge.bindings.items()],
         approved=dict(bridge.approved, sources={k: asdict(v) for k, v in bridge.approved['sources'].items()}))
+    testing = isinstance(bridge, _TestBridge)
+    if testing:
+        request['mode'] = 'test'
     child = None
     deadline = time.monotonic() + _SDK_TIMEOUT
     buffered = bytearray()
@@ -434,7 +681,11 @@ def _run_subprocess(artifacts, node_id, bridge):
             message = receive()
             if not isinstance(message, dict):
                 _reject('DBT_NATIVE_PROTOCOL_FAILED')
-            if message == {'op': 'done', 'status': 'success'}:
+            done = (message == {'op': 'done', 'status': 'success'} if not testing else
+                    set(message) == {'op', 'status', 'failures'} and message['op'] == 'done'
+                    and type(message['failures']) is int and message['failures'] == bridge.failures
+                    and message['status'] == ('PASSED' if bridge.failures == 0 else 'FAILED'))
+            if done:
                 child.stdin.close()
                 if receive() is not eof:
                     _reject('DBT_NATIVE_PROTOCOL_FAILED')
@@ -519,12 +770,7 @@ def materialize_accepted(execution, principal, context, plan, node, bindings, ap
             with compiler._compiled_project(project['path'], catalog=context.sql_catalog,
                     source_schema=plan['_source_sql_schema'],
                     staging_materialization=plan['staging_materialization']) as artifacts:
-                summary = artifacts[0]
-                if (summary['source_digest'] != plan['source_digest'] or summary['models'] != plan['models']
-                        or summary['tests'] != plan['tests'] or summary['compatibility'] != plan['compatibility']
-                        or summary['sources'] != [{k: v for k, v in s.items() if k != 'ref'}
-                                                 for s in plan['source_bindings']]):
-                    _reject('DBT_PLAN_CHANGED')
+                _fresh_summary(plan, artifacts)
                 locator = registry.DestinationLocator(context.database_id, context.schema_id,
                                                      'n_' + execution.id.replace('-', '')[:17])
                 receipt = dict(payload, native_verified=False)
@@ -543,6 +789,47 @@ def materialize_accepted(execution, principal, context, plan, node, bindings, ap
             bridge.aborted = True
         # Generic reconciliation preserves UNKNOWN/cancel/owner loss.
         # Never clean up, retry, resume or claim native verification.
+        try:
+            if execution._row()['state'] == 'ACTIVE':
+                execution.fail()
+        except (QueryError, admission.AdmissionConflict):
+            pass
+        finally:
+            live = ds._live.pop(execution.id, None)
+            if live is not None:
+                live[2].close()
+            execution._inspect()
+        raise
+
+
+def test_accepted(execution, principal, context, plan, test, build_receipt, payload, *, isolated=True):
+    """One accepted suite child; never retry, publish or alter the candidate."""
+    bridge = None
+    try:
+        with ds._accepted(execution):
+            fresh = _plan(principal, context, plan['id'], payload['selected_node_id'])[0]
+            if fresh != plan or test not in suite(fresh, payload['selected_node_id']):
+                _reject('DBT_PLAN_CHANGED')
+            project = db_dbt._projects().get(plan['project_id'])
+            if project is None:
+                _reject('DBT_PROJECT_NOT_FOUND')
+            with compiler._compiled_project(project['path'], catalog=context.sql_catalog,
+                    source_schema=plan['_source_sql_schema'],
+                    staging_materialization=plan['staging_materialization']) as artifacts:
+                _fresh_summary(plan, artifacts)
+                bridge = _TestBridge(execution, plan, test, build_receipt, payload, wire=isolated)
+                (_run_subprocess if isolated else _run_test_native)(artifacts, test['unique_id'], bridge)
+                bridge._scope()
+                bridge._candidate()
+                _check_inputs(execution, bridge.inputs, bridge.approved['sources'])
+                if bridge.aborted or not bridge.called or bridge.failures is None:
+                    _reject('DBT_NATIVE_TEST_RUNNER_FAILED')
+                _plan(principal, context, plan['id'], payload['selected_node_id'])
+                return execution.complete(dict(bridge.receipt, test_verified=True, failures=bridge.failures,
+                    status='PASSED' if bridge.failures == 0 else 'FAILED'))
+    except BaseException:
+        if bridge is not None:
+            bridge.aborted = True
         try:
             if execution._row()['state'] == 'ACTIVE':
                 execution.fail()

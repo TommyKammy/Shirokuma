@@ -139,6 +139,12 @@ class CompileBoundaryTests(unittest.TestCase):
         self.assertTrue(all(m['view_security'] == 'INVOKER' for m in views))
         self.assertTrue(all(m['relation'] and m['table_properties'] == {} for m in views))
         summary = dbt.compile_project(self.project, catalog='cat', source_schema='raw', staging_materialization='ephemeral')
+        self.assertEqual(set(summary['test_owners']), {t['unique_id'] for t in summary['tests']})
+        owners = summary['test_owners']
+        dim = next(m['unique_id'] for m in summary['models'] if m['name'] == 'dim_customers')
+        relationships = [t for t in summary['tests'] if t['test_type'] == 'relationships']
+        self.assertTrue(relationships)
+        self.assertTrue(any(dim in t['depends_on'] and owners[t['unique_id']] != dim for t in relationships))
         tables = [m for m in summary['models'] if m['materialized'] == 'table']
         self.assertTrue(tables)
         self.assertTrue(all(m['table_properties'] == {'format': 'PARQUET'} for m in tables))

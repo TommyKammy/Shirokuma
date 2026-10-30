@@ -414,7 +414,8 @@ def _validate_manifest(manifest, *, catalog, source_schema):
                     for i, rel in enumerate(sorted(used))}
         normalize_select(item['compiled_sql'], bindings, database_id='offline')
     return {'compatibility': compatibility(), 'models': [model_by_id[uid] for uid in order], 'tests': tests,
-            'sources': sources, 'materialized_order': [uid for uid in order
+            'sources': sources, 'test_owners': {t['unique_id']: nodes[t['unique_id']].get('attached_node') for t in tests},
+            'materialized_order': [uid for uid in order
                 if model_by_id[uid]['materialized'] == 'table']}
 
 

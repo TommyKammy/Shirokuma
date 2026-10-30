@@ -165,6 +165,27 @@ class Routes(unittest.TestCase):
                         self.assertEqual(response.status, expected, reply)
                         self.assertEqual(call.call_count, int(expected == 202))
 
+    def test_native_quality_optional_strict_bool_and_executor(self):
+        base = dict(context=asdict(C), plan_id=ID)
+        for executor in ('native_table', 'sql_wap'):
+            for flag in ('missing', False, True, None, 0, 1, 'true', [], {}):
+                body = dict(base, executor=executor)
+                if executor == 'native_table':
+                    body['node_id'] = 'model.arbitrary.table'
+                if flag != 'missing':
+                    body['native_tests'] = flag
+                valid = flag == 'missing' or type(flag) is bool and (not flag or executor == 'native_table')
+                with self.subTest(executor=executor, flag=flag), patch.object(routes.dbt, 'submit_run', return_value={}) as run:
+                    h = self.handler(BASE + 'runs', body, {'Content-Type': 'application/json', 'Idempotency-Key': 'quality'})
+                    if valid:
+                        routes.dispatch(h, 'POST', h.path, {}, 'actor', C.selected_role)
+                        expected = {k: v for k, v in body.items() if k != 'context'}
+                        run.assert_called_once_with('actor', C, key='quality', **expected)
+                    else:
+                        with self.assertRaises(ValueError):
+                            routes.dispatch(h, 'POST', h.path, {}, 'actor', C.selected_role)
+                        run.assert_not_called()
+
     def test_native_run_strict_optional_fields_before_service(self):
         good = dict(context=asdict(C), plan_id=ID, executor='native_table', node_id='model.arbitrary.table')
         h = self.handler(BASE + 'runs', good, {'Content-Type': 'application/json', 'Idempotency-Key': 'native'})

@@ -15,6 +15,7 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		flags := cmd.Flags()
 		values := map[string]*string{}
+		var nativeTests *bool
 		names := []string{}
 		add := func(name, fallback string, required bool) {
 			names = append(names, name)
@@ -42,6 +43,7 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 			add("plan-id", "", action != "runs")
 		}
 		if action == "run" {
+			nativeTests = flags.Bool("native-tests", false, "Run attached quality tests with native TABLE")
 			add("executor", "sql_wap", false)
 			add("node-id", "", false)
 		}
@@ -80,6 +82,9 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 				}
 			}
 			if action == "run" {
+				if *nativeTests && value("executor") != "native_table" {
+					return fmt.Errorf("native-tests requires native_table executor")
+				}
 				switch value("executor") {
 				case "sql_wap":
 					if value("node-id") != "" {
@@ -112,6 +117,9 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 				if value(name) != "" {
 					args = append(args, "--"+name+"="+value(name))
 				}
+			}
+			if nativeTests != nil && *nativeTests {
+				args = append(args, "--native-tests")
 			}
 			data, runErr := runner.Run(cmd.Context(), python, args...)
 			if runErr != nil {
