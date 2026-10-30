@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-30
-version: "2.10.0"
+version: "2.11.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -23,7 +23,7 @@ tags: [shirokuma, local, handoff, gates]
 後続計画は[Databaseコア機能統合とコンピュート拡張](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を参照する。DB作成導線は[本人の条件付き受入](../../guides/database-logical-create-owner-acceptance-2026-10-28.md)に進み、待ち時間改善を継続する。
 2026-10-29、DB-P6-0の[表示契約](../../guides/database-p6-0-implementation-2026-10-29.md)、DB-P6-1の[保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。
 [DB-P6-2の共有LOCAL管理](../../guides/database-p6-2-implementation-2026-10-29.md)は実装済み、技術受入は完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。read-only UNKNOWNは結果を変えず実行閉鎖・OPENまで照合し、元の138 DB／552 Schemaとbindingを保持した。
-[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)と[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)は各限定範囲の技術受入済み。[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)でnative TABLE 1件の明示選択を保存run／API／CLIへ接続し、履歴でテスト未実行・公開不可を区別した。E／A・2DB・休止復帰・Snapshot・取消／停止を確認し、この限定範囲の技術受入を完了した。画面からのnative実行選択、通常RunTask／graph・native test・置換、DB-P6-3全体とM1本人受入は後続である。
+[DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)と[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)は各限定範囲の技術受入済み。[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)でnative TABLE 1件を保存run／API／CLIへ接続した。[C2B3](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md)ではWorkbenchの実行方式・対象モデルの明示選択と利用条件の表示を実装した。SQL／WAPを既定に保ち、非対応理由、テスト未実行・公開不可、元要求の回収を区別する。通常サーバーで2DB・休止復帰と保全を確認し、この限定範囲の技術受入を完了した。通常RunTask／graph・native test・置換、DB-P6-3全体とM1本人受入は後続である。
 DB-P7〜9は後続計画であり、下表の旧PhaseのCompletedから新Database対応・実サイズ変更・用途別Warehouseの完了を推定しない。
 
 | Phase / WP | Gate Objective | Current Status |

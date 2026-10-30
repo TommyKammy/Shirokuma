@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-30
-version: "7.10.0"
+version: "7.11.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-30 — DB-P6-3C2B3 Workbench native TABLE selection
+
+- Added explicit execution-method and single-model selection, per-model eligibility reasons, and original-intent recovery. SQL/WAP remains the default; native results remain tests NOT_RUN and publication unavailable. See the [UI contract and evidence](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md).
+- Two admin-owned databases passed actual UI native execution with one child/CREATE each, including cold resume and ALPHA/BETA isolation. Existing SQL/WAP, viewer restrictions, other-owner refusal, read-only reload/history, Japanese/English and 390px layout passed; preserved original metadata, credentials, configuration and RAW/MARTS heads. Technical acceptance passed: 3,281 Python tests, 34 existing skips, Go and design checks.
+- Standard RunTask/graph, native tests, replacement and publication remain separate. Full DB-P6-3 and M1 owner acceptance stay open.
 
 ### 2026-10-30 — DB-P6-3C2B2 saved native TABLE runs
 

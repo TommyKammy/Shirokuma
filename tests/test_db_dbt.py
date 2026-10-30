@@ -100,6 +100,94 @@ class DbtTests(unittest.TestCase):
             fn(record)
             dbt._write(db, record)
 
+    def test_native_options_readonly_and_agree_with_submission_validator(self):
+        import database_dbt_native as native
+        plan = self.plan()
+        with control_store.connect() as db:
+            before = list(db.iterdump())
+        with (patch.object(qs, '_acquire_query_owner', side_effect=AssertionError('owner')),
+              patch.object(qs, '_capture_dataops', side_effect=AssertionError('credentials')),
+              patch.object(compiler, 'compile_project', side_effect=AssertionError('compile'))):
+            for _ in range(2):
+                self.assertEqual(dbt.get_plan(self.engineer, self.context, plan['id']), plan)
+                options = dbt.get_run_options(self.engineer, self.context, plan['id'])
+        self.assertEqual((options['version'], options['plan_id'], options['source_digest']),
+                         (1, plan['id'], plan['source_digest']))
+        self.assertTrue(options['eligible'])
+        self.assertEqual([n['reason_code'] for n in options['nodes']],
+            ['DBT_NATIVE_TABLE_REQUIRED', None, 'DBT_NATIVE_MATERIALIZED_DEPENDENCY'])
+        for node in options['nodes']:
+            if node['eligible']:
+                native._plan(self.engineer, self.context, plan['id'], node['node_id'])
+            else:
+                self.code(node['reason_code'], native._plan, self.engineer, self.context, plan['id'], node['node_id'])
+        with control_store.connect() as db:
+            self.assertEqual(before, list(db.iterdump()))
+
+    def test_native_options_global_owner_full_context_contract_state_hash_and_sources(self):
+        plan = self.plan()
+        def options(context=None, principal=None):
+            return dbt.get_run_options(principal or self.engineer, context or self.context, plan['id'])
+        self.assertEqual(options(self.admin_context, self.admin)['reason_code'], 'CONTEXT_MISMATCH')
+        # A saved full context mismatch is visible to an authorized admin observer.
+        original = self.record(plan['id'])
+        for change, reason in [
+            ({'state': 'COMPILING'}, 'DBT_PLAN_NOT_READY'),
+            ({'state': 'FAILED'}, 'DBT_PLAN_NOT_READY'),
+            ({'compatibility': dict(version=1, executor='sql_wap', status='supported', issues=[])}, 'DBT_PLAN_RECOMPILE_REQUIRED'),
+            ({'compatibility': None}, 'DBT_PLAN_RECOMPILE_REQUIRED'),
+            ({'source_digest': 'tampered'}, 'DBT_PLAN_CHANGED'),
+            ({'context': dict(original['context'], grant_revision=999)}, 'CONTEXT_MISMATCH')]:
+            with self.subTest(change=change):
+                self.mutate(plan['id'], lambda p: (p.clear(), p.update(original), p.update(change)))
+                result = options()
+                self.assertFalse(result['eligible'])
+                self.assertEqual(result['reason_code'], reason)
+                self.assertEqual(result['nodes'], [])
+        self.mutate(plan['id'], lambda p: (p.clear(), p.update(original), p.pop('compatibility')))
+        self.assertEqual(options()['reason_code'], 'DBT_PLAN_RECOMPILE_REQUIRED')
+        self.mutate(plan['id'], lambda p: (p.clear(), p.update(original)))
+        with patch.object(dbt, '_source_identities', side_effect=QueryError('STALE_RESOURCE', 409)):
+            self.assertEqual(options()['reason_code'], 'STALE_RESOURCE')
+        self.mutate(plan['id'], lambda p: p.update(state='COMPILING'))
+        with patch.object(qs, '_acquire_query_owner', side_effect=AssertionError('GET owner')):
+            self.assertEqual(options()['reason_code'], 'DBT_PLAN_NOT_READY')
+        self.assertEqual(self.record(plan['id'])['state'], 'COMPILING')
+
+    def test_native_options_per_node_format_view_raw_and_constant_select(self):
+        import database_dbt_native as native
+        plan = self.plan()
+        original = self.record(plan['id'])
+        def change(fn):
+            def update(p):
+                p.clear()
+                p.update(json.loads(json.dumps(original)))
+                fn(p)
+                p['_plan_digest'] = dbt._hash_plan(p)
+            self.mutate(plan['id'], update)
+        for props in [{}, {'format': 'ORC'}, {'format': 'PARQUET', 'other': True}]:
+            change(lambda p: p['models'][1].update(table_properties=props))
+            node = dbt.get_run_options(self.engineer, self.context, plan['id'])['nodes'][1]
+            self.assertEqual(node['reason_code'], 'DBT_NATIVE_PARQUET_REQUIRED')
+            self.code(node['reason_code'], native._plan, self.engineer, self.context, plan['id'], 'model.first')
+        change(lambda p: p['models'][1].update(materialized='view'))
+        self.assertEqual(dbt.get_run_options(self.engineer, self.context, plan['id'])['nodes'][1]['reason_code'], 'DBT_NATIVE_TABLE_REQUIRED')
+        metadata = dbt._access(self.engineer, self.context)
+        with patch.object(metadata, '_schema', return_value=type('Schema', (), {'sql_name': 'raw', 'purpose': 'marts'})()):
+            with control_store.connect() as db:
+                p = self.record(plan['id'])
+                p['models'][1].update(materialized='table')
+                p['_plan_digest'] = dbt._hash_plan(p)
+                self.assertEqual(native.run_options(db, metadata, self.engineer, self.context, p)['nodes'][1]['reason_code'], 'DBT_NATIVE_RAW_REQUIRED')
+                # RAW is per used binding; source identity validation stays plan-wide.
+                p['models'][1].update(compiled_sql='SELECT 42 AS arbitrary_value', depends_on=[])
+                p['_plan_digest'] = dbt._hash_plan(p)
+                self.assertTrue(native.run_options(db, metadata, self.engineer, self.context, p)['nodes'][1]['eligible'])
+                with patch.object(dbt, '_source_identities', side_effect=QueryError('STALE_RESOURCE', 409)):
+                    self.assertEqual(native.run_options(db, metadata, self.engineer, self.context, p)['reason_code'], 'STALE_RESOURCE')
+        change(lambda p: p['models'][1].update(compiled_sql='DELETE FROM forbidden'))
+        self.assertEqual(dbt.get_run_options(self.engineer, self.context, plan['id'])['nodes'][1]['reason_code'], 'DBT_NATIVE_SELECT_REQUIRED')
+
     def view_project(self):
         def summary(*args, **kwargs):
             result = self.summary(*args, **kwargs)
@@ -701,8 +789,34 @@ class DbtTests(unittest.TestCase):
         args = dict(key='lost-compile', project_id='lake_marts', source_schema='raw', target_schema='marts', staging_materialization=None)
         ack = dbt.submit_plan(self.engineer, self.context, **args)
         dbt._live.pop(ack['id'])[-1].close()
-        self.assertEqual(dbt.get_plan(self.engineer, self.context, ack['id'])['state'], 'FAILED')
+        observed = dbt.get_plan(self.engineer, self.context, ack['id'])
+        self.assertEqual(observed['state'], 'FAILED')
+        self.assertEqual(observed['error_code'], 'DBT_OWNER_LOST')
+        starts = self.start.call_count
+        self.assertEqual(dbt.submit_plan(self.engineer, self.context, **args), observed)
+        self.assertEqual(self.start.call_count, starts)
         self.assertEqual(self.compile.call_count, 1)
+        self.assertEqual(self.w.posts, [])
+
+    def test_owned_compiling_plan_detail_and_same_key_replay_only_observe(self):
+        args = dict(key='owned-compile', project_id='lake_marts', source_schema='raw',
+                    target_schema='marts', staging_materialization=None)
+        ack = dbt.submit_plan(self.engineer, self.context, **args)
+        self.mutate(ack['id'], lambda p: p.update(state='COMPILING'))
+        self.assertEqual(dbt.get_plan(self.engineer, self.context, ack['id'])['state'], 'COMPILING')
+        self.assertEqual(dbt.submit_plan(self.engineer, self.context, **args)['state'], 'COMPILING')
+        self.assertEqual(self.start.call_count, 1)
+        self.compile.assert_not_called()
+        self.assertEqual(self.w.posts, [])
+        dbt._live.pop(ack['id'])[-1].close()
+        # Replay only reads the saved record; detail observation settles owner loss.
+        self.assertEqual(dbt.submit_plan(self.engineer, self.context, **args)['state'], 'COMPILING')
+        observed = dbt.get_plan(self.engineer, self.context, ack['id'])
+        self.assertEqual((observed['state'], observed['error_code']), ('FAILED', 'DBT_OWNER_LOST'))
+        self.assertEqual(dbt.submit_plan(self.engineer, self.context, **args), observed)
+        self.assertEqual(self.start.call_count, 1)
+        self.compile.assert_not_called()
+        self.assertEqual(self.w.posts, [])
 
     def test_identical_model_names_in_two_databases_keep_refs_separate(self):
         a = self.build_run()

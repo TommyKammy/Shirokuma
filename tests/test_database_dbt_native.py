@@ -29,6 +29,24 @@ import test_manual_wap
 
 
 class SQLTests(unittest.TestCase):
+    def test_shared_node_validator_accepts_constant_select_and_blocks_write_dependencies(self):
+        from types import SimpleNamespace
+        context = SimpleNamespace(database_id='arbitrary-db')
+        node = dict(unique_id='model.any.result', materialized='table',
+                    table_properties={'format': 'PARQUET'}, depends_on=[], compiled_sql='SELECT 7 AS value')
+        plan = dict(models=[node], source_bindings=[])
+        metadata = SimpleNamespace(_schema=lambda _: self.fail('constant SELECT has no used schema'))
+        selected, bindings, approved = native._node_plan(metadata, context, plan, node['unique_id'])
+        self.assertEqual(selected, node)
+        self.assertEqual(bindings, {})
+        self.assertEqual(approved['sources'], {})
+        for materialized in ('view', 'table', 'unknown'):
+            plan['models'] = [dict(node, depends_on=['model.any.dependency']),
+                dict(node, unique_id='model.any.dependency', materialized=materialized)]
+            with self.subTest(materialized=materialized), self.assertRaises(QueryError) as caught:
+                native._node_plan(metadata, context, plan, node['unique_id'])
+            self.assertEqual(caught.exception.code, 'DBT_NATIVE_MATERIALIZED_DEPENDENCY')
+
     def test_first_cli_import_disables_dotenv_and_restores_exact_environment(self):
         with tempfile.TemporaryDirectory() as temporary:
             sentinel = Path(temporary) / '.env'

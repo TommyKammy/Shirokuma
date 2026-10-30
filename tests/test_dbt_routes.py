@@ -47,12 +47,18 @@ class Routes(unittest.TestCase):
             ('POST', 'runs/' + ID + '/reconcile', {}, 'reconcile_run', 'run', 200),
             ('POST', 'runs/' + ID + '/publish', dict(node_id='model.project.orders'), 'submit_publication', 'publication', 202)]
         for method, path, body, service, field, status in cases:
-            with self.subTest(service=service), patch.object(routes.dbt, service, return_value={'safe': True}) as call:
+            with self.subTest(service=service), patch.object(routes.dbt, service, return_value={'safe': True}) as call, patch.object(routes.dbt, 'get_run_options', return_value={'version': 1}) as options:
                 params = {'context': [json.dumps(asdict(C))]} if method == 'GET' else {}
                 h = self.handler(BASE + path, dict(context=asdict(C), **(body or {})),
                     {'Content-Type': 'application/json', 'Idempotency-Key': 'original'})
                 self.assertTrue(routes.dispatch(h, method, BASE + path, params, 'actor', C.selected_role))
-                h.respond.assert_called_once_with(dict(context=asdict(C), **{field: {'safe': True}}), status)
+                expected = dict(context=asdict(C), **{field: {'safe': True}})
+                if method == 'GET' and service == 'get_plan':
+                    expected['run_options'] = {'version': 1}
+                    options.assert_called_once_with('actor', C, ID)
+                else:
+                    options.assert_not_called()
+                h.respond.assert_called_once_with(expected, status)
                 self.assertEqual(call.call_args.args[:2], ('actor', C))
                 if method == 'POST':
                     self.assertEqual(call.call_args.kwargs['key'], 'original')

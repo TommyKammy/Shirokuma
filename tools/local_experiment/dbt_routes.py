@@ -78,6 +78,7 @@ def dispatch(handler, method, path, params, principal, role):
             elif family == 'plans':
                 if ident:
                     envelope['plan'] = dbt.get_plan(principal, context, ident)
+                    envelope['run_options'] = dbt.get_run_options(principal, context, ident)
                 else:
                     envelope['items'] = dbt.list_plans(principal, context)
             elif family == 'runs':

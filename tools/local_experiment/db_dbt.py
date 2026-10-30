@@ -1252,6 +1252,14 @@ def get_plan(principal, context, plan_id):
     return _observe(principal, context, plan_id, 'plan')
 
 
+def get_run_options(principal, context, plan_id):
+    import database_dbt_native as native
+    metadata = _access(principal, context)
+    with control_store.connect() as db:
+        plan = _authorized(db, principal, context, plan_id, 'plan')
+        return native.run_options(db, metadata, principal, context, plan)
+
+
 def get_run(principal, context, run_id):
     return _observe(principal, context, run_id, 'run')
 

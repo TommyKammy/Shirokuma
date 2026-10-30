@@ -39,20 +39,27 @@ def _reject(code='DBT_NATIVE_UNSUPPORTED'):
     raise QueryError(code, 409)
 
 
-def _plan(principal, context, plan_id, node_id):
-    metadata = db_dbt._access(principal, context)
-    with control_store.connect() as db:
-        plan = db_dbt._authorized(db, principal, context, plan_id, 'plan')
-        if plan['actor'] != principal.principal_id or plan['context'] != asdict(context):
-            _reject('CONTEXT_MISMATCH')
-        if (plan['state'] != 'READY' or plan.get('compatibility') != compiler.compatibility()
-                or db_dbt._hash_plan(plan) != plan.get('_plan_digest')):
-            _reject('DBT_PLAN_CHANGED')
-        db_dbt._source_identities(db, plan)
+def _saved_plan(db, principal, context, plan):
+    """Saved compatibility only; execution still revalidates live inputs."""
+    if plan['actor'] != principal.principal_id or plan['context'] != asdict(context):
+        _reject('CONTEXT_MISMATCH')
+    if plan['state'] != 'READY':
+        _reject('DBT_PLAN_NOT_READY')
+    if plan.get('compatibility') != compiler.compatibility():
+        _reject('DBT_PLAN_RECOMPILE_REQUIRED')
+    if db_dbt._hash_plan(plan) != plan.get('_plan_digest'):
+        _reject('DBT_PLAN_CHANGED')
+    db_dbt._source_identities(db, plan)
+
+
+def _node_plan(metadata, context, plan, node_id):
+    """The same compact per-node boundary for projection and execution."""
     models = {m['unique_id']: m for m in plan['models']}
     node = models.get(node_id)
-    if node is None or node['materialized'] != 'table' or node.get('table_properties') != {'format': 'PARQUET'}:
-        _reject()
+    if node is None or node['materialized'] != 'table':
+        _reject('DBT_NATIVE_TABLE_REQUIRED')
+    if node.get('table_properties') != {'format': 'PARQUET'}:
+        _reject('DBT_NATIVE_PARQUET_REQUIRED')
     sources = {s['unique_id']: s for s in plan['source_bindings']}
     pending, seen = list(node['depends_on']), set()
     while pending:
@@ -74,7 +81,38 @@ def _plan(principal, context, plan_id, node_id):
         if schema.sql_name != 'raw' or schema.purpose != 'raw':
             _reject('DBT_NATIVE_RAW_REQUIRED')
     normalized = compiler.normalize_select(node['compiled_sql'], bindings, database_id=context.database_id)
-    return plan, node, bindings, normalized
+    return node, bindings, normalized
+
+
+def _plan(principal, context, plan_id, node_id):
+    metadata = db_dbt._access(principal, context)
+    with control_store.connect() as db:
+        plan = db_dbt._authorized(db, principal, context, plan_id, 'plan')
+        _saved_plan(db, principal, context, plan)
+    return (plan, *_node_plan(metadata, context, plan, node_id))
+
+
+def run_options(db, metadata, principal, context, plan):
+    """Readonly projection. No SDK import, owners, credentials or runtime probes."""
+    result = dict(version=1, plan_id=plan['id'], source_digest=plan.get('source_digest'),
+                  executor='native_table', eligible=False, reason_code=None, nodes=[])
+    try:
+        _saved_plan(db, principal, context, plan)
+    except QueryError as error:
+        result['reason_code'] = error.code
+        return result
+    for model in plan['models']:
+        reason = None
+        try:
+            _node_plan(metadata, context, plan, model['unique_id'])
+        except QueryError as error:
+            reason = error.code
+        except compiler.DbtError:
+            reason = 'DBT_NATIVE_SELECT_REQUIRED'
+        result['nodes'].append(dict(node_id=model['unique_id'], eligible=reason is None, reason_code=reason))
+    # Global eligibility describes the saved plan gate, separately from nodes.
+    result['eligible'] = True
+    return result
 
 
 def _native_select(sql, target, bindings, approved, database_id):

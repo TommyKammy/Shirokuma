@@ -47,4 +47,4 @@ shirokuma dbt status --database <database> --schema sandbox --run-id <run-id>
 
 最終保全比較では141 DB／564 Schema／各141 binding、既存grant・identity・資格情報・password・file ACL・OPA guard、profile／host固有YAML、RAW／MARTS 19 Tableのheadと全legacy rowを保持した。検証用RAW source 1件とnative候補10件を残し、native保存runは成功4件・未検証候補を残す6件・SQL前取消1件。新規の未閉鎖admission／UNKNOWNは0、元のFENCED_READ_ONLY UNKNOWN 2件を保持した。
 
-RunTaskのschema／cache／graph、複数の実体model、native test、置換・rename／drop、native VIEW、正式公開と画面からのnative実行選択は後続とする。DB-P6-3全体とM1本人受入は未完了である。
+画面からのnative実行選択は後続の[C2B3](database-p6-3c2b3-native-ui-2026-10-30.md)で扱う。RunTaskのschema／cache／graph、複数の実体model、native test、置換・rename／drop、native VIEWと正式公開は引き続き後続とする。DB-P6-3全体とM1本人受入は未完了である。

@@ -2467,7 +2467,7 @@ editJob(null);clearSelectedJob();
 const dbWorksheetKey='shirokuma.worksheets.v2';
 Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
- "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. API/CLI supports native TABLE execution for one node. UI launch and native full build are unsupported.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。Database dbt はコンパイル済み table／ephemeral SELECT の候補構築と実行ごとの SANDBOX INVOKER VIEW・テストに対応します。モデル単位の WAP 公開は TABLE のみ、table properties は固定の format=PARQUET のみ対応します。API／CLI は1ノードの native TABLE 実行に対応します。UI からの開始と native の全体ビルドは未対応です。",
+ "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native full build and tests are unsupported.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。Database dbt はコンパイル済み table／ephemeral SELECT の候補構築と実行ごとの SANDBOX INVOKER VIEW・テストに対応します。モデル単位の WAP 公開は TABLE のみ、table properties は固定の format=PARQUET のみ対応します。UI／API／CLI は互換性のある保存済み1モデルの native TABLE 実行に対応します。native の全体ビルドとテストは未対応です。",
  "AI Bears and Copilot are unavailable in Database mode. Use SQL for queries and Manual WAP for build, audit and publication.": "Database モードでは AI Bears と Copilot は未対応です。クエリには SQL、build・audit・公開には手動 WAP を利用してください。",
  "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.": "保存済みメタデータの監査を利用できます。SQL・プロンプト・結果は含みません。Pawprints は別の補助的な基盤プレビューです。",
  "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control.": "Database モードでは Compute 操作・Auto-Chill・ガバナンス検査は未対応です。共有ウェアハウスの状態はヘッダーで確認できます。Database の admin ロールは基盤の操作権限を付与しません。",
@@ -3366,7 +3366,7 @@ async function initializeDatabaseUI(session){
  ],
  [
   "transformation",
-  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. API/CLI supports native TABLE execution for one node. UI launch and native full build are unsupported."
+  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native full build and tests are unsupported."
  ],
  [
   "bears",
@@ -4963,20 +4963,47 @@ function dbMartsInstall(){
 
 
 // Database dbt: immutable receipts and GET observation, independent of Worksheet context.
-const dbDbt={installed:false,started:false,epoch:0,request:0,pending:false,invalid:true,projects:[],plans:[],runs:[],plan:null,run:null,publications:{},intent:null,rejectedIntent:null,timer:null};
+const dbDbt={installed:false,started:false,epoch:0,request:0,pending:false,invalid:true,projects:[],plans:[],runs:[],plan:null,run:null,publications:{},intent:null,rejectedIntent:null,timer:null,method:'sql_wap',node:'',runOptions:null};
 const dbDbtKey='shirokuma.database.dbt.intent.v1';
 const dbDbtPath=(kind,id)=>'/api/v1/dbt/'+kind+(id?'/'+encodeURIComponent(id):'');
 const dbDbtNode=name=>$('db-dbt-'+name);
 Object.assign(i18n.ja,{
+ "Loading saved-plan compatibility. Execution is blocked while loading.":"保存プランの互換性を読込中です。読込中は実行できません。",
+ "Run saved plan":"保存プランを実行",
+ "Execution method":"実行方法",
+ "SQL / WAP":"SQL / WAP",
+ "Native TABLE":"Native TABLE",
+ "Target model":"対象モデル",
+ "Choose a target model":"対象モデルを選択",
+ "Run native TABLE":"Native TABLE を実行",
+ "Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.":"同じ DB の SANDBOX に新しい候補を1モデル作成します。テストは実行せず、公開できません。実行時に現在のプロジェクト・ポリシー・ソースを再検証します。",
+ "Native saved-plan compatibility":"Native の保存プラン互換性",
+ "Inspect the saved plan to load native eligibility. Missing or invalid eligibility blocks execution.":"保存プランを確認して native の適格性を読み込んでください。情報がない場合や不正な場合は実行できません。",
+ "Choose one eligible saved model. No model is selected automatically.":"実行可能な保存済みモデルを1つ選択してください。自動選択はしません。",
+ "Native requires a TABLE model. Use a compatible saved plan; materialization is never changed automatically.":"Native には TABLE モデルが必要です。互換性のある保存プランを使用してください。materialization は自動変更しません。",
+ "Native requires explicit fixed format=PARQUET. Compile a compatible saved plan.":"Native には明示的な固定 format=PARQUET が必要です。互換性のあるプランをコンパイルしてください。",
+ "Native accepts source and expanded EPHEMERAL dependencies only. TABLE/VIEW dependencies require a compatible saved plan.":"Native の依存先はソースと展開済み EPHEMERAL のみです。TABLE／VIEW に依存する場合は互換性のある保存プランが必要です。",
+ "Native used sources must have RAW schema and purpose.":"Native で使用するソースは Schema 名と用途が RAW である必要があります。",
+ "Native requires a supported saved SELECT. Compile a compatible plan.":"Native には対応範囲の保存済み SELECT が必要です。互換性のあるプランをコンパイルしてください。",
+ "Native requires a READY saved plan. Wait for compile, or recompile a failed plan.":"Native には READY の保存プランが必要です。コンパイルを待つか、失敗したプランを再コンパイルしてください。",
+ "Native requires a current v2 saved plan. Recompile to validate compatibility.":"Native には現行 v2 の保存プランが必要です。再コンパイルして互換性を検証してください。",
+ "Saved plan changed. Inspect and compile a new compatible plan.":"保存プランが変わりました。確認し、互換性のある新しいプランをコンパイルしてください。",
+ "Saved source identity changed. Inspect sources and recompile.":"保存ソースの識別情報が変わりました。ソースを確認して再コンパイルしてください。",
+ "Eligible saved model":"実行可能な保存済みモデル",
+ "This saved plan has no models. Compile a compatible saved plan with a TABLE model.":"この保存プランにはモデルがありません。TABLE モデルを含む互換性のある保存プランをコンパイルしてください。",
+ "No compatible native model in this saved plan. Compile a saved plan with a PARQUET TABLE reading only RAW sources or expanded EPHEMERAL models.":"この保存プランには native 対応モデルがありません。RAW ソースまたは展開済み EPHEMERAL モデルだけを読む PARQUET TABLE を含む保存プランをコンパイルしてください。",
+ "Inspect the saved plan again to prepare a different explicit run.":"別の実行を準備するには保存プランを再度確認してください。",
+ "Choose a READY saved plan before running.":"実行するには READY の保存プランを選択してください。",
+ "Native execution may take a few minutes. This view only polls saved state.":"Native 実行には数分かかる場合があります。この画面は保存状態だけを定期照会します。",
  'Close rejected request and choose again':'要求を閉じて選び直す','Request rejected before acceptance. Close it explicitly to choose again; the original receipt is retained.':'要求は受付前に拒否されました。明示的に閉じて選び直してください。元の要求情報は保持されます。','Rejected request receipt':'拒否された要求情報',
- 'Database dbt SQL / WAP':'Database dbt SQL / WAP','Refresh dbt context':'dbt コンテキストを更新','Approved project':'承認済みプロジェクト','Source Schema':'ソース Schema','Target Schema':'公開先 Schema','Candidate Schema: SANDBOX (fixed)':'候補 Schema: SANDBOX（固定）','Staging materialization':'staging materialization','Project default (no override)':'プロジェクト既定（変更なし）','Explicit ephemeral override':'ephemeral を明示指定','Explicit table override':'table を明示指定',
+ 'Database dbt':'Database dbt','Refresh dbt context':'dbt コンテキストを更新','Approved project':'承認済みプロジェクト','Source Schema':'ソース Schema','Target Schema':'公開先 Schema','Candidate Schema: SANDBOX (fixed)':'候補 Schema: SANDBOX（固定）','Staging materialization':'staging materialization','Project default (no override)':'プロジェクト既定（変更なし）','Explicit ephemeral override':'ephemeral を明示指定','Explicit table override':'table を明示指定',
  'Project and schema inputs apply to the next compile. Build and publish use the selected saved artifacts.':'プロジェクトと Schema の入力は次のコンパイルに適用します。構築と公開は選択した保存済み artifact を使います。','Candidate builds and tests may take a few minutes. This view only polls saved state.':'候補構築とテストには数分かかる場合があります。この画面は保存状態だけを定期照会します。','Compile project':'プロジェクトをコンパイル','Build candidates and test':'候補を構築してテスト','Observe saved state':'保存状態を照会','Recover original receipt':'元の受付を照合','Cancel saved run':'保存実行を取り消す','Reconcile existing operations':'既存処理を照合','Refresh dbt history':'dbt 履歴を更新','Saved plans':'保存プラン','Saved runs':'保存実行','Inspect plan':'プランを確認','Inspect run':'実行を確認','Compiled models':'コンパイル済みモデル','Candidate models':'候補モデル','Model SQL and lineage':'モデル SQL とリネージュ','Tests and failure counts':'テストと失敗件数','Audit and publish':'監査して公開','Review publication':'公開内容を確認','Close publication review':'公開確認を閉じる',
  'Tests passed, awaiting publication':'テスト成功・公開待ち','Published':'公開済み','Publication committed; recording failed. Do not republish.':'公開はコミット済みですが記帳に失敗しました。再公開しないでください。','Backend outcome unknown. Reconcile existing operations; publication is blocked.':'backend の実行結果が不明です。既存処理を照合してください。公開は停止しています。',
  'Observation failed. Saved backend state is unchanged. Retry observation.':'状態の照会に失敗しました。保存済み backend 状態は変更していません。再照会してください。','Receipt not observed. Recover repeats only the original request with the same key and context.':'受付を確認できません。照合は元のキーとコンテキストで同じ要求だけを再送します。','Request in progress. Inputs and receipt are fixed.':'要求中です。入力と受付情報は固定されています。','Compile may take a few minutes. It does not execute engine SQL.':'コンパイルには数分かかる場合があります。エンジン SQL は実行しません。','Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'閲覧者は利用できません。許可された data_engineer または admin を選択してください。ソース SQL は非表示です。',
  'Refresh an authorized Database and SANDBOX context.':'許可された Database と SANDBOX コンテキストを更新してください。','Saved context differs. Reselect the original context; requests are never retargeted.':'保存コンテキストと異なります。元のコンテキストを選び直してください。要求の対象は変更しません。','Only the original owner and saved execution role/context may build this plan.':'元の所有者と保存済み実行ロール／コンテキストでのみ、このプランを構築できます。','Publication requires admin and every planned test to pass. Each model publishes independently.':'公開には admin と予定された全テストの成功が必要です。モデルごとに独立して公開します。','Choose an approved project and explicit registered source and target schemas.':'承認済みプロジェクトと登録済みソース／公開先 Schema を選択してください。','Project defaults to views are supported as run-specific SANDBOX INVOKER VIEWs. Only TABLE candidates can be published.':'既定の view は実行ごとの SANDBOX INVOKER VIEW として利用できます。公開できるのは TABLE 候補のみです。',
  'Native TABLE verified; tests not run; publication unavailable':'Native TABLE 検証済み。テスト未実行、公開不可',
  'Tests not run; publication unavailable':'テスト未実行、公開不可',
- 'SQL / WAP supports compiled table/ephemeral SELECT and run-specific SANDBOX INVOKER VIEWs. Publication is TABLE-only. Only fixed format=PARQUET table properties are supported. API/CLI supports native TABLE execution for one node. UI launch and native full build are unsupported.':'SQL / WAP はコンパイル済み table／ephemeral SELECT と実行ごとの SANDBOX INVOKER VIEW に対応します。公開は TABLE のみ、table properties は固定の format=PARQUET のみ対応します。API／CLI は1ノードの native TABLE 実行に対応します。UI からの開始と native の全体ビルドは未対応です。','Context is independent of Worksheets. History and deep links only read saved records.':'Worksheet とは独立したコンテキストです。履歴と直接リンクは保存済み記録だけを参照します。','Choose a saved plan or compile an approved project.':'保存プランを選ぶか、承認済みプロジェクトをコンパイルしてください。','Choose a saved run or build a ready plan.':'保存実行を選ぶか、準備済みプランから候補を構築してください。','Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.':'ソースまたは公開先の識別情報が変わりました。Schema を確認し、コンテキストを更新して新しいプランをコンパイルしてください。',
+ 'SQL / WAP supports compiled table/ephemeral SELECT and run-specific SANDBOX INVOKER VIEWs. Publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native full build and tests are unsupported.':'SQL / WAP はコンパイル済み table／ephemeral SELECT と実行ごとの SANDBOX INVOKER VIEW に対応します。公開は TABLE のみ、table properties は固定の format=PARQUET のみ対応します。UI／API／CLI は互換性のある保存済み1モデルの native TABLE 実行に対応します。native の全体ビルドとテストは未対応です。','Context is independent of Worksheets. History and deep links only read saved records.':'Worksheet とは独立したコンテキストです。履歴と直接リンクは保存済み記録だけを参照します。','Choose a saved plan or compile an approved project.':'保存プランを選ぶか、承認済みプロジェクトをコンパイルしてください。','Choose a saved run or build a ready plan.':'保存実行を選ぶか、準備済みプランから候補を構築してください。','Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.':'ソースまたは公開先の識別情報が変わりました。Schema を確認し、コンテキストを更新して新しいプランをコンパイルしてください。',
  'Compatibility':'互換性',
  'Validating settings compatibility':'設定の互換性を検証中',
  'Wait for validation of the original saved plan. No new compile request is needed.':'元の保存済みプランの検証完了をお待ちください。新しいコンパイル要求は不要です。',
@@ -4987,13 +5014,13 @@ Object.assign(i18n.ja,{
  'Recompile to validate settings before a new build. Existing runs and publications retain their saved gates.':'新規構築の前に再コンパイルして設定を検証してください。既存の実行と公開には保存済みの gate を適用します。',
  'Review the settings and compile a supported project.':'設定を確認し、対応範囲のプロジェクトをコンパイルしてください。',
  'For staging, explicitly choose ephemeral, or use a supported project, then recompile. No automatic conversion.':'staging には ephemeral を明示指定するか、対応範囲のプロジェクトを選び、再コンパイルしてください。自動変換はしません。',
- 'SQL / WAP uses compiled table/ephemeral SELECT and tests with error severity, COUNT(*) and zero failures. Views are unsupported by this plan. API/CLI supports native TABLE execution for one node. UI launch and native full build are unsupported.':'SQL / WAP はコンパイル済み table／ephemeral SELECT と、error・COUNT(*)・失敗件数0のテストに対応します。このプランでは view は未対応です。API／CLI は1ノードの native TABLE 実行に対応します。UI からの開始と native の全体ビルドは未対応です。',
+ 'SQL / WAP uses compiled table/ephemeral SELECT and tests with error severity, COUNT(*) and zero failures. Views are unsupported by this plan. UI/API/CLI supports native TABLE execution for one compatible saved model. Native full build and tests are unsupported.':'SQL / WAP はコンパイル済み table／ephemeral SELECT と、error・COUNT(*)・失敗件数0のテストに対応します。このプランでは view は未対応です。UI／API／CLI は互換性のある保存済み1モデルの native TABLE 実行に対応します。native の全体ビルドとテストは未対応です。',
  'Build candidates and test using the saved plan and applied table formats below.':'保存プランと下記の適用テーブル形式で候補を構築し、テストしてください。',
  'Unsupported materialization':'未対応の materialization',
  'Unsupported model setting':'未対応のモデル設定',
  'Only fixed format=PARQUET is supported':'固定の format=PARQUET のみ対応',
  'Test requires error severity, COUNT(*) and zero failures':'テストは error・COUNT(*)・失敗件数0が必要',
- 'SQL / WAP supports run-specific SANDBOX INVOKER VIEWs over TABLE sources and downstream TABLE candidates/tests. TABLE-only publication; VIEW to VIEW is unsupported. API/CLI supports native TABLE execution for one node. UI launch and native full build are unsupported.':'SQL / WAP は TABLE ソースを読む実行ごとの SANDBOX INVOKER VIEW と、後続の TABLE 候補／テストに対応します。公開は TABLE のみです。VIEW 間依存は未対応です。API／CLI は1ノードの native TABLE 実行に対応します。UI からの開始と native の全体ビルドは未対応です。',
+ 'SQL / WAP supports run-specific SANDBOX INVOKER VIEWs over TABLE sources and downstream TABLE candidates/tests. TABLE-only publication; VIEW to VIEW is unsupported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native full build and tests are unsupported.':'SQL / WAP は TABLE ソースを読む実行ごとの SANDBOX INVOKER VIEW と、後続の TABLE 候補／テストに対応します。公開は TABLE のみです。VIEW 間依存は未対応です。UI／API／CLI は互換性のある保存済み1モデルの native TABLE 実行に対応します。native の全体ビルドとテストは未対応です。',
  'Sandbox INVOKER view':'Sandbox INVOKER View','Views require INVOKER security':'View は INVOKER が必要です','View write properties are unsupported':'View の書込 property は未対応です','VIEW to VIEW dependencies are unsupported':'VIEW 間の依存は未対応です','Candidate Ref / TABLE snapshot / VIEW version':'候補 Ref / TABLE snapshot / VIEW version',
  'Unknown compatibility issue':'不明な互換性の問題',
  'Node':'ノード',
@@ -5019,7 +5046,7 @@ function dbDbtAllowed(){
  return !!(d&&s&&d.state==='READY'&&d.allowed_roles?.includes(p.role)&&d.capabilities?.query===true&&s.capabilities?.write===true&&s.capabilities?.query===true&&String(s.purpose||s.sql_name).toUpperCase()==='SANDBOX'&&d.binding_revision===c.binding_revision&&d.generation_id===c.generation_id&&(d.grant_revision??null)===c.grant_revision);
 }
 function dbDbtPurge(){
- const p=dbDbt;if(!p.installed)return;++p.epoch;++p.request;clearTimeout(p.timer);p.timer=null;p.pending=false;p.invalid=true;p.context=null;p.databases=[];p.schemas=[];p.plan=null;p.run=null;p.plans=[];p.runs=[];p.projects=[];p.publications={};p.review=null;
+ const p=dbDbt;if(!p.installed)return;++p.epoch;++p.request;clearTimeout(p.timer);p.timer=null;p.pending=false;p.invalid=true;p.context=null;p.databases=[];p.schemas=[];p.plan=null;p.run=null;p.plans=[];p.runs=[];p.projects=[];p.publications={};p.review=null;p.runOptions=null;p.node='';p.method='sql_wap';
  if(p.intent&&(p.intent.principal!==dbPrincipal||p.intent.header!==currentRole))p.intentBlocked=true;
  for(const name of ['plan-detail','models','sql','run-detail','candidates','tests','publications','confirmation','history'])dbDbtNode(name).replaceChildren();
  ui(p.status,p.role==='bi_viewer'||!dbRoleWithinHeader('data_engineer')?'Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'Refresh an authorized Database and SANDBOX context.');dbDbtRender();
@@ -5094,7 +5121,7 @@ function dbDbtRenderCompatibility(parent,a){
  const state=dbDbtCompatibility(a),section=dataopsNode('section','db-dbt-compatibility',parent);section.className='db-dbt-compatibility';section.setAttribute('aria-labelledby','db-dbt-compatibility-title');
  dataopsNode('h3','db-dbt-compatibility-title',section,'Compatibility');
  dataopsNode('p','',section,({pending:'Validating settings compatibility',supported:'Supported: SQL / WAP',blocked:'Blocked: unsupported settings',legacy:'Legacy plan: recompile required',invalid:'Compatibility not validated'})[state]);
- if(state==='supported')dataopsNode('p','',section,a.compatibility.version===2?'SQL / WAP supports run-specific SANDBOX INVOKER VIEWs over TABLE sources and downstream TABLE candidates/tests. TABLE-only publication; VIEW to VIEW is unsupported. API/CLI supports native TABLE execution for one node. UI launch and native full build are unsupported.':'SQL / WAP uses compiled table/ephemeral SELECT and tests with error severity, COUNT(*) and zero failures. Views are unsupported by this plan. API/CLI supports native TABLE execution for one node. UI launch and native full build are unsupported.');
+ if(state==='supported')dataopsNode('p','',section,a.compatibility.version===2?'SQL / WAP supports run-specific SANDBOX INVOKER VIEWs over TABLE sources and downstream TABLE candidates/tests. TABLE-only publication; VIEW to VIEW is unsupported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native full build and tests are unsupported.':'SQL / WAP uses compiled table/ephemeral SELECT and tests with error severity, COUNT(*) and zero failures. Views are unsupported by this plan. UI/API/CLI supports native TABLE execution for one compatible saved model. Native full build and tests are unsupported.');
  if(state==='blocked'){
   const reasons={UNSUPPORTED_VIEW_SECURITY:'Views require INVOKER security',UNSUPPORTED_VIEW_PROPERTIES:'View write properties are unsupported',UNSUPPORTED_VIEW_DEPENDENCY:'VIEW to VIEW dependencies are unsupported',UNSUPPORTED_MATERIALIZATION:'Unsupported materialization',UNSUPPORTED_MODEL_CONFIG:'Unsupported model setting',UNSUPPORTED_TABLE_PROPERTIES:'Only fixed format=PARQUET is supported',UNSUPPORTED_TEST_CONFIG:'Test requires error severity, COUNT(*) and zero failures'};
   const sharedSettings=['pre_hook','post_hook','on_run_start','on_run_end','hooks','grants','persist_docs','sql_header','store_failures','store_failures_as','incremental_strategy','full_refresh','column_types','unique_key','partition_by','cluster_by','table_format','file_format','location','catalog_name','indexes','bind','dist','sort','sql_where','contract'];
@@ -5109,6 +5136,38 @@ function dbDbtRenderCompatibility(parent,a){
  dataopsNode('p','',section,dbDbtCompatibilityAction(a));
 }
 function dbDbtCanBuild(){const p=dbDbt,a=p.plan;return dbDbtAllowed()&&a?.state==='READY'&&dbDbtCompatibility(a)==='supported'&&a.actor===dbDbtOwner()&&dataopsSameContext(a.context,p.context)&&!p.intent&&!p.run;}
+const dbDbtNativeReasons={CONTEXT_MISMATCH:'Only the original owner and saved execution role/context may build this plan.',DBT_PLAN_NOT_READY:'Native requires a READY saved plan. Wait for compile, or recompile a failed plan.',DBT_PLAN_RECOMPILE_REQUIRED:'Native requires a current v2 saved plan. Recompile to validate compatibility.',DBT_PLAN_CHANGED:'Saved plan changed. Inspect and compile a new compatible plan.',STALE_RESOURCE:'Saved source identity changed. Inspect sources and recompile.',DBT_NATIVE_TABLE_REQUIRED:'Native requires a TABLE model. Use a compatible saved plan; materialization is never changed automatically.',DBT_NATIVE_PARQUET_REQUIRED:'Native requires explicit fixed format=PARQUET. Compile a compatible saved plan.',DBT_NATIVE_MATERIALIZED_DEPENDENCY:'Native accepts source and expanded EPHEMERAL dependencies only. TABLE/VIEW dependencies require a compatible saved plan.',DBT_NATIVE_RAW_REQUIRED:'Native used sources must have RAW schema and purpose.',DBT_NATIVE_SELECT_REQUIRED:'Native requires a supported saved SELECT. Compile a compatible plan.'};
+function dbDbtOptionsValid(o,a=dbDbt.plan){
+ const gate=x=>typeof x?.eligible==='boolean'&&(x.eligible?x.reason_code===null:typeof x.reason_code==='string'&&Object.hasOwn(dbDbtNativeReasons,x.reason_code));
+ if(!a||!o||o.version!==1||o.executor!=='native_table'||o.plan_id!==a.id||o.source_digest!==a.source_digest||!gate(o)||!Array.isArray(o.nodes))return false;
+ if(!o.eligible)return o.nodes.length===0;
+ const ids=(a.models||[]).map(m=>m.unique_id);
+ return a.state==='READY'&&a.compatibility?.version===2&&dbDbtCompatibility(a)==='supported'&&o.nodes.length===ids.length&&new Set(o.nodes.map(n=>n.node_id)).size===ids.length&&o.nodes.every(n=>ids.includes(n.node_id)&&gate(n));
+}
+function dbDbtSelectPlan(a,options){
+ const p=dbDbt;if(p.plan?.id!==a.id||p.plan?.source_digest!==a.source_digest){p.node='';p.method='sql_wap';}
+ p.plan=dataopsFreeze(dataopsClone(a));p.runOptions=dbDbtOptionsValid(options,a)?dataopsFreeze(dataopsClone(options)):null;
+ if(!p.runOptions?.nodes.some(n=>n.node_id===p.node&&n.eligible))p.node='';
+}
+function dbDbtMethod(){return dbDbt.intent?.action==='build'?(dbDbt.intent.body.executor||'sql_wap'):dbDbt.method;}
+function dbDbtNativeReason(node){
+ const p=dbDbt,o=p.runOptions;if(p.pending&&!o)return 'Loading saved-plan compatibility. Execution is blocked while loading.';if(!dbDbtOptionsValid(o))return 'Inspect the saved plan to load native eligibility. Missing or invalid eligibility blocks execution.';
+ if(!o.eligible)return dbDbtNativeReasons[o.reason_code];
+ if(!o.nodes.length)return 'This saved plan has no models. Compile a compatible saved plan with a TABLE model.';
+ if(!node&&!o.nodes.some(n=>n.eligible))return 'No compatible native model in this saved plan. Compile a saved plan with a PARQUET TABLE reading only RAW sources or expanded EPHEMERAL models.';
+ if(!node)return 'Choose one eligible saved model. No model is selected automatically.';
+ const n=o.nodes.find(n=>n.node_id===node);return n?(n.eligible?'Eligible saved model':dbDbtNativeReasons[n.reason_code]):'Inspect the saved plan to load native eligibility. Missing or invalid eligibility blocks execution.';
+}
+function dbDbtCanRun(){const p=dbDbt;return dbDbtCanBuild()&&(dbDbtMethod()==='sql_wap'||dbDbtMethod()==='native_table'&&dbDbtOptionsValid(p.runOptions)&&p.runOptions.eligible&&p.runOptions.nodes.some(n=>n.node_id===p.node&&n.eligible));}
+function dbDbtBuildReason(){
+ const p=dbDbt,a=p.plan;if(!a)return 'Choose a READY saved plan before running.';
+ if(a.actor!==dbDbtOwner()||!dataopsSameContext(a.context,p.context))return 'Only the original owner and saved execution role/context may build this plan.';
+ if(p.run)return 'Publication requires admin and every planned test to pass. Each model publishes independently.';
+ if(dbDbtMethod()==='native_table')return dbDbtNativeReason(p.node);
+ if(dbDbtCompatibility(a)!=='supported')return dbDbtCompatibilityAction(a);
+ if(a.state!=='READY')return 'Choose a READY saved plan before running.';
+ return 'Publication requires admin and every planned test to pass. Each model publishes independently.';
+}
 function dbDbtOwnRun(){const p=dbDbt;return dbDbtAllowed()&&p.run?.actor===dbDbtOwner()&&dataopsSameContext(p.run.context,p.context);}
 function dbDbtPublicationAssociated(a,run=dbDbt.run){return !!run&&dbDbtArtifact(run,'run',dbDbt.context,run.id)&&dbDbtArtifact(a,'publication',dbDbt.context,a?.id)&&a.run_id===run.id&&a.parent_run_id===run.id&&a.plan_id===run.plan_id&&run.models?.some(m=>m.unique_id===a.node_id&&(!m.publication_id||m.publication_id===a.id));}
 function dbDbtOwnPublication(a){return dbDbtAllowed()&&dbDbtPublicationAssociated(a)&&a.actor===dbDbtOwner()&&dataopsSameContext(a.context,dbDbt.context);}
@@ -5129,7 +5188,7 @@ async function dbDbtSubmit(action,nodeId){
  const p=dbDbt;dbDbtRender();if(p.pending||p.intent||!dbDbtAllowed())return;let path,body,kind,id;
  if(action==='compile'){
   if(dbDbtNode('compile').disabled)return;path=dbDbtPath('plans');kind='plan';body={project_id:dbDbtNode('project').value,source_schema:dbDbtNode('source').value,target_schema:dbDbtNode('target').value,staging_materialization:dbDbtNode('materialization').value||null};
- }else if(action==='build'){if(!dbDbtCanBuild())return;path=dbDbtPath('runs');kind='run';body={plan_id:p.plan.id};}
+ }else if(action==='build'){if(!dbDbtCanRun())return;path=dbDbtPath('runs');kind='run';body={plan_id:p.plan.id};if(dbDbtMethod()==='native_table')Object.assign(body,{executor:'native_table',node_id:p.node});}
  else{if(!p.run)return;id=p.run.id;path=dbDbtPath('runs',id)+'/'+action;body={};kind=action==='publish'?'publication':'run';
   if(action==='publish'){const m=p.run.models?.find(m=>m.unique_id===nodeId);if(p.review!==nodeId||!dbDbtCanPublish(m))return;body.node_id=nodeId;}
   else if(action==='cancel'? !dbDbtOwnRun()||['FAILED','CANCELED','UNKNOWN','CANCELING'].includes(p.run.state)||p.run.cancel_requested : action!=='reconcile'||!dbDbtCanReconcile())return;
@@ -5141,11 +5200,12 @@ async function dbDbtRecover(fresh=false){
  try{const reply=await dbDbtRequest(i.path,i.context,i.body,i.key);if(!current()||p.intent!==i)return;const a=reply[i.kind];
  // Reconcile acknowledges the selected parent metadata; new receipts belong to this submitter.
  const provenance=i.action==='reconcile'&&i.parent?a?.actor===i.parent.actor&&dataopsSameContext(a?.context,i.parent.context):a?.actor===dbDbtOwner()&&dataopsSameContext(a?.context,i.context);
- if(!provenance||!dbDbtArtifact(a,i.kind,i.context,i.kind==='run'&&i.id?i.id:undefined)||i.body.plan_id&&a.plan_id!==i.body.plan_id||i.kind==='publication'&&(a.run_id!==i.id||a.node_id!==i.body.node_id)||i.kind==='plan'&&(a.project_id!==i.body.project_id||a.source_schema!==i.body.source_schema||a.target_schema!==i.body.target_schema||a.staging_materialization!==i.body.staging_materialization))throw Error('receipt');
- if(i.kind==='plan'){p.plan=dataopsFreeze(dataopsClone(a));p.run=null;p.publications={};}
+ const methodMatches=i.action!=='build'||(i.body.executor==='native_table'?a?.executor==='native_table'&&a.selected_node_id===i.body.node_id:(a?.executor===undefined||a.executor==='sql_wap')&&a.selected_node_id==null);
+ if(!methodMatches||!provenance||!dbDbtArtifact(a,i.kind,i.context,i.kind==='run'&&i.id?i.id:undefined)||i.body.plan_id&&a.plan_id!==i.body.plan_id||i.kind==='publication'&&(a.run_id!==i.id||a.node_id!==i.body.node_id)||i.kind==='plan'&&(a.project_id!==i.body.project_id||a.source_schema!==i.body.source_schema||a.target_schema!==i.body.target_schema||a.staging_materialization!==i.body.staging_materialization))throw Error('receipt');
+ if(i.kind==='plan'){p.method='sql_wap';p.node='';dbDbtSelectPlan(a,null);p.run=null;p.publications={};}
  if(i.kind==='run'){p.run=dataopsFreeze(dataopsClone(a));p.review=null;}
  if(i.kind==='publication'){p.publications[a.node_id]=dataopsFreeze(dataopsClone(a));p.review=null;}
- p.intent=null;dbDbtRemember();if(i.action==='reconcile')await dbDbtRefreshPublications(current);if(!current())return;dbDbtURL(true);ui(p.status,i.action==='compile'?'Compile may take a few minutes. It does not execute engine SQL.':i.action==='build'?'Candidate builds and tests may take a few minutes. This view only polls saved state.':'Observe saved state');
+ p.intent=null;dbDbtRemember();if(i.action==='reconcile')await dbDbtRefreshPublications(current);if(!current())return;dbDbtURL(true);ui(p.status,i.action==='compile'?'Compile may take a few minutes. It does not execute engine SQL.':i.action==='build'?(i.body.executor==='native_table'?'Native execution may take a few minutes. This view only polls saved state.':'Candidate builds and tests may take a few minutes. This view only polls saved state.'):'Observe saved state');
  }catch(error){if(current()){
  if(fresh&&p.intent===i&&i.action==='compile'&&i.path===dbDbtPath('plans')&&error.status===404&&error.code==='DBT_PROJECT_NOT_FOUND'){p.intent=dataopsFreeze({...i,rejection:error.code});dbDbtRemember();ui(p.status,'Request rejected before acceptance. Close it explicitly to choose again; the original receipt is retained.');}
  else dbDbtError(error,p.intent===i);
@@ -5153,13 +5213,13 @@ async function dbDbtRecover(fresh=false){
 }
 async function dbDbtObserve(kind,id,expectedPlan){
  const p=dbDbt;if(p.pending||!dbDbtAllowed()||p.intent)return;kind=kind|| (p.run?'run':'plan');id=id||(kind==='run'?p.run?.id:p.plan?.id);if(!id)return;
- const current=dbDbtGuard(),context=p.context;p.pending=true;dbDbtRender();
+ const current=dbDbtGuard(),context=p.context;p.runOptions=null;p.pending=true;dbDbtRender();
  try{const reply=await dbDbtRequest(dbDbtPath(kind==='plan'?'plans':kind==='run'?'runs':'publications',id),context);if(!current())return;const a=reply[kind];if(!dbDbtArtifact(a,kind,context,id))throw Error('artifact');
  if(kind==='run'){
   if(typeof a.plan_id!=='string'||!a.plan_id||expectedPlan&&a.plan_id!==expectedPlan)throw Error('plan');
-  let plan=p.plan;if(plan?.id!==a.plan_id){const result=await dbDbtRequest(dbDbtPath('plans',a.plan_id),context);if(!current())return;plan=result.plan;if(!dbDbtArtifact(plan,'plan',context,a.plan_id))throw Error('plan');}
-  if(a.actor!==plan.actor||!dataopsSameContext(a.context,plan.context))throw Error('plan owner');if(p.run?.id!==a.id)p.publications={};p.plan=dataopsFreeze(dataopsClone(plan));p.run=dataopsFreeze(dataopsClone(a));p.review=null;
- }else if(kind==='plan'){p.plan=dataopsFreeze(dataopsClone(a));p.run=null;p.publications={};p.review=null;}
+  let plan=p.plan,options=null;if(plan?.id!==a.plan_id){const result=await dbDbtRequest(dbDbtPath('plans',a.plan_id),context);if(!current())return;plan=result.plan;options=result.run_options;if(!dbDbtArtifact(plan,'plan',context,a.plan_id))throw Error('plan');}
+  if(a.actor!==plan.actor||!dataopsSameContext(a.context,plan.context))throw Error('plan owner');if(p.run?.id!==a.id)p.publications={};dbDbtSelectPlan(plan,options);p.run=dataopsFreeze(dataopsClone(a));p.review=null;
+ }else if(kind==='plan'){dbDbtSelectPlan(a,reply.run_options);p.run=null;p.publications={};p.review=null;}
  else{if(Object.values(p.publications).some(v=>v.id===id&&v.node_id!==a.node_id)||!dbDbtPublicationAssociated(a))throw Error('publication');p.publications[a.node_id]=dataopsFreeze(dataopsClone(a));}
  dbDbtURL(true);ui(p.status,'Observe saved state');
  }catch(error){if(current())dbDbtError(error);}finally{if(current()){p.pending=false;dbDbtRender();dbDbtSchedule();}}
@@ -5211,22 +5271,31 @@ function dbDbtRender(){
  for(const name of ['project','source','target','materialization'])dbDbtNode(name).disabled=locked||!allowed;
  dbDbtNode('refresh').disabled=p.pending;
  dbDbtNode('compile').disabled=locked||!allowed||!p.projects.some(x=>x.id===dbDbtNode('project').value)||!dbDbtNode('source').value||!dbDbtNode('target').value;
- dbDbtNode('build').disabled=locked||!dbDbtCanBuild();
+ const method=dbDbtMethod(),native=method==='native_table';
+ dbDbtNode('method').value=method;dbDbtNode('method').disabled=locked||!allowed||!p.plan;
+ dbDbtNode('native-controls').hidden=!native||!allowed;dbDbtNode('native-help').hidden=!native||!allowed;
+ const selected=allowed?(p.intent?.action==='build'?p.intent.body.node_id||'':p.node):'';
+ const select=dbDbtNode('node');select.replaceChildren();const empty=new Option(t('Choose a target model'),'');ui(empty,'Choose a target model');select.add(empty);
+ if(allowed)for(const m of p.plan?.models||[]){const n=dbDbtOptionsValid(p.runOptions)?p.runOptions.nodes.find(n=>n.node_id===m.unique_id):null,option=new Option(m.name+' · '+t(dbDbtNativeReason(m.unique_id)),m.unique_id);option.disabled=!p.runOptions?.eligible||!n?.eligible;select.add(option);}
+ if(selected&&p.intent&&!Array.from(select.options).some(o=>o.value===selected)){const frozen=new Option(selected,selected);frozen.disabled=true;select.add(frozen);}
+ select.value=selected;select.disabled=locked||!allowed||!native||!dbDbtOptionsValid(p.runOptions)||!p.runOptions.eligible||!p.runOptions.nodes.some(n=>n.eligible);select.setAttribute('aria-describedby','db-dbt-native-reason');
+ ui(dbDbtNode('native-reason'),dbDbtNativeReason(selected));
+ ui(dbDbtNode('build'),native?'Run native TABLE':'Build candidates and test');dbDbtNode('build').disabled=locked||!dbDbtCanRun();
  dbDbtNode('observe').disabled=locked||!allowed||!(p.run||p.plan);
  dbDbtNode('recover').disabled=p.pending||!dbDbtCanRecover()||dbDbtCanCloseRejected();dbDbtNode('recover').hidden=!p.intent;dbDbtNode('close-rejected').hidden=!dbDbtCanCloseRejected();dbDbtNode('close-rejected').disabled=p.pending||!dbDbtCanCloseRejected();
  dbDbtNode('cancel').disabled=locked||!dbDbtOwnRun()||p.run.cancel_requested||['CANCELED','FAILED','UNKNOWN','CANCELING'].includes(p.run.state);
  dbDbtNode('reconcile').disabled=locked||!dbDbtCanReconcile();dbDbtNode('history-refresh').disabled=locked||!allowed;
- ui(dbDbtNode('reason'),!allowed?(p.role==='bi_viewer'||!dbRoleWithinHeader('data_engineer')?'Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'Refresh an authorized Database and SANDBOX context.'):p.intentBlocked?'Saved context differs. Reselect the original context; requests are never retargeted.':p.plan&&dbDbtCompatibility(p.plan)!=='supported'?dbDbtCompatibilityAction(p.plan):p.plan&&!dbDbtCanBuild()&&!p.run?'Only the original owner and saved execution role/context may build this plan.':p.run?.executor==='native_table'?'Tests not run; publication unavailable':'Publication requires admin and every planned test to pass. Each model publishes independently.');
+ ui(dbDbtNode('reason'),!allowed?(p.role==='bi_viewer'||!dbRoleWithinHeader('data_engineer')?'Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'Refresh an authorized Database and SANDBOX context.'):p.intentBlocked?'Saved context differs. Reselect the original context; requests are never retargeted.':p.run?.executor==='native_table'?'Tests not run; publication unavailable':dbDbtBuildReason());
  const receipt=dbDbtNode('receipt');receipt.replaceChildren();const saved=p.intent||p.rejectedIntent;if(allowed&&saved?.principal===dbPrincipal){dataopsNode('p','',receipt).textContent=[t('Request key'),saved.key,saved.context.database_id,saved.context.sql_schema,saved.context.selected_role].join(' · ');if(saved.rejection){const detail=dataopsNode('details','',receipt);dataopsNode('summary','',detail,'Rejected request receipt');dataopsNode('pre','',detail).textContent=JSON.stringify(saved,null,2);}}
  for(const name of ['plan-detail','models','sql','run-detail','candidates','tests','publications','confirmation','history'])dbDbtNode(name).replaceChildren();
  if(!allowed)return;
  const a=p.plan,r=p.run;
  if(a){dbDbtSummary(dbDbtNode('plan-detail'),a);dbDbtRenderCompatibility(dbDbtNode('plan-detail'),a);dataopsNode('p','',dbDbtNode('plan-detail'),'Project version / source digest');dataopsNode('p','',dbDbtNode('plan-detail')).textContent=[a.project_name||a.project_id,a.project_version||JSON.stringify(a.compiler_versions||{}),a.source_digest||'',t('Staging materialization')+': '+(a.staging_materialization||t('Project default (no override)')),t('Source Schema')+': '+a.source_schema,t('Target Schema')+': '+a.target_schema].join(' · ');
- dbDbtTable(dbDbtNode('models'),['Model','Materialization','Applied table format','Dependencies'],(a.models||[]).map(m=>[m.name,m.materialized==='ephemeral'?t('Ephemeral, expanded into SQL'):m.materialized==='table'?t('Table candidate'):m.materialized==='view'?t('Sandbox INVOKER view'):m.materialized,dbDbtFormat(m),JSON.stringify(m.depends_on||[])]));
+ dbDbtTable(dbDbtNode('models'),['Model','Materialization','Applied table format','Dependencies','Native saved-plan compatibility'],(a.models||[]).map(m=>[m.name,m.materialized==='ephemeral'?t('Ephemeral, expanded into SQL'):m.materialized==='table'?t('Table candidate'):m.materialized==='view'?t('Sandbox INVOKER view'):m.materialized,dbDbtFormat(m),JSON.stringify(m.depends_on||[]),t(dbDbtNativeReason(m.unique_id))]));
  for(const m of a.models||[]){const detail=dataopsNode('details','',dbDbtNode('sql'));dataopsNode('summary','',detail).textContent=m.unique_id+' · '+JSON.stringify(m.relation);dataopsNode('pre','',detail).textContent=m.compiled_sql||'';dataopsNode('p','',detail,'Dependencies');dataopsNode('pre','',detail).textContent=JSON.stringify(m.depends_on||[],null,2);}
  dataopsNode('h3','',dbDbtNode('sql'),'Sources / refs');dataopsNode('pre','',dbDbtNode('sql')).textContent=JSON.stringify({sources:a.sources||[],source_bindings:a.source_bindings||[],refs:a.refs||[]},null,2);dataopsNode('h3','',dbDbtNode('sql'),'Tests and failure counts');dataopsNode('pre','',dbDbtNode('sql')).textContent=JSON.stringify((a.tests||[]).map(x=>({unique_id:x.unique_id,name:x.name,test_type:x.test_type,depends_on:x.depends_on})),null,2);
  }else dataopsNode('p','',dbDbtNode('plan-detail'),'Choose a saved plan or compile an approved project.');
- if(r){dbDbtSummary(dbDbtNode('run-detail'),r);dbDbtTable(dbDbtNode('candidates'),['Model','Status','Applied table format','TABLE snapshot / VIEW version','Candidate Ref details'],(r.models||[]).map(m=>[m.name,m.state,dbDbtFormat(m),dbDbtCandidateVersion(m),parent=>dbDbtCandidateDetails(parent,m)]));
+ if(r){dbDbtSummary(dbDbtNode('run-detail'),r);if(!locked&&['READY','NATIVE_VERIFIED','FAILED','CANCELED','PUBLISHED'].includes(r.state)){dataopsNode('p','',dbDbtNode('run-detail'),'Inspect the saved plan again to prepare a different explicit run.');dataopsButton(dbDbtNode('run-detail'),'','Inspect plan',()=>dbDbtObserve('plan',r.plan_id));}else if(r.state==='UNKNOWN'&&r.executor==='native_table')dataopsNode('p','',dbDbtNode('run-detail'),'Backend outcome unknown. Reconcile existing operations; publication is blocked.');dbDbtTable(dbDbtNode('candidates'),['Model','Status','Applied table format','TABLE snapshot / VIEW version','Candidate Ref details'],(r.models||[]).map(m=>[m.name,m.state,dbDbtFormat(m),dbDbtCandidateVersion(m),parent=>dbDbtCandidateDetails(parent,m)]));
  dbDbtTable(dbDbtNode('tests'),['Model','Status','Failure count'],(r.tests||[]).map(x=>[x.unique_id+' · '+x.name,x.state,x.failure_count??'']));
  for(const m of r.models||[]){if(m.materialized!=='table')continue;const row=dataopsNode('div','',dbDbtNode('publications'));dataopsNode('p','',row).textContent=m.name;
  const pub=p.publications[m.unique_id];if(pub)dbDbtSummary(row,pub);
@@ -5254,8 +5323,8 @@ function dbDbtInstall(){
  // Only Database mode replaces the legacy model controls. Manual WAP/Marts remain separate.
  for(const child of $('transformation-models').children)child.hidden=true;
  delete $('transformation-view-models').dataset.databaseUnavailable;$('transformation-view-models').disabled=false;
- const root=dataopsNode('section','db-dbt-panel',$('transformation-models'));root.className='panel';root.setAttribute('aria-labelledby','db-dbt-title');const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','db-dbt-title',body,'Database dbt SQL / WAP');
- for(const copy of ['SQL / WAP supports compiled table/ephemeral SELECT and run-specific SANDBOX INVOKER VIEWs. Publication is TABLE-only. Only fixed format=PARQUET table properties are supported. API/CLI supports native TABLE execution for one node. UI launch and native full build are unsupported.','Context is independent of Worksheets. History and deep links only read saved records.'])dataopsNode('p','',body,copy).className='help';
+ const root=dataopsNode('section','db-dbt-panel',$('transformation-models'));root.className='panel';root.setAttribute('aria-labelledby','db-dbt-title');const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','db-dbt-title',body,'Database dbt');
+ for(const copy of ['SQL / WAP supports compiled table/ephemeral SELECT and run-specific SANDBOX INVOKER VIEWs. Publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native full build and tests are unsupported.','Context is independent of Worksheets. History and deep links only read saved records.'])dataopsNode('p','',body,copy).className='help';
  const context=dataopsNode('div','',body);context.className='toolbar';
  for(const [name,label] of [['role','Execution role'],['database','Database']])dataopsField(context,'db-dbt-'+name,label,'select').onchange=()=>{const value=dbDbtNode(name).value;dbDbtPurge();p[name]=value;return dbDbtRefresh();};
  dataopsNode('p','',context,'Candidate Schema: SANDBOX (fixed)');dataopsButton(context,'db-dbt-refresh','Refresh dbt context',dbDbtRefresh);
@@ -5263,6 +5332,12 @@ function dbDbtInstall(){
  dataopsField(inputs,'db-dbt-materialization','Staging materialization','select',[['','Project default (no override)'],['ephemeral','Explicit ephemeral override'],['table','Explicit table override']]).onchange=dbDbtRender;
  dataopsNode('p','',body,'Project and schema inputs apply to the next compile. Build and publish use the selected saved artifacts.').className='help';
  dataopsNode('p','',body,'Project defaults to views are supported as run-specific SANDBOX INVOKER VIEWs. Only TABLE candidates can be published.').className='help';
+ const saved=dataopsNode('div','',body);saved.className='toolbar';saved.setAttribute('role','group');saved.setAttribute('aria-labelledby','db-dbt-run-label');dataopsNode('span','db-dbt-run-label',saved,'Run saved plan');
+ dataopsField(saved,'db-dbt-method','Execution method','select',[['sql_wap','SQL / WAP'],['native_table','Native TABLE']]).onchange=()=>{if(p.pending||p.intent)return;const value=dbDbtNode('method').value;if(!['sql_wap','native_table'].includes(value))return;p.method=value;p.node='';dbDbtRender();};
+ const native=dataopsNode('div','db-dbt-native-controls',saved);native.className='toolbar';
+ dataopsField(native,'db-dbt-node','Target model','select').onchange=()=>{if(p.pending||p.intent)return;p.node=dbDbtNode('node').value;dbDbtRender();};
+ dataopsNode('p','db-dbt-native-reason',native).setAttribute('aria-live','polite');
+ dataopsNode('p','db-dbt-native-help',body,'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.').className='help';
  const actions=dataopsNode('div','',body);actions.className='toolbar';for(const [name,label,fn] of [['compile','Compile project',()=>dbDbtSubmit('compile')],['build','Build candidates and test',()=>dbDbtSubmit('build')],['observe','Observe saved state',()=>dbDbtObserve()],['recover','Recover original receipt',()=>dbDbtRecover()],['close-rejected','Close rejected request and choose again',dbDbtCloseRejected],['cancel','Cancel saved run',()=>dbDbtSubmit('cancel')],['reconcile','Reconcile existing operations',()=>dbDbtSubmit('reconcile')]])dataopsButton(actions,'db-dbt-'+name,label,fn);
  p.status=dataopsNode('p','db-dbt-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');dataopsNode('p','db-dbt-reason',body);dataopsNode('p','db-dbt-receipt',body);
  for(const [name,label,tag] of [['plan-detail','Saved plans','div'],['models','Compiled models','div'],['sql','Model SQL and lineage','div'],['run-detail','Saved runs','div'],['candidates','Candidate models','div'],['tests','Tests and failure counts','div'],['publications','Publication','div'],['confirmation',null,'div']]){if(label)dataopsNode('h3','',body,label);const n=dataopsNode(tag,'db-dbt-'+name,body);if(['models','candidates','tests'].includes(name))n.className='table-wrap';}

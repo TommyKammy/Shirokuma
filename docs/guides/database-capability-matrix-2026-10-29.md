@@ -90,7 +90,7 @@
 | TRF-08 | 変更確認、無条件／条件付き全件更新 | 対応、上記条件。変更確認はwatch sourceが必要 | M、source Ref／Snapshot集合 | Mart check／refresh |
 | TRF-09 | Mart照会・履歴 | 対応、元owner／context | M、未知操作再送なし | Mart runs |
 | TRF-10 | Mart予定のLoad・新規・保存・有効化・停止・tick | 対応、A、監視sourceあり | M＋T、保存版で実行 | schedules |
-| TRF-11 | dbt一覧・model SQL・build／test | SQL／WAPのcompile・候補build／test・公開をAPI／CLI／Workbenchで提供。native TABLE 1件はAPI／CLIで明示選択し、同じ耐久履歴・取消・照合で観測 | SQL／WAPはTABLE／EPHEMERALとrun専用SANDBOX INVOKER VIEW。nativeは元本人・READY v2 plan・RAW／展開済EPHEMERAL依存・固定PARQUET・新規SANDBOX限定で、テスト未実行・正式公開不可。native実行選択UI、通常RunTask／graph・native test・置換・VIEWは後続 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C1](database-p6-3c-dbt-compatibility-2026-10-29.md)、[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)、[C2B2](database-p6-3c2b2-native-runs-2026-10-30.md) |
+| TRF-11 | dbt一覧・model SQL・build／test | SQL／WAPのcompile・候補build／test・公開をAPI／CLI／Workbenchで提供。native TABLE 1件もAPI／CLI／Workbenchで明示選択し、同じ耐久履歴・取消・照合で観測 | SQL／WAPは既定で、TABLE／EPHEMERALとrun専用SANDBOX INVOKER VIEWに対応。nativeは元本人・READY v2 plan・RAW／展開済EPHEMERAL依存・固定PARQUET・新規SANDBOX限定で、テスト未実行・正式公開不可。画面は適否と非対応理由を表示し、対象を自動選択しない。通常RunTask／graph・native test・置換・VIEWは後続 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C1](database-p6-3c-dbt-compatibility-2026-10-29.md)、[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)、[C2B2](database-p6-3c2b2-native-runs-2026-10-30.md)、[C2B3](database-p6-3c2b3-native-ui-2026-10-30.md) |
 | TRF-12 | 旧dynamic WAP一覧・refresh widget | 未接続の旧widget | 手動WAP／Managed Martを使用 | 変換の新パネル |
 | JOB-01 | Job新規・一覧・Load・再Load・定義／引数保存 | 対応、E／A | J、owner＋保存role＋context、CAS | `/api/v1/jobs` |
 | JOB-02 | SQL／alert step | 対応、E／A、既存SQL policy | J、alertはread-only | typed Job step |
@@ -115,7 +115,7 @@
 | CMP-01 | ヘッダー／SQLの共有Warehouse状態・更新 | logical_v1は共有runtime観測を実装。技術受入済み | 物理状態・観測時刻・engine検証を分離し、replica数だけでSQL準備完了にしない | `/api/v1/warehouses/LOCAL/runtime`。旧Database profileは従来の観測のみ |
 | CMP-02 | Compute panelの共有状態・停止blocker・保存policy | logical_v1で対応、認証済みV／E／A。技術受入済み | 受付・処理中・SUCCEEDEDと物理状態／engine検証を区別。旧SRE／Policy検査は含まない | 共有LOCAL panel／runtime GET |
 | CMP-03 | quick／SQL／Computeの明示Wake／Chillと状態再検証 | logical_v1のP専用API／UI／HTTP CLIを実装。技術受入済み | 全DBへの影響を表示。元key／receipt保持、現在権限・admission／drain・全blockerを再確認。SQLは再送しない | runtime操作／operation照会。旧Database profileは未対応 |
-| CMP-04 | Auto-Chill設定と許可済みSQLのAuto-resume | logical_v1で設定CAS、server側休止、SQL共通経路の自動復帰を実装。技術受入済み、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 設定はP、0は無効。自動起動は元のDB／role／intentを認可し、同一初回POSTを再送しない。queued取消・UNKNOWN保護を維持 | Workbench／native／CLI、既存DataOps・Job・Stage・Mart・予定の共通SQL経路。dbt／AIは未接続 |
+| CMP-04 | Auto-Chill設定と許可済みSQLのAuto-resume | logical_v1で設定CAS、server側休止、SQL共通経路の自動復帰を実装。技術受入済み、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 設定はP、0は無効。自動起動は元のDB／role／intentを認可し、同一初回POSTを再送しない。queued取消・UNKNOWN保護を維持 | Workbench／native／CLI、既存DataOps・Job・Stage・Mart・対応済みdbt・予定の共通SQL経路。AIは未接続 |
 | CMP-05 | ComputeのSRE check／Policy audit | 未接続。共有LOCALの休止・復帰とは別機能 | DB対応Bearsとplatform scopeが必要。旧routeの拒否を維持 | DB-P6-4／5 |
 | CMP-06 | XS／Sの実サイズ、Worker増減、用途別Warehouse | 未実装。休止・復帰の対応から伸縮完了を推定しない | 同一computeのaliasを維持し、容量・実資源・性能の計測後に採用 | DB-P7／8 |
 | ADM-01 | DB管理一覧・選択・revision／binding情報 | 対応、P | A、Worksheetと独立 | `/api/v1/admin/databases` |

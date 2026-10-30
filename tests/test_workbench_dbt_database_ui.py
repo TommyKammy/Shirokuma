@@ -21,6 +21,7 @@ const posts=()=>calls.filter(c=>c.path.startsWith('/api/v1/dbt/')&&c.options?.me
 const readBody=c=>JSON.parse(c.options.body);
 const ids=['model.demo.stage','model.demo.first','model.demo.second'];
 function makePlan(context,body={}){return {id:'plan-1',kind:'plan',actor:dbDbtOwner(),context:structuredClone(context),state:'READY',compatibility:{version:1,executor:'sql_wap',status:'supported',issues:[]},project_id:'lake_marts',project_name:'Lake marts',source_digest:'bytes-digest',source_schema:'raw',target_schema:'schema',staging_materialization:'ephemeral',created_at:'2026-10-29T00:00:00Z',models:ids.map((id,i)=>({unique_id:id,name:['stage','first','second'][i],materialized:i?'table':'ephemeral',table_properties:i===1?{format:'PARQUET'}:{},relation:['sales','sandbox',['stage','first','second'][i]],depends_on:i?[ids[0]]:['source.demo.orders'],compiled_sql:i?'select * from orders':"select '<img src=x onerror=attack()>' from sales.raw.orders"})),tests:[{unique_id:'test.first',name:'not_null',test_type:'not_null',depends_on:[ids[1]]},{unique_id:'test.second',name:'unique',test_type:'unique',depends_on:[ids[2]]}],source_bindings:[{unique_id:'source.demo.orders',relation:['sales','raw','orders'],ref:{database_id:'db',schema_id:'raw',object_id:'orders',incarnation:1}}],...body};}
+function makeOptions(a){return {version:1,plan_id:a.id,source_digest:a.source_digest,executor:'native_table',eligible:true,reason_code:null,nodes:a.models.map((m,i)=>({node_id:m.unique_id,eligible:i===1,reason_code:i===1?null:i===0?'DBT_NATIVE_TABLE_REQUIRED':'DBT_NATIVE_PARQUET_REQUIRED'}))};}
 function makeRun(context,body={}){return {id:'run-1',kind:'run',actor:dbDbtOwner(),context:structuredClone(context),plan_id:plan.id,state:'READY',cancel_requested:false,created_at:'2026-10-29T00:01:00Z',models:plan.models.map((m,i)=>({unique_id:m.unique_id,name:m.name,materialized:m.materialized,table_properties:structuredClone(m.table_properties),state:i?'BUILT':'EXPANDED',wap_model_id:'wap-'+i,wap_version:2,build_id:i?'build-'+i:null,candidate:i?{ref:{database_id:'db',schema_id:'sandbox',object_id:'candidate-'+i,incarnation:1},snapshot:'snap-'+i}:null,operation_ids:[]})),tests:plan.tests.map(t=>({...t,state:'PASSED',failure_count:0,operation_id:'op-'+t.unique_id})),operations:[{id:'safe-op',state:'FINISHED'}],...body};}
 route=async(path,options)=>{
  const url=new URL('http://local'+path),body=options?.body?JSON.parse(options.body):null,context=body?.context||JSON.parse(url.searchParams.get('context')||'null');
@@ -33,7 +34,7 @@ route=async(path,options)=>{
   let artifact=receipts.get(key);
   if(!artifact){
    if(url.pathname.endsWith('/plans')){plan=makePlan(context,{...body});delete plan.context.context;artifact={plan};}
-   else if(url.pathname.endsWith('/runs')){run=makeRun(context);artifact={run};}
+   else if(url.pathname.endsWith('/runs')){run=makeRun(context,body.executor==='native_table'?{executor:'native_table',selected_node_id:body.node_id,state:'QUEUED',tests:[],tests_status:'NOT_RUN',publication_allowed:false}:{});artifact={run};}
    else if(url.pathname.endsWith('/cancel')){run={...run,state:'CANCELING',cancel_requested:true};artifact={run};}
    else if(url.pathname.endsWith('/reconcile')){artifact={run};}
    else if(url.pathname.endsWith('/publish')){const publication={id:'pub-'+body.node_id.split('.').at(-1),kind:'publication',actor:dbDbtOwner(),context,run_id:run.id,parent_run_id:run.id,plan_id:run.plan_id,node_id:body.node_id,state:'QUEUED',build_id:'build',audit_id:null,publication_id:null,operation_ids:[]};pubs[publication.id]=publication;artifact={publication};}
@@ -46,7 +47,7 @@ route=async(path,options)=>{
  if(url.pathname.endsWith('/projects'))return {context,projects:[{id:'lake_marts',name:'Lake marts'},{id:'approved_second',name:'Other approved project'}]};
  if(url.pathname.endsWith('/plans'))return {context,items:plan?[structuredClone(plan)]:[]};
  if(url.pathname.endsWith('/runs'))return {context,items:run?[structuredClone(run)]:[]};
- if(url.pathname.includes('/plans/'))return {context,plan:structuredClone(plan),...wrong};
+ if(url.pathname.includes('/plans/'))return {context,plan:structuredClone(plan),run_options:makeOptions(plan),...wrong};
  if(url.pathname.includes('/runs/'))return {context,run:structuredClone(run),...wrong};
  if(url.pathname.includes('/publications/'))return {context,publication:structuredClone(pubs[url.pathname.split('/').at(-1)]),...wrong};
  throw Error('Unexpected GET '+path);
@@ -69,6 +70,151 @@ function review(node=ids[1]){p.review=node;dbDbtRender();assert.ok(dbDbtNode('pu
 class DbtDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
+
+    def test_native_saved_options_explicit_selection_payload_and_sql_default(self):
+        self.javascript(r"""
+await compile();const sqlBody={plan_id:plan.id};assert.equal(p.method,'sql_wap');
+assert.equal(dbDbtNode('native-controls').hidden,true);
+dbDbtNode('method').value='native_table';await dbDbtNode('method').onchange();
+assert.equal(dbDbtNode('build').disabled,true);assert.match(dbDbtNode('native-reason').textContent,/Inspect the saved plan/);
+await dbDbtSubmit('build');assert.equal(posts().length,1);
+plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);
+assert.equal(p.node,'');assert.equal(dbDbtNode('build').disabled,true);
+assert.equal(dbDbtNode('node').options.find(n=>n.value===ids[0]).disabled,true);
+assert.match(dbDbtNode('node').options.find(n=>n.value===ids[2]).textContent,/PARQUET/);
+assert.equal(dbDbtNode('node').options.find(n=>n.value===ids[1]).disabled,false);
+dbDbtNode('node').value=ids[1];await dbDbtNode('node').onchange();
+assert.equal(dbDbtNode('build').disabled,false);
+// Compile draft controls cannot change the selected saved plan or node.
+dbDbtNode('project').value='approved_second';dbDbtNode('materialization').value='table';
+await dbDbtSubmit('build');const sent=readBody(posts().at(-1));
+assert.deepEqual(Object.keys(sent).sort(),['context','executor','node_id','plan_id']);
+assert.equal(sent.executor,'native_table');assert.equal(sent.node_id,ids[1]);assert.equal(sent.plan_id,plan.id);
+assert.equal(p.run.executor,'native_table');assert.equal(p.run.tests_status,'NOT_RUN');assert.equal(dbDbtCanPublish(p.run.models[1]),false);
+p.method='sql_wap';dbDbtRender();assert.match(text(dbDbtNode('run-detail')),/native_table/);assert.match(text(dbDbtNode('run-detail')),new RegExp(ids[1]));
+await dbDbtObserve('plan',plan.id);dbDbtNode('method').value='sql_wap';await dbDbtNode('method').onchange();
+await dbDbtSubmit('build');const oldBody=readBody(posts().at(-1));delete oldBody.context;assert.deepEqual(oldBody,sqlBody);
+clearTimeout(p.timer);
+""")
+
+    def test_native_default_view_plan_has_no_compatible_model_and_changes_never_post(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;
+plan.models=plan.models.map(m=>({...m,materialized:'view'}));
+wrong={run_options:{...makeOptions(plan),nodes:ids.map(node_id=>({node_id,eligible:false,reason_code:'DBT_NATIVE_TABLE_REQUIRED'}))}};
+await dbDbtObserve('plan',plan.id);const count=posts().length;
+dbDbtNode('method').value='native_table';await dbDbtNode('method').onchange();
+for(const lang of ['ja','en']){
+ setLanguage(lang);dbDbtRender();
+ assert.match(dbDbtNode('native-reason').textContent,lang==='ja'?/native 対応モデルがありません/:/No compatible native model/);
+ assert.match(dbDbtNode('native-reason').textContent,/RAW/);assert.match(dbDbtNode('native-reason').textContent,/EPHEMERAL/);
+ assert.equal(dbDbtNode('build').disabled,true);assert.equal(p.node,'');
+ assert.equal(dbDbtNode('node').disabled,true);
+ assert.ok(dbDbtNode('node').options.filter(o=>o.value).every(o=>o.disabled));
+ assert.equal($('db-dbt-title').textContent,'Database dbt');
+}
+setLanguage('en');dbDbtNode('node').value=ids[0];await dbDbtNode('node').onchange();
+assert.equal(posts().length,count);await dbDbtSubmit('build');assert.equal(posts().length,count);
+assert.ok(plan.models.every(m=>m.materialized==='view'));
+// Empty saved models, global incompatibility and an unselected eligible model have distinct guidance.
+p.plan={...p.plan,models:[]};p.runOptions={...makeOptions(p.plan),nodes:[]};
+assert.match(dbDbtNativeReason(''),/has no models/);
+p.runOptions={...p.runOptions,eligible:false,reason_code:'DBT_PLAN_NOT_READY'};
+assert.match(dbDbtNativeReason(''),/requires a READY/);
+p.plan=plan;p.runOptions=makeOptions(plan);assert.match(dbDbtNativeReason(''),/Choose one/);
+""")
+
+    def test_prepare_different_run_only_after_definite_closure(self):
+        self.javascript(r"""
+await build();const count=posts().length;
+const preparation=()=>dbDbtNode('run-detail').children.find(n=>n.tagName==='BUTTON'&&n.textContent===t('Inspect plan'));
+for(const lang of ['ja','en']){
+ setLanguage(lang);
+ for(const state of ['QUEUED','COMPILING','BUILDING','TESTING','AUDITING','PUBLISHING','CANCELING','UNKNOWN','COMMITTED_RECORDING_FAILED']){
+  p.run={...run,state};dbDbtRender();assert.equal(preparation(),undefined);
+  assert.equal(text(dbDbtNode('run-detail')).includes(t('Inspect the saved plan again to prepare a different explicit run.')),false);
+  assert.equal(dbDbtNode('observe').disabled,false);assert.equal(dbDbtNode('history-refresh').disabled,false);
+ }
+ for(const state of ['READY','NATIVE_VERIFIED','FAILED','CANCELED','PUBLISHED']){
+  p.run={...run,state};dbDbtRender();assert.ok(preparation());assert.equal(preparation().disabled,false);
+ }
+}
+p.run={...run,executor:'native_table',state:'UNKNOWN'};dbDbtRender();
+assert.match(text(dbDbtNode('run-detail')),/Reconcile existing operations/);assert.equal(preparation(),undefined);
+p.run={...run,state:'FAILED'};lose=true;await dbDbtSubmit('reconcile');assert.ok(p.intent);
+assert.equal(preparation(),undefined);assert.equal(text(dbDbtNode('run-detail')).includes(t('Inspect the saved plan again to prepare a different explicit run.')),false);
+assert.equal(posts().length,count+1);clearTimeout(p.timer);
+""")
+
+    def test_native_invalid_missing_and_stale_options_fail_closed(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;
+for(const change of [undefined,null,{...makeOptions(plan),plan_id:'wrong'},{...makeOptions(plan),source_digest:'wrong'},
+ {...makeOptions(plan),executor:'sql_wap'},{...makeOptions(plan),version:9},
+ {...makeOptions(plan),nodes:[]},{...makeOptions(plan),nodes:[{node_id:ids[1],eligible:true,reason_code:null}]}]){
+ wrong={run_options:change};await dbDbtObserve('plan',plan.id);p.method='native_table';p.node=ids[1];dbDbtRender();
+ assert.equal(dbDbtNode('build').disabled,true);assert.equal(p.runOptions,null);await dbDbtSubmit('build');assert.equal(posts().length,1);
+}
+wrong=null;await dbDbtObserve('plan',plan.id);p.method='native_table';p.node=ids[1];
+const hold=deferred();observing=hold;const reading=dbDbtObserve('plan',plan.id);await tick();
+assert.equal(p.runOptions,null);assert.equal(dbDbtNode('build').disabled,true);
+p.database='other';dbDbtPurge();hold.resolve();await reading;
+assert.equal(p.plan,null);assert.equal(p.runOptions,null);assert.equal(p.node,'');
+assert.equal(posts().length,1);
+""")
+
+    def test_native_ack_executor_node_and_original_frozen_recovery_after_reload(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);
+p.method='native_table';p.node=ids[1];lose=true;await dbDbtSubmit('build');const original=p.intent,first=posts().at(-1);
+assert.ok(original);assert.equal(dbDbtNode('method').disabled,true);assert.equal(dbDbtNode('node').disabled,true);
+// A reload restores the original method/node/body/key without launching it.
+p.intent=null;lose=false;await dbDbtRefresh();assert.deepEqual(p.intent,JSON.parse(JSON.stringify(original)));
+assert.equal(dbDbtNode('method').value,'native_table');assert.equal(dbDbtNode('node').value,ids[1]);assert.equal(posts().length,2);
+const saved=structuredClone(run);
+for(const change of [{executor:undefined},{executor:'sql_wap'},{selected_node_id:undefined},{selected_node_id:ids[2]},{plan_id:'wrong'},{actor:'other'},{context:{...saved.context,grant_revision:99}}]){
+ wrong={run:{...saved,...change}};await dbDbtRecover();assert.ok(p.intent);assert.equal(p.run,null);
+ const last=posts().at(-1);assert.equal(last.options.body,first.options.body);assert.equal(last.options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);
+}
+wrong=null;await dbDbtRecover();assert.equal(p.intent,null);assert.equal(p.run.executor,'native_table');
+assert.equal(receipts.size,2);clearTimeout(p.timer);
+""")
+
+    def test_native_uncertain_intent_is_retained_but_node_hidden_from_viewer(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);
+p.method='native_table';p.node=ids[1];lose=true;await dbDbtSubmit('build');const original=p.intent;
+p.role='bi_viewer';dbDbtPurge();assert.equal(p.intent,original);assert.equal(p.runOptions,null);
+assert.equal(dbDbtNode('native-controls').hidden,true);assert.equal(dbDbtNode('node').value,'');
+assert.equal(dbDbtNode('node').options.some(o=>o.value===ids[1]),false);
+assert.equal(dbDbtNode('sql').children.length,0);assert.equal(posts().length,2);
+""")
+
+    def test_sql_ack_cannot_masquerade_as_native_and_unknown_never_auto_retries(self):
+        self.javascript(r"""
+await compile();const base=route;route=async(path,options)=>{const reply=await base(path,options);if(options?.method==='POST'&&path.endsWith('/runs'))reply.run={...reply.run,executor:'native_table',selected_node_id:ids[1]};return reply;};
+await dbDbtSubmit('build');assert.ok(p.intent);assert.equal(p.intent.body.executor,undefined);assert.equal(p.run,null);
+const first=posts().at(-1);route=base;await dbDbtRecover();assert.equal(p.intent,null);assert.equal(posts().at(-1).options.body,first.options.body);
+run={...run,executor:'native_table',selected_node_id:ids[1],state:'UNKNOWN',tests:[]};await dbDbtObserve('run',run.id);
+const count=posts().length;dbDbtSchedule();assert.equal(p.timer,null);await dbDbtSubmit('build');assert.equal(posts().length,count);
+await dbDbtHistory();assert.equal(posts().length,count);assert.match(text(dbDbtNode('history')),/native_table/);
+""")
+
+    def test_native_controls_localized_labels_reasons_role_plan_and_no_autoselect(self):
+        self.javascript(r"""
+await compile();plan.compatibility.version=2;await dbDbtObserve('plan',plan.id);p.method='native_table';dbDbtRender();
+for(const lang of ['ja','en']){
+ setLanguage(lang);dbDbtRender();assert.equal(dbDbtNode('build').textContent,t('Run native TABLE'));
+ for(const id of ['method','node'])assert.ok(dbDbtNode(id).parentElement.children.some(n=>n.tagName==='LABEL'&&n.htmlFor===dbDbtNode(id).id));
+ assert.equal(dbDbtNode('node').value,'');assert.equal(dbDbtNode('native-controls').hidden,false);
+ assert.match(text(dbDbtNode('native-help')),/SANDBOX/);assert.match(text(dbDbtNode('native-help')),lang==='ja'?/テストは実行せず/:/Tests are not run/);
+ for(const reason of Object.values(dbDbtNativeReasons))assert.notEqual(i18n.ja[reason],undefined);
+ assert.match(dbDbtNode('native-reason').textContent,lang==='ja'?/1つ選択/:/Choose one/);
+}
+p.node=ids[1];plan={...plan,id:'new-plan'};await dbDbtObserve('plan',plan.id);assert.equal(p.method,'sql_wap');assert.equal(p.node,'');
+p.role='bi_viewer';dbDbtPurge();assert.equal(p.runOptions,null);assert.equal(p.node,'');assert.equal(dbDbtNode('sql').children.length,0);
+assert.equal(dbDbtNode('method').disabled,true);assert.equal(worksheets.length,13);
+""")
 
     def test_mock_header_contract_matches_shared_backend_key_adapter(self):
         # Execute the actual adapter function without importing unrelated services.
@@ -634,7 +780,7 @@ for(const lang of ['ja','en']){
  setLanguage(lang);
  const detail=text(dbDbtNode('compatibility'));
  assert.match(detail,/SQL \/ WAP/);assert.match(detail,/COUNT\(\*\)/);
- assert.match(detail,lang==='ja'?/API／CLI は1ノードの native TABLE 実行に対応/:/API\/CLI supports native TABLE execution for one node/);
+ assert.match(detail,lang==='ja'?/UI／API／CLI は互換性のある保存済み1モデル/:/UI\/API\/CLI supports native TABLE execution for one compatible saved model/);
  assert.match(text(dbDbtNode('models')),lang==='ja'?/適用テーブル形式/:/Applied table format/);
  assert.match(text(dbDbtNode('models')),/PARQUET/);
  assert.match(text(dbDbtNode('models')),lang==='ja'?/コネクタ既定/:/Connector default/);
