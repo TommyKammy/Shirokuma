@@ -1683,6 +1683,9 @@ class QueryRecovery(Recovery):
 
 
 def run(args):
+    if args.command.startswith('recover-dbt-audit-'):
+        import dbt_execution_recovery
+        return dbt_execution_recovery.run(args)
     if args.command.startswith('recover-query-'):
         _require(args.config.is_absolute())
         config = runtime_profile.private_json(args.config)

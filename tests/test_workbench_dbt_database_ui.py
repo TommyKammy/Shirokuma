@@ -144,6 +144,77 @@ class DbtDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
 
+    def check_operator_abandoned_publication(self, phase):
+        self.javascript(GRAPH_PUBLICATION + VIEW_PUBLICATION + r"""
+await viewSource();const publication=publishedRecord();publication.state='UNKNOWN';
+delete publication.native_audit;delete publication.native_publication;delete publication.committed;
+publication.execution_closure='FENCED_READ_ONLY';
+publication.execution_recovery={operation_id:'f94f5de1-8ff0-44cf-b178-c1bec29d8760',phase:PHASE,query_outcome:'UNKNOWN'};
+publication.operation_ids=['unrelated-child-operation'];pubs[publication.id]=publication;
+const original=structuredClone(publication),before=posts().length,saved=worksheets.map(w=>w.sql),baseRoute=route;
+route=async(path,options)=>{if(/\/runs\//.test(path))throw Error('source run forbidden');return baseRoute(path,options);};
+await dbDbtObserve('publication',publication.id,undefined,true);await dbDbtHistory();
+assert.deepEqual(p.standalone,original);assert.deepEqual(p.publicationHistory,[original]);assert.equal(p.intent,null);
+for(const lang of ['en','ja']){
+ setLanguage(lang);dbDbtRender();
+ for(const name of ['publications','history']){
+  const panel=text(dbDbtNode(name));assert.ok(panel.includes(lang==='ja'?'結果不明。読取り実行は運用者が停止・放棄済み':'Outcome unknown. Read execution was stopped and abandoned by the operator.'));
+  assert.ok(panel.includes(publication.execution_recovery.operation_id));assert.ok(panel.includes((lang==='ja'?'復旧フェーズ':'Recovery phase')+': '+PHASE));
+  assert.ok(panel.includes((lang==='ja'?'クエリ結果':'Query outcome')+': UNKNOWN'));assert.doesNotMatch(panel,/Reconcile existing operations|既存処理を照合/);
+  assert.match(panel,PHASE==='CLOSED'?(lang==='ja'?/サービスの健全性は未確認/:/Service health is not confirmed/):(lang==='ja'?/置換先は健全で、受付は再開済み/:/Replacement healthy; admission reopened/));
+  assert.doesNotMatch(panel,/Row audit: 0|行数監査: 0|Row count: 0|success|成功|Published Snapshot: [^N]/);
+ }
+ assert.match(text(dbDbtNode('publications')),/Definition digest: a{64}|定義 digest: a{64}/);
+ for(const action of ['build','cancel','reconcile']){assert.equal(dbDbtNode(action).disabled,true);await dbDbtSubmit(action);}
+ await dbDbtSubmit('publish',publication.node_id);assert.doesNotMatch(text(dbDbtNode('publications')),/Review publication|Audit and publish|公開内容を確認|監査して公開/);
+}
+assert.deepEqual(p.standalone,original);assert.deepEqual(p.publicationHistory,[original]);assert.equal(p.standalone.state,'UNKNOWN');
+assert.equal('native_audit' in p.standalone,false);assert.equal('row_count' in p.standalone,false);assert.equal('audit_count' in p.standalone,false);
+assert.equal(posts().length,before);assert.deepEqual(worksheets.map(w=>w.sql),saved);assert.equal(worksheets.length,13);clearTimeout(p.timer);
+""".replace('PHASE', repr(phase)))
+
+    def test_operator_abandoned_publication_closed_display(self):
+        self.check_operator_abandoned_publication('CLOSED')
+
+    def test_operator_abandoned_publication_open_display(self):
+        self.check_operator_abandoned_publication('OPEN')
+
+    def test_operator_abandoned_publication_invalid_contract_and_legacy(self):
+        self.javascript(GRAPH_PUBLICATION + VIEW_PUBLICATION + r"""
+await viewSource();const good=publishedRecord();good.state='UNKNOWN';delete good.native_audit;delete good.native_publication;
+good.execution_closure='FENCED_READ_ONLY';good.execution_recovery={operation_id:'f94f5de1-8ff0-44cf-b178-c1bec29d8760',phase:'CLOSED',query_outcome:'UNKNOWN'};
+const changes=[a=>{delete a.execution_closure;delete a.execution_recovery;},a=>delete a.execution_closure,a=>delete a.execution_recovery,
+ a=>a.kind='run',a=>a.kind='plan',a=>a.state='PUBLISHED',a=>a.state='FAILED',a=>a.state='CLOSED',a=>a.execution_closure='CLOSED',a=>a.execution_closure='fenced_read_only',
+ ...[null,[],true,'CLOSED',42].map(v=>a=>a.execution_recovery=v),
+ ...['operation_id','phase','query_outcome'].map(k=>a=>delete a.execution_recovery[k]),a=>a.execution_recovery.extra=true,
+ ...['closed','open','UNKNOWN','PUBLISHED','FAILED','',null,1].map(v=>a=>a.execution_recovery.phase=v),
+ ...['FINISHED','FAILED','unknown',null,0].map(v=>a=>a.execution_recovery.query_outcome=v),
+ ...['not-a-uuid','f94f5de18ff044cfb178c1bec29d8760','{f94f5de1-8ff0-44cf-b178-c1bec29d8760}','f94f5de1-8ff0-44cf-b178-c1bec29d876g','f94f5de1-8ff0-44cf-b178-c1bec29d8760\n','',null,1].map(v=>a=>a.execution_recovery.operation_id=v),
+ a=>a.execution_recovery=Object.assign(Object.create({inherited:true}),a.execution_recovery),a=>a.execution_recovery[Symbol('extra')]=true];
+const before=posts().length;
+for(const change of changes){const bad=structuredClone(good);change(bad);const original=JSON.stringify(bad);p.run=null;p.standalone=bad;p.publicationHistory=[bad];
+ for(const lang of ['en','ja']){setLanguage(lang);dbDbtRender();for(const name of ['publications','history']){
+  const panel=text(dbDbtNode(name));assert.doesNotMatch(panel,/stopped and abandoned|停止・放棄済み|Recovery operation ID|復旧操作 ID|physically fenced|物理的に隔離済み/);
+  if(bad.state==='UNKNOWN')assert.ok(panel.includes(t('Backend outcome unknown. Reconcile existing operations; publication is blocked.')));
+ }}assert.equal(JSON.stringify(bad),original);
+}
+assert.equal(posts().length,before);clearTimeout(p.timer);
+""")
+
+    def test_operator_abandoned_publication_role_and_context_purge(self):
+        for control, value in [('role', 'data_engineer'), ('database', '')]:
+            with self.subTest(control=control):
+                self.javascript(GRAPH_PUBLICATION + VIEW_PUBLICATION + r"""
+await viewSource();const publication=publishedRecord();publication.state='UNKNOWN';delete publication.native_audit;delete publication.native_publication;
+publication.execution_closure='FENCED_READ_ONLY';publication.execution_recovery={operation_id:'f94f5de1-8ff0-44cf-b178-c1bec29d8760',phase:'OPEN',query_outcome:'UNKNOWN'};pubs[publication.id]=publication;
+await dbDbtObserve('publication',publication.id,undefined,true);await dbDbtHistory();const before=posts().length;
+assert.match(text(dbDbtNode('history')),/stopped and abandoned/);
+dbDbtNode(CONTROL).value=VALUE;await dbDbtNode(CONTROL).onchange();
+assert.equal(p.standalone,null);assert.deepEqual(p.publications,{});assert.deepEqual(p.publicationHistory,[]);assert.equal(p.run,null);
+for(const name of ['publications','history'])assert.doesNotMatch(text(dbDbtNode(name)),/stopped and abandoned|停止・放棄済み|f94f5de1|OPEN/);
+assert.equal(JSON.stringify([p.standalone,p.publications,p.publicationHistory,p.run,p.plan,p.runs,p.plans]).includes('execution_recovery'),false);assert.equal(posts().length,before);clearTimeout(p.timer);
+""".replace('CONTROL', repr(control)).replace('VALUE', repr(value)))
+
     def test_view_frozen_review_facts_stay_visible_through_rerenders(self):
         self.javascript(GRAPH_PUBLICATION + VIEW_PUBLICATION + r"""
 function visible(n){return n.textContent+' '+(n.tagName==='DETAILS'&&!n.open?n.children.filter(c=>c.tagName==='SUMMARY'):n.children).map(visible).join(' ');}

@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-31
-version: "1.32"
+version: "1.33"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -32,7 +32,7 @@ DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse�
 
 2026-10-31、優先unit [C2E1 native graphのINVOKER VIEW](../../guides/database-p6-3c2e1-native-views-2026-10-31.md)を実装し、この範囲の技術受入を完了した。同じDBのrun専用SANDBOXへVIEWを構築し、VIEWからTABLEへの依存と保存全品質testを実SDKで実行する。C2E1受入時点ではVIEWを含むgraphの正式公開を保留した。C2E2でVIEW定義・識別情報と推移依存を公開証拠へ接続する。既存のTABLE／EPHEMERAL graph公開とSQL/WAPを維持する。
 
-2026-10-31、優先unit [C2E2 VIEWを含むnative graphのTABLE公開](../../guides/database-p6-3c2e2-view-graph-publication-2026-10-31.md)を実装し、技術受入を進めている。全VIEWの定義・UUID／version・閉鎖済み作成queryと推移依存を公開intentへ固定し、全graph構築・品質成功後に選択TABLEを明示公開する。確認済みVIEW要約と受付結果を照合し、元VIEWが変更・削除された後も公開履歴を独立して照会できる。正式VIEW公開やVIEW連鎖は含めない。 実機の空監査でバックエンドIDなしのUNKNOWNが残り、新規1公開・3admissionは未閉鎖である。技術受入は継続中で、DBT読取り監査の限定的な運用復旧を最優先とする。
+2026-10-31、優先unit [C2E2 VIEWを含むnative graphのTABLE公開](../../guides/database-p6-3c2e2-view-graph-publication-2026-10-31.md)を実装し、この範囲の技術受入を完了した。全VIEWの定義・UUID／version・閉鎖済み作成queryと推移依存を公開intentへ固定し、全graph構築・品質成功後に選択TABLEを明示公開する。確認済みVIEW要約と受付結果を照合し、元VIEWが変更・削除された後も公開履歴を独立して照会できる。正式VIEW公開やVIEW連鎖は含めない。 実機の監査UNKNOWNは[R1の限定運用復旧](../../guides/database-p6-3r1-dbt-audit-recovery-2026-10-31.md)で、UNKNOWNを保持して実行閉鎖・受付再開を証明した。新しい未閉鎖実行は0件である。次はTRF-11の必須操作との対応を確認し、DB-P6-4AのQuery Doctor／Copilot Explain読取り専用context統合へ進む。
 
 ---
 

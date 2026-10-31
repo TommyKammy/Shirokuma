@@ -5438,7 +5438,19 @@ function dbDbtSchedule(){
  const a=pub||(['QUEUED','BUILDING','TESTING','CANCELING'].includes(p.run?.state)?p.run:['QUEUED','COMPILING'].includes(p.plan?.state)?p.plan:null);if(!a)return;
  const epoch=p.epoch;p.timer=setTimeout(()=>{if(epoch===p.epoch&&dbDbtAllowed())dbDbtObserve(a.kind,a.id);},1800);p.timer?.unref?.();
 }
-function dbDbtState(a){if(a?.kind==='run'&&a.executor==='native_graph'){const counts=(a.tests||[]).map(x=>x.failure_count).filter(x=>Number.isSafeInteger(x)&&x>=0);return ['native_graph',a.state,t(a.native_verified===true?'Graph build verified':'Graph build not verified'),t('Quality tests')+': '+(a.native_tests===true?a.tests_status||'UNKNOWN':'NOT_RUN'),t('Test count')+': '+(a.tests?.length||0),...(counts.length?[t('Failure count')+': '+counts.reduce((n,x)=>n+x,0)]:[]),t(dbDbtGraphPublicationReason(a))].join(' · '); }if(a?.kind==='run'&&a.executor==='native_table'){
+Object.assign(i18n.ja,{
+ 'Outcome unknown. Read execution was stopped and abandoned by the operator.':'結果不明。読取り実行は運用者が停止・放棄済み',
+ 'Recovery operation ID':'復旧操作 ID','Recovery phase':'復旧フェーズ','Query outcome':'クエリ結果',
+ 'Original query physically fenced. Service health is not confirmed.':'元のクエリは物理的に隔離済みです。サービスの健全性は未確認です。',
+ 'Original query physically fenced. Replacement healthy; admission reopened.':'元のクエリは物理的に隔離済みです。置換先は健全で、受付は再開済みです。'
+});
+function dbDbtExecutionRecovery(a){
+ const r=a?.execution_recovery;
+ if(a?.kind!=='publication'||a.state!=='UNKNOWN'||a.execution_closure!=='FENCED_READ_ONLY'||!r||typeof r!=='object'||Array.isArray(r)||![Object.prototype,null].includes(Object.getPrototypeOf(r)))return null;
+ const keys=Reflect.ownKeys(r);if(keys.length!==3||!['operation_id','phase','query_outcome'].every(k=>Object.hasOwn(r,k)))return null;
+ return typeof r.operation_id==='string'&&r.operation_id.length===36&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(r.operation_id)&&['CLOSED','OPEN'].includes(r.phase)&&r.query_outcome==='UNKNOWN'?r:null;
+}
+function dbDbtState(a){const recovery=dbDbtExecutionRecovery(a);if(recovery)return [a.state,t('Outcome unknown. Read execution was stopped and abandoned by the operator.'),t('Recovery operation ID')+': '+recovery.operation_id,t('Recovery phase')+': '+recovery.phase,t('Query outcome')+': '+recovery.query_outcome,t(recovery.phase==='OPEN'?'Original query physically fenced. Replacement healthy; admission reopened.':'Original query physically fenced. Service health is not confirmed.')].join(' · ');if(a?.kind==='run'&&a.executor==='native_graph'){const counts=(a.tests||[]).map(x=>x.failure_count).filter(x=>Number.isSafeInteger(x)&&x>=0);return ['native_graph',a.state,t(a.native_verified===true?'Graph build verified':'Graph build not verified'),t('Quality tests')+': '+(a.native_tests===true?a.tests_status||'UNKNOWN':'NOT_RUN'),t('Test count')+': '+(a.tests?.length||0),...(counts.length?[t('Failure count')+': '+counts.reduce((n,x)=>n+x,0)]:[]),t(dbDbtGraphPublicationReason(a))].join(' · '); }if(a?.kind==='run'&&a.executor==='native_table'){
  const verified=a.native_verified===true||a.state==='NATIVE_VERIFIED';
  if(a.native_tests!==true)return ['native_table',a.selected_node_id||'',a.state,a.state==='NATIVE_VERIFIED'?t('Native TABLE verified; tests not run; publication unavailable'):t('Tests not run; publication unavailable')].join(' · ');
  const status=['QUEUED','RUNNING','PASSED','FAILED','ERROR','CANCELED','UNKNOWN'].includes(a.tests_status)?a.tests_status:'UNKNOWN';

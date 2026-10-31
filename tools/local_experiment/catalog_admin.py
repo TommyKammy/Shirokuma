@@ -317,6 +317,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     for name in ('plan', 'apply', 'reconcile', 'inspect'):
+        recovery = commands.add_parser('recover-dbt-audit-' + name)
+        recovery.add_argument('--config', required=True, type=Path)
+        if name == 'plan':
+            recovery.add_argument('--publication-id', required=True)
+            recovery.add_argument('--idempotency-key', required=True)
+        else:
+            recovery.add_argument('--operation-id', required=True)
+        if name in ('apply', 'reconcile'):
+            recovery.add_argument('--expected-revision', required=True, type=int)
+            recovery.add_argument('--expected-intent-digest', required=True)
+    for name in ('plan', 'apply', 'reconcile', 'inspect'):
         recovery = commands.add_parser('recover-query-' + name)
         recovery.add_argument('--config', required=True, type=Path)
         if name == 'plan':
@@ -393,7 +404,7 @@ def main(argv=None):
                 or not args.verify_readonly and any(supplied)):
             parser.error('read-only verify requires --step verify and all revision/digest flags together')
     try:
-        if args.command.startswith(('recover-job-', 'recover-query-')):
+        if args.command.startswith(('recover-job-', 'recover-query-', 'recover-dbt-audit-')):
             import execution_recovery
             print(json.dumps(execution_recovery.run(args), sort_keys=True))
             return 0

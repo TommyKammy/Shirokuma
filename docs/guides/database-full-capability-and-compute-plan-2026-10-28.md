@@ -32,7 +32,7 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 | 自動休止・自動復帰 | `logical_v1`の既存server lifecycleと共通SQL経路へ接続。技術受入は完了、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 元intent・現在権限・admissionを維持し、queued取消とUNKNOWNを保護。dbtの型付きSQLも共通経路を使い、AI接続は後続 |
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
-| データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を技術受入済み。C2E1のnative VIEW graph構築・品質testを技術受入済み。C2E2のVIEW証拠付きTABLE公開・独立公開履歴を実装・技術受入中 | 正式公開はTABLE。VIEW含有native graphのTABLE公開はC2E2の全VIEW・全品質条件を適用。incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
+| データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を技術受入済み。C2E1のnative VIEW graph構築・品質testを技術受入済み。C2E2のVIEW証拠付きTABLE公開・独立公開履歴を技術受入済み | 正式公開はTABLE。VIEW含有native graphのTABLE公開はC2E2の全VIEW・全品質条件を適用。incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
 | AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview、Bears／Copilotは未接続 | telemetryと耐久監査を分離。AIはDB-P6-4で認可／WAPへ接続する |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
@@ -132,7 +132,7 @@ UIは受付・起動中・利用可能・停止中・失敗を表示し、通常
 
 [C2E1](database-p6-3c2e1-native-views-2026-10-31.md)でnative graphのSANDBOX INVOKER VIEW構築と品質testを実装・技術受入済みである。VIEW→TABLEとVIEWの品質testを対象とし、VIEW→VIEWは引き続き拒否する。C2E1受入時点ではVIEWを含むgraphの正式公開を保留し、C2E2で公開証拠を拡張する。既存のTABLE／EPHEMERAL graph公開を維持する。
 
-[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)で、全VIEWの作成receipt・定義digest・推移依存を公開intentへ固定し、全graph構築・品質成功後の選択TABLE公開を実装・技術受入中である。VIEW要約をpreview／受付で一致確認し、公開後のVIEW変更・source cancelを過去のPUBLISHED証拠と分ける。公開一覧・詳細・直リンクは元source runが変更検知で参照できない場合も独立して照会する。
+[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)で、全VIEWの作成receipt・定義digest・推移依存を公開intentへ固定し、全graph構築・品質成功後の選択TABLE公開を実装・技術受入済みである。VIEW要約をpreview／受付で一致確認し、公開後のVIEW変更・source cancelを過去のPUBLISHED証拠と分ける。公開一覧・詳細・直リンクは元source runが変更検知で参照できない場合も独立して照会する。
 
 手動WAPと管理Martを既存の基準動作として残し、信頼するローカルprojectのモデル一覧・compile・build／test・結果・lineageをDatabase対応へ移す。`iceberg`固定profile、暗黙Schema作成、管理者credentialへのfallbackを除く。最初はSQLモデルと明示したmaterializationを対象とし、Pythonモデル・任意shell・外部package実行は含めない。
 
@@ -268,7 +268,9 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 
-DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C／C2D／C2E1は各限定範囲の技術受入済みである。現在unit **DB-P6-3C2E2**は、全VIEWの定義・識別情報と推移依存を固定したnative graphのTABLE公開、独立した公開履歴を実装し、技術受入を進めている。詳細は[C2E2の契約と証拠](database-p6-3c2e2-view-graph-publication-2026-10-31.md)を参照する。実機で新たな監査UNKNOWNが発生し、終端を照合できないため、現在の最優先はDBT読取り監査に限定した運用復旧である。結果不明を履歴へ残し、停止証拠なしに再実行・閉鎖しない。復旧とC2E2受入後、TRF-11の必須操作との対応を確認し、DB-P6-4AでQuery Doctor／Copilot Explainの読取り専用Database context統合を進める。native候補の直接置換、正式VIEW公開、VIEW連鎖、incremental・並列実行、manual-WAP rollback統合は対応表上の残件として分け、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、M1本人受入は未完了である。
+DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C／C2D／C2E1／C2E2は各限定範囲の技術受入済みである。[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)でVIEW証拠付きTABLE公開と独立履歴を接続し、[R1](database-p6-3r1-dbt-audit-recovery-2026-10-31.md)で不確定なnative_graph COUNT監査の結果をUNKNOWNに保ったまま実行閉鎖・受付再開を証明した。新しい未閉鎖実行は0件である。
+
+次の優先unitはDB-P6-4AのQuery Doctor／Copilot Explain読取り専用Database context統合である。その前にTRF-11の必須操作との対応を短く確認する。承認済みlake_martsはVIEW／TABLEで、incremental設定はない。native候補の直接置換、正式VIEW公開、VIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、DB-P6-3全体とM1本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

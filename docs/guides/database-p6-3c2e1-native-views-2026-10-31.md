@@ -36,4 +36,4 @@ VIEWと下流dim／summaryを各DBで新たにSELECTし、AのALPHAとBのBETA�
 
 ## C2E2への追補（2026年10月31日）
 
-[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)で、VIEW定義と推移依存を固定したTABLE公開・独立した公開履歴を実装し、技術受入を進めている。本書のVIEW含有graph公開保留はC2E1受入時点の範囲である。正式VIEW公開・VIEW連鎖は引き続き後続である。
+[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)で、VIEW定義と推移依存を固定したTABLE公開・独立した公開履歴を実装し、この範囲の技術受入を完了した。本書のVIEW含有graph公開保留はC2E1受入時点の範囲である。正式VIEW公開・VIEW連鎖は引き続き後続である。

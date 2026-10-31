@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.17.0"
+version: "7.18.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -20,11 +20,17 @@ tags: [shirokuma, local, milestones]
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
 
-### 2026-10-31 — DB-P6-3C2E2 VIEW graph TABLE publication (acceptance pending)
+### 2026-10-31 — DB-P6-3R1 indeterminate native graph audit recovery
 
-- Implemented per-TABLE MARTS publication from quality-PASSED native VIEW/TABLE/EPHEMERAL graphs, with frozen VIEW definitions/identities/dependencies, matching preview/ACK summaries, and independent publication collection/direct links. Browser testing found and fixed the publication-only URL startup path. See the [contract and evidence](../../guides/database-p6-3c2e2-view-graph-publication-2026-10-31.md).
-- Actual A/UI and separate summary publication succeeded; E-built B published through the real CLI after cold start and a dropped ACK, recovered with the same request. Fresh two-database MARTS values and read-only history/JA/EN/390px/viewer/draft preservation passed. B's empty audit instead became UNKNOWN without a backend ID; reconciliation could not prove completion. One new UNKNOWN publication and three unclosed admissions remain; later physical operations are correctly blocked. No result or execution closure was fabricated.
-- All 88 canonical groups passed in stages: 3,502 tests, 3,468 passed, 34 existing skips; Go and documentation checks passed. Technical acceptance remains pending. A bounded DBT read-only audit recovery takes priority over further publication experiments and DB-P6-4A; full DB-P6-3 and M1 owner acceptance remain open.
+- Added a platform-operator path for an ownerless native_graph publication COUNT audit, requiring the frozen native proof, exact publisher/context/children, all owner locks and existing logical managed-compute stop proof. Publication/query outcomes remain UNKNOWN; verified execution abandonment is a separate API/UI fact. A deterministic GET/recovery race was reproduced and fixed by rechecking the marker under the DBT owner lock. See the [contract and evidence](../../guides/database-p6-3r1-dbt-audit-recovery-2026-10-31.md).
+- Actual same-operation recovery fenced the two planned Trino containers, resumed partial-stop/proof stages and restored OPEN. Independent comparison of all 78 ledger tables found only planned recovery changes, retained every original query/SQL row, two old fences and all 28 RAW/MARTS heads. GET/list/original-key recovery, historical source changes and truthful JA/EN/390px/viewer behavior passed; normal services, policy and 46 doctor checks were restored.
+- Final staged canonical evidence covers 88 groups: 3,535 tests, 3,501 passed, 34 existing skips, with five affected groups rerun after the final change. The wildcard includes all 29 recovery tests; UI has 97 tests. Existing Go and documentation checks passed. This is limited operator recovery, not arbitrary write abandonment or automatic recovery; full DB-P6-3 and M1 owner acceptance remain open.
+
+### 2026-10-31 — DB-P6-3C2E2 VIEW graph TABLE publication
+
+- Connected complete VIEW/TABLE/EPHEMERAL native graph proofs to explicit per-TABLE MARTS publication, matching frozen VIEW preview/ACK summaries and independent publication collection/direct links. Actual browser testing found and fixed publication-only URL startup. See the [contract and evidence](../../guides/database-p6-3c2e2-view-graph-publication-2026-10-31.md).
+- Actual A/UI and E-built B/CLI publication, cold resume/dropped ACK/same-key recovery, separate TABLE publication, a fresh A zero-row refusal, and post-audit B VIEW drift refusal all passed. Source cancellation and a new target head did not invalidate published history. Five ordinary publications (three PUBLISHED, two FAILED) and one independently recovered UNKNOWN passed wire/private proof; original 25 heads and two fences remain, with no new unclosed execution.
+- Normal endpoints expose only lake_marts again, preserve 13 worksheets/SQL drafts and owner-local YAML/profile bytes. One preexisting committed-recording-failed observation timestamp was refreshed by normal GET, explicitly recorded as the sole timestamp exception. Next priority is DB-P6-4A after a short TRF-11 mandatory-operation mapping check; advanced native extensions remain separate.
 
 ### 2026-10-31 — DB-P6-3C2E1 native graph INVOKER VIEW
 

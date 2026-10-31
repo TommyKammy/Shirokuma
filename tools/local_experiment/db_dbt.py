@@ -112,6 +112,13 @@ def _authorized(db, principal, context, ident, kind=None):
 
 def _public(db, record):
     result = {k: v for k, v in record.items() if not k.startswith('_') and k != 'views'}
+    result.pop('execution_closure', None)
+    result.pop('execution_recovery', None)
+    result.pop('recovery', None)
+    if '_execution_recovery' in record:
+        from dbt_execution_recovery import verified_closure
+        result['execution_recovery'] = verified_closure(db, record)
+        result['execution_closure'] = 'FENCED_READ_ONLY'
     if (record['kind'] == 'publication' and record.get('origin') == 'native_graph'
             and _native_has_views(db, record)):
         try:
@@ -2037,20 +2044,34 @@ def _observe(principal, context, ident, kind):
     metadata = _access(principal, context)
     with control_store.connect() as db:
         record = _authorized(db, principal, context, ident, kind)
-    if ident not in _live and record['state'] in _ACTIVE | {'UNKNOWN', 'COMMITTED_RECORDING_FAILED'}:
+        fenced = False
+        if '_execution_recovery' in record:
+            from dbt_execution_recovery import verified_closure
+            verified_closure(db, record)
+            fenced = True
+    if not fenced and ident not in _live and record['state'] in _ACTIVE | {'UNKNOWN', 'COMMITTED_RECORDING_FAILED'}:
         try:
             owner = queries._acquire_query_owner('dbt-' + ident)
         except QueryError:
             owner = None
         if owner:
             try:
-                if kind == 'plan':
-                    with control_store.connect() as db:
-                        _, current = _row(db, ident)
-                        current.update(state='FAILED', error_code='DBT_OWNER_LOST')
-                        _write(db, current)
-                else:
-                    _settle(ident, owner_lost=True)
+                # Recovery can close execution between the first read and
+                # owner acquisition. Decide settlement from the owned record.
+                with control_store.connect() as db:
+                    current = _authorized(db, principal, context, ident, kind)
+                    if '_execution_recovery' in current:
+                        from dbt_execution_recovery import verified_closure
+                        verified_closure(db, current)
+                        fenced = True
+                if not fenced:
+                    if kind == 'plan':
+                        with control_store.connect() as db:
+                            _, current = _row(db, ident)
+                            current.update(state='FAILED', error_code='DBT_OWNER_LOST')
+                            _write(db, current)
+                    else:
+                        _settle(ident, owner_lost=True)
             finally:
                 owner.close()
     with control_store.connect() as db:

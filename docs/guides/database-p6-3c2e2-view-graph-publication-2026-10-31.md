@@ -1,6 +1,6 @@
 # DB-P6-3C2E2 VIEWを含むnative graphのTABLE公開
 
-2026年10月31日。C2E1で構築・品質testに対応したVIEWを含むnative graphを、TABLE単位のMARTS公開へ接続する。実装・技術受入中である。
+2026年10月31日。C2E1で構築・品質testに対応したVIEWを含むnative graphを、TABLE単位のMARTS公開へ接続する。実装し、この範囲の技術受入を完了した。
 
 ## 利用条件と操作
 
@@ -20,13 +20,19 @@ VIEWのない既存native_table／TABLE・EPHEMERAL graphのwire形状、expecte
 
 ## 検証記録
 
-全88正規グループを段階実行し、3,502件のうち3,468件成功・34件の既存skipを確認した。最終の公開履歴URL起動修正後に該当正規グループを再実行済みである。Go検証も成功した。
+全88正規グループを段階検証した。R1と最終のowner競合修正後に影響する5グループを再実行し、変更のない83グループの先行結果と合わせ、3,535件のうち3,501件成功・34件の既存skipを確認した。Go、設計文書・改行等の検証も成功した。
 
 Aの既存VIEW graphから画面でdimを公開し、別操作でsummaryも公開した。Eが構築したBの全7品質test成功graphから、実CLIでdimを公開した。0/0からの復帰、初回受付ACK欠落、同じargv・body・keyによる同一公開IDの回収、元SDK／build／testの追加実行なしを確認した。AのALPHAとBのBETA、summaryの値を、MARTSの新しいread-only SELECTと9項目contextで検証した。
 
 Bでは公開先不在の確認後に今回限りのテーブルを作成し、古い確認内容のPOSTがSQL・要求・admissionを増やさず拒否されることを確認した。現在のPolarisはpurgeを拒否するため、通常DROPの失敗を記録した後、当該新規テーブルだけをnon-purgingでカタログ解除し、新たな不在確認から公開した。同じ保存planは後から現れた対象を既存TABLEとして採用しない。既存TABLE Snapshotの置換は焦点テストと先行C2Dの実機証拠に属する。
 
-Bのempty監査はバックエンドIDを取得できずUNKNOWNとなった。元要求を照合しても終端を証明できず、監査値0や成功・失敗へ読み替えていない。新規UNKNOWN 1公開・3未閉鎖admissionにより後続の物理操作は安全に拒否された。限定的なDBT読取り監査の運用復旧を最優先として検討し、技術受入は継続中である。VIEW変更・source cancel後の履歴等の実機確認は復旧後に行う。
+Bのempty監査はバックエンドIDを取得できずUNKNOWNとなり、通常照合でも終端を証明できなかった。[R1の限定的な運用復旧](database-p6-3r1-dbt-audit-recovery-2026-10-31.md)で、元COUNTの再送や監査値の生成を行わず実行停止を証明した。公開・queryのUNKNOWNと選択TABLEの予約を保持し、実行の閉鎖と受付再開を別に記録した。原因を特定した、または通信問題を修正したという受入ではない。
+
+別のA側の未予約empty候補を新たに確認・公開し、実監査値0・FAILEDと正式公開SQLなしを確認した。B側summaryは正の監査後に停止し、今回構築したSANDBOX VIEWだけを同じSELECT／INVOKERのままv1からv2へ変更した。送信再開時にDBT_VIEW_CHANGEDで拒否され、2 child／1 queryで正式公開SQLは発生しなかった。その後Eが元runを取り消し、今回新設したBのMARTS公開先を1行appendしてheadを進めた。PUBLISHEDの元Snapshot・VIEW v1・builder E／publisher Aは保持され、実CLIの元argv・key・bodyによる回収でもSQL・SDKを増やさなかった。
+
+通常公開5件（PUBLISHED 3件、FAILED 2件）と復旧済みUNKNOWN 1件について、実GET／公開一覧のVIEW要約を凍結intentから独立に導出して一致確認した。旧VIEWなし公開のwire形状、VIEW／EPHEMERAL選択拒否、engineerの公開拒否、他DB・他actor・viewerの参照拒否も確認した。独立照合は原25 RAW／MARTS head、旧2 fence、WAP、profileと所有者の2 YAMLを保持し、新しい未閉鎖実行0を証明した。既存COMMITTED_RECORDING_FAILED公開1件の照合日時だけは通常GETで更新されており、その例外を証拠へ明記した。
+
+通常の8888／8080を一時project登録なし（lake_martsのみ）で復元した。LOCALは2/2、休止policyはminutes=0／revision=5のままで、local-experiment doctorの46項目に異常はない。通常構成でもpublicationだけの直リンク・reload・source一覧エラー時の独立した公開履歴、日英、390px幅、viewer切替時の詳細消去を確認し、既存13 worksheetとSQL下書きを保持した。参照操作ではSQL・要求・admissionの件数は増えていない。
 
 証拠は`var/shirokuma/db-p6-3c2e2-2026-10-31/private`へ保存する。
 
