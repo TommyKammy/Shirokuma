@@ -39,3 +39,7 @@ WorkbenchからAのTABLEを確認・公開し、別TABLEを独立して公開し
 既存22 RAW／MARTS heads、旧DBT／DataOps履歴、manual-WAP全記録、141 Database／564 Schemaと各141 binding、policy・資格情報・runtime profile・既存ローカルYAMLを保持した。新しい未閉鎖admissionは0件、既存のFENCED_READ_ONLY UNKNOWN 2件は維持した。確認用project登録はprocess限定で、終了時は8888／8080を通常構成のlake_martsへ戻した。LOCALは2/2、policyは0分／revision 5、前後doctorは46項目healthyである。
 
 実機証拠・テスト集計・画面は`var/shirokuma/db-p6-3c2d-2026-10-31/private`に保存した。この記録は上記範囲の技術受入であり、DB-P6-3全体やM1本人受入の完了を意味しない。
+
+## C2E1への追補（2026年10月31日）
+
+[C2E1](database-p6-3c2e1-native-views-2026-10-31.md)で、native graphのSANDBOX INVOKER VIEW構築・品質testを実装し、この範囲の技術受入を完了した。VIEWを含むgraphのTABLE公開は保留し、C2E2でVIEW定義と推移依存の公開証拠を拡張する。本書のTABLE／EPHEMERAL graph公開の受入範囲を維持する。

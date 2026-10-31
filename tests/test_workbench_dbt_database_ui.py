@@ -94,10 +94,10 @@ route=async(path,options)=>{
 GRAPH_PUBLICATION = r"""
 function graphProofs(r){
  const result=(id,status,failures=null)=>({node_id:id,status,failures,adapter_response:{}});
- const build=r.models.map(m=>({...result(m.unique_id,'success'),adapter_response:m.materialized==='table'?{code:'CREATE TABLE',rows_affected:0}:{}})),tests=r.tests.map(x=>({...result(x.unique_id,'pass',0),adapter_response:{code:'SELECT',rows_affected:1}}));
- r.task_receipts={build:{task:'RunTask',completed:true,success:true,selected:r.models.map(m=>m.unique_id).sort(),nodes:build,results:build.filter(x=>r.models.find(m=>m.unique_id===x.node_id).materialized==='table')},test:{task:'TestTask',completed:true,success:true,selected:r.tests.map(x=>x.unique_id).sort(),nodes:tests,results:structuredClone(tests)}};
+ const build=r.models.map(m=>({...result(m.unique_id,'success'),adapter_response:m.materialized==='view'?{code:'CREATE VIEW'}:m.materialized==='table'?{code:'CREATE TABLE',rows_affected:0}:{}})),tests=r.tests.map(x=>({...result(x.unique_id,'pass',0),adapter_response:{code:'SELECT',rows_affected:1}}));
+ r.task_receipts={build:{task:'RunTask',completed:true,success:true,selected:r.models.map(m=>m.unique_id).sort(),nodes:build,results:build.filter(x=>r.models.find(m=>m.unique_id===x.node_id).materialized!=='ephemeral')},test:{task:'TestTask',completed:true,success:true,selected:r.tests.map(x=>x.unique_id).sort(),nodes:tests,results:structuredClone(tests)}};
  r.operations=[];
- for(const m of r.models){m.state=m.materialized==='table'?'NATIVE_VERIFIED':'EXPANDED';m.operation_ids=[];
+ for(const m of r.models){m.state=m.materialized!=='ephemeral'?'NATIVE_VERIFIED':'EXPANDED';m.operation_ids=[];
   if(m.materialized==='ephemeral'){m.candidate=null;continue;}
   const id='build-'+m.unique_id;m.operation_ids=[id];r.operations.push({id,phase:'build',node_id:m.unique_id,state:'FINISHED',committed:true});
   m.native_receipt={executor:'native_graph',plan_id:r.plan_id,node_id:m.unique_id,phase:'build',digest:'plan-digest',native_verified:true,candidate:structuredClone(m.candidate),sdk_result:structuredClone(build.find(x=>x.node_id===m.unique_id))};
@@ -128,6 +128,50 @@ class DbtDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
 
+    def test_view_graph_options_provenance_publication_and_readonly_history(self):
+        self.javascript(GRAPH_PUBLICATION + r"""
+await compile();plan.compatibility.version=2;
+plan.models[1].materialized='view';plan.models[1].view_security='INVOKER';plan.models[1].table_properties={};
+plan.models[2].depends_on=[ids[1]];plan.models[2].table_properties={format:'PARQUET'};
+await dbDbtObserve('plan',plan.id);assert.ok(dbDbtGraphOptionsValid(p.graphOptions));
+dbDbtNode('method').value='native_graph';dbDbtNode('method').onchange();assert.equal(dbDbtCanRun(),true);
+assert.match(text(dbDbtNode('graph-counts')),/TABLE: 1 · VIEW: 1 · EPHEMERAL: 1/);
+assert.match(text(dbDbtNode('native-help')),/TABLE\/RAW inputs/);assert.match(text(dbDbtNode('native-help')),/VIEW to VIEW and formal VIEWs are unsupported/);
+assert.match(text(dbDbtNode('models')),/downstream TABLE and tests/);assert.match(text(dbDbtNode('native-quality-help')),/NOT_RUN.*VIEW.*PASSED/);
+const bad=structuredClone(plan);bad.models[2].materialized='view';bad.models[2].view_security='INVOKER';assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(bad),bad),false);
+bad.models[2].materialized='table';bad.models[1].view_security='DEFINER';assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(bad),bad),false);
+const denied=structuredClone(p.graphOptions);denied.eligible=false;denied.reason_code='UNSUPPORTED_VIEW_DEPENDENCY';assert.ok(dbDbtGraphOptionsValid(denied));p.graphOptions=denied;dbDbtRender();assert.equal(dbDbtCanRun(),false);assert.match(text(dbDbtNode('graph-reason')),/VIEW to VIEW dependencies are unsupported/);language='ja';dbDbtRender();assert.match(text(dbDbtNode('graph-reason')),/VIEW 間の依存は未対応/);language='en';p.graphOptions=makeGraphOptions(plan);
+await dbDbtSubmit('build');assert.equal(p.intent,null);assert.equal(readBody(posts().at(-1)).executor,'native_graph');assert.equal(Object.hasOwn(readBody(posts().at(-1)),'node_id'),false);
+run=makeRun(plan.context,{executor:'native_graph',source_digest:plan.source_digest,state:'NATIVE_VERIFIED',native_verified:true,native_tests:true,tests_status:'PASSED',publication_allowed:false});
+run.models[1].candidate={kind:'VIEW',ref:{database_id:'db',schema_id:'sandbox',object_id:'run-view',incarnation:1},view_uuid:'11111111-1111-1111-1111-111111111111',version:1,security:'INVOKER'};
+run=graphProofs(run);await dbDbtObserve('run',run.id);assert.equal(p.run.id,run.id);assert.ok(dbDbtGraphRunValid(p.run,p.plan));
+assert.match(text(dbDbtNode('candidates')),/View UUID: 11111111.*VIEW v1 · INVOKER/);assert.equal(Object.hasOwn(p.run.models[1].candidate,'snapshot'),false);
+const before=calls.length,postCount=posts().length;
+assert.match(text(dbDbtNode('publications')),/Native graph with VIEW: build and quality tests supported/);assert.doesNotMatch(text(dbDbtNode('publications')),/no eligible/);
+run.publication_allowed=true;await dbDbtObserve('run',run.id);assert.equal(dbDbtGraphPublishable(),false);
+for(const m of p.run.models)assert.equal(dbDbtCanPublish(m),false);
+await dbDbtReview(p.run.models[2]);await dbDbtSubmit('publish',ids[2]);assert.equal(calls.slice(before).some(c=>c.path.includes('publication-preview')),false);assert.equal(posts().length,postCount);
+for(const status of ['NOT_RUN','FAILED','PASSED']){run.native_tests=status!=='NOT_RUN';run.tests_status=status;if(status==='NOT_RUN')run.tests=[];else run.tests=plan.tests.map(t=>({...t,state:status,failure_count:status==='FAILED'?1:0}));await dbDbtObserve('run',run.id);assert.match(text(dbDbtNode('run-detail')),new RegExp('Quality tests: '+status));assert.match(text(dbDbtNode('publications')),/Use SQL\/WAP for TABLE publication/);}
+await dbDbtHistory();assert.equal(posts().length,postCount);assert.match(text(dbDbtNode('history')),/Native graph with VIEW/);
+language='ja';dbDbtRender();assert.match(text(dbDbtNode('publications')),/VIEW を含む Native graph/);assert.match(text(dbDbtNode('publications')),/TABLE の公開には SQL\/WAP/);assert.match(text(dbDbtNode('native-help')),/VIEW 間依存と正式な VIEW は未対応/);
+clearTimeout(p.timer);
+""")
+
+    def test_view_graph_identity_tampering_retains_original_request(self):
+        self.javascript(GRAPH_PUBLICATION + r"""
+await compile();plan.compatibility.version=2;plan.models[1].materialized='view';plan.models[1].view_security='INVOKER';plan.models[2].depends_on=[ids[1]];
+await dbDbtObserve('plan',plan.id);dbDbtNode('method').value='native_graph';dbDbtNode('method').onchange();lose=true;await dbDbtSubmit('build');const original=structuredClone(p.intent);lose=false;
+const base=makeRun(plan.context,{executor:'native_graph',source_digest:plan.source_digest,state:'NATIVE_VERIFIED',native_verified:true,native_tests:false,tests:[],tests_status:'NOT_RUN',publication_allowed:false});
+base.models[1].candidate={kind:'VIEW',ref:{database_id:'db',schema_id:'sandbox',object_id:'run-view',incarnation:1},view_uuid:'11111111-1111-1111-1111-111111111111',version:1,security:'INVOKER'};graphProofs(base);
+const record=structuredClone(base);for(const change of [m=>delete m.candidate.view_uuid,m=>m.candidate.view_uuid='bad',m=>m.candidate.version=true,m=>m.candidate.security='DEFINER',m=>m.candidate.snapshot='fake',m=>m.candidate={ref:m.candidate.ref,snapshot:'fake'},m=>m.candidate.ref.schema_id='raw',m=>m.native_receipt.candidate.version=9]){
+ const bad=structuredClone(record);change(bad.models[1]);if(bad.models[1].native_receipt.candidate.version!==9)bad.models[1].native_receipt.candidate=structuredClone(bad.models[1].candidate);
+ assert.equal(dbDbtGraphRunValid(bad,plan),false);wrong={run:bad};await dbDbtRecover();assert.deepEqual(p.intent,original);assert.equal(p.run,null);
+}
+wrong={run:record};await dbDbtRecover();assert.equal(p.intent,null);assert.equal(p.run.models[1].candidate.security,'INVOKER');
+assert.ok(posts().filter(c=>c.path.endsWith('/runs')).every(c=>c.options.headers['Idempotency-Key']===original.key&&c.options.body===posts().find(c=>c.path.endsWith('/runs')).options.body));
+clearTimeout(p.timer);
+""")
+
     def test_native_graph_options_exact_projection_gates_and_stale_absence(self):
         self.javascript(r"""
 await compile();plan.compatibility.version=2;for(const m of plan.models)if(m.materialized==='table')m.table_properties={format:'PARQUET'};
@@ -136,14 +180,14 @@ plan.tests.push({unique_id:'test.source',name:'source test',depends_on:['source.
 await dbDbtObserve('plan',plan.id);const good=p.graphOptions;assert.ok(dbDbtGraphOptionsValid(good));assert.ok(Object.isFrozen(good.models[0].depends_on));
 dbDbtNode('method').value='native_graph';dbDbtNode('method').onchange();assert.equal(p.node,'');assert.equal(dbDbtCanRun(),true);
 assert.equal(dbDbtNode('node').parentElement.hidden,true);assert.equal(dbDbtNode('native-controls').hidden,false);assert.equal(dbDbtNode('native-tests').disabled,false);
-assert.match(text(dbDbtNode('graph-counts')),/3 · TABLE: 2 · EPHEMERAL: 1 · Test count: 4/);
+assert.match(text(dbDbtNode('graph-counts')),/3 · TABLE: 2 · VIEW: 0 · EPHEMERAL: 1 · Test count: 4/);
 assert.match(text(dbDbtNode('graph-reason')),/All saved/);assert.match(text(dbDbtNode('native-quality-help')),/source and unattached/);
 for(const change of [o=>o.version=true,o=>o.executor='native_table',o=>o.plan_id='other',o=>o.source_digest='other',o=>o.model_count=true,o=>o.table_count=3,o=>o.model_count=2,o=>o.models.pop(),o=>o.models[1].node_id=ids[0],o=>o.models[1].materialized='view',o=>o.models[1].depends_on=[],o=>o.models[1].depends_on.push(ids[0]),o=>o.testability.count=2,o=>o.testability.count='4',o=>o.eligible='true',o=>o.testability.eligible=1]){
  const bad=structuredClone(good);change(bad);assert.equal(dbDbtGraphOptionsValid(bad),false);p.graphOptions=bad;assert.equal(dbDbtCanRun(),false);
 }
 const saved=structuredClone(p.plan),cyclic=structuredClone(saved);cyclic.models[0].depends_on=[ids[2]];assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(cyclic),cyclic),false);
 const missing=structuredClone(saved);missing.models[0].depends_on=['model.missing'];assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(missing),missing),false);
-const view=structuredClone(saved);view.models[1].materialized='view';assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(view),view),false);
+const view=structuredClone(saved);view.models[1].materialized='view';view.models[1].view_security='INVOKER';assert.equal(dbDbtGraphOptionsValid(makeGraphOptions(view),view),true);
 const denied=structuredClone(good);denied.eligible=false;denied.reason_code='DBT_NATIVE_GRAPH_UNSUPPORTED_MATERIALIZATION';assert.ok(dbDbtGraphOptionsValid(denied));p.graphOptions=denied;dbDbtRender();assert.equal(dbDbtCanRun(),false);assert.match(text(dbDbtNode('graph-reason')),/DBT_NATIVE_GRAPH_/);
 p.graphOptions=good;dbDbtNode('native-tests').checked=true;dbDbtNode('native-tests').onchange();assert.equal(dbDbtQuality(),true);
 const noTests={...saved,tests:[]};p.plan=noTests;p.graphOptions=makeGraphOptions(noTests);dbDbtRender();assert.equal(dbDbtNode('native-tests').disabled,true);assert.equal(dbDbtCanRun(),false);
@@ -428,7 +472,7 @@ clearTimeout(p.timer);
     def test_native_definitive_rejection_explicit_close_retains_original_receipt(self):
         for origin, fixture, source in [('native_table', NATIVE_PUBLICATION, 'nativeSource'),
                                         ('native_graph', GRAPH_PUBLICATION, 'graphSource')]:
-            for code in ['STAGE_CHANGED', 'DBT_CANDIDATE_CHANGED', 'DBT_PUBLICATION_REVIEW_CHANGED']:
+            for code in ['STAGE_CHANGED', 'DBT_CANDIDATE_CHANGED', 'DBT_PUBLICATION_REVIEW_CHANGED', 'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED']:
                 with self.subTest(origin=origin, code=code):
                     self.javascript(fixture + r"""
 await SOURCE();const m=p.run.models.find(m=>m.unique_id===ids[1]);await dbDbtReview(m);
@@ -436,7 +480,7 @@ const baseRoute=route;route=async(path,options)=>{if(options?.method==='POST'&&p
 const before=posts().length;await dbDbtSubmit('publish',m.unique_id);const original=p.intent,first=posts().at(-1);
 assert.equal(original.origin,'ORIGIN');assert.equal(original.rejection,'CODE');assert.equal(Object.isFrozen(original),true);assert.equal(Object.isFrozen(original.body.expected_target.destination),true);
 assert.equal(dbDbtCanCloseRejected(),true);assert.match(text(p.status),/rejected before acceptance/);
-if('CODE'!=='DBT_PUBLICATION_REVIEW_CHANGED')assert.match(text(p.status),/Source or target identity changed/);
+if(['STAGE_CHANGED','DBT_CANDIDATE_CHANGED'].includes('CODE'))assert.match(text(p.status),/Source or target identity changed/);
 assert.equal(dbDbtNode('compile').disabled,true);await dbDbtRecover();await dbDbtSubmit('compile');assert.equal(posts().length,before+1);
 await dbDbtNode('close-rejected').onclick();assert.equal(p.intent,null);assert.equal(p.rejectedIntent,original);assert.equal(p.review,null);assert.equal(p.preview,null);assert.equal(posts().length,before+1);
 assert.deepEqual(readStorage(dbDbtKey+'.rejected',null),JSON.parse(JSON.stringify(original)));assert.equal(p.rejectedIntent.key,first.options.headers['Idempotency-Key']);
@@ -460,7 +504,7 @@ const baseRoute=route;route=async(path,options)=>{if(options?.method==='POST'&&p
 }return baseRoute(path,options);};
 await dbDbtSubmit('publish',m.unique_id);const original=p.intent,first=posts().at(-1);assert.ok(original);assert.equal(dbDbtCanCloseRejected(),false);dbDbtCloseRejected();assert.equal(p.intent,original);
 if(p.invalid)await dbDbtRefresh();
-for(const code of ['STAGE_CHANGED','DBT_CANDIDATE_CHANGED','DBT_PUBLICATION_REVIEW_CHANGED']){
+for(const code of ['STAGE_CHANGED','DBT_CANDIDATE_CHANGED','DBT_PUBLICATION_REVIEW_CHANGED','DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED']){
  route=async(path,options)=>{if(options?.method==='POST'&&path.endsWith('/publish'))throw Object.assign(Error('rejected'),{status:409,code});return baseRoute(path,options);};
  await dbDbtRecover();assert.equal(dbDbtCanCloseRejected(),false);dbDbtCloseRejected();assert.equal(p.intent,original);assert.equal(p.intent.rejection,undefined);assert.deepEqual(posts().at(-1),first);
  const count=posts().length;await dbDbtSubmit('compile');await dbDbtReview(m);assert.equal(posts().length,count);assert.equal(dbDbtNode('compile').disabled,true);
@@ -907,7 +951,7 @@ for(const lang of ['en','ja']){
  assert.equal(headers[4].textContent,lang==='ja'?'候補 Ref の詳細':'Candidate Ref details');
  const rows=candidate.querySelector('tbody').children;
  assert.equal(rows[0].children[3].textContent,'N/A');
- assert.equal(rows[1].children[3].textContent,'VIEW v7 · INVOKER');
+ assert.equal(rows[1].children[3].textContent,'View UUID: '+run.models[1].candidate.view_uuid+' · VIEW v7 · INVOKER');
  assert.equal(rows[2].children[3].textContent,snapshot);
  for(const [i,m] of run.models.entries()){
   const cell=rows[i].children[4],detail=cell.children[0];
@@ -924,7 +968,7 @@ for(const lang of ['en','ja']){
 // Missing candidates retain the pending/legacy presentation rather than inventing a version.
 run.models[1].candidate=null;run.models[2].candidate=null;await dbDbtObserve('run','run-1');
 const rows=dbDbtNode('candidates').querySelector('tbody').children;
-assert.equal(rows[1].children[3].textContent,'VIEW '+t('Not recorded'));
+assert.equal(rows[1].children[3].textContent,'View UUID: '+t('Not recorded')+' · VIEW '+t('Not recorded'));
 assert.equal(rows[2].children[3].textContent,t('Not recorded'));
 """)
 

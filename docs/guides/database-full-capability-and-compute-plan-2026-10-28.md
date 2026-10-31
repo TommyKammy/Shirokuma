@@ -32,7 +32,7 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 | 自動休止・自動復帰 | `logical_v1`の既存server lifecycleと共通SQL経路へ接続。技術受入は完了、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 元intent・現在権限・admissionを維持し、queued取消とUNKNOWNを保護。dbtの型付きSQLも共通経路を使い、AI接続は後続 |
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
-| データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を実装・技術受入済み | 正式公開はTABLE。native VIEW／incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
+| データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を技術受入済み。C2E1のnative VIEW graph構築・品質testを実装・技術受入済み | 正式公開はTABLE。VIEW含有native graphのTABLE公開は次のC2E2。incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
 | AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview、Bears／Copilotは未接続 | telemetryと耐久監査を分離。AIはDB-P6-4で認可／WAPへ接続する |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
@@ -126,9 +126,11 @@ UIは受付・起動中・利用可能・停止中・失敗を表示し、通常
 2026-10-30：[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)で真のrun専用SANDBOX INVOKER VIEW、TABLE Snapshot固定、VIEW head検査と下流TABLE／testを実装し、実機確認を完了した。この範囲の技術受入を完了した。標準dbt executorの型付き操作、VIEW→VIEWと正式VIEW公開は残件とし、DB-P6-3全体は未完了とする。
 同日の[C2B1](database-p6-3c2b-native-materialization-2026-10-30.md)でinstalled標準TABLE macro→DataOps childのprivate接続を実装し、新規SANDBOX候補のE／A・2DB・Snapshot・取消／owner停止を実機確認した。この限定した接続実証の技術受入を完了した。C2B1時点では通常RunTaskのschema／cache／graph、native test・置換と通常導線への接続は後続であり、このprivate実証だけで標準dbt buildを利用可能とはしない。
 同日の[C2B2](database-p6-3c2b2-native-runs-2026-10-30.md)でnative TABLE 1件を保存run／API／CLIへ接続し、元の資格情報を持つDataOpsとSDK processを分離した。[C2B3](database-p6-3c2b3-native-ui-2026-10-30.md)で画面からの方式・モデルの明示選択と利用条件を表示する。
-[C2B4](database-p6-3c2b4-native-quality-tests-2026-10-30.md)では、新規native TABLEに付属する非空の品質test一式をopt-inで実行する。標準TestRunnerを型付きcallbackで接続し、固定候補の作成検証と品質成功／失敗・取消／結果不明を分けて保存する。B4受入時点では品質成功後も正式公開不可だった。2026-10-31の[C2B5](database-p6-3c2b5-native-publication-2026-10-31.md)で、固定preview・最低1行の監査・同じDBのMARTS公開を実装した。全graphのRunTaskは後述C2C、graph候補のTABLE公開は後述C2Dで対応した。native候補直接置換・native VIEW・manual-WAP rollback統合は後続である。
+[C2B4](database-p6-3c2b4-native-quality-tests-2026-10-30.md)では、新規native TABLEに付属する非空の品質test一式をopt-inで実行する。標準TestRunnerを型付きcallbackで接続し、固定候補の作成検証と品質成功／失敗・取消／結果不明を分けて保存する。B4受入時点では品質成功後も正式公開不可だった。2026-10-31の[C2B5](database-p6-3c2b5-native-publication-2026-10-31.md)で、固定preview・最低1行の監査・同じDBのMARTS公開を実装した。全graphのRunTaskは後述C2C、graph候補のTABLE公開は後述C2Dで対応した。native VIEWの構築・testは後述C2E1で拡張する。native候補直接置換・native VIEWの正式公開・manual-WAP rollback統合は後続である。
 
-[C2C](database-p6-3c2c-native-graph-2026-10-31.md)では、対応する保存済みTABLE／EPHEMERAL全DAGを通常の`RunTask.run()`で構築する。明示した`native_tests`はsource test・TABLE間relationshipsを含む保存全generic testを`TestTask.run()`で実行する。必要なSchema／cache操作を型付きmetadata経路へ接続し、同DB RAW Snapshotと同run候補を固定する。画面／API／CLIで`native_graph`を明示選択でき、E／A・2DB・休止復帰・失敗／取消／owner停止と保全を実機確認し、この限定範囲の技術受入を完了した。非対応materializationを含むgraphは実行前に全体を拒否する。[C2D](database-p6-3c2d-graph-publication-2026-10-31.md)で、全graphの構築・保存全test成功を条件とするTABLE単位の明示MARTS公開を実装し、この範囲の技術受入を完了した。native VIEW／incremental・並列実行は後続である。
+[C2C](database-p6-3c2c-native-graph-2026-10-31.md)では、対応する保存済みTABLE／EPHEMERAL全DAGを通常の`RunTask.run()`で構築する。明示した`native_tests`はsource test・TABLE間relationshipsを含む保存全generic testを`TestTask.run()`で実行する。必要なSchema／cache操作を型付きmetadata経路へ接続し、同DB RAW Snapshotと同run候補を固定する。画面／API／CLIで`native_graph`を明示選択でき、E／A・2DB・休止復帰・失敗／取消／owner停止と保全を実機確認し、この限定範囲の技術受入を完了した。非対応materializationを含むgraphは実行前に全体を拒否する。[C2D](database-p6-3c2d-graph-publication-2026-10-31.md)で、全graphの構築・保存全test成功を条件とするTABLE単位の明示MARTS公開を実装し、この範囲の技術受入を完了した。native VIEWの構築・testは後述C2E1で拡張する。incremental・並列実行は後続である。
+
+[C2E1](database-p6-3c2e1-native-views-2026-10-31.md)でnative graphのSANDBOX INVOKER VIEW構築と品質testを実装・技術受入済みである。VIEW→TABLEとVIEWの品質testを対象とし、VIEW→VIEWは引き続き拒否する。VIEWを含むgraphはTABLEを選んでも正式公開を保留する。次のC2E2で公開証拠を拡張し、既存のTABLE／EPHEMERAL graph公開を維持する。
 
 手動WAPと管理Martを既存の基準動作として残し、信頼するローカルprojectのモデル一覧・compile・build／test・結果・lineageをDatabase対応へ移す。`iceberg`固定profile、暗黙Schema作成、管理者credentialへのfallbackを除く。最初はSQLモデルと明示したmaterializationを対象とし、Pythonモデル・任意shell・外部package実行は含めない。
 
@@ -264,7 +266,7 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 
-DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2Cは各限定範囲の技術受入済みである。直近の技術受入unit **DB-P6-3C2D**は、全graphの構築・品質成功を条件に、選択TABLEを固定previewと最低1行監査で同じDBのMARTSへ明示公開する。E作成／A公開・TABLEごとの独立した予約・元要求の回収を含めてこの範囲の技術受入を完了した。詳細は[C2Dの契約と証拠](database-p6-3c2d-graph-publication-2026-10-31.md)を参照する。native SDKの候補直接置換、native VIEW／incremental・並列実行、manual-WAP rollback統合、Bears／Copilot・SRE／Policy、残る探索操作、実サイズ変更と用途別Warehouseは各後続unitへ残す。M1の全必須行の対応と本人受入は未完了である。
+DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C／C2Dは各限定範囲の技術受入済みである。直近の技術受入unit **DB-P6-3C2E1**は、同じDBのrun専用SANDBOX INVOKER VIEWを含むnative graphの構築・全品質testを実装し、この範囲の技術受入を完了した。VIEWを含むgraphの正式公開は保留し、次の優先unit C2E2でVIEWの定義・UUID／versionと推移依存を公開intent／履歴証拠へ固定する。詳細は[C2E1の契約と証拠](database-p6-3c2e1-native-views-2026-10-31.md)を参照する。native VIEWの正式VIEW公開・候補直接置換、incremental・並列実行、manual-WAP rollback統合、Bears／Copilot・SRE／Policy、残る探索操作、実サイズ変更と用途別Warehouseは各後続unitへ残す。M1の全必須行の対応と本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

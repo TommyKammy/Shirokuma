@@ -70,6 +70,23 @@ def graph_publication_fixture():
     return run, plan, preview
 
 
+def view_graph_fixture():
+    run, plan, preview = graph_publication_fixture()
+    model = run['models'][1]
+    model.update(materialized='view', table_properties={}, view_security='INVOKER')
+    plan['models'][1].update(materialized='view', table_properties={}, view_security='INVOKER')
+    model['candidate'] = dict(kind='VIEW', ref=deepcopy(model['candidate']['ref']),
+        view_uuid='44444444-4444-4444-4444-444444444444', version=1, security='INVOKER')
+    sdk = next(x for x in run['task_receipts']['build']['nodes'] if x['node_id'] == model['unique_id'])
+    sdk.update(adapter_response=dict(code='CREATE VIEW'), model_type='view', view_security='invoker')
+    run['task_receipts']['build']['results'][0] = deepcopy(sdk)
+    model['native_receipt'].update(candidate=deepcopy(model['candidate']), sdk_result=deepcopy(sdk))
+    run['publication_allowed'] = False
+    preview.update(node_id=run['models'][2]['unique_id'], candidate=deepcopy(run['models'][2]['candidate']))
+    preview['target']['name'] = preview['expected_target']['destination']['physical_name'] = 'second'
+    return run, plan, preview
+
+
 class ClientTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -92,8 +109,10 @@ class ClientTests(unittest.TestCase):
                 outer.calls.append((self.command, url.path, parse_qs(url.query), body, dict(self.headers)))
                 if outer.http_status:
                     self.send_response(outer.http_status)
-                    self.send_header('Content-Length', '0')
+                    raw = outer.raw_response or b''
+                    self.send_header('Content-Length', str(len(raw)))
                     self.end_headers()
+                    self.wfile.write(raw)
                     return
                 if url.path == '/api/v1/databases':
                     reply = {'items': [dict(id='db', sql_catalog='sales', binding_revision=1, generation_id='gen', grant_revision=3)]}
@@ -185,6 +204,79 @@ class ClientTests(unittest.TestCase):
             self.call(action, *args)
             self.assertEqual(len(self.calls), before + 1)
             self.assertEqual(self.calls[-1][0], 'GET')
+
+    def test_view_graph_saved_receipts_status_history_and_request_contract(self):
+        run, plan, _ = view_graph_fixture()
+        run['actor'] = plan['actor'] = 'alice'
+        def envelope(reply):
+            path = self.calls[-1][1]
+            if path.endswith('/projects'):
+                return reply
+            if '/plans/' in path:
+                return dict(context=C, plan=deepcopy(plan))
+            return dict(context=C, **({'items': [deepcopy(run)]} if self.calls[-1][0] == 'GET' and path.endswith('/runs') else {'run': deepcopy(run)}))
+        self.envelope = envelope
+        self.call('projects')
+        self.assertEqual(self.call('plan', '--plan-id=' + PLAN)['plan'], plan)
+        for quality in (False, True):
+            saved = deepcopy(run)
+            if not quality:
+                run.update(native_tests=False, tests_status='NOT_RUN', tests=[])
+            reply = self.call('run', '--plan-id=' + PLAN, '--executor=native_graph', *(['--native-tests'] if quality else []), '--idempotency-key=view-' + str(quality))
+            self.assertEqual(reply['run'], run)
+            self.assertEqual(self.calls[-1][3], dict(context=C, plan_id=PLAN, executor='native_graph', **({'native_tests': True} if quality else {})))
+            run = saved
+        before = len(self.calls)
+        self.assertEqual(self.call('status', '--run-id=' + ID)['run'], run)
+        self.assertEqual(self.call('runs', '--plan-id=' + PLAN)['items'], [run])
+        self.assertTrue(all(c[0] == 'GET' for c in self.calls[before:]))
+        self.assertIn('task_receipts', run)
+        self.assertNotIn('graph_task_receipts', run)
+        self.assertNotIn('snapshot', run['models'][1]['candidate'])
+
+    def test_view_graph_malformed_identity_and_receipt_ack_retains_intent(self):
+        run, _, _ = view_graph_fixture()
+        run['actor'] = 'alice'
+        changes = [lambda m: m['candidate'].pop('view_uuid'), lambda m: m['candidate'].update(view_uuid='bad'),
+            lambda m: m['candidate'].update(version=True), lambda m: m['candidate'].update(version=0),
+            lambda m: m['candidate'].update(security='DEFINER'), lambda m: m['candidate'].update(snapshot='fake'),
+            lambda m: m.update(candidate=dict(ref=m['candidate']['ref'], snapshot='fake')),
+            lambda m: m['candidate']['ref'].update(schema_id='raw'), lambda m: m['native_receipt'].update(node_id='wrong')]
+        for index, change in enumerate(changes):
+            bad = deepcopy(run); change(bad['models'][1])
+            if bad['models'][1]['native_receipt']['node_id'] != 'wrong':
+                bad['models'][1]['native_receipt']['candidate'] = deepcopy(bad['models'][1]['candidate'])
+            self.envelope = lambda reply: dict(context=C, run=deepcopy(bad))
+            reply = self.call('run', '--plan-id=' + PLAN, '--executor=native_graph', '--native-tests', '--idempotency-key=bad-view-' + str(index))
+            self.assertTrue(reply['request_uncertain'])
+            self.assertEqual(reply['retry']['body'], dict(context=C, plan_id=PLAN, executor='native_graph', native_tests=True))
+            with self.assertRaises(ValueError):
+                self.call('status', '--run-id=' + ID)
+
+    def test_view_graph_publication_spoof_refused_without_post(self):
+        admin, path = self.graph_review()
+        self.source, self.source_plan, self.preview = view_graph_fixture()
+        self.source['publication_allowed'] = True
+        before = len(self.calls)
+        with self.assertRaisesRegex(ValueError, 'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED'):
+            self.call('publish-preview', '--run-id=' + ID, '--node-id=model.lake.second', context=admin)
+        self.assertTrue(all(c[0] == 'GET' for c in self.calls[before:]))
+
+    def test_view_publication_known_rejection_keeps_conservative_boundary(self):
+        admin, path = self.graph_review()
+        self.http_status = 409
+        for code in ('DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED', 'DBT_PUBLICATION_REVIEW_CHANGED', 'OTHER_CONFLICT'):
+            self.raw_response = json.dumps(dict(error=dict(code=code))).encode()
+            flags = ['--run-id=' + ID, '--node-id=model.lake.orders', '--expected-target-file=' + str(path), '--idempotency-key=original-view-publish']
+            if code == 'OTHER_CONFLICT':
+                self.assertTrue(self.call('publish', *flags, context=admin)['request_uncertain'])
+            else:
+                with self.assertRaisesRegex(client.RequestRejected, code):
+                    self.call('publish', *flags, context=admin)
+            # This code cannot close a graph build or an unreviewed publication conflict.
+            self.assertTrue(self.call('run', '--plan-id=' + PLAN, '--executor=native_graph')['request_uncertain'])
+        self.assertTrue(all(c[0] == 'POST' for c in self.calls))
+        self.assertEqual(self.receipts, {})
 
     def graph_review(self):
         source, plan, preview = graph_publication_fixture()

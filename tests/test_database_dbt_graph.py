@@ -741,7 +741,7 @@ class GraphContractTests(unittest.TestCase):
         saved = self.saved(plan['id'])
         metadata = dbt._access(self.engineer, self.context)
         for change, code in [
-            (lambda p: p['models'][1].update(materialized='view'), 'DBT_GRAPH_MATERIALIZATION_UNSUPPORTED'),
+            (lambda p: p['models'][1].update(materialized='view', view_security='DEFINER'), 'DBT_GRAPH_MATERIALIZATION_UNSUPPORTED'),
             (lambda p: p['models'][1].update(materialized='incremental'), 'DBT_GRAPH_MATERIALIZATION_UNSUPPORTED'),
             (lambda p: p['models'][1].update(table_properties={}), 'DBT_NATIVE_PARQUET_REQUIRED'),
             (lambda p: p['models'][0].update(depends_on=['model.second']), 'DBT_GRAPH_DEPENDENCY_INVALID'),

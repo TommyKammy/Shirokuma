@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.15.0"
+version: "7.16.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-31 — DB-P6-3C2E1 native graph INVOKER VIEW
+
+- Added actual RunTask/TestTask execution of supported VIEW/TABLE/EPHEMERAL graphs, including VIEW-to-TABLE dependencies and quality tests. Run-specific SANDBOX VIEWs require INVOKER configuration, checked callback SQL, fixed inputs and distinct VIEW identity/definition proof. See the [contract and evidence](../../guides/database-p6-3c2e1-native-views-2026-10-31.md).
+- Real CLI and Workbench acceptance passed all seven saved tests in each of two databases. Cancellation retained one completed VIEW and sent no downstream SQL; an intentionally changed new VIEW was rejected without re-execution. Independent proof covered 23 native child/query records, six fresh SELECTs, role/database/actor isolation, preserved 25 original RAW/MARTS heads and restored normal services with 46 healthy doctor checks.
+- All 87 canonical groups passed in stages: 3,464 tests, 3,430 passed, 34 existing skips. Go and documentation checks passed. Publication from any VIEW-containing native graph remains blocked; C2E2 will freeze VIEW definitions and transitive dependencies into publication intent/history. Existing TABLE/EPHEMERAL graph publication and SQL/WAP remain; full DB-P6-3 and M1 owner acceptance are open.
 
 ### 2026-10-31 — DB-P6-3C2D native graph TABLE publication
 

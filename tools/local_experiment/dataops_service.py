@@ -685,7 +685,14 @@ class Execution:
         import db_dbt
         from manual_wap import _compile_model
         run, node, locator = db_dbt._view_node(self)
-        normalized = db_dbt._normalized(run, node)
+        native_graph = run.get('executor') == 'native_graph'
+        if native_graph:
+            import database_dbt_graph
+            with control_store.connect() as db:
+                plan = db_dbt._check_plan(db, run)
+            _, normalized = database_dbt_graph.bindings_for(plan, run, node)
+        else:
+            normalized = db_dbt._normalized(run, node)
         inputs = db_dbt._pinned(self, normalized['sources'])
         if any(m.get('kind') == 'VIEW' for m in inputs.values()):
             raise QueryError('UNSUPPORTED_VIEW_DEPENDENCY', 409)
@@ -700,8 +707,9 @@ class Execution:
         if locator.schema_id != self._context().schema_id or self._schema(locator.schema_id).sql_name != 'sandbox':
             raise QueryError('SANDBOX_REQUIRED', 409)
         self._absent(locator)
+        receipt = json.loads(self._row()['result'] or '{}') if native_graph else {}
         self._execute('dbt_view_create', 'CREATE VIEW ' + name + ' SECURITY INVOKER AS ' + generated, 'view',
-            commit_result=dict(view_created=True, _view_locator=asdict(locator)))
+            commit_result=dict(receipt, view_created=True, _view_locator=asdict(locator)))
         schema = self._schema(locator.schema_id, write=True)
         database, binding = self._catalog()
         with inventory.catalog_api(database, binding) as api:

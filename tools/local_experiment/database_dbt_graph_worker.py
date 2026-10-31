@@ -18,8 +18,11 @@ def manifest_copy(raw):
 
 
 def result_dict(result):
-    return dict(node_id=result.node.unique_id, status=str(result.status), failures=result.failures,
+    value = dict(node_id=result.node.unique_id, status=str(result.status), failures=result.failures,
         adapter_response=result.adapter_response)
+    if result.node.resource_type == 'model' and result.node.config.materialized == 'view':
+        value.update(model_type='view', view_security=result.node.config.get('view_security'))
+    return value
 
 
 def run_tasks(artifacts, targets, tests, call):
@@ -36,8 +39,14 @@ def run_tasks(artifacts, targets, tests, call):
     for uid, node in raw['nodes'].items():
         if node['resource_type'] not in ('model', 'test'):
             raise ValueError('non SQL node')
-        if node['resource_type'] == 'model' and node['config']['materialized'] not in ('table', 'ephemeral'):
+        if node['resource_type'] == 'model' and node['config']['materialized'] not in ('table', 'view', 'ephemeral'):
             raise ValueError('unsupported model')
+        if node['resource_type'] == 'model' and node['config']['materialized'] == 'view':
+            # Saved omission means INVOKER; the installed Trino macro defaults
+            # to DEFINER. Set the effective SDK config before compilation.
+            if node['config'].get('view_security') not in (None, 'invoker'):
+                raise ValueError('unsupported view security')
+            node['config']['view_security'] = 'invoker'
         if uid in targets:
             node['database'], node['schema'], node['alias'] = targets[uid]
             node['relation_name'] = '.'.join('"' + p.replace('"', '""') + '"' for p in targets[uid])
@@ -111,7 +120,9 @@ def run_tasks(artifacts, targets, tests, call):
         class GraphModelRunner(Lifecycle, ModelRunner):
             def _get_materialization_macro(self, model, manifest):
                 macro = super()._get_materialization_macro(model, manifest)
-                if macro.unique_id != 'macro.dbt_trino.materialization_table_trino':
+                if (model.config.materialized not in ('table', 'view')
+                        or macro.unique_id != 'macro.dbt_trino.materialization_' + model.config.materialized + '_trino'
+                        or model.config.materialized == 'view' and model.config.get('view_security') != 'invoker'):
                     deny()
                 return macro
 

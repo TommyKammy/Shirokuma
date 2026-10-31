@@ -238,9 +238,45 @@ def _native_select(sql, target, bindings, approved, database_id):
 
 def _check_inputs(execution, inputs, sources):
     for alias, ref in sources.items():
+        if inputs[alias].get('kind') == 'VIEW':
+            db_dbt._view_binding(execution, ref, expected=inputs[alias])
+            continue
         current = execution.wap_measure(ref)
         if any(current[k] != inputs[alias][k] for k in ('ref', 'schema_id', 'schema_fingerprint')):
             _reject('SOURCE_SCHEMA_CHANGED')
+        if ds._dbt.get() and ref.schema_id == execution._context().schema_id and current != inputs[alias]:
+            _reject('STAGE_CHANGED')
+
+
+def _native_view_select(sql, target, bindings, approved, database_id):
+    """Validate the installed VIEW callback; never authorize executing its DDL."""
+    import sqlglot
+    from sqlglot import exp
+    try:
+        trees = sqlglot.parse(sql, read='trino', error_level=sqlglot.ErrorLevel.RAISE)
+        if len(trees) != 1 or not isinstance(trees[0], exp.Create):
+            _reject()
+        tree = trees[0]
+        if (tree.kind != 'VIEW' or tree.args.get('replace') is not True
+                or any(n.comments for n in tree.walk())
+                or any(v for k, v in tree.args.items() if k not in ('this', 'kind', 'expression', 'properties', 'replace'))
+                or not isinstance(tree.this, exp.Table) or compiler._identity(tree.this) != target
+                or any(v for k, v in tree.this.args.items() if k not in ('this', 'db', 'catalog'))):
+            _reject()
+        expected = sqlglot.parse_one('CREATE VIEW c.s.v SECURITY INVOKER AS SELECT 1', read='trino')
+        if tree.args.get('properties') != expected.args['properties']:
+            _reject()
+        body = tree.expression
+        if isinstance(body, exp.Subquery) and not any(v for k, v in body.args.items() if k != 'this'):
+            body = body.this
+        if not isinstance(body, (exp.Select, exp.SetOperation)):
+            _reject()
+        normalized = compiler.normalize_select(body.sql(dialect='trino'), bindings, database_id=database_id)
+        if normalized != approved:
+            _reject('DBT_NATIVE_BODY_CHANGED')
+        return normalized
+    except (sqlglot.errors.SqlglotError, ValueError, AttributeError):
+        _reject()
 
 
 class _Bridge:

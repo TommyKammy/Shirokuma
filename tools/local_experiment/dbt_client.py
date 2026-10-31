@@ -53,7 +53,7 @@ class DbtClient(Client):
                     code = code.get('code') if isinstance(code, dict) else code
                 except (ValueError, OSError):
                     code = None
-                if error.code == 409 and code == 'DBT_PUBLICATION_REVIEW_CHANGED':
+                if error.code == 409 and code in ('DBT_PUBLICATION_REVIEW_CHANGED', 'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED'):
                     raise RequestRejected(code) from None
                 raise RequestUncertain() from None
             if method == 'POST' and (error.code == 409 or error.code >= 500):
@@ -118,14 +118,38 @@ def artifact(value, context, kind, principal, expected=None, *, observe=False):
                 or not isinstance(value.get('source_digest'), str) or not value['source_digest']
                 or not isinstance(models, list) or not models or not isinstance(tests, list)
                 or any(not isinstance(m, dict) or not isinstance(m.get('unique_id'), str) or not m['unique_id']
-                    or m.get('materialized') not in ('table', 'ephemeral') for m in models)
+                    or m.get('materialized') not in ('view', 'table', 'ephemeral') for m in models)
                 or len({m['unique_id'] for m in models}) != len(models)
-                or not any(m['materialized'] == 'table' for m in models)
+                or not any(m['materialized'] in ('view', 'table') for m in models)
                 or any(not isinstance(t, dict) or not isinstance(t.get('unique_id'), str) or not t['unique_id'] for t in tests)
                 or len({t['unique_id'] for t in tests}) != len(tests)
                 or (not value['native_tests'] and tests)):
             raise ValueError('invalid graph receipt')
+        for model in models:
+            if model['materialized'] == 'view' and (model.get('candidate') is not None or model.get('state') == 'NATIVE_VERIFIED'):
+                native_view_candidate(model.get('candidate'), saved)
+                proof = model.get('native_receipt')
+                if (not isinstance(proof, dict) or proof.get('executor') != 'native_graph'
+                        or proof.get('plan_id') != value.get('plan_id') or proof.get('node_id') != model['unique_id']
+                        or proof.get('phase') != 'build' or proof.get('native_verified') is not True
+                        or proof.get('candidate') != model['candidate']):
+                    raise ValueError('invalid native VIEW receipt')
     return value
+
+
+def native_view_candidate(candidate, context):
+    """VIEW provenance is an INVOKER identity/version, never a TABLE snapshot."""
+    if (not isinstance(candidate, dict) or set(candidate) != {'kind', 'ref', 'view_uuid', 'version', 'security'}
+            or candidate.get('kind') != 'VIEW' or candidate.get('security') != 'INVOKER'
+            or type(candidate.get('version')) is not int or not 1 <= candidate['version'] <= 9007199254740991):
+        raise ValueError('invalid native VIEW candidate')
+    identifier(candidate.get('view_uuid'))
+    ref = candidate.get('ref')
+    if (not isinstance(ref, dict) or set(ref) != {'database_id', 'schema_id', 'object_id', 'incarnation'}
+            or ref.get('database_id') != context['database_id'] or ref.get('schema_id') != context['schema_id']
+            or not isinstance(ref.get('object_id'), str) or not ref['object_id']
+            or type(ref.get('incarnation')) is not int or not 1 <= ref['incarnation'] <= 9007199254740991):
+        raise ValueError('invalid native VIEW reference')
 
 
 def validate_reply(reply, context, kind, expected, args, principal):
@@ -231,6 +255,7 @@ def frozen_publication_review(preview, context, principal):
             or ref.get('database_id') != source['database_id'] or ref.get('schema_id') != source['schema_id']
             or not isinstance(ref.get('object_id'), str) or not ref['object_id']
             or type(ref.get('incarnation')) is not int or not 1 <= ref['incarnation'] <= 9007199254740991
+            or candidate.get('kind') not in (None, 'TABLE') or any(k in candidate for k in ('view_uuid', 'version', 'security'))
             or not isinstance(candidate.get('snapshot'), str) or not candidate['snapshot']
             or not isinstance(target, dict) or set(target) != {'catalog', 'schema', 'name'}
             or any(not isinstance(v, str) or not v for v in target.values())
@@ -264,6 +289,8 @@ def graph_publication_source(run, plan, preview, *, allow_reserved=False):
             or not planned_models or not planned_tests or not isinstance(models, list) or not isinstance(tests, list)
             or any(not isinstance(n, dict) or not isinstance(n.get('unique_id'), str) for n in planned_models + planned_tests + models + tests)):
         raise ValueError('invalid graph publication source')
+    if any(m.get('materialized') == 'view' for m in models + planned_models):
+        raise ValueError('DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED')
     mids, tids = [n['unique_id'] for n in planned_models], [n['unique_id'] for n in planned_tests]
     if (not same_ids([m['unique_id'] for m in models], mids) or len(set(mids)) != len(mids)
             or not same_ids([t['unique_id'] for t in tests], tids) or len(set(tids)) != len(tids)):
@@ -334,6 +361,7 @@ def graph_publication_source(run, plan, preview, *, allow_reserved=False):
                         or ref.get('database_id') != run['context']['database_id'] or ref.get('schema_id') != run['context']['schema_id']
                         or not isinstance(ref.get('object_id'), str) or not ref['object_id']
                         or type(ref.get('incarnation')) is not int or not 1 <= ref['incarnation'] <= 9007199254740991
+                        or candidate.get('kind') not in (None, 'TABLE') or any(k in candidate for k in ('view_uuid', 'version', 'security'))
                         or not isinstance(candidate.get('snapshot'), str) or not candidate['snapshot']):
                     raise ValueError('graph candidate mismatch')
             elif proof.get('test_verified') is not True or proof.get('status') != 'PASSED' or not safe_zero(proof.get('failures')):

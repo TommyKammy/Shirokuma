@@ -134,6 +134,8 @@ def _public(db, record):
     result['operation_ids'] = [r['id'] for r in links]
     def safe(value):
         if isinstance(value, dict):
+            if record.get('executor') == 'native_graph' and value.get('kind') == 'VIEW':
+                return _view_public(value)
             return {k: safe(v) for k, v in value.items() if not k.startswith('_')}
         if isinstance(value, list):
             return [safe(v) for v in value]
@@ -406,6 +408,7 @@ def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=
             executor=executor, native_tests=native_tests, native_verified=False, publication_allowed=False,
             tests_status='QUEUED' if native_tests else 'NOT_RUN', task_receipts={},
             models=[dict(unique_id=m['unique_id'], name=m['name'], materialized=m['materialized'],
+                **({'view_security': m['view_security']} if m['materialized'] == 'view' else {}),
                 table_properties=m['table_properties'], state='QUEUED', candidate=None, operation_ids=[])
                 for m in plan['models']],
             tests=[dict(unique_id=t['unique_id'], name=t['name'], test_type=t['test_type'],
@@ -667,6 +670,18 @@ def _view_node(execution):
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
         _, run = _row(db, scope[5])
         plan = _check_plan(db, run)
+        if run.get('executor') == 'native_graph':
+            import database_dbt_graph as graph
+            node = next((m for m in plan['models'] if m['unique_id'] == scope[7]), None)
+            selected = next(m for m in run['models'] if m['unique_id'] == scope[7])
+            op = execution._row()
+            expected = ds._json(dict(payload=graph.payload(run, 'build', scope[7]), context=run['context']))
+            if (node is None or node['materialized'] != 'view' or node.get('view_security') != 'INVOKER'
+                    or selected['state'] != 'BUILDING' or run['_phase'] != 'build' or run['_node_id'] != scope[7]
+                    or op['route'] != 'dbt-graph-build' or op['payload'] != expected
+                    or op['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()):
+                raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
+            return run, node, registry.DestinationLocator(**run['_graph_locators'][scope[7]])
         if run.get('_source_bindings') != plan['source_bindings'] or run.get('_models') != plan['models']:
             raise QueryError('DBT_PLAN_CHANGED', 409)
     operation = execution._row()
@@ -688,6 +703,12 @@ def _view_node(execution):
 
 def _view_saved(db, run, model):
     """A run descriptor cannot substitute for its exact finished owned child."""
+    if run.get('executor') == 'native_graph':
+        import database_dbt_graph as graph
+        proof = graph.child_proof(db, run, model['unique_id'], 'build')
+        if proof is None or proof['candidate'].get('kind') != 'VIEW':
+            raise QueryError('DBT_VIEW_CHANGED', 409)
+        return proof['candidate']
     saved = model.get('_view_measurement')
     ids = model.get('operation_ids', [])
     child = db.execute('SELECT o.*,l.phase,l.node_id FROM dataops_operations o JOIN dbt_run_operations l '
@@ -768,9 +789,14 @@ def _view_binding(execution, ref, *, expected=None):
         _, run = _row(db, scope[5])
         plan = _check_plan(db, run)
         node = next(n for n in plan['tests' if scope[6] == 'test' else 'models'] if n['unique_id'] == scope[7])
-        if run.get('_source_bindings') != plan['source_bindings'] or run.get('_models') != plan['models']:
-            raise QueryError('DBT_PLAN_CHANGED', 409)
-        normalized = _normalized(run, node)
+        if run.get('executor') == 'native_graph':
+            import database_dbt_graph as graph
+            _, normalized = graph.bindings_for(plan, run, node)
+            graph.check_verified(db, run)
+        else:
+            if run.get('_source_bindings') != plan['source_bindings'] or run.get('_models') != plan['models']:
+                raise QueryError('DBT_PLAN_CHANGED', 409)
+            normalized = _normalized(run, node)
         if asdict(ref) not in [asdict(r) for r in normalized['sources'].values()]:
             raise QueryError('INVALID_BINDING', 409)
         matches = [m for m in run['models'] if (m.get('candidate') or {}).get('ref') == asdict(ref)]
@@ -781,6 +807,8 @@ def _view_binding(execution, ref, *, expected=None):
             raise QueryError('DBT_VIEW_CHANGED', 409)
     if execution._dbt_measure_view(ref) != saved:
         raise QueryError('DBT_VIEW_CHANGED', 409)
+    if run.get('executor') == 'native_graph':
+        graph.check_candidates(execution, run)
     return saved
 
 
@@ -1952,7 +1980,7 @@ def _settle(ident, *, owner_lost=False):
 
 
 def _observe(principal, context, ident, kind):
-    _access(principal, context)
+    metadata = _access(principal, context)
     with control_store.connect() as db:
         record = _authorized(db, principal, context, ident, kind)
     if ident not in _live and record['state'] in _ACTIVE | {'UNKNOWN', 'COMMITTED_RECORDING_FAILED'}:
@@ -1972,7 +2000,14 @@ def _observe(principal, context, ident, kind):
             finally:
                 owner.close()
     with control_store.connect() as db:
-        return _public(db, _authorized(db, principal, context, ident, kind))
+        record = _authorized(db, principal, context, ident, kind)
+        if record.get('executor') == 'native_graph' and any(
+                m['materialized'] == 'view' and m.get('native_receipt', {}).get('native_verified') is True
+                for m in record['models']):
+            import database_dbt_graph as graph
+            graph.check_verified(db, record)
+            graph.check_candidates(metadata, record)
+        return _public(db, record)
 
 
 def get_plan(principal, context, plan_id):

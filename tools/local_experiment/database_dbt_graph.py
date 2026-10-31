@@ -53,10 +53,17 @@ def validate(metadata, context, plan, *, tests=False):
     source_ids = [s['unique_id'] for s in sources]
     if len(set(ids + source_ids)) != len(ids + source_ids):
         reject('DBT_GRAPH_DEPENDENCY_INVALID')
-    if not any(m['materialized'] == 'table' for m in models):
+    if not any(m['materialized'] in ('table', 'view') for m in models):
         reject('DBT_GRAPH_TABLE_REQUIRED')
-    if any(m['materialized'] not in ('table', 'ephemeral') for m in models):
+    if any(m['materialized'] not in ('table', 'view', 'ephemeral') for m in models):
         reject('DBT_GRAPH_MATERIALIZATION_UNSUPPORTED')
+    for model in models:
+        if model['materialized'] == 'view':
+            if model.get('view_security') != 'INVOKER' or model.get('table_properties') != {}:
+                reject('DBT_GRAPH_MATERIALIZATION_UNSUPPORTED')
+            deps = ancestors(plan, model)
+            if any(m['unique_id'] in deps and m['materialized'] == 'view' for m in models):
+                reject('UNSUPPORTED_VIEW_DEPENDENCY')
     if any(m['materialized'] == 'table' and m.get('table_properties') != {'format': 'PARQUET'} for m in models):
         reject('DBT_NATIVE_PARQUET_REQUIRED')
     remaining = {m['unique_id']: set(m['depends_on']) - set(source_ids) for m in models}
@@ -78,13 +85,13 @@ def validate(metadata, context, plan, *, tests=False):
         refs.add(ref)
         relations[tuple(source['relation'])] = (source['unique_id'], ref)
     for model in models:
-        if model['materialized'] == 'table':
+        if model['materialized'] in ('table', 'view'):
             relation = tuple(model['relation'])
             if relation[:2] != (context.sql_catalog, context.sql_schema) or relation in relations:
                 reject('DBT_GRAPH_ALIAS_COLLISION')
             relations[relation] = (model['unique_id'], registry.ResourceRef(context.database_id,
                 context.schema_id, model['unique_id'], 1))
-    if len(relations) != len(sources) + sum(m['materialized'] == 'table' for m in models):
+    if len(relations) != len(sources) + sum(m['materialized'] in ('table', 'view') for m in models):
         reject('DBT_GRAPH_ALIAS_COLLISION')
     selected = plan['tests'] if tests else []
     if tests:
@@ -141,7 +148,7 @@ def payload(run, phase, uid):
 def node_allowed(db, run, phase, uid):
     plan = dbt._check_plan(db, run)
     if phase == 'build':
-        return any(m['unique_id'] == uid and m['materialized'] == 'table' for m in plan['models'])
+        return any(m['unique_id'] == uid and m['materialized'] in ('table', 'view') for m in plan['models'])
     return phase == 'test' and run.get('native_tests') is True and any(t['unique_id'] == uid for t in plan['tests'])
 
 
@@ -159,8 +166,15 @@ def check_candidates(metadata, run):
     for model in run['models']:
         if model.get('native_receipt', {}).get('native_verified') is True:
             saved = model['_measurement']
-            if metadata.wap_measure(registry.ResourceRef(**saved['ref'])) != saved:
-                reject('STAGE_CHANGED')
+            measure = metadata._dbt_measure_view if saved.get('kind') == 'VIEW' else metadata.wap_measure
+            if measure(registry.ResourceRef(**saved['ref'])) != saved:
+                reject('DBT_VIEW_CHANGED' if saved.get('kind') == 'VIEW' else 'STAGE_CHANGED')
+    # Historical RAW snapshots remain pinned across appends. Their binding and
+    # schema must still match; same-run candidates above must match full heads.
+    for saved in (run.get('_pins') or {}).values():
+        current = metadata.wap_measure(registry.ResourceRef(**saved['ref']))
+        if any(current[k] != saved[k] for k in ('ref', 'schema_id', 'schema_fingerprint', 'columns')):
+            reject('SOURCE_SCHEMA_CHANGED')
 
 
 def logical_sql(sql, remapping):
@@ -217,7 +231,8 @@ class Bridge(native._Bridge):
             context = self.execution._context()
             sql = logical_sql(sql, self.owner.remapping)
             if self.phase == 'build':
-                native._native_select(sql, self.target, self.bindings, self.approved, context.database_id)
+                validator = native._native_view_select if self.node['materialized'] == 'view' else native._native_select
+                validator(sql, self.target, self.bindings, self.approved, context.database_id)
             else:
                 if auto_begin is not True or fetch is not True:
                     reject('DBT_NATIVE_TEST_CALLBACK_REUSED')
@@ -227,6 +242,17 @@ class Bridge(native._Bridge):
             with control_store.connect() as db:
                 db.execute("UPDATE dataops_operations SET result=? WHERE id=? AND state='ACTIVE'",
                     (ds._json(self.receipt), self.execution.id))
+            if self.phase == 'build' and self.node['materialized'] == 'view':
+                self.candidate_ref = self.execution._dbt_create_view()
+                self.receipt['candidate'] = self.execution._dbt_measure_view(self.candidate_ref)
+                selected = next(m for m in dbt._row_run(self.owner.ident)['models'] if m['unique_id'] == self.node['unique_id'])
+                if self.receipt['candidate']['_canonical_definition_digest'] != selected['_view_definition_digest']:
+                    reject('DBT_VIEW_CHANGED')
+                with control_store.connect() as db:
+                    db.execute("UPDATE dataops_operations SET result=? WHERE id=? AND state='ACTIVE'",
+                        (ds._json(self.receipt), self.execution.id))
+                self.response = dict(_message='CREATE VIEW', code='CREATE VIEW')
+                return self.response
             if self.phase == 'build':
                 self.execution._absent(self.locator)
                 page = self.execution._execute('dbt_native_create', 'CREATE TABLE ' + self.execution._locator(self.locator)
@@ -291,7 +317,7 @@ class Graph:
         self.events = {'build': {}, 'test': {}}
         self.completed = set()
         self.remapping = {(context.sql_catalog, context.sql_schema, locators[m['unique_id']]['physical_name']): tuple(m['relation'])
-            for m in plan['models'] if m['materialized'] == 'table'}
+            for m in plan['models'] if m['materialized'] in ('table', 'view')}
 
     def check(self, *, candidates=True):
         if self.thread != threading.get_ident() or admission.current() is not (self.bridge.parent if self.bridge else self.parent) or self.ident not in dbt._live:
@@ -320,7 +346,7 @@ class Graph:
                 reject('DBT_NATIVE_RELATION_LOOKUP')
             run = dbt._row_run(self.ident)
             return [dict(database=self.context.sql_catalog, schema=self.context.sql_schema,
-                identifier=self.locators[m['unique_id']]['physical_name'], type='table')
+                identifier=self.locators[m['unique_id']]['physical_name'], type=m['materialized'])
                 for m in run['models'] if m.get('native_receipt', {}).get('native_verified') is True]
         if message['op'] != 'get_relation' or set(message) != {'op', 'database', 'schema', 'identifier'}:
             reject('DBT_NATIVE_PROTOCOL_FAILED')
@@ -332,7 +358,7 @@ class Graph:
                 model = next(m for m in dbt._row_run(self.ident)['models'] if m['unique_id'] == uid)
                 if message['identifier'] == name and (model.get('native_receipt', {}).get('native_verified') is True
                         or self.bridge and self.bridge.node['unique_id'] == uid and self.bridge.candidate_ref is not None):
-                    return dict(database=self.context.sql_catalog, schema=self.context.sql_schema, identifier=name, type='table')
+                    return dict(database=self.context.sql_catalog, schema=self.context.sql_schema, identifier=name, type=model['materialized'])
                 dbt._access(self.principal, self.context)._absent(registry.DestinationLocator(**dict(locator, physical_name=message['identifier'])))
                 return None
         reject('DBT_NATIVE_RELATION_LOOKUP')
@@ -378,6 +404,9 @@ class Graph:
         node, skipped = self.active
         uid = node['unique_id']
         status = result['status']
+        if self.phase == 'build' and node['materialized'] == 'view' and (
+                result.get('model_type') != 'view' or result.get('view_security') != 'invoker'):
+            reject('DBT_NATIVE_RUNNER_FAILED')
         if skipped and status != 'skipped' or not skipped and status == 'skipped':
             reject('DBT_NATIVE_RUNNER_FAILED')
         proof = None
@@ -392,7 +421,10 @@ class Graph:
                 if self.phase == 'build':
                     if b.candidate_ref is None:
                         reject('TABLE_OBSERVATION_REQUIRED')
-                    proof.update(native_verified=True, candidate=b.execution.wap_measure(b.candidate_ref))
+                    measure = b.execution._dbt_measure_view if node['materialized'] == 'view' else b.execution.wap_measure
+                    proof.update(native_verified=True, candidate=measure(b.candidate_ref))
+                    if node['materialized'] == 'view' and proof['candidate'] != b.receipt['candidate']:
+                        reject('DBT_VIEW_CHANGED')
                 else:
                     proof.update(test_verified=True, status='PASSED' if b.failures == 0 else 'FAILED')
                 b.execution.complete(proof)
@@ -413,7 +445,8 @@ class Graph:
                 if self.phase == 'build':
                     item['operation_ids'] = [b.execution.id]
                     if proof:
-                        item.update(candidate=proof['candidate'], _measurement=proof['candidate'], native_receipt=proof,
+                        item.update(candidate=dbt._view_public(proof['candidate']) if node['materialized'] == 'view' else proof['candidate'],
+                            _measurement=proof['candidate'], native_receipt=proof,
                             dependency_snapshots=proof['pins'])
                 else:
                     item['operation_id'] = b.execution.id
@@ -428,7 +461,7 @@ class Graph:
     def task_done(self, message):
         self.check()
         expected = {m['unique_id'] for m in (self.plan['models'] if self.phase == 'build' else self.plan['tests'])}
-        result_ids = {m['unique_id'] for m in self.plan['models'] if m['materialized'] == 'table'} if self.phase == 'build' else expected
+        result_ids = {m['unique_id'] for m in self.plan['models'] if m['materialized'] in ('table', 'view')} if self.phase == 'build' else expected
         if (self.phase in self.completed or self.active is not None or set(message) != {'op', 'phase', 'selected', 'results', 'success'}
                 or message['phase'] != self.phase or type(message['success']) is not bool
                 or not isinstance(message['selected'], list) or len(message['selected']) != len(expected)
@@ -512,7 +545,9 @@ class Graph:
 
 
 def valid_result(result):
-    return (isinstance(result, dict) and set(result) == {'node_id', 'status', 'failures', 'adapter_response'}
+    return (isinstance(result, dict) and set(result) in (
+            {'node_id', 'status', 'failures', 'adapter_response'},
+            {'node_id', 'status', 'failures', 'adapter_response', 'model_type', 'view_security'})
         and type(result['node_id']) is str and result['status'] in ('success', 'error', 'skipped', 'pass', 'fail')
         and (result['failures'] is None or type(result['failures']) is int and result['failures'] >= 0)
         and isinstance(result['adapter_response'], dict)
@@ -673,8 +708,10 @@ def child_proof(db, run, uid, phase, *, historical=False):
         if len(query_rows) != 1:
             return None
         query = query_rows[0]
-        step = 'native-create' if phase == 'build' else 'native-test'
-        if (query['step'] != step or query['action'] != ('dbt_native_create' if phase == 'build' else 'dbt_test')
+        view = phase == 'build' and node['materialized'] == 'view'
+        step = 'view' if view else 'native-create' if phase == 'build' else 'native-test'
+        action = 'dbt_view_create' if view else 'dbt_native_create' if phase == 'build' else 'dbt_test'
+        if (query['step'] != step or query['action'] != action
                 or query['state'] != 'FINISHED' or not query['backend_query_id'] or not query['backend_query_id'].strip()
                 or query['actor'] != run['actor'] or query['mode'] != 'dataops' or query['request_id'] != op['id']
                 or query['worksheet_id'] != step or any(query[k] != run['context'][k] for k in run['context'])
@@ -702,6 +739,7 @@ def child_proof(db, run, uid, phase, *, historical=False):
             return None
         if phase == 'build':
             candidate = receipt['candidate']
+            public = dbt._view_public(candidate) if view else candidate
             ref = registry.ResourceRef(**candidate['ref'])
             if historical:
                 saved_object = db.execute('SELECT * FROM object_bindings WHERE id=?', (ref.object_id,)).fetchone()
@@ -712,16 +750,36 @@ def child_proof(db, run, uid, phase, *, historical=False):
             owned = db.execute('SELECT * FROM dataops_owned_objects WHERE operation_id=? AND object_id=?',
                 (op['id'], ref.object_id)).fetchone()
             locator = run['_graph_locators'][uid]
-            if (item['state'] != 'NATIVE_VERIFIED' or item.get('candidate') != candidate
+            if (item['state'] != 'NATIVE_VERIFIED' or item.get('candidate') != public
+                    or item.get('materialized') != node['materialized']
                     or item.get('_measurement') != candidate or item.get('operation_ids') != [op['id']]
                     or item.get('dependency_snapshots') != pins or sdk['status'] != 'success'
                     or ref.database_id != run['context']['database_id'] or ref.schema_id != run['context']['schema_id']
                     or schema is None or schema.purpose != 'sandbox' or schema.database_id != ref.database_id
-                    or obj is None or not historical and not obj.current or obj.kind != 'TABLE' or obj.schema_id != ref.schema_id
-                    or obj.incarnation != ref.incarnation or not obj.backend_identity or not candidate.get('snapshot')
+                    or obj is None or not historical and not obj.current or obj.kind != ('VIEW' if view else 'TABLE') or obj.schema_id != ref.schema_id
+                    or obj.incarnation != ref.incarnation or not obj.backend_identity
+                    or not view and not candidate.get('snapshot')
                     or owned is None or owned['incarnation'] != ref.incarnation or owned['purpose'] != 'stage'
-                    or receipt.get('candidate_locator') != locator or obj.physical_name != locator['physical_name']):
+                    or receipt.get('candidate_locator') != locator
+                    or locator != dict(database_id=ref.database_id, schema_id=ref.schema_id, physical_name=obj.physical_name)):
                 return None
+            if view and (candidate.get('kind') != 'VIEW' or 'snapshot' in candidate
+                    or candidate.get('view_uuid') != obj.backend_identity or candidate.get('security') != 'INVOKER'
+                    or candidate.get('_canonical_definition_digest') != item.get('_view_definition_digest')
+                    or node.get('view_security') != 'INVOKER' or item.get('view_security') != 'INVOKER'
+                    or sdk.get('model_type') != 'view' or sdk.get('view_security') != 'invoker'
+                    or sdk['failures'] is not None or sdk['adapter_response'] != dict(_message='CREATE VIEW', code='CREATE VIEW')):
+                return None
+            if view:
+                # The ledger must contain the lowered absent-only statement,
+                # not the SDK's CREATE OR REPLACE callback or another target.
+                prefix = 'CREATE VIEW ' + '.'.join(ds._identifier(p) for p in (
+                    run['context']['sql_catalog'], run['context']['sql_schema'], locator['physical_name'])) + ' SECURITY INVOKER AS '
+                if not query['sql'].startswith(prefix):
+                    return None
+                canonical = compiler._sql_tree(query['sql'][len(prefix):]).sql(dialect='trino')
+                if hashlib.sha256(canonical.encode()).hexdigest() != item['_view_definition_digest']:
+                    return None
         else:
             failures = receipt.get('failures')
             result = run.get('_graph_test_results', {}).get(uid)
@@ -770,10 +828,12 @@ def _failed_build_child(db, run, op):
     if len(rows) != 1:
         return False
     query = rows[0]
-    if (query['step'] != 'native-create' or query['action'] != 'dbt_native_create'
+    node = next(m for m in dbt._check_plan(db, run)['models'] if m['unique_id'] == op['node_id'])
+    step, action = ('view', 'dbt_view_create') if node['materialized'] == 'view' else ('native-create', 'dbt_native_create')
+    if (query['step'] != step or query['action'] != action
             or query['state'] != 'FAILED' or not query['backend_query_id'] or not query['backend_query_id'].strip()
             or query['actor'] != run['actor'] or query['mode'] != 'dataops' or query['request_id'] != op['id']
-            or query['worksheet_id'] != 'native-create' or any(query[k] != run['context'][k] for k in run['context'])
+            or query['worksheet_id'] != step or any(query[k] != run['context'][k] for k in run['context'])
             or any(query[k] != op[k] for k in ('backend_username', 'credential_snapshot_ref'))):
         return False
     admissions = list(db.execute('SELECT * FROM warehouse_admissions WHERE parent_id=?', (child['id'],)))
@@ -815,6 +875,11 @@ def _task_completion_proof(db, run, phase, *, historical=False):
             return False
         for item in items:
             uid = item['unique_id']
+            if phase == 'build' and item.get('materialized') != next(n['materialized'] for n in nodes if n['unique_id'] == uid):
+                return False
+            if phase == 'build' and item['materialized'] == 'view' and (
+                    results[uid].get('model_type') != 'view' or results[uid].get('view_security') != 'invoker'):
+                return False
             if item.get('_sdk_result') != results[uid]:
                 return False
             if phase == 'build' and results[uid]['status'] in ('error', 'skipped'):
@@ -859,6 +924,8 @@ def publication_proof(db, run, uid, publication=None, *, historical=False):
     forbidden = 'DBT_GRAPH_PUBLICATION_FORBIDDEN'
     try:
         plan = dbt._check_plan(db, run)
+        if any(m['materialized'] == 'view' for m in plan['models']):
+            reject('DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED')
         if (run['kind'] != 'run' or run.get('executor') != 'native_graph'
                 or not historical and (run['state'] != 'NATIVE_VERIFIED' or run.get('native_verified') is not True
                     or run.get('cancel_requested') is not False or run.get('tests_status') != 'PASSED')
@@ -946,7 +1013,7 @@ def execute(ident, principal, context, parent, frozen, credential):
     validate(metadata, context, plan, tests=run['native_tests'])
     pins = {ds._json(s['ref']): metadata.wap_measure(registry.ResourceRef(**s['ref'])) for s in plan['source_bindings']}
     locators = {m['unique_id']: dict(database_id=context.database_id, schema_id=context.schema_id,
-        physical_name='g_' + secrets.token_hex(8)) for m in plan['models'] if m['materialized'] == 'table'}
+        physical_name='g_' + secrets.token_hex(8)) for m in plan['models'] if m['materialized'] in ('table', 'view')}
     with control_store.connect() as db:
         _, run = dbt._row(db, ident)
         run.update(_pins=pins, _graph_locators=locators, state='BUILDING')
