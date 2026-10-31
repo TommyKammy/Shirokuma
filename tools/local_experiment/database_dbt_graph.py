@@ -7,6 +7,8 @@ from copy import deepcopy
 from dataclasses import asdict
 import hashlib
 import json
+import uuid
+import re
 import os
 from pathlib import Path
 import secrets
@@ -729,10 +731,11 @@ def child_proof(db, run, uid, phase, *, historical=False):
         if not isinstance(pins, dict) or set(pins) != set(approved['sources']):
             return None
         if any(not isinstance(pins[a], dict) or pins[a].get('ref') != asdict(ref)
-                or originals.get(ds._json(asdict(ref))) != pins[a] for a, ref in approved['sources'].items()):
+                or pins[a].get('kind') == 'VIEW' and not valid_view_measurement(pins[a])
+                or ds._json(originals.get(ds._json(asdict(ref)))) != ds._json(pins[a]) for a, ref in approved['sources'].items()):
             return None
         item = next(m for m in run['models' if phase == 'build' else 'tests'] if m['unique_id'] == uid)
-        if item.get('native_receipt') != receipt:
+        if ds._json(item.get('native_receipt')) != ds._json(receipt):
             return None
         sdk = receipt.get('sdk_result')
         if not valid_result(sdk) or sdk['node_id'] != uid or sdk != item.get('_sdk_result'):
@@ -750,10 +753,10 @@ def child_proof(db, run, uid, phase, *, historical=False):
             owned = db.execute('SELECT * FROM dataops_owned_objects WHERE operation_id=? AND object_id=?',
                 (op['id'], ref.object_id)).fetchone()
             locator = run['_graph_locators'][uid]
-            if (item['state'] != 'NATIVE_VERIFIED' or item.get('candidate') != public
+            if (item['state'] != 'NATIVE_VERIFIED' or ds._json(item.get('candidate')) != ds._json(public)
                     or item.get('materialized') != node['materialized']
-                    or item.get('_measurement') != candidate or item.get('operation_ids') != [op['id']]
-                    or item.get('dependency_snapshots') != pins or sdk['status'] != 'success'
+                    or ds._json(item.get('_measurement')) != ds._json(candidate) or item.get('operation_ids') != [op['id']]
+                    or ds._json(item.get('dependency_snapshots')) != ds._json(pins) or sdk['status'] != 'success'
                     or ref.database_id != run['context']['database_id'] or ref.schema_id != run['context']['schema_id']
                     or schema is None or schema.purpose != 'sandbox' or schema.database_id != ref.database_id
                     or obj is None or not historical and not obj.current or obj.kind != ('VIEW' if view else 'TABLE') or obj.schema_id != ref.schema_id
@@ -762,6 +765,8 @@ def child_proof(db, run, uid, phase, *, historical=False):
                     or owned is None or owned['incarnation'] != ref.incarnation or owned['purpose'] != 'stage'
                     or receipt.get('candidate_locator') != locator
                     or locator != dict(database_id=ref.database_id, schema_id=ref.schema_id, physical_name=obj.physical_name)):
+                return None
+            if view and not valid_view_measurement(candidate):
                 return None
             if view and (candidate.get('kind') != 'VIEW' or 'snapshot' in candidate
                     or candidate.get('view_uuid') != obj.backend_identity or candidate.get('security') != 'INVOKER'
@@ -796,6 +801,29 @@ def child_proof(db, run, uid, phase, *, historical=False):
         return receipt
     except (KeyError, TypeError, ValueError, AttributeError, IndexError, StopIteration, QueryError, compiler.DbtError):
         return None
+
+
+def valid_view_measurement(candidate):
+    """Strict saved VIEW identity and digests; a VIEW never carries a snapshot."""
+    try:
+        if (set(candidate) != {'kind', 'ref', 'view_uuid', 'version', 'security', 'schema_id',
+                'columns', 'schema_fingerprint', '_definition_digest', '_canonical_definition_digest', '_head_digest'}
+                or candidate['kind'] != 'VIEW' or candidate['security'] != 'INVOKER'
+                or type(candidate['version']) is not int or candidate['version'] < 1
+                or type(candidate['schema_id']) is not int or candidate['schema_id'] < 0
+                or not isinstance(candidate['columns'], list) or not candidate['columns']
+                or any(not isinstance(c, dict) or set(c) != {'name', 'type'}
+                    or not isinstance(c['name'], str) or not c['name'] or not isinstance(c['type'], (str, dict))
+                    for c in candidate['columns'])
+                or len({c['name'] for c in candidate['columns']}) != len(candidate['columns'])
+                or any(not isinstance(candidate[k], str) or not re.fullmatch('[0-9a-f]{64}', candidate[k])
+                    for k in ('schema_fingerprint', '_definition_digest', '_canonical_definition_digest', '_head_digest'))):
+            return False
+        registry.ResourceRef(**candidate['ref'])
+        uuid.UUID(candidate['view_uuid'])
+        return True
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
 
 
 def check_verified(db, run):
@@ -924,8 +952,6 @@ def publication_proof(db, run, uid, publication=None, *, historical=False):
     forbidden = 'DBT_GRAPH_PUBLICATION_FORBIDDEN'
     try:
         plan = dbt._check_plan(db, run)
-        if any(m['materialized'] == 'view' for m in plan['models']):
-            reject('DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED')
         if (run['kind'] != 'run' or run.get('executor') != 'native_graph'
                 or not historical and (run['state'] != 'NATIVE_VERIFIED' or run.get('native_verified') is not True
                     or run.get('cancel_requested') is not False or run.get('tests_status') != 'PASSED')
@@ -941,7 +967,7 @@ def publication_proof(db, run, uid, publication=None, *, historical=False):
         if model['materialized'] != 'table':
             reject(forbidden)
         proofs = {m['unique_id']: child_proof(db, run, m['unique_id'], 'build', historical=historical)
-            for m in run['models'] if m['materialized'] == 'table'}
+            for m in run['models'] if m['materialized'] in ('table', 'view')}
         if any(p is None for p in proofs.values()) or uid not in proofs:
             reject(forbidden)
         if not historical and model.get('publication_id') and model['publication_id'] != publication:

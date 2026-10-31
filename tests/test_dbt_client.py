@@ -81,7 +81,8 @@ def view_graph_fixture():
     sdk.update(adapter_response=dict(code='CREATE VIEW'), model_type='view', view_security='invoker')
     run['task_receipts']['build']['results'][0] = deepcopy(sdk)
     model['native_receipt'].update(candidate=deepcopy(model['candidate']), sdk_result=deepcopy(sdk))
-    run['publication_allowed'] = False
+    run['publication_allowed'] = True
+    preview['views'] = [dict(node_id=model['unique_id'], candidate=deepcopy(model['candidate']), definition_digest='a' * 64)]
     preview.update(node_id=run['models'][2]['unique_id'], candidate=deepcopy(run['models'][2]['candidate']))
     preview['target']['name'] = preview['expected_target']['destination']['physical_name'] = 'second'
     return run, plan, preview
@@ -253,19 +254,194 @@ class ClientTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.call('status', '--run-id=' + ID)
 
-    def test_view_graph_publication_spoof_refused_without_post(self):
+    def test_view_graph_full_quality_and_complete_summary_required(self):
         admin, path = self.graph_review()
         self.source, self.source_plan, self.preview = view_graph_fixture()
-        self.source['publication_allowed'] = True
+        flags = ['--run-id=' + ID, '--node-id=model.lake.second']
+        self.assertEqual(self.call('publish-preview', *flags, context=admin)['preview']['views'], self.preview['views'])
+        good = deepcopy(self.source)
+        for change in (lambda r: r['tests'].pop(), lambda r: r.update(native_verified=False),
+                lambda r: r['models'][1]['native_receipt'].update(sdk_result={}),
+                lambda r: r['task_receipts']['build']['results'].pop(),
+                lambda r: r['task_receipts']['test']['nodes'][0].update(failures=False),
+                lambda r: r['models'][1].update(view_security='DEFINER')):
+            self.source = deepcopy(good); change(self.source)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.call('publish-preview', *flags, context=admin)
+        self.source = good
+        summary = deepcopy(self.preview['views'])
+        for bad in (None, [], summary * 2, [dict(summary[0], definition_digest='A' * 64)],
+                    [dict(summary[0], node_id='wrong')]):
+            self.preview['views'] = bad
+            with self.subTest(summary=bad), self.assertRaises(ValueError):
+                self.call('publish-preview', *flags, context=admin)
+        self.assertTrue(all(c[0] == 'GET' for c in self.calls))
+
+    def test_multiview_graph_summary_covers_every_physical_view(self):
+        admin, _ = self.graph_review()
+        run, plan, preview = view_graph_fixture()
+        second = deepcopy(run['models'][1])
+        second['unique_id'] = 'model.lake.extra_view'
+        second['candidate']['view_uuid'] = '55555555-5555-5555-5555-555555555555'
+        second['candidate']['ref']['object_id'] = 'extra-view'
+        operation_id = 'build-' + second['unique_id']
+        second['operation_ids'] = [operation_id]
+        second['native_receipt'].update(node_id=second['unique_id'], candidate=deepcopy(second['candidate']))
+        second['native_receipt']['sdk_result']['node_id'] = second['unique_id']
+        run['models'].append(second)
+        planned = deepcopy(plan['models'][1]); planned['unique_id'] = second['unique_id']
+        plan['models'].append(planned)
+        run['operations'].append(dict(id=operation_id, phase='build', node_id=second['unique_id'], state='FINISHED', committed=True))
+        task = run['task_receipts']['build']
+        task['selected'].append(second['unique_id'])
+        for field in ('nodes', 'results'):
+            task[field].append(deepcopy(second['native_receipt']['sdk_result']))
+        preview['views'].append(dict(node_id=second['unique_id'], candidate=deepcopy(second['candidate']), definition_digest='b' * 64))
+        self.source, self.source_plan, self.preview = run, plan, preview
+        flags = ['--run-id=' + ID, '--node-id=model.lake.second']
+        self.assertEqual(len(self.call('publish-preview', *flags, context=admin)['preview']['views']), 2)
+        good = deepcopy(preview['views'])
+        for bad in (good[:1], [good[0], dict(good[1], candidate=good[0]['candidate'])]):
+            self.preview['views'] = bad
+            with self.assertRaises(ValueError):
+                self.call('publish-preview', *flags, context=admin)
+
+    def test_view_graph_frozen_replay_and_history_no_source_get(self):
+        admin, path = self.graph_review()
+        self.source, self.source_plan, self.preview = view_graph_fixture()
+        frozen = deepcopy(self.preview)
+        path.write_text(json.dumps(frozen))
+        flags = ['--run-id=' + ID, '--node-id=model.lake.second', '--preview-file=' + str(path), '--idempotency-key=view-frozen']
+        def ack(record):
+            record.update(origin='native_graph', node_id=frozen['node_id'], plan_id=PLAN, source_digest=frozen['source_digest'], views=deepcopy(frozen['views']))
+        self.corrupt = ack
+        self.drop = True
+        result = self.call('publish', *flags, context=admin)
+        self.assertTrue(result['request_uncertain'])
+        original = deepcopy(self.calls[-1])
+        self.source.update(state='CANCELED', publication_allowed=False)
+        self.source['models'][1]['candidate']['version'] = 2
+        recovered = self.call('publish', *flags, context=admin)
+        self.assertEqual(recovered['publication']['views'], frozen['views'])
+        self.assertEqual(self.calls[-1], original)
+        for change in (lambda r: r.pop('views'), lambda r: r['views'][0].update(definition_digest='b' * 64),
+                       lambda r: r['views'][0]['candidate'].update(version=True)):
+            def mismatch(record):
+                ack(record); change(record)
+            self.corrupt = mismatch
+            uncertain = self.call('publish', *flags, context=admin)
+            self.assertTrue(uncertain['request_uncertain'])
+            self.assertEqual(uncertain['retry']['body'], original[3])
+            self.assertEqual(uncertain['retry']['idempotency_key'], 'view-frozen')
+        self.corrupt = ack
         before = len(self.calls)
-        with self.assertRaisesRegex(ValueError, 'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED'):
-            self.call('publish-preview', '--run-id=' + ID, '--node-id=model.lake.second', context=admin)
-        self.assertTrue(all(c[0] == 'GET' for c in self.calls[before:]))
+        self.assertEqual(self.call('publication', '--publication-id=' + PUB, context=admin)['publication']['views'], frozen['views'])
+        self.assertEqual([c[0] for c in self.calls[before:]], ['GET'])
+        self.assertTrue(all(c[0] == 'POST' for c in self.calls[:before]))
+        intent = {k: deepcopy(frozen[k]) for k in ('origin', 'run_id', 'plan_id', 'node_id', 'source_digest', 'source_actor', 'source_context')}
+        intent.update(context=admin, publisher_actor='alice', candidate=deepcopy(frozen['candidate']))
+        def audited(record):
+            ack(record)
+            record['native_audit'] = dict(intent=deepcopy(intent))
+        self.corrupt = audited
+        self.call('publication', '--publication-id=' + PUB, context=admin)
+        for change in (lambda i: i['source_context'].update(schema_id='other'),
+                       lambda i: i.update(source_actor=''), lambda i: i.update(publisher_actor='engineer'),
+                       lambda i: i.update(run_id=PLAN), lambda i: i.update(source_digest='other'),
+                       lambda i: i['candidate']['ref'].update(incarnation=True),
+                       lambda i: i['candidate'].update(kind='VIEW'), lambda i: i['candidate'].update(view_uuid=ID)):
+            def bad_intent(record):
+                audited(record); change(record['native_audit']['intent'])
+            self.corrupt = bad_intent
+            before = len(self.calls)
+            with self.assertRaises(ValueError):
+                self.call('publication', '--publication-id=' + PUB, context=admin)
+            self.assertEqual(len(self.calls), before + 1)
+        for change in (lambda r: r.update(parent_run_id=PLAN), lambda r: r.update(plan_id='bad'),
+                       lambda r: r.update(source_digest=''), lambda r: r.update(node_id=frozen['views'][0]['node_id']),
+                       lambda r: r.update(native_audit=dict(intent=dict(source_context=dict(C, schema_id='other'))))):
+            def bad_history(record):
+                ack(record); change(record)
+            self.corrupt = bad_history
+            before = len(self.calls)
+            with self.assertRaises(ValueError):
+                self.call('publication', '--publication-id=' + PUB, context=admin)
+            self.assertEqual(len(self.calls), before + 1)
+
+
+    def test_view_publication_history_binds_saved_context_after_admin_grant_change(self):
+        _, _, frozen = view_graph_fixture()
+        saved_admin = dict(frozen['context'], grant_revision=7)
+        current_admin = dict(saved_admin, grant_revision=11)
+        intent = {k: deepcopy(frozen[k]) for k in ('origin', 'run_id', 'plan_id', 'node_id',
+                  'source_digest', 'source_actor', 'source_context', 'candidate')}
+        intent.update(context=deepcopy(saved_admin), publisher_actor='alice')
+        self.assertEqual(intent['source_context']['selected_role'], 'data_engineer')
+        self.assertNotEqual(intent['source_context'], saved_admin)
+        for receipt in ('native_audit', 'native_publication'):
+            def record(r):
+                r.update(origin='native_graph', state='PUBLISHED', context=deepcopy(saved_admin),
+                         node_id=frozen['node_id'], source_digest=frozen['source_digest'],
+                         views=deepcopy(frozen['views']))
+                r[receipt] = dict(intent=deepcopy(intent))
+            self.corrupt = record
+            before = len(self.calls)
+            with self.subTest(receipt=receipt):
+                publication = self.call('publication', '--publication-id=' + PUB,
+                                        context=current_admin)['publication']
+                self.assertEqual(publication['context'], saved_admin)
+                self.assertEqual(publication[receipt]['intent'], intent)
+                self.assertEqual(publication['views'], frozen['views'])
+                for wrong_context in (current_admin, intent['source_context']):
+                    def wrong(r):
+                        record(r)
+                        r[receipt]['intent']['context'] = deepcopy(wrong_context)
+                    self.corrupt = wrong
+                    with self.assertRaisesRegex(ValueError, 'frozen publication source identity mismatch'):
+                        self.call('publication', '--publication-id=' + PUB, context=current_admin)
+                self.corrupt = record
+                with self.assertRaises(ValueError):
+                    self.call('publication', '--publication-id=' + PUB,
+                              context=dict(current_admin, selected_role='data_engineer'))
+            self.assertEqual([(c[0], c[1]) for c in self.calls[before:]],
+                             [('GET', '/api/v1/dbt/publications/' + PUB)] * 4)
+        self.assertEqual(self.receipts, {})
+
+    def test_completed_view_publication_requires_frozen_native_intent(self):
+        admin, path = self.graph_review()
+        self.source, self.source_plan, self.preview = view_graph_fixture()
+        frozen = deepcopy(self.preview)
+        path.write_text(json.dumps(frozen))
+        intent = {k: deepcopy(frozen[k]) for k in ('origin', 'run_id', 'plan_id', 'node_id', 'source_digest', 'source_actor', 'source_context', 'candidate')}
+        intent.update(context=admin, publisher_actor='alice')
+        for state in ('QUEUED', 'AUDITING', 'PUBLISHED', 'COMMITTED_RECORDING_FAILED'):
+            for receipt in (None, 'native_audit', 'native_publication'):
+                def record(r):
+                    r.update(origin='native_graph', state=state, node_id=frozen['node_id'],
+                             source_digest=frozen['source_digest'], views=deepcopy(frozen['views']))
+                    if receipt:
+                        r[receipt] = dict(intent=deepcopy(intent))
+                self.corrupt = record
+                before = len(self.calls)
+                with self.subTest(state=state, receipt=receipt):
+                    if receipt is None and state in ('PUBLISHED', 'COMMITTED_RECORDING_FAILED'):
+                        with self.assertRaisesRegex(ValueError, 'missing frozen publication receipt'):
+                            self.call('publication', '--publication-id=' + PUB, context=admin)
+                    else:
+                        self.assertEqual(self.call('publication', '--publication-id=' + PUB, context=admin)['publication']['state'], state)
+                self.assertEqual([c[0] for c in self.calls[before:]], ['GET'])
+                if receipt is None and state in ('PUBLISHED', 'COMMITTED_RECORDING_FAILED'):
+                    before = len(self.calls)
+                    result = self.call('publish', '--run-id=' + ID, '--node-id=' + frozen['node_id'],
+                                       '--preview-file=' + str(path), '--idempotency-key=missing-intent', context=admin)
+                    self.assertTrue(result['request_uncertain'])
+                    self.assertEqual(result['retry']['idempotency_key'], 'missing-intent')
+                    self.assertEqual([c[0] for c in self.calls[before:]], ['POST'])
 
     def test_view_publication_known_rejection_keeps_conservative_boundary(self):
         admin, path = self.graph_review()
         self.http_status = 409
-        for code in ('DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED', 'DBT_PUBLICATION_REVIEW_CHANGED', 'OTHER_CONFLICT'):
+        for code in ('DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED', 'DBT_PUBLICATION_REVIEW_CHANGED', 'DBT_VIEW_CHANGED', 'OTHER_CONFLICT'):
             self.raw_response = json.dumps(dict(error=dict(code=code))).encode()
             flags = ['--run-id=' + ID, '--node-id=model.lake.orders', '--expected-target-file=' + str(path), '--idempotency-key=original-view-publish']
             if code == 'OTHER_CONFLICT':
@@ -275,6 +451,11 @@ class ClientTests(unittest.TestCase):
                     self.call('publish', *flags, context=admin)
             # This code cannot close a graph build or an unreviewed publication conflict.
             self.assertTrue(self.call('run', '--plan-id=' + PLAN, '--executor=native_graph')['request_uncertain'])
+            self.assertTrue(self.call('publish', '--run-id=' + ID, '--node-id=model.lake.orders', context=admin)['request_uncertain'])
+        self.raw_response = json.dumps(dict(error=dict(code='DBT_VIEW_CHANGED'))).encode()
+        for status in (400, 500):
+            self.http_status = status
+            self.assertTrue(self.call('publish', *flags, context=admin)['request_uncertain'])
         self.assertTrue(all(c[0] == 'POST' for c in self.calls))
         self.assertEqual(self.receipts, {})
 

@@ -1,5 +1,6 @@
 """HTTP-only compiled SQL to WAP client. Mutations return durable receipts."""
 import argparse
+from copy import deepcopy
 import base64
 import http.client
 import json
@@ -53,7 +54,7 @@ class DbtClient(Client):
                     code = code.get('code') if isinstance(code, dict) else code
                 except (ValueError, OSError):
                     code = None
-                if error.code == 409 and code in ('DBT_PUBLICATION_REVIEW_CHANGED', 'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED'):
+                if error.code == 409 and code in ('DBT_PUBLICATION_REVIEW_CHANGED', 'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED', 'DBT_VIEW_CHANGED'):
                     raise RequestRejected(code) from None
                 raise RequestUncertain() from None
             if method == 'POST' and (error.code == 409 or error.code >= 500):
@@ -129,12 +130,77 @@ def artifact(value, context, kind, principal, expected=None, *, observe=False):
             if model['materialized'] == 'view' and (model.get('candidate') is not None or model.get('state') == 'NATIVE_VERIFIED'):
                 native_view_candidate(model.get('candidate'), saved)
                 proof = model.get('native_receipt')
+                sdk = proof.get('sdk_result') if isinstance(proof, dict) else None
+                if (not isinstance(sdk, dict) or set(sdk) != {'node_id', 'status', 'failures', 'adapter_response', 'model_type', 'view_security'}
+                        or sdk.get('node_id') != model['unique_id'] or sdk.get('status') != 'success'
+                        or sdk.get('failures') is not None or sdk.get('model_type') != 'view' or sdk.get('view_security') != 'invoker'
+                        or not isinstance(sdk.get('adapter_response'), dict) or set(sdk['adapter_response']) - {'code', 'rows_affected'}):
+                    raise ValueError('invalid native VIEW SDK result')
                 if (not isinstance(proof, dict) or proof.get('executor') != 'native_graph'
                         or proof.get('plan_id') != value.get('plan_id') or proof.get('node_id') != model['unique_id']
                         or proof.get('phase') != 'build' or proof.get('native_verified') is not True
                         or proof.get('candidate') != model['candidate']):
                     raise ValueError('invalid native VIEW receipt')
+    if kind == 'publication' and 'views' in value:
+        publication_view_record(value, saved)
     return value
+
+
+def publication_view_record(value, context):
+    """Validate frozen history using only the returned publication evidence."""
+    views = publication_views(value, context)
+    identifier(value.get('run_id'))
+    identifier(value.get('plan_id'))
+    if (value.get('parent_run_id') != value['run_id'] or context['selected_role'] != 'admin'
+            or not isinstance(value.get('node_id'), str) or not value['node_id']
+            or value['node_id'] in {v['node_id'] for v in views}
+            or not isinstance(value.get('source_digest'), str) or not value['source_digest']):
+        raise ValueError('invalid frozen VIEW publication identity')
+    frozen_intent = None
+    for field in ('native_audit', 'native_publication'):
+        if field not in value:
+            continue
+        receipt = value[field]
+        intent = receipt.get('intent') if isinstance(receipt, dict) else None
+        if not isinstance(intent, dict):
+            raise ValueError('invalid frozen publication receipt')
+        source = saved_context(intent.get('source_context'))
+        candidate = intent.get('candidate')
+        ref = candidate.get('ref') if isinstance(candidate, dict) else None
+        if (not isinstance(ref, dict) or set(ref) != {'database_id', 'schema_id', 'object_id', 'incarnation'}
+                or ref.get('database_id') != source['database_id'] or ref.get('schema_id') != source['schema_id']
+                or not isinstance(ref.get('object_id'), str) or not ref['object_id']
+                or type(ref.get('incarnation')) is not int or not 1 <= ref['incarnation'] <= 9007199254740991
+                or candidate.get('kind') not in (None, 'TABLE') or any(k in candidate for k in ('view_uuid', 'version', 'security'))
+                or not isinstance(candidate.get('snapshot'), str) or not candidate['snapshot']):
+            raise ValueError('invalid frozen publication TABLE candidate')
+        if (any(source[k] != context[k] for k in ('database_id', 'schema_id', 'warehouse_id', 'sql_catalog', 'sql_schema', 'generation_id', 'binding_revision'))
+                or intent.get('context') != value['context'] or intent.get('publisher_actor') != value['actor']
+                or not isinstance(intent.get('source_actor'), str) or not intent['source_actor']
+                or any(intent.get(k) != value[k] for k in ('origin', 'run_id', 'plan_id', 'node_id', 'source_digest'))):
+            raise ValueError('frozen publication source identity mismatch')
+        if frozen_intent is not None and json.dumps(intent, sort_keys=True) != json.dumps(frozen_intent, sort_keys=True):
+            raise ValueError('frozen publication receipts disagree')
+        frozen_intent = intent
+    if frozen_intent is None and value.get('state') in ('PUBLISHED', 'COMMITTED_RECORDING_FAILED'):
+        raise ValueError('missing frozen publication receipt')
+
+
+def publication_views(value, context):
+    """Validate public, frozen VIEW provenance without fetching its source."""
+    if 'views' not in value:
+        return []
+    views = value['views']
+    if (value.get('origin') != 'native_graph' or not isinstance(views, list) or not views
+            or any(not isinstance(v, dict) or set(v) != {'node_id', 'candidate', 'definition_digest'}
+                or not isinstance(v.get('node_id'), str) or not v['node_id']
+                or not isinstance(v.get('definition_digest'), str)
+                or not re.fullmatch(r'[0-9a-f]{64}', v['definition_digest']) for v in views)
+            or len({v['node_id'] for v in views}) != len(views)):
+        raise ValueError('invalid publication VIEW summary')
+    for view in views:
+        native_view_candidate(view['candidate'], context)
+    return views
 
 
 def native_view_candidate(candidate, context):
@@ -184,6 +250,8 @@ def validate_reply(reply, context, kind, expected, args, principal):
                     or json.dumps(record.get('expected_target'), sort_keys=True) != json.dumps(args.expected_target, sort_keys=True) or record.get('parent_run_id') != args.run_id
                     or record.get('plan_id') != args.review_plan_id):
                 raise ValueError('native publication review ACK mismatch')
+            if action == 'publish' and hasattr(args, 'review_views') and record.get('views') != args.review_views:
+                raise ValueError('native publication VIEW ACK mismatch')
     return reply
 
 
@@ -200,6 +268,7 @@ def publication_preview(value, context, run_id, node_id):
             or value.get('node_id') != node_id or value.get('context') != context):
         raise ValueError('preview association mismatch')
     identifier(value.get('plan_id'))
+    publication_views(value, context)
     d = value.get('expected_target')
     if (not isinstance(d, dict) or set(d) != {'version', 'destination', 'target'}
             or type(d['version']) is not int or d['version'] != 1
@@ -289,23 +358,28 @@ def graph_publication_source(run, plan, preview, *, allow_reserved=False):
             or not planned_models or not planned_tests or not isinstance(models, list) or not isinstance(tests, list)
             or any(not isinstance(n, dict) or not isinstance(n.get('unique_id'), str) for n in planned_models + planned_tests + models + tests)):
         raise ValueError('invalid graph publication source')
-    if any(m.get('materialized') == 'view' for m in models + planned_models):
-        raise ValueError('DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED')
     mids, tids = [n['unique_id'] for n in planned_models], [n['unique_id'] for n in planned_tests]
     if (not same_ids([m['unique_id'] for m in models], mids) or len(set(mids)) != len(mids)
             or not same_ids([t['unique_id'] for t in tests], tids) or len(set(tids)) != len(tids)):
         raise ValueError('graph publication scope mismatch')
+    views = publication_views(preview, run['context'])
+    saved_views = [m for m in models if m.get('materialized') == 'view']
+    if (not same_ids([v['node_id'] for v in views], [m['unique_id'] for m in saved_views])
+            or any(not equal(v['candidate'], next(m['candidate'] for m in saved_views if m['unique_id'] == v['node_id'])) for v in views)):
+        raise ValueError('graph VIEW summary scope mismatch')
     task_results = {}
     tasks = run.get('task_receipts')
     for phase, expected in (('build', mids), ('test', tids)):
         task = tasks.get(phase) if isinstance(tasks, dict) else None
-        actual = [m['unique_id'] for m in planned_models if m.get('materialized') == 'table'] if phase == 'build' else tids
+        actual = [m['unique_id'] for m in planned_models if m.get('materialized') in ('table', 'view')] if phase == 'build' else tids
         status = 'success' if phase == 'build' else 'pass'
         if (not isinstance(task, dict) or task.get('task') != ('RunTask' if phase == 'build' else 'TestTask')
                 or task.get('completed') is not True or task.get('success') is not True
                 or not same_ids(task.get('selected'), expected)
                 or not isinstance(task.get('nodes'), list) or not isinstance(task.get('results'), list)
-                or any(not isinstance(n, dict) or set(n) != {'node_id', 'status', 'failures', 'adapter_response'}
+                or any(not isinstance(n, dict) or set(n) != ({'node_id', 'status', 'failures', 'adapter_response', 'model_type', 'view_security'}
+                    if phase == 'build' and any(m['unique_id'] == n.get('node_id') and m.get('materialized') == 'view' for m in planned_models)
+                    else {'node_id', 'status', 'failures', 'adapter_response'})
                     or n.get('status') != status or not isinstance(n.get('adapter_response'), dict)
                     or set(n['adapter_response']) - {'code', 'rows_affected'}
                     or not (n.get('failures') is None or type(n['failures']) is int and 0 <= n['failures'] <= 9007199254740991)
@@ -333,8 +407,11 @@ def graph_publication_source(run, plan, preview, *, allow_reserved=False):
                     if item.get('state') != 'EXPANDED' or item.get('candidate') is not None or item.get('operation_ids') != [] or sdk['failures'] is not None or sdk['adapter_response']:
                         raise ValueError('invalid graph ephemeral proof')
                     continue
-                if item.get('materialized') != 'table' or item.get('state') != 'NATIVE_VERIFIED' or not isinstance(item.get('operation_ids'), list) or len(item['operation_ids']) != 1:
-                    raise ValueError('invalid graph TABLE proof')
+                if item.get('materialized') not in ('table', 'view') or item.get('state') != 'NATIVE_VERIFIED' or not isinstance(item.get('operation_ids'), list) or len(item['operation_ids']) != 1:
+                    raise ValueError('invalid graph physical model proof')
+                if item['materialized'] == 'view' and (item.get('view_security') != 'INVOKER' or pm.get('view_security') != 'INVOKER'
+                        or sdk.get('model_type') != 'view' or sdk.get('view_security') != 'invoker' or sdk.get('failures') is not None):
+                    raise ValueError('invalid graph VIEW proof')
                 operation_id = item['operation_ids'][0]
             else:
                 if item.get('state') != 'PASSED' or not safe_zero(item.get('failure_count')) or not safe_zero(sdk['failures']):
@@ -356,20 +433,24 @@ def graph_publication_source(run, plan, preview, *, allow_reserved=False):
             if phase == 'build':
                 candidate = item.get('candidate')
                 ref = candidate.get('ref') if isinstance(candidate, dict) else None
-                if (proof.get('native_verified') is not True or not equal(proof.get('candidate'), candidate)
-                        or not isinstance(ref, dict) or set(ref) != {'database_id', 'schema_id', 'object_id', 'incarnation'}
-                        or ref.get('database_id') != run['context']['database_id'] or ref.get('schema_id') != run['context']['schema_id']
-                        or not isinstance(ref.get('object_id'), str) or not ref['object_id']
-                        or type(ref.get('incarnation')) is not int or not 1 <= ref['incarnation'] <= 9007199254740991
-                        or candidate.get('kind') not in (None, 'TABLE') or any(k in candidate for k in ('view_uuid', 'version', 'security'))
-                        or not isinstance(candidate.get('snapshot'), str) or not candidate['snapshot']):
+                if proof.get('native_verified') is not True or not equal(proof.get('candidate'), candidate):
                     raise ValueError('graph candidate mismatch')
+                if item['materialized'] == 'view':
+                    native_view_candidate(candidate, run['context'])
+                else:
+                    if (not isinstance(ref, dict) or set(ref) != {'database_id', 'schema_id', 'object_id', 'incarnation'}
+                            or ref.get('database_id') != run['context']['database_id'] or ref.get('schema_id') != run['context']['schema_id']
+                            or not isinstance(ref.get('object_id'), str) or not ref['object_id']
+                            or type(ref.get('incarnation')) is not int or not 1 <= ref['incarnation'] <= 9007199254740991
+                            or candidate.get('kind') not in (None, 'TABLE') or any(k in candidate for k in ('view_uuid', 'version', 'security'))
+                            or not isinstance(candidate.get('snapshot'), str) or not candidate['snapshot']):
+                        raise ValueError('graph candidate mismatch')
             elif proof.get('test_verified') is not True or proof.get('status') != 'PASSED' or not safe_zero(proof.get('failures')):
                 raise ValueError('graph quality receipt mismatch')
     selected = next(m for m in models if m['unique_id'] == preview['node_id'])
     target = preview.get('target')
     pm = next(m for m in planned_models if m['unique_id'] == preview['node_id'])
-    if (len(digests) != 1 or len(operations) != len(used)
+    if (selected.get('materialized') != 'table' or len(digests) != 1 or len(operations) != len(used)
             or any(not isinstance(o, dict) or o.get('id') not in used or o.get('phase') not in ('build', 'test') for o in operations)
             or run.get('publication_allowed') is not True and not (allow_reserved and selected.get('publication_id'))
             or preview['expected_target']['destination']['schema_id'] != plan.get('target_schema')
@@ -447,7 +528,7 @@ def parser():
         if action in ('publish', 'publish-preview'):
             p.add_argument('--node-id', required=True)
         if action == 'publish':
-            p.add_argument('--expected-target-file', help='JSON returned by publish-preview')
+            p.add_argument('--expected-target-file', '--preview-file', dest='expected_target_file', help='JSON returned by publish-preview')
         if action == 'publication':
             p.add_argument('--publication-id', required=True)
     return root
@@ -529,6 +610,7 @@ def main(argv=None, *, profile=None):
                     frozen_publication_review(preview, context, client.principal)
                     args.review_origin = preview['origin']
                     args.review_plan_id = preview['plan_id']
+                    args.review_views = deepcopy(preview.get('views'))
                     args.expected_target = preview['expected_target']
                     body['expected_target'] = args.expected_target
             if action == 'publish-preview':

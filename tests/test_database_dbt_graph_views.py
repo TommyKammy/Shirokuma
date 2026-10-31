@@ -72,7 +72,7 @@ class ViewGraphTests(unittest.TestCase):
         self.assertEqual(result['state'], 'NATIVE_VERIFIED', result)
         self.assertTrue(result['native_verified'])
         self.assertEqual(result['tests_status'], 'PASSED')
-        self.assertFalse(result['publication_allowed'])
+        self.assertTrue(result['publication_allowed'])
         self.assertEqual(len(result['tests']), 3)
         self.assertEqual({r['task'] for r in result['task_receipts'].values()}, {'RunTask', 'TestTask'})
         view = next(m for m in result['models'] if m['materialized'] == 'view')
@@ -123,7 +123,7 @@ class ViewGraphTests(unittest.TestCase):
                 args['key'] = 'forbidden'
             with self.assertRaises(QueryError) as caught:
                 method(self.w.owner, self.b.context(schema='sandbox', principal=self.w.owner, role='admin'), result['id'], **args)
-            self.assertEqual(caught.exception.code, 'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED')
+            self.assertEqual(caught.exception.code, 'DBT_GRAPH_PUBLICATION_FORBIDDEN')
 
     def view_metadata(self):
         return next(value for key, value in self.b.objects.items() if key[3] == 'views')

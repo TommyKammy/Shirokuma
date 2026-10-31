@@ -26,7 +26,7 @@ def dispatch(handler, method, path, params, principal, role):
         allowed = {'context', 'node_id'} if preview else {'context', 'plan_id'} if family == 'runs' and not ident else {'context'}
         if set(params) - allowed or 'context' not in params or any(len(v) != 1 for v in params.values()):
             raise ValueError('exact parameters required')
-        if action and not preview or family == 'projects' and ident or family == 'publications' and not ident:
+        if action and not preview or family == 'projects' and ident:
             raise QueryError('NOT_FOUND', 404)
         if preview and ('node_id' not in params or not re.fullmatch(r'[A-Za-z0-9_.-]{1,512}', params['node_id'][0])):
             raise ValueError('node ID required')
@@ -99,7 +99,10 @@ def dispatch(handler, method, path, params, principal, role):
                 else:
                     envelope['items'] = dbt.list_runs(principal, context, plan_id=plan_id)
             else:
-                envelope['publication'] = dbt.get_publication(principal, context, ident)
+                if ident:
+                    envelope['publication'] = dbt.get_publication(principal, context, ident)
+                else:
+                    envelope['publications'] = dbt.list_publications(principal, context)
         elif family == 'plans':
             envelope['plan'] = dbt.submit_plan(principal, context, key=key,
                 **{k: body[k] for k in ('project_id', 'source_schema', 'target_schema', 'staging_materialization')})

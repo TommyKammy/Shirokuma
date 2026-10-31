@@ -1,0 +1,33 @@
+# DB-P6-3C2E2 VIEWを含むnative graphのTABLE公開
+
+2026年10月31日。C2E1で構築・品質testに対応したVIEWを含むnative graphを、TABLE単位のMARTS公開へ接続する。実装・技術受入中である。
+
+## 利用条件と操作
+
+対応するVIEW／TABLE／EPHEMERAL全graphのRunTask構築と、非空の保存全generic testのTestTask実行が完了・成功していることを条件とする。全TABLEと全VIEWの閉鎖済み作成証拠を検証し、選択したTABLEだけを公開する。VIEWだけのgraph、VIEW／EPHEMERAL自体の正式公開、品質未実行・失敗・不明・未完了のgraphは対象外である。
+
+現在のadminが固定したMARTS公開先、候補TABLE Snapshot、元builderとcontext、全VIEWのUUID／version／INVOKER設定と定義digestを確認する。VIEW要約はpreviewと受付結果で一致確認する。各TABLEの公開ごとに新しい最低1行の行数監査を行い、固定PARQUETで同じDatabaseのMARTSへ反映する。他TABLEやVIEWの同時公開は行わない。
+
+VIEWのない既存native_table／TABLE・EPHEMERAL graphのwire形状、expected_target v1、公開POST bodyを維持する。受付が不明な場合は元key・body・context・確認済みVIEW要約を保持して回収し、現在のsource適格性をGETし直して別要求へ切り替えない。
+
+## VIEWの定義と依存証拠
+
+公開intentには、全VIEWの作成receiptと依存Snapshotを固定する。receipt内の完全なVIEW測定値には、UUID／version／INVOKER、定義・head digest、schema、SDK resultとpinsが含まれる。定義digestを実際の閉鎖済みCREATE VIEW queryへ結び付け、推移的なRAW／同run TABLE依存も照合する。VIEWへTABLE Snapshotを代用しない。
+
+公開用のviews要約はnode_id、既存VIEW candidate、canonical definition digestで構成し、公開recordでは凍結intentから導出する。VIEWのない旧recordには追加しない。preview／受付／監査前・公開送信前では、全VIEWと同run TABLEの現在のhead、RAW binding／schema、元actorの現在権限と公開adminの権限を再検証する。固定RAW Snapshotの通常appendと、候補・定義の変更を区別する。
+
+公開後のPUBLISHEDは、凍結VIEW証拠、canonical child／query、commitと永続bindingから照合する。その後のsource cancel、VIEW更新・削除・retirement、公開先更新を、過去の公開成否へ混ぜない。元sourceのGETが変更検知で失敗する場合も、公開履歴の一覧・詳細・直リンクはsource runを取得せず保存planと公開recordから参照する。履歴表示で新しいSDK・監査・公開SQLを送らない。
+
+## 検証記録
+
+全88正規グループを段階実行し、3,502件のうち3,468件成功・34件の既存skipを確認した。最終の公開履歴URL起動修正後に該当正規グループを再実行済みである。Go検証も成功した。
+
+Aの既存VIEW graphから画面でdimを公開し、別操作でsummaryも公開した。Eが構築したBの全7品質test成功graphから、実CLIでdimを公開した。0/0からの復帰、初回受付ACK欠落、同じargv・body・keyによる同一公開IDの回収、元SDK／build／testの追加実行なしを確認した。AのALPHAとBのBETA、summaryの値を、MARTSの新しいread-only SELECTと9項目contextで検証した。
+
+Bでは公開先不在の確認後に今回限りのテーブルを作成し、古い確認内容のPOSTがSQL・要求・admissionを増やさず拒否されることを確認した。現在のPolarisはpurgeを拒否するため、通常DROPの失敗を記録した後、当該新規テーブルだけをnon-purgingでカタログ解除し、新たな不在確認から公開した。同じ保存planは後から現れた対象を既存TABLEとして採用しない。既存TABLE Snapshotの置換は焦点テストと先行C2Dの実機証拠に属する。
+
+Bのempty監査はバックエンドIDを取得できずUNKNOWNとなった。元要求を照合しても終端を証明できず、監査値0や成功・失敗へ読み替えていない。新規UNKNOWN 1公開・3未閉鎖admissionにより後続の物理操作は安全に拒否された。限定的なDBT読取り監査の運用復旧を最優先として検討し、技術受入は継続中である。VIEW変更・source cancel後の履歴等の実機確認は復旧後に行う。
+
+証拠は`var/shirokuma/db-p6-3c2e2-2026-10-31/private`へ保存する。
+
+正式VIEW公開、VIEWからVIEWへの依存、native候補の直接置換、incremental・並列実行、manual-WAP rollback統合、DB-P6-3全体とM1本人受入は後続である。

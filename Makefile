@@ -85,6 +85,7 @@ test-resident-core:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_graph.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_graph_views.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_graph_publication.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_graph_publication_views.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_ingest.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_sqlserver_sync.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_bears_resident.py'

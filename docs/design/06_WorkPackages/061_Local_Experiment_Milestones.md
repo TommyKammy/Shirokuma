@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.16.0"
+version: "7.17.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-31 — DB-P6-3C2E2 VIEW graph TABLE publication (acceptance pending)
+
+- Implemented per-TABLE MARTS publication from quality-PASSED native VIEW/TABLE/EPHEMERAL graphs, with frozen VIEW definitions/identities/dependencies, matching preview/ACK summaries, and independent publication collection/direct links. Browser testing found and fixed the publication-only URL startup path. See the [contract and evidence](../../guides/database-p6-3c2e2-view-graph-publication-2026-10-31.md).
+- Actual A/UI and separate summary publication succeeded; E-built B published through the real CLI after cold start and a dropped ACK, recovered with the same request. Fresh two-database MARTS values and read-only history/JA/EN/390px/viewer/draft preservation passed. B's empty audit instead became UNKNOWN without a backend ID; reconciliation could not prove completion. One new UNKNOWN publication and three unclosed admissions remain; later physical operations are correctly blocked. No result or execution closure was fabricated.
+- All 88 canonical groups passed in stages: 3,502 tests, 3,468 passed, 34 existing skips; Go and documentation checks passed. Technical acceptance remains pending. A bounded DBT read-only audit recovery takes priority over further publication experiments and DB-P6-4A; full DB-P6-3 and M1 owner acceptance remain open.
 
 ### 2026-10-31 — DB-P6-3C2E1 native graph INVOKER VIEW
 

@@ -33,3 +33,7 @@ VIEWと下流dim／summaryを各DBで新たにSELECTし、AのALPHAとBのBETA�
 既存25 RAW／MARTS heads、旧DBT／DataOps／query履歴、manual-WAP全記録、141 Database／564 Schemaと各141 binding、権限・資格情報・runtime profile・既存ローカルYAMLを保持した。新しい未閉鎖admissionは0件、既存FENCED_READ_ONLY UNKNOWN 2件を維持した。8888／8080は通常構成のlake_martsのみへ戻し、LOCALは2/2、policy 0分／revision 5、前後doctorは46項目healthyだった。通常構成でAの正常VIEW graphと保全を再照合した。
 
 実機証拠・独立照合・画面は`var/shirokuma/db-p6-3c2e1-2026-10-31/private`へ保存した。この受入範囲はnative graphのSANDBOX VIEW構築・品質testであり、C2E2の公開証拠拡張、DB-P6-3全体とM1本人受入は後続である。
+
+## C2E2への追補（2026年10月31日）
+
+[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)で、VIEW定義と推移依存を固定したTABLE公開・独立した公開履歴を実装し、技術受入を進めている。本書のVIEW含有graph公開保留はC2E1受入時点の範囲である。正式VIEW公開・VIEW連鎖は引き続き後続である。

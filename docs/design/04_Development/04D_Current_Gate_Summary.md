@@ -5,7 +5,7 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-31
-version: "2.16.0"
+version: "2.17.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
@@ -32,7 +32,9 @@ DB-P7〜9は後続計画であり、下表の旧PhaseのCompletedから新Databa
 
 2026-10-31、優先unit [C2D graph候補の明示公開](../../guides/database-p6-3c2d-graph-publication-2026-10-31.md)を実装し、この範囲の技術受入を完了した。全graphの構築と保存全品質testの成功証拠を条件に、現在のAが選択TABLEと固定targetを確認し、最低1行の監査後に同じDBのMARTSへ公開する。他TABLEの公開は別操作であり、source Eとpublisher Aのcontext・資格情報、元要求の回収と履歴証拠を分けて保持する。
 
-2026-10-31、優先unit [C2E1 native graphのINVOKER VIEW](../../guides/database-p6-3c2e1-native-views-2026-10-31.md)を実装し、この範囲の技術受入を完了した。同じDBのrun専用SANDBOXへVIEWを構築し、VIEWからTABLEへの依存と保存全品質testを実SDKで実行する。VIEWを含むgraphの正式公開は明示的に保留し、次のC2E2でVIEW定義・識別情報と推移依存を公開証拠へ接続する。既存のTABLE／EPHEMERAL graph公開とSQL/WAPを維持する。
+2026-10-31、優先unit [C2E1 native graphのINVOKER VIEW](../../guides/database-p6-3c2e1-native-views-2026-10-31.md)を実装し、この範囲の技術受入を完了した。同じDBのrun専用SANDBOXへVIEWを構築し、VIEWからTABLEへの依存と保存全品質testを実SDKで実行する。C2E1受入時点ではVIEWを含むgraphの正式公開を保留した。C2E2でVIEW定義・識別情報と推移依存を公開証拠へ接続する。既存のTABLE／EPHEMERAL graph公開とSQL/WAPを維持する。
+
+2026-10-31、優先unit [C2E2 VIEWを含むnative graphのTABLE公開](../../guides/database-p6-3c2e2-view-graph-publication-2026-10-31.md)を実装し、技術受入を進めている。全VIEWの定義・UUID／version・閉鎖済み作成queryと推移依存を公開intentへ固定し、全graph構築・品質成功後に選択TABLEを明示公開する。確認済みVIEW要約と受付結果を照合し、元VIEWが変更・削除された後も公開履歴を独立して照会できる。正式VIEW公開やVIEW連鎖は含めない。 実機の空監査でバックエンドIDなしのUNKNOWNが残り、新規1公開・3admissionは未閉鎖である。技術受入は継続中で、DBT読取り監査の限定的な運用復旧を最優先とする。
 
 | Phase / WP | Gate Objective | Current Status |
 |---|---|---|

@@ -41,6 +41,7 @@ class Routes(unittest.TestCase):
             ('GET', 'runs', None, 'list_runs', 'items', 200),
             ('GET', 'runs/' + ID, None, 'get_run', 'run', 200),
             ('GET', 'publications/' + ID, None, 'get_publication', 'publication', 200),
+            ('GET', 'publications', None, 'list_publications', 'publications', 200),
             ('POST', 'plans', dict(project_id='lake_marts', source_schema='raw', target_schema='marts', staging_materialization=None), 'submit_plan', 'plan', 202),
             ('POST', 'runs', dict(plan_id=ID), 'submit_run', 'run', 202),
             ('POST', 'runs/' + ID + '/cancel', {}, 'cancel_run', 'run', 200),
