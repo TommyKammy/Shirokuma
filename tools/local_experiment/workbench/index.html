@@ -2569,6 +2569,10 @@ const dbPlanHelp='Acquire a non-ANALYZE execution plan through normal query admi
 const dbExplanationKey='shirokuma.sql-explanation-intents.v1';
 const dbPlanDisclosures=new Map();
 const dbPlanProofs=new Map();
+// Loader-only A1 receipts; never restore authority from browser storage.
+const dbSourceProofs=new Map();
+const dbSource={scope:'',version:0,token:null,origin:null,notice:''};
+const dbSourceInputEvents=new WeakSet();
 let dbPlanAuthorityStamp='',dbPlanAuthorityEpoch=0;
 const dbExplanationHelp='Explains SQL using authorized column names and types. Values and comments are omitted from model input. No execution plan or query results are collected. SQL is not executed.';
 const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Other Bears are unavailable.';
@@ -2596,6 +2600,12 @@ Object.assign(i18n.ja,{
  'Canceled':'キャンセル済み','Not started':'未開始','Not collected':'未取得','Collected':'取得済み','Not submitted':'未送信'
 });
 Object.assign(i18n.ja,{
+ 'Original request refreshed. Current SQL was kept.':'元の要求を更新しました。現在の SQL は保持しています。',
+ 'Load latest SELECT':'最新の SELECT を読み込む',
+ 'Loading latest SELECT…':'最新の SELECT を読込中…',
+ 'Latest SELECT in this database, schema and role (read only)':'このデータベース・スキーマ・ロールの最新 SELECT（表示のみ）',
+ 'No eligible SELECT found. Enter SQL or copy it from the worksheet.':'対象の SELECT がありません。SQL を入力するか、ワークシートからコピーしてください。',
+ 'Latest SELECT unavailable. Enter SQL or copy it from the worksheet.':'最新の SELECT を取得できません。SQL を入力するか、ワークシートからコピーしてください。',
  'Explain SQL':'SQLの説明','SQL to explain':'説明する SQL','Copy from worksheet':'ワークシートからコピー',
  'Request new explanation':'新しい説明を要求',
  'After a confirmed completion or failure, request a new explanation explicitly. Otherwise refresh or recover the original request.':'完了または失敗を確認した後、新しい説明を明示的に要求できます。それ以外は元の要求を更新または復旧してください。',
@@ -2644,6 +2654,7 @@ function dbPlanProven(intent){
  return !!proof&&proof.authority===dbPlanAuthority()&&proof.id===intent.id&&proof.key===intent.key&&proof.body===intent.body&&proof.terminal;
 }
 function dbPlanObserve(record){
+ dbSourceObserve(record);
  if(record.kind!=='sql_plan_explanation')return;
  for(const intent of dbExplanation.intents){
   if(!dbPlanSameIdentity(intent)||!intent.id||intent.id!==record.id||record.input.sql!==intent.body.sql||record.input.language!==intent.body.language)continue;
@@ -2693,20 +2704,21 @@ function dbExplanationSync(){
   dbExplanation.scope=scope;++dbExplanation.sequence;dbExplanation.busy=false;dbExplanation.pendingHistoryKind=null;
   dbExplanation.record=null;dbExplanation.displayOrigin=null;dbExplanation.history=[];dbExplanation.notice='';
  }
- const reason=dbReason(),intent=dbExplanationIntent();
+ const reason=dbReason(),intent=dbExplanationIntent(),recoveryIntent=dbSourceRecoveryIntent();
+ const originalRecovery=!!recoveryIntent&&dbSourceA1Held(recoveryIntent);
  const contextLine=$('explanation-doctor-context');
  if(reason)contextLine.textContent=reason+' '+t(dbExplanationContextStep);
  else{const context=dbContext(dbCurrent());contextLine.textContent=`${context.sql_catalog}.${context.sql_schema} · ${context.selected_role} · LOCAL`;}
  if(intent&&intent.recoveryScope===null&&!reason)intent.recoveryScope=scope;
  for(const [id,sql] of [['copilot-explain',$('sql').value],['bear-query-run',$('bear-query-sql').value]]){
   const button=$(id),terminal=dbExplanationTerminal(intent);
-  button.disabled=!!reason||dbExplanation.busy||!!intent&&!terminal||!sql.trim();
+  button.disabled=!!reason||!!dbSource.token||dbExplanation.busy||!!intent&&!terminal||!sql.trim();
   ui(button,terminal?'Request new explanation':'Explain SQL');
   button.dataset.databaseUnavailable='false';
  }
  for(const prefix of ['doctor','copilot']){
-  $('explanation-'+prefix+'-recover').disabled=!!reason||dbExplanation.busy||!intent||intent.recoveryScope!==scope;
-  $('explanation-'+prefix+'-recover').title=intent&&intent.recoveryScope!==scope?t('Load explanation history to recover the original request after access changes.'):'';
+  $('explanation-'+prefix+'-recover').disabled=!!reason||dbExplanation.busy||!recoveryIntent||!originalRecovery&&recoveryIntent.recoveryScope!==scope;
+  $('explanation-'+prefix+'-recover').title=recoveryIntent&&!originalRecovery&&recoveryIntent.recoveryScope!==scope?t('Load explanation history to recover the original request after access changes.'):'';
   $('explanation-'+prefix+'-history').disabled=!!reason||dbExplanation.busy&&dbExplanation.pendingHistoryKind!=='sql_plan_explanation';
   const select=$('explanation-'+prefix+'-saved'),selected=select.value;
   select.replaceChildren(new Option(t('Choose a saved explanation'),''));
@@ -2716,7 +2728,7 @@ function dbExplanationSync(){
   if(planIntent&&planIntent.recoveryScope===null&&!reason)planIntent.recoveryScope=dbPlanAuthority();
   const planTerminal=dbExplanationTerminal(planIntent);
   const planButton=$('explanation-'+prefix+'-plan');
-  planButton.disabled=!!reason||dbExplanation.busy||!!planIntent&&!planTerminal||!(prefix==='doctor'?$('bear-query-sql').value:$('sql').value).trim();
+  planButton.disabled=!!reason||!!dbSource.token||dbExplanation.busy||!!planIntent&&!planTerminal||!(prefix==='doctor'?$('bear-query-sql').value:$('sql').value).trim();
   ui(planButton,planTerminal?'Acquire a new plan and explain':'Acquire plan and explain');
   $('explanation-'+prefix+'-plan-recover').disabled=!!reason||dbExplanation.busy||!planIntent||planIntent.recoveryScope!==dbPlanAuthority();
   $('explanation-'+prefix+'-plan-history').disabled=!!reason||dbExplanation.busy&&dbExplanation.pendingHistoryKind!=='sql_explanation';
@@ -2724,6 +2736,7 @@ function dbExplanationSync(){
   cancel.disabled=!!reason||dbExplanation.busy||!planIntent?.id||planIntent.recoveryScope!==dbPlanAuthority()||active?.id!==planIntent.id||active?.kind!=='sql_plan_explanation'||!['QUEUED','RUNNING'].includes(active.state)||active.cancel_requested;
   ui(cancel,active?.plan_status==='COLLECTED'?'Discard explanation result':'Cancel plan acquisition');
  }
+ dbSourceSync();
  $('bear-query-sql').disabled=false;$('explanation-copy').disabled=dbExplanation.busy;
  const record=dbExplanation.record;
  for(const id of ['copilot-result','explanation-doctor-output']){
@@ -2749,6 +2762,75 @@ function dbExplanationSync(){
   if(dbExplanation.notice){const p=document.createElement('p');ui(p,dbExplanation.notice);node.append(p);}
   node.hidden=!record&&!dbExplanation.notice;
  }
+}
+// Source loading is an explicit draft action with its own lock and invalidation token.
+function dbSourceSameIdentity(intent,capture=dbExplanationCapture()){
+ return intent.kind==='sql_explanation'&&dbPlanSameIdentity({...intent,kind:'sql_plan_explanation'},capture);
+}
+function dbSourceObserve(record){
+ if(record.kind!=='sql_explanation')return;
+ for(const intent of dbExplanation.intents){
+  if(!dbSourceSameIdentity(intent)||!intent.id||intent.id!==record.id||record.input.sql!==intent.body.sql||record.input.language!==intent.body.language)continue;
+  dbSourceProofs.set(intent,{authority:dbPlanAuthority(),id:intent.id,key:intent.key,body:intent.body,terminal:['SUCCEEDED','FAILED'].includes(record.state)});
+ }
+}
+function dbSourceA1Held(intent){
+ if(!dbSourceSameIdentity(intent))return false;
+ const proof=dbSourceProofs.get(intent);
+ return !proof||proof.authority!==dbPlanAuthority()||proof.id!==intent.id||proof.key!==intent.key||proof.body!==intent.body||!proof.terminal;
+}
+function dbSourceRecoveryIntent(){
+ // One original per explicit recovery click, newest unproven first, including beyond history's limit.
+ return dbExplanation.intents.findLast(dbSourceA1Held)||dbExplanationIntent();
+}
+function dbSourceHeld(){
+ return dbExplanation.intents.some(intent=>intent.kind==='sql_plan_explanation'?dbPlanSameIdentity(intent)&&!dbPlanProven(intent):dbSourceA1Held(intent));
+}
+function dbSourceInvalidate(){++dbSource.version;dbSource.origin=null;dbSource.notice='';}
+function dbSourceSync(){
+ const scope=dbExplanationScope();
+ if(scope!==dbSource.scope){dbSource.scope=scope;dbSourceInvalidate();}
+ const button=$('explanation-latest');
+ button.disabled=!!dbReason()||!!dbSource.token||dbExplanation.busy||dbSourceHeld();
+ ui(button,dbSource.token?'Loading latest SELECT…':'Load latest SELECT');
+ const node=$('explanation-source');node.replaceChildren();
+ if(dbSource.origin){
+  const label=document.createElement('p');ui(label,'Latest SELECT in this database, schema and role (read only)');
+  const evidence=document.createElement('p'),source=dbSource.origin;
+  evidence.textContent=t('Query ID')+': '+source.query_id+' · '+source.created_at+' · '+dbExplanationStateLabel(source.state);
+  node.append(label,evidence);
+ }
+ if(dbSource.notice){const message=document.createElement('p');ui(message,dbSource.notice);node.append(message);}
+ node.hidden=!dbSource.origin&&!dbSource.notice;
+}
+function dbSourceProject(data,context){
+ if(!dbExplanationObject(data)||!dbExplanationSameContext(data.context,context)||!Object.hasOwn(data,'source'))throw Error('CONTEXT_MISMATCH');
+ if(data.source===null)return null;
+ const source=data.source,nonempty=value=>typeof value==='string'&&!!value.trim();
+ if(!dbExplanationObject(source)||!dbExplanationSameContext(source.context,context)||!nonempty(source.query_id)||!nonempty(source.created_at)||!Number.isFinite(Date.parse(source.created_at))||!nonempty(source.sql)||!['QUEUED','RUNNING','FINISHED','FAILED','CANCELED','UNKNOWN'].includes(source.state))throw Error('CONTEXT_MISMATCH');
+ return {query_id:source.query_id,created_at:source.created_at,state:source.state,sql:source.sql,context:Object.fromEntries(dbExplanationContextKeys.map(key=>[key,source.context[key]]))};
+}
+async function dbSourceLoad(){
+ dbExplanationSync();if(dbReason()||dbSource.token||dbExplanation.busy||dbSourceHeld())return;
+ const capture=structuredClone(dbExplanationCapture()),token={},version=dbSource.version,sequence=dbExplanation.sequence,scope=dbExplanation.scope,authority=dbPlanAuthority();
+ dbSource.token=token;dbSource.origin=null;dbSource.notice='';dbSourceSync();
+ const current=()=>{dbExplanationSync();return dbSource.token===token&&dbSource.version===version&&dbExplanation.sequence===sequence&&dbExplanation.scope===scope&&!dbReason()&&!dbSourceHeld();};
+ try{
+  const response=await fetch('/api/v1/bears/query-sources/latest?'+new URLSearchParams({context:JSON.stringify(capture.context)}),{headers:{'X-Shirokuma-Role':capture.context.selected_role}});
+  const data=await response.json();if(!current())return;
+  if(!response.ok)throw Error('SOURCE_UNAVAILABLE');
+  const source=dbSourceProject(data,capture.context);
+  if(!source){dbSource.notice='No eligible SELECT found. Enter SQL or copy it from the worksheet.';return;}
+  // Only this own input event may change the captured draft; all other edits invalidate it.
+  $('bear-query-sql').value=source.sql;
+  const expectedScope=dbExplanationScope(),inputEvent=new Event('input');
+  dbSource.scope=expectedScope;dbSourceInputEvents.add(inputEvent);
+  $('bear-query-sql').dispatchEvent(inputEvent);
+  if(dbSource.token!==token||dbSource.version!==version||dbExplanationScope()!==expectedScope||dbPlanAuthority()!==authority||dbReason()||dbSourceHeld()||JSON.stringify(dbExplanationCapture())!==JSON.stringify({...capture,doctor:source.sql}))return;
+  dbSource.origin=source;dbSource.notice='';
+ }catch{
+  if(current()){dbSource.origin=null;dbSource.notice='Latest SELECT unavailable. Enter SQL or copy it from the worksheet.';}
+ }finally{if(dbSource.token===token){dbSource.token=null;dbExplanationSync();}}
 }
 function dbExplanationCurrent(sequence,scope){
  dbExplanationSync();return sequence===dbExplanation.sequence&&scope===dbExplanation.scope;
@@ -2799,7 +2881,10 @@ async function dbExplanationFetch(path,intent,post=false){
  const headers={'X-Shirokuma-Role':intent.body.context.selected_role};
  const options=post?{method:'POST',headers:{...headers,'Content-Type':'application/json','Idempotency-Key':intent.key},body:JSON.stringify(intent.body)}:{headers};
  const response=await fetch(path,options),data=await response.json();
- if(!response.ok)throw Object.assign(dbError(data,response.status),{noAdmission:post&&response.status===400&&[data?.code,dbExplanationObject(data?.error)?data.error.code:null].some(code=>typeof code==='string'&&['AI_INPUT_INVALID','AI_PLAN_VIEW_UNSUPPORTED'].includes(code))});
+ if(!response.ok)throw Object.assign(dbError(data,response.status),{
+  noAdmission:post&&response.status===400&&[data?.code,dbExplanationObject(data?.error)?data.error.code:null].some(code=>typeof code==='string'&&['AI_INPUT_INVALID','AI_PLAN_VIEW_UNSUPPORTED'].includes(code)),
+  sourceNoAdmission:post&&!intent.id&&response.status===400&&dbExplanationObject(data)&&[data.code,dbExplanationObject(data.error)?data.error.code:null].includes('AI_INPUT_INVALID')&&!['id','explanation_id','request_id','query_id'].some(key=>[data,data.explanation,data.error].some(value=>dbExplanationObject(value)&&Object.hasOwn(value,key)&&value[key]!==null))
+ });
  return data;
 }
 async function dbExplanationPoll(){
@@ -2809,10 +2894,12 @@ async function dbExplanationPoll(){
  if(!dbExplanation.busy&&dbExplanation.displayOrigin==='current'&&intent?.id&&record?.kind===intent.kind&&record.id===intent.id&&intent.recoveryScope===dbExplanationRecoveryScope(kind)&&['QUEUED','RUNNING'].includes(record.state))await dbExplain('poll',true,kind);
 }
 async function dbExplain(source,recover=false,kind='sql_explanation'){
- dbExplanationSync();if(dbExplanation.busy||dbReason())return;
+ dbExplanationSync();if(dbExplanation.busy||dbReason()||!recover&&dbSource.token)return;
  if(!Object.hasOwn(dbExplanationEndpoints,kind))return;
- let intent=dbExplanationIntent(kind);
- if(recover&&(!intent||intent.recoveryScope!==dbExplanationRecoveryScope(kind))||!recover&&intent&&!dbExplanationTerminal(intent))return;
+ const explicitRecovery=recover&&source==='recover'&&kind==='sql_explanation';
+ let intent=explicitRecovery?dbSourceRecoveryIntent():dbExplanationIntent(kind);
+ const originalRecovery=explicitRecovery&&!!intent&&dbSourceA1Held(intent);
+ if(recover&&(!intent||!originalRecovery&&intent.recoveryScope!==dbExplanationRecoveryScope(kind))||!recover&&intent&&!dbExplanationTerminal(intent))return;
  if(!recover){
   const capture=structuredClone(dbExplanationCapture()),sql=source==='doctor'?capture.doctor:capture.editor;
   if(!sql.trim())return;
@@ -2826,18 +2913,23 @@ async function dbExplain(source,recover=false,kind='sql_explanation'){
   dbExplanation.notice='Explanation request could not be saved in browser storage. No request was sent. Restore storage, then recover the original request.';
   dbExplanationSync();return;
  }
- const scope=dbExplanation.scope,sequence=++dbExplanation.sequence;
+ const scope=dbExplanation.scope,sequence=++dbExplanation.sequence,sourceAuthority=dbPlanAuthority(),sourceVersion=dbSource.version;
+ if(kind==='sql_explanation')dbSourceProofs.delete(intent);
  if(kind==='sql_plan_explanation')dbPlanProofs.delete(intent);
  if(dbExplanation.record?.id!==intent.id||dbExplanation.record?.kind!==intent.kind)dbExplanation.record=null;
  dbExplanation.busy=true;dbExplanation.notice='Explanation request in progress.';dbExplanationSync();
  try{
   const path=intent.id?intent.endpoint+'/'+encodeURIComponent(intent.id)+'?'+new URLSearchParams({context:JSON.stringify(intent.body.context)}):intent.endpoint;
   const data=await dbExplanationFetch(path,intent,!intent.id);
-  if(!dbExplanationCurrent(sequence,scope))return;
+  if(!dbExplanationCurrent(sequence,scope)||originalRecovery&&(sourceAuthority!==dbPlanAuthority()||sourceVersion!==dbSource.version||!dbSourceSameIdentity(intent)))return;
   const record=dbExplanationRecord(data,intent.body.context,intent);
-  intent.id=record.id;dbPlanObserve(record);dbExplanationPersist();dbExplanation.record=record;dbExplanation.displayOrigin='current';dbExplanation.notice='';
+  intent.id=record.id;dbPlanObserve(record);dbExplanationPersist();
+  if(originalRecovery&&JSON.stringify(intent.capture)!==JSON.stringify(dbExplanationCapture())){
+   dbExplanation.record=null;dbExplanation.displayOrigin=null;dbExplanation.history=[];dbExplanation.notice='Original request refreshed. Current SQL was kept.';
+  }else{dbExplanation.record=record;dbExplanation.displayOrigin='current';dbExplanation.notice='';}
  }catch(error){
-  if(!dbExplanationCurrent(sequence,scope))return;
+  if(!dbExplanationCurrent(sequence,scope)||originalRecovery&&(sourceAuthority!==dbPlanAuthority()||sourceVersion!==dbSource.version||!dbSourceSameIdentity(intent)))return;
+  if(kind==='sql_explanation'&&!intent.id&&error.sourceNoAdmission&&sourceAuthority===dbPlanAuthority())dbSourceProofs.set(intent,{authority:sourceAuthority,id:null,key:intent.key,body:intent.body,terminal:true});
   if(kind==='sql_plan_explanation'&&!intent.id&&error.noAdmission)dbPlanProofs.set(intent,{authority:dbPlanAuthority(),id:null,key:intent.key,body:intent.body,terminal:true});
   dbExplanation.notice=intent.id?'Explanation unavailable. Refresh context and recover the original request or load history.':kind==='sql_plan_explanation'&&error?.code==='AI_PLAN_VIEW_UNSUPPORTED'?'This VIEW is unsupported for plan acquisition. Use Explain SQL for a SQL-only explanation.':error?.code==='AI_INPUT_INVALID'?(kind==='sql_plan_explanation'?'Plan acquisition supports a single SELECT or CTE over TABLEs and supported INVOKER VIEWs. Review the SQL, or use Explain SQL.':'SQL explanation supports a single SELECT or CTE. Review and edit the SQL.'):'Explanation outcome uncertain. Recover the original request; no automatic resubmission.';
  }finally{if(dbExplanationCurrent(sequence,scope)){dbExplanation.busy=false;dbExplanationSync();}}
@@ -2855,7 +2947,7 @@ async function dbExplanationHistory(kind='sql_explanation'){
   if(kind==='sql_plan_explanation'){
    for(const intent of dbExplanation.intents)if(dbPlanSameIdentity(intent))intent.recoveryScope=dbPlanAuthority();
    dbExplanation.history.forEach(dbPlanObserve);
-  }else{const intent=dbExplanationIntent(kind);if(intent)intent.recoveryScope=scope;}
+  }else{dbExplanation.history.forEach(dbSourceObserve);const intent=dbExplanationIntent(kind);if(intent)intent.recoveryScope=scope;}
   if(!dbExplanation.history.length)dbExplanation.notice='No saved explanations in this context.';
  }catch(error){if(dbExplanationCurrent(sequence,scope))dbExplanation.notice='Explanation unavailable. Refresh context and recover the original request or load history.';}
  finally{if(dbExplanationCurrent(sequence,scope)){dbExplanation.busy=false;dbExplanation.pendingHistoryKind=null;dbExplanationSync();}}
@@ -2977,6 +3069,7 @@ function dbPlanRender(node,record){
  node.append(details);
 }
 function dbExplanationInstall(){
+ dbSourceProofs.clear();dbSource.token=null;dbSource.scope='';dbSourceInvalidate();
  dbPlanDisclosures.clear();
  dbPlanProofs.clear();
  dbExplanation.installed=true;
@@ -2999,12 +3092,14 @@ function dbExplanationInstall(){
  $('bear-tab-query').click();
  const copy=document.createElement('button');copy.id='explanation-copy';copy.type='button';ui(copy,'Copy from worksheet');
  copy.onclick=()=>{input.value=$('sql').value;input.dispatchEvent(new Event('input'));dbExplanationSync();};$('bear-query-run').before(copy);
+ const latest=document.createElement('button');latest.id='explanation-latest';latest.type='button';ui(latest,'Load latest SELECT');latest.onclick=dbSourceLoad;copy.after(latest);
+ const source=document.createElement('div');source.id='explanation-source';source.className='status-line';source.setAttribute('aria-live','polite');input.after(source);
  for(const prefix of ['doctor','copilot']){
   const panel=document.createElement('div');panel.className='copilot-body';
   const help=document.createElement('p');ui(help,dbExplanationHelp);panel.append(help);
   const guidance=document.createElement('p');ui(guidance,'After a confirmed completion or failure, request a new explanation explicitly. Otherwise refresh or recover the original request.');panel.append(guidance);
   const toolbar=document.createElement('div');toolbar.className='toolbar';
-  for(const [action,key,task] of [['recover','Refresh explanation / recover request',()=>dbExplain(prefix,true)],['history','Load explanation history',()=>dbExplanationHistory()]]){
+  for(const [action,key,task] of [['recover','Refresh explanation / recover request',()=>dbExplain('recover',true)],['history','Load explanation history',()=>dbExplanationHistory()]]){
    const button=document.createElement('button');button.id='explanation-'+prefix+'-'+action;button.type='button';ui(button,key);button.onclick=task;toolbar.append(button);
   }
   const label=document.createElement('label'),select=document.createElement('select');select.id='explanation-'+prefix+'-saved';label.htmlFor=select.id;ui(label,'Choose a saved explanation');select.onchange=()=>select.value!==''?dbExplanationSelect(Number(select.value)):undefined;
@@ -3023,7 +3118,8 @@ function dbExplanationInstall(){
   else $('copilot-result').before(panel);
  }
  $('bear-query-run').onclick=()=>dbExplain('doctor');$('copilot-explain').onclick=()=>dbExplain('copilot');
- input.addEventListener('input',dbExplanationSync);
+ input.addEventListener('input',event=>{if(!dbSourceInputEvents.has(event))dbSourceInvalidate();dbExplanationSync();});
+ $('sql').addEventListener('input',()=>{dbSourceInvalidate();dbExplanationSync();});
  // Reload restores only the separate Doctor draft, never a historical record into an editor.
  const draftKey='shirokuma.sql-explanation-doctor.'+dbPrincipal;
  input.value=readStorage(draftKey,'');if(typeof input.value!=='string')input.value='';

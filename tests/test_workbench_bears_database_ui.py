@@ -7,6 +7,9 @@ import test_workbench_database_ui as harness
 
 
 COMMON = r'''
+const sourceCalls=()=>calls.filter(c=>c.path.startsWith('/api/v1/bears/query-sources/latest?'));
+const sourceReply=(extra={})=>({context:structuredClone(dbContext(dbCurrent())),source:{query_id:'source-query',created_at:'2026-10-31T01:00:00Z',state:'UNKNOWN',sql:'WITH q AS (SELECT 8) SELECT * FROM q UNION SELECT 9',context:structuredClone(dbContext(dbCurrent())),...extra}});
+const loadSource=()=>$('explanation-latest').onclick();
 const explanationCalls=()=>calls.filter(c=>c.path.startsWith('/api/v1/bears/explanations'));
 const posts=()=>explanationCalls().filter(c=>c.options?.method==='POST');
 const record=(extra={})=>({id:'explanation-1',kind:'sql_explanation',state:'SUCCEEDED',actor:'owner',
@@ -37,6 +40,228 @@ field.className='bear-field';field.append(label,$('bear-query-sql'));content.app
 $('bear-query-sql').before=node=>{field.append(node);field.children.splice(field.children.indexOf(node),1);field.children.splice(field.children.indexOf($('bear-query-sql')),0,node);};
 '''
         self.javascript(fixture + body)
+
+    def test_original_a1_explicit_recovery_after_both_drafts_and_reload_uses_only_original_get(self):
+        for state in ['RUNNING', 'UNKNOWN']:
+            with self.subTest(state=state):
+                self.javascript('const initialState=' + json.dumps(state) + r'''
+await boot();const accepted=record({state:initialState,text:null});route=async()=>wrap(accepted);await $('copilot-explain').onclick();const original=structuredClone(posts()[0]),saved=storage.get(dbExplanationKey);
+editSQL('SELECT edited worksheet');editDoctor('SELECT edited Doctor');dbExplanationInstall();
+assert.equal($('explanation-doctor-recover').disabled,false);assert.equal($('explanation-copilot-recover').disabled,false);assert.equal($('explanation-latest').disabled,true);const count=explanationCalls().length;
+dbControls();await tick();assert.equal(explanationCalls().length,count);
+route=async(path,options)=>{assert.equal(options.method,undefined);assert.ok(path.startsWith('/api/v1/bears/explanations/'+accepted.id+'?'));assert.equal(new URL(path,'http://local').searchParams.get('context'),JSON.stringify(accepted.context));assert.equal(options.headers['X-Shirokuma-Role'],'admin');return wrap({...accepted,state:'SUCCEEDED',text:'OLD SQL ANSWER'});};
+await $('explanation-doctor-recover').onclick();assert.equal(explanationCalls().length,count+1);assert.equal(posts().length,1);assert.equal($('sql').value,'SELECT edited worksheet');assert.equal($('bear-query-sql').value,'SELECT edited Doctor');assert.equal(dbExplanation.record,null);assert.deepEqual(dbExplanation.history,[]);assert.equal($('explanation-latest').disabled,false);
+for(const locale of ['ja','en']){setLanguage(locale);assert.ok(visibleText($('explanation-doctor-output')).includes(t('Original request refreshed. Current SQL was kept.')));assert.doesNotMatch(visibleText($('explanation-doctor-output')),/OLD SQL ANSWER/);}
+assert.equal(storage.get(dbExplanationKey),saved);assert.equal(JSON.stringify(dbExplanation.intents[0].body),original.options.body);assert.equal(dbExplanation.intents[0].key,original.options.headers['Idempotency-Key']);
+route=async()=>sourceReply();await loadSource();assert.equal(sourceCalls().length,1);assert.ok(dbSource.origin);
+''')
+
+    def test_original_a1_broad_recovery_selection_never_applies_to_automatic_poll(self):
+        self.javascript(r'''
+await boot();const current=record({state:'RUNNING',text:null});route=async()=>wrap(current);await $('copilot-explain').onclick();
+const capture=structuredClone(dbExplanationCapture());capture.editor='SELECT hidden';capture.doctor='SELECT hidden Doctor';
+dbExplanation.intents.push(dbExplanationFreezeIntent({kind:'sql_explanation',endpoint:'/api/v1/bears/explanations',source:'copilot',key:'hidden-key',id:'hidden-id',capture,body:{context:capture.context,sql:capture.editor,language:'en'}}));dbExplanationPersist();
+assert.equal(dbSourceRecoveryIntent().id,'hidden-id');route=async(path,options)=>{assert.equal(options.method,undefined);assert.ok(path.startsWith('/api/v1/bears/explanations/'+current.id+'?'));return wrap(current);};
+await dbExplanationPoll();const count=explanationCalls().length;
+await dbExplain('unrelated',true);assert.equal(explanationCalls().length,count+1);
+// With neither draft matching an original, unrelated labels cannot recover a hidden intent.
+editSQL('SELECT unrelated current');editDoctor('SELECT unrelated Doctor');const editedCount=explanationCalls().length;
+await dbExplain('unrelated',true);assert.equal(explanationCalls().length,editedCount);
+assert.equal(posts().length,1);assert.equal(dbSourceA1Held(dbExplanation.intents.at(-1)),true);assert.equal($('explanation-latest').disabled,true);
+''')
+
+    def test_original_a1_uncertain_ack_explicit_recovery_replays_original_after_edits_reload(self):
+        self.javascript(r'''
+await boot();route=async()=>{throw Error('lost ACK');};await $('copilot-explain').onclick();const original=structuredClone(posts()[0]);editSQL('SELECT current editor');editDoctor('SELECT current Doctor');dbExplanationInstall();
+assert.equal($('explanation-doctor-recover').disabled,false);assert.equal(posts().length,1);
+route=async(path,options)=>{assert.equal(path,'/api/v1/bears/explanations');assert.equal(options.body,original.options.body);assert.equal(options.headers['Idempotency-Key'],original.options.headers['Idempotency-Key']);return {http:400,body:{error:{code:'AI_INPUT_INVALID'}}};};
+await $('explanation-doctor-recover').onclick();assert.equal(posts().length,2);assert.equal($('explanation-latest').disabled,false);assert.equal(dbExplanation.intents[0].id,null);assert.equal($('sql').value,'SELECT current editor');assert.equal($('bear-query-sql').value,'SELECT current Doctor');assert.equal(dbExplanation.record,null);
+dbExplanationInstall();assert.equal($('explanation-latest').disabled,true);assert.equal($('explanation-doctor-recover').disabled,false);await $('explanation-doctor-recover').onclick();assert.equal(posts().length,3);assert.equal($('explanation-latest').disabled,false);
+''')
+
+    def test_original_a1_older_than_fifty_history_records_remains_explicitly_recoverable(self):
+        self.javascript(r'''
+await boot();const context=structuredClone(dbContext(dbCurrent())),capture=structuredClone(dbExplanationCapture());
+const saved=Array.from({length:51},(_,i)=>({kind:'sql_explanation',endpoint:'/api/v1/bears/explanations',source:'copilot',id:'saved-'+i,key:'original-key-'+i,capture:{...capture,editor:'SELECT '+i,doctor:'SELECT doctor_'+i},body:{context,sql:'SELECT '+i,language:'en'}}));
+storage.set(dbExplanationKey,JSON.stringify(saved));editSQL('SELECT current');editDoctor('SELECT current Doctor');dbExplanationInstall();
+const newest=saved.slice(1).map(intent=>record({id:intent.id,input:{sql:intent.body.sql,language:'en'}}));
+route=async(path,options)=>{assert.equal(options.method,undefined);return {context,explanations:newest};};await $('explanation-doctor-history').onclick();const count=explanationCalls().length;
+assert.equal(dbSourceRecoveryIntent().id,'saved-0');assert.equal($('explanation-doctor-recover').disabled,false);assert.equal($('explanation-latest').disabled,true);
+route=async(path,options)=>{assert.equal(options.method,undefined);assert.ok(path.startsWith('/api/v1/bears/explanations/saved-0?'));assert.equal(new URL(path,'http://local').searchParams.get('context'),JSON.stringify(context));return wrap(record({id:'saved-0',input:{sql:'SELECT 0',language:'en'}}));};
+await $('explanation-doctor-recover').onclick();assert.equal(explanationCalls().length,count+1);assert.equal(posts().length,0);assert.equal($('explanation-latest').disabled,false);assert.equal(dbExplanation.record,null);assert.equal($('sql').value,'SELECT current');assert.equal($('bear-query-sql').value,'SELECT current Doctor');assert.equal(dbExplanation.intents[0].key,'original-key-0');assert.deepEqual(dbExplanation.intents[0].body,saved[0].body);
+route=async()=>sourceReply();await loadSource();assert.ok(dbSource.origin);assert.equal(sourceCalls().length,1);
+''')
+
+    def test_original_a1_recovery_identity_fences_actor_full_context_and_worksheet(self):
+        self.javascript(r'''
+await boot([input('a'),input('b')]);const accepted=record({state:'RUNNING',text:null});route=async()=>wrap(accepted);await $('copilot-explain').onclick();editSQL('SELECT current');editDoctor('SELECT Doctor');dbExplanationInstall();const count=explanationCalls().length;
+const changes=[
+ [()=>{worksheetId='b';},()=>{worksheetId='a';}],
+ [()=>{dbCurrent().schema_id='raw';},()=>{dbCurrent().schema_id='schema';}],
+ [()=>{dbCurrent().selected_role='bi_viewer';},()=>{dbCurrent().selected_role='admin';}],
+ [()=>{dbPrincipal=JSON.stringify(['another',true]);},()=>{dbPrincipal=JSON.stringify(['owner',true]);}]
+];
+for(const [change,restore] of changes){change();dbControls();assert.equal($('explanation-doctor-recover').disabled,true);await $('explanation-doctor-recover').onclick();assert.equal(explanationCalls().length,count);restore();dbControls();}
+assert.equal($('explanation-doctor-recover').disabled,false);assert.equal($('explanation-latest').disabled,true);assert.equal(posts().length,1);
+''')
+
+    def test_original_a1_recovery_late_edits_and_authority_roundtrips_never_prove_closure(self):
+        self.javascript(r'''
+await boot();
+const mutations=[()=>editSQL('SELECT late editor'),()=>editDoctor('SELECT late Doctor'),()=>{const value=$('bear-query-sql').value;editDoctor('SELECT temporary');editDoctor(value);},()=>editDoctor($('bear-query-sql').value),()=>{currentRole='bi_viewer';dbControls();currentRole='admin';dbControls();},()=>{dbMaximumRole='bi_viewer';dbControls();dbMaximumRole='admin';dbControls();},()=>{dbAuthorizationVersion++;dbControls();},()=>{dbEpoch++;dbControls();},()=>{const old=dbPrincipal;dbPrincipal=JSON.stringify(['other',true]);dbControls();dbPrincipal=old;dbControls();},()=>{const w=dbCurrent(),old=w.schema_id;w.schema_id='raw';dbControls();w.schema_id=old;dbControls();}];
+for(const mutate of mutations){
+ const w={...dbCurrent(),id:crypto.randomUUID()};worksheets.push(w);worksheetId=w.id;await dbRefreshContext();editSQL('SELECT original');editDoctor('SELECT original Doctor');const accepted=record({id:'request-'+w.id,state:'RUNNING',text:null});route=async()=>wrap(accepted);await $('copilot-explain').onclick();editSQL('SELECT current');editDoctor('SELECT current Doctor');dbExplanationInstall();const intent=dbSourceRecoveryIntent(),wait=deferred();route=()=>wait.promise;
+ const pending=$('explanation-doctor-recover').onclick();await tick();mutate();const editor=$('sql').value,doctor=$('bear-query-sql').value;
+ wait.resolve(wrap({...accepted,state:'SUCCEEDED',text:'STALE'}));await pending;if(dbReason())await dbRefreshContext();assert.equal(dbSourceA1Held(intent),true,'held after '+mutate+' '+dbReason());assert.equal($('explanation-latest').disabled,true);assert.equal(dbExplanation.record,null);assert.equal($('sql').value,editor);assert.equal($('bear-query-sql').value,doctor);assert.doesNotMatch(visibleText($('explanation-doctor-output')),/STALE/);
+}
+''')
+
+    def test_latest_source_a1_structured_no_admission_is_memory_only_and_original_recovery_exact(self):
+        for payload in [{'code': 'AI_INPUT_INVALID'}, {'error': {'code': 'AI_INPUT_INVALID'}}]:
+            with self.subTest(payload=payload):
+                self.javascript('const rejection=' + json.dumps(payload) + r'''
+await boot();route=async()=>({http:400,body:rejection});await $('copilot-explain').onclick();
+const original=structuredClone(posts()[0]),intent=dbExplanation.intents[0],saved=storage.get(dbExplanationKey),capture=intent.capture;
+assert.equal(intent.id,null);assert.equal(dbExplanation.record,null);assert.equal($('explanation-latest').disabled,false);assert.equal($('copilot-explain').disabled,true);
+editDoctor('SELECT user draft');editSQL('SELECT different editor');assert.equal($('copilot-explain').disabled,false);assert.equal($('explanation-latest').disabled,false);
+route=async()=>sourceReply();await loadSource();assert.ok(dbSource.origin);assert.equal(sourceCalls().length,1);assert.equal(posts().length,1);assert.equal(storage.get(dbExplanationKey),saved);assert.equal(intent.key,original.options.headers['Idempotency-Key']);assert.equal(JSON.stringify(intent.body),original.options.body);assert.equal(intent.id,null);
+const hints=JSON.parse(saved);Object.assign(hints[0],{terminal:true,noAdmission:true,sourceNoAdmission:true,state:'FAILED'});storage.set(dbExplanationKey,JSON.stringify(hints));dbExplanationInstall();assert.equal($('explanation-latest').disabled,true);await dbSourceLoad();assert.equal(sourceCalls().length,1);
+editSQL(capture.editor);editDoctor(capture.doctor);route=async()=>({http:400,body:rejection});await $('explanation-copilot-recover').onclick();
+assert.equal(posts().length,2);assert.equal(posts()[1].options.body,original.options.body);assert.equal(posts()[1].options.headers['Idempotency-Key'],original.options.headers['Idempotency-Key']);assert.equal(dbExplanation.intents[0].id,null);assert.equal($('explanation-latest').disabled,false);
+// A later uncertain recovery revokes the earlier no-admission receipt.
+route=async()=>{throw Error('transport');};await $('explanation-copilot-recover').onclick();assert.equal($('explanation-latest').disabled,true);
+''')
+
+    def test_latest_source_a1_nonqualifying_rejections_and_accepted_ids_stay_held(self):
+        self.javascript(r'''
+await boot();
+const responses=[
+ ()=>({http:400,body:{message:'AI_INPUT_INVALID'}}),()=>({http:400,body:{error:'AI_INPUT_INVALID'}}),
+ ()=>({code:'AI_INPUT_INVALID'}),()=>({http:400,body:{error_code:'AI_INPUT_INVALID'}}),
+ ()=>({http:400,body:{code:'AI_PLAN_VIEW_UNSUPPORTED'}}),()=>({http:400,body:{code:'OTHER'}}),
+ ()=>({http:401,body:{code:'AI_INPUT_INVALID'}}),()=>({http:403,body:{code:'AI_INPUT_INVALID'}}),()=>({http:500,body:{code:'AI_INPUT_INVALID'}}),
+ ()=>({http:400,body:{code:'AI_INPUT_INVALID',id:'accepted'}}),()=>({http:400,body:{code:'AI_INPUT_INVALID',explanation:{id:'accepted'}}}),
+ ()=>({http:400,body:{error:{code:'AI_INPUT_INVALID',request_id:'accepted'}}}),()=>({http:400,body:{code:'AI_INPUT_INVALID',query_id:'accepted'}}),
+ ()=>({malformed:true}),()=>{throw Error('AI_INPUT_INVALID');}
+];
+for(const reply of responses){
+ const w={...dbCurrent(),id:crypto.randomUUID()};worksheets.push(w);worksheetId=w.id;dbControls();
+ route=async()=>reply();await $('copilot-explain').onclick();const intent=dbExplanation.intents.at(-1);assert.equal(intent.id,null);assert.equal($('explanation-latest').disabled,true);await dbSourceLoad();assert.equal(sourceCalls().length,0);
+}
+const w={...dbCurrent(),id:crypto.randomUUID()};worksheets.push(w);worksheetId=w.id;dbControls();const accepted=record({state:'RUNNING',text:null});route=async()=>wrap(accepted);await $('copilot-explain').onclick();
+const intent=dbExplanation.intents.at(-1),key=intent.key,body=JSON.stringify(intent.body);route=async()=>({http:400,body:{code:'AI_INPUT_INVALID'}});await $('explanation-copilot-recover').onclick();assert.equal(intent.id,accepted.id);assert.equal(intent.key,key);assert.equal(JSON.stringify(intent.body),body);assert.equal($('explanation-latest').disabled,true);
+''')
+
+    def test_latest_source_a1_no_admission_authority_roundtrips_and_stale_response_remain_held(self):
+        self.javascript(r'''
+await boot();
+for(const mutate of [()=>{currentRole='bi_viewer';dbControls();currentRole='admin';dbControls();},()=>{dbMaximumRole='bi_viewer';dbControls();dbMaximumRole='admin';dbControls();},()=>{const w=dbCurrent(),schema=w.schema_id;w.schema_id='raw';dbControls();w.schema_id=schema;dbControls();},()=>{dbAuthorizationVersion++;dbControls();},()=>{dbEpoch++;dbControls();}]){
+ const w={...dbCurrent(),id:crypto.randomUUID()};worksheets.push(w);worksheetId=w.id;dbControls();route=async()=>({http:400,body:{code:'AI_INPUT_INVALID'}});await $('copilot-explain').onclick();assert.equal($('explanation-latest').disabled,false,'fresh '+mutate+' '+dbReason());editDoctor('SELECT different doctor');editSQL('SELECT different editor');assert.equal($('explanation-latest').disabled,false,'draft '+mutate+' '+dbReason());
+ mutate();assert.equal($('explanation-latest').disabled,true);await dbSourceLoad();assert.equal(sourceCalls().length,0);
+}
+const w={...dbCurrent(),id:crypto.randomUUID()};worksheets.push(w);worksheetId=w.id;dbControls();await dbRefreshContext();const wait=deferred();route=()=>wait.promise;const pending=$('copilot-explain').onclick();await tick();currentRole='bi_viewer';dbControls();currentRole='admin';dbControls();wait.resolve({http:400,body:{code:'AI_INPUT_INVALID'}});await pending;assert.equal($('explanation-latest').disabled,true);assert.equal(dbSourceProofs.has(dbExplanation.intents.at(-1)),false);
+''')
+
+    def test_latest_source_explicit_exact_get_draft_only_projection_and_localized_origin(self):
+        self.javascript(r'''
+await boot();editDoctor('SELECT manual');
+queryResult={columns:['keep'],rows:[[4]]};const results=JSON.stringify(queryResult),runs=JSON.stringify([...dbRuns]),worksheet=JSON.stringify(dbCurrent()),editor=$('sql').value;
+assert.equal(sourceCalls().length,0);
+for(const state of ['QUEUED','RUNNING','FINISHED','FAILED','CANCELED','UNKNOWN']){
+ const reply=sourceReply({state,query_id:'<img src=x>',private_provider:'PRIVATE',backend_id:'PRIVATE'});reply.private_config='PRIVATE';
+ route=async(path,options)=>{assert.ok(path.startsWith('/api/v1/bears/query-sources/latest?'));assert.equal(options.method,undefined);assert.equal(options.body,undefined);assert.equal(options.headers['X-Shirokuma-Role'],'admin');assert.equal(new URL(path,'http://local').searchParams.get('context'),JSON.stringify(dbContext(dbCurrent())));return reply;};
+ queryResult=JSON.parse(results);await loadSource();assert.equal(JSON.stringify(queryResult),results);assert.equal($('bear-query-sql').value,reply.source.sql);
+ assert.deepEqual(Object.keys(dbSource.origin).sort(),['context','created_at','query_id','sql','state']);
+ assert.equal(storage.get('shirokuma.sql-explanation-doctor.'+dbPrincipal),JSON.stringify(reply.source.sql));
+ for(const locale of ['ja','en']){setLanguage(locale);const text=visibleText($('explanation-source'));assert.ok(text.includes(t('Latest SELECT in this database, schema and role (read only)')));assert.ok(text.includes(dbExplanationStateLabel(state)));assert.ok(text.includes('<img src=x>'));assert.ok(text.includes(reply.source.created_at));assert.doesNotMatch(text,/PRIVATE|current worksheet query|database_id/);assert.equal($('explanation-source').descendants().some(n=>['IMG','INPUT','BUTTON'].includes(n.tagName)),false);assert.equal($('explanation-latest').textContent,locale==='ja'?'最新の SELECT を読み込む':'Load latest SELECT');}
+}
+assert.equal(posts().length,0);assert.equal(explanationCalls().length,0);assert.equal($('sql').value,editor);assert.equal(JSON.stringify([...dbRuns]),runs);assert.equal(JSON.stringify(dbCurrent()),worksheet);
+assert.equal([...storage.values()].some(value=>value.includes('source-query')||value.includes('PRIVATE')),false);
+editDoctor($('bear-query-sql').value);assert.equal(dbSource.origin,null);
+route=async()=>sourceReply();await loadSource();$('explanation-copy').onclick();assert.equal(dbSource.origin,null);
+''')
+
+    def test_latest_source_normal_input_clears_incompatible_display_and_post_stays_exact(self):
+        self.javascript(r'''
+await boot();route=async()=>wrap(record());await $('copilot-explain').onclick();const durable=storage.get(dbExplanationKey);
+assert.ok(dbExplanation.record);route=async()=>sourceReply();await loadSource();
+assert.equal(dbExplanation.record,null);assert.deepEqual(dbExplanation.history,[]);assert.equal(dbExplanation.notice,'');assert.equal(storage.get(dbExplanationKey),durable);assert.ok(dbSource.origin);
+route=async(path,options)=>wrap(record({input:JSON.parse(options.body)}));await $('bear-query-run').onclick();
+const body=JSON.parse(posts().at(-1).options.body);assert.deepEqual(Object.keys(body).sort(),['context','language','sql']);assert.equal(body.sql,sourceReply().source.sql);assert.deepEqual(body.context,dbContext(dbCurrent()));
+''')
+
+    def test_latest_source_null_error_and_malformed_keep_manual_draft_fixed_guidance(self):
+        self.javascript(r'''
+await boot();
+const bad=[()=>({context:dbContext(dbCurrent()),source:null}),()=>({http:403,body:{sql:'SECRET',message:'SECRET'}}),()=>({malformed:true}),()=>({}),()=>{const x=sourceReply();delete x.context.grant_revision;return x;},()=>{const x=sourceReply();x.context.sql_schema='other';return x;},()=>sourceReply({context:{...dbContext(dbCurrent()),extra:'SECRET'}}),()=>sourceReply({context:{...dbContext(dbCurrent()),grant_revision:999}}),()=>sourceReply({query_id:''}),()=>sourceReply({created_at:'yesterday'}),()=>sourceReply({state:'SUCCEEDED'}),()=>sourceReply({sql:5})];
+for(const [index,reply] of bad.entries()){
+ editDoctor('SELECT manual');route=async()=>reply();await loadSource();assert.equal($('bear-query-sql').value,'SELECT manual');assert.equal(dbSource.origin,null);
+ for(const locale of ['en','ja']){setLanguage(locale);assert.equal(visibleText($('explanation-source')).trim(),t(index===0?'No eligible SELECT found. Enter SQL or copy it from the worksheet.':'Latest SELECT unavailable. Enter SQL or copy it from the worksheet.'));assert.doesNotMatch(visibleText($('explanation-source')),/SECRET/);}
+}
+assert.equal(posts().length,0);
+''')
+
+    def test_latest_source_late_responses_discard_edits_copy_scope_and_authority_roundtrips(self):
+        self.javascript(r'''
+await boot([input('a'),input('b')]);
+const mutations=[()=>editDoctor('SELECT edited'),()=>{const old=$('bear-query-sql').value;editDoctor('SELECT temp');editDoctor(old);},()=>$('explanation-copy').onclick(),()=>{editSQL('SELECT temp');editSQL('SELECT 1');},()=>{worksheetId='b';dbControls();worksheetId='a';dbControls();},()=>{const w=dbCurrent(),old=w.schema_id;w.schema_id='raw';dbControls();w.schema_id=old;dbControls();},()=>{currentRole='bi_viewer';dbControls();currentRole='admin';dbControls();},()=>{dbMaximumRole='bi_viewer';dbControls();dbMaximumRole='admin';dbControls();},()=>{const old=dbPrincipal;dbPrincipal=JSON.stringify(['other',true]);dbControls();dbPrincipal=old;dbControls();},()=>{dbAuthorizationVersion++;dbControls();},()=>{dbRoleAuthorizationVersions.set(dbTabRole(),dbRoleVersion(dbTabRole())+1);dbControls();},()=>{dbEpoch++;dbControls();}];
+for(const mutate of mutations)for(const outcome of ['source','null','error']){
+ editDoctor('SELECT manual');const wait=deferred(),reply=sourceReply();route=()=>wait.promise;
+ const pending=loadSource();await tick();const count=sourceCalls().length;await loadSource();await dbSourceLoad();assert.equal(sourceCalls().length,count);assert.equal($('explanation-latest').disabled,true);
+ assert.equal($('bear-query-run').disabled,true);await dbExplain('doctor');await dbExplain('copilot',false,'sql_plan_explanation');assert.equal(posts().length,0);
+ mutate();const draft=$('bear-query-sql').value;dbSource.notice='newer message';
+ wait.resolve(outcome==='source'?reply:outcome==='null'?{context:reply.context,source:null}:{http:500,body:{message:'SECRET'}});await pending;
+ assert.equal($('bear-query-sql').value,draft);assert.equal(dbSource.notice,'newer message');assert.equal(dbSource.origin,null);assert.equal(dbSource.token,null);
+}
+''')
+
+    def test_latest_source_a1_identity_hold_after_edits_reload_and_authoritative_terminal(self):
+        self.javascript(r'''
+await boot();const accepted=record({state:'RUNNING',text:null});route=async()=>wrap(accepted);await $('copilot-explain').onclick();
+const original=structuredClone(posts()[0]),intent=dbExplanation.intents[0];
+editDoctor('SELECT manual');editSQL('SELECT changed');$('explanation-copy').onclick();
+for(const reload of [false,true]){
+ if(reload){const saved=JSON.parse(storage.get(dbExplanationKey));Object.assign(saved[0],{state:'SUCCEEDED',terminal:true,noAdmission:true});storage.set(dbExplanationKey,JSON.stringify(saved));dbExplanationInstall();}
+ assert.equal($('explanation-latest').disabled,true);const n=sourceCalls().length;await dbSourceLoad();assert.equal(sourceCalls().length,n);
+}
+// Restore A1's original distinct-input capture for its unchanged recovery path.
+editSQL(intent.capture.editor);editDoctor(intent.capture.doctor);
+for(const state of ['UNKNOWN','RUNNING','FAILED']){route=async(path,options)=>{assert.notEqual(options?.method,'POST');assert.ok(path.includes('/'+accepted.id+'?'));assert.equal(new URL(path,'http://local').searchParams.get('context'),JSON.stringify(intent.body.context));return wrap({...accepted,state});};await $('explanation-copilot-recover').onclick();editDoctor('SELECT unrelated');assert.equal($('explanation-latest').disabled,state!=='FAILED');editDoctor(intent.capture.doctor);}
+assert.equal(posts().length,1);assert.equal(dbExplanation.intents[0].key,original.options.headers['Idempotency-Key']);assert.equal(JSON.stringify(dbExplanation.intents[0].body),original.options.body);
+dbAuthorizationVersion++;dbControls();assert.equal($('explanation-latest').disabled,true);
+''')
+
+    def test_latest_source_a1_uncertain_ack_original_key_and_distinct_input_unchanged(self):
+        self.javascript(r'''
+await boot();route=async()=>{throw Error('lost ACK');};await $('copilot-explain').onclick();const original=structuredClone(posts()[0]),capture=dbExplanation.intents[0].capture;
+editSQL('SELECT changed');assert.equal($('copilot-explain').disabled,false);assert.equal($('explanation-latest').disabled,true);await dbSourceLoad();assert.equal(sourceCalls().length,0);
+dbExplanationInstall();assert.equal($('explanation-latest').disabled,true);editSQL(capture.editor);editDoctor(capture.doctor);
+route=async()=>wrap(record({state:'FAILED',text:null}));await $('explanation-copilot-recover').onclick();assert.equal(posts().length,2);assert.equal(posts()[1].options.body,original.options.body);assert.equal(posts()[1].options.headers['Idempotency-Key'],original.options.headers['Idempotency-Key']);assert.equal($('explanation-latest').disabled,false);
+''')
+
+    def test_latest_source_own_input_side_effects_cannot_attach_stale_origin(self):
+        self.javascript(r'''
+await boot();route=async()=>sourceReply();let nested=false;
+$('bear-query-sql').addEventListener('input',()=>{if(!nested){nested=true;editDoctor('SELECT user edit from listener');}});
+await loadSource();assert.equal($('bear-query-sql').value,'SELECT user edit from listener');assert.equal(dbSource.origin,null);assert.equal(dbSource.notice,'');assert.equal(dbSource.token,null);
+assert.equal(storage.get('shirokuma.sql-explanation-doctor.'+dbPrincipal),JSON.stringify('SELECT user edit from listener'));
+''')
+
+    def test_latest_source_old_completion_never_finishes_reloaded_request_token(self):
+        self.javascript(r'''
+await boot();const old=deferred(),fresh=deferred(),reply=sourceReply();route=()=>old.promise;const first=loadSource();await tick();
+dbExplanationInstall();route=()=>fresh.promise;const second=loadSource();await tick();const token=dbSource.token;
+old.resolve(reply);await first;assert.equal(dbSource.token,token);assert.equal($('explanation-latest').disabled,true);assert.equal(dbSource.origin,null);
+fresh.resolve({...reply,source:{...reply.source,sql:'SELECT fresh'}});await second;assert.equal(dbSource.token,null);assert.equal($('bear-query-sql').value,'SELECT fresh');assert.ok(dbSource.origin);
+''')
+
+    def test_latest_source_recovery_during_get_remains_available_and_discards_source(self):
+        self.javascript(r'''
+await boot();const completed=record();route=async()=>wrap(completed);await $('copilot-explain').onclick();const wait=deferred(),reply=sourceReply();route=()=>wait.promise;
+const pending=loadSource();await tick();assert.equal($('explanation-copilot-recover').disabled,false);
+route=async()=>wrap(completed);await $('explanation-copilot-recover').onclick();const draft=$('bear-query-sql').value;
+wait.resolve(reply);await pending;assert.equal($('bear-query-sql').value,draft);assert.equal(dbSource.origin,null);assert.equal(dbExplanation.record.id,completed.id);assert.equal(posts().length,1);
+''')
 
     def test_database_lead_instruction_and_single_metadata_helper_preserve_legacy_copy(self):
         self.markup_javascript(r'''

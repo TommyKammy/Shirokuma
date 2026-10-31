@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.21.0"
+version: "7.22.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-31 — DB-P6-4A4 latest SELECT source for Query Doctor
+
+- [実装・検証記録](../../guides/database-p6-4a4-latest-query-source-2026-10-31.md)：本人・保存9項目context・全参照schema権限が一致する通常read-only SELECTを明示GETでDoctor入力へ読み込む。SQL・AI・Wake・catalogは呼ばない。
+- 元queryのID・時刻・状態と入力の遅着ガードを追加。未解決A1／A2を保持し、A1の元ID／元key・bodyを既存の明示復旧操作で確認する。重点backend116件・UI168件、全体回帰92単位（3,779成功・34 skip）と2DB・3roleの実機・画面、既存状態の保全を確認。
+- 取得済み計画だけを使う明示再説明、SQL案／WAP・他Bearsは後続。P6-4全体／P6-7／M1本人受入は未完了。
 
 ### 2026-10-31 — DB-P6-4A3 compatible INVOKER VIEW plan explanation
 

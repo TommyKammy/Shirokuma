@@ -39,6 +39,40 @@ class PlanDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, COMMON + PLAN + body)
 
+    def test_latest_loader_plan_hold_survives_edits_reload_and_uses_original_recovery(self):
+        self.javascript(r'''
+await boot();const accepted=pendingPlan();route=async()=>wrap(accepted);await startPlan();const original=structuredClone(planPosts()[0]);
+editSQL('SELECT new editor');editDoctor('SELECT new doctor');$('explanation-copy').onclick();
+for(const reload of [false,true]){
+ if(reload){const saved=JSON.parse(storage.get(dbExplanationKey));Object.assign(saved[0],{terminal:true,state:'SUCCEEDED',noAdmission:true});storage.set(dbExplanationKey,JSON.stringify(saved));dbExplanationInstall();}
+ assert.equal($('explanation-latest').disabled,true);await dbSourceLoad();assert.equal(sourceCalls().length,0);
+}
+for(const reply of [pendingPlan({state:'UNKNOWN',input:accepted.input}),pendingPlan({input:accepted.input}),planRecord({input:accepted.input})]){
+ route=async(path,options)=>{assert.equal(options?.method,undefined);assert.ok(path.startsWith(planEndpoint+'/'+accepted.id+'?'));assert.equal(new URL(path,'http://local').searchParams.get('context'),JSON.stringify(accepted.context));return wrap(reply);};
+ await recoverPlan();assert.equal($('explanation-latest').disabled,reply.state!=='SUCCEEDED','terminal source guard '+reply.state+' '+dbExplanation.notice);
+}
+assert.equal(planPosts().length,1);assert.equal(JSON.stringify(dbExplanationIntent('sql_plan_explanation').body),original.options.body);assert.equal(dbExplanationIntent('sql_plan_explanation').key,original.options.headers['Idempotency-Key']);
+route=async()=>sourceReply();await loadSource();assert.ok(dbSource.origin);
+route=async(path,options)=>{const body=JSON.parse(options.body);assert.deepEqual(Object.keys(body).sort(),['context','language','sql']);return wrap(planRecord({input:{sql:body.sql,language:body.language}}));};
+await startPlan('doctor');assert.equal(planPosts().length,2);assert.equal(JSON.parse(planPosts()[1].options.body).sql,sourceReply().source.sql);
+''')
+
+    def test_latest_loader_both_kinds_hold_until_every_intent_has_fresh_terminal_receipt(self):
+        self.javascript(r'''
+await boot();const a1=record({state:'RUNNING',text:null}),a2=pendingPlan();
+route=async()=>wrap(a1);await $('copilot-explain').onclick();route=async()=>wrap(a2);await startPlan();
+assert.equal($('explanation-latest').disabled,true);route=async()=>wrap(planRecord());await recoverPlan();assert.equal($('explanation-latest').disabled,true);
+route=async()=>wrap({...a1,state:'FAILED'});await $('explanation-copilot-recover').onclick();assert.equal($('explanation-latest').disabled,false);
+dbExplanationInstall();assert.equal($('explanation-latest').disabled,true);route=async()=>wrap(planRecord());await recoverPlan();assert.equal($('explanation-latest').disabled,true);route=async()=>wrap({...a1,state:'FAILED'});await $('explanation-copilot-recover').onclick();assert.equal($('explanation-latest').disabled,false);
+''')
+
+    def test_latest_loader_plan_uncertain_ack_remains_frozen_after_reload(self):
+        self.javascript(r'''
+await boot();route=async()=>{throw Error('lost');};await startPlan();const original=structuredClone(planPosts()[0]);editDoctor('SELECT changed');editSQL('SELECT edited');dbExplanationInstall();
+assert.equal($('explanation-latest').disabled,true);await dbSourceLoad();assert.equal(sourceCalls().length,0);
+route=async()=>wrap(pendingPlan({input:JSON.parse(original.options.body)}));await recoverPlan();assert.equal(planPosts().length,2);assert.equal(planPosts()[1].options.body,original.options.body);assert.equal(planPosts()[1].options.headers['Idempotency-Key'],original.options.headers['Idempotency-Key']);assert.equal($('explanation-latest').disabled,true);
+''')
+
     def test_unresolved_identity_survives_both_drafts_copy_and_manual_execute(self):
         for source in ['doctor', 'copilot']:
             for state in ['RUNNING', 'UNKNOWN']:

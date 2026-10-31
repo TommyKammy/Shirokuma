@@ -29,11 +29,11 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 | --- | --- | --- |
 | LOCAL／XS／S | 同じ`trino-local`の別名。実CPU・メモリのサイズ切替ではない | DB-P7まで実効サイズを偽装せず「共有LOCAL」と表示 |
 | 手動休止・起動 | `logical_v1`のP専用API／CLI／UIと共有操作receiptを実装。技術受入は完了 | 0／0と1／設定Worker数、実engine検証、全DBへの共有影響を区別。旧profileの対応を自動宣言しない |
-| 自動休止・自動復帰 | `logical_v1`の既存server lifecycleと共通SQL経路へ接続。技術受入は完了、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 元intent・現在権限・admissionを維持し、queued取消とUNKNOWNを保護。dbtの型付きSQLも共通経路を使い、AI接続は後続 |
+| 自動休止・自動復帰 | `logical_v1`の既存server lifecycleと共通SQL経路へ接続。技術受入は完了、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 元intent・現在権限・admissionを維持し、queued取消とUNKNOWNを保護。dbtとAI計画取得の型付きSQLも共通経路を使う |
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
 | データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を技術受入済み。C2E1のnative VIEW graph構築・品質testを技術受入済み。C2E2のVIEW証拠付きTABLE公開・独立公開履歴を技術受入済み | 正式公開はTABLE。VIEW含有native graphのTABLE公開はC2E2の全VIEW・全品質条件を適用。incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
-| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。Bears／CopilotはSQL・TABLE計画説明に対応、他actionは未接続 | telemetryと耐久監査を分離。AIの変更提案はDB-P6-4で認可／WAPへ接続する |
+| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。Bears／CopilotはSQL・TABLE／条件付きINVOKER VIEW計画説明に対応。Query Doctorは現在の本人・保存contextに一致する最新の対象SELECTを入力へ読み込める | 最新読込はSQL・AI・Wake・catalogを呼ばない。telemetryと耐久監査を分離し、AIの変更提案はDB-P6-4で認可／WAPへ接続する |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
 
@@ -272,7 +272,9 @@ DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C�
 
 [DB-P6-4A1](database-p6-4a1-local-sql-explanation-2026-10-31.md)のSQL説明、[A2](database-p6-4a2-plan-explanation-2026-10-31.md)のTABLE計画説明に続き、[A3](database-p6-4a3-view-plan-explanation-2026-10-31.md)で`logical_v1`の対応するnative／外部登録INVOKER VIEWを扱う。stored defaultsで再帰依存を解決し、同一DB・全schemaの現在のquery権限とVIEWのhead／格納先証拠を検査する。保存済みVIEW内の整数snapshot付きTABLE参照は、全snapshotの存在と現行列構成に一致するschemaを検証し、TABLEの可変headは固定しない。元SQLへ固定の非ANALYZE EXPLAINを付けて通常受付・Wakeへ通し、元SQLは実行しない。VIEW定義のSQL展開は行わず、検証はversion固定やserializable snapshotではない楽観的な境界とする。実機・画面で重点検証した。全体回帰91単位（3,719成功・34 skip）に加え、回帰開始後の修正を最終重点backend204件・UI80件で確認し、この限定範囲を技術受入済みとした。A1／A2の受入結果は各ガイドに保持し、旧default storeのA1検証時移行もA1ガイドへ分けて記録した。
 
-DEFINER・他DB参照のVIEW計画、現行列構成と異なる履歴schema、timestamp／tag／branch等の非整数time travel、最新query指定、取得済み計画だけを使う明示的な再説明、SQL案／WAP引渡し、他Bearsは後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、native graphのVIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、P6-4全体／DB-P6-3全体とM1本人受入は未完了である。
+[A4](database-p6-4a4-latest-query-source-2026-10-31.md)でQuery Doctorの最新SELECT読込を実装した。本人・保存9項目contextが一致する通常read-only queryから選び、全参照schema権限と現在のlogical identityを再検査する。明示GETは元SQLとqueryのID・時刻・状態だけを返し、SQL・AI・Wake・catalogを呼ばない。別Worksheetの同一contextのqueryも対象になり、EXPLAIN・書込・DataOps／Bears等の内部子queryは除外する。入力・認可・context変更後の遅着応答を捨て、未解決のA1／A2説明要求を保持する。A1の原要求は、入力を戻さず既存の明示復旧操作から元IDのGETまたは元key／bodyの再送で確認できる。重点backend116件・UI168件、全体回帰92単位（3,779成功・34 skip）、2DB・3roleの実機・画面と既存状態の保全を確認し、この限定範囲を技術受入済みとした。
+
+次は取得済み計画だけを使う明示的な再説明を優先し、その後にSQL案／WAP引渡し、他Bearsを扱う。DEFINER・他DB参照のVIEW計画、現行列構成と異なる履歴schema、timestamp／tag／branch等の非整数time travelも後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、native graphのVIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、P6-4全体／DB-P6-3全体とM1本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

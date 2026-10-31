@@ -66,4 +66,4 @@ VIEWの公開metadataはcompact UTF-8 JSONの`{relations,view_dependencies}`を6
 
 保存defaultとINVOKER判定は[Trino 483 REST catalog](https://raw.githubusercontent.com/trinodb/trino/483/plugin/trino-iceberg/src/main/java/io/trino/plugin/iceberg/catalog/rest/TrinoRestCatalog.java)および[VIEW Session](https://raw.githubusercontent.com/trinodb/trino/483/core/trino-main/src/main/java/io/trino/Session.java)に合わせる。元VIEWへの計画取得を保ち、[VIEW型変換・row filter／column mask](https://raw.githubusercontent.com/trinodb/trino/483/core/trino-main/src/main/java/io/trino/sql/planner/RelationPlanner.java)を省略する近似的なSQL展開は行わない。
 
-DEFINER、異なるhistorical列定義、version tag／timestamp、最新query指定、取得済み計画だけを使う新しい説明、他Bears／SQL案とWAP連携は後続である。DB-P6-4全体、P6-7の縦断検証、M1本人受入は継続する。
+A3受入時点の残件のうち、最新query指定は後続の[A4 Query Doctor入力読込](database-p6-4a4-latest-query-source-2026-10-31.md)で扱う。A4は出典SQLの読込であり、A3の計画取得を自動実行しない。本ガイドのA3受入結果は維持する。DEFINER、異なるhistorical列定義、version tag／timestamp、取得済み計画だけを使う新しい説明、他Bears／SQL案とWAP連携は後続である。DB-P6-4全体、P6-7の縦断検証、M1本人受入は継続する。

@@ -1,8 +1,10 @@
 # Databaseモードの機能一覧と利用条件
 
-2026年10月31日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)の実装を反映した。機能数は増やさず、現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
+2026年10月31日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)・[Query Doctorの最新SELECT読込](database-p6-4a4-latest-query-source-2026-10-31.md)の実装を反映した。機能数は増やさず、現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
 
 VIEW計画は`logical_v1`の対応するnative／外部登録INVOKER VIEWに限り、再帰依存先も同一DB・現在の全schema query権限を必要とする。保存済みVIEW定義内で整数snapshotを指定するTABLEは、そのsnapshotのschemaが現行列構成と一致する場合に扱う。利用者の直接入力に対するVERSION対応は広げない。DEFINER・他DB参照・履歴schemaの列構成差分・timestamp／tag／branch等の非整数time travelは未対応である。固定の非ANALYZE EXPLAINを実行し、元SQLは実行しない。
+
+最新SELECT読込はQuery Doctor入力だけを対象とし、本人と保存9項目contextが一致する対象の通常read-only queryを選ぶ。全参照schema権限と現在のidentityを再検査し、SQL・AI・Wake・catalogを呼ばない。元queryのID・時刻・状態は出典情報であり、UNKNOWN等の照合・取消・再実行は行わない。説明や計画取得は別の明示操作とする。
 
 ## 利用条件と表示の意味
 
@@ -105,7 +107,7 @@ VIEW計画は`logical_v1`の対応するnative／外部登録INVOKER VIEWに限�
 | JOB-09 | interval／daily／once／weekly／monthly／timezone | 対応、予定の入力契約 | T、競合・遅延の既存方針 | schedules |
 | JOB-10 | alert一覧・更新・確認 | 対応、E／A、元owner／context | T、確認と解消を区別 | alerts |
 | JOB-11 | native Stored Procedure／CALL／DAG／任意command | 別計画。Jobと同義にしない | Routineの意味を先に確定 | DB-P9-2 |
-| AI-01 | Query Doctor Bear | 明示SQL・TABLE／条件付きVIEW実行計画の説明に対応。最新query指定は未接続 | V／E／A、現在のSQLワークシートcontext・再帰依存を含む全schemaのquery権限・LOCAL AI。VIEWは`logical_v1`の対応INVOKERに限定し、依存先も同一DB。元SQLは未実行、履歴は表示専用。対象外のVIEWにはSQL説明を案内 | DB-P6-4A1／A2／A3対応 |
+| AI-01 | Query Doctor Bear | 明示SQL・TABLE／条件付きVIEW実行計画の説明、最新の対象SELECTの入力読込に対応 | V／E／A、現在のSQLワークシートcontext・全参照schemaのquery権限。説明にはLOCAL AIを使用。VIEW計画は`logical_v1`の対応INVOKERと再帰依存の同一DB権限が条件。最新読込は本人・保存9項目contextが一致する通常read-only queryのみ。元SQLは実行せず、読込から説明を自動送信しない | DB-P6-4A1／A2／A3／A4対応 |
 | AI-02 | Data Engineer Bear | 未接続。手動SQL／WAPは対応 | 提案と実実行を分離 | DB-P6-4 |
 | AI-03 | Catalog Curator Bear | 未接続 | 許可metadata scopeが必要 | DB-P6-4 |
 | AI-04 | SRE Bear | 未接続 | DB／platform観測を分離 | DB-P6-4／5 |

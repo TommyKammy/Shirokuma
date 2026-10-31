@@ -4,12 +4,24 @@ import re
 import dataops_routes as common
 import db_ai
 import db_ai_plan
+import db_ai_sources
 from query_context import QueryError
 
 
 def dispatch(handler, method, path, params, principal, role):
     if path != '/api/v1/bears' and not path.startswith('/api/v1/bears/'):
         return False
+    if path == '/api/v1/bears/query-sources/latest':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        if ('#' in handler.path or handler.headers.get_all('Transfer-Encoding', [])
+                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])
+                or set(params) != {'context'} or len(params['context']) != 1):
+            raise ValueError('exact context required')
+        context = common.context_value(common._json_context(params['context'][0]), role)
+        source = db_ai_sources.latest(principal, context)
+        handler.respond(dict(context=context.public_metadata(), source=source), 200)
+        return True
     match = re.fullmatch(r'/api/v1/bears/(explanations|plan-explanations)(?:/([0-9a-f-]{36})(/cancel)?)?', path)
     if not match:
         raise QueryError('NOT_FOUND', 404)
