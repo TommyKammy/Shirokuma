@@ -1,6 +1,6 @@
 # Databaseモードの機能一覧と利用条件
 
-2026年10月31日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEWとnative TABLEの実装を反映した。現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
+2026年10月31日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)の実装を反映した。現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
 
 ## 利用条件と表示の意味
 
@@ -52,7 +52,7 @@
 | SQL-08 | Worksheet結果CSV／JSON／TSV保存 | 未接続。Table全件Exportと別機能 | 結果保存の再認可は後続 | DB-P6-6 |
 | SQL-09 | 固定sample SQL shortcut | 未接続、旧catalogを仮定 | U、固定SQLを自動送信しない | 選択DBのSQLを明示入力 |
 | SQL-10 | Copilot SQL生成 | 未接続 | 将来はQに結び付く提案 | DB-P6-4 |
-| SQL-11 | Copilot Explain | 未接続 | 将来は許可されたSQL／plan | DB-P6-4 |
+| SQL-11 | Copilot Explain | 対応（SQLの説明） | V／E／A、有効なSQLワークシートcontext・全参照schemaのquery権限・LOCAL AI。SQLは実行しない。planは未取得 | DB-P6-4A1対応、planはA2 |
 | SQL-12 | Copilot Stage and Audit | 未接続。手動WAPは対応 | 将来はWの明示実行 | 手動WAP、DB-P6-4 |
 | SQL-13 | Copilot Publish | 未接続。手動WAP公開は対応 | 将来もAによる明示WAP公開 | 手動WAP、DB-P6-4 |
 | EXP-01 | DB／Schema／Table／Viewツリー、検索・page・更新 | 対応、V／E／Aの許可Schema | X、Explorer独自context | inventory／objects |
@@ -103,7 +103,7 @@
 | JOB-09 | interval／daily／once／weekly／monthly／timezone | 対応、予定の入力契約 | T、競合・遅延の既存方針 | schedules |
 | JOB-10 | alert一覧・更新・確認 | 対応、E／A、元owner／context | T、確認と解消を区別 | alerts |
 | JOB-11 | native Stored Procedure／CALL／DAG／任意command | 別計画。Jobと同義にしない | Routineの意味を先に確定 | DB-P9-2 |
-| AI-01 | Query Doctor Bear | 未接続 | 許可SQL／planを扱う入口が必要 | DB-P6-4 |
+| AI-01 | Query Doctor Bear | 明示SQLの説明に対応。plan／最新query指定は未接続 | V／E／A、現在のSQLワークシートcontextとLOCAL AI。元SQLと履歴は表示専用、他DBを参照しない | DB-P6-4A1対応、planはA2 |
 | AI-02 | Data Engineer Bear | 未接続。手動SQL／WAPは対応 | 提案と実実行を分離 | DB-P6-4 |
 | AI-03 | Catalog Curator Bear | 未接続 | 許可metadata scopeが必要 | DB-P6-4 |
 | AI-04 | SRE Bear | 未接続 | DB／platform観測を分離 | DB-P6-4／5 |

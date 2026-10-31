@@ -15,6 +15,7 @@ import control_store as store
 
 
 def drop_dbt_schema(db):
+    db.execute('DROP TABLE IF EXISTS ai_explanations')
     for table in ('dbt_run_operations', 'dbt_requests', 'dbt_runs'):
         db.execute('DROP TABLE ' + table)
 
@@ -62,6 +63,29 @@ def drop_recovery_schema(db):
 
 
 class ControlStoreTests(unittest.TestCase):
+    def test_v22_ai_upgrade_is_additive_atomic_and_preserves_history(self):
+        with store.connect() as db:
+            db.execute("INSERT INTO jobs VALUES ('kept-v22','actor','{}','now','now')")
+            db.execute('DROP TABLE ai_explanations')
+            db.execute('PRAGMA user_version=22')
+            tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+            before = {table: sorted([tuple(row) for row in db.execute('SELECT * FROM '+table)], key=repr)
+                      for table in tables}
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            db.execute('CREATE TABLE ai_explanations(sentinel TEXT)')
+        with self.assertRaises(sqlite3.OperationalError):
+            with store.connect():
+                self.fail('conflicting migration accepted')
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 22)
+            self.assert_history(db, before)
+            db.execute('DROP TABLE ai_explanations')
+        with store.connect() as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 23)
+            self.assert_history(db, before)
+            self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
+                             set(before) | {'ai_explanations'})
+
     def v18_history(self):
         """Retain real v18 definitions, with representative irreversible history."""
         import data_management as dm
@@ -140,7 +164,7 @@ class ControlStoreTests(unittest.TestCase):
         self.assertTrue(all(table not in before for table in
                             ('dbt_runs', 'dbt_run_operations', 'dbt_requests')))
         with store.connect() as db:
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 22)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
             self.assert_history(db, before)
             for table in ('dbt_runs', 'dbt_run_operations', 'dbt_requests'):
                 self.assertEqual(db.execute('SELECT count(*) FROM '+table).fetchone()[0], 0)
@@ -159,7 +183,7 @@ class ControlStoreTests(unittest.TestCase):
                              schema_before)
             self.assert_history(db, before)
         with store.connect() as db:
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 22)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
             self.assert_history(db, before)
 
     def test_creation_requests_enforce_scope_foreign_keys_and_immutable_ack(self):
@@ -242,7 +266,7 @@ class ControlStoreTests(unittest.TestCase):
                     'db_creations', 'db_creation_phase_plans', 'db_creation_requests',
                     'db_creation_principal_gates', 'logical_requests', 'logical_effects',
                     'logical_foundations', 'logical_bindings', 'logical_backend_identities',
-                    'dbt_runs', 'dbt_run_operations', 'dbt_requests'}
+                    'dbt_runs', 'dbt_run_operations', 'dbt_requests', 'ai_explanations'}
         for _ in range(2):
             with store.connect() as db:
                 self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)

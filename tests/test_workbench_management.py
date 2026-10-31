@@ -90,7 +90,7 @@ class ManagementHTTPTests(unittest.TestCase):
     def test_grant_management_http_pending_cas_replay_inspect_and_admin(self):
         import control_store
         import data_management as dm
-        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ,SHIROKUMA_STATE_DIR=temp):
+        with tempfile.TemporaryDirectory(dir=self.state_directory.name) as temp, patch.dict(os.environ,SHIROKUMA_STATE_DIR=temp):
             with control_store.connect() as db:
                 database = dm.create_database(db,'arbitrary','Arbitrary','','test')
             route = '/api/v1/databases/'+database.id+'/grants'
@@ -122,7 +122,7 @@ class ManagementHTTPTests(unittest.TestCase):
     def test_grant_roles_malformed_are_400_and_operation_inspection_requires_current_admin(self):
         import control_store
         import data_management as dm
-        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ,SHIROKUMA_STATE_DIR=temp):
+        with tempfile.TemporaryDirectory(dir=self.state_directory.name) as temp, patch.dict(os.environ,SHIROKUMA_STATE_DIR=temp):
             with control_store.connect() as db:
                 database = dm.create_database(db,'research','Research','','test')
             route = '/api/v1/databases/'+database.id+'/grants'
@@ -162,10 +162,40 @@ class ManagementHTTPTests(unittest.TestCase):
         return handler.respond.call_args.args
 
     def setUp(self):
+        import control_store
+        self.state_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.state_directory.cleanup)
+        environment = patch.dict(os.environ, SHIROKUMA_STATE_DIR=self.state_directory.name)
+        environment.start()
+        self.addCleanup(environment.stop)
+
+        real_root = control_store.root
+        temporary_root = Path(self.state_directory.name).resolve()
+
+        def guarded_root():
+            configured_root = os.environ.get('SHIROKUMA_STATE_DIR')
+            self.assertTrue(configured_root, 'Management tests must not use the default state root')
+            self.assertTrue(Path(configured_root).resolve().is_relative_to(temporary_root),
+                            'Management state must stay inside the per-test temporary directory')
+            return real_root()
+
+        root_patch = patch.object(control_store, 'root', side_effect=guarded_root)
+        self.state_root = root_patch.start()
+        self.addCleanup(root_patch.stop)
         self.principal = auth.AuthenticatedPrincipal('admin', 'admin', True)
         self.authentication = patch.object(auth, 'authenticate_principal', side_effect=lambda _: self.principal)
         self.authentication.start()
         self.addCleanup(self.authentication.stop)
+
+    def test_generic_operation_lookup_opens_temporary_store_before_catalog_inspection(self):
+        def inspect_operation(*args, **kwargs):
+            self.state_root.assert_called()
+            self.assertTrue((Path(self.state_directory.name) / 'jobs.sqlite3').is_file())
+            return {'id': 'op'}
+
+        with patch('catalog_admin.inspect_operation', side_effect=inspect_operation) as inspect:
+            self.assertEqual(self.request('/api/v1/operations/op', 'GET'), ({'id': 'op'}, 200))
+            inspect.assert_called_once()
 
     def test_plan_and_handoff_have_no_execution(self):
         with patch('catalog_admin.public_plan', return_value={'id': 'op'}) as plan, \
@@ -251,7 +281,7 @@ class ManagementHTTPTests(unittest.TestCase):
             self.assertFalse(handler.management_request('GET'))
 
     def test_create_inspect_replay_and_conflict_are_authenticated_without_optional_dependencies(self):
-        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, SHIROKUMA_STATE_DIR=directory), \
+        with tempfile.TemporaryDirectory(dir=self.state_directory.name) as directory, patch.dict(os.environ, SHIROKUMA_STATE_DIR=directory), \
                 patch.dict(sys.modules, yaml=None, boto3=None):
             body = dict(sql_catalog='marketing_forecast_2026', profile_id='local-polaris-1.8.0')
             headers = [('Idempotency-Key', 'create-one')]
@@ -310,7 +340,7 @@ assert 'database_generation' not in sys.modules
         import warehouse_operations as core
         from test_database_generation import spec
         bundle = database_generation.render(spec(1))
-        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, SHIROKUMA_STATE_DIR=temp):
+        with tempfile.TemporaryDirectory(dir=self.state_directory.name) as temp, patch.dict(os.environ, SHIROKUMA_STATE_DIR=temp):
             with control_store.connect() as db:
                 for key, value in bundle['manifest']['spec']['databases'].items():
                     db.execute('INSERT INTO databases VALUES (?,?,?,?,?,?,?)',

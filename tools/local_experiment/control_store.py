@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 
 
-VERSION = 22
+VERSION = 23
 
 _CREATION_SCHEMA = '''
 CREATE TABLE db_creations (
@@ -603,6 +603,12 @@ def _bootstrap(connection):
             if statement.strip():
                 connection.execute(statement)
         connection.execute('PRAGMA user_version=22')
+    if _version(connection) == 22:
+        connection.execute('''CREATE TABLE ai_explanations (
+            id TEXT PRIMARY KEY, actor TEXT NOT NULL, idempotency_key TEXT NOT NULL,
+            payload TEXT NOT NULL, context TEXT NOT NULL, pins TEXT NOT NULL,
+            record TEXT NOT NULL, UNIQUE(actor,idempotency_key))''')
+        connection.execute('PRAGMA user_version=23')
     connection.commit()
 
 

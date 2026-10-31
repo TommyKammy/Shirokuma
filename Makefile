@@ -15,6 +15,7 @@ test-resident-core:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_schedule_routes.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_schedules_client.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_schedules_database_ui.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_ai.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_marts.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_db_dbt*.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_dbt*.py'

@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.18.0"
+version: "7.19.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,13 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-31 — DB-P6-4A1 LOCAL SQL explanation
+
+- Added Query Doctor/Copilot SQL interpretation with full9 actor/schema authority, literal/comment redaction, local inference and durable idempotent history; no SQL, plan or admission execution.
+- Real A/admin/8888 and B/engineer/8080 explanations pass. Equal-context different actors, cross-DB input, delayed editor changes, timeout and process-owner loss preserve isolation and never auto-infer on recovery.
+- Both endpoints resolve active-profile AI settings; no credentials copied. Existing rows in 78 control-store tables, 28 data heads, original profile/global config/YAML remain intact; doctor is healthy. Legacy default-store lazy schema23 migration is recorded separately; its test is now isolated. Canonical:89 groups,3,595 pass/34 skip.
+- [Evidence](../../guides/database-p6-4a1-local-sql-explanation-2026-10-31.md). Next is A2 plan explanation; full DB-P6-3/P6-7 and owner M1 acceptance remain open.
 
 ### 2026-10-31 — DB-P6-3R1 indeterminate native graph audit recovery
 

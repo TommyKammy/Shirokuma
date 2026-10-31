@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-31
-version: "1.33"
+version: "1.34"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -15,6 +15,8 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 本ドキュメントは [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) に基づき、2026年10月16日以降の Shirokuma の開発体制（**Antigravity 司令塔 × `codex-cli` GPT-6.1 Sol Medium 実装ワーカー**）および **Phase 0〜Phase 6 再起動ロードマップ** を定義する。
 
 ### Databaseコア機能統合とコンピュート拡張の後続計画
+
+2026-10-31、TRF-11の必須操作対応を確認し、[DB-P6-4A1](../../guides/database-p6-4a1-local-sql-explanation-2026-10-31.md)で許可されたSQLのローカル説明を実装した。Query Doctor／Copilotは保存キー・本人履歴・遅着ガードを共有し、SQL／planの実行や旧INTERNAL経路を使わない。2DB実推論とブラウザー検証を終え、canonical 89単位（3,595成功・34 skip）と文書検証を完了し、この限定範囲を技術受入済みとした。次はA2の認可された実行計画取得・説明であり、5 Bears全面対応やM1完了にはしない。
 
 2026-10-28、[Database後続実装計画](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を作成した。新しいDatabase trackは`DB-P6`〜`DB-P9`とし、下記の旧コアPhase番号と区別する。
 最優先のDB-P6は変換・AI・監査・ガバナンスと共有Warehouseの自動休止／復帰を通常導線へ統合し、技術受入と所有者受入でM1を判定する。

@@ -24,8 +24,8 @@ class LogicalRegistryTests(unittest.TestCase):
         self.db.execute('BEGIN IMMEDIATE')
 
     def remove_v22_schema(self, db):
-        # Historical fixtures must omit v22 tables and their implicit indexes.
-        for table in ('dbt_run_operations', 'dbt_requests', 'dbt_runs'):
+        # Historical fixtures must omit v22/v23 tables and their implicit indexes.
+        for table in ('ai_explanations', 'dbt_run_operations', 'dbt_requests', 'dbt_runs'):
             db.execute('DROP TABLE ' + table)
 
     def base(self, database_id='db', mode='logical_v1', reservation=1):
@@ -226,8 +226,10 @@ class LogicalRegistryTests(unittest.TestCase):
         db.rollback()
         self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 19)
         self.assertEqual(db.execute('SELECT type,name,sql FROM sqlite_master ORDER BY name').fetchall(), before)
+        self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='ai_explanations'").fetchone())
         store._bootstrap(db)
         self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
+        self.assertEqual(db.execute('SELECT count(*) FROM ai_explanations').fetchone()[0], 0)
 
     def test_unpublished_binding_identity_and_active_profile_foundation_denied(self):
         binding = self.setup_ready(); self.grant()
@@ -386,6 +388,7 @@ class LogicalRegistryTests(unittest.TestCase):
             for _ in range(2):
                 with store.connect() as reopened:
                     self.assertEqual(reopened.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
+                    self.assertEqual(reopened.execute('SELECT count(*) FROM ai_explanations').fetchone()[0], 0)
                     self.assertEqual(self.effect_rows(reopened), before)
                     self.assertEqual([tuple(row) for row in reopened.execute(
                         'SELECT type,name,sql FROM sqlite_master ORDER BY name')], schema)
@@ -410,6 +413,7 @@ class LogicalRegistryTests(unittest.TestCase):
                     with store.connect():
                         self.fail('failed migration must not yield a connection')
             self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 20)
+            self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='ai_explanations'").fetchone())
             self.assertEqual(self.effect_rows(db), before)
             self.assertEqual([tuple(row) for row in db.execute(
                 'SELECT type,name,sql FROM sqlite_master ORDER BY name')], schema)
@@ -420,6 +424,7 @@ class LogicalRegistryTests(unittest.TestCase):
             db.rollback()
             with store.connect() as restored:
                 self.assertEqual(restored.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
+                self.assertEqual(restored.execute('SELECT count(*) FROM ai_explanations').fetchone()[0], 0)
                 self.assertEqual(self.effect_rows(restored), before)
                 self.assert_effect_constraints(restored)
                 restored.execute("UPDATE logical_effects SET state='OBSERVED_APPLIED' WHERE state='UNKNOWN'")

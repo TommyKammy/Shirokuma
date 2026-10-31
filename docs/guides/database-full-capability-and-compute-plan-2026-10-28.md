@@ -270,7 +270,7 @@ Commanderが一unitごとに対象ファイル、禁止事項、検証コマン�
 
 DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C／C2D／C2E1／C2E2は各限定範囲の技術受入済みである。[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)でVIEW証拠付きTABLE公開と独立履歴を接続し、[R1](database-p6-3r1-dbt-audit-recovery-2026-10-31.md)で不確定なnative_graph COUNT監査の結果をUNKNOWNに保ったまま実行閉鎖・受付再開を証明した。新しい未閉鎖実行は0件である。
 
-次の優先unitはDB-P6-4AのQuery Doctor／Copilot Explain読取り専用Database context統合である。その前にTRF-11の必須操作との対応を短く確認する。承認済みlake_martsはVIEW／TABLEで、incremental設定はない。native候補の直接置換、正式VIEW公開、VIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、DB-P6-3全体とM1本人受入は未完了である。
+[DB-P6-4A1](database-p6-4a1-local-sql-explanation-2026-10-31.md)でQuery Doctor／CopilotのSQL説明を実装し、TRF-11の必須操作対応を確認した。実行計画は取得せず、この限定範囲は89単位の回帰検証と実機・画面検証で技術受入済みである。旧default storeの検証時移行はガイドへ分けて記録した。次の優先unitはA2の認可された実行計画取得・説明である。元の要求IDで不確定な受付を照合し、`ANALYZE`による実SQL実行や全体の最新query照会へ広げない。native候補の直接置換、正式VIEW公開、VIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、DB-P6-3全体とM1本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

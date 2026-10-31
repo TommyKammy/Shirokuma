@@ -24,15 +24,17 @@ AI_CONFIG_PATH = wap.state_path('ai_config.json')
 _ai_config = {}
 
 
-def load_ai_config():
+def load_ai_config(*, path=None):
     config = dict(provider='local-openai',
                   model=os.environ.get('BEAR_MODEL', 'qwen3.8-flash-next'),
                   api_url=os.environ.get('BEAR_MODEL_URL', 'http://127.0.0.1:8001/v1'),
                   api_key_env='BEAR_API_KEY' if os.environ.get('BEAR_API_KEY') else 'OPENAI_API_KEY',
                   api_key='', timeout=30, max_tokens=1024, temperature=0.0)
-    config.update(_ai_config)
+    if path is None:
+        config.update(_ai_config)
+        path = AI_CONFIG_PATH
     try:
-        saved = json.loads(AI_CONFIG_PATH.read_text())
+        saved = json.loads(Path(path).read_text())
         if isinstance(saved, dict):
             config.update(saved)
     except (OSError, ValueError):

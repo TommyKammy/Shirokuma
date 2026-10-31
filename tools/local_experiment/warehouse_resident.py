@@ -1512,6 +1512,7 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             return WorkbenchHandler.respond(self, value, status)
 
         def stage_request(self):
+            import ai_routes
             import db_stage_routes
             import db_mart_routes
             import dbt_routes
@@ -1523,6 +1524,7 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             from workbench_server import request_origin_allowed
             url = urllib.parse.urlsplit(self.path)
             stage = url.path == '/api/v1/stages' or url.path.startswith('/api/v1/stages/')
+            ai = url.path == '/api/v1/bears' or url.path.startswith('/api/v1/bears/')
             dbt = url.path == '/api/v1/dbt' or url.path.startswith('/api/v1/dbt/')
             mart = url.path == '/api/v1/marts' or url.path.startswith('/api/v1/marts/')
             schedule = any(url.path == '/api/v1/' + name or url.path.startswith('/api/v1/' + name + '/')
@@ -1531,14 +1533,14 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                             for name in ('databases', 'schemas', 'objects', 'grants'))
             model_read = self.command == 'GET' and url.path == '/api/v1/wap/models'
             session_read = self.command == 'GET' and url.path == '/api/session'
-            if not stage and not mart and not dbt and not schedule and not inventory and not model_read and not session_read:
+            if not ai and not stage and not mart and not dbt and not schedule and not inventory and not model_read and not session_read:
                 return False
             try:
                 principal = request_auth.authenticate_principal(self.headers)
                 roles = self.headers.get_all('X-Shirokuma-Role', [])
                 if len(roles) != 1 or roles[0] not in request_auth.ROLES:
                     raise ValueError('one explicit role required')
-                if (stage or mart or dbt or schedule) and self.command == 'POST' and self.headers.get('Origin') and not request_origin_allowed(self.headers):
+                if (ai or stage or mart or dbt or schedule) and self.command == 'POST' and self.headers.get('Origin') and not request_origin_allowed(self.headers):
                     raise QueryError('INVALID_ORIGIN', 403)
                 params = urllib.parse.parse_qs(url.query, keep_blank_values=True)
                 if session_read:
@@ -1552,6 +1554,8 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
                     self.respond(dict(username=principal.principal_id, role=role,
                         maximum_role=principal.maximum_role, authenticated=True,
                         data_mode='database', platform_admin=principal.platform_admin))
+                elif ai:
+                    ai_routes.dispatch(self, self.command, url.path, params, principal, roles[0])
                 elif inventory:
                     if not db_inventory_routes.dispatch(self, self.command, url.path, params, principal, roles[0]):
                         raise QueryError('NOT_FOUND', 404)
