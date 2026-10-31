@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.19.0"
+version: "7.20.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -20,12 +20,18 @@ tags: [shirokuma, local, milestones]
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
 
+### 2026-10-31 — DB-P6-4A2 authorized TABLE plan explanation
+
+- [実装・検証記録](../../guides/database-p6-4a2-plan-explanation-2026-10-31.md)：Query Doctor／Copilotへ固定の非ANALYZE EXPLAINと安全な演算子構造のローカル説明を接続。元SQLは未実行。
+- 2DB・V/E/A、取消・cold Wake・保存後restart・入力変更／再読込の元要求復旧を実機確認。既存全行・28 data head・設定を保全した。canonical 90単位（3,672成功・34 skip）と最終重点・文書検証を完了し、この限定範囲を技術受入済みとした。
+- VIEW計画・他Bears／SQL案とWAP連携は後続。P6-4全体／P6-7／M1本人受入は未完了。
+
 ### 2026-10-31 — DB-P6-4A1 LOCAL SQL explanation
 
 - Added Query Doctor/Copilot SQL interpretation with full9 actor/schema authority, literal/comment redaction, local inference and durable idempotent history; no SQL, plan or admission execution.
 - Real A/admin/8888 and B/engineer/8080 explanations pass. Equal-context different actors, cross-DB input, delayed editor changes, timeout and process-owner loss preserve isolation and never auto-infer on recovery.
 - Both endpoints resolve active-profile AI settings; no credentials copied. Existing rows in 78 control-store tables, 28 data heads, original profile/global config/YAML remain intact; doctor is healthy. Legacy default-store lazy schema23 migration is recorded separately; its test is now isolated. Canonical:89 groups,3,595 pass/34 skip.
-- [Evidence](../../guides/database-p6-4a1-local-sql-explanation-2026-10-31.md). Next is A2 plan explanation; full DB-P6-3/P6-7 and owner M1 acceptance remain open.
+- [Evidence](../../guides/database-p6-4a1-local-sql-explanation-2026-10-31.md). Plan explanation is tracked separately in A2; full DB-P6-3/P6-7 and owner M1 acceptance remain open.
 
 ### 2026-10-31 — DB-P6-3R1 indeterminate native graph audit recovery
 

@@ -13,6 +13,8 @@ import os
 import secrets
 import re
 import threading
+import time
+import socket
 from urllib.parse import urlsplit
 import uuid
 from typing import Optional
@@ -46,6 +48,7 @@ class _Pin:
     initial_response: object = field(default=None, repr=False)
     initial_error: object = field(default=None, repr=False)
     initial_attempted: bool = True
+    plan: object = field(default=None, repr=False)
 
 
 _pins = {}
@@ -104,14 +107,59 @@ def _transport(url, method, pin, body=None):
                 if admission._row(db, pin.admission)['execution_closure']:
                     raise QueryError('EXECUTION_CLOSED', 409)
                 admission.check_execution(db, pin.admission)
+        if pin.plan is not None and initial:
+            import db_ai_plan
+            with control_store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                db_ai_plan.dispatch_claim(db, pin.plan, pin.context, claim=True)
+                revalidate_admission(db, pin.plan.principal, pin.context,
+                    backend_username=pin.headers['X-Trino-User'])
+            pin.initial_attempted = True
         connection = (http.client.HTTPSConnection(parsed.hostname, parsed.port or 443,
             context=pin.tls, timeout=30) if parsed.scheme == 'https' else
             http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=30))
+        timer = None
         try:
+            if pin.plan is not None:
+                import db_ai_plan
+                deadline = time.monotonic() + 10 if method == 'DELETE' else pin.plan.deadline
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise QueryError('AI_PLAN_TIMEOUT', 504)
+                connection.timeout = min(30, remaining)
+                connection.connect()
+                transport_socket = connection.sock
+                def expire():
+                    try:
+                        transport_socket.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+                timer = threading.Timer(remaining, expire)
+                timer.daemon = True
+                timer.start()
             connection.request(method, parsed.path + ('?' + parsed.query if parsed.query else ''),
                                body=body, headers=pin.headers)
             response = connection.getresponse()
-            payload = response.read()
+            if pin.plan is None:
+                payload = response.read()
+            else:
+                chunks, size = [], 0
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise QueryError('AI_PLAN_TIMEOUT', 504)
+                    if connection.sock is not None:
+                        connection.sock.settimeout(min(30, remaining))
+                    chunk = response.read1(min(8192, db_ai_plan.MAX_RESPONSE + 1 - size))
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    size += len(chunk)
+                    if size > db_ai_plan.MAX_RESPONSE:
+                        raise QueryError('AI_PLAN_TOO_LARGE', 502)
+                payload = b''.join(chunks)
+                if time.monotonic() >= deadline:
+                    raise QueryError('AI_PLAN_TIMEOUT', 504)
             if not 200 <= response.status < 300:
                 raise QueryError('QUERY_BACKEND_FAILED', 502)
             return json.loads(payload) if payload else {}
@@ -120,6 +168,8 @@ def _transport(url, method, pin, body=None):
         except Exception:
             raise QueryError('QUERY_BACKEND_FAILED', 502) from None
         finally:
+            if timer is not None:
+                timer.cancel()
             connection.close()
 
 
@@ -250,7 +300,7 @@ def _owned(principal, query_id, selected_role, *, grants=True, cleanup=False):
     return row
 
 
-def _state(query_id, state, backend_id=None, evidence_ref=None):
+def _state(query_id, state, backend_id=None, evidence_ref=None, *, plan_result=None):
     with control_store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         if admission.query_closure(db, query_id):
@@ -264,6 +314,12 @@ def _state(query_id, state, backend_id=None, evidence_ref=None):
         handle = _pins[query_id].admission
         if state in _TERMINAL or state == 'UNKNOWN':
             admission.finish(db, handle, state=state, evidence_ref=evidence_ref)
+        pin = _pins[query_id]
+        if pin.plan is not None:
+            import db_ai_plan
+            db_ai_plan.query_state(db, pin.plan, pin.context, query_id, state, backend_id, plan_result)
+            if state in _TERMINAL or state == 'UNKNOWN':
+                pin.plan.raw = None
         child = db.execute('SELECT operation_id,commit_result FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
         if child is not None and state == 'FINISHED' and child['commit_result'] is not None:
             db.execute('UPDATE dataops_operations SET committed=1,result=? WHERE id=?',
@@ -296,6 +352,13 @@ def _cancel_locked(query_id, pin, row, url=None):
     if row['state'] in _TERMINAL:
         _close_query_owner(pin)
         return {'id': query_id, 'state': row['state']}
+    if pin.plan is not None:
+        import db_ai_plan
+        with control_store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            claimed = db_ai_plan.cancel_claim(db, pin.plan, pin.context)
+        if not claimed:
+            return {'id': query_id, 'state': row['state']}
     if not pin.initial_attempted:
         _state(query_id, 'CANCELED')
         return {'id': query_id, 'state': 'CANCELED'}
@@ -347,7 +410,7 @@ def _page(query_id, page):
     if 'columns' in page:
         if not isinstance(page['columns'], list):
             raise QueryError('QUERY_BACKEND_FAILED', 502)
-        pin.columns = deepcopy(page['columns'])
+        pin.columns = deepcopy(page['columns']) if pin.plan is None else []
     state = str(stats.get('state', 'RUNNING' if next_uri else 'FINISHED')).upper()
     if page.get('error'):
         state = 'FAILED'
@@ -356,6 +419,8 @@ def _page(query_id, page):
     elif state not in ('QUEUED', 'RUNNING'):
         state = 'RUNNING'
     data = page.get('data', [])
+    if pin.plan is not None:
+        return _plan_page(query_id, pin, row, backend_id, state, next_uri, data)
     if not isinstance(data, list):
         raise QueryError('QUERY_BACKEND_FAILED', 502)
     truncated = False
@@ -387,6 +452,27 @@ def _page(query_id, page):
         result['truncated'] = True
     result['stats']['state'] = state
     return result
+
+
+def _plan_page(query_id, pin, row, backend_id, state, next_uri, data):
+    # Raw columns, stats and cells never reach the generic page/cache layer.
+    pin.columns = []
+    try:
+        pin.plan.consume(data)
+    except Exception as error:
+        pin.plan.raw = None
+        if state not in _TERMINAL:
+            raise
+        # Projection failure cannot erase an already proven engine terminal.
+        pin.plan.error = error.code if isinstance(error, QueryError) else 'AI_PLAN_INVALID'
+    result = pin.plan.terminal(pin.context) if state == 'FINISHED' else None
+    if state in ('FAILED', 'CANCELED', 'UNKNOWN'):
+        pin.plan.raw = None
+    _state(query_id, state, backend_id, plan_result=result)
+    return dict(id=query_id, backend_query_id=backend_id, request_id=row['request_id'],
+        worksheet_id=row['worksheet_id'], context=_metadata(row), columns=[], data=[],
+        stats={'state': state}, state=state, next_uri=next_uri,
+        cancel_uri='/api/v1/queries/' + query_id + '/cancel')
 
 
 def _backend_statement(sql):
@@ -618,6 +704,78 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
         return response
 
 
+def submit_explain(principal, context, *, explanation_id):
+    """One parent-bound intent. An existing link is observation, never dispatch."""
+    import db_ai_plan as plan
+    import db_ai as ai
+    if not isinstance(context, ResolvedQueryContext):
+        raise QueryError('UNKNOWN_CONTEXT', 400)
+    _, record, private = plan._owned(principal, context, explanation_id)
+    ai._authority(principal, context, private['relations'])
+    if record['plan']['query_id']:
+        row = _owned(principal, record['plan']['query_id'], context.selected_role)
+        return dict(id=row['id'], state=row['state'], next_uri=None, columns=[], data=[], stats={'state': row['state']})
+    plan.check_metadata(principal, context, explanation_id, private['relations'])
+    frozen = _capture_dataops(principal, context)
+    original = record['input']['sql']
+    try:
+        backend_sql = 'EXPLAIN (TYPE DISTRIBUTED, FORMAT JSON) ' + _backend_statement(original)
+    except ValueError:
+        raise QueryError('AI_INPUT_INVALID', 400) from None
+    query_id = str(uuid.uuid4())
+    headers = dict(frozen.headers)
+    headers['X-Trino-Source'] = 'shirokuma-query-' + query_id
+    owner = _acquire_query_owner(query_id)
+    capture = plan.Capture(principal, explanation_id, private['relations'])
+    try:
+        with control_store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            _, current, private = plan._owned(principal, context, explanation_id, db)
+            ai._transaction_authority(db, principal, context, capture.pins)
+            if current['plan']['query_id']:
+                owner.close()
+                row = db.execute('SELECT id,state FROM query_records WHERE id=?',
+                    (current['plan']['query_id'],)).fetchone()
+                return dict(id=row['id'], state=row['state'], next_uri=None, columns=[], data=[], stats={'state': row['state']})
+            plan.dispatch_claim(db, capture, context, claim=False)
+            revalidate_admission(db, principal, context, backend_username=headers['X-Trino-User'])
+            handle = admission.admit(db, warehouse_id=context.warehouse_id,
+                actor=principal.principal_id, kind='query', subject_id=query_id,
+                generation_id=context.generation_id, database_id=context.database_id)
+            registry.record_query(db, registry.QueryRecord(query_id, principal.principal_id,
+                registry.QueryContext(context.database_id, context.schema_id, context.warehouse_id,
+                                      context.generation_id), 'QUEUED', datetime.now(timezone.utc).isoformat()))
+            registry.record_query_execution(db, registry.QueryExecutionContext(query_id,
+                context.selected_role, 'read-only', context.sql_catalog, context.sql_schema,
+                context.binding_revision, context.grant_revision, headers['X-Trino-User'],
+                secrets.token_urlsafe(32), None, explanation_id, 'ai-plan-' + explanation_id, backend_sql))
+            current['plan'].update(query_id=query_id, query_state='QUEUED')
+            plan._save(db, explanation_id, current, private)
+        _pins[query_id] = _Pin(context, '', headers, frozen.tls, admission=handle, owner=owner,
+            max_rows=None, initial_attempted=False, plan=capture)
+    except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as error:
+        owner.close()
+        raise QueryError(error.code, error.status) from None
+    except BaseException:
+        owner.close()
+        raise
+    import warehouse_lifecycle as lifecycle
+    if lifecycle.applicable() and lifecycle.requires_wake():
+        response = _pending_page(query_id, _pins[query_id])
+        try:
+            threading.Thread(target=_cold_initial, args=(principal, query_id, backend_sql),
+                daemon=True, name='ai-plan-query-' + query_id).start()
+        except BaseException as error:
+            _initial_failure(query_id, error)
+            raise QueryError('QUERY_BACKEND_FAILED', 502) from None
+        return response
+    _cold_initial(principal, query_id, backend_sql)
+    pin = _pins[query_id]
+    if pin.initial_error:
+        raise QueryError(*pin.initial_error)
+    return pin.initial_response or _pending_page(query_id, pin, state=_row(query_id)['state'])
+
+
 def _capture_dataops(principal, context):
     """Private credential capture for a server-owned DataOps operation."""
     decision, headers = trino_auth.prepare_backend_v2(principal=principal,
@@ -733,17 +891,36 @@ def _receive_accepted(query_id, url, method, body=None):
         except QueryError:
             _best_cancel(query_id)
             raise
+    pin = _pins[query_id]
+    if pin.plan is not None and method in ('POST', 'GET'):
+        import db_ai_plan
+        try:
+            db_ai_plan.check_metadata(pin.plan.principal, pin.context,
+                pin.plan.explanation_id, pin.plan.pins)
+            with control_store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                db_ai_plan.dispatch_claim(db, pin.plan, pin.context, claim=False)
+        except QueryError:
+            _best_cancel(query_id)
+            raise
     try:
-        if method == 'POST':
-            _pins[query_id].initial_attempted = True
+        if method == 'POST' and pin.plan is None:
+            pin.initial_attempted = True
         return _page(query_id, _transport(url, method, _pins[query_id], body))
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout):
         raise
-    except QueryError:
-        _state(query_id, 'UNKNOWN')
+    except QueryError as error:
+        if _row(query_id)['state'] not in _TERMINAL:
+            if pin.plan is not None and not pin.initial_attempted:
+                import db_ai_plan
+                _, record, _ = db_ai_plan._owned(pin.plan.principal, pin.context, pin.plan.explanation_id)
+                _state(query_id, 'CANCELED' if record['cancel_requested'] else 'FAILED')
+            else:
+                _state(query_id, 'UNKNOWN', plan_result={'error': error.code})
         raise
     except Exception:
-        _state(query_id, 'UNKNOWN')
+        if _row(query_id)['state'] not in _TERMINAL:
+            _state(query_id, 'UNKNOWN')
         raise QueryError('QUERY_BACKEND_FAILED', 502) from None
 
 

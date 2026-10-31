@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-31
-version: "2.19.0"
+version: "2.20.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-10-31、[DB-P6-4A2](../../guides/database-p6-4a2-plan-explanation-2026-10-31.md)でTABLEの非ANALYZE計画取得とローカル説明を実装した。plan／推論の状態を分離し、通常受付・Wake、保存済み計画の保持、取消、元キーによる復旧、入力変更後の未確定要求の保持を接続した。2DB・V/E/Aの実機・画面検証と既存全行・28 data headの保全を確認した。canonical 90単位（3,672成功・34 skip）と最終重点・文書検証を完了し、この限定範囲を技術受入済みとした。VIEW計画と他Bears／SQL案は別単位であり、DB-P6-3全体／P6-7／M1本人受入は継続する。
 
 > [!IMPORTANT]
 > **Operating Model**: [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) and [DEV-04F](04F_Commander_Worker_and_Pragmatic_Roadmap.md) govern current development.
@@ -20,7 +22,7 @@ tags: [shirokuma, local, handoff, gates]
 
 ## Current Phase & Active Gate Status
 
-2026-10-31、[DB-P6-4A1 LOCAL SQL説明](../../guides/database-p6-4a1-local-sql-explanation-2026-10-31.md)を実装し、Query Doctor／Copilotを本人・9項目context・全参照schema権限へ接続した。SQLを実行せず、値・コメントを伏せたSQLと列metadataだけでローカル説明を返す。2DBの実推論、復旧・履歴・遅着応答の画面ガードを検証し、canonical 89単位（3,595成功・34 skip）と文書検証を完了し、この限定範囲を技術受入済みとした。次の単位はA2の実行計画説明で、DB-P6-3全体／P6-7／M1本人受入は継続する。
+2026-10-31、[DB-P6-4A1 LOCAL SQL説明](../../guides/database-p6-4a1-local-sql-explanation-2026-10-31.md)を実装し、Query Doctor／Copilotを本人・9項目context・全参照schema権限へ接続した。SQLを実行せず、値・コメントを伏せたSQLと列metadataだけでローカル説明を返す。2DBの実推論、復旧・履歴・遅着応答の画面ガードを検証し、canonical 89単位（3,595成功・34 skip）と文書検証を完了し、この限定範囲を技術受入済みとした。実行計画はA2へ分け、DB-P6-3全体／P6-7／M1本人受入は継続する。
 
 後続計画は[Databaseコア機能統合とコンピュート拡張](../../guides/database-full-capability-and-compute-plan-2026-10-28.md)を参照する。DB作成導線は[本人の条件付き受入](../../guides/database-logical-create-owner-acceptance-2026-10-28.md)に進み、待ち時間改善を継続する。
 2026-10-29、DB-P6-0の[表示契約](../../guides/database-p6-0-implementation-2026-10-29.md)、DB-P6-1の[保存metadata監査](../../guides/database-p6-1-implementation-2026-10-29.md)は技術受入済みである。

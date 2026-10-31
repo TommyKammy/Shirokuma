@@ -33,7 +33,7 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
 | データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を技術受入済み。C2E1のnative VIEW graph構築・品質testを技術受入済み。C2E2のVIEW証拠付きTABLE公開・独立公開履歴を技術受入済み | 正式公開はTABLE。VIEW含有native graphのTABLE公開はC2E2の全VIEW・全品質条件を適用。incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
-| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview、Bears／Copilotは未接続 | telemetryと耐久監査を分離。AIはDB-P6-4で認可／WAPへ接続する |
+| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。Bears／CopilotはSQL・TABLE計画説明に対応、他actionは未接続 | telemetryと耐久監査を分離。AIの変更提案はDB-P6-4で認可／WAPへ接続する |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
 
@@ -270,7 +270,9 @@ Commanderが一unitごとに対象ファイル、禁止事項、検証コマン�
 
 DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C／C2D／C2E1／C2E2は各限定範囲の技術受入済みである。[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)でVIEW証拠付きTABLE公開と独立履歴を接続し、[R1](database-p6-3r1-dbt-audit-recovery-2026-10-31.md)で不確定なnative_graph COUNT監査の結果をUNKNOWNに保ったまま実行閉鎖・受付再開を証明した。新しい未閉鎖実行は0件である。
 
-[DB-P6-4A1](database-p6-4a1-local-sql-explanation-2026-10-31.md)でQuery Doctor／CopilotのSQL説明を実装し、TRF-11の必須操作対応を確認した。実行計画は取得せず、この限定範囲は89単位の回帰検証と実機・画面検証で技術受入済みである。旧default storeの検証時移行はガイドへ分けて記録した。次の優先unitはA2の認可された実行計画取得・説明である。元の要求IDで不確定な受付を照合し、`ANALYZE`による実SQL実行や全体の最新query照会へ広げない。native候補の直接置換、正式VIEW公開、VIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、DB-P6-3全体とM1本人受入は未完了である。
+[DB-P6-4A1](database-p6-4a1-local-sql-explanation-2026-10-31.md)のSQL説明に続き、[A2](database-p6-4a2-plan-explanation-2026-10-31.md)でQuery Doctor／CopilotのTABLE計画取得・説明を実装した。固定の非ANALYZE EXPLAINを通常受付・Wakeへ通し、元SQLは未実行とする。planと推論の状態を分け、モデル不調時も取得済み計画を保持する。2DB・V/E/A、取消・cold Wake・保存後restart・UNKNOWN・入力変更と再読込の実機／画面検証を行い、既存全行・28 data head・設定を保全した。canonical 90単位（3,672成功・34 skip）と最終重点・文書検証を完了し、この限定範囲を技術受入済みとした。旧default storeのA1検証時移行はA1ガイドへ分けて記録した。
+
+VIEW計画の依存先認可、最新query指定、取得済み計画だけを使う明示的な再説明、SQL案／WAP引渡し、他Bearsは後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、VIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、DB-P6-3全体とM1本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 
