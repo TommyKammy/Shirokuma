@@ -71,4 +71,6 @@ A2の未確定要求は両入力から独立した本人・9項目context・work
 
 詳細証拠は`var/shirokuma/db-p6-4a2-2026-10-31/private/`の`preservation-after-canonical.json`、`final-execution-summary.json`、`ui-unknown-final-summary.json`と`ui-plan-explanation.jpg`に保存した。これらはprivateな検証資料であり、配布成果物には含めない。
 
-A1のSQL説明は継続する。VIEW依存の計画対応、取得済み計画だけを使う新しい明示再説明、他BearsやSQL案／WAPへの連携は後続単位とする。DB-P6-3全体、P6-7の縦断検証、M1の本人受入は継続する。
+A2受入時点では、VIEW依存の計画対応、取得済み計画だけを使う新しい明示再説明、他BearsやSQL案／WAPへの連携を後続単位とした。A1のSQL説明、DB-P6-3全体、P6-7の縦断検証、M1の本人受入は継続する。
+
+後続の[DB-P6-4A3](database-p6-4a3-view-plan-explanation-2026-10-31.md)で、`logical_v1`の対応するINVOKER VIEWと、同一DBの再帰依存の認可を条件にした計画説明を追加した。このガイドのA2受入範囲・件数・保全証拠は当時の記録として保持する。

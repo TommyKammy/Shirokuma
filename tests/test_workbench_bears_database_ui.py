@@ -607,8 +607,8 @@ await boot();const before=calls.length;
 for(const body of [{bear:'query',target:'latest'},{bear:'query',target:'query-id'},{bear:'sre'},{bear:'data',action:'generate'},{bear:'data',action:'publish'},{bear:'catalog'},{bear:'policy'}])await assert.rejects(api('/api/bears/run',body));
 assert.equal(calls.length,before);
 for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button','wake','chill'])assert.equal($(id).disabled,true,id);
-assert.match($('database-bears-notice').textContent,/SQL explanation and TABLE execution plan explanation/);
-setLanguage('ja');assert.match($('database-bears-notice').textContent,/SQL の説明と TABLE の実行計画の説明/);
+assert.match($('database-bears-notice').textContent,/SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs/);
+setLanguage('ja');assert.match($('database-bears-notice').textContent,/SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明/);
 ''')
 
     def test_no_global_history_or_explanation_calls_at_boot(self):

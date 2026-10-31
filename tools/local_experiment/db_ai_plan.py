@@ -9,6 +9,7 @@ import uuid
 
 import control_store
 import db_ai as ai
+import db_ai_plan_views as views
 from query_context import QueryError
 
 KIND = 'sql_plan_explanation'
@@ -171,7 +172,12 @@ def _save(db, ident, record, private):
 
 def check_metadata(principal, context, ident, pins):
     row, record, _ = _owned(principal, context, ident)
-    current, _, _ = ai._capture(principal, context, record['input']['sql'], tables_only=True)
+    try:
+        current, _, _, _ = views.capture(principal, context, record['input']['sql'])
+    except QueryError as error:
+        if views.bearing(pins) and error.code == 'AI_PLAN_VIEW_UNSUPPORTED':
+            ai._fail('AI_METADATA_CHANGED', 409)
+        raise
     if current != pins:
         ai._fail('AI_METADATA_CHANGED', 409)
 
@@ -194,9 +200,10 @@ def dispatch_claim(db, capture, context, *, claim):
         _save(db, capture.explanation_id, record, private)
 
 
-def cancel_claim(db, capture, context):
+def cancel_claim(db, capture, context, *, caller_intent=True):
     row, record, private = _owned(capture.principal, context, capture.explanation_id, db)
-    record['cancel_requested'] = True
+    if caller_intent:
+        record['cancel_requested'] = True
     claimed = private['control'].get('cancel_claimed', False)
     private['control']['cancel_claimed'] = True
     _save(db, capture.explanation_id, record, private)
@@ -230,7 +237,12 @@ def query_state(db, capture, context, query_id, state, backend_id, result):
             record.update(state='CANCELED', inference_state='CANCELED')
     elif state in ('FAILED', 'CANCELED', 'UNKNOWN'):
         status = state if state in ('CANCELED', 'UNKNOWN') else 'FAILED'
-        error = result.get('error') if result else (
+        internal_stop = private['control'].get('cancel_claimed') and not record['cancel_requested']
+        if state == 'CANCELED' and capture.error and internal_stop:
+            status = 'FAILED'
+        error = ('AI_PLAN_CANCELED' if state == 'CANCELED' and record['cancel_requested'] else
+            result.get('error') if result else
+            capture.error if capture.error and (internal_stop or views.bearing(capture.pins)) else
             plan.get('error_code') if status == 'UNKNOWN' and plan.get('error_code') else 'AI_PLAN_' + status)
         record.update(state=status, plan_status=status, inference_state='CANCELED' if
             record['cancel_requested'] else 'NOT_STARTED', error_code=error)
@@ -401,7 +413,7 @@ def _run(principal, context, ident, pins, config, prompt_sql, relations, languag
             query_id = page['id']
             pin = qs._pins[query_id]
             if time.monotonic() >= pin.plan.deadline:
-                qs._best_cancel(query_id)
+                qs._best_cancel(query_id, cause='AI_PLAN_TIMEOUT')
                 ai._fail('AI_PLAN_TIMEOUT', 504)
             page = qs.fetch(principal, query_id, page['next_uri'].rsplit('/', 1)[1],
                 selected_role=context.selected_role)
@@ -417,7 +429,9 @@ def _run(principal, context, ident, pins, config, prompt_sql, relations, languag
             ai._transaction_authority(db, principal, context, pins)
             record['inference_state'] = 'RUNNING'
             _save(db, ident, record, private)
-        text = ai._complete(config, prompt_sql, relations, language, plan=record['plan']['operators'])
+        extra = ({'view_dependencies': record['metadata']['view_dependencies']}
+            if 'view_dependencies' in record['metadata'] else {})
+        text = ai._complete(config, prompt_sql, relations, language, plan=record['plan']['operators'], **extra)
         check_metadata(principal, context, ident, pins)
         with control_store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -430,7 +444,7 @@ def _run(principal, context, ident, pins, config, prompt_sql, relations, languag
     except QueryError as error:
         _, record, _ = _owned(principal, context, ident)
         if record['plan']['query_id'] and record['plan']['query_state'] not in qs._TERMINAL:
-            qs._best_cancel(record['plan']['query_id'])
+            qs._best_cancel(record['plan']['query_id'], cause=error.code)
         _settle_error(principal, context, ident, error.code)
     except Exception:
         _settle_error(principal, context, ident, 'AI_PLAN_OUTCOME_UNKNOWN')
@@ -452,7 +466,7 @@ def submit(principal, context, *, key, sql, language):
             (principal.principal_id, key)).fetchone()
     if row:
         return replay(row)
-    pins, relations, prompt_sql = ai._capture(principal, context, sql, tables_only=True)
+    pins, relations, prompt_sql, dependencies = views.capture(principal, context, sql)
     config = ai._config()
     ident, now = str(uuid.uuid4()), ai._now()
     record = dict(id=ident, kind=KIND, state='QUEUED', actor=principal.principal_id,
@@ -463,6 +477,8 @@ def submit(principal, context, *, key, sql, language):
         inference_state='NOT_STARTED', plan_status='NOT_COLLECTED',
         plan=dict(format='TRINO_DISTRIBUTED_JSON', query_id=None, backend_query_id=None,
             query_state='NOT_SUBMITTED', execution_closure=None, captured_at=None, operators=None, error_code=None))
+    if dependencies is not None:
+        record['metadata']['view_dependencies'] = dependencies
     private = dict(relations=pins, control={})
     owner = ai._owner(ident)
     try:

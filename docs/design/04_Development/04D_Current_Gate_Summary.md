@@ -5,14 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-31
-version: "2.20.0"
+version: "2.21.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
 
-2026-10-31、[DB-P6-4A2](../../guides/database-p6-4a2-plan-explanation-2026-10-31.md)でTABLEの非ANALYZE計画取得とローカル説明を実装した。plan／推論の状態を分離し、通常受付・Wake、保存済み計画の保持、取消、元キーによる復旧、入力変更後の未確定要求の保持を接続した。2DB・V/E/Aの実機・画面検証と既存全行・28 data headの保全を確認した。canonical 90単位（3,672成功・34 skip）と最終重点・文書検証を完了し、この限定範囲を技術受入済みとした。VIEW計画と他Bears／SQL案は別単位であり、DB-P6-3全体／P6-7／M1本人受入は継続する。
+2026-10-31、[DB-P6-4A3](../../guides/database-p6-4a3-view-plan-explanation-2026-10-31.md)で[A2](../../guides/database-p6-4a2-plan-explanation-2026-10-31.md)のTABLE計画説明を、`logical_v1`の対応するnative／外部登録INVOKER VIEWへ拡張した。再帰依存を同一DBへ限定し、全schemaのquery権限とVIEWのhead／格納先証拠を検査する。元SQLは固定の非ANALYZE EXPLAINで計画取得し、実行しない。保存済みVIEW内の整数snapshot参照は、参照先TABLE・指定snapshotの存在と現行列構成に一致するschemaを検証して扱う。実機・画面で重点検証した。全体回帰91単位（3,719成功・34 skip）に加え、回帰開始後の修正を最終重点backend204件・UI80件で確認し、この限定範囲を技術受入済みとした。DEFINER・他DB参照・列構成が異なる履歴schema・非整数のtime travel、他Bears／SQL案・WAP連携は後続であり、P6-4全体／DB-P6-3全体／P6-7／M1本人受入は未完了である。
 
 > [!IMPORTANT]
 > **Operating Model**: [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) and [DEV-04F](04F_Commander_Worker_and_Pragmatic_Roadmap.md) govern current development.

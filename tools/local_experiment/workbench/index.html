@@ -2565,7 +2565,7 @@ function dbSave(){const w=dbCurrent();if(w)w.sql=$('sql').value;dbPersist();dbEx
 // SQL explanation has its own immutable intent. It never shares query execution or result state.
 const dbExplanation={installed:false,scope:'',sequence:0,busy:false,pendingHistoryKind:null,record:null,displayOrigin:null,history:[],historyKind:'sql_explanation',notice:'',intents:[]};
 const dbExplanationEndpoints=Object.freeze({sql_explanation:'/api/v1/bears/explanations',sql_plan_explanation:'/api/v1/bears/plan-explanations'});
-const dbPlanHelp='Acquire a non-ANALYZE execution plan through normal query admission, which may wake LOCAL, then explain it locally. The source SQL is not run. TABLE sources only; for VIEWs use Explain SQL. No query results are collected.';
+const dbPlanHelp='Acquire a non-ANALYZE execution plan through normal query admission, which may wake LOCAL, then explain it locally. The source SQL is not run. TABLEs and supported INVOKER VIEWs require current query permissions for all dependencies. Unsupported VIEWs can use Explain SQL. No query results are collected. View definitions are checked at acquisition. Detected changes prevent the explanation from being saved.';
 const dbExplanationKey='shirokuma.sql-explanation-intents.v1';
 const dbPlanDisclosures=new Map();
 const dbPlanProofs=new Map();
@@ -2575,9 +2575,9 @@ const dbExplanationLead='Query Doctor explains SQL using the active SQL workshee
 const dbExplanationInstruction='Enter SQL or copy it from the active worksheet.';
 const dbExplanationContextStep='Choose or confirm the database, schema and role in the SQL worksheet.';
 const dbExplanationStateLabel=state=>t({SUCCEEDED:'Completed',RUNNING:'Running',QUEUED:'Queued',FAILED:'Failed',UNKNOWN:'Outcome unknown',CANCELED:'Canceled',NOT_STARTED:'Not started',NOT_COLLECTED:'Not collected',COLLECTED:'Collected',NOT_SUBMITTED:'Not submitted',FINISHED:'Completed'}[state]);
-const dbExplanationFence='SQL explanation and TABLE execution plan explanation are available in Database mode. Other Bear actions, SQL generation and AI settings are unavailable.';
+const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Other Bear actions, SQL generation and AI settings are unavailable.';
 Object.assign(i18n.ja,{
- [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE のみ対応し、VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。',
+ [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE と対応する INVOKER VIEW を利用でき、すべての依存先への現在のクエリ権限が必要です。未対応の VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。取得時点の定義を確認します。変更を検出した場合は説明を確定しません。',
  'Acquire plan and explain':'実行計画を取得して説明','Acquire a new plan and explain':'新しい実行計画を取得して説明',
  'Refresh plan explanation / recover request':'実行計画の説明を更新／元の要求を復旧','Load plan explanation history':'実行計画の説明履歴を読み込む',
  'Cancel plan acquisition':'実行計画の取得をキャンセル','Discard explanation result':'説明結果を破棄',
@@ -2586,8 +2586,8 @@ Object.assign(i18n.ja,{
  'Plan query':'計画取得クエリ','Local explanation':'ローカルでの説明','Safe operator tree (read only)':'安全な演算子ツリー（表示のみ）',
  'Captured optimizer topology only; no measured rows, timing or cost.':'取得時点の最適化後の構造です。実測の行数・時間・コストは含みません。',
  'Plan captured at':'実行計画取得日時','Source SQL not executed':'元の SQL は未実行',
- 'Plan acquisition supports a single SELECT or CTE over TABLEs. Review the SQL, or use Explain SQL.':'実行計画の取得は TABLE を参照する単一の SELECT または CTE に対応しています。SQL を確認するか「SQLの説明」を使用してください。',
- 'VIEW plans are unavailable. Use Explain SQL for a SQL-only explanation.':'VIEW の実行計画は未対応です。「SQLの説明」で SQL のみの説明を取得してください。',
+ 'Plan acquisition supports a single SELECT or CTE over TABLEs and supported INVOKER VIEWs. Review the SQL, or use Explain SQL.':'実行計画の取得は TABLE・対応する INVOKER VIEW を参照する単一の SELECT または CTE に対応しています。SQL を確認するか「SQLの説明」を使用してください。',
+ 'This VIEW is unsupported for plan acquisition. Use Explain SQL for a SQL-only explanation.':'この VIEW は実行計画の取得に未対応です。「SQLの説明」で SQL のみの説明を取得してください。',
  'Query outcome unknown. Check the original query status with the operator; recover this request without acquiring another plan.':'クエリの結果は不明です。運用担当者と元のクエリ状態を確認し、新しい計画を取得せず元の要求を復旧してください。',
  'Plan query has no confirmed closure. Check its status with the operator before requesting another plan.':'計画取得クエリの終了を確認できていません。新しい計画を要求する前に運用担当者と状態を確認してください。',
  'Original query evidence (read only)':'元のクエリの記録（表示のみ）','Query ID':'クエリ ID',
@@ -2608,6 +2608,8 @@ Object.assign(i18n.ja,{
  'SQL not executed · Execution plan not collected':'SQL は未実行 · 実行計画は未取得',
  'Captured at':'メタデータ取得日時','Updated at':'更新日時','Original SQL (read only)':'元の SQL（表示のみ）',
  '{count} columns':'カラム数: {count}',
+ 'VIEW dependencies: {count}':'VIEW の依存先: {count}',
+ 'Captured authorized dependency provenance; not an operator-to-relation mapping.':'取得時点の許可された依存先情報です。演算子と参照先の対応を示すものではありません。',
  'Explanation request in progress.':'説明要求を送信中です。',
  'Explanation request could not be saved in browser storage. No request was sent. Restore storage, then recover the original request.':'説明要求をブラウザーに保存できませんでした。要求は送信していません。ストレージを復旧した後、元の要求を復旧してください。',
  'SQL explanation supports a single SELECT or CTE. Review and edit the SQL.':'SQL の説明は単一の SELECT または CTE に対応しています。SQL を確認して編集してください。',
@@ -2617,7 +2619,7 @@ Object.assign(i18n.ja,{
  'Load explanation history to recover the original request after access changes.':'アクセス変更後に元の要求を復旧するには、説明履歴を読み込んでください。',
  'SUCCEEDED':'完了',
  [dbExplanationHelp]:'SQL と許可されたカラム名・型に基づく説明です。値とコメントはモデル入力から除外します。実行計画・クエリ結果は取得せず、SQL は実行しません。',
- [dbExplanationFence]:'Database モードでは SQL の説明と TABLE の実行計画の説明を利用できます。他の Bear 操作・SQL 生成・AI 設定は未対応です。'
+ [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。他の Bear 操作・SQL 生成・AI 設定は未対応です。'
 });
 function dbExplanationCapture(){
  const w=dbCurrent();if(!w)return null;
@@ -2739,7 +2741,7 @@ function dbExplanationSync(){
    const context=document.createElement('p');context.textContent=`${record.context.sql_catalog}.${record.context.sql_schema} · ${record.context.selected_role} · ${warehouse}`;node.append(context);
    const model=document.createElement('p');model.textContent=`${record.model.name} · ${t('Captured at')}: ${record.metadata.captured_at} · ${t('Updated at')}: ${record.updated_at}`;node.append(model);
    for(const relation of record.metadata.relations){
-    const ref=document.createElement('p');ref.textContent=`${relation.schema}.${relation.table} · ${t('{count} columns',{count:relation.columns.length})}`;node.append(ref);
+    const ref=document.createElement('p');ref.textContent=`${record.kind==='sql_plan_explanation'?relation.kind+' · ':''}${relation.schema}.${relation.table} · ${t('{count} columns',{count:relation.columns.length})}`;node.append(ref);
    }
    const sqlLabel=document.createElement('p');ui(sqlLabel,'Original SQL (read only)');
    const sql=document.createElement('pre');sql.textContent=record.input.sql;node.append(sqlLabel,sql);
@@ -2766,19 +2768,31 @@ function dbExplanationRecord(data,context,intent=null){
  if(intent?.body?.sql!==undefined&&(record.input.sql!==intent.body.sql||record.input.language!==intent.body.language)||intent?.id&&intent.id!==record.id)throw Error('CONTEXT_MISMATCH');
  const model=record.model,metadata=record.metadata;
  if(!dbExplanationObject(model)||model.provider!=='local-openai'||!nonempty(model.name)||!dbExplanationObject(metadata)||!nonempty(metadata.captured_at)||!Array.isArray(metadata.relations))throw Error('CONTEXT_MISMATCH');
- const relations=metadata.relations.map(relation=>{
-  if(!dbExplanationObject(relation)||!nonempty(relation.schema)||!nonempty(relation.table)||!(isPlan?['TABLE']:['TABLE','VIEW']).includes(relation.kind)||!Array.isArray(relation.columns))throw Error('CONTEXT_MISMATCH');
+ const projectRelation=relation=>{
+  if(!dbExplanationObject(relation)||!nonempty(relation.schema)||!nonempty(relation.table)||!['TABLE','VIEW'].includes(relation.kind)||!Array.isArray(relation.columns))throw Error('CONTEXT_MISMATCH');
   const columns=relation.columns.map(column=>{
    if(!dbExplanationObject(column)||!nonempty(column.name)||!nonempty(column.type))throw Error('CONTEXT_MISMATCH');
    return {name:column.name,type:column.type};
   });
   return {schema:relation.schema,table:relation.table,kind:relation.kind,columns};
- });
+ };
+ const relations=metadata.relations.map(projectRelation),publicMetadata={captured_at:metadata.captured_at,relations};
+ if(isPlan){
+  const hasView=relations.some(relation=>relation.kind==='VIEW');
+  if(hasView){
+   if(!Array.isArray(metadata.view_dependencies))throw Error('CONTEXT_MISMATCH');
+   publicMetadata.view_dependencies=metadata.view_dependencies.map(projectRelation);
+   const all=[...relations,...publicMetadata.view_dependencies];
+   const keys=all.map(relation=>JSON.stringify([relation.schema,relation.table]));
+   const envelope={relations,view_dependencies:publicMetadata.view_dependencies};
+   if(all.length>64||new Set(keys).size!==all.length||new TextEncoder().encode(JSON.stringify(envelope)).length>64*1024)throw Error('CONTEXT_MISMATCH');
+  }
+ }
  // Keep only the public contract: private provider/configuration fields never reach rendering/history.
  return {id:record.id,kind:record.kind,state:record.state,actor:record.actor,
   context:Object.fromEntries(dbExplanationContextKeys.map(key=>[key,record.context[key]])),
   input:{sql:record.input.sql,language:record.input.language},model:{provider:'local-openai',name:model.name},
-  metadata:{captured_at:metadata.captured_at,relations},text:record.text,error_code:record.error_code,
+  metadata:publicMetadata,text:record.text,error_code:record.error_code,
   plan_status:record.plan_status,sql_status:record.sql_status,created_at:record.created_at,updated_at:record.updated_at,...(isPlan?dbPlanRecord(record):{})};
 }
 async function dbExplanationFetch(path,intent,post=false){
@@ -2825,7 +2839,7 @@ async function dbExplain(source,recover=false,kind='sql_explanation'){
  }catch(error){
   if(!dbExplanationCurrent(sequence,scope))return;
   if(kind==='sql_plan_explanation'&&!intent.id&&error.noAdmission)dbPlanProofs.set(intent,{authority:dbPlanAuthority(),id:null,key:intent.key,body:intent.body,terminal:true});
-  dbExplanation.notice=intent.id?'Explanation unavailable. Refresh context and recover the original request or load history.':kind==='sql_plan_explanation'&&error?.code==='AI_PLAN_VIEW_UNSUPPORTED'?'VIEW plans are unavailable. Use Explain SQL for a SQL-only explanation.':error?.code==='AI_INPUT_INVALID'?(kind==='sql_plan_explanation'?'Plan acquisition supports a single SELECT or CTE over TABLEs. Review the SQL, or use Explain SQL.':'SQL explanation supports a single SELECT or CTE. Review and edit the SQL.'):'Explanation outcome uncertain. Recover the original request; no automatic resubmission.';
+  dbExplanation.notice=intent.id?'Explanation unavailable. Refresh context and recover the original request or load history.':kind==='sql_plan_explanation'&&error?.code==='AI_PLAN_VIEW_UNSUPPORTED'?'This VIEW is unsupported for plan acquisition. Use Explain SQL for a SQL-only explanation.':error?.code==='AI_INPUT_INVALID'?(kind==='sql_plan_explanation'?'Plan acquisition supports a single SELECT or CTE over TABLEs and supported INVOKER VIEWs. Review the SQL, or use Explain SQL.':'SQL explanation supports a single SELECT or CTE. Review and edit the SQL.'):'Explanation outcome uncertain. Recover the original request; no automatic resubmission.';
  }finally{if(dbExplanationCurrent(sequence,scope)){dbExplanation.busy=false;dbExplanationSync();}}
 }
 async function dbExplanationHistory(kind='sql_explanation'){
@@ -2928,7 +2942,7 @@ function dbPlanRender(node,record){
   }
  }
  if(record.error_code==='AI_PLAN_VIEW_UNSUPPORTED'||record.error_code==='AI_INPUT_INVALID'){
-  const p=document.createElement('p');ui(p,record.error_code==='AI_PLAN_VIEW_UNSUPPORTED'?'VIEW plans are unavailable. Use Explain SQL for a SQL-only explanation.':'Plan acquisition supports a single SELECT or CTE over TABLEs. Review the SQL, or use Explain SQL.');node.append(p);
+  const p=document.createElement('p');ui(p,record.error_code==='AI_PLAN_VIEW_UNSUPPORTED'?'This VIEW is unsupported for plan acquisition. Use Explain SQL for a SQL-only explanation.':'Plan acquisition supports a single SELECT or CTE over TABLEs and supported INVOKER VIEWs. Review the SQL, or use Explain SQL.');node.append(p);
  }
  if(record.plan.captured_at){const p=document.createElement('p');p.textContent=t('Plan captured at')+': '+record.plan.captured_at;node.append(p);}
  if(!record.plan.operators)return;
@@ -2940,6 +2954,15 @@ function dbPlanRender(node,record){
  dbPlanDisclosures.set(node,{kind:record.kind,id:record.id,details});
  const summary=document.createElement('summary');ui(summary,'Safe operator tree (read only)');details.append(summary);
  const help=document.createElement('p');ui(help,'Captured optimizer topology only; no measured rows, timing or cost.');details.append(help);
+ if(record.metadata.view_dependencies){
+  const count=document.createElement('p');ui(count,'VIEW dependencies: {count}',{count:record.metadata.view_dependencies.length});details.append(count);
+  const provenance=document.createElement('p');ui(provenance,'Captured authorized dependency provenance; not an operator-to-relation mapping.');details.append(provenance);
+  const dependencies=document.createElement('ul');
+  for(const relation of record.metadata.view_dependencies){
+   const item=document.createElement('li');item.textContent=`${relation.kind} · ${relation.schema}.${relation.table} · ${t('{count} columns',{count:relation.columns.length})}`;dependencies.append(item);
+  }
+  details.append(dependencies);
+ }
  const tree=operators=>{
   const list=document.createElement('ul');
   for(const operator of operators){

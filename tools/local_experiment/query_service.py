@@ -109,6 +109,14 @@ def _transport(url, method, pin, body=None):
                 admission.check_execution(db, pin.admission)
         if pin.plan is not None and initial:
             import db_ai_plan
+            if db_ai_plan.views.bearing(pin.plan.pins):
+                # VIEW fences must follow the gate/Wake, outside the writer TX.
+                try:
+                    db_ai_plan.check_metadata(pin.plan.principal, pin.context,
+                        pin.plan.explanation_id, pin.plan.pins)
+                except QueryError as error:
+                    pin.plan.error = error.code
+                    raise
             with control_store.connect() as db:
                 db.execute('BEGIN IMMEDIATE')
                 db_ai_plan.dispatch_claim(db, pin.plan, pin.context, claim=True)
@@ -265,11 +273,11 @@ def _owned(principal, query_id, selected_role, *, grants=True, cleanup=False):
         account = request_auth._principal_accounts().get(principal.principal_id)
     except PermissionError:
         if cleanup:
-            _best_cancel(query_id)
+            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
         raise QueryError('DB_ACCESS_REVOKED', 403) from None
     if account is None:
         if cleanup:
-            _best_cancel(query_id)
+            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
         raise QueryError('DB_ACCESS_REVOKED', 403)
     if grants:
         try:
@@ -295,7 +303,7 @@ def _owned(principal, query_id, selected_role, *, grants=True, cleanup=False):
         except (QueryError, PermissionError):
             frozen = ResolvedQueryContext(**_metadata(row))
             if cleanup and not _retirement_only_denial(principal, frozen, backend_username=row['backend_username']):
-                _best_cancel(query_id)
+                _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
             raise QueryError('DB_ACCESS_REVOKED', 403) from None
     return row
 
@@ -333,12 +341,14 @@ def _state(query_id, state, backend_id=None, evidence_ref=None, *, plan_result=N
         _close_query_owner(_pins.get(query_id))
 
 
-def _best_cancel(query_id):
+def _best_cancel(query_id, *, cause=None):
     pin = _pins.get(query_id)
     if pin is not None:
         with pin.lock:
             try:
-                _cancel_locked(query_id, pin, _row(query_id))
+                if pin.plan is not None and cause is not None:
+                    pin.plan.error = pin.plan.error or cause
+                _cancel_locked(query_id, pin, _row(query_id), caller_intent=False)
             except QueryError:
                 pass
 
@@ -346,7 +356,7 @@ def _best_cancel(query_id):
 _TERMINAL = frozenset(('FINISHED', 'FAILED', 'CANCELED'))
 
 
-def _cancel_locked(query_id, pin, row, url=None):
+def _cancel_locked(query_id, pin, row, url=None, *, caller_intent=True):
     if row['execution_closure']:
         return _reconcile_result(row)
     if row['state'] in _TERMINAL:
@@ -356,7 +366,7 @@ def _cancel_locked(query_id, pin, row, url=None):
         import db_ai_plan
         with control_store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            claimed = db_ai_plan.cancel_claim(db, pin.plan, pin.context)
+            claimed = db_ai_plan.cancel_claim(db, pin.plan, pin.context, caller_intent=caller_intent)
         if not claimed:
             return {'id': query_id, 'state': row['state']}
     if not pin.initial_attempted:
@@ -900,8 +910,15 @@ def _receive_accepted(query_id, url, method, body=None):
             with control_store.connect() as db:
                 db.execute('BEGIN IMMEDIATE')
                 db_ai_plan.dispatch_claim(db, pin.plan, pin.context, claim=False)
-        except QueryError:
-            _best_cancel(query_id)
+        except QueryError as error:
+            # Preserve the rejection before cleanup can commit a terminal parent.
+            pin.plan.error = pin.plan.error or error.code
+            if not pin.initial_attempted:
+                _, record, _ = db_ai_plan._owned(pin.plan.principal, pin.context, pin.plan.explanation_id)
+                _state(query_id, 'CANCELED' if record['cancel_requested'] else 'FAILED',
+                    plan_result={'error': error.code})
+            else:
+                _best_cancel(query_id, cause=error.code)
             raise
     try:
         if method == 'POST' and pin.plan is None:
@@ -910,11 +927,14 @@ def _receive_accepted(query_id, url, method, body=None):
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout):
         raise
     except QueryError as error:
+        if pin.plan is not None:
+            pin.plan.error = pin.plan.error or error.code
         if _row(query_id)['state'] not in _TERMINAL:
             if pin.plan is not None and not pin.initial_attempted:
                 import db_ai_plan
                 _, record, _ = db_ai_plan._owned(pin.plan.principal, pin.context, pin.plan.explanation_id)
-                _state(query_id, 'CANCELED' if record['cancel_requested'] else 'FAILED')
+                _state(query_id, 'CANCELED' if record['cancel_requested'] else 'FAILED',
+                    plan_result={'error': error.code})
             else:
                 _state(query_id, 'UNKNOWN', plan_result={'error': error.code})
         raise

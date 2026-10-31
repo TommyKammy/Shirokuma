@@ -270,9 +270,9 @@ Commanderが一unitごとに対象ファイル、禁止事項、検証コマン�
 
 DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C／C2D／C2E1／C2E2は各限定範囲の技術受入済みである。[C2E2](database-p6-3c2e2-view-graph-publication-2026-10-31.md)でVIEW証拠付きTABLE公開と独立履歴を接続し、[R1](database-p6-3r1-dbt-audit-recovery-2026-10-31.md)で不確定なnative_graph COUNT監査の結果をUNKNOWNに保ったまま実行閉鎖・受付再開を証明した。新しい未閉鎖実行は0件である。
 
-[DB-P6-4A1](database-p6-4a1-local-sql-explanation-2026-10-31.md)のSQL説明に続き、[A2](database-p6-4a2-plan-explanation-2026-10-31.md)でQuery Doctor／CopilotのTABLE計画取得・説明を実装した。固定の非ANALYZE EXPLAINを通常受付・Wakeへ通し、元SQLは未実行とする。planと推論の状態を分け、モデル不調時も取得済み計画を保持する。2DB・V/E/A、取消・cold Wake・保存後restart・UNKNOWN・入力変更と再読込の実機／画面検証を行い、既存全行・28 data head・設定を保全した。canonical 90単位（3,672成功・34 skip）と最終重点・文書検証を完了し、この限定範囲を技術受入済みとした。旧default storeのA1検証時移行はA1ガイドへ分けて記録した。
+[DB-P6-4A1](database-p6-4a1-local-sql-explanation-2026-10-31.md)のSQL説明、[A2](database-p6-4a2-plan-explanation-2026-10-31.md)のTABLE計画説明に続き、[A3](database-p6-4a3-view-plan-explanation-2026-10-31.md)で`logical_v1`の対応するnative／外部登録INVOKER VIEWを扱う。stored defaultsで再帰依存を解決し、同一DB・全schemaの現在のquery権限とVIEWのhead／格納先証拠を検査する。保存済みVIEW内の整数snapshot付きTABLE参照は、全snapshotの存在と現行列構成に一致するschemaを検証し、TABLEの可変headは固定しない。元SQLへ固定の非ANALYZE EXPLAINを付けて通常受付・Wakeへ通し、元SQLは実行しない。VIEW定義のSQL展開は行わず、検証はversion固定やserializable snapshotではない楽観的な境界とする。実機・画面で重点検証した。全体回帰91単位（3,719成功・34 skip）に加え、回帰開始後の修正を最終重点backend204件・UI80件で確認し、この限定範囲を技術受入済みとした。A1／A2の受入結果は各ガイドに保持し、旧default storeのA1検証時移行もA1ガイドへ分けて記録した。
 
-VIEW計画の依存先認可、最新query指定、取得済み計画だけを使う明示的な再説明、SQL案／WAP引渡し、他Bearsは後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、VIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、DB-P6-3全体とM1本人受入は未完了である。
+DEFINER・他DB参照のVIEW計画、現行列構成と異なる履歴schema、timestamp／tag／branch等の非整数time travel、最新query指定、取得済み計画だけを使う明示的な再説明、SQL案／WAP引渡し、他Bearsは後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、native graphのVIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、P6-4全体／DB-P6-3全体とM1本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

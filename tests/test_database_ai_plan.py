@@ -227,7 +227,16 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
         self.f.complete.assert_called_once()
 
-    def test_view_rejected_before_admission_credentials_or_model(self):
+    def test_legacy_view_rejected_before_admission_credentials_or_model(self):
+        # A compatible definition still cannot use legacy/shared credentials.
+        metadata = self.f.objects[('sales', 'raw', 'order_view', 'VIEW')]
+        metadata['view-uuid'] = 'c97b7f6a-4d08-4d85-a416-d6330578c5eb'
+        metadata['properties'] = {}
+        metadata['versions'][0]['representations'] = [dict(type='sql', dialect='trino',
+            sql='SELECT * FROM sales.raw.orders')]
+        import logical_registry
+        with store.connect() as db:
+            self.assertEqual(logical_registry.creation_mode(db, self.context.database_id), 'legacy')
         self.error('AI_PLAN_VIEW_UNSUPPORTED', lambda: self.accept('SELECT * FROM order_view'))
         self.assertEqual(self.calls, [])
         self.f.complete.assert_not_called()

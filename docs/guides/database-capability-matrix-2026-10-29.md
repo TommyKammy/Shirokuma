@@ -1,6 +1,8 @@
 # Databaseモードの機能一覧と利用条件
 
-2026年10月31日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE計画説明](database-p6-4a2-plan-explanation-2026-10-31.md)の実装を反映した。現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
+2026年10月31日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)の実装を反映した。機能数は増やさず、現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
+
+VIEW計画は`logical_v1`の対応するnative／外部登録INVOKER VIEWに限り、再帰依存先も同一DB・現在の全schema query権限を必要とする。保存済みVIEW定義内で整数snapshotを指定するTABLEは、そのsnapshotのschemaが現行列構成と一致する場合に扱う。利用者の直接入力に対するVERSION対応は広げない。DEFINER・他DB参照・履歴schemaの列構成差分・timestamp／tag／branch等の非整数time travelは未対応である。固定の非ANALYZE EXPLAINを実行し、元SQLは実行しない。
 
 ## 利用条件と表示の意味
 
@@ -52,7 +54,7 @@
 | SQL-08 | Worksheet結果CSV／JSON／TSV保存 | 未接続。Table全件Exportと別機能 | 結果保存の再認可は後続 | DB-P6-6 |
 | SQL-09 | 固定sample SQL shortcut | 未接続、旧catalogを仮定 | U、固定SQLを自動送信しない | 選択DBのSQLを明示入力 |
 | SQL-10 | Copilot SQL生成 | 未接続 | 将来はQに結び付く提案 | DB-P6-4 |
-| SQL-11 | Copilot Explain | SQL説明・TABLE実行計画の説明に対応 | V／E／A、有効なSQLワークシートcontext・全参照schemaのquery権限・LOCAL AI。固定の非ANALYZE EXPLAINは通常受付・Wakeを利用。元SQLは未実行、VIEW計画は対象外 | DB-P6-4A1／A2対応 |
+| SQL-11 | Copilot Explain | SQL説明・TABLE／条件付きVIEW実行計画の説明に対応 | V／E／A、有効なSQLワークシートcontext・再帰依存を含む全schemaのquery権限・LOCAL AI。VIEWは`logical_v1`の対応INVOKERに限定し、依存先も同一DB。固定の非ANALYZE EXPLAINは通常受付・Wakeを利用。元SQLは未実行 | DB-P6-4A1／A2／A3対応 |
 | SQL-12 | Copilot Stage and Audit | 未接続。手動WAPは対応 | 将来はWの明示実行 | 手動WAP、DB-P6-4 |
 | SQL-13 | Copilot Publish | 未接続。手動WAP公開は対応 | 将来もAによる明示WAP公開 | 手動WAP、DB-P6-4 |
 | EXP-01 | DB／Schema／Table／Viewツリー、検索・page・更新 | 対応、V／E／Aの許可Schema | X、Explorer独自context | inventory／objects |
@@ -103,7 +105,7 @@
 | JOB-09 | interval／daily／once／weekly／monthly／timezone | 対応、予定の入力契約 | T、競合・遅延の既存方針 | schedules |
 | JOB-10 | alert一覧・更新・確認 | 対応、E／A、元owner／context | T、確認と解消を区別 | alerts |
 | JOB-11 | native Stored Procedure／CALL／DAG／任意command | 別計画。Jobと同義にしない | Routineの意味を先に確定 | DB-P9-2 |
-| AI-01 | Query Doctor Bear | 明示SQL・TABLE実行計画の説明に対応。最新query指定は未接続 | V／E／A、現在のSQLワークシートcontext・全参照schemaのquery権限・LOCAL AI。元SQLと履歴は表示専用、他DBを参照しない。VIEWはSQL説明を利用 | DB-P6-4A1／A2対応 |
+| AI-01 | Query Doctor Bear | 明示SQL・TABLE／条件付きVIEW実行計画の説明に対応。最新query指定は未接続 | V／E／A、現在のSQLワークシートcontext・再帰依存を含む全schemaのquery権限・LOCAL AI。VIEWは`logical_v1`の対応INVOKERに限定し、依存先も同一DB。元SQLは未実行、履歴は表示専用。対象外のVIEWにはSQL説明を案内 | DB-P6-4A1／A2／A3対応 |
 | AI-02 | Data Engineer Bear | 未接続。手動SQL／WAPは対応 | 提案と実実行を分離 | DB-P6-4 |
 | AI-03 | Catalog Curator Bear | 未接続 | 許可metadata scopeが必要 | DB-P6-4 |
 | AI-04 | SRE Bear | 未接続 | DB／platform観測を分離 | DB-P6-4／5 |

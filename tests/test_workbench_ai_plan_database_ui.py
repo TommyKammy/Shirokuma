@@ -24,6 +24,9 @@ const planRecord=(extra={})=>({...record(),id:'a254ca08-a6f3-4392-940d-85df9f8a8
  query_state:'FINISHED',execution_closure:null,captured_at:'2026-10-31T02:30:00Z',operators:projection(),error_code:null},...extra});
 const pendingPlan=(extra={})=>planRecord({state:'RUNNING',text:null,plan_status:'NOT_COLLECTED',inference_state:'NOT_STARTED',
  plan:{...planRecord().plan,query_state:'RUNNING',operators:null,captured_at:null},...extra});
+const relation=(schema,table,kind='TABLE',columns=[{name:'value',type:'bigint'}])=>({schema,table,kind,columns});
+const viewMetadata=()=>({captured_at:'2026-10-31T02:30:00Z',relations:[relation('raw','source_table'),relation('sandbox','report_view','VIEW')],
+ view_dependencies:[relation('raw','shared_leaf'),relation('staging','nested_view','VIEW')]});
 const startPlan=source=>$('explanation-'+(source||'copilot')+'-plan').onclick();
 const recoverPlan=()=>$('explanation-copilot-plan-recover').onclick();
 const cancelPlan=()=>$('explanation-doctor-plan-cancel').onclick();
@@ -643,6 +646,172 @@ for(const key of dbExplanationContextKeys){
  held.resolve(wrap(accepted));await pending;assert.equal(dbExplanation.record,null,key);
  assert.equal($('explanation-copilot-plan-recover').disabled,true,key);dbContext=original;
 }
+''')
+
+
+    def test_view_mixed_direct_nested_shared_dependency_projection_and_cached_provenance(self):
+        self.javascript(r'''
+await boot();editSQL('SELECT v.value FROM sandbox.report_view v JOIN raw.source_table t ON v.value=t.value');
+const metadata=viewMetadata(),answer='Explain this captured topology';
+metadata.view_dependencies[1].columns=[{name:'complex',type:'array(row("Mixed field" map(varchar, decimal(24, 8))))'}];
+route=async()=>wrap(planRecord({metadata,text:answer}));await startPlan();
+assert.deepEqual(dbExplanation.record.metadata,metadata);
+const tree=id=>$(id).descendants().find(n=>n.tagName==='DETAILS');
+const retained=tree('copilot-result');assert.notEqual(retained.open,true);
+for(const id of ['copilot-result','explanation-doctor-output']){
+ const node=$(id),details=tree(id);assert.equal(node.children[0].textContent,answer);
+ const outside=node.children.filter(n=>n!==details).map(visibleText).join('\n');
+ assert.match(outside,/TABLE · raw.source_table · 1 columns/);assert.match(outside,/VIEW · sandbox.report_view · 1 columns/);
+ assert.doesNotMatch(outside,/shared_leaf|nested_view|VIEW dependencies/);
+ assert.match(visibleText(details),/VIEW dependencies: 2/);
+ assert.match(visibleText(details),/TABLE · raw.shared_leaf · 1 columns/);
+ assert.match(visibleText(details),/VIEW · staging.nested_view · 1 columns/);
+ assert.match(visibleText(details),/dependency provenance; not an operator-to-relation mapping/);
+ assert.doesNotMatch(visibleText(node),/Mixed field|decimal\(24|"relations"/);
+ assert.equal(node.descendants().some(n=>['BUTTON','INPUT','TEXTAREA'].includes(n.tagName)),false);
+ assert.ok(node.children.some(n=>n.tagName==='PRE'&&n.textContent===$('sql').value));
+}
+retained.open=true;dbExplanationSync();assert.equal(tree('copilot-result'),retained);assert.equal(retained.open,true);
+setLanguage('ja');assert.equal(tree('copilot-result'),retained);assert.equal(retained.open,true);
+assert.match(visibleText(retained),/VIEW の依存先: 2/);assert.match(visibleText(retained),/演算子と参照先の対応を示すものではありません/);
+''')
+
+    def test_constant_view_empty_dependencies_and_legacy_table_a1_wire(self):
+        self.javascript(r'''
+await boot();editSQL('SELECT value FROM sandbox.constant_view');
+const metadata={captured_at:'now',relations:[relation('sandbox','constant_view','VIEW')],view_dependencies:[]};
+route=async()=>wrap(planRecord({metadata}));await startPlan();assert.deepEqual(dbExplanation.record.metadata,metadata);
+assert.match(visibleText($('copilot-result')),/VIEW dependencies: 0/);
+independentWorksheet();editSQL('SELECT value FROM raw.legacy_table');
+const old={captured_at:'then',relations:[relation('raw','legacy_table')]};
+route=async()=>wrap(planRecord({metadata:old}));await startPlan();assert.deepEqual(dbExplanation.record.metadata,old);
+assert.equal(Object.hasOwn(dbExplanation.record.metadata,'view_dependencies'),false);
+assert.deepEqual(Object.keys(JSON.parse(planPosts().at(-1).options.body)).sort(),['context','language','sql']);
+assert.doesNotMatch(visibleText($('copilot-result')),/VIEW dependencies|dependency provenance/);
+independentWorksheet();const a1={captured_at:'then',relations:[relation('sandbox','a1_view','VIEW')]};
+route=async()=>wrap(record({metadata:{...a1,view_dependencies:[relation('raw','must_not_project')]}}));await $('copilot-explain').onclick();
+assert.deepEqual(dbExplanation.record.metadata,a1);assert.equal(dbExplanation.record.plan_status,'NOT_COLLECTED');
+assert.deepEqual(Object.keys(JSON.parse(posts().at(-1).options.body)).sort(),['context','language','sql']);
+assert.doesNotMatch(visibleText($('copilot-result')),/must_not_project|VIEW dependencies|VIEW ·/);
+''')
+
+    def test_view_metadata_malformed_closure_rejected_on_every_response_path(self):
+        self.javascript(r'''
+await boot();
+const invalid=[
+ m=>{delete m.view_dependencies;},m=>{m.view_dependencies=null;},m=>{m.view_dependencies={};},
+ m=>{m.view_dependencies=[null];},m=>{m.view_dependencies=[{...relation('raw','bad'),kind:'MATERIALIZED_VIEW'}];},
+ m=>{m.view_dependencies[0].columns=null;},m=>{m.view_dependencies[0].columns=[{name:'v',type:8}];},
+ m=>{m.view_dependencies[0].columns=[{name:'v',type:''}];},m=>{m.view_dependencies[0].columns=[{name:'v',type:{type:'bigint'}}];},
+ m=>{m.view_dependencies[0].columns=[{name:'',type:'bigint'}];},m=>{m.view_dependencies[0].schema='';},
+ m=>{m.view_dependencies[0].table=9;},m=>{m.view_dependencies.push(structuredClone(m.view_dependencies[0]));},
+ m=>{m.view_dependencies.push(structuredClone(m.relations[0]));},m=>{m.relations.push(structuredClone(m.relations[1]));},
+ m=>{m.relations[0].kind='UNKNOWN';},m=>{m.relations[0].columns=[{name:'v',type:false}];},
+ m=>{m.view_dependencies=Array.from({length:63},(_,i)=>relation('raw','leaf_'+i));}
+];
+for(const operation of ['post','get','list','cancel'])for(const change of invalid){
+ independentWorksheet();const metadata=viewMetadata();change(metadata);const bad=planRecord({metadata,text:'REJECTED_VIEW_ANSWER'});
+ if(operation==='cancel'){route=async()=>wrap(pendingPlan());await startPlan();}
+ route=async()=>operation==='list'?{context:bad.context,explanations:[bad]}:wrap(bad);
+ if(operation==='post')await startPlan();
+ if(operation==='get'){dbExplanation.history=[bad];dbExplanation.historyKind=bad.kind;await dbExplanationSelect(0);}
+ if(operation==='list')await dbExplanationHistory(bad.kind);
+ if(operation==='cancel')await cancelPlan();
+ assert.doesNotMatch(visibleText($('copilot-result')),/REJECTED_VIEW_ANSWER|shared_leaf|nested_view/);
+ if(operation==='list')assert.equal(dbExplanation.history.length,0);
+ else assert.notEqual(dbExplanation.record?.text,'REJECTED_VIEW_ANSWER');
+}
+''')
+
+    def test_view_combined_limits_utf8_and_qualified_identifier_identity(self):
+        self.javascript(r'''
+await boot();
+const parse=metadata=>{const r=planRecord({metadata});return dbExplanationRecord(wrap(r),r.context,{kind:r.kind});};
+const m={captured_at:'now',relations:[relation('sandbox','v','VIEW')],view_dependencies:Array.from({length:63},(_,i)=>relation('raw','t'+String(i).padStart(2,'0')))};
+assert.equal(parse(m).metadata.view_dependencies.length,63);
+m.view_dependencies.push(relation('raw','overflow'));assert.throws(()=>parse(m),/CONTEXT_MISMATCH/);
+// Qualified pairs must not be flattened or case-folded: quoted identifiers retain identity.
+const distinct={captured_at:'now',relations:[relation('a.b','c','VIEW')],view_dependencies:[relation('a','b.c'),relation('a.b','C')]};
+assert.deepEqual(parse(distinct).metadata,distinct);
+const bytes={captured_at:'now',relations:[relation('sandbox','v','VIEW')],view_dependencies:[relation('raw','leaf','TABLE',[{name:'v',type:'界'.repeat(22000)}])]};
+assert.ok(JSON.stringify(bytes).length<64*1024);assert.ok(new TextEncoder().encode(JSON.stringify(bytes)).length>64*1024);
+assert.throws(()=>parse(bytes),/CONTEXT_MISMATCH/);
+const boundary={captured_at:'now',relations:[relation('sandbox','v','VIEW')],view_dependencies:[relation('raw','leaf','TABLE',[{name:'v',type:'x'}])]};
+const envelope=m=>({relations:m.relations,view_dependencies:m.view_dependencies});
+const size=new TextEncoder().encode(JSON.stringify(envelope(boundary))).length;
+boundary.view_dependencies[0].columns[0].type+='x'.repeat(64*1024-size);
+assert.equal(new TextEncoder().encode(JSON.stringify(envelope(boundary))).length,65536);
+assert.ok(new TextEncoder().encode(JSON.stringify(boundary)).length>65536);assert.ok(parse(boundary));
+boundary.view_dependencies[0].columns[0].type+='x';
+assert.equal(new TextEncoder().encode(JSON.stringify(envelope(boundary))).length,65537);assert.throws(()=>parse(boundary),/CONTEXT_MISMATCH/);
+''')
+
+    def test_wide_legacy_table_and_a1_history_keep_prior_validation_and_projection(self):
+        self.javascript(r'''
+await boot();
+const wideType='array(row("value" varchar)) '.repeat(3000);
+const descriptor=relation('raw','legacy','TABLE',[{name:'wide',type:wideType}]);
+// Old TABLE/A1 records had neither the new byte/count envelope nor relation uniqueness validation.
+const original={captured_at:'2026-10-31T02:30:00Z',relations:Array.from({length:65},()=>structuredClone(descriptor))};
+assert.ok(new TextEncoder().encode(JSON.stringify(original)).length>65536);
+for(const kind of ['sql_plan_explanation','sql_explanation']){
+ const endpoint=dbExplanationEndpoints[kind],make=kind==='sql_plan_explanation'?planRecord:record;
+ const saved=make({metadata:{...structuredClone(original),private_definition:'NEVER_PROJECT',view_dependencies:'NEVER_PROJECT'}});
+ route=async(path,options)=>{assert.equal(options?.method,undefined);assert.ok(path.startsWith(endpoint));
+  return path.includes('/'+saved.id+'?')?wrap(saved):{context:saved.context,explanations:[saved]};};
+ await dbExplanationHistory(kind);assert.equal(dbExplanation.history.length,1);
+ assert.deepEqual(dbExplanation.history[0].metadata,original);
+ await dbExplanationSelect(0);assert.equal(dbExplanation.record.kind,kind);
+ assert.deepEqual(dbExplanation.record.metadata,original);
+ assert.equal(Object.hasOwn(dbExplanation.record.metadata,'view_dependencies'),false);
+ assert.equal(dbExplanation.record.metadata.relations[0].columns[0].type,wideType);
+ assert.doesNotMatch(JSON.stringify(dbExplanation.record)+visibleText($('copilot-result')),/NEVER_PROJECT/);
+}
+assert.equal(planPosts().length,0);assert.equal(posts().length,0);
+''')
+
+    def test_view_private_metadata_never_projects_or_renders_from_history(self):
+        self.javascript(r'''
+await boot();const secret={definition:'PRIVATE_SENTINEL_SELECT_LITERAL',dialect:'PRIVATE_SENTINEL_DIALECT',properties:{owner:'PRIVATE_SENTINEL_OWNER'},
+ defaults:'PRIVATE_SENTINEL_DEFAULT',digest:'PRIVATE_SENTINEL_DIGEST',uuid:'PRIVATE_SENTINEL_UUID',path:'PRIVATE_SENTINEL_PATH',literal:'PRIVATE_SENTINEL_LITERAL'};
+const metadata={...viewMetadata(),...secret};
+for(const r of [...metadata.relations,...metadata.view_dependencies]){Object.assign(r,secret);for(const c of r.columns)Object.assign(c,secret);}
+const saved=planRecord({metadata}),frozen=structuredClone(saved);
+let currentSource=structuredClone(metadata);
+route=async(path,options)=>{assert.equal(options?.method,undefined);assert.ok(path.startsWith(planEndpoint));
+ return path.includes('/'+saved.id+'?')?wrap(structuredClone(frozen)):{context:saved.context,explanations:[structuredClone(frozen)]};};
+await dbExplanationHistory('sql_plan_explanation');
+currentSource.relations[1].table='changed_view';currentSource.view_dependencies=[];currentSource=null; // Source changed, then deleted.
+await dbExplanationSelect(0);assert.equal(dbExplanation.displayOrigin,'history');
+const before=calls.length,node=$('copilot-result'),details=node.descendants().find(n=>n.tagName==='DETAILS');
+details.open=true;dbExplanationSync();setLanguage('ja');await dbExplanationPoll();
+assert.equal(calls.length,before);assert.equal(planPosts().length,0);assert.equal(posts().length,0);
+assert.deepEqual(dbExplanation.record.metadata,viewMetadata());
+assert.doesNotMatch(JSON.stringify(dbExplanation.record)+JSON.stringify(dbExplanation.history)+visibleText(node),/PRIVATE_SENTINEL|definition|dialect|properties|digest|uuid|literal/);
+assert.match(visibleText(node),/sandbox.report_view/);assert.match(visibleText(node),/raw.shared_leaf/);
+assert.equal(node.descendants().find(n=>n.tagName==='DETAILS'),details);assert.equal(details.open,true);
+''')
+
+    def test_view_ja_en_conditional_help_and_unsupported_fallback_original_receipt(self):
+        self.javascript(r'''
+await boot();editSQL('SELECT value FROM sandbox.unsupported_view');
+route=async()=>({http:400,body:{code:'AI_PLAN_VIEW_UNSUPPORTED'}});await startPlan();
+const original=structuredClone(planPosts()[0]),intent=dbExplanationIntent('sql_plan_explanation');
+for(const locale of ['en','ja']){
+ setLanguage(locale);const help=t(dbPlanHelp),fence=t(dbExplanationFence),notice=visibleText($('copilot-result'));
+ assert.match(help,/INVOKER VIEW/);assert.match(fence,/INVOKER VIEW/);
+ assert.match(help,locale==='en'?/current query permissions for all dependencies/:/すべての依存先への現在のクエリ権限/);
+ assert.match(help,locale==='en'?/View definitions are checked at acquisition\. Detected changes prevent the explanation from being saved\./:/取得時点の定義を確認します。変更を検出した場合は説明を確定しません。/);
+ assert.match(help,locale==='en'?/non-ANALYZE/:/非 ANALYZE/);assert.match(help,locale==='en'?/may wake LOCAL/:/LOCAL が起動/);
+ assert.match(notice,locale==='en'?/This VIEW is unsupported/:/この VIEW は/);
+ assert.match(notice,locale==='en'?/Explain SQL/:/SQLの説明/);
+ assert.doesNotMatch(help,/zero unauthorized|zero internal/);
+}
+setLanguage('en');editSQL('SELECT 3 AS changed');dbExplanationInstall();
+route=async(path,options)=>{assert.equal(options.body,original.options.body);assert.equal(options.headers['Idempotency-Key'],original.options.headers['Idempotency-Key']);return {http:400,body:{code:'AI_PLAN_VIEW_UNSUPPORTED'}};};
+await recoverPlan();assert.equal(dbExplanationIntent('sql_plan_explanation').key,intent.key);
+route=async()=>wrap(record());await $('copilot-explain').onclick();assert.equal(dbExplanation.record.kind,'sql_explanation');
+assert.equal(dbExplanationIntent('sql_plan_explanation').key,intent.key);assert.equal($('sql').value,'SELECT 3 AS changed');
 ''')
 
     def test_bilingual_computed_label_dependencies_extract_without_browser(self):

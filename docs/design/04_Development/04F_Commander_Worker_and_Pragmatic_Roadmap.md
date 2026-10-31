@@ -5,14 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-31
-version: "1.35"
+version: "1.36"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
 
-2026-10-31、[DB-P6-4A2](../../guides/database-p6-4a2-plan-explanation-2026-10-31.md)で認可されたTABLEの実行計画取得・ローカル説明をQuery Doctor／Copilotへ接続した。固定の非ANALYZE EXPLAINだけを通常受付・Wakeで実行し、元SQLは実行しない。2DB・V/E/A、取消・cold Wake・保存後restart・UNKNOWN復旧・入力変更と再読込を検証し、既存全行・28 data head・設定を保全した。canonical 90単位（3,672成功・34 skip）と最終重点・文書検証を完了し、この限定範囲を技術受入済みとした。VIEW計画・SQL案／WAP・他Bearsは後続で、P6-4全体／P6-7／M1本人受入は未完了である。
+2026-10-31、[DB-P6-4A3](../../guides/database-p6-4a3-view-plan-explanation-2026-10-31.md)でQuery Doctor／Copilotの計画説明を、TABLEから`logical_v1`の対応するINVOKER VIEWへ拡張した。native／外部登録を名前で限定せず、stored defaultsに従う再帰依存の同一DB・全schema権限とprivateなhead証拠を固定・再検査する。VIEW定義内の整数snapshot付きTABLE参照は全指定snapshotとschemaを検証し、通常のdata appendを妨げない。VIEW定義をSQLへ展開せず、元SQLへの固定非ANALYZE EXPLAINを通常受付・Wakeで実行する。元SQLは未実行であり、catalog検証はversion固定ではない楽観的検証である。実機・画面で重点検証した。全体回帰91単位（3,719成功・34 skip）に加え、回帰開始後の修正を最終重点backend204件・UI80件で確認し、この限定範囲を技術受入済みとした。DEFINER・他DB・履歴schema差分・timestamp／tag等のtime travel、SQL案／WAP・他Bearsは後続で、P6-4全体／P6-7／M1本人受入は未完了である。
 
 本ドキュメントは [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) に基づき、2026年10月16日以降の Shirokuma の開発体制（**Antigravity 司令塔 × `codex-cli` GPT-6.1 Sol Medium 実装ワーカー**）および **Phase 0〜Phase 6 再起動ロードマップ** を定義する。
 

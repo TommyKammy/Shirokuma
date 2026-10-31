@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.20.0"
+version: "7.21.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,11 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-31 — DB-P6-4A3 compatible INVOKER VIEW plan explanation
+
+- [実装・検証記録](../../guides/database-p6-4a3-view-plan-explanation-2026-10-31.md)：`logical_v1`の対応するnative／外部登録INVOKER VIEWへ計画説明を拡張。再帰依存の同一DB・全schema権限、VIEW head、整数snapshotのTABLE／schema証拠を検査し、元SQLは実行しない。
+- 実機・画面で重点検証した。全体回帰91単位（3,719成功・34 skip）に加え、回帰開始後の修正を最終重点backend204件・UI80件で確認し、この限定範囲を技術受入済みとした。DEFINER・他DB・履歴schema差分・非整数time travel、他Bears／SQL案・WAP連携とP6-4全体／P6-7／M1本人受入は残件。
 
 ### 2026-10-31 — DB-P6-4A2 authorized TABLE plan explanation
 
