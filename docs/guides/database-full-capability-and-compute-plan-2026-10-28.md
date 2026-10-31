@@ -33,7 +33,7 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
 | データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を技術受入済み。C2E1のnative VIEW graph構築・品質testを技術受入済み。C2E2のVIEW証拠付きTABLE公開・独立公開履歴を技術受入済み | 正式公開はTABLE。VIEW含有native graphのTABLE公開はC2E2の全VIEW・全品質条件を適用。incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
-| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。Bears／CopilotはSQL・TABLE／条件付きINVOKER VIEW計画説明に対応。Query Doctorは現在の本人・保存contextに一致する最新の対象SELECTを入力へ読み込める | 最新読込はSQL・AI・Wake・catalogを呼ばない。telemetryと耐久監査を分離し、AIの変更提案はDB-P6-4で認可／WAPへ接続する |
+| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。Bears／CopilotはSQL・TABLE／条件付きINVOKER VIEW計画説明と、条件を満たす保存済み計画の再説明に対応。Query Doctorは現在の本人・保存contextに一致する最新SELECTを入力へ読み込める | 最新読込はSQL・AI・Wake・catalogを呼ばず、保存済み計画の再説明は取得時点の証拠でLOCAL推論だけを行う。telemetryと耐久監査を分離し、AIの変更提案はDB-P6-4で認可／WAPへ接続する |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
 
@@ -274,7 +274,9 @@ DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C�
 
 [A4](database-p6-4a4-latest-query-source-2026-10-31.md)でQuery Doctorの最新SELECT読込を実装した。本人・保存9項目contextが一致する通常read-only queryから選び、全参照schema権限と現在のlogical identityを再検査する。明示GETは元SQLとqueryのID・時刻・状態だけを返し、SQL・AI・Wake・catalogを呼ばない。別Worksheetの同一contextのqueryも対象になり、EXPLAIN・書込・DataOps／Bears等の内部子queryは除外する。入力・認可・context変更後の遅着応答を捨て、未解決のA1／A2説明要求を保持する。A1の原要求は、入力を戻さず既存の明示復旧操作から元IDのGETまたは元key／bodyの再送で確認できる。重点backend116件・UI168件、全体回帰92単位（3,779成功・34 skip）、2DB・3roleの実機・画面と既存状態の保全を確認し、この限定範囲を技術受入済みとした。
 
-次は取得済み計画だけを使う明示的な再説明を優先し、その後にSQL案／WAP引渡し、他Bearsを扱う。DEFINER・他DB参照のVIEW計画、現行列構成と異なる履歴schema、timestamp／tag／branch等の非整数time travelも後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、native graphのVIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、P6-4全体／DB-P6-3全体とM1本人受入は未完了である。
+[A5](database-p6-4a5-saved-plan-explanation-2026-10-31.md)で、保存済み計画を使う明示再説明を別kindのLOCAL推論として実装した。元A2／A3がCOLLECTEDで、元queryの保存値・現在台帳がともにFINISHEDであることを確認し、安全な演算子・取得時点のmetadata・privateな権限pinsを新要求へ原子的に固定する。元親はSUCCEEDED／FAILED／CANCELED／UNKNOWNを対象にできるが、その状態・query・admissionを変更せず、元UNKNOWNを解消したりA2の新規query受付を解除したりしない。本人・保存9項目context・全凍結依存schemaの現在権限を検査し、現行TABLE／VIEWのheadやcatalogを再取得しない。Engine・Wake・admissionも呼ばず、元SQL・planを再実行しない。新要求の元key復旧・履歴・取消は独立させ、取消は新しい説明結果だけへ作用し、UNKNOWNは自動再推論しない。重点backend198件・UI190件、全体回帰3,824成功・34 skip、2DB・3roleの休止中実機確認と最終保全照合を完了した。
+
+次は許可metadataに基づくSQL案生成を優先し、その後に既存WAPへの明示引渡し、他Bearsを扱う。DEFINER・他DB参照のVIEW計画、現行列構成と異なる履歴schema、timestamp／tag／branch等の非整数time travelも後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、native graphのVIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目とし、AI／監査・ガバナンスの必須導線を先に統合する。P6-6の残る探索操作とP6-7の縦断検証、P6-4全体／DB-P6-3全体とM1本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

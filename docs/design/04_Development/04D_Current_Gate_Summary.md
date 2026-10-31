@@ -5,14 +5,16 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-10-31
-version: "2.22.0"
+version: "2.23.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
 
-2026-10-31、[DB-P6-4A4](../../guides/database-p6-4a4-latest-query-source-2026-10-31.md)で、Query Doctorへ最新の対象SELECTを読み込む明示操作を実装した。本人と保存済み9項目contextが一致する通常のread-only queryに限り、参照schema権限と現在のlogical identityを再検査する。読込だけではSQL・AI・Wake・catalogを呼ばず、元queryのID・時刻・状態を表示する。遅着応答と未解決の説明要求を保護し、別入力へ移ったA1の元要求も既存の明示復旧操作で照合できる。重点backend116件・UI168件、全体回帰92単位（3,779成功・34 skip）、2DB・3roleの実機・画面と既存状態の保全を確認し、この限定範囲を技術受入済みとした。次は取得済み計画だけを使う明示再説明、その後にSQL案／WAP連携・他Bearsを扱う。P6-4全体／DB-P6-3全体／P6-7／M1本人受入は未完了である。
+2026-10-31、[DB-P6-4A5](../../guides/database-p6-4a5-saved-plan-explanation-2026-10-31.md)で、Query Doctor／Copilotへ保存済み計画だけを使う明示的な再説明を実装した。元A2／A3がCOLLECTEDで、元queryの保存値・現在台帳がともにFINISHEDの場合に、取得時点の安全な演算子・metadataを新しい説明要求へ固定する。元の説明がFAILED・CANCELED・UNKNOWNでも対象になり得るが、元状態を変更せず、A2の新規query受付も解除しない。本人・保存9項目context・凍結した全依存schemaの現在権限を検査し、catalog再取得・Engine・Wake・admissionを使わない。取消は新しい説明だけへ作用し、そのUNKNOWNを自動再送しない。重点backend198件・UI190件、全体回帰3,824成功・34 skip、2DB・3roleの休止中実機確認と最終保全照合を完了した。次はSQL案生成、既存WAPへの明示引渡し・他Bearsを扱う。P6-4全体／DB-P6-3全体／P6-7／M1本人受入は未完了である。
+
+2026-10-31、[DB-P6-4A4](../../guides/database-p6-4a4-latest-query-source-2026-10-31.md)で、Query Doctorへ最新の対象SELECTを読み込む明示操作を実装した。本人と保存済み9項目contextが一致する通常のread-only queryに限り、参照schema権限と現在のlogical identityを再検査する。読込だけではSQL・AI・Wake・catalogを呼ばず、元queryのID・時刻・状態を表示する。遅着応答と未解決の説明要求を保護し、別入力へ移ったA1の元要求も既存の明示復旧操作で照合できる。重点backend116件・UI168件、全体回帰92単位（3,779成功・34 skip）、2DB・3roleの実機・画面と既存状態の保全を確認し、この限定範囲を技術受入済みとした。A4時点の後続だった保存済み計画の明示再説明はA5で扱う。P6-4全体／DB-P6-3全体／P6-7／M1本人受入は未完了である。
 
 2026-10-31、[DB-P6-4A3](../../guides/database-p6-4a3-view-plan-explanation-2026-10-31.md)で[A2](../../guides/database-p6-4a2-plan-explanation-2026-10-31.md)のTABLE計画説明を、`logical_v1`の対応するnative／外部登録INVOKER VIEWへ拡張した。再帰依存を同一DBへ限定し、全schemaのquery権限とVIEWのhead／格納先証拠を検査する。元SQLは固定の非ANALYZE EXPLAINで計画取得し、実行しない。保存済みVIEW内の整数snapshot参照は、参照先TABLE・指定snapshotの存在と現行列構成に一致するschemaを検証して扱う。実機・画面で重点検証した。全体回帰91単位（3,719成功・34 skip）に加え、回帰開始後の修正を最終重点backend204件・UI80件で確認し、この限定範囲を技術受入済みとした。DEFINER・他DB参照・列構成が異なる履歴schema・非整数のtime travel、他Bears／SQL案・WAP連携は後続であり、P6-4全体／DB-P6-3全体／P6-7／M1本人受入は未完了である。
 

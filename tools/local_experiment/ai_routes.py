@@ -5,6 +5,7 @@ import dataops_routes as common
 import db_ai
 import db_ai_plan
 import db_ai_sources
+import db_ai_reexplain
 from query_context import QueryError
 
 
@@ -22,13 +23,14 @@ def dispatch(handler, method, path, params, principal, role):
         source = db_ai_sources.latest(principal, context)
         handler.respond(dict(context=context.public_metadata(), source=source), 200)
         return True
-    match = re.fullmatch(r'/api/v1/bears/(explanations|plan-explanations)(?:/([0-9a-f-]{36})(/cancel)?)?', path)
+    match = re.fullmatch(r'/api/v1/bears/(explanations|plan-explanations|saved-plan-explanations)(?:/([0-9a-f-]{36})(/cancel)?)?', path)
     if not match:
         raise QueryError('NOT_FOUND', 404)
     if '#' in handler.path or handler.headers.get('Transfer-Encoding'):
         raise ValueError('invalid framing')
     family, ident, cancel = match.groups()
-    service = db_ai_plan if family == 'plan-explanations' else db_ai
+    service = (db_ai_reexplain if family == 'saved-plan-explanations' else
+        db_ai_plan if family == 'plan-explanations' else db_ai)
     if cancel and (service is db_ai or method != 'POST'):
         raise QueryError('NOT_FOUND', 404)
     if method == 'GET':
@@ -52,10 +54,11 @@ def dispatch(handler, method, path, params, principal, role):
             raise ValueError('invalid POST framing')
         key = common._key(handler)
         body = handler.database_body()
-        common._keys(body, {'context', 'sql', 'language'})
+        field = 'source_explanation_id' if service is db_ai_reexplain else 'sql'
+        common._keys(body, {'context', field, 'language'})
         context = common.context_value(body['context'], role)
         result = {'explanation': service.submit(principal, context, key=key,
-            sql=body['sql'], language=body['language'])}
+            language=body['language'], **{field: body[field]})}
         status = 202
     else:
         raise QueryError('NOT_FOUND', 404)

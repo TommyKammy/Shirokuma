@@ -62,4 +62,4 @@ private証跡は`var/shirokuma/db-p6-4a4-2026-10-31/private/`へ保存した。�
 
 ## 残件
 
-取得済みplanの明示再説明、SQL案／WAP引渡し、Catalog Curator／SRE／Policy Gatekeeper等は別単位である。P6-4全体、P6-7の縦断検証とM1本人受入は未完了である。
+A4受入時点の残件だった取得済みplanの明示再説明は、後続の[A5 保存済み計画の説明](database-p6-4a5-saved-plan-explanation-2026-10-31.md)で扱う。A4の読込操作から自動推論は開始せず、本ガイドの受入結果は維持する。SQL案／WAP引渡し、Catalog Curator／SRE／Policy Gatekeeper等は別単位である。P6-4全体、P6-7の縦断検証とM1本人受入は未完了である。

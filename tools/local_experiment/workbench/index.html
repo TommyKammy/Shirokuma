@@ -2564,11 +2564,22 @@ function dbPersist(){writeStorage(dbWorksheetKey,{active:worksheetId,tabs:worksh
 function dbSave(){const w=dbCurrent();if(w)w.sql=$('sql').value;dbPersist();dbExplanationSync();}
 // SQL explanation has its own immutable intent. It never shares query execution or result state.
 const dbExplanation={installed:false,scope:'',sequence:0,busy:false,pendingHistoryKind:null,record:null,displayOrigin:null,history:[],historyKind:'sql_explanation',notice:'',intents:[]};
-const dbExplanationEndpoints=Object.freeze({sql_explanation:'/api/v1/bears/explanations',sql_plan_explanation:'/api/v1/bears/plan-explanations'});
+const dbExplanationEndpoints=Object.freeze({sql_explanation:'/api/v1/bears/explanations',sql_plan_explanation:'/api/v1/bears/plan-explanations',saved_plan_explanation:'/api/v1/bears/saved-plan-explanations'});
 const dbPlanHelp='Acquire a non-ANALYZE execution plan through normal query admission, which may wake LOCAL, then explain it locally. The source SQL is not run. TABLEs and supported INVOKER VIEWs require current query permissions for all dependencies. Unsupported VIEWs can use Explain SQL. No query results are collected. View definitions are checked at acquisition. Detected changes prevent the explanation from being saved.';
 const dbExplanationKey='shirokuma.sql-explanation-intents.v1';
 const dbPlanDisclosures=new Map();
 const dbPlanProofs=new Map();
+const dbSavedProofs=new Map(),dbSavedSources=new WeakMap();
+let dbSavedBusy=null;
+Object.assign(i18n.ja,{
+ 'Explain saved plan again':'保存済み計画を再説明',
+ 'Refresh saved plan explanation / recover request':'保存済み計画の説明を更新／元の要求を復旧',
+ 'Load saved plan explanation history':'保存済み計画の再説明履歴を読み込む',
+ 'Explains the saved plan locally. Uses its original SQL and captured metadata.':'保存済み計画をローカルで説明します。元の SQL と取得済みメタデータを使用します。',
+ 'Saved plan, as of saved plan time':'保存済み計画（取得時点の記録）',
+ 'Original explanation outcome':'元の説明の結果',
+ 'Saved plan unavailable. Refresh the original plan record before trying again.':'保存済み計画を利用できません。元の計画の記録を更新してから再試行してください。'
+});
 // Loader-only A1 receipts; never restore authority from browser storage.
 const dbSourceProofs=new Map();
 const dbSource={scope:'',version:0,token:null,origin:null,notice:''};
@@ -2662,6 +2673,7 @@ function dbPlanObserve(record){
  }
 }
 function dbExplanationIntent(kind='sql_explanation'){
+ if(kind==='saved_plan_explanation')return dbSavedIntent();
  if(kind==='sql_plan_explanation'){
   const intents=dbExplanation.intents.filter(item=>dbPlanSameIdentity(item));
   return intents.findLast(item=>!dbPlanProven(item))||intents.at(-1);
@@ -2670,6 +2682,7 @@ function dbExplanationIntent(kind='sql_explanation'){
  return dbExplanation.intents.findLast(item=>item.kind===kind&&JSON.stringify(item.capture)===captured);
 }
 function dbExplanationTerminal(intent){
+ if(intent?.kind==='saved_plan_explanation')return dbSavedProven(intent);
  if(intent?.kind==='sql_plan_explanation')return intent.recoveryScope===dbPlanAuthority()&&dbPlanProven(intent);
  const record=dbExplanation.record;
  // Only a guarded server read/response can supply this record; saved intent hints cannot.
@@ -2685,7 +2698,8 @@ function dbExplanationPersist(){
 function dbExplanationFreezeIntent(intent){
  // Legacy storage is A1 only. Never interpret a stored URL as authority to fetch.
  const kind=Object.hasOwn(intent,'kind')?intent.kind:'sql_explanation',endpoint=dbExplanationEndpoints[kind];
- if(!Object.hasOwn(dbExplanationEndpoints,kind)||(intent.endpoint!==undefined&&intent.endpoint!==endpoint)||kind==='sql_plan_explanation'&&intent.endpoint!==endpoint)throw Error('CONTEXT_MISMATCH');
+ if(!Object.hasOwn(dbExplanationEndpoints,kind)||(intent.endpoint!==undefined&&intent.endpoint!==endpoint)||kind!=='sql_explanation'&&intent.endpoint!==endpoint)throw Error('CONTEXT_MISMATCH');
+ if(kind==='saved_plan_explanation'&&((intent.id!==null&&!dbSavedUUID(intent.id))||!dbSavedExact(intent.body,['context','source_explanation_id','language'])||!dbSavedUUID(intent.body.source_explanation_id)||!['ja','en'].includes(intent.body.language)||!dbExplanationSameContext(intent.capture.context,intent.body.context)))throw Error('CONTEXT_MISMATCH');
  intent.kind=kind;intent.endpoint=endpoint;
  Object.freeze(intent.capture.context);Object.freeze(intent.capture);
  Object.freeze(intent.body.context);Object.freeze(intent.body);
@@ -2701,7 +2715,7 @@ function dbExplanationSync(){
  const scope=dbExplanationScope();
  if(scope!==dbExplanation.scope){
   dbPlanDisclosures.clear();
-  dbExplanation.scope=scope;++dbExplanation.sequence;dbExplanation.busy=false;dbExplanation.pendingHistoryKind=null;
+  dbExplanation.scope=scope;++dbExplanation.sequence;dbExplanation.busy=!!dbSavedBusy;dbExplanation.pendingHistoryKind=null;
   dbExplanation.record=null;dbExplanation.displayOrigin=null;dbExplanation.history=[];dbExplanation.notice='';
  }
  const reason=dbReason(),intent=dbExplanationIntent(),recoveryIntent=dbSourceRecoveryIntent();
@@ -2722,7 +2736,7 @@ function dbExplanationSync(){
   $('explanation-'+prefix+'-history').disabled=!!reason||dbExplanation.busy&&dbExplanation.pendingHistoryKind!=='sql_plan_explanation';
   const select=$('explanation-'+prefix+'-saved'),selected=select.value;
   select.replaceChildren(new Option(t('Choose a saved explanation'),''));
-  dbExplanation.history.forEach((record,index)=>select.add(new Option(`${record.created_at} · ${dbExplanationStateLabel(record.state)} · ${record.input.sql.slice(0,80)}`,String(index))));
+  dbExplanation.history.forEach((record,index)=>select.add(new Option(`${record.created_at} · ${dbExplanationStateLabel(record.state)} · ${(record.kind==='saved_plan_explanation'?record.source_snapshot.sql:record.input.sql).slice(0,80)}`,String(index))));
   select.value=selected;select.disabled=!!reason||dbExplanation.busy||!dbExplanation.history.length;
   const planIntent=dbExplanationIntent('sql_plan_explanation');
   if(planIntent&&planIntent.recoveryScope===null&&!reason)planIntent.recoveryScope=dbPlanAuthority();
@@ -2735,6 +2749,11 @@ function dbExplanationSync(){
   const cancel=$('explanation-'+prefix+'-plan-cancel'),active=dbExplanation.record;
   cancel.disabled=!!reason||dbExplanation.busy||!planIntent?.id||planIntent.recoveryScope!==dbPlanAuthority()||active?.id!==planIntent.id||active?.kind!=='sql_plan_explanation'||!['QUEUED','RUNNING'].includes(active.state)||active.cancel_requested;
   ui(cancel,active?.plan_status==='COLLECTED'?'Discard explanation result':'Cancel plan acquisition');
+  const savedIntent=dbSavedIntent(),savedActive=active?.kind==='saved_plan_explanation';
+  $('explanation-'+prefix+'-saved-plan').disabled=!!reason||!!dbSource.token||dbExplanation.busy||!dbSavedEligible(active)||!!savedIntent&&!dbSavedProven(savedIntent);
+  $('explanation-'+prefix+'-saved-plan-recover').disabled=!!reason||dbExplanation.busy||!savedIntent;
+  $('explanation-'+prefix+'-saved-plan-history').disabled=!!reason||dbExplanation.busy;
+  $('explanation-'+prefix+'-saved-plan-cancel').disabled=!!reason||dbExplanation.busy||!savedActive||!['QUEUED','RUNNING'].includes(active.state)||active.cancel_requested;
  }
  dbSourceSync();
  $('bear-query-sql').disabled=false;$('explanation-copy').disabled=dbExplanation.busy;
@@ -2747,17 +2766,18 @@ function dbExplanationSync(){
    // Captured evidence and model output are untrusted text, including SQL and metadata names.
    const text=document.createElement('pre');text.textContent=record.text||'';node.append(text);
    const label=document.createElement('p');label.textContent=t(dbExplanation.displayOrigin==='history'?'Historical explanation (read only)':'Saved explanation (read only)')+' · '+dbExplanationStateLabel(record.state);node.append(label);
-   const status=document.createElement('p');ui(status,record.kind==='sql_plan_explanation'?'Source SQL not executed':'SQL not executed · Execution plan not collected');node.append(status);
+   const status=document.createElement('p');ui(status,record.kind!=='sql_explanation'?'Source SQL not executed':'SQL not executed · Execution plan not collected');node.append(status);
    if(record.kind==='sql_plan_explanation')dbPlanRender(node,record);
+   if(record.kind==='saved_plan_explanation')dbSavedRender(node,record);
    // Database worksheets currently authorize LOCAL only. Never fall back to an opaque ID.
    const warehouse=record.context.warehouse_id==='LOCAL'?'LOCAL':t('Unavailable');
    const context=document.createElement('p');context.textContent=`${record.context.sql_catalog}.${record.context.sql_schema} · ${record.context.selected_role} · ${warehouse}`;node.append(context);
    const model=document.createElement('p');model.textContent=`${record.model.name} · ${t('Captured at')}: ${record.metadata.captured_at} · ${t('Updated at')}: ${record.updated_at}`;node.append(model);
    for(const relation of record.metadata.relations){
-    const ref=document.createElement('p');ref.textContent=`${record.kind==='sql_plan_explanation'?relation.kind+' · ':''}${relation.schema}.${relation.table} · ${t('{count} columns',{count:relation.columns.length})}`;node.append(ref);
+    const ref=document.createElement('p');ref.textContent=`${record.kind!=='sql_explanation'?relation.kind+' · ':''}${relation.schema}.${relation.table} · ${t('{count} columns',{count:relation.columns.length})}`;node.append(ref);
    }
    const sqlLabel=document.createElement('p');ui(sqlLabel,'Original SQL (read only)');
-   const sql=document.createElement('pre');sql.textContent=record.input.sql;node.append(sqlLabel,sql);
+   const sql=document.createElement('pre');sql.textContent=record.kind==='saved_plan_explanation'?record.source_snapshot.sql:record.input.sql;node.append(sqlLabel,sql);
   }
   if(dbExplanation.notice){const p=document.createElement('p');ui(p,dbExplanation.notice);node.append(p);}
   node.hidden=!record&&!dbExplanation.notice;
@@ -2784,7 +2804,7 @@ function dbSourceRecoveryIntent(){
  return dbExplanation.intents.findLast(dbSourceA1Held)||dbExplanationIntent();
 }
 function dbSourceHeld(){
- return dbExplanation.intents.some(intent=>intent.kind==='sql_plan_explanation'?dbPlanSameIdentity(intent)&&!dbPlanProven(intent):dbSourceA1Held(intent));
+ return dbExplanation.intents.some(intent=>intent.kind==='saved_plan_explanation'?dbSavedSameIdentity(intent)&&!dbSavedProven(intent):intent.kind==='sql_plan_explanation'?dbPlanSameIdentity(intent)&&!dbPlanProven(intent):dbSourceA1Held(intent));
 }
 function dbSourceInvalidate(){++dbSource.version;dbSource.origin=null;dbSource.notice='';}
 function dbSourceSync(){
@@ -2842,6 +2862,7 @@ function dbExplanationSameContext(a,b){
  return exact(a)&&exact(b)&&dbExplanationContextKeys.every(key=>a[key]===b[key]);
 }
 function dbExplanationRecord(data,context,intent=null){
+ if(intent?.kind==='saved_plan_explanation')return dbSavedRecord(data,context,intent);
  const record=data?.explanation,nonempty=value=>typeof value==='string'&&value.trim().length>0;
  let principal;try{principal=JSON.parse(dbPrincipal);}catch{throw Error('CONTEXT_MISMATCH');}
  if(!Array.isArray(principal)||principal.length!==2||!nonempty(principal[0])||principal[1]!==true)throw Error('CONTEXT_MISMATCH');
@@ -2883,6 +2904,7 @@ async function dbExplanationFetch(path,intent,post=false){
  const response=await fetch(path,options),data=await response.json();
  if(!response.ok)throw Object.assign(dbError(data,response.status),{
   noAdmission:post&&response.status===400&&[data?.code,dbExplanationObject(data?.error)?data.error.code:null].some(code=>typeof code==='string'&&['AI_INPUT_INVALID','AI_PLAN_VIEW_UNSUPPORTED'].includes(code)),
+  savedNoAdmission:post&&intent.kind==='saved_plan_explanation'&&!intent.id&&response.status===409&&dbExplanationObject(data)&&[data.code,dbExplanationObject(data.error)?data.error.code:null].includes('AI_SAVED_PLAN_UNAVAILABLE')&&!['id','explanation_id','request_id','query_id'].some(key=>[data,data.explanation,data.error].some(value=>dbExplanationObject(value)&&Object.hasOwn(value,key)&&value[key]!==null)),
   sourceNoAdmission:post&&!intent.id&&response.status===400&&dbExplanationObject(data)&&[data.code,dbExplanationObject(data.error)?data.error.code:null].includes('AI_INPUT_INVALID')&&!['id','explanation_id','request_id','query_id'].some(key=>[data,data.explanation,data.error].some(value=>dbExplanationObject(value)&&Object.hasOwn(value,key)&&value[key]!==null))
  });
  return data;
@@ -2890,10 +2912,13 @@ async function dbExplanationFetch(path,intent,post=false){
 async function dbExplanationPoll(){
  if(!dbExplanation.installed)return;
  dbExplanationSync();
- const record=dbExplanation.record,kind=record?.kind,intent=dbExplanationIntent(kind);
+ const record=dbExplanation.record,kind=record?.kind;
+ if(kind==='saved_plan_explanation'){if(!dbExplanation.busy&&dbExplanation.displayOrigin==='current'&&['QUEUED','RUNNING'].includes(record.state))await dbSavedExplain('poll',true);return;}
+ const intent=dbExplanationIntent(kind);
  if(!dbExplanation.busy&&dbExplanation.displayOrigin==='current'&&intent?.id&&record?.kind===intent.kind&&record.id===intent.id&&intent.recoveryScope===dbExplanationRecoveryScope(kind)&&['QUEUED','RUNNING'].includes(record.state))await dbExplain('poll',true,kind);
 }
 async function dbExplain(source,recover=false,kind='sql_explanation'){
+ if(kind==='saved_plan_explanation')return dbSavedExplain(source,recover);
  dbExplanationSync();if(dbExplanation.busy||dbReason()||!recover&&dbSource.token)return;
  if(!Object.hasOwn(dbExplanationEndpoints,kind))return;
  const explicitRecovery=recover&&source==='recover'&&kind==='sql_explanation';
@@ -2920,10 +2945,12 @@ async function dbExplain(source,recover=false,kind='sql_explanation'){
  dbExplanation.busy=true;dbExplanation.notice='Explanation request in progress.';dbExplanationSync();
  try{
   const path=intent.id?intent.endpoint+'/'+encodeURIComponent(intent.id)+'?'+new URLSearchParams({context:JSON.stringify(intent.body.context)}):intent.endpoint;
+  const savedRead=!!intent.id;
   const data=await dbExplanationFetch(path,intent,!intent.id);
   if(!dbExplanationCurrent(sequence,scope)||originalRecovery&&(sourceAuthority!==dbPlanAuthority()||sourceVersion!==dbSource.version||!dbSourceSameIdentity(intent)))return;
   const record=dbExplanationRecord(data,intent.body.context,intent);
   intent.id=record.id;dbPlanObserve(record);dbExplanationPersist();
+  if(savedRead)dbSavedMarkSource(record);
   if(originalRecovery&&JSON.stringify(intent.capture)!==JSON.stringify(dbExplanationCapture())){
    dbExplanation.record=null;dbExplanation.displayOrigin=null;dbExplanation.history=[];dbExplanation.notice='Original request refreshed. Current SQL was kept.';
   }else{dbExplanation.record=record;dbExplanation.displayOrigin='current';dbExplanation.notice='';}
@@ -2935,7 +2962,7 @@ async function dbExplain(source,recover=false,kind='sql_explanation'){
  }finally{if(dbExplanationCurrent(sequence,scope)){dbExplanation.busy=false;dbExplanationSync();}}
 }
 async function dbExplanationHistory(kind='sql_explanation'){
- dbExplanationSync();if(dbReason()||dbExplanation.busy&&(!dbExplanation.pendingHistoryKind||dbExplanation.pendingHistoryKind===kind))return;
+ dbExplanationSync();if(dbSavedBusy||dbReason()||dbExplanation.busy&&(!dbExplanation.pendingHistoryKind||dbExplanation.pendingHistoryKind===kind))return;
  if(!Object.hasOwn(dbExplanationEndpoints,kind))return;
  const context=structuredClone(dbContext(dbCurrent())),scope=dbExplanation.scope,sequence=++dbExplanation.sequence;
  dbExplanation.busy=true;dbExplanation.pendingHistoryKind=kind;dbExplanation.record=null;dbExplanation.displayOrigin=null;dbExplanation.history=[];dbExplanation.historyKind=kind;dbExplanation.notice='';dbExplanationSync();
@@ -2944,7 +2971,8 @@ async function dbExplanationHistory(kind='sql_explanation'){
   if(!dbExplanationCurrent(sequence,scope))return;
   if(!dbExplanationSameContext(data?.context,context)||!Array.isArray(data.explanations))throw Error('CONTEXT_MISMATCH');
   dbExplanation.history=data.explanations.filter(record=>record?.kind===kind).map(record=>dbExplanationRecord({context,explanation:record},context,{kind})).slice(0,50);
-  if(kind==='sql_plan_explanation'){
+  if(kind==='saved_plan_explanation'){dbExplanation.history.forEach(dbSavedObserve);}
+  else if(kind==='sql_plan_explanation'){
    for(const intent of dbExplanation.intents)if(dbPlanSameIdentity(intent))intent.recoveryScope=dbPlanAuthority();
    dbExplanation.history.forEach(dbPlanObserve);
   }else{dbExplanation.history.forEach(dbSourceObserve);const intent=dbExplanationIntent(kind);if(intent)intent.recoveryScope=scope;}
@@ -2962,8 +2990,8 @@ async function dbExplanationSelect(index){
   const data=await dbExplanationFetch(dbExplanationEndpoints[kind]+'/'+encodeURIComponent(selected.id)+'?'+new URLSearchParams({context:JSON.stringify(context)}),{body:{context}});
   if(!dbExplanationCurrent(sequence,scope))return;
   const intent=dbExplanationIntent(kind);
-  const record=dbExplanationRecord(data,context,intent?.id===selected.id?intent:{kind,id:selected.id,body:{sql:selected.input.sql,language:selected.input.language}});
-  dbPlanObserve(record);dbExplanation.record=record;dbExplanation.displayOrigin='history';
+  const record=dbExplanationRecord(data,context,intent?.id===selected.id?intent:{kind,id:selected.id,body:kind==='saved_plan_explanation'?selected.input:{sql:selected.input.sql,language:selected.input.language}});
+  dbPlanObserve(record);dbSavedObserve(record);dbSavedMarkSource(record);dbExplanation.record=record;dbExplanation.displayOrigin='history';
  }catch(error){if(dbExplanationCurrent(sequence,scope))dbExplanation.notice='Explanation unavailable. Refresh context and recover the original request or load history.';}
  finally{if(dbExplanationCurrent(sequence,scope)){dbExplanation.busy=false;dbExplanation.pendingHistoryKind=null;dbExplanationSync();}}
 }
@@ -3037,7 +3065,10 @@ function dbPlanRender(node,record){
   const p=document.createElement('p');ui(p,record.error_code==='AI_PLAN_VIEW_UNSUPPORTED'?'This VIEW is unsupported for plan acquisition. Use Explain SQL for a SQL-only explanation.':'Plan acquisition supports a single SELECT or CTE over TABLEs and supported INVOKER VIEWs. Review the SQL, or use Explain SQL.');node.append(p);
  }
  if(record.plan.captured_at){const p=document.createElement('p');p.textContent=t('Plan captured at')+': '+record.plan.captured_at;node.append(p);}
- if(!record.plan.operators)return;
+ dbPlanRenderOperators(node,record,record.plan.operators);
+}
+function dbPlanRenderOperators(node,record,operators){
+ if(!operators)return;
  // Reuse the native disclosure per surface while this scoped record remains displayed.
  // A transient empty read does not change identity; another record or scope does.
  const retained=dbPlanDisclosures.get(node);
@@ -3065,19 +3096,124 @@ function dbPlanRender(node,record){
   }
   return list;
  };
- for(const [index,fragment] of record.plan.operators.fragments.entries()){const p=document.createElement('p');ui(p,'Fragment {number}',{number:index+1});details.append(p,tree([fragment.root]));}
+ for(const [index,fragment] of operators.fragments.entries()){const p=document.createElement('p');ui(p,'Fragment {number}',{number:index+1});details.append(p,tree([fragment.root]));}
  node.append(details);
 }
+// Saved-plan inference has its own receipt and never changes the source's query proof.
+function dbSavedExact(value,keys){return dbExplanationObject(value)&&JSON.stringify(Object.keys(value).sort())===JSON.stringify([...keys].sort());}
+function dbSavedUUID(value){return typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);}
+function dbSavedSameIdentity(intent){return intent.kind==='saved_plan_explanation'&&dbPlanSameIdentity({...intent,kind:'sql_plan_explanation'});}
+function dbSavedProven(intent){
+ const proof=dbSavedProofs.get(intent);
+ return !!proof&&proof.authority===dbPlanAuthority()&&proof.key===intent.key&&proof.body===intent.body&&proof.id===intent.id&&proof.terminal;
+}
+function dbSavedIntent(){
+ const intents=dbExplanation.intents.filter(dbSavedSameIdentity);
+ return intents.findLast(intent=>!dbSavedProven(intent))||intents.at(-1);
+}
+function dbSavedObserve(record){
+ if(record.kind!=='saved_plan_explanation')return;
+ for(const intent of dbExplanation.intents){
+  if(!dbSavedSameIdentity(intent)||!intent.id||intent.id!==record.id||record.input.source_explanation_id!==intent.body.source_explanation_id||record.input.language!==intent.body.language)continue;
+  dbSavedProofs.set(intent,{authority:dbPlanAuthority(),key:intent.key,body:intent.body,id:intent.id,terminal:['SUCCEEDED','FAILED','CANCELED'].includes(record.state)&&!['RUNNING','UNKNOWN'].includes(record.inference_state)});
+ }
+}
+function dbSavedMarkSource(record){
+ if(record.kind==='sql_plan_explanation')dbSavedSources.set(record,{authority:dbPlanAuthority(),scope:dbExplanation.scope});
+}
+function dbSavedEligible(record){
+ const proof=record&&dbSavedSources.get(record);
+ return !!proof&&proof.authority===dbPlanAuthority()&&proof.scope===dbExplanation.scope&&record.kind==='sql_plan_explanation'&&['SUCCEEDED','FAILED','CANCELED','UNKNOWN'].includes(record.state)&&record.plan_status==='COLLECTED'&&record.plan.query_state==='FINISHED'&&!!record.plan.operators&&!!record.plan.captured_at;
+}
+function dbSavedRecord(data,context,intent){
+ const r=data?.explanation,p=r?.source_snapshot,nonempty=value=>typeof value==='string'&&!!value.trim();
+ if(!dbExplanationObject(r)||!dbSavedUUID(r.id)||['plan','plan_status','query','query_id','backend_query_id','operational_plan'].some(key=>Object.hasOwn(r,key))||!dbSavedExact(r.input,['source_explanation_id','language'])||!dbSavedUUID(r.input.source_explanation_id)||r.id===r.input.source_explanation_id||!['ja','en'].includes(r.input.language)||!dbSavedExact(p,['explanation_id','query_id','state','query_state','format','captured_at','sql','operators'])||!dbSavedUUID(p.explanation_id)||p.explanation_id!==r.input.source_explanation_id||!dbSavedUUID(p.query_id)||!['SUCCEEDED','FAILED','CANCELED','UNKNOWN'].includes(p.state)||p.query_state!=='FINISHED'||p.format!=='TRINO_DISTRIBUTED_JSON'||!nonempty(p.captured_at)||!nonempty(p.sql)||typeof r.cancel_requested!=='boolean'||!['NOT_STARTED','RUNNING','SUCCEEDED','FAILED','UNKNOWN','CANCELED'].includes(r.inference_state)||r.cancel_requested&&r.state!=='SUCCEEDED'&&r.text!==null)throw Error('CONTEXT_MISMATCH');
+ if(intent.id&&intent.id!==r.id||intent.body?.source_explanation_id!==undefined&&(intent.body.source_explanation_id!==r.input.source_explanation_id||intent.body.language!==r.input.language))throw Error('CONTEXT_MISMATCH');
+ const metadata=r.metadata,hasView=metadata?.relations?.some(relation=>relation?.kind==='VIEW');
+ if(!dbSavedExact(metadata,hasView?['captured_at','relations','view_dependencies']:['captured_at','relations']))throw Error('CONTEXT_MISMATCH');
+ for(const relation of [...metadata.relations,...(metadata.view_dependencies||[])]){
+  if(!dbSavedExact(relation,['schema','table','kind','columns'])||!Array.isArray(relation.columns)||relation.columns.some(column=>!dbSavedExact(column,['name','type'])))throw Error('CONTEXT_MISMATCH');
+ }
+ // Reuse the unchanged A2 metadata envelope and closed operator projection validator.
+ // The temporary shape is validation only; no operational plan enters the A5 DTO.
+ const operators=dbPlanProjection(p.operators);
+ const checked=dbExplanationRecord({context:data.context,explanation:{...r,kind:'sql_plan_explanation',input:{sql:p.sql,language:r.input.language},plan_status:'COLLECTED',cancel_requested:false,
+  plan:{format:p.format,query_id:p.query_id,backend_query_id:null,query_state:'FINISHED',execution_closure:null,captured_at:p.captured_at,operators,error_code:null}}},context,{kind:'sql_plan_explanation',id:intent.id});
+ if(r.kind!=='saved_plan_explanation')throw Error('CONTEXT_MISMATCH');
+ return {id:checked.id,kind:r.kind,state:checked.state,actor:checked.actor,context:checked.context,input:{source_explanation_id:p.explanation_id,language:r.input.language},model:checked.model,metadata:checked.metadata,text:checked.text,error_code:checked.error_code,
+  sql_status:checked.sql_status,cancel_requested:r.cancel_requested,inference_state:r.inference_state,created_at:checked.created_at,updated_at:checked.updated_at,
+  source_snapshot:{explanation_id:p.explanation_id,query_id:p.query_id,state:p.state,query_state:p.query_state,format:p.format,captured_at:p.captured_at,sql:p.sql,operators}};
+}
+async function dbSavedExplain(source,recover=false){
+ dbExplanationSync();if(dbReason()||dbExplanation.busy||dbSavedBusy||!recover&&dbSource.token)return;
+ let intent;
+ if(source==='poll'){
+  const shown=dbExplanation.record;
+  if(!recover||shown?.kind!=='saved_plan_explanation'||dbExplanation.displayOrigin!=='current'||!['QUEUED','RUNNING'].includes(shown.state))return;
+  intent=dbExplanation.intents.find(item=>dbSavedSameIdentity(item)&&item.id===shown.id&&item.body.source_explanation_id===shown.input.source_explanation_id&&item.body.language===shown.input.language);
+  if(!intent?.id)return;
+ }else if(!recover||source==='recover')intent=dbSavedIntent();
+ else return;
+ if(recover&&!intent||!recover&&intent&&!dbSavedProven(intent))return;
+ if(!recover){
+  const record=dbExplanation.record;if(!dbSavedEligible(record))return;
+  const capture=structuredClone(dbExplanationCapture());
+  intent=dbExplanationFreezeIntent({key:crypto.randomUUID(),capture,source,kind:'saved_plan_explanation',endpoint:dbExplanationEndpoints.saved_plan_explanation,body:{context:structuredClone(capture.context),source_explanation_id:record.id,language:language==='ja'?'ja':'en'},id:null});
+  dbExplanation.intents.push(intent);
+ }
+ if(!intent.id&&!dbExplanationPersist()){
+  dbExplanation.notice='Explanation request could not be saved in browser storage. No request was sent. Restore storage, then recover the original request.';dbExplanationSync();return;
+ }
+ const scope=dbExplanation.scope,sequence=++dbExplanation.sequence,authority=dbPlanAuthority(),version=dbSource.version,token={};
+ const current=()=>dbExplanationCurrent(sequence,scope)&&authority===dbPlanAuthority()&&version===dbSource.version&&dbSavedSameIdentity(intent);
+ dbSavedProofs.delete(intent);dbSavedBusy=token;dbExplanation.busy=true;
+ if(dbExplanation.record?.kind!==intent.kind||dbExplanation.record?.id!==intent.id)dbExplanation.record=null;
+ dbExplanation.notice='Explanation request in progress.';dbExplanationSync();
+ try{
+  const post=!intent.id,path=post?intent.endpoint:intent.endpoint+'/'+encodeURIComponent(intent.id)+'?'+new URLSearchParams({context:JSON.stringify(intent.body.context)});
+  const data=await dbExplanationFetch(path,intent,post);if(!current())return;
+  const record=dbExplanationRecord(data,intent.body.context,intent);
+  intent.id=record.id;dbSavedObserve(record);dbExplanationPersist();
+  dbExplanation.record=record;dbExplanation.displayOrigin='current';dbExplanation.notice='';
+ }catch(error){
+  if(!current())return;
+  if(!intent.id&&error.savedNoAdmission)dbSavedProofs.set(intent,{authority,key:intent.key,body:intent.body,id:null,terminal:true});
+  dbExplanation.notice=error.savedNoAdmission?'Saved plan unavailable. Refresh the original plan record before trying again.':'Explanation outcome uncertain. Recover the original request; no automatic resubmission.';
+ }finally{
+  if(dbSavedBusy===token){dbSavedBusy=null;dbExplanation.busy=false;dbExplanationSync();}
+ }
+}
+async function dbSavedCancel(){
+ dbExplanationSync();if(dbExplanation.busy||dbReason())return;
+ const shown=dbExplanation.record;if(shown?.kind!=='saved_plan_explanation'||!['QUEUED','RUNNING'].includes(shown.state)||shown.cancel_requested)return;
+ const context=structuredClone(shown.context),intent={kind:shown.kind,id:shown.id,body:{context,...shown.input}},scope=dbExplanation.scope,sequence=++dbExplanation.sequence,authority=dbPlanAuthority(),version=dbSource.version,token={};
+ const current=()=>dbExplanationCurrent(sequence,scope)&&authority===dbPlanAuthority()&&version===dbSource.version;
+ dbSavedBusy=token;dbExplanation.busy=true;dbExplanationSync();
+ try{
+  const response=await fetch(dbExplanationEndpoints.saved_plan_explanation+'/'+encodeURIComponent(shown.id)+'/cancel',{method:'POST',headers:{'Content-Type':'application/json','X-Shirokuma-Role':context.selected_role},body:JSON.stringify({context})});
+  const data=await response.json();if(!response.ok)throw dbError(data,response.status);if(!current())return;
+  const record=dbExplanationRecord(data,context,intent);dbSavedObserve(record);dbExplanation.record=record;dbExplanation.notice='';
+ }catch{if(current())dbExplanation.notice='Cancellation unavailable. Refresh the original request to check its outcome.';}
+ finally{if(dbSavedBusy===token){dbSavedBusy=null;dbExplanation.busy=false;dbExplanationSync();}}
+}
+function dbSavedRender(node,record){
+ const p=record.source_snapshot,provenance=document.createElement('p');
+ provenance.textContent=t('Saved plan, as of saved plan time')+' · '+t('Plan captured at')+': '+p.captured_at+' · '+t('Original explanation outcome')+': '+dbExplanationStateLabel(p.state);node.append(provenance);
+ const phase=document.createElement('p');phase.textContent=t('Local explanation')+': '+dbExplanationStateLabel(record.inference_state);node.append(phase);
+ if(record.cancel_requested&&record.state!=='SUCCEEDED'){const notice=document.createElement('p');ui(notice,'Model result will be discarded. Physical model stoppage is not confirmed.');node.append(notice);}
+ dbPlanRenderOperators(node,record,p.operators);
+}
 function dbExplanationInstall(){
+ dbSavedBusy=null;
  dbSourceProofs.clear();dbSource.token=null;dbSource.scope='';dbSourceInvalidate();
  dbPlanDisclosures.clear();
- dbPlanProofs.clear();
+ dbPlanProofs.clear();dbSavedProofs.clear();
  dbExplanation.installed=true;
  ++dbExplanation.sequence;dbExplanation.busy=false;dbExplanation.pendingHistoryKind=null;dbExplanation.record=null;dbExplanation.displayOrigin=null;dbExplanation.history=[];dbExplanation.notice='';
  const saved=readStorage(dbExplanationKey,[]);
  dbExplanation.intents=Array.isArray(saved)?saved.flatMap(item=>{
-  if(typeof item?.key!=='string'||!item.key||!item.capture?.context||!item.body?.context||typeof item.body.sql!=='string'||!['ja','en'].includes(item.body.language)||!['doctor','copilot'].includes(item.source)||!dbExplanationSameContext(item.capture.context,item.body.context))return [];
-  try{return [dbExplanationFreezeIntent({...item,body:{context:item.body.context,sql:item.body.sql,language:item.body.language}})];}catch{return [];}
+  if(typeof item?.key!=='string'||!item.key||!item.capture?.context||!item.body?.context||(item.kind!=='saved_plan_explanation'&&typeof item.body.sql!=='string')||!['ja','en'].includes(item.body.language)||!['doctor','copilot'].includes(item.source)||!dbExplanationSameContext(item.capture.context,item.body.context))return [];
+  try{return [dbExplanationFreezeIntent({...item,body:item.kind==='saved_plan_explanation'?item.body:{context:item.body.context,sql:item.body.sql,language:item.body.language}})];}catch{return [];}
  }):[];
  $('bear-query-target').disabled=true;if($('bear-query-target').parentElement)$('bear-query-target').parentElement.hidden=true;
  const input=$('bear-query-sql');input.disabled=false;input.dataset.databaseUnavailable='false';
@@ -3114,6 +3250,16 @@ function dbExplanationInstall(){
    const button=document.createElement('button');button.id='explanation-'+prefix+'-'+action;button.type='button';ui(button,key);button.onclick=task;planToolbar.append(button);
   }
   panel.append(planToolbar);
+  const savedHelp=document.createElement('p');ui(savedHelp,'Explains the saved plan locally. Uses its original SQL and captured metadata.');panel.append(savedHelp);
+  const savedToolbar=document.createElement('div');savedToolbar.className='toolbar';
+  for(const [action,key,task] of [
+   ['saved-plan','Explain saved plan again',()=>dbSavedExplain(prefix)],
+   ['saved-plan-recover','Refresh saved plan explanation / recover request',()=>dbSavedExplain('recover',true)],
+   ['saved-plan-history','Load saved plan explanation history',()=>dbExplanationHistory('saved_plan_explanation')],
+   ['saved-plan-cancel','Discard explanation result',dbSavedCancel]]){
+   const button=document.createElement('button');button.id='explanation-'+prefix+'-'+action;button.type='button';ui(button,key);button.onclick=task;savedToolbar.append(button);
+  }
+  panel.append(savedToolbar);
   if(prefix==='doctor'){const output=document.createElement('div');output.id='explanation-doctor-output';output.setAttribute('aria-live','polite');panel.append(output);$('bear-panel-query').append(panel);}
   else $('copilot-result').before(panel);
  }

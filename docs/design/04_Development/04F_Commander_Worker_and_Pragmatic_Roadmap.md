@@ -5,14 +5,16 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-31
-version: "1.37"
+version: "1.38"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
 
-2026-10-31、[DB-P6-4A4](../../guides/database-p6-4a4-latest-query-source-2026-10-31.md)でQuery Doctorの最新SELECT読込を実装した。本人・保存済み9項目context・通常read-only queryへ対象を限定し、全参照schema権限と現在のlogical identityを検査する。明示GETでSQLと元queryのID・時刻・状態だけを取り出し、SQL・AI・Wake・catalogは呼ばない。入力変更・認可変更・遅着応答を拒み、未解決のA1／A2要求を保持する。A1は元IDのGETまたは元key／bodyの明示復旧で確認し、異なる現在入力へ古い説明を表示しない。重点backend116件・UI168件、全体回帰92単位（3,779成功・34 skip）、2DB・3roleの実機・画面と既存状態の保全を確認し、この限定範囲を技術受入済みとした。次は取得済み計画だけを使う明示再説明、その後にSQL案／WAP連携・他Bearsを扱い、P6-4全体／P6-7／M1本人受入は継続する。
+2026-10-31、[DB-P6-4A5](../../guides/database-p6-4a5-saved-plan-explanation-2026-10-31.md)で保存済み計画の明示再説明を実装した。元A2／A3のCOLLECTED証拠と、保存値・現在台帳の両方でFINISHEDの元queryを検証し、安全な取得時点の計画とmetadataを別kindの推論要求へ原子的に固定する。元親がSUCCEEDED／FAILED／CANCELED／UNKNOWNでも条件が合えば扱い、元UNKNOWNやA2の新規query guardを変更しない。保存9項目contextと全凍結依存schemaの現在権限を検査し、catalog・Engine・Wake・admissionを呼ばずにLOCAL推論だけを行う。新要求の元key復旧・履歴・取消を分離し、UNKNOWNを自動再推論しない。重点backend198件・UI190件、全体回帰3,824成功・34 skip、2DB・3roleの休止中実機確認と最終保全照合を完了した。次はSQL案生成、その後に既存WAPへの明示引渡し・他Bearsを扱う。P6-4全体／P6-7／M1本人受入は継続する。
+
+2026-10-31、[DB-P6-4A4](../../guides/database-p6-4a4-latest-query-source-2026-10-31.md)でQuery Doctorの最新SELECT読込を実装した。本人・保存済み9項目context・通常read-only queryへ対象を限定し、全参照schema権限と現在のlogical identityを検査する。明示GETでSQLと元queryのID・時刻・状態だけを取り出し、SQL・AI・Wake・catalogは呼ばない。入力変更・認可変更・遅着応答を拒み、未解決のA1／A2要求を保持する。A1は元IDのGETまたは元key／bodyの明示復旧で確認し、異なる現在入力へ古い説明を表示しない。重点backend116件・UI168件、全体回帰92単位（3,779成功・34 skip）、2DB・3roleの実機・画面と既存状態の保全を確認し、この限定範囲を技術受入済みとした。A4時点の後続だった保存済み計画の明示再説明はA5で扱い、P6-4全体／P6-7／M1本人受入は継続する。
 
 2026-10-31、[DB-P6-4A3](../../guides/database-p6-4a3-view-plan-explanation-2026-10-31.md)でQuery Doctor／Copilotの計画説明を、TABLEから`logical_v1`の対応するINVOKER VIEWへ拡張した。native／外部登録を名前で限定せず、stored defaultsに従う再帰依存の同一DB・全schema権限とprivateなhead証拠を固定・再検査する。VIEW定義内の整数snapshot付きTABLE参照は全指定snapshotとschemaを検証し、通常のdata appendを妨げない。VIEW定義をSQLへ展開せず、元SQLへの固定非ANALYZE EXPLAINを通常受付・Wakeで実行する。元SQLは未実行であり、catalog検証はversion固定ではない楽観的検証である。実機・画面で重点検証した。全体回帰91単位（3,719成功・34 skip）に加え、回帰開始後の修正を最終重点backend204件・UI80件で確認し、この限定範囲を技術受入済みとした。DEFINER・他DB・履歴schema差分・timestamp／tag等のtime travel、SQL案／WAP・他Bearsは後続で、P6-4全体／P6-7／M1本人受入は未完了である。
 

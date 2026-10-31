@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.22.0"
+version: "7.23.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -20,11 +20,17 @@ tags: [shirokuma, local, milestones]
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
 
+### 2026-10-31 — DB-P6-4A5 frozen collected plan re-explanation
+
+- [実装・検証記録](../../guides/database-p6-4a5-saved-plan-explanation-2026-10-31.md)：元A2／A3のCOLLECTED計画と保存値・実台帳がFINISHEDの元queryを検証し、取得時点の計画・metadataだけで新しいLOCAL説明を要求する。現在の本人・保存9項目context・全凍結依存schema権限が条件。
+- 元親のFAILED／CANCELED／UNKNOWNを変更せず、catalog・Engine・Wake・admissionを呼ばない。独立した元key復旧・履歴・取消とUNKNOWN保持を実装。重点backend198件・UI190件、全体回帰3,824成功・34 skip、2DB・3roleの休止中実機確認・最終保全照合を完了。
+- 次はSQL案生成、既存WAPへの明示引渡し・他Bears。P6-4全体／P6-7／M1本人受入は未完了。
+
 ### 2026-10-31 — DB-P6-4A4 latest SELECT source for Query Doctor
 
 - [実装・検証記録](../../guides/database-p6-4a4-latest-query-source-2026-10-31.md)：本人・保存9項目context・全参照schema権限が一致する通常read-only SELECTを明示GETでDoctor入力へ読み込む。SQL・AI・Wake・catalogは呼ばない。
 - 元queryのID・時刻・状態と入力の遅着ガードを追加。未解決A1／A2を保持し、A1の元ID／元key・bodyを既存の明示復旧操作で確認する。重点backend116件・UI168件、全体回帰92単位（3,779成功・34 skip）と2DB・3roleの実機・画面、既存状態の保全を確認。
-- 取得済み計画だけを使う明示再説明、SQL案／WAP・他Bearsは後続。P6-4全体／P6-7／M1本人受入は未完了。
+- A4時点の後続だった保存済み計画の明示再説明はA5で拡張。SQL案／WAP・他Bears、P6-4全体／P6-7／M1本人受入は残件。
 
 ### 2026-10-31 — DB-P6-4A3 compatible INVOKER VIEW plan explanation
 
