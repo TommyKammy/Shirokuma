@@ -640,7 +640,7 @@ def _run_subprocess(artifacts, owner, tests):
 
 
 
-def child_proof(db, run, uid, phase):
+def child_proof(db, run, uid, phase, *, historical=False):
     """Exact persisted parent/child/query/identity and input proof, no live RPC."""
     try:
         from db_marts import _closed_child
@@ -703,7 +703,11 @@ def child_proof(db, run, uid, phase):
         if phase == 'build':
             candidate = receipt['candidate']
             ref = registry.ResourceRef(**candidate['ref'])
-            obj = registry.get_object(db, ref.object_id)
+            if historical:
+                saved_object = db.execute('SELECT * FROM object_bindings WHERE id=?', (ref.object_id,)).fetchone()
+                obj = registry.ObjectBinding(**dict(saved_object)) if saved_object is not None else None
+            else:
+                obj = registry.get_object(db, ref.object_id)
             schema = registry.get_schema(db, ref.schema_id)
             owned = db.execute('SELECT * FROM dataops_owned_objects WHERE operation_id=? AND object_id=?',
                 (op['id'], ref.object_id)).fetchone()
@@ -713,7 +717,7 @@ def child_proof(db, run, uid, phase):
                     or item.get('dependency_snapshots') != pins or sdk['status'] != 'success'
                     or ref.database_id != run['context']['database_id'] or ref.schema_id != run['context']['schema_id']
                     or schema is None or schema.purpose != 'sandbox' or schema.database_id != ref.database_id
-                    or obj is None or not obj.current or obj.kind != 'TABLE' or obj.schema_id != ref.schema_id
+                    or obj is None or not historical and not obj.current or obj.kind != 'TABLE' or obj.schema_id != ref.schema_id
                     or obj.incarnation != ref.incarnation or not obj.backend_identity or not candidate.get('snapshot')
                     or owned is None or owned['incarnation'] != ref.incarnation or owned['purpose'] != 'stage'
                     or receipt.get('candidate_locator') != locator or obj.physical_name != locator['physical_name']):
@@ -786,7 +790,7 @@ def _failed_build_child(db, run, op):
         and _closed_child(db, op['id']))
 
 
-def _task_completion_proof(db, run, phase):
+def _task_completion_proof(db, run, phase, *, historical=False):
     """Validate completion, including SDK error/skipped nodes, without claiming success."""
     try:
         plan = dbt._check_plan(db, run)
@@ -837,16 +841,47 @@ def _task_completion_proof(db, run, phase):
                 if (item['state'] != 'EXPANDED' or results[uid]['status'] != 'success' or item['operation_ids']
                         or results[uid]['adapter_response'] != {} or results[uid]['failures'] is not None):
                     return False
-            elif child_proof(db, run, uid, phase) is None:
+            elif child_proof(db, run, uid, phase, historical=historical) is None:
                 return False
         return True
     except (KeyError, TypeError, ValueError, QueryError, compiler.DbtError):
         return False
 
 
-def task_proof(db, run, phase):
-    return (_task_completion_proof(db, run, phase)
+def task_proof(db, run, phase, *, historical=False):
+    return (_task_completion_proof(db, run, phase, historical=historical)
         and (phase != 'build' or run['task_receipts'][phase]['success']))
+
+
+
+def publication_proof(db, run, uid, publication=None, *, historical=False):
+    """Whole saved task and quality closure for one explicit TABLE publication."""
+    forbidden = 'DBT_GRAPH_PUBLICATION_FORBIDDEN'
+    try:
+        plan = dbt._check_plan(db, run)
+        if (run['kind'] != 'run' or run.get('executor') != 'native_graph'
+                or not historical and (run['state'] != 'NATIVE_VERIFIED' or run.get('native_verified') is not True
+                    or run.get('cancel_requested') is not False or run.get('tests_status') != 'PASSED')
+                or run.get('_graph_sdk_closed') is not True or run.get('native_tests') is not True
+                or not plan['tests']
+                or [t['unique_id'] for t in run['tests']] != [t['unique_id'] for t in plan['tests']]
+                or any(t['state'] != 'PASSED' or type(t['failure_count']) is not int
+                    or t['failure_count'] != 0 for t in run['tests'])
+                or any(not task_proof(db, run, phase, historical=historical)
+                    or run['task_receipts'][phase]['success'] is not True for phase in ('build', 'test'))):
+            reject(forbidden)
+        model = next(m for m in run['models'] if m['unique_id'] == uid)
+        if model['materialized'] != 'table':
+            reject(forbidden)
+        proofs = {m['unique_id']: child_proof(db, run, m['unique_id'], 'build', historical=historical)
+            for m in run['models'] if m['materialized'] == 'table'}
+        if any(p is None for p in proofs.values()) or uid not in proofs:
+            reject(forbidden)
+        if not historical and model.get('publication_id') and model['publication_id'] != publication:
+            reject('DBT_PUBLICATION_EXISTS')
+        return model, proofs[uid]
+    except (KeyError, TypeError, ValueError, StopIteration, compiler.DbtError):
+        reject(forbidden)
 
 
 def settle(db, run, operations, *, closed, owner_lost):

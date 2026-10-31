@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-10-31
-version: "7.14.0"
+version: "7.15.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-10-31 — DB-P6-3C2D native graph TABLE publication
+
+- Connected complete native graph build and all saved quality-test proofs to explicit per-TABLE MARTS publication through Workbench/API/CLI. Current admin reviews the frozen target and performs a fresh row audit >= 1; other TABLEs remain separate operations. Source and publisher identities, original-request recovery, and historical publication proof remain distinct. See the [contract and evidence](../../guides/database-p6-3c2d-graph-publication-2026-10-31.md).
+- Real acceptance covered 3 graphs, 6 publications, cold CLI execution with a dropped acknowledgement and same-key recovery, browser publication, empty audit, source cancel, target/candidate drift refusal, and fresh two-database MARTS results. Independent ledger/query/SQL/catalog proof validated 34 children, preserved the original 22 RAW/MARTS heads and existing history/configuration, and found no new unclosed admissions. Normal services and 46 healthy doctor checks were restored.
+- All 86 canonical groups passed in stages: 3,442 tests, 3,408 passed, 34 existing skips. Go and documentation checks passed. Native VIEW/incremental/parallel execution, direct SDK candidate replacement, manual-WAP rollback integration, full DB-P6-3 and M1 owner acceptance remain separate follow-ups.
 
 ### 2026-10-31 — DB-P6-3C2C native RunTask graph
 

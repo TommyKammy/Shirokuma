@@ -5,7 +5,7 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-10-31
-version: "1.29"
+version: "1.30"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
@@ -24,9 +24,11 @@ DB-P7は実サイズ／Worker増減、DB-P8は条件付きの用途別Warehouse�
 [DB-P6-2の共有LOCAL休止・自動復帰](../../guides/database-p6-2-implementation-2026-10-29.md)はAPI／CLI／UIを実装し、技術受入が完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））。warm各30回の標本p95差は35.3ms、限定復旧は元UNKNOWNを保持して実行だけを閉鎖した。
 [DB-P6-3B](../../guides/database-p6-3b-implementation-2026-10-29.md)・[C1](../../guides/database-p6-3c-dbt-compatibility-2026-10-29.md)・[C2A](../../guides/database-p6-3c2-sandbox-views-2026-10-30.md)・[C2B1](../../guides/database-p6-3c2b-native-materialization-2026-10-30.md)・[C2B2](../../guides/database-p6-3c2b2-native-runs-2026-10-30.md)・[C2B3](../../guides/database-p6-3c2b3-native-ui-2026-10-30.md)は各限定範囲の技術受入済み。[C2B4](../../guides/database-p6-3c2b4-native-quality-tests-2026-10-30.md)で新規native TABLE 1件に付属する品質test一式を明示選択でき、TABLE作成の検証と品質結果を分離した。API／実CLI／画面、E／A・2DB・休止復帰・品質失敗・SDK停止／取消／owner喪失と保全を実機確認した。この限定範囲の技術受入を完了した。C2B4時点の通常RunTask／全graphは後述のC2Cで扱う。native SDKの候補直接置換、native VIEW、DB-P6-3全体とM1本人受入は後続である。
 
-2026-10-31、[C2B5](../../guides/database-p6-3c2b5-native-publication-2026-10-31.md)で、品質成功済みnative TABLEの明示公開を実装した。Aが固定した公開先を確認し、最低1行の監査を経て同じDatabaseのMARTSへ公開する。E作成／A公開と元key回収を実機確認し、この限定範囲の技術受入を完了した。graph候補の公開・native VIEW、native SDKによる既存候補の直接置換、manual-WAP rollback統合、DB-P6-3全体とM1本人受入は後続である。
+2026-10-31、[C2B5](../../guides/database-p6-3c2b5-native-publication-2026-10-31.md)で、品質成功済みnative TABLEの明示公開を実装した。Aが固定した公開先を確認し、最低1行の監査を経て同じDatabaseのMARTSへ公開する。E作成／A公開と元key回収を実機確認し、この限定範囲の技術受入を完了した。graph候補のTABLE公開は後述C2Dで対応した。native VIEW、native SDKによる既存候補の直接置換、manual-WAP rollback統合、DB-P6-3全体とM1本人受入は後続である。
 
-2026-10-31、[C2C native RunTask／全graph](../../guides/database-p6-3c2c-native-graph-2026-10-31.md)を実装した。対応する保存済みTABLE／EPHEMERAL全DAGを実際のRunTaskで構築し、明示選択時はsource test・TABLE間relationshipsを含む保存全testをTestTaskで実行する。画面／API／CLIに`native_graph`と利用条件を接続した。E／A・2DB・休止復帰・SQL失敗／SKIPPED・取消／owner停止と保全を実機確認し、この限定範囲の技術受入を完了した。graph候補の正式公開、native VIEW／incremental、並列実行は後続とし、C2B5の単一TABLE公開と既存SQL/WAPを維持する。
+2026-10-31、[C2C native RunTask／全graph](../../guides/database-p6-3c2c-native-graph-2026-10-31.md)を実装した。対応する保存済みTABLE／EPHEMERAL全DAGを実際のRunTaskで構築し、明示選択時はsource test・TABLE間relationshipsを含む保存全testをTestTaskで実行する。画面／API／CLIに`native_graph`と利用条件を接続した。E／A・2DB・休止復帰・SQL失敗／SKIPPED・取消／owner停止と保全を実機確認し、この限定範囲の技術受入を完了した。graph候補のTABLE公開は後述C2Dで対応した。native VIEW／incremental、並列実行は後続とし、C2B5の単一TABLE公開と既存SQL/WAPを維持する。
+
+2026-10-31、優先unit [C2D graph候補の明示公開](../../guides/database-p6-3c2d-graph-publication-2026-10-31.md)を実装し、この範囲の技術受入を完了した。全graphの構築と保存全品質testの成功証拠を条件に、現在のAが選択TABLEと固定targetを確認し、最低1行の監査後に同じDBのMARTSへ公開する。他TABLEの公開は別操作であり、source Eとpublisher Aのcontext・資格情報、元要求の回収と履歴証拠を分けて保持する。
 
 ---
 

@@ -22,6 +22,54 @@ C = dict(database_id='db', schema_id='sc', warehouse_id='LOCAL', sql_catalog='sa
          selected_role='data_engineer', binding_revision=1, generation_id='gen', grant_revision=3)
 
 
+def graph_publication_fixture():
+    """Public saved receipts for two TABLEs, an EPHEMERAL, and the whole suite."""
+    mids = ['model.lake.stage', 'model.lake.orders', 'model.lake.second']
+    tids = ['test.orders', 'test.second', 'test.source', 'test.unattached']
+    models = [dict(unique_id=uid, materialized='ephemeral' if i == 0 else 'table',
+        table_properties={} if i == 0 else dict(format='PARQUET'),
+        depends_on=['source.orders'] if i == 0 else [mids[i - 1]],
+        relation=['sales', 'sandbox', ['stage', 'orders', 'second'][i]]) for i, uid in enumerate(mids)]
+    plan = dict(id=PLAN, kind='plan', actor='engineer', context=deepcopy(C), state='READY',
+        source_digest='saved-graph-digest', target_schema='marts', models=deepcopy(models),
+        tests=[dict(unique_id=uid) for uid in tids])
+    run = dict(id=ID, kind='run', actor='engineer', context=deepcopy(C), state='NATIVE_VERIFIED',
+        plan_id=PLAN, source_digest=plan['source_digest'], executor='native_graph', native_tests=True,
+        native_verified=True, tests_status='PASSED', publication_allowed=True, models=models,
+        tests=[dict(unique_id=uid, state='PASSED', failure_count=0) for uid in tids], operations=[])
+    build, tests = [], []
+    for i, model in enumerate(models):
+        uid = model['unique_id']
+        sdk = dict(node_id=uid, status='success', failures=None,
+            adapter_response={} if i == 0 else dict(code='CREATE TABLE', rows_affected=0))
+        build.append(sdk)
+        model.update(state='EXPANDED' if i == 0 else 'NATIVE_VERIFIED', candidate=None, operation_ids=[])
+        if i:
+            model['candidate'] = dict(ref=dict(database_id='db', schema_id='sc', object_id='candidate-' + str(i), incarnation=1), snapshot=str(10 + i))
+            operation_id = 'build-' + uid
+            model['operation_ids'] = [operation_id]
+            model['native_receipt'] = dict(executor='native_graph', plan_id=PLAN, node_id=uid, phase='build', digest='plan-digest',
+                native_verified=True, sdk_result=deepcopy(sdk), candidate=deepcopy(model['candidate']))
+            run['operations'].append(dict(id=operation_id, phase='build', node_id=uid, state='FINISHED', committed=True))
+    for test in run['tests']:
+        uid = test['unique_id']; operation_id = 'test-' + uid
+        sdk = dict(node_id=uid, status='pass', failures=0, adapter_response=dict(code='SELECT', rows_affected=1))
+        tests.append(sdk)
+        test.update(operation_id=operation_id, native_receipt=dict(executor='native_graph', plan_id=PLAN, node_id=uid, phase='test',
+            digest='plan-digest', test_verified=True, status='PASSED', failures=0, sdk_result=deepcopy(sdk)))
+        run['operations'].append(dict(id=operation_id, phase='test', node_id=uid, state='FINISHED', committed=False))
+    run['task_receipts'] = dict(build=dict(task='RunTask', completed=True, success=True, selected=sorted(mids),
+        nodes=deepcopy(build), results=deepcopy(build[1:])), test=dict(task='TestTask', completed=True, success=True,
+        selected=sorted(tids), nodes=deepcopy(tests), results=deepcopy(tests)))
+    admin = dict(C, selected_role='admin')
+    preview = dict(version=1, origin='native_graph', run_id=ID, plan_id=PLAN, node_id=mids[1], context=admin,
+        source_digest=run['source_digest'], source_actor=run['actor'], source_context=deepcopy(C), publisher_actor='alice',
+        candidate=deepcopy(models[1]['candidate']), quality=dict(status='PASSED', count=len(tids), test_ids=tids),
+        target=dict(catalog='sales', schema='marts', name='orders'),
+        expected_target=dict(version=1, destination=dict(database_id='db', schema_id='marts', physical_name='orders'), target=None))
+    return run, plan, preview
+
+
 class ClientTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -50,7 +98,7 @@ class ClientTests(unittest.TestCase):
                 if url.path == '/api/v1/databases':
                     reply = {'items': [dict(id='db', sql_catalog='sales', binding_revision=1, generation_id='gen', grant_revision=3)]}
                 elif url.path == '/api/v1/databases/db/schemas':
-                    reply = {'items': [dict(id='sc', sql_name='sandbox')]}
+                    reply = {'items': [dict(id='sc', sql_name='sandbox'), dict(id='marts', sql_name='marts')]}
                 else:
                     context = body['context'] if body else json.loads(parse_qs(url.query)['context'][0])
                     record = dict(id=ID, kind='run', actor='alice', context=deepcopy(context), state='QUEUED', plan_id=PLAN, project_id='lake_marts')
@@ -137,6 +185,169 @@ class ClientTests(unittest.TestCase):
             self.call(action, *args)
             self.assertEqual(len(self.calls), before + 1)
             self.assertEqual(self.calls[-1][0], 'GET')
+
+    def graph_review(self):
+        source, plan, preview = graph_publication_fixture()
+        self.source, self.source_plan, self.preview = source, plan, preview
+        admin = preview['context']
+        def envelope(reply):
+            path = self.calls[-1][1]
+            if path.endswith('/publication-preview'):
+                return dict(context=admin, preview=deepcopy(self.preview))
+            if path == '/api/v1/dbt/runs/' + ID:
+                return dict(context=admin, run=deepcopy(self.source))
+            if path == '/api/v1/dbt/plans/' + PLAN:
+                return dict(context=admin, plan=deepcopy(self.source_plan))
+            return reply
+        self.envelope = envelope
+        self.corrupt = lambda r: r.update(origin='native_graph') if r['kind'] == 'publication' else None
+        path = Path(self.temp.name) / 'graph-review.json'
+        path.write_text(json.dumps(preview))
+        return admin, path
+
+    def test_graph_publication_preview_confirm_and_original_recovery(self):
+        admin, path = self.graph_review()
+        flags = ['--run-id=' + ID, '--node-id=model.lake.orders']
+        reply = self.call('publish-preview', *flags, context=admin)
+        self.assertEqual(reply['preview'], self.preview)
+        self.assertEqual([c[0] for c in self.calls], ['GET', 'GET', 'GET', 'GET'])
+        self.assertTrue(all('Idempotency-Key' not in c[4] for c in self.calls))
+        flags += ['--expected-target-file=' + str(path), '--idempotency-key=graph-original']
+        self.drop = True
+        result = self.call('publish', *flags, context=admin)
+        self.assertTrue(result['request_uncertain'])
+        original = deepcopy(self.calls[-1])
+        self.assertEqual(result['retry']['body'], dict(context=admin, node_id='model.lake.orders', expected_target=self.preview['expected_target']))
+        self.assertEqual(set(result['retry']['body']), {'context', 'node_id', 'expected_target'})
+        self.source['models'][1]['publication_id'] = PUB
+        self.source['publication_allowed'] = False
+        self.preview['expected_target']['destination']['physical_name'] = 'changed-after-review'
+        reply = self.call('publish', *flags, context=admin)
+        self.assertEqual(reply['publication']['origin'], 'native_graph')
+        self.assertEqual(self.calls[-1], original)
+        self.assertEqual(len(self.receipts), 1)
+        self.assertEqual(reply['publication']['expected_target']['destination']['physical_name'], 'orders')
+
+    def test_graph_publication_preview_source_scope_quality_and_task_tampers_blocked(self):
+        admin, path = self.graph_review()
+        good_source, good_plan, good_preview = deepcopy(self.source), deepcopy(self.source_plan), deepcopy(self.preview)
+        flags = ['--run-id=' + ID, '--node-id=model.lake.orders', '--expected-target-file=' + str(path)]
+        preview_changes = [lambda v: v.update(origin='native_table'), lambda v: v.update(origin='sql_wap'),
+            lambda v: v.update(run_id=PLAN), lambda v: v.update(plan_id=ID), lambda v: v.update(node_id='model.lake.second'),
+            lambda v: v.update(source_digest='wrong'), lambda v: v.update(source_actor='other'),
+            lambda v: v['source_context'].update(grant_revision=999), lambda v: v['candidate']['ref'].update(object_id='other'),
+            lambda v: v['quality'].update(count=3), lambda v: v['quality']['test_ids'].pop(),
+            lambda v: v['target'].update(catalog='forged'), lambda v: v['target'].update(schema='raw'), lambda v: v['target'].update(name='second'),
+            lambda v: v['expected_target']['destination'].update(schema_id='raw'),
+            lambda v: v['expected_target']['destination'].update(physical_name='second')]
+        source_changes = [lambda r: r.update(executor='native_table'), lambda r: r.update(publication_allowed=False),
+            lambda r: r.update(native_verified=False), lambda r: r.update(native_tests=False), lambda r: r.update(tests_status='NOT_RUN'),
+            lambda r: r['tests'].pop(), lambda r: r['tests'][1].update(state='FAILED', failure_count=1),
+            lambda r: r['tests'][2].update(failure_count=False), lambda r: r['models'].pop(),
+            lambda r: r['models'][2].update(state='FAILED'), lambda r: r['models'][0].update(state='NATIVE_VERIFIED'),
+            lambda r: r['models'][1]['native_receipt']['candidate'].update(snapshot='wrong'),
+            lambda r: r['models'][1].update(operation_ids=['other']), lambda r: r['operations'][0].update(node_id='other'),
+            lambda r: r.pop('task_receipts'), lambda r: r['task_receipts']['build'].update(success=False),
+            lambda r: r['task_receipts']['test'].update(completed=False),
+            lambda r: r['task_receipts']['test']['selected'].pop(),
+            lambda r: r['task_receipts']['build']['results'].pop(),
+            lambda r: r['operations'].append(dict(id='extra', phase='build', node_id='model.lake.stage', state='FINISHED', committed=True))]
+        for change in preview_changes:
+            self.preview = deepcopy(good_preview); change(self.preview); path.write_text(json.dumps(self.preview))
+            before = sum(c[0] == 'POST' for c in self.calls)
+            with self.subTest(preview=change), self.assertRaises((ValueError, StopIteration)):
+                self.call('publish-preview', '--run-id=' + ID, '--node-id=model.lake.orders', context=admin)
+            self.assertEqual(sum(c[0] == 'POST' for c in self.calls), before)
+        self.preview = deepcopy(good_preview); path.write_text(json.dumps(self.preview))
+        for change in source_changes:
+            self.source = deepcopy(good_source); change(self.source)
+            before = sum(c[0] == 'POST' for c in self.calls)
+            with self.subTest(source=change), self.assertRaises((ValueError, StopIteration)):
+                self.call('publish-preview', '--run-id=' + ID, '--node-id=model.lake.orders', context=admin)
+            self.assertEqual(sum(c[0] == 'POST' for c in self.calls), before)
+        self.source = good_source
+        self.source_plan = deepcopy(good_plan); self.source_plan['models'][2]['materialized'] = 'ephemeral'
+        with self.assertRaises(ValueError):
+            self.call('publish-preview', '--run-id=' + ID, '--node-id=model.lake.orders', context=admin)
+
+    def test_graph_publication_ack_mismatch_retains_frozen_origin_and_intent(self):
+        admin, path = self.graph_review()
+        flags = ['--run-id=' + ID, '--node-id=model.lake.orders', '--expected-target-file=' + str(path), '--idempotency-key=graph-ack']
+        changes = [dict(origin='native_table'), dict(origin='sql_wap'), dict(run_id=PLAN), dict(parent_run_id=PLAN),
+                   dict(plan_id=ID), dict(node_id='model.lake.second'), dict(expected_target={}), dict(context=C)]
+        for change in changes:
+            self.corrupt = lambda r, c=change: r.update(origin='native_graph', **{k:v for k,v in c.items() if k != 'origin'}) if 'origin' not in c else r.update(c)
+            reply = self.call('publish', *flags, context=admin)
+            self.assertTrue(reply['request_uncertain'])
+            self.assertEqual(reply['retry']['idempotency_key'], 'graph-ack')
+            self.assertEqual(reply['retry']['body'], self.calls[-1][3])
+            self.assertEqual(reply['retry']['body']['expected_target'], self.preview['expected_target'])
+
+    def test_graph_sandbox_relation_marts_preview_and_forged_saved_relation(self):
+        admin, _ = self.graph_review()
+        flags = ['--run-id=' + ID, '--node-id=model.lake.orders']
+        self.assertEqual(self.source_plan['models'][1]['relation'], ['sales', 'sandbox', 'orders'])
+        self.assertNotIn('graph_task_receipts', self.source)
+        self.assertEqual(self.call('publish-preview', *flags, context=admin)['preview']['target'],
+                         dict(catalog='sales', schema='marts', name='orders'))
+        good = deepcopy(self.source_plan)
+        for index, forged in ((0, 'other_catalog'), (2, 'other_alias')):
+            self.source_plan = deepcopy(good)
+            self.source_plan['models'][1]['relation'][index] = forged
+            with self.subTest(index=index), self.assertRaises(ValueError):
+                self.call('publish-preview', *flags, context=admin)
+        self.assertTrue(all(c[0] == 'GET' for c in self.calls))
+
+    def test_frozen_graph_replay_after_source_cancellation_quality_or_other_publication(self):
+        changes = [lambda r: r.update(state='CANCELED', cancel_requested=True, publication_allowed=False),
+                   lambda r: r.update(state='FAILED', tests_status='FAILED', publication_allowed=False),
+                   lambda r: r['task_receipts']['test'].update(success=False),
+                   lambda r: r['models'][1]['candidate'].update(snapshot='invalidated'),
+                   lambda r: r['models'][2].update(publication_id=PUB)]
+        for index, change in enumerate(changes):
+            with self.subTest(change=index):
+                admin, path = self.graph_review()
+                flags = ['--run-id=' + ID, '--node-id=model.lake.orders',
+                         '--expected-target-file=' + str(path), '--idempotency-key=replay-' + str(index)]
+                before = len(self.calls)
+                self.drop = True
+                uncertain = self.call('publish', *flags, context=admin)
+                self.assertTrue(uncertain['request_uncertain'])
+                original = deepcopy(self.calls[-1])
+                change(self.source)
+                recovered = self.call('publish', *flags, context=admin)
+                self.assertEqual(recovered['publication']['id'], PUB)
+                self.assertEqual(self.calls[-1], original)
+                self.assertEqual([c[0] for c in self.calls[before:]], ['POST', 'POST'])
+                self.assertEqual(len(self.receipts), index + 1)
+                with self.assertRaises(ValueError):
+                    # The read-only gate still rejects current invalid proof.
+                    if index == 4:
+                        self.source['publication_allowed'] = False
+                    self.call('publish-preview', '--run-id=' + ID, '--node-id=model.lake.orders', context=admin)
+
+    def test_complete_frozen_review_validation_and_b5_publish_without_get(self):
+        admin, path = self.graph_review()
+        flags = ['--run-id=' + ID, '--node-id=model.lake.orders', '--expected-target-file=' + str(path)]
+        good = deepcopy(self.preview)
+        for change in (lambda v: v.update(publisher_actor='other'), lambda v: v.pop('source_actor'),
+                       lambda v: v.pop('source_digest'), lambda v: v['source_context'].update(database_id='other'),
+                       lambda v: v['candidate']['ref'].update(schema_id='raw'),
+                       lambda v: v['target'].update(catalog='other'),
+                       lambda v: v['target'].update(name='other')):
+            bad = deepcopy(good); change(bad); path.write_text(json.dumps(bad))
+            before = len(self.calls)
+            with self.assertRaises(ValueError):
+                self.call('publish', *flags, context=admin)
+            self.assertEqual(len(self.calls), before)
+        good['origin'] = 'native_table'
+        path.write_text(json.dumps(good))
+        self.corrupt = lambda r: r.update(origin='native_table')
+        before = len(self.calls)
+        reply = self.call('publish', *flags, context=admin)
+        self.assertEqual(reply['publication']['origin'], 'native_table')
+        self.assertEqual([c[0] for c in self.calls[before:]], ['POST'])
+        self.assertEqual(self.calls[-1][3], dict(context=admin, node_id=good['node_id'], expected_target=good['expected_target']))
 
     def test_sqlwap_false_preserves_original_body_key_and_explicit_recovery(self):
         for executor in (None, 'sql_wap'):
@@ -233,7 +444,9 @@ class ClientTests(unittest.TestCase):
         flags = ['--run-id=' + ID, '--node-id=model.lake.orders', '--expected-target-file=' + str(path)]
         for envelope in (preview, dict(context=admin, preview=preview)):
             path.write_text(json.dumps(envelope))
+            before = len(self.calls)
             result = self.call('publish', *flags, context=admin)
+            self.assertEqual([c[0] for c in self.calls[before:]], ['POST'])
             self.assertEqual(result['publication']['expected_target'], preview['expected_target'])
             self.assertEqual(set(self.calls[-1][3]), {'node_id', 'context', 'expected_target'})
         original = deepcopy(preview['expected_target'])

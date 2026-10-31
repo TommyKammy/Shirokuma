@@ -48,3 +48,7 @@ native VIEW・incremental等の追加materializationと並列実行は別の対�
 元の141 DB／564 Schema、141 catalog binding／141 logical binding、権限・identity・資格情報・policy、全WAP行と旧dbt／DataOps行を保持した。B5公開先を含む元22 RAW／MARTS Tableのheadは変えていない。新規の未閉鎖は0、従来のFENCED_READ_ONLY UNKNOWNは2件のままである。意図したローカルYAML差分2件とruntime profileも変更していない。
 
 Workbench8888／SQL endpoint8080を通常processへ戻し、一時project登録を解除して両方とも`lake_marts`だけを返すことを確認した。doctorはhealthy（46チェック）、LOCALは2/2、AutoChillはminutes=0／revision=5を保持する。主な証拠は`final-proof.json`、`test-summary.json`、`normal-restored.json`と各runの元要求・完了記録である。
+
+## 2026-10-31 C2D追補
+
+[C2D](database-p6-3c2d-graph-publication-2026-10-31.md)で、全RunTask／TestTaskと保存全品質結果が成功したgraphから、AがTABLEを1件ずつ確認して同じDBのMARTSへ公開する経路を実装し、この範囲の技術受入を完了した。本書のgraph公開不可・残件の記述は各unit受入時点の記録である。B5の単一TABLE公開と既存SQL/WAPを維持する。

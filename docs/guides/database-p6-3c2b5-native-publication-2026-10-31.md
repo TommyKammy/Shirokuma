@@ -49,3 +49,7 @@ target claimはShirokumaの協調的なwriter間の競合を防ぐ。最終検�
 ## 2026-10-31 C2C追補
 
 [C2C](database-p6-3c2c-native-graph-2026-10-31.md)で対応するTABLE／EPHEMERAL全graphの通常RunTaskと、保存全generic testの明示TestTaskを実装した。上記のRunTask／全graph残件はB5受入時点の記録である。C2Cのgraph候補は正式公開不可であり、B5の単一native TABLEの公開条件を拡張しない。native VIEW／incremental・並列実行・候補直接置換・manual-WAP rollback統合は後続である。
+
+## 2026-10-31 C2D追補
+
+[C2D](database-p6-3c2d-graph-publication-2026-10-31.md)で、全RunTask／TestTaskと保存全品質結果が成功したgraphから、AがTABLEを1件ずつ確認して同じDBのMARTSへ公開する経路を実装し、この範囲の技術受入を完了した。本書のgraph公開不可・残件の記述は各unit受入時点の記録である。B5の単一TABLE公開と既存SQL/WAPを維持する。

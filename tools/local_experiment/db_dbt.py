@@ -120,6 +120,13 @@ def _public(db, record):
             result['publication_allowed'] = False
     if record.get('executor') == 'native_graph' and record['kind'] == 'run':
         result['publication_allowed'] = False
+        for model in record['models']:
+            try:
+                _native_publication_gate(db, record, model['unique_id'])
+                result['publication_allowed'] = True
+                break
+            except (QueryError, KeyError, TypeError, ValueError):
+                pass
     links = [dict(id=r['operation_id'], phase=r['phase'], node_id=r['node_id'], state=r['state'],
         committed=bool(r['committed'])) for r in db.execute('SELECT l.*,o.state,o.committed FROM dbt_run_operations l '
             'JOIN dataops_operations o ON o.id=l.operation_id WHERE l.run_id=? ORDER BY l.rowid', (record['id'],))]
@@ -555,8 +562,8 @@ def _check_operation(db, operation_id):
         _source_identities(db, _check_plan(db, source))
         if run['kind'] == 'publication':
             _gate(db, source, link['node_id'], publication=run['id'])
-            if run.get('origin') == 'native_table':
-                _native_publisher(db, principal=live[0], context=live[1], run=source)
+            if run.get('origin') in ('native_table', 'native_graph'):
+                _native_publisher(db, principal=live[0], context=live[1], run=source, node_id=run['node_id'])
                 if (link['phase'] not in ('audit', 'publish') or link['node_id'] != run['node_id']
                         or op['route'] != 'dbt-native-' + link['phase']
                         or op['payload'] != ds._json(dict(payload=_native_child_payload(run, link['phase']), context=run['context']))):
@@ -577,7 +584,7 @@ def _before_query(operation_id, principal, context):
         sent = db.execute('SELECT 1 FROM dataops_queries d JOIN query_execution_contexts e ON e.query_id=d.query_id '
             "WHERE d.operation_id=? AND e.backend_query_id IS NOT NULL AND e.backend_query_id<>''", (operation_id,)).fetchone()
     metadata = _access(principal, context)
-    if run.get('origin') == 'native_table' and not sent:
+    if run.get('origin') in ('native_table', 'native_graph') and not sent:
         # This is the final initial send (after wake). Once accepted by Trino,
         # polling must be able to observe our own write changing the target.
         _native_publication_live(metadata, run)
@@ -871,9 +878,7 @@ def _test_select(execution):
 
 
 def _gate(db, run, node_id, publication=None):
-    if run.get('executor') == 'native_graph':
-        raise QueryError('DBT_GRAPH_PUBLICATION_UNAVAILABLE', 409)
-    if run.get('executor') == 'native_table':
+    if run.get('executor') in ('native_table', 'native_graph'):
         return _native_publication_gate(db, run, node_id, publication)
     plan = _check_plan(db, run)
     expected = {t['unique_id'] for t in plan['tests']}
@@ -954,26 +959,31 @@ def _guard(principal, context, action, *, model_id=None, build=None):
 
 def _native_publication_gate(db, run, node_id, publication=None):
     """Saved native evidence, never manual-WAP artifacts or live catalog calls."""
-    if (run['kind'] != 'run' or run.get('executor') != 'native_table'
-            or run['state'] != 'NATIVE_VERIFIED' or run.get('native_verified') is not True
-            or run.get('native_tests') is not True or run.get('tests_status') != 'PASSED'
-            or run['cancel_requested'] or not run['tests']
-            or any(t['state'] != 'PASSED' or type(t['failure_count']) is not int
-                or t['failure_count'] != 0 for t in run['tests'])):
-        raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
-    plan = _check_plan(db, run)
-    if len(run['models']) != 1 or node_id != run['selected_node_id']:
-        raise QueryError('DBT_NODE_NOT_FOUND', 404)
-    model = run['models'][0]
-    if (model['unique_id'] != node_id or model['materialized'] != 'table'
-            or model['state'] != 'NATIVE_VERIFIED'):
-        raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
-    ids = model.get('operation_ids', [])
-    proof = _native_saved(db, run, ids[0]) if len(ids) == 1 else None
-    if proof is None or not _native_quality_saved(db, run, proof):
-        raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
-    if model.get('publication_id') and model['publication_id'] != publication:
-        raise QueryError('DBT_PUBLICATION_EXISTS', 409)
+    if run.get('executor') == 'native_graph':
+        import database_dbt_graph as graph
+        model, proof = graph.publication_proof(db, run, node_id, publication)
+        plan = _check_plan(db, run)
+    else:
+        if (run['kind'] != 'run' or run.get('executor') != 'native_table'
+                or run['state'] != 'NATIVE_VERIFIED' or run.get('native_verified') is not True
+                or run.get('native_tests') is not True or run.get('tests_status') != 'PASSED'
+                or run['cancel_requested'] or not run['tests']
+                or any(t['state'] != 'PASSED' or type(t['failure_count']) is not int
+                    or t['failure_count'] != 0 for t in run['tests'])):
+            raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
+        plan = _check_plan(db, run)
+        if len(run['models']) != 1 or node_id != run['selected_node_id']:
+            raise QueryError('DBT_NODE_NOT_FOUND', 404)
+        model = run['models'][0]
+        if (model['unique_id'] != node_id or model['materialized'] != 'table'
+                or model['state'] != 'NATIVE_VERIFIED'):
+            raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
+        ids = model.get('operation_ids', [])
+        proof = _native_saved(db, run, ids[0]) if len(ids) == 1 else None
+        if proof is None or not _native_quality_saved(db, run, proof):
+            raise QueryError('DBT_NATIVE_PUBLICATION_FORBIDDEN', 409)
+        if model.get('publication_id') and model['publication_id'] != publication:
+            raise QueryError('DBT_PUBLICATION_EXISTS', 409)
     target = plan['_targets'][node_id]
     schema = registry.get_schema(db, target['schema_id'])
     sandbox = registry.get_schema(db, run['context']['schema_id'])
@@ -985,7 +995,7 @@ def _native_publication_gate(db, run, node_id, publication=None):
     return model, proof
 
 
-def _native_publisher(db, principal, context, run):
+def _native_publisher(db, principal, context, run, node_id):
     revalidate_admission(db, principal, context)
     if context.selected_role != 'admin':
         raise QueryError('SQL_PERMISSION_DENIED', 403)
@@ -997,7 +1007,8 @@ def _native_publisher(db, principal, context, run):
     if account is None:
         raise QueryError('DB_ACCESS_REVOKED', 403)
     actor = ds.request_auth.AuthenticatedPrincipal(run['actor'], account['role'], account['platform_admin'])
-    ids = run['models'][0]['operation_ids']
+    model = next(m for m in run['models'] if m['unique_id'] == node_id and m['materialized'] == 'table')
+    ids = model['operation_ids']
     op = db.execute('SELECT backend_username FROM dataops_operations WHERE id=?', (ids[0],)).fetchone()
     revalidate_admission(db, actor, ResolvedQueryContext(**run['context']), backend_username=op['backend_username'])
 
@@ -1053,17 +1064,18 @@ def get_publication_preview(principal, context, run_id, *, node_id):
     metadata = _access(principal, context, admin=True)
     with control_store.connect() as db:
         run = _authorized(db, principal, context, run_id, 'run')
-        if run.get('executor') == 'native_graph':
-            raise QueryError('DBT_GRAPH_PUBLICATION_UNAVAILABLE', 409)
         _, proof = _native_publication_gate(db, run, node_id)
-        _native_publisher(db, principal, context, run)
+        _native_publisher(db, principal, context, run, node_id)
         plan = _check_plan(db, run)
         destination = plan['_targets'][node_id]
         schema = registry.get_schema(db, destination['schema_id'])
         node = next(m for m in plan['models'] if m['unique_id'] == node_id)
         target = dict(catalog=context.sql_catalog, schema=schema.sql_name, name=node['relation'][2])
+    if run['executor'] == 'native_graph':
+        import database_dbt_graph as graph
+        graph.check_candidates(metadata, run)
     expected = _native_review(metadata, proof, destination)
-    return dict(version=1, origin='native_table', run_id=run_id, plan_id=run['plan_id'], node_id=node_id,
+    return dict(version=1, origin=run['executor'], run_id=run_id, plan_id=run['plan_id'], node_id=node_id,
         source_digest=run['source_digest'], context=asdict(context), source_actor=run['actor'],
         publisher_actor=principal.principal_id, source_context=run['context'], candidate=proof['candidate'],
         quality=dict(status='PASSED', count=len(run['tests']), test_ids=[t['unique_id'] for t in run['tests']]),
@@ -1071,22 +1083,31 @@ def get_publication_preview(principal, context, run_id, *, node_id):
 
 
 def _native_intent(run, node_id, proof, expected, context, actor):
-    return dict(origin='native_table', run_id=run['id'], plan_id=run['plan_id'], node_id=node_id,
+    model = next(m for m in run['models'] if m['unique_id'] == node_id)
+    intent = dict(origin=run['executor'], run_id=run['id'], plan_id=run['plan_id'], node_id=node_id,
         source_digest=run['source_digest'], plan_digest=run['_plan_digest'], source_actor=run['actor'],
-        source_context=run['context'], build_operation_id=run['models'][0]['operation_ids'][0],
+        source_context=run['context'], build_operation_id=model['operation_ids'][0],
         build=proof, candidate=proof['candidate'], quality=[t['native_receipt'] for t in run['tests']],
         expected_target=expected, audit_policy=dict(min_rows=1), context=asdict(context), publisher_actor=actor)
+    if run['executor'] == 'native_graph':
+        intent.update(task_receipts=run['task_receipts'], pins=run['_pins'],
+            tables=[dict(node_id=m['unique_id'], receipt=m['native_receipt'],
+                dependency_snapshots=m['dependency_snapshots']) for m in run['models'] if m['materialized'] == 'table'])
+    return intent
 
 
 def _native_publication_live(metadata, publication):
     with control_store.connect() as db:
         source = _row(db, publication['parent_run_id'])[1]
         _, proof = _native_publication_gate(db, source, publication['node_id'], publication['id'])
-        _native_publisher(db, metadata.principal, metadata._context(), source)
+        _native_publisher(db, metadata.principal, metadata._context(), source, publication['node_id'])
         destination = _check_plan(db, source)['_targets'][publication['node_id']]
         if publication['_native_intent'] != _native_intent(source, publication['node_id'], proof,
                 publication['expected_target'], metadata._context(), metadata.principal.principal_id):
             raise QueryError('DBT_NATIVE_PUBLICATION_INVALID', 409)
+    if source['executor'] == 'native_graph':
+        import database_dbt_graph as graph
+        graph.check_candidates(metadata, source)
     actual = _native_review(metadata, proof, destination)
     if actual != publication['expected_target']:
         raise QueryError('TARGET_CHANGED', 409)
@@ -1105,15 +1126,18 @@ def submit_publication(principal, context, run_id, *, key, node_id, expected_tar
         if replay:
             return replay
         model, proof = _gate(db, run, node_id)
-        native = run.get('executor') == 'native_table'
+        native = run.get('executor') in ('native_table', 'native_graph')
         if native:
-            _native_publisher(db, principal, context, run)
+            _native_publisher(db, principal, context, run, node_id)
             destination = _check_plan(db, run)['_targets'][node_id]
             _native_descriptor(expected_target, destination)
         elif expected_target is not _UNREVIEWED:
             raise QueryError('DBT_PUBLICATION_REVIEW_UNEXPECTED', 400)
     if native:
         try:
+            if run['executor'] == 'native_graph':
+                import database_dbt_graph as graph
+                graph.check_candidates(metadata, run)
             if _native_review(metadata, proof, destination) != expected_target:
                 raise QueryError('TARGET_CHANGED', 409)
         except QueryError as error:
@@ -1130,13 +1154,18 @@ def submit_publication(principal, context, run_id, *, key, node_id, expected_tar
         node_id=node_id, build_id=model.get('build_id'), audit_id=None, publication_id=None,
         _phase=None, _node_id=node_id, committed=False)
     if native:
-        record.update(origin='native_table', expected_target=expected_target,
+        record.update(origin=run['executor'], expected_target=expected_target,
             _native_intent=_native_intent(run, node_id, proof, expected_target, context, principal.principal_id))
     def check(db):
         current = _authorized(db, principal, context, run_id, 'run')
         selected, current_proof = _gate(db, current, node_id)
         if native:
-            _native_publisher(db, principal, context, current)
+            if current['executor'] == 'native_graph':
+                import database_dbt_graph as graph
+                graph.check_candidates(metadata, current)
+                if _native_review(metadata, current_proof, destination) != expected_target:
+                    raise QueryError('DBT_PUBLICATION_REVIEW_CHANGED', 409)
+            _native_publisher(db, principal, context, current, node_id)
             if record['_native_intent'] != _native_intent(current, node_id, current_proof,
                     expected_target, context, principal.principal_id):
                 raise QueryError('DBT_NATIVE_PUBLICATION_INVALID', 409)
@@ -1532,7 +1561,7 @@ def _native_execution_intent(execution, phase):
         _check_operation(db, execution.id)
         link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
         publication = _row(db, scope[5])[1]
-        if (publication.get('origin') != 'native_table' or publication['kind'] != 'publication'
+        if (publication.get('origin') not in ('native_table', 'native_graph') or publication['kind'] != 'publication'
                 or link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]):
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
         if phase == 'publish' and _native_audit_saved(db, publication) is None:
@@ -1544,6 +1573,9 @@ def _native_execution_intent(execution, phase):
 def _native_child_saved(db, publication, phase):
     """Exact closed child/query lineage, independent of subsequent catalog heads."""
     from db_marts import _closed_child
+    if (publication.get('origin') not in ('native_table', 'native_graph')
+            or publication['_native_intent'].get('origin') != publication['origin']):
+        return None
     ops = list(db.execute('SELECT o.*,l.node_id FROM dataops_operations o JOIN dbt_run_operations l '
         'ON l.operation_id=o.id WHERE l.run_id=? AND l.phase=?', (publication['id'], phase)))
     if len(ops) != 1:
@@ -1607,7 +1639,7 @@ def _native_audit_saved(db, publication):
             return None
         op, query, result = saved
         receipt = result['audit']
-        expected = dict(id=publication['audit_id'], origin='native_table', publication_id=publication['id'],
+        expected = dict(id=publication['audit_id'], origin=publication['origin'], publication_id=publication['id'],
             intent=publication['_native_intent'], operation_id=op['id'], query_id=query['id'],
             count=receipt['count'], passed=True)
         if (type(receipt['count']) is not int or receipt['count'] < 1 or receipt.get('passed') is not True or receipt != expected
@@ -1621,6 +1653,20 @@ def _native_audit_saved(db, publication):
 
 def _native_publication_saved(db, publication):
     try:
+        if publication.get('origin') == 'native_graph':
+            import database_dbt_graph as graph
+            source = _row(db, publication['parent_run_id'])[1]
+            # Source observation may retire current build eligibility. Closed
+            # publication evidence instead uses its frozen child receipts.
+            for table in publication['_native_intent']['tables']:
+                model = next((m for m in source['models'] if m['unique_id'] == table['node_id']), None)
+                if model is None:
+                    return None
+                model.update(state='NATIVE_VERIFIED', native_receipt=table['receipt'])
+            _, proof = graph.publication_proof(db, source, publication['node_id'], historical=True)
+            if publication['_native_intent'] != _native_intent(source, publication['node_id'], proof,
+                    publication['expected_target'], ResolvedQueryContext(**publication['context']), publication['actor']):
+                return None
         links = list(db.execute('SELECT phase,node_id FROM dbt_run_operations WHERE run_id=?', (publication['id'],)))
         if sorted((r['phase'], r['node_id']) for r in links) != [('audit', publication['node_id']), ('publish', publication['node_id'])]:
             return None
@@ -1665,12 +1711,14 @@ def _native_publication_saved(db, publication):
                 and ds._json(publication['native_publication']) != ds._json(receipt)):
             return None
         return receipt
-    except (KeyError, TypeError, ValueError, AttributeError, QueryError):
+    except (KeyError, TypeError, ValueError, AttributeError, StopIteration, QueryError):
         return None
 
 
 def _native_publish_intent(publication, operation_id):
-    return dict(origin='native_table', publication_id=publication['id'], audit_id=publication['audit_id'],
+    if publication.get('origin') not in ('native_table', 'native_graph'):
+        raise QueryError('DBT_NATIVE_PUBLICATION_INVALID', 409)
+    return dict(origin=publication['origin'], publication_id=publication['id'], audit_id=publication['audit_id'],
         operation_id=operation_id, intent=publication['_native_intent'])
 
 
@@ -1732,7 +1780,7 @@ def _native_publish_run(ident, principal, context, parent, frozen, credential):
 def _publish_run(ident, principal, context, parent, frozen, credential):
     with control_store.connect() as db:
         _, publication = _row(db, ident)
-    if publication.get('origin') == 'native_table':
+    if publication.get('origin') in ('native_table', 'native_graph'):
         return _native_publish_run(ident, principal, context, parent, frozen, credential)
     _verify_views(_access(principal, context), _row_run(publication['parent_run_id']), complete=True)
     uid = publication['node_id']
@@ -1829,14 +1877,14 @@ def _settle(ident, *, owner_lost=False):
         if run['kind'] == 'publication' and committed:
             receipt = json.loads(committed['result'] or '{}')
             run.update(committed=True, publication_id=receipt.get('publication_id'))
-            if run.get('origin') == 'native_table':
+            if run.get('origin') in ('native_table', 'native_graph'):
                 artifact = _native_publication_saved(db, run)
                 if artifact:
                     run['native_publication'] = artifact
             else:
                 artifact = db.execute('SELECT id FROM wap_publications WHERE id=? AND operation_id=?',
                     (receipt.get('publication_id'), committed['id'])).fetchone()
-            recorded = artifact and closed and (run.get('origin') == 'native_table' or not committed['cleanup_error'])
+            recorded = artifact and closed and (run.get('origin') in ('native_table', 'native_graph') or not committed['cleanup_error'])
             run['state'] = 'PUBLISHED' if recorded else 'COMMITTED_RECORDING_FAILED'
         elif not closed:
             run['state'] = 'UNKNOWN'

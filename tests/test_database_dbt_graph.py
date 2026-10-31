@@ -126,7 +126,7 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(result['state'], 'NATIVE_VERIFIED', result)
         self.assertTrue(result['native_verified'])
         self.assertEqual(result['tests_status'], 'PASSED')
-        self.assertFalse(result['publication_allowed'])
+        self.assertTrue(result['publication_allowed'])
         self.assertEqual(len(result['operation_ids']), 7)
         self.assertTrue(all(ident not in ds._live for ident in result['operation_ids']))
         self.assertEqual([m['state'] for m in result['models']].count('EXPANDED'), 1)
@@ -766,7 +766,7 @@ class GraphContractTests(unittest.TestCase):
                 kwargs['key'] = 'pub'
             with self.assertRaises(QueryError) as caught:
                 fn(self.admin, context, ack['id'], **kwargs)
-            self.assertEqual(caught.exception.code, 'DBT_GRAPH_PUBLICATION_UNAVAILABLE')
+            self.assertEqual(caught.exception.code, 'DBT_GRAPH_PUBLICATION_FORBIDDEN')
         with self.assertRaises(QueryError):
             dbt.submit_run(self.admin, self.admin_context, key='other', plan_id=plan['id'], executor='native_graph')
         with self.assertRaises(QueryError):

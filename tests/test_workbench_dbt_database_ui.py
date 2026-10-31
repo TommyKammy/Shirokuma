@@ -91,6 +91,39 @@ route=async(path,options)=>{
 """
 
 
+GRAPH_PUBLICATION = r"""
+function graphProofs(r){
+ const result=(id,status,failures=null)=>({node_id:id,status,failures,adapter_response:{}});
+ const build=r.models.map(m=>({...result(m.unique_id,'success'),adapter_response:m.materialized==='table'?{code:'CREATE TABLE',rows_affected:0}:{}})),tests=r.tests.map(x=>({...result(x.unique_id,'pass',0),adapter_response:{code:'SELECT',rows_affected:1}}));
+ r.task_receipts={build:{task:'RunTask',completed:true,success:true,selected:r.models.map(m=>m.unique_id).sort(),nodes:build,results:build.filter(x=>r.models.find(m=>m.unique_id===x.node_id).materialized==='table')},test:{task:'TestTask',completed:true,success:true,selected:r.tests.map(x=>x.unique_id).sort(),nodes:tests,results:structuredClone(tests)}};
+ r.operations=[];
+ for(const m of r.models){m.state=m.materialized==='table'?'NATIVE_VERIFIED':'EXPANDED';m.operation_ids=[];
+  if(m.materialized==='ephemeral'){m.candidate=null;continue;}
+  const id='build-'+m.unique_id;m.operation_ids=[id];r.operations.push({id,phase:'build',node_id:m.unique_id,state:'FINISHED',committed:true});
+  m.native_receipt={executor:'native_graph',plan_id:r.plan_id,node_id:m.unique_id,phase:'build',digest:'plan-digest',native_verified:true,candidate:structuredClone(m.candidate),sdk_result:structuredClone(build.find(x=>x.node_id===m.unique_id))};
+ }
+ for(const x of r.tests){const id='test-'+x.unique_id;x.operation_id=id;r.operations.push({id,phase:'test',node_id:x.unique_id,state:'FINISHED',committed:false});x.native_receipt={executor:'native_graph',plan_id:r.plan_id,node_id:x.unique_id,phase:'test',digest:'plan-digest',test_verified:true,status:'PASSED',failures:0,sdk_result:structuredClone(tests.find(y=>y.node_id===x.unique_id))};}
+ return r;
+}
+async function graphSource(){
+ await compile();plan.compatibility.version=2;for(const m of plan.models)if(m.materialized==='table')m.table_properties={format:'PARQUET'};
+ plan.models[2].depends_on=[ids[1]];
+ plan.tests.push({unique_id:'test.source',name:'source-only',depends_on:['source.demo.orders']},{unique_id:'test.unattached',name:'unattached',depends_on:[]});
+ plan.actor='engineer';plan.context={...plan.context,selected_role:'data_engineer',grant_revision:2};
+ run=graphProofs(makeRun(plan.context,{actor:'engineer',executor:'native_graph',source_digest:plan.source_digest,state:'NATIVE_VERIFIED',native_verified:true,native_tests:true,tests_status:'PASSED',publication_allowed:true}));p.plan=null;
+ await dbDbtObserve('run',run.id);assert.equal(p.run.models.length,3);assert.equal(dbDbtCanPublish(p.run.models[1]),true);assert.equal(dbDbtCanPublish(p.run.models[2]),true);
+}
+function graphPreview(node){const m=run.models.find(m=>m.unique_id===node),pm=plan.models.find(m=>m.unique_id===node);return {version:1,origin:'native_graph',run_id:run.id,plan_id:plan.id,node_id:node,source_digest:run.source_digest,context:structuredClone(p.context),source_context:structuredClone(run.context),source_actor:run.actor,publisher_actor:dbDbtOwner(),candidate:structuredClone(m.candidate),quality:{status:'PASSED',count:run.tests.length,test_ids:run.tests.map(x=>x.unique_id)},target:{catalog:'sales',schema:'marts',name:pm.relation[2]},expected_target:{version:1,destination:{database_id:'db',schema_id:'schema',physical_name:pm.relation[2]},target:null}};}
+const graphRoute=route;let graphPreviewChange=null,graphAckChange=null;
+route=async(path,options)=>{
+ if(path.includes('/publication-preview?')){const v=graphPreview(new URL('http://local'+path).searchParams.get('node_id'));if(graphPreviewChange)graphPreviewChange(v);return {context:structuredClone(p.context),preview:v};}
+ const reply=await graphRoute(path,options);
+ if(reply?.publication&&options?.body){const b=JSON.parse(options.body);reply.publication.origin='native_graph';reply.publication.expected_target=structuredClone(b.expected_target);run.models.find(m=>m.unique_id===b.node_id).publication_id=reply.publication.id;run.publication_allowed=run.models.some(m=>m.materialized==='table'&&!m.publication_id);if(graphAckChange)graphAckChange(reply.publication);}
+ return reply;
+};
+"""
+
+
 class DbtDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
@@ -210,6 +243,70 @@ language='ja';dbDbtRender();assert.match(text(dbDbtNode('publications')),/グラ
 clearTimeout(p.timer);
 """)
 
+    def test_graph_per_table_review_quality_receipts_and_readonly_history(self):
+        self.javascript(GRAPH_PUBLICATION + r"""
+await graphSource();const before=posts().length;
+assert.equal(dbDbtCanPublish(p.run.models[0]),false);assert.match(text(dbDbtNode('publications')),/Admin may review each eligible TABLE/);
+await dbDbtReview(p.run.models[1]);assert.equal(posts().length,before);
+const graphReview=dbDbtNode('confirmation');assert.match(text(graphReview),/engineer/);assert.ok(text(graphReview).includes('Publisher: '+dbDbtOwner()));assert.match(text(graphReview),/Whole graph quality/);assert.match(text(graphReview),/Only the selected TABLE/);assert.match(text(graphReview),/other TABLEs are not published simultaneously/);assert.match(text(graphReview),/row audit >= 1/);assert.match(text(graphReview),/sales.marts.first/);
+const frozen=JSON.stringify(p.preview);language='ja';dbDbtRender();assert.match(text(graphReview),/選択した TABLE だけ/);assert.match(text(graphReview),/依存先や他の TABLE は同時に公開しません/);assert.match(text(graphReview),/グラフ全体の品質/);assert.equal(JSON.stringify(p.preview),frozen);
+language='en';await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,before+1);assert.equal(p.intent,null);assert.equal(p.publications[ids[1]].origin,'native_graph');assert.deepEqual(Object.keys(readBody(posts().at(-1))).sort(),['context','expected_target','node_id']);
+assert.equal(dbDbtCanPublish(p.run.models[1]),false);assert.equal(dbDbtCanPublish(p.run.models[2]),true);
+await dbDbtObserve('run',run.id);assert.equal(dbDbtCanPublish(p.run.models[2]),true);await dbDbtReview(p.run.models[2]);assert.match(text(dbDbtNode('confirmation')),/sales.marts.second/);assert.equal(p.preview.candidate.ref.object_id,'candidate-2');
+await dbDbtSubmit('publish',ids[2]);assert.equal(posts().length,before+2);assert.equal(p.intent,null);assert.equal(run.publication_allowed,false);
+await dbDbtObserve('run',run.id);assert.equal(dbDbtCanPublish(p.run.models[2]),false);
+const count=posts().length;await dbDbtHistory();await dbDbtObserve('publication',p.publications[ids[2]].id);assert.equal(posts().length,count);assert.match(text(dbDbtNode('publications')),/native_graph/);
+language='ja';dbDbtRender();assert.equal(posts().length,count);assert.match(text(dbDbtNode('publications')),/グラフ公開不可/);
+clearTimeout(p.timer);
+""")
+
+    def test_graph_history_other_or_unselected_plan_keeps_saved_status_without_publish_bypass(self):
+        self.javascript(GRAPH_PUBLICATION + r"""
+await graphSource();const originalPlan=p.plan,originalRun=p.run,before=posts().length;
+assert.equal(Object.hasOwn(originalRun,'graph_task_receipts'),false);
+p.plan=makePlan(p.context,{id:'other-plan',source_digest:'other-source'});
+await dbDbtHistory();assert.equal(posts().length,before);
+assert.match(text(dbDbtNode('history')),/NATIVE_VERIFIED/);
+assert.match(text(dbDbtNode('history')),/Saved graph quality tests passed\. Open the original run and plan to check publication conditions\./);
+assert.doesNotMatch(text(dbDbtNode('history')),/publication_allowed/);
+assert.doesNotMatch(text(dbDbtNode('history')),/missing or inconsistent/);
+for(const selected of [p.plan,null]){
+ p.plan=selected;dbDbtRender();assert.match(dbDbtState(originalRun),/Saved graph quality tests passed\. Open the original run and plan to check publication conditions\./);
+ assert.equal(dbDbtGraphPublishable(),false);
+ for(const m of originalRun.models){assert.equal(dbDbtCanPublish(m),false);await dbDbtReview(m);await dbDbtSubmit('publish',m.unique_id);}
+ assert.equal(posts().length,before);
+ assert.ok(dbDbtNode('publications').descendants().filter(n=>n.tagName==='BUTTON').every(n=>n.disabled));
+}
+language='ja';dbDbtRender();assert.match(text(dbDbtNode('history')),/保存済みの品質テストは合格済みです。元の実行とプランを開いて公開条件を確認してください。/);assert.doesNotMatch(text(dbDbtNode('history')),/publication_allowed/);assert.doesNotMatch(text(dbDbtNode('history')),/不足しているか一致しません/);
+language='en';p.plan=originalPlan;assert.equal(dbDbtCanPublish(originalRun.models[1]),true);
+p.run=structuredClone(originalRun);p.run.task_receipts.test.success=false;dbDbtRender();
+assert.equal(dbDbtCanPublish(p.run.models[1]),false);assert.match(dbDbtState(p.run),/missing or inconsistent/);
+await dbDbtReview(p.run.models[1]);await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,before);clearTimeout(p.timer);
+""")
+
+    def test_graph_publication_fail_closed_for_whole_suite_model_and_task_tampers(self):
+        self.javascript(GRAPH_PUBLICATION + r"""
+await graphSource();const good=p.run,before=posts().length;
+const changes=[r=>r.publication_allowed=false,r=>delete r.publication_allowed,r=>r.native_tests=false,r=>r.native_verified=false,r=>r.state='FAILED',r=>r.tests_status='UNKNOWN',r=>r.tests_status='NOT_RUN',r=>r.tests=[],r=>r.tests.pop(),r=>r.tests[1].state='FAILED',r=>r.tests[1].failure_count=1,r=>r.tests[2].failure_count=false,r=>r.tests[3].failure_count='0',r=>r.models[2].state='FAILED',r=>r.models[0].state='NATIVE_VERIFIED',r=>r.models.pop(),r=>r.models[2].unique_id=ids[1],r=>r.models[2].materialized='ephemeral',r=>r.models[2].table_properties={},r=>r.models[1].candidate.ref.schema_id='raw',r=>r.models[1].native_receipt.candidate.snapshot='wrong',r=>r.models[1].native_receipt.node_id=ids[2],r=>r.models[1].native_receipt.executor='native_table',r=>r.models[1].native_receipt.phase='test',r=>r.models[1].operation_ids=['other'],r=>r.operations[0].node_id=ids[2],r=>r.operations[0].state='RUNNING',r=>r.operations[0].committed=false,r=>r.operations.push({id:'extra',phase:'build',node_id:ids[0],state:'FINISHED',committed:true}),r=>r.operations.push({...r.operations[0],id:'extra'}),r=>r.task_receipts.build.nodes[1].adapter_response.unexpected=true,r=>delete r.task_receipts,r=>r.task_receipts.build.completed=false,r=>r.task_receipts.build.success=false,r=>r.task_receipts.test.success=false,r=>r.task_receipts.test.task='RunTask',r=>r.task_receipts.build.selected.pop(),r=>r.task_receipts.test.selected.pop(),r=>r.task_receipts.build.nodes.pop(),r=>r.task_receipts.build.results.push(r.task_receipts.build.nodes[0]),r=>r.task_receipts.test.results[0].status='fail',r=>r.task_receipts.test.nodes[0].failures=false,r=>r.tests[2].native_receipt.test_verified=false,r=>r.tests[3].native_receipt.sdk_result.node_id='test.other'];
+for(const change of changes){const bad=structuredClone(good);change(bad);p.run=bad;assert.equal(dbDbtCanPublish(bad.models[1]),false,String(change));await dbDbtReview(bad.models[1]);await dbDbtSubmit('publish',ids[1]);assert.equal(posts().length,before);}
+p.run=good;
+for(const change of [v=>v.origin='native_table',v=>v.origin='sql_wap',v=>v.run_id='other',v=>v.plan_id='other',v=>v.node_id=ids[2],v=>v.source_digest='other',v=>v.source_actor='other',v=>v.source_context.grant_revision++,v=>v.source_context.selected_role='admin',v=>v.context.schema_id='raw',v=>v.candidate=structuredClone(good.models[2].candidate),v=>v.quality.count--,v=>v.quality.test_ids.pop(),v=>v.quality.test_ids[0]='test.other',v=>v.expected_target.destination.physical_name='second']){
+ graphPreviewChange=change;await dbDbtReview(p.run.models[1]);assert.equal(p.review,null,String(change));assert.equal(p.preview,null);assert.equal(posts().length,before);
+}
+graphPreviewChange=null;await dbDbtReview(p.run.models[1]);assert.equal(p.review,ids[1]);clearTimeout(p.timer);
+""")
+
+    def test_graph_publication_original_intent_reload_origin_node_and_target_ack(self):
+        self.javascript(GRAPH_PUBLICATION + r"""
+await graphSource();await dbDbtReview(p.run.models[2]);lose=true;await dbDbtSubmit('publish',ids[2]);const intent=p.intent,first=posts().at(-1),before=posts().length;
+assert.equal(intent.origin,'native_graph');assert.equal(intent.body.node_id,ids[2]);assert.equal(intent.body.expected_target.destination.physical_name,'second');assert.equal(Object.isFrozen(intent.body.expected_target),true);
+p.intent=null;await dbDbtRefresh();assert.deepEqual(p.intent,JSON.parse(JSON.stringify(intent)));assert.equal(posts().length,before);lose=false;
+for(const change of [a=>a.origin='native_table',a=>a.origin='sql_wap',a=>a.run_id='other',a=>a.parent_run_id='other',a=>a.plan_id='other',a=>a.node_id=ids[1],a=>a.context={...a.context,selected_role:'data_engineer'},a=>a.expected_target.destination.physical_name='first']){
+ graphAckChange=change;await dbDbtRecover();assert.ok(p.intent,String(change));assert.equal(posts().at(-1).options.body,first.options.body);assert.equal(posts().at(-1).options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);
+}
+graphAckChange=null;await dbDbtRecover();assert.equal(p.intent,null);assert.deepEqual(posts().at(-1),first);assert.equal(p.publications[ids[2]].origin,'native_graph');assert.equal(receipts.size,2);clearTimeout(p.timer);
+""")
+
     def test_native_presentation_concise_facts_and_closed_full_proofs(self):
         self.javascript(NATIVE_PUBLICATION + r"""
 function visible(n){return n.textContent+' '+(n.tagName==='DETAILS'&&!n.open?n.children.filter(c=>c.tagName==='SUMMARY'):n.children).map(visible).join(' ');}
@@ -261,7 +358,7 @@ route=originalRoute;await dbDbtRecover();assert.equal(p.intent,null);assert.equa
 const saved=p.publications[ids[1]];await dbDbtObserve('run',run.id);assert.equal(dbDbtCanPublish(p.run.models[0]),false);
 for(const state of ['UNKNOWN','COMMITTED_RECORDING_FAILED','PUBLISHED']){
  pubs[saved.id]={...saved,state,origin:'native_table',committed:state!=='UNKNOWN',native_publication:{target:{snapshot:'new-snapshot'}}};
- const n=posts().length;await dbDbtObserve('publication',saved.id);assert.equal(posts().length,n);assert.equal(dbDbtCanPublish(p.run.models[0]),false);
+ const n=posts().length;await dbDbtObserve('publication',saved.id);assert.equal(posts().length,n);assert.equal(dbDbtCanPublish(p.run.models[0]),false);assert.equal(dbDbtCanCloseRejected(),false);
  assert.match(text(dbDbtNode('publications')),/native_table/);
 }
 clearTimeout(p.timer);
@@ -328,15 +425,74 @@ const saved=p.run;p.run={...saved,tests:[]};assert.equal(dbDbtCanPublish(p.run.m
 clearTimeout(p.timer);
 """)
 
-    def test_native_review_changed_closes_only_dedicated_rejection(self):
-        self.javascript(NATIVE_PUBLICATION + r"""
-await nativeSource();await dbDbtReview(p.run.models[0]);publishError={status:409,code:'TARGET_CHANGED'};
-await dbDbtSubmit('publish',ids[1]);const key=p.intent.key;assert.equal(dbDbtCanCloseRejected(),false);
-for(const code of ['CONTEXT_MISMATCH','IDEMPOTENCY_CONFLICT']){publishError={status:409,code};await dbDbtRecover();assert.equal(p.intent.key,key);assert.equal(dbDbtCanCloseRejected(),false);if(p.invalid)await dbDbtRefresh();}
-publishError={status:409,code:'DBT_PUBLICATION_REVIEW_CHANGED'};await dbDbtRecover();assert.equal(dbDbtCanCloseRejected(),true);
-const before=posts().length;dbDbtCloseRejected();assert.equal(p.intent,null);assert.equal(p.review,null);assert.equal(p.preview,null);assert.equal(p.rejectedIntent.key,key);assert.equal(posts().length,before);
-publishError=null;await dbDbtObserve('run',run.id);await dbDbtReview(p.run.models[0]);assert.ok(p.preview);assert.equal(p.intent,null);clearTimeout(p.timer);
-""")
+    def test_native_definitive_rejection_explicit_close_retains_original_receipt(self):
+        for origin, fixture, source in [('native_table', NATIVE_PUBLICATION, 'nativeSource'),
+                                        ('native_graph', GRAPH_PUBLICATION, 'graphSource')]:
+            for code in ['STAGE_CHANGED', 'DBT_CANDIDATE_CHANGED', 'DBT_PUBLICATION_REVIEW_CHANGED']:
+                with self.subTest(origin=origin, code=code):
+                    self.javascript(fixture + r"""
+await SOURCE();const m=p.run.models.find(m=>m.unique_id===ids[1]);await dbDbtReview(m);
+const baseRoute=route;route=async(path,options)=>{if(options?.method==='POST'&&path.endsWith('/publish'))throw Object.assign(Error('rejected'),{status:409,code:'CODE'});return baseRoute(path,options);};
+const before=posts().length;await dbDbtSubmit('publish',m.unique_id);const original=p.intent,first=posts().at(-1);
+assert.equal(original.origin,'ORIGIN');assert.equal(original.rejection,'CODE');assert.equal(Object.isFrozen(original),true);assert.equal(Object.isFrozen(original.body.expected_target.destination),true);
+assert.equal(dbDbtCanCloseRejected(),true);assert.match(text(p.status),/rejected before acceptance/);
+if('CODE'!=='DBT_PUBLICATION_REVIEW_CHANGED')assert.match(text(p.status),/Source or target identity changed/);
+assert.equal(dbDbtNode('compile').disabled,true);await dbDbtRecover();await dbDbtSubmit('compile');assert.equal(posts().length,before+1);
+await dbDbtNode('close-rejected').onclick();assert.equal(p.intent,null);assert.equal(p.rejectedIntent,original);assert.equal(p.review,null);assert.equal(p.preview,null);assert.equal(posts().length,before+1);
+assert.deepEqual(readStorage(dbDbtKey+'.rejected',null),JSON.parse(JSON.stringify(original)));assert.equal(p.rejectedIntent.key,first.options.headers['Idempotency-Key']);
+assert.match(text(dbDbtNode('receipt')),new RegExp(original.key));assert.match(text(dbDbtNode('receipt')),/CODE/);assert.equal(dbDbtNode('compile').disabled,false);
+route=baseRoute;await dbDbtReview(m);assert.ok(p.preview);assert.equal(p.review,m.unique_id);assert.equal(p.intent,null);assert.equal(posts().length,before+1);
+assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST').length,0);clearTimeout(p.timer);
+""".replace('SOURCE', source).replace('ORIGIN', origin).replace('CODE', code))
+
+    def test_native_unknown_ack_cannot_be_closed_by_later_identity_rejection(self):
+        for origin, fixture, source in [('native_table', NATIVE_PUBLICATION, 'nativeSource'),
+                                        ('native_graph', GRAPH_PUBLICATION, 'graphSource')]:
+            for failure in ['transport', 'missing', 'mismatch', 'forbidden', 'other_rejection']:
+                with self.subTest(origin=origin, failure=failure):
+                    self.javascript(fixture + r"""
+await SOURCE();const m=p.run.models.find(m=>m.unique_id===ids[1]);await dbDbtReview(m);
+const baseRoute=route;route=async(path,options)=>{if(options?.method==='POST'&&path.endsWith('/publish')){
+ if('FAILURE'==='transport')throw Error('ACK lost');
+ if('FAILURE'==='forbidden')throw Object.assign(Error('denied'),{status:403,code:'FORBIDDEN'});
+ if('FAILURE'==='other_rejection')throw Object.assign(Error('rejected'),{status:409,code:'TARGET_CHANGED'});
+ const reply=await baseRoute(path,options);if('FAILURE'==='missing')delete reply.publication;else reply.publication.origin='sql_wap';return reply;
+}return baseRoute(path,options);};
+await dbDbtSubmit('publish',m.unique_id);const original=p.intent,first=posts().at(-1);assert.ok(original);assert.equal(dbDbtCanCloseRejected(),false);dbDbtCloseRejected();assert.equal(p.intent,original);
+if(p.invalid)await dbDbtRefresh();
+for(const code of ['STAGE_CHANGED','DBT_CANDIDATE_CHANGED','DBT_PUBLICATION_REVIEW_CHANGED']){
+ route=async(path,options)=>{if(options?.method==='POST'&&path.endsWith('/publish'))throw Object.assign(Error('rejected'),{status:409,code});return baseRoute(path,options);};
+ await dbDbtRecover();assert.equal(dbDbtCanCloseRejected(),false);dbDbtCloseRejected();assert.equal(p.intent,original);assert.equal(p.intent.rejection,undefined);assert.deepEqual(posts().at(-1),first);
+ const count=posts().length;await dbDbtSubmit('compile');await dbDbtReview(m);assert.equal(posts().length,count);assert.equal(dbDbtNode('compile').disabled,true);
+}
+route=baseRoute;await dbDbtRecover();assert.equal(p.intent,null);assert.deepEqual(posts().at(-1),first);assert.equal(p.publications[m.unique_id].origin,'ORIGIN');assert.equal(dbDbtCanCloseRejected(),false);
+assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST').length,0);clearTimeout(p.timer);
+""".replace('SOURCE', source).replace('ORIGIN', origin).replace('FAILURE', failure))
+
+    def test_native_accepted_publication_failure_is_not_a_closable_rejection(self):
+        for origin, fixture, source in [('native_table', NATIVE_PUBLICATION, 'nativeSource'),
+                                        ('native_graph', GRAPH_PUBLICATION, 'graphSource')]:
+            for state in ['UNKNOWN', 'FAILED', 'COMMITTED_RECORDING_FAILED']:
+                with self.subTest(origin=origin, state=state):
+                    self.javascript(fixture + r"""
+await SOURCE();const m=p.run.models.find(m=>m.unique_id===ids[1]);await dbDbtReview(m);const baseRoute=route;
+route=async(path,options)=>{const reply=await baseRoute(path,options);if(reply.publication&&options?.method==='POST')Object.assign(reply.publication,{state:'STATE',error_code:'STAGE_CHANGED'});return reply;};
+await dbDbtSubmit('publish',m.unique_id);const saved=p.publications[m.unique_id],before=posts().length;
+assert.equal(p.intent,null);assert.equal(saved.state,'STATE');assert.equal(saved.origin,'ORIGIN');assert.equal(dbDbtCanCloseRejected(),false);
+dbDbtCloseRejected();assert.equal(p.publications[m.unique_id],saved);assert.equal(dbDbtCanPublish(m),false);await dbDbtSubmit('publish',m.unique_id);assert.equal(posts().length,before);
+assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST').length,0);clearTimeout(p.timer);
+""".replace('SOURCE', source).replace('ORIGIN', origin).replace('STATE', state))
+
+    def test_native_preview_stage_changed_uses_existing_identity_guidance_in_both_languages(self):
+        for fixture, source in [(NATIVE_PUBLICATION, 'nativeSource'), (GRAPH_PUBLICATION, 'graphSource')]:
+            with self.subTest(source=source):
+                self.javascript(fixture + r"""
+await SOURCE();const m=p.run.models.find(m=>m.unique_id===ids[1]),before=posts().length,baseRoute=route;
+route=async(path,options)=>{if(path.includes('/publication-preview?'))throw Object.assign(Error('changed'),{status:409,code:'STAGE_CHANGED'});return baseRoute(path,options);};
+for(const lang of ['en','ja']){setLanguage(lang);await dbDbtReview(m);assert.equal(p.preview,null);assert.equal(p.review,null);assert.equal(p.intent,null);assert.equal(posts().length,before);assert.match(text(p.status),/STAGE_CHANGED/);
+ assert.ok(text(p.status).includes(lang==='en'?'Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.':'ソースまたは公開先の識別情報が変わりました。Schema を確認し、コンテキストを更新して新しいプランをコンパイルしてください。'));
+}clearTimeout(p.timer);
+""".replace('SOURCE', source))
 
     def test_quality_optional_metadata_uncheck_and_saved_projection(self):
         self.javascript(r"""
