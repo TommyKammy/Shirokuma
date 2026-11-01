@@ -68,4 +68,4 @@ B2の限定範囲を技術受入済みとした（全体回帰3,944成功・34 s
 
 ## 後続
 
-他Bearsの必須導線を別単位で統合する。native VIEWの私的経路や新しいAI実行権限で範囲を広げない。P6-4全体・P6-7の縦断検証・M1本人受入は継続する。
+[C1 Catalog Curatorのmetadata説明・説明文案](database-p6-4c1-catalog-proposals-2026-11-01.md)を実装した。本ガイドのB2受入結果を維持し、C1は独立contextから選ぶTABLE／VIEW 1件の名前・列名・型だけをLOCALへ渡す未適用の推定に限定する。C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 skip、2DB・3roleの実API、adminの実画面、最終保全PASS）。その後のSRE／PolicyはDBとplatformの観測を分け、native VIEWの私的経路や新しいAI実行権限で範囲を広げない。P6-4全体・P6-5・P6-7の縦断検証・M1本人受入は継続する。

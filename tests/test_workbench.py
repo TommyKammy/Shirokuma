@@ -1422,7 +1422,7 @@ eval('function aiStatus('+HANDLERS);
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
         harness = 'const SCRIPT=' + json.dumps(script) + ';const HANDLERS=' + json.dumps(handlers) + ';' + harness
-        completed = subprocess.run(['node', '-e', harness], capture_output=True, text=True)
+        completed = subprocess.run(['node'], input=harness, capture_output=True, text=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_phase8_controls_and_defaults(self):
@@ -1511,7 +1511,7 @@ const run=eval(HANDLER);
 })().catch(e=>{console.error(e);process.exitCode=1;});
 """
         source = 'const SCRIPT=' + json.dumps(script) + ';const HANDLER=' + json.dumps(handler) + ';\n' + harness
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        result = subprocess.run(['node'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_phase8_api_and_rendering_contracts(self):

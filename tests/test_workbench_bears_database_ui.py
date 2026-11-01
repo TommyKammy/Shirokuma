@@ -279,7 +279,7 @@ for(const locale of ['en','ja']){
  assert.equal(intro.textContent,locale==='en'?'Enter SQL or copy it from the active worksheet.':'SQL を入力するか、ワークシートからコピーしてください。');
  assert.doesNotMatch(lead.textContent,/five resident specialists|5 体の常駐スペシャリスト/);
  assert.match(lead.textContent,/Query Doctor/);
- assert.ok(lead.textContent.includes(locale==='en'?'Other Bears are unavailable.':'他の Bears は利用できません。'));
+ assert.ok(lead.textContent.includes(locale==='en'?'Catalog Curator explains metadata with its own authorized context.':'Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。'));
  const helpers=$('bear-panel-query').descendants().filter(n=>n.textContent===t(dbExplanationHelp));assert.equal(helpers.length,1);
  assert.ok(helpers[0].textContent.includes(locale==='en'?'SQL is not executed.':'SQL は実行しません。'));
  assert.equal($('bear-query-sql').disabled,false);assert.equal(explanationCalls().length,0);
@@ -361,7 +361,8 @@ eval(''' + json.dumps(tab_handlers) + r''');
 assert.equal($('bear-panel-sre').hidden,false);await boot();
 assert.equal($('bear-panel-query').hidden,false);assert.equal($('bear-tab-query')['aria-selected'],'true');
 assert.equal($('bear-panel-sre').hidden,true);assert.equal(targetField.hidden,true);
-for(const bear of ['sre','data','catalog','policy'])assert.equal($('bear-tab-'+bear).disabled,true);
+for(const bear of ['sre','data','policy'])assert.equal($('bear-tab-'+bear).disabled,true);
+assert.equal($('bear-tab-catalog').disabled,false);
 ''')
 
     def test_copilot_async_202_get_preserves_editor_and_results(self):

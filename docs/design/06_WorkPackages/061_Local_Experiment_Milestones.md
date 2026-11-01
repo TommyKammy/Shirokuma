@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-11-01
-version: "7.25.0"
+version: "7.26.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-01 — DB-P6-4C1 authorized catalog explanation and description drafts
+
+- [実装・検証計画](../../guides/database-p6-4c1-catalog-proposals-2026-11-01.md)：独立したCatalog Curator contextから、本人が選ぶprimary schemaのTABLE／VIEW 1件の現在権限・安定Ref・UUID・列構造を確認する。
+- 名前・列名・型だけでLOCALへ要約と未適用の説明文案を要求し、列文案は最大8列の部分的な提案と表示する。SQL・Engine・Wake・catalog metadata変更や他の画面の入力書換えは行わない。
+- 元要求の明示復旧・履歴・取消とUNKNOWNを保護する。C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 skip、2DB・3roleの実API、adminの実画面、最終保全PASS）。SRE／Policy・lineage・説明保存は別単位で、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 ### 2026-11-01 — DB-P6-4B2 explicit Manual WAP draft handoff
 

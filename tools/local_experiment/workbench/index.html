@@ -2471,7 +2471,7 @@ const dbWorksheetKey='shirokuma.worksheets.v2';
 Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。Database dbt はコンパイル済み table／ephemeral SELECT の候補構築と実行ごとの SANDBOX INVOKER VIEW・テストに対応します。モデル単位の WAP 公開は TABLE のみ、table properties は固定の format=PARQUET のみ対応します。UI／API／CLI は互換性のある保存済み1モデルの native TABLE 実行に対応します。Native graph は適格な保存済み VIEW／TABLE／EPHEMERAL 全モデルを実行します。VIEW を含むグラフも、全体の構築・品質検証後に適格な TABLE 候補を公開できます。incremental は未対応です。品質テストは明示選択、保存済み品質テスト一式の合格後、適格なグラフの TABLE 候補を1件ずつ公開できます。",
- "SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.": "SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。",
+ "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.": "Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。",
  "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.": "保存済みメタデータの監査を利用できます。SQL・プロンプト・結果は含みません。Pawprints は別の補助的な基盤プレビューです。",
  "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control.": "Database モードでは Compute 操作・Auto-Chill・ガバナンス検査は未対応です。共有ウェアハウスの状態はヘッダーで確認できます。Database の admin ロールは基盤の操作権限を付与しません。",
  "AI settings are unavailable in Database mode. Use SQL or Manual WAP.": "Database モードでは AI 設定は未対応です。SQL または手動 WAP を利用してください。",
@@ -2500,6 +2500,7 @@ function dbInvalidateReceipt(role,account=false){
  // Session/admin-route checks still clear management state on actual account or admin loss.
  if(account){dbAdmin.platform=false;dbAdminClear();}
  if(dbAudit.installed)dbAuditValidate();
+ if(dbCurator.installed)dbCuratorSync();
 }
 let dbAuthorizationVersion=0;
 const dbExplorer={database_id:'',schema_id:'',binding_revision:null,generation_id:null,grant_revision:null,schemas:[],schemaScope:'',invalid:false};
@@ -2589,11 +2590,11 @@ const dbSource={scope:'',version:0,token:null,origin:null,notice:''};
 const dbSourceInputEvents=new WeakSet();
 let dbPlanAuthorityStamp='',dbPlanAuthorityEpoch=0;
 const dbExplanationHelp='Explains SQL using authorized column names and types. Values and comments are omitted from model input. No execution plan or query results are collected. SQL is not executed.';
-const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Other Bears are unavailable.';
+const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Catalog Curator explains metadata with its own authorized context. Other Bears are unavailable.';
 const dbExplanationInstruction='Enter SQL or copy it from the active worksheet.';
 const dbExplanationContextStep='Choose or confirm the database, schema and role in the SQL worksheet.';
 const dbExplanationStateLabel=state=>t({SUCCEEDED:'Completed',RUNNING:'Running',QUEUED:'Queued',FAILED:'Failed',UNKNOWN:'Outcome unknown',CANCELED:'Canceled',NOT_STARTED:'Not started',NOT_COLLECTED:'Not collected',COLLECTED:'Collected',NOT_SUBMITTED:'Not submitted',FINISHED:'Completed'}[state]);
-const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
+const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
 Object.assign(i18n.ja,{
  [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE と対応する INVOKER VIEW を利用でき、すべての依存先への現在のクエリ権限が必要です。未対応の VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。取得時点の定義を確認します。変更を検出した場合は説明を確定しません。',
  'Acquire plan and explain':'実行計画を取得して説明','Acquire a new plan and explain':'新しい実行計画を取得して説明',
@@ -2626,7 +2627,7 @@ Object.assign(i18n.ja,{
  'Refresh explanation / recover request':'説明を更新／元の要求を復旧','Load explanation history':'説明履歴を読み込む',
  'Choose a saved explanation':'保存済みの説明を選択','Historical explanation (read only)':'過去の説明（表示のみ）',
  'Saved explanation (read only)':'保存された説明（表示のみ）',
- [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。他の Bears は利用できません。',
+ [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。他の Bears は利用できません。',
  [dbExplanationInstruction]:'SQL を入力するか、ワークシートからコピーしてください。',
  [dbExplanationContextStep]:'SQL ワークシートでデータベース・スキーマ・ロールを選択または確認してください。',
  'SQL not executed · Execution plan not collected':'SQL は未実行 · 実行計画は未取得',
@@ -2643,7 +2644,7 @@ Object.assign(i18n.ja,{
  'Load explanation history to recover the original request after access changes.':'アクセス変更後に元の要求を復旧するには、説明履歴を読み込んでください。',
  'SUCCEEDED':'完了',
  [dbExplanationHelp]:'SQL と許可されたカラム名・型に基づく説明です。値とコメントはモデル入力から除外します。実行計画・クエリ結果は取得せず、SQL は実行しません。',
- [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
+ [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
 });
 function dbExplanationCapture(){
  const w=dbCurrent();if(!w)return null;
@@ -3364,6 +3365,218 @@ function dbProposalInstall(){
  }
  $('copilot-generate').onclick=()=>dbProposalSubmit('create');dbProposalSync();
 }
+// Catalog Curator owns its context and durable originals, independently of worksheets.
+const dbCuratorEndpoint='/api/v1/bears/catalog-proposals',dbCuratorKey='shirokuma.catalog-proposal-intents.v1';
+const dbCurator={installed:false,role:'',database:'',schema:'',databases:[],schemas:[],context:null,inventoryAuth:'',auth:'',epoch:0,objects:[],cursor:null,source:null,busy:null,record:null,origin:null,history:[],intents:[],proofs:new Map(),notice:''};
+Object.assign(i18n.ja,{
+ 'SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.':'SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。',
+ 'Explain and draft descriptions':'説明と説明文案を作成',
+ 'Only names and column types go to LOCAL. Descriptions are inferred proposals, not applied. Review the content. Column proposals cover some columns, at most 8.':'名前とカラムの型だけを LOCAL に送信します。説明文は推測による未適用の案です。内容を確認してください。カラム案は一部のみ、最大8件です。',
+ 'Catalog Curator drafts descriptions for one TABLE or VIEW using its own context.':'Catalog Curator は独自のコンテキストを使い、TABLE または VIEW 1件の説明文案を作成します。',
+ 'Refresh context to load Databases for the selected role.':'選択したロールの Database を読み込むには、コンテキストを更新してください。',
+ 'Choose a Database, then refresh context to load its schemas.':'Database を選び、コンテキストを更新してスキーマを読み込んでください。',
+ 'Refresh context to load schemas for the selected Database.':'選択した Database のスキーマを読み込むには、コンテキストを更新してください。',
+ 'Choose a primary schema, then refresh context to verify it.':'主スキーマを選び、コンテキストを更新して確認してください。',
+ 'Refresh context to verify the selected primary schema.':'選択した主スキーマを確認するには、コンテキストを更新してください。',
+ 'Load source objects, then choose one TABLE or VIEW and explicitly request a proposal.':'参照元を読み込み、TABLE または VIEW を1件選んでから、案の作成を明示的に要求してください。',
+ 'Choose one TABLE or VIEW, then explicitly request a proposal.':'TABLE または VIEW を1件選び、案の作成を明示的に要求してください。',
+ 'Select Explain and draft descriptions to explicitly request a proposal for the chosen source.':'選択した参照元の案を明示的に要求するには、「説明と説明文案を作成」を選んでください。',
+ 'Curator context ready. Load objects explicitly.':'Curator のコンテキストを確認しました。参照元を明示的に読み込んでください。',
+ 'Curator request in progress.':'Curator の要求を処理中です。',
+ 'Curator outcome unknown. Recover the original request explicitly.':'Curator の結果は不明です。元の要求を明示的に復旧してください。',
+ 'Curator unavailable. Refresh context and recover the original request.':'Curator を利用できません。コンテキストを更新し、元の要求を復旧してください。',
+ 'Original Curator request could not be saved. No request was sent.':'Curator の元要求を保存できません。要求は送信していません。',
+ 'Recover oldest original Curator request':'最も古い Curator の元要求を復旧',
+ 'Load Curator history':'Curator の履歴を読み込む','Choose saved Curator proposal':'保存済み Curator 案を選択',
+ 'Discard Curator result':'Curator の結果を破棄','Curator current frozen source':'Curator の現在選択から固定した参照元',
+ 'Curator historical frozen source; current selection kept':'Curator の過去の固定参照元（現在の選択は維持）',
+ 'Proposed relation description':'リレーションの説明文案','Proposed columns: {count} (partial, maximum 8)':'カラムの説明文案: {count}件（一部のみ、最大8件）',
+ 'No eligible objects. Check primary schema and query permissions.':'対象の参照元がありません。主スキーマとクエリ権限を確認してください。',
+ 'No saved Curator proposals in this context.':'このコンテキストに保存済み Curator 案はありません。',
+ 'Curator request rejected before acceptance. Review the source and refresh metadata before creating a new request.':'Curator の要求は受け付け前に拒否されました。参照元を確認し、メタデータを更新してから新しい要求を作成してください。',
+ 'Original Curator request refreshed; current selection kept.':'Curator の元要求を確認しました。現在の選択は維持しています。'
+});
+function dbCuratorText(value,max){return dbProposalText(value,max)&&!/[\u0000\uD800-\uDFFF]/u.test(value);}
+function dbCuratorContext(c){return dbExplanationSameContext(c,c)&&['database_id','schema_id','generation_id','sql_catalog','sql_schema'].every(k=>dbCuratorText(c[k],4096))&&Number.isSafeInteger(c.binding_revision)&&c.binding_revision>0&&(c.grant_revision===null||Number.isSafeInteger(c.grant_revision)&&c.grant_revision>0)&&c.warehouse_id==='LOCAL'&&['bi_viewer','data_engineer','admin'].includes(c.selected_role);}
+function dbCuratorBody(b){const c=b?.context,r=b?.relation;return dbSavedExact(b,['context','relation','language'])&&dbCuratorContext(c)&&dbProposalRef(r)&&dbSavedUUID(r.object_id)&&r.database_id===c.database_id&&r.schema_id===c.schema_id&&r.binding_revision===c.binding_revision&&r.generation_id===c.generation_id&&['ja','en'].includes(b.language);}
+function dbCuratorAuth(){return JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbEpoch,dbAuthorizationVersion,dbRoleVersion(dbCurator.role)]);}
+function dbCuratorAllowed(){const p=dbCurator,c=p.context;return databaseMode&&!!c&&p.inventoryAuth===dbCuratorAuth()&&dbRoleWithinHeader(p.role)&&c.selected_role===p.role&&c.database_id===p.database&&c.schema_id===p.schema&&dbCuratorContext(c);}
+function dbCuratorChanged(clearContext=false){const p=dbCurator;++p.epoch;p.busy=null;p.record=null;p.origin=null;p.history=[];p.notice='';if(clearContext){p.context=null;p.inventoryAuth='';p.objects=[];p.cursor=null;p.source=null;}dbCuratorSync();}
+function dbCuratorSame(i){return i.principal===dbPrincipal&&dbCuratorAllowed()&&dbExplanationSameContext(i.body.context,dbCurator.context);}
+function dbCuratorMatches(b,r){return dbExplanationSameContext(b.context,r.context)&&b.language===r.input.language&&Object.keys(b.relation).every(k=>b.relation[k]===r.input.relation[k]);}
+function dbCuratorHeld(){return dbCurator.intents.filter(i=>{const proof=dbCurator.proofs.get(i);return dbCuratorSame(i)&&!(proof?.authority===dbCuratorAuth()&&proof.key===i.key&&proof.body===i.body&&proof.id===i.id&&proof.terminal);});}
+function dbCuratorObserve(r){for(const i of dbCurator.intents)if(dbCuratorSame(i)&&i.id===r.id&&dbCuratorMatches(i.body,r)&&i.source.schema===r.metadata.relation.schema&&i.source.name===r.metadata.relation.table&&i.source.kind===r.metadata.relation.kind)dbCurator.proofs.set(i,{authority:dbCuratorAuth(),epoch:dbCurator.epoch,key:i.key,body:i.body,id:i.id,terminal:['SUCCEEDED','FAILED','CANCELED'].includes(r.state)&&!['RUNNING','UNKNOWN'].includes(r.inference_state)});}
+function dbCuratorFreeze(i){
+ if(!dbSavedExact(i,['principal','kind','body','key','id','source'])||i.kind!=='catalog_proposal'||!dbSavedUUID(i.key)||i.id!==null&&!dbSavedUUID(i.id)||!dbCuratorBody(i.body)||!dbSavedExact(i.source,['ref','schema','name','kind'])||!dbProposalRef(i.source.ref)||!Object.keys(i.source.ref).every(k=>i.source.ref[k]===i.body.relation[k])||i.source.schema!==i.body.context.sql_schema||!dbCuratorText(i.source.name,4096)||!['TABLE','VIEW'].includes(i.source.kind))throw Error('CONTEXT_MISMATCH');
+ const actor=JSON.parse(i.principal);if(!Array.isArray(actor)||actor.length!==2||actor[1]!==true||!dbCuratorText(actor[0],4096))throw Error('CONTEXT_MISMATCH');
+ return Object.seal({...i,body:dataopsFreeze(structuredClone(i.body)),source:dataopsFreeze(structuredClone(i.source))});
+}
+function dbCuratorPersist(){try{const value=JSON.stringify(dbCurator.intents);localStorage.setItem(dbCuratorKey,value);return localStorage.getItem(dbCuratorKey)===value;}catch{return false;}}
+function dbCuratorSync(){
+ const p=dbCurator;if(!p.installed)return;
+ const auth=dbCuratorAuth();if(auth!==p.auth){p.auth=auth;++p.epoch;p.busy=null;p.context=null;p.inventoryAuth='';p.objects=[];p.cursor=null;p.source=null;p.record=null;p.origin=null;p.history=[];p.databases=[];p.schemas=[];p.notice='';}
+ if(p.navigation!==activeTab){p.navigation=activeTab;++p.epoch;p.busy=null;p.record=null;p.origin=null;p.notice='';}
+ const allowed=dbCuratorAllowed(),busy=!!p.busy;
+ dbSelectOptions('curator-role',['bi_viewer','data_engineer','admin'].map(role=>({value:role,label:role,disabled:!dbRoleWithinHeader(role)})),p.role,'Execution role');
+ dbSelectOptions('curator-database',p.databases.filter(d=>d.capabilities?.query&&d.allowed_roles?.includes(p.role)&&d.state==='READY').map(d=>({value:d.id,label:d.display_name+' · '+d.sql_catalog})),p.database,'Choose database');
+ dbSelectOptions('curator-schema',p.schemas.filter(s=>s.database_id===p.database&&s.capabilities?.query).map(s=>({value:s.id,label:s.display_name+' · '+s.sql_name})),p.schema,'Choose schema');
+ dbSelectOptions('curator-object',p.objects.map((o,index)=>({value:String(index),label:o.schema+'.'+o.name+' · '+o.kind})),p.source?String(p.objects.indexOf(p.source)):'','Choose source object');
+ $('curator-refresh').disabled=busy||!dbRoleWithinHeader(p.role);$('curator-load').disabled=busy||!allowed;$('curator-more').hidden=!p.cursor;$('curator-more').disabled=busy||!allowed;
+ $('curator-object').disabled=!allowed;$('curator-create').disabled=busy||!allowed||!p.source||dbCuratorHeld().length>0;
+ $('curator-recover').disabled=busy||!allowed||!dbCuratorHeld().length;$('curator-history').disabled=busy||!allowed;
+ const saved=p.origin==='history'&&p.record?p.history.findIndex(r=>r.id===p.record.id):-1;dbSelectOptions('curator-saved',p.history.map((r,index)=>({value:String(index),label:r.created_at+' · '+dbExplanationStateLabel(r.state)+' · '+r.metadata.relation.table})),saved<0?'':String(saved),'Choose saved Curator proposal');$('curator-saved').disabled=busy||!allowed;
+ $('curator-cancel').disabled=busy||!allowed||!p.record||!['QUEUED','RUNNING'].includes(p.record.state)||p.record.cancel_requested||!p.intents.some(i=>dbCuratorSame(i)&&i.id===p.record.id&&dbCuratorMatches(i.body,p.record));
+ dbCuratorRender();
+}
+function dbCuratorGuard(token,epoch,auth){dbCuratorSync();return dbCurator.busy===token&&dbCurator.epoch===epoch&&dbCuratorAuth()===auth;}
+async function dbCuratorRefresh(){
+ dbCuratorSync();const p=dbCurator;if(p.busy||!dbRoleWithinHeader(p.role))return;
+ dbCuratorChanged(true);const token={},epoch=p.epoch,auth=dbCuratorAuth(),role=p.role,database=p.database,schema=p.schema;p.busy=token;dbCuratorSync();const current=()=>dbCuratorGuard(token,epoch,auth);
+ try{
+  const items=await dbReadInventory(role,current);if(!current()||!dbInventoryCurrent(items))return;
+  p.databases=items.filter(d=>d.state==='READY'&&d.capabilities?.query&&d.allowed_roles?.includes(role));
+  const d=p.databases.find(d=>d.id===database);if(!d)return;
+  const reply=await dbAPI('/api/v1/databases/'+encodeURIComponent(database)+'/schemas',role);if(!current())return;
+  if(!Array.isArray(reply.items))throw Error('CONTEXT_MISMATCH');p.schemas=reply.items.filter(s=>s.database_id===database&&s.capabilities?.query);
+  const s=p.schemas.find(s=>s.id===schema);if(!s)return;
+  const context={database_id:d.id,schema_id:s.id,warehouse_id:'LOCAL',binding_revision:d.binding_revision,generation_id:d.generation_id,grant_revision:d.grant_revision,sql_catalog:d.sql_catalog,sql_schema:s.sql_name,selected_role:role};
+  if(!dbCuratorContext(context))throw Error('CONTEXT_MISMATCH');p.context=dataopsFreeze(context);p.inventoryAuth=auth;p.notice='Curator context ready. Load objects explicitly.';
+ }catch{if(current())p.notice='Curator unavailable. Refresh context and recover the original request.';}
+ finally{if(p.busy===token){p.busy=null;dbCuratorSync();}}
+}
+async function dbCuratorLoad(more=false){
+ dbCuratorSync();const p=dbCurator;if(p.busy||!dbCuratorAllowed()||more&&!p.cursor)return;
+ dbCuratorChanged();p.source=null;if(!more){p.objects=[];p.cursor=null;}const token={},epoch=p.epoch,auth=dbCuratorAuth(),c=p.context,cursor=more?p.cursor:null;p.busy=token;dbCuratorSync();const current=()=>dbCuratorGuard(token,epoch,auth)&&dbCuratorAllowed();
+ try{
+  const params=new URLSearchParams({limit:'100'});if(cursor)params.set('cursor',cursor);
+  const data=await dbAPI('/api/v1/schemas/'+encodeURIComponent(c.schema_id)+'/objects?'+params,p.role);if(!current())return;
+  if(!Array.isArray(data.items)||data.next_cursor!=null&&typeof data.next_cursor!=='string')throw Error('CONTEXT_MISMATCH');
+  const schema=p.schemas.find(s=>s.id===c.schema_id),objects=data.items.filter(o=>dbProposalObject(o,schema,c)&&dbSavedUUID(o.ref.object_id)).map(o=>dataopsFreeze({ref:structuredClone(o.ref),schema:schema.sql_name,name:o.physical_name,kind:o.kind}));
+  p.objects=more?[...p.objects,...objects]:objects;p.cursor=data.next_cursor||null;p.notice=p.objects.length?'':'No eligible objects. Check primary schema and query permissions.';
+ }catch{if(current()){dbCuratorChanged(true);p.notice='Curator unavailable. Refresh context and recover the original request.';dbCuratorSync();}}
+ finally{if(p.busy===token){p.busy=null;dbCuratorSync();}}
+}
+function dbCuratorRecord(data,c,intent=null){
+ const r=data?.explanation,date=v=>typeof v==='string'&&Number.isFinite(Date.parse(v)),text=dbCuratorText;
+ const fail=()=>{throw Error('CONTEXT_MISMATCH');};let actor;try{actor=JSON.parse(dbPrincipal);}catch{fail();}
+ if(!dbSavedExact(data,['context','explanation'])||!dbSavedExact(r,['id','kind','state','actor','context','input','model','metadata','proposal','error_code','created_at','updated_at','cancel_requested','inference_state'])||!dbExplanationSameContext(data.context,c)||!dbExplanationSameContext(r.context,c)||!dbSavedUUID(r.id)||r.kind!=='catalog_proposal'||actor?.[1]!==true||r.actor!==actor[0]||!text(r.actor,4096)||!dbSavedExact(r.input,['relation','language'])||!dbCuratorBody({context:r.context,...r.input})||!['QUEUED','RUNNING','SUCCEEDED','FAILED','CANCELED','UNKNOWN'].includes(r.state)||!['NOT_STARTED','RUNNING','SUCCEEDED','FAILED','CANCELED','UNKNOWN'].includes(r.inference_state)||typeof r.cancel_requested!=='boolean'||!date(r.created_at)||!date(r.updated_at)||!dbSavedExact(r.model,['provider','name'])||r.model.provider!=='local-openai'||!text(r.model.name,4096)||r.error_code!==null&&!dbProposalCodes.has(r.error_code)||!dbSavedExact(r.metadata,['relation','captured_at'])||!date(r.metadata.captured_at))fail();
+ if(intent&&(intent.id&&intent.id!==r.id||!dbCuratorMatches(intent.body,r)))fail();
+ const relation=r.metadata.relation;
+ if(!dbSavedExact(relation,['schema','table','kind','columns'])||relation.schema!==c.sql_schema||!text(relation.schema,4096)||!text(relation.table,4096)||!['TABLE','VIEW'].includes(relation.kind)||!Array.isArray(relation.columns)||relation.columns.some(col=>!dbSavedExact(col,['name','type'])||!text(col.name,4096)||!text(col.type,49152))||new Set(relation.columns.map(col=>col.name)).size!==relation.columns.length||new TextEncoder().encode(JSON.stringify(relation)).length>49152)fail();
+ if(intent&&(relation.schema!==intent.source?.schema||relation.table!==intent.source?.name||relation.kind!==intent.source?.kind))fail();
+ if(r.state==='SUCCEEDED'){
+  const proposal=r.proposal;if(r.inference_state!=='SUCCEEDED'||r.error_code!==null||r.cancel_requested||!dbSavedExact(proposal,['summary','description','columns'])||!text(proposal.summary,4096)||!text(proposal.description,4096)||!Array.isArray(proposal.columns)||proposal.columns.length>8||proposal.columns.some(col=>!dbSavedExact(col,['name','description'])||!relation.columns.some(c=>c.name===col.name)||!text(col.description,1024))||new Set(proposal.columns.map(col=>col.name)).size!==proposal.columns.length||new TextEncoder().encode(JSON.stringify(proposal)).length>16384)fail();
+ }else if(r.proposal!==null||r.state==='QUEUED'&&r.inference_state!=='NOT_STARTED'||r.state==='RUNNING'&&r.inference_state!=='RUNNING'||r.state==='FAILED'&&r.inference_state!=='FAILED'||r.state==='UNKNOWN'&&r.inference_state!=='UNKNOWN'||r.state==='CANCELED'&&!['NOT_STARTED','RUNNING','UNKNOWN','CANCELED'].includes(r.inference_state))fail();
+ const checked=structuredClone(r);if(checked.proposal)checked.proposal.columns.sort((a,b)=>relation.columns.findIndex(c=>c.name===a.name)-relation.columns.findIndex(c=>c.name===b.name));return dataopsFreeze(checked);
+}
+async function dbCuratorRequest(path,c,body,key){
+ const headers={'X-Shirokuma-Role':c.selected_role};if(body!==undefined)Object.assign(headers,{'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})});
+ const response=await fetch(path,body===undefined?{headers}:{method:'POST',headers,body:JSON.stringify(body)});
+ let data;try{data=await response.json();}catch{if(response.ok)throw Error('CURATOR_UNAVAILABLE');}
+ if(!response.ok){
+  const object=dbExplanationObject,codes=object(data)?[data.code,object(data.error)?data.error.code:null].filter(code=>typeof code==='string'):[],unique=codes.length>0&&codes.every(code=>code===codes[0]);
+  const code=unique&&dbProposalCodes.has(codes[0])?codes[0]:null;
+  // A closed rejection envelope cannot carry an accepted operation or conflicting framing.
+  const rejection=(dbSavedExact(data,['code','message','details','retryable'])||dbSavedExact(data,['code','message','request_id','details','retryable'])&&typeof data.request_id==='string'&&data.request_id.trim().length>0)&&typeof data.message==='string'&&dbSavedExact(data.details,[])&&data.retryable===false&&(response.status===400&&code==='AI_INPUT_INVALID'||response.status===409&&code==='AI_METADATA_CHANGED');
+  throw Object.assign(Error('CURATOR_UNAVAILABLE'),{status:Number.isInteger(response.status)&&response.status>=100&&response.status<=599?response.status:null,code,rejection:!!rejection});
+ }
+ return data;
+}
+function dbCuratorDenied(error){
+ if([401,403].includes(error?.status)||error?.status&&['DB_ACCESS_REVOKED','SQL_PERMISSION_DENIED','UNKNOWN_CONTEXT','STALE_BINDING','CONTEXT_MISMATCH'].includes(error.code)){
+  dbCuratorChanged(true);return true;
+ }
+ return false;
+}
+async function dbCuratorSubmit(action='create'){
+ dbCuratorSync();const p=dbCurator;if(p.busy||!dbCuratorAllowed()||!['create','recover'].includes(action))return;
+ let intent;
+ if(action==='recover')intent=dbCuratorHeld()[0];
+ else{
+  if(dbCuratorHeld().length||!p.source)return;const body={context:structuredClone(p.context),relation:structuredClone(p.source.ref),language};if(!dbCuratorBody(body))return;
+  intent=dbCuratorFreeze({principal:dbPrincipal,kind:'catalog_proposal',body,key:crypto.randomUUID(),id:null,source:p.source});p.intents.push(intent);
+  if(!dbCuratorPersist()){p.intents.pop();p.notice='Original Curator request could not be saved. No request was sent.';dbCuratorSync();return;}
+ }
+ if(!intent)return;const token={},epoch=p.epoch,auth=dbCuratorAuth(),body=intent.body,key=intent.key;p.busy=token;p.notice='Curator request in progress.';dbCuratorSync();const current=()=>dbCuratorGuard(token,epoch,auth)&&dbCuratorAllowed();
+ try{
+  const c=intent.body.context,data=await dbCuratorRequest(intent.id?dbCuratorEndpoint+'/'+encodeURIComponent(intent.id)+'?'+new URLSearchParams({context:JSON.stringify(c)}):dbCuratorEndpoint,c,intent.id?undefined:body,key);
+  const r=dbCuratorRecord(data,c,intent);
+  // Retain a valid ACK even if only the object changed; never install stale output/proof.
+  if(intent.principal===dbPrincipal&&auth===dbCuratorAuth()){intent.id=r.id;dbCuratorPersist();}
+  if(!current())return;dbCuratorObserve(r);p.notice='';
+  const selected=p.source&&dbCuratorMatches({context:p.context,relation:p.source.ref,language:intent.body.language},r)&&p.source.name===r.metadata.relation.table&&p.source.kind===r.metadata.relation.kind;
+  if(action==='create'&&selected){p.record=r;p.origin='current';}else{p.record=r;p.origin='history';p.notice='Original Curator request refreshed; current selection kept.';}
+ }catch(error){if(current()){
+  if(action==='create'&&!intent.id&&intent.body===body&&intent.key===key&&dbCuratorSame(intent)&&error.rejection){
+   p.proofs.set(intent,{authority:auth,key,body,id:null,terminal:true});
+   p.notice='Curator request rejected before acceptance. Review the source and refresh metadata before creating a new request.';
+  }else{dbCuratorDenied(error);p.notice='Curator outcome unknown. Recover the original request explicitly.';dbCuratorSync();}
+ }}
+ finally{if(p.busy===token){p.busy=null;dbCuratorSync();}}
+}
+async function dbCuratorHistory(index=null){
+ dbCuratorSync();const p=dbCurator;if(p.busy||!dbCuratorAllowed())return;const saved=index===null?null:p.history[index];if(index!==null&&!saved)return;
+ const history=p.history;dbCuratorChanged();if(saved)p.history=history;const token={},epoch=p.epoch,auth=dbCuratorAuth(),c=p.context;p.busy=token;dbCuratorSync();const current=()=>dbCuratorGuard(token,epoch,auth)&&dbCuratorAllowed();
+ try{
+  const data=await dbCuratorRequest(dbCuratorEndpoint+(saved?'/'+encodeURIComponent(saved.id):'')+'?'+new URLSearchParams({context:JSON.stringify(c)}),c);if(!current())return;
+  if(saved){const r=dbCuratorRecord(data,c);if(r.id!==saved.id||!dbCuratorMatches({context:c,...saved.input},r)||JSON.stringify(r.metadata)!==JSON.stringify(saved.metadata))throw Error('CONTEXT_MISMATCH');dbCuratorObserve(r);p.history=p.history.map(entry=>entry.id===r.id?r:entry);p.record=r;p.origin='history';}
+  else{if(!dbSavedExact(data,['context','explanations'])||!dbExplanationSameContext(data.context,c)||!Array.isArray(data.explanations))throw Error('CONTEXT_MISMATCH');p.history=data.explanations.map(r=>dbCuratorRecord({context:c,explanation:r},c));p.history.forEach(dbCuratorObserve);p.notice=p.history.length?'':'No saved Curator proposals in this context.';}
+ }catch(error){if(current()){dbCuratorDenied(error);p.notice='Curator unavailable. Refresh context and recover the original request.';dbCuratorSync();}}
+ finally{if(p.busy===token){p.busy=null;dbCuratorSync();}}
+}
+async function dbCuratorCancel(){
+ dbCuratorSync();const p=dbCurator,r=p.record;if(p.busy||!dbCuratorAllowed()||!r||!['QUEUED','RUNNING'].includes(r.state)||r.cancel_requested)return;
+ const intent=p.intents.find(i=>dbCuratorSame(i)&&i.id===r.id&&dbCuratorMatches(i.body,r));if(!intent)return;
+ const token={},epoch=p.epoch,auth=dbCuratorAuth();p.busy=token;dbCuratorSync();const current=()=>dbCuratorGuard(token,epoch,auth)&&dbCuratorAllowed();
+ try{const data=await dbCuratorRequest(dbCuratorEndpoint+'/'+encodeURIComponent(r.id)+'/cancel',r.context,{context:r.context});if(!current())return;const checked=dbCuratorRecord(data,r.context,intent);dbCuratorObserve(checked);p.record=checked;p.notice='';}
+ catch(error){if(current()){dbCuratorDenied(error);p.notice='Curator outcome unknown. Recover the original request explicitly.';dbCuratorSync();}}
+ finally{if(p.busy===token){p.busy=null;dbCuratorSync();}}
+}
+function dbCuratorGuidance(){
+ const p=dbCurator;
+ if(!p.databases.length)return 'Refresh context to load Databases for the selected role.';
+ if(!p.database)return 'Choose a Database, then refresh context to load its schemas.';
+ if(!p.schemas.some(s=>s.database_id===p.database))return 'Refresh context to load schemas for the selected Database.';
+ if(!p.schema)return 'Choose a primary schema, then refresh context to verify it.';
+ if(!dbCuratorAllowed())return 'Refresh context to verify the selected primary schema.';
+ if(dbCuratorHeld().length)return 'Curator outcome unknown. Recover the original request explicitly.';
+ if(!p.objects.length)return 'Load source objects, then choose one TABLE or VIEW and explicitly request a proposal.';
+ return p.source?'Select Explain and draft descriptions to explicitly request a proposal for the chosen source.':'Choose one TABLE or VIEW, then explicitly request a proposal.';
+}
+function dbCuratorRender(){
+ const p=dbCurator,node=$('curator-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
+ const r=dbCuratorAllowed()?p.record:null;
+ if(r){
+  if(r.proposal){line(r.proposal.summary);line(t('Proposed relation description'));line(r.proposal.description,'pre');line(t('Proposed columns: {count} (partial, maximum 8)',{count:r.proposal.columns.length}));for(const col of r.proposal.columns){line(col.name+' · '+r.metadata.relation.columns.find(c=>c.name===col.name).type);line(col.description,'pre');}}
+  else line(t(r.state==='UNKNOWN'?'Curator outcome unknown. Recover the original request explicitly.':r.state==='QUEUED'||r.state==='RUNNING'?'Curator request in progress.':dbExplanationStateLabel(r.state)));
+  line(t('Only names and column types go to LOCAL. Descriptions are inferred proposals, not applied. Review the content. Column proposals cover some columns, at most 8.'));
+  line(t(p.origin==='current'?'Curator current frozen source':'Curator historical frozen source; current selection kept'));
+  line(r.metadata.relation.schema+'.'+r.metadata.relation.table+' · '+r.metadata.relation.kind);
+  line(r.context.sql_catalog+'.'+r.context.sql_schema+' · '+r.context.selected_role+' · '+r.context.warehouse_id);
+  line(r.model.provider+' · '+r.model.name+' · '+r.metadata.captured_at+' · '+dbExplanationStateLabel(r.state)+' · '+dbExplanationStateLabel(r.inference_state));
+  if(r.error_code)line(r.error_code);if(r.cancel_requested)line(t('Model result will be discarded. Physical model stoppage is not confirmed.'));
+ }else line(t(dbCuratorGuidance()));
+ if(p.notice)line(t(p.notice));
+}
+function dbCuratorInstall(){
+ const p=dbCurator;p.installed=true;p.role=p.role||currentRole;p.auth='';p.proofs.clear();const saved=readStorage(dbCuratorKey,[]);p.intents=Array.isArray(saved)?saved.flatMap(i=>{try{return [dbCuratorFreeze(Object.fromEntries(['principal','kind','body','key','id','source'].map(k=>[k,i[k]])))];}catch{return [];}}):[];
+ for(const id of ['bear-catalog-action','bear-catalog-table']){const n=$(id);n.disabled=true;n.hidden=true;if(n.parentElement)n.parentElement.hidden=true;}
+ $('bear-catalog-run').hidden=true;const description=$('bear-panel-catalog').querySelector('p');if(description)ui(description,'Catalog Curator drafts descriptions for one TABLE or VIEW using its own context.');const tab=$('bear-tab-catalog');tab.disabled=false;tab.dataset.databaseUnavailable='false';tab.title='';
+ for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===tab&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
+ if(!$('curator-panel')?.dataset.installed){
+  const panel=document.createElement('div');panel.id='curator-panel';panel.dataset.installed='true';$('bear-panel-catalog').append(panel);
+  const help=document.createElement('p');ui(help,'Only names and column types go to LOCAL. Descriptions are inferred proposals, not applied. Review the content. Column proposals cover some columns, at most 8.');panel.append(help);
+  const toolbar=document.createElement('div');toolbar.className='toolbar';panel.append(toolbar);
+  for(const [name,label] of [['role','Execution role'],['database','Database'],['schema','Schema'],['object','Choose source object'],['saved','Choose saved Curator proposal']]){
+   const field=document.createElement('span'),l=document.createElement('label'),select=document.createElement('select');field.className='field';select.id='curator-'+name;l.htmlFor=select.id;ui(l,label);field.append(l,select);toolbar.append(field);
+   select.onchange=()=>{if(name==='saved')return select.value===''?undefined:dbCuratorHistory(Number(select.value));if(name==='object'){p.source=p.objects[Number(select.value)]&&select.value!==''?p.objects[Number(select.value)]:null;dbCuratorChanged();return;}p[name]=select.value;if(name==='role'){p.databases=[];p.schemas=[];p.database='';p.schema='';}if(name==='database'){p.schemas=[];p.schema='';}dbCuratorChanged(true);};
+  }
+  const local=document.createElement('span');local.textContent='LOCAL';toolbar.append(local);
+  for(const [name,label,task] of [['refresh','Refresh context',dbCuratorRefresh],['load','Load source objects',()=>dbCuratorLoad()],['more','More objects',()=>dbCuratorLoad(true)],['create','Explain and draft descriptions',()=>dbCuratorSubmit()],['recover','Recover oldest original Curator request',()=>dbCuratorSubmit('recover')],['history','Load Curator history',()=>dbCuratorHistory()],['cancel','Discard Curator result',dbCuratorCancel]]){const b=document.createElement('button');b.id='curator-'+name;b.type='button';ui(b,label);b.onclick=task;toolbar.append(b);}
+  const output=document.createElement('div');output.id='curator-output';output.setAttribute('aria-live','polite');panel.append(output);
+ }
+ dbCuratorSync();
+}
 // Saved-plan inference has its own receipt and never changes the source's query proof.
 function dbSavedExact(value,keys){return dbExplanationObject(value)&&JSON.stringify(Object.keys(value).sort())===JSON.stringify([...keys].sort());}
 function dbSavedUUID(value){return typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);}
@@ -3560,7 +3773,7 @@ function dbReason(w=dbCurrent()){
  return '';
 }
 function dbControls(){
- dbExplanationSync();dbProposalSync();
+ dbExplanationSync();dbProposalSync();dbCuratorSync();
  if(dbRuntime.installed)dbRuntimeSync();
  if(dbAudit.installed)dbAuditValidate();
  const w=dbCurrent();if(!w)return;
@@ -4346,7 +4559,7 @@ async function initializeDatabaseUI(session){
  ],
  [
   "bears",
-  "SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable."
+  "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable."
  ],
  [
   "pawprints",
@@ -4366,13 +4579,13 @@ async function initializeDatabaseUI(session){
  for(const [controls,key] of [
   [['quick-wake','quick-chill','wake','chill'].map(id=>$(id)),'Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.'],
   [[$('ai-settings-button')],'AI settings are unavailable in Database mode. Use SQL or Manual WAP.'],
-  [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.'],
+  [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.'],
   [['export-csv','export-json','copy-tsv'].map(id=>$(id)),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.'],
   [['clone-table-btn','drop-table-btn'].map(id=>$(id)),'Clone and drop are unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.'],
   [['run-dbt-build','run-dbt-test'].map(id=>$(id)),'Legacy dbt build/test is unavailable in Database mode. Use Manual WAP or Managed Marts with an authorized context.'],
   [[...document.querySelectorAll('[data-sample]')],'Fixed sample queries are unavailable in Database mode. Enter SQL for the selected database.']
  ])for(const node of controls){node.disabled=true;node.dataset.databaseUnavailable='true';node.setAttribute('title',t(key));uiAttributes.push({node,attribute:'title',key});}
- const copilot=$('copilot-result');ui(copilot,'SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.');copilot.hidden=false;
+ const copilot=$('copilot-result');ui(copilot,'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.');copilot.hidden=false;
  const legacyRenderWorksheets=renderWorksheets,legacyRenderResults=renderResults,legacyAPI=api;
  saveWorksheet=dbSave;
  renderWorksheets=()=>{legacyRenderWorksheets();dbWorkspacePane='worksheet';dbWireWorkspaceTabs();dbControls();dbRenderRun();return dbRefreshContext();};
@@ -4389,7 +4602,7 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
@@ -4403,7 +4616,7 @@ async function initializeDatabaseUI(session){
  $('open-table-sql').onclick=dbOpenExplorerWorksheet;
  $('refresh-catalog').onclick=dbRefreshExplorer;
  $('refresh-table-details').onclick=()=>{dbDetails.clear();if(dbObject)dbDescribe(dbObject);};
- dbExplanationInstall();dbProposalInstall();
+ dbExplanationInstall();dbProposalInstall();dbCuratorInstall();
  dbApplyRole();legacyRenderWorksheets();dbWireWorkspaceTabs();dbPersist();await dbRefreshContext();
  if(currentRole!==dbTabRole()){try{const items=await dbReadInventory(currentRole);dbApplyInventory(items,currentRole);}catch(error){if(error.code!=='AUTH_READ_STALE')message('catalog-error',error.message);}}
  // Seed once from explicit restored inputs. Worksheet switches never follow this.

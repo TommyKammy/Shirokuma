@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-01
-version: "1.40"
+version: "1.41"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-01、[DB-P6-4C1](../../guides/database-p6-4c1-catalog-proposals-2026-11-01.md)でCatalog Curatorの許可metadata説明・説明文案を実装した。ワークシートに依存しない明示contextと、同じprimary schemaのTABLE／VIEW 1件を対象に、現在の権限・Ref・UUID・列構造を検査してLOCAL推論だけを行う。入力は名前・列名・型へ限定し、VIEWの定義・依存や既存の説明文を転用しない。出力は推定の表説明と最大8列の部分的な説明文案であり、保存・適用・SQL実行を追加しない。既存AIの元key／受付ID・履歴・取消・UNKNOWN境界を保ち、metadataの直接読取りでregistryを更新しない。C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 skip、2DB・3roleの実API、adminの実画面、最終保全PASS）。SRE／PolicyのDBとplatformの観測、lineage・説明保存は後続に分け、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 2026-11-01、[DB-P6-4B2](../../guides/database-p6-4b2-wap-handoff-2026-11-01.md)でB1案から既存Manual WAPへの明示引渡しを実装し、限定範囲の技術受入を完了した。元案の本人・保存9項目contextと全source schema権限を保ち、利用者が選んだ同一DB・同一E／A roleのSANDBOX実行先9項目contextを別に検査する。保存済み元SQLの使用TABLEだけを現在の識別情報・列で確認し、scopeに従うalias変換と既存WAP compilerを通す。使用VIEWを拡張せず、未使用VIEWはschema権限だけを確認する。明示GETはmetadata読取りだけで、新しい未保存WAP下書きへ取り込んだ後のSQL・source・target・品質編集と版保存／build／audit／A公開は既存WAPの責務とする。B2の限定範囲を技術受入済みとした（全体回帰3,944成功・34 skip、2DBの実機・画面・最終保全PASS）。次は他Bearsの必須導線を統合し、P6-4全体／P6-7／M1本人受入は継続する。
 

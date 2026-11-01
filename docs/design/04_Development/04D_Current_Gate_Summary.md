@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-01
-version: "2.25.0"
+version: "2.26.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-11-01、[DB-P6-4C1](../../guides/database-p6-4c1-catalog-proposals-2026-11-01.md)でCatalog Curatorのmetadata説明と説明文案を実装した。SQLワークシートとは独立して、本人が選ぶ同一DB・primary schemaの安定したTABLE／VIEW 1件と保存9項目contextを検査する。現在の名前・列名・型だけをLOCALへ送り、要約・表の説明文案と最大8列の部分的な説明文案を未適用の推定として示す。VIEW定義・依存や行データをモデル入力や保存metadataへ含めず、SQL・Engine・Wake・catalog metadataの変更を行わない。元要求の復旧・履歴・取消を独立させ、UNKNOWNや別の選択を新keyで上書きしない。C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 skip、2DB・3roleの実API、adminの実画面、最終保全PASS）。SRE／PolicyのDB・platform観測やlineage・説明保存は別単位とし、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 2026-11-01、[DB-P6-4B2](../../guides/database-p6-4b2-wap-handoff-2026-11-01.md)のManual WAP下書き引渡しを実装し、限定範囲の技術受入を完了した。本人の成功済みB1案の保存SQLを元contextで解釈し、使用するTABLEの現在識別情報・列を検査して通常WAPのsource aliasへ変換する。実行先は利用者が選ぶ同一DB・同一E／A roleのSANDBOX contextとし、元contextと実行先contextを別々に検査・表示する。metadataだけの明示GETと未保存の新規WAPフォームへの取込に限り、AI推論・SQL・Wakeや保存／build／audit／publishを自動実行しない。編集中の案や未解決WAP操作を上書きせず、確認・編集後は既存の版保存・実行・品質・A公開の認可を使う。B2の限定範囲を技術受入済みとした（全体回帰3,944成功・34 skip、2DBの実機・画面・最終保全PASS）。後続は他Bearsの必須導線の統合とし、P6-4全体／P6-7／M1本人受入は未完了である。
 

@@ -448,7 +448,7 @@ LOADERS
         self.assertNotIn("api('/api/warehouse/autochill',{check:true})", script)
         self.assertIn("api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})", script)
         self.assertIn('if(data.auto_chill)updateAutoChill(data.auto_chill)', script)
-        result = subprocess.run(['node', '-e', 'new Function(' + json.dumps(script) + ')'], capture_output=True, text=True)
+        result = subprocess.run(['node'], input='new Function(' + json.dumps(script) + ')', capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_enabled_browser_timer_does_not_check_auto_chill(self):
