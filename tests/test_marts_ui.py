@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from html.parser import HTMLParser
 
@@ -34,7 +35,11 @@ class MartsUITests(unittest.TestCase):
         script = re.search(r"<script>(.*?)</script>", source, re.S)[1]
         dictionary = "const i18n = " + script.split("const i18n = ", 1)[1].split("function t(", 1)[0]
         # Parse the entire script and verify both languages for the new controls.
-        result = subprocess.run(["node", "-e", "new Function(" + json.dumps(script) + ");" + dictionary + "console.log(JSON.stringify(i18n))"], capture_output=True, text=True)
+        harness = "new Function(" + json.dumps(script) + ");" + dictionary + "console.log(JSON.stringify(i18n))"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "marts_ui.js"
+            path.write_text(harness, encoding="utf-8")
+            result = subprocess.run(["node", str(path)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         translations = json.loads(result.stdout)
         for key in ["Registered refresh targets", "Save target", "Refresh target", "Last successful refresh", "Inspect run in Jobs", "Minimum rows", "SELECT definition", "Watched source tables (comma-separated, optional for manual refresh)", "Automatic refresh", "Check unchanged"]:

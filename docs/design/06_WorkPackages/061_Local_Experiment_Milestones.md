@@ -4,8 +4,8 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-10-31
-version: "7.23.0"
+updated: 2026-11-01
+version: "7.24.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,12 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-01 — DB-P6-4B1 authorized metadata SQL draft
+
+- [実装・検証計画](../../guides/database-p6-4b1-sql-proposals-2026-11-01.md)：現在の本人・保存9項目context・明示選択した同一DBの1〜8件のTABLE／VIEWから、原文の依頼文と許可された名前・列名・型だけでLOCAL SQL案を生成する。VIEW定義・行データは対象外。
+- 単一read-only SELECTの構文・参照範囲・policy検査と独立した復旧・履歴・取消を扱い、SQL・Engine・Wake・WAPの実行やeditor／結果の書換えは行わない。
+- B1を技術受入済みとした（全体回帰3,892成功・34 skip、2DB・3role実機・最終保全PASS）。次はB2の既存WAPへの明示引渡し。P6-4全体／P6-7／M1本人受入は未完了。
 
 ### 2026-10-31 — DB-P6-4A5 frozen collected plan re-explanation
 

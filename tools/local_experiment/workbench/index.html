@@ -251,6 +251,9 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .copilot .toolbar{margin-top:8px}
 #copilot-stage-table{width:180px}
 #copilot-result{margin-top:8px}
+#proposal-panel{margin-top:12px} #proposal-panel p{max-width:75ch;overflow-wrap:anywhere}
+#proposal-sources{padding-left:20px} #proposal-sources li{margin:4px 0;overflow-wrap:anywhere} #proposal-sources button{margin-left:8px}
+#proposal-panel select{max-width:100%}
 .results-tools{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)}
 .results-tools label{margin:0;font-weight:500;color:var(--muted)}
 .results-tools input[type=search]{width:220px}
@@ -610,7 +613,7 @@ html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wr
 <div class="editor-tabs"><div id="worksheet-tabs" role="tablist" aria-label="SQL worksheets"></div><button id="add-worksheet-tab" aria-label="Add SQL worksheet">+ Worksheet</button><div class="history-field"><label for="query-history">Recent Query History</label><select id="query-history"><option value="">Restore a past query…</option></select></div></div>
 <label for="sql" class="visually-hidden">SQL statement</label><textarea id="sql" class="editor" spellcheck="false">SELECT * FROM marts.fct_orders LIMIT 10</textarea>
 <div class="query-footer"><div class="toolbar"><span class="field"><label for="query-warehouse">Warehouse</label><select id="query-warehouse"><option>LOCAL</option><option>XS</option><option>S</option></select></span><span class="field"><label for="query-schema">Schema</label><select id="query-schema"><option>marts</option><option>raw</option><option>sandbox</option><option>staging</option><option>tpch_tiny</option><option>smoke</option></select></span><span class="field"><label for="query-mode">Mode</label><select id="query-mode"><option>read-only</option><option>sandbox-write</option><option>admin-write</option></select></span><span class="field"><label for="max-rows">Max rows</label><input id="max-rows" type="number" min="1" value="1000"></span></div><div class="run-group"><small class="wide-only">Runs selected text when present</small><kbd>⌘/Ctrl + Enter</kbd><button id="run-query" class="primary run">Run Query</button></div></div>
-<details class="copilot"><summary>AI Bear Copilot</summary><div class="copilot-body"><label for="copilot-request">Describe the SQL you need</label><input id="copilot-request" placeholder="Revenue by nation"><div class="toolbar"><button id="copilot-generate">Generate SQL</button><button id="copilot-explain">Explain Plan</button><span class="divider"></span><label for="copilot-stage-table">WAP table</label><input id="copilot-stage-table" placeholder="nation_summary"><button id="copilot-stage">Stage &amp; Audit</button><button id="copilot-publish">Publish</button></div><pre id="copilot-result" role="status" hidden></pre></div></details>
+<details class="copilot"><summary>AI Bear Copilot</summary><div class="copilot-body"><label for="copilot-request">Describe the SQL you need</label><textarea id="copilot-request" rows="2" placeholder="Revenue by nation"></textarea><div class="toolbar"><button id="copilot-generate">Generate SQL</button><button id="copilot-explain">Explain Plan</button><span class="divider"></span><label for="copilot-stage-table">WAP table</label><input id="copilot-stage-table" placeholder="nation_summary"><button id="copilot-stage">Stage &amp; Audit</button><button id="copilot-publish">Publish</button></div><section id="proposal-panel" hidden></section><pre id="copilot-result" role="status" hidden></pre></div></details>
 </div>
 <div class="panel results-panel"><div class="panel-head"><h2>Results</h2><span id="query-meta" class="status-line" role="status">Ready</span></div>
 <div class="results-tools"><div class="segmented" role="group" aria-label="Result view"><button id="result-view-table" aria-pressed="true">Table View</button><button id="result-view-chart" aria-pressed="false">Chart View</button></div><label for="result-filter">Filter rows</label><input id="result-filter" type="search" placeholder="Search returned rows"><span class="header-spacer"></span><button id="export-csv" class="small" disabled>Download CSV</button><button id="export-json" class="small" disabled>Download JSON</button><button id="copy-tsv" class="small" disabled>Copy TSV</button><small id="result-action-state" role="status"></small></div>
@@ -2468,7 +2471,7 @@ const dbWorksheetKey='shirokuma.worksheets.v2';
 Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。Database dbt はコンパイル済み table／ephemeral SELECT の候補構築と実行ごとの SANDBOX INVOKER VIEW・テストに対応します。モデル単位の WAP 公開は TABLE のみ、table properties は固定の format=PARQUET のみ対応します。UI／API／CLI は互換性のある保存済み1モデルの native TABLE 実行に対応します。Native graph は適格な保存済み VIEW／TABLE／EPHEMERAL 全モデルを実行します。VIEW を含むグラフも、全体の構築・品質検証後に適格な TABLE 候補を公開できます。incremental は未対応です。品質テストは明示選択、保存済み品質テスト一式の合格後、適格なグラフの TABLE 候補を1件ずつ公開できます。",
- "Only SQL explanation is available in Database mode. Other Bear actions, SQL generation and AI settings are unavailable.": "Database モードでは SQL の説明のみ利用できます。他の Bear 操作・SQL 生成・AI 設定は未対応です。",
+ "SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.": "SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。",
  "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.": "保存済みメタデータの監査を利用できます。SQL・プロンプト・結果は含みません。Pawprints は別の補助的な基盤プレビューです。",
  "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control.": "Database モードでは Compute 操作・Auto-Chill・ガバナンス検査は未対応です。共有ウェアハウスの状態はヘッダーで確認できます。Database の admin ロールは基盤の操作権限を付与しません。",
  "AI settings are unavailable in Database mode. Use SQL or Manual WAP.": "Database モードでは AI 設定は未対応です。SQL または手動 WAP を利用してください。",
@@ -2590,7 +2593,7 @@ const dbExplanationLead='Query Doctor explains SQL using the active SQL workshee
 const dbExplanationInstruction='Enter SQL or copy it from the active worksheet.';
 const dbExplanationContextStep='Choose or confirm the database, schema and role in the SQL worksheet.';
 const dbExplanationStateLabel=state=>t({SUCCEEDED:'Completed',RUNNING:'Running',QUEUED:'Queued',FAILED:'Failed',UNKNOWN:'Outcome unknown',CANCELED:'Canceled',NOT_STARTED:'Not started',NOT_COLLECTED:'Not collected',COLLECTED:'Collected',NOT_SUBMITTED:'Not submitted',FINISHED:'Completed'}[state]);
-const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Other Bear actions, SQL generation and AI settings are unavailable.';
+const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
 Object.assign(i18n.ja,{
  [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE と対応する INVOKER VIEW を利用でき、すべての依存先への現在のクエリ権限が必要です。未対応の VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。取得時点の定義を確認します。変更を検出した場合は説明を確定しません。',
  'Acquire plan and explain':'実行計画を取得して説明','Acquire a new plan and explain':'新しい実行計画を取得して説明',
@@ -2640,7 +2643,7 @@ Object.assign(i18n.ja,{
  'Load explanation history to recover the original request after access changes.':'アクセス変更後に元の要求を復旧するには、説明履歴を読み込んでください。',
  'SUCCEEDED':'完了',
  [dbExplanationHelp]:'SQL と許可されたカラム名・型に基づく説明です。値とコメントはモデル入力から除外します。実行計画・クエリ結果は取得せず、SQL は実行しません。',
- [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。他の Bear 操作・SQL 生成・AI 設定は未対応です。'
+ [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
 });
 function dbExplanationCapture(){
  const w=dbCurrent();if(!w)return null;
@@ -2910,6 +2913,7 @@ async function dbExplanationFetch(path,intent,post=false){
  return data;
 }
 async function dbExplanationPoll(){
+ if(dbProposal.installed)await dbProposalSubmit('poll');
  if(!dbExplanation.installed)return;
  dbExplanationSync();
  const record=dbExplanation.record,kind=record?.kind;
@@ -3098,6 +3102,265 @@ function dbPlanRenderOperators(node,record,operators){
  };
  for(const [index,fragment] of operators.fragments.entries()){const p=document.createElement('p');ui(p,'Fragment {number}',{number:index+1});details.append(p,tree([fragment.root]));}
  node.append(details);
+}
+// Database SQL proposals are draft-only and own their forms, receipts and output.
+const dbProposalEndpoint='/api/v1/bears/sql-proposals',dbProposalKey='shirokuma.sql-proposal-intents.v1';
+const dbProposal={installed:false,authority:'',stamp:'',epoch:0,view:'',formKey:'',sourceAuthority:'',forms:new Map(),request:'',schema:'',objects:[],cursor:null,sources:[],fetchToken:null,busy:null,record:null,origin:null,history:[],intents:[],proofs:new Map(),selection:'',version:0,notice:''};
+const dbProposalHelp='Your raw request and selected source names and column metadata go to the fixed LOCAL model. Rows are not automatically sent. Review the draft: SQL correctness and runtime behavior are not guaranteed. SQL is not executed.';
+const dbProposalEmpty='Describe your request, load a schema and add 1–8 sources. The SQL draft appears here for review.';
+const dbProposalUnknown='Proposal outcome unknown. Select and recover the original request; do not submit another request.';
+const dbProposalFailed='Proposal failed. Review the request and sources, then explicitly request a new draft after confirmed closure.';
+Object.assign(i18n.ja,{
+ 'Your raw request and selected source names and column metadata go to the fixed LOCAL model. Rows are not automatically sent. Review the draft: SQL correctness and runtime behavior are not guaranteed. SQL is not executed.':'入力した要求はそのまま、選択した参照元の名前とカラムのメタデータとともに固定の LOCAL モデルへ送信されます。行データは自動送信しません。SQL の正しさや実行時の動作は保証しません。SQL は未実行です。',
+ 'Describe your request, load a schema and add 1–8 sources. The SQL draft appears here for review.':'要求を入力し、スキーマを読み込んで参照元を1〜8件追加してください。確認用の SQL 案をここに表示します。',
+ 'Proposal outcome unknown. Select and recover the original request; do not submit another request.':'SQL 案の結果は不明です。元の要求を選択して復旧してください。別の要求を送信しないでください。',
+ 'Proposal failed. Review the request and sources, then explicitly request a new draft after confirmed closure.':'SQL 案の生成に失敗しました。終了確認後、要求と参照元を見直して新しい案を明示的に要求してください。',
+ 'Request rejected before acceptance. Review the request and selected sources, then explicitly request a new SQL draft.':'要求は受付前に拒否されました。要求と選択した参照元を確認し、新しい SQL 案を明示的に要求してください。',
+ 'Source metadata changed before acceptance. Reload source objects, remove and re-add changed sources, then explicitly request a new SQL draft.':'受付前に参照元のメタデータが変わりました。参照元を再読込し、変更された参照元を削除して追加し直してから、新しい SQL 案を明示的に要求してください。',
+ 'Recovered SQL draft (read only)':'復旧した SQL 案（表示のみ）','Historical SQL draft (read only)':'過去の SQL 案（表示のみ）','Original request (read only)':'元の要求（表示のみ）',
+ 'SQL draft (read only)':'SQL 案（表示のみ）','Generate SQL draft':'SQL 案を生成','Proposal sources':'SQL 案の参照元',
+ 'Load source objects':'参照元を読み込む','Choose source object':'参照元を選択','Add source':'参照元を追加','Remove source':'参照元を削除',
+ 'Recover original proposal':'元の SQL 案要求を復旧','Choose original proposal':'元の SQL 案要求を選択','Load SQL draft history':'SQL 案の履歴を読み込む',
+ 'Choose saved SQL draft':'保存済み SQL 案を選択','Discard SQL draft result':'SQL 案の結果を破棄',
+ 'Loading source objects…':'参照元を読込中…','Source objects unavailable. Refresh context and load the chosen schema again.':'参照元を取得できません。コンテキストを更新し、選択したスキーマを再読込してください。',
+ 'Load source objects for the chosen schema.':'選択したスキーマの参照元を読み込んでください。',
+ 'No eligible sources. Choose another query-enabled schema.':'利用可能な参照元がありません。照会できる別のスキーマを選択してください。',
+ 'SQL draft request in progress.':'SQL 案を要求中です。','SQL draft canceled. You may explicitly request a new draft after confirmed closure.':'SQL 案は取消済みです。終了確認後、新しい案を明示的に要求できます。',
+ 'SQL draft unavailable. Refresh context and recover the original request or load history.':'SQL 案を取得できません。コンテキストを更新し、元の要求を復旧するか履歴を読み込んでください。',
+ 'Could not save the original proposal. No request was sent. Restore browser storage and try again.':'元の SQL 案要求を保存できませんでした。要求は送信していません。ブラウザーの保存機能を復旧して再試行してください。',
+ 'No saved SQL drafts in this context.':'このコンテキストに保存済み SQL 案はありません。',
+ 'Request must contain 1–4096 UTF-8 bytes and 1–8 current sources.':'要求は空白以外の文字を含む4096 UTF-8バイト以内、現在の参照元は1〜8件必要です。',
+ '{count}/8 selected sources':'選択済み参照元: {count}/8','LOCAL · SQL not executed':'LOCAL · SQL は未実行',
+ 'Syntax, selected references and read-only policy checked by the server. Review before any future use.':'サーバーで構文・選択参照元・読取専用ポリシーを確認済みです。利用前に内容を確認してください。'
+});
+function dbProposalText(value,max){return typeof value==='string'&&!!value.trim()&&new TextEncoder().encode(value).length<=max;}
+function dbProposalRef(ref){
+ return dbSavedExact(ref,['database_id','schema_id','object_id','incarnation','binding_revision','generation_id'])&&['database_id','schema_id','object_id','generation_id'].every(k=>dbProposalText(ref[k],4096))&&['incarnation','binding_revision'].every(k=>Number.isSafeInteger(ref[k])&&ref[k]>0);
+}
+function dbProposalRefs(refs,context){
+ return Array.isArray(refs)&&refs.length>=1&&refs.length<=8&&refs.every(ref=>dbProposalRef(ref)&&ref.database_id===context.database_id&&ref.binding_revision===context.binding_revision&&ref.generation_id===context.generation_id)&&new Set(refs.map(ref=>ref.object_id)).size===refs.length;
+}
+function dbProposalBody(body){return dbSavedExact(body,['context','request','relations','language'])&&dbExplanationSameContext(body.context,body.context)&&dbProposalText(body.request,4096)&&['ja','en'].includes(body.language)&&dbProposalRefs(body.relations,body.context);}
+function dbProposalFreeze(intent){
+ if(!dbSavedUUID(intent.key)||intent.kind!=='sql_proposal'||!dbProposalBody(intent.body)||!dbSavedExact(intent.capture,['principal','worksheet','context'])||!dbExplanationSameContext(intent.capture.context,intent.body.context)||(intent.id!==null&&!dbSavedUUID(intent.id)))throw Error('CONTEXT_MISMATCH');
+ for(const ref of intent.body.relations)Object.freeze(ref);Object.freeze(intent.body.relations);Object.freeze(intent.body.context);Object.freeze(intent.body);Object.freeze(intent.capture.context);Object.freeze(intent.capture);
+ for(const key of ['key','kind','body','capture'])Object.defineProperty(intent,key,{value:intent[key],enumerable:true,writable:false});
+ return intent;
+}
+function dbProposalAuthority(){
+ const w=dbCurrent(),stamp=JSON.stringify([dbPrincipal,w?.id,w&&dbContext(w),currentRole,dbMaximumRole,dbEpoch,dbAuthorizationVersion,dbRoleVersion(dbTabRole()),!!dbReason()]);
+ if(stamp!==dbProposal.stamp){dbProposal.stamp=stamp;++dbProposal.epoch;}
+ return JSON.stringify([stamp,dbProposal.epoch]);
+}
+function dbProposalSame(intent){
+ let principal;try{principal=JSON.parse(dbPrincipal);}catch{return false;}
+ return principal?.[1]===true&&typeof principal[0]==='string'&&!!principal[0].trim()&&intent.kind==='sql_proposal'&&intent.capture.principal===dbPrincipal&&intent.capture.worksheet===worksheetId&&dbExplanationSameContext(intent.body.context,dbContext(dbCurrent()));
+}
+function dbProposalProven(intent){const p=dbProposal.proofs.get(intent);return !!p&&p.authority===dbProposalAuthority()&&p.key===intent.key&&p.body===intent.body&&p.id===intent.id&&p.terminal;}
+function dbProposalHeld(){return dbProposal.intents.filter(intent=>dbProposalSame(intent)&&!dbProposalProven(intent));}
+function dbProposalMatches(body,record){return dbExplanationSameContext(body.context,record.context)&&body.request===record.input.request&&body.language===record.input.language&&body.relations.length===record.input.relations.length&&body.relations.every((ref,index)=>Object.keys(ref).every(key=>ref[key]===record.input.relations[index][key]));}
+function dbProposalObserve(record){
+ for(const intent of dbProposal.intents){
+  if(!dbProposalSame(intent)||intent.id!==record.id||!dbProposalMatches(intent.body,record))continue;
+  dbProposal.proofs.set(intent,{authority:dbProposalAuthority(),key:intent.key,body:intent.body,id:intent.id,terminal:['SUCCEEDED','FAILED','CANCELED'].includes(record.state)&&!['RUNNING','UNKNOWN'].includes(record.inference_state)});
+ }
+}
+function dbProposalPersist(){try{const value=JSON.stringify(dbProposal.intents);localStorage.setItem(dbProposalKey,value);return localStorage.getItem(dbProposalKey)===value;}catch{return false;}}
+function dbProposalView(){return JSON.stringify([dbProposalAuthority(),dbProposal.version,dbProposal.request,dbProposal.sources.map(s=>s.ref),$('sql').value,$('bear-query-sql').value,dbCurrent()?.mode,dbCurrent()?.max_rows,activeTab,dbWorkspacePane]);}
+function dbProposalStoreForm(){
+ if(!dbProposal.formKey||!dbProposal.request&&!dbProposal.sources.length&&!dbProposal.forms.has(dbProposal.formKey))return;
+ const form={request:dbProposal.request,schema:dbProposal.schema,sources:dbProposal.sources,sourceAuthority:dbProposal.sourceAuthority};dbProposal.forms.set(dbProposal.formKey,form);
+ try{localStorage.setItem('shirokuma.sql-proposal-form.'+dbProposal.formKey,JSON.stringify({request:form.request,schema:form.schema}));}catch{/* Form storage is optional; original submission storage is mandatory. */}
+}
+function dbProposalSync(){
+ if(!dbProposal.installed)return;
+ const authority=dbProposalAuthority(),w=dbCurrent(),formKey=JSON.stringify([dbPrincipal,w?.id,w&&dbContext(w)]);
+ if(authority!==dbProposal.authority){
+  dbProposalStoreForm();
+  dbProposal.authority=authority;dbProposal.formKey=formKey;dbProposal.fetchToken=null;dbProposal.pickerNotice='';dbProposal.objects=[];dbProposal.cursor=null;dbProposal.busy=null;dbProposal.history=[];dbProposal.selection='';dbProposal.notice='';
+  const form=dbProposal.forms.get(formKey)||readStorage('shirokuma.sql-proposal-form.'+formKey,{});
+  dbProposal.request=typeof form.request==='string'?form.request:'';dbProposal.schema=form.schema||w?.schema_id||'';
+  // A context switch can retain a verified in-memory form. Authorization changes require a fresh explicit selection.
+  dbProposal.sourceAuthority=JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbEpoch,dbAuthorizationVersion,dbRoleVersion(dbTabRole())]);
+  dbProposal.sources=form.sourceAuthority===dbProposal.sourceAuthority?(form.sources||[]):[];
+  $('copilot-request').value=dbProposal.request;
+ }
+ const view=dbProposalView();if(view!==dbProposal.view){dbProposal.view=view;dbProposal.busy=null;dbProposal.record=null;dbProposal.origin=null;}
+ const reason=!!dbReason(),busy=!!dbProposal.busy,held=dbProposalHeld(),eligible=dbSchemasFor(w).filter(s=>s.database_id===w.database_id&&s.capabilities?.query);
+ dbSelectOptions('proposal-schema',eligible.map(s=>({value:s.id,label:s.sql_name})),dbProposal.schema,'Choose schema');
+ const chosen=eligible.some(s=>s.id===dbProposal.schema),objectValue=$('proposal-object').value;
+ dbSelectOptions('proposal-object',dbProposal.objects.map((object,index)=>({value:String(index),label:object.schema+'.'+object.name+' · '+object.kind})),objectValue,'Choose source object');
+ for(const id of ['copilot-request','copilot-generate']){const binding=uiAttributes.find(b=>b.node===$(id)&&b.attribute==='title');if(binding)binding.key=dbExplanationContextStep;$(id).dataset.databaseUnavailable=reason?'true':'false';if(reason)$(id).setAttribute('title',t(dbExplanationContextStep));else $(id).removeAttribute('title');}
+ $('copilot-request').disabled=reason;
+ $('copilot-generate').disabled=reason||busy||held.length>0||!dbProposalText(dbProposal.request,4096)||!dbProposalRefs(dbProposal.sources.map(s=>s.ref),dbContext(w));ui($('copilot-generate'),'Generate SQL draft');
+ $('proposal-schema').disabled=reason; $('proposal-load').disabled=reason||!chosen||!!dbProposal.fetchToken;
+ $('proposal-object').disabled=reason||!!dbProposal.fetchToken; $('proposal-add').disabled=reason||!dbProposal.objects[Number(objectValue)]||objectValue===''||dbProposal.sources.length>=8;
+ $('proposal-more').hidden=!dbProposal.cursor;$('proposal-more').disabled=reason||!!dbProposal.fetchToken;
+ ui($('proposal-count'),'{count}/8 selected sources',{count:dbProposal.sources.length});
+ const list=$('proposal-sources');list.replaceChildren();
+ dbProposal.sources.forEach((source,index)=>{const row=document.createElement('li'),name=document.createElement('span'),remove=document.createElement('button');name.textContent=source.schema+'.'+source.name+' · '+source.kind;remove.type='button';ui(remove,'Remove source');remove.disabled=reason;remove.onclick=()=>{dbProposal.sources.splice(index,1);dbProposalChanged();};row.append(name,remove);list.append(row);});
+ const selected=dbProposal.selection;
+ $('proposal-original').replaceChildren(new Option(t('Choose original proposal'),''));
+ held.forEach(intent=>$('proposal-original').add(new Option(intent.body.request.slice(0,80)+' · '+(intent.id?t('SQL draft (read only)'):t('Outcome unknown')),intent.key)));
+ dbProposal.selection=held.some(i=>i.key===selected)?selected:(held[0]?.key||'');$('proposal-original').value=dbProposal.selection;
+ $('proposal-recover').disabled=reason||busy||!held.length;$('proposal-original').disabled=reason||busy||!held.length;
+ $('proposal-history').disabled=reason||busy;
+ const saved=$('proposal-saved').value;$('proposal-saved').replaceChildren(new Option(t('Choose saved SQL draft'),''));dbProposal.history.forEach((r,index)=>$('proposal-saved').add(new Option(r.created_at+' · '+dbExplanationStateLabel(r.state)+' · '+r.input.request.slice(0,80),String(index))));$('proposal-saved').value=saved;$('proposal-saved').disabled=reason||busy||!dbProposal.history.length;
+ $('proposal-cancel').disabled=reason||busy||!dbProposal.record||!['QUEUED','RUNNING'].includes(dbProposal.record.state)||dbProposal.record.cancel_requested;
+ ui($('proposal-picker-status'),dbProposal.fetchToken?'Loading source objects…':dbProposal.pickerNotice||(!dbProposal.objects.length?'Load source objects for the chosen schema.':''));
+ dbProposalRender();
+}
+function dbProposalChanged(){dbProposal.request=$('copilot-request').value;++dbProposal.version;dbProposalStoreForm();dbProposalSync();}
+function dbProposalObject(object,schema,context){
+ return dbExplanationObject(object)&&object.capabilities?.resolve===true&&object.capabilities?.columns===true&&['TABLE','VIEW'].includes(object.kind)&&dbProposalText(object.physical_name,4096)&&dbProposalRef(object.ref)&&object.id===object.ref.object_id&&object.ref.schema_id===schema.id&&object.ref.database_id===context.database_id&&object.ref.binding_revision===context.binding_revision&&object.ref.generation_id===context.generation_id;
+}
+async function dbProposalLoad(cursor=null){
+ dbProposalSync();if(dbReason()||dbProposal.fetchToken)return;
+ const context=structuredClone(dbContext(dbCurrent())),schema=dbSchemasFor(dbCurrent()).find(s=>s.id===dbProposal.schema&&s.capabilities?.query&&s.database_id===context.database_id);if(!schema)return;
+ const authority=dbProposalAuthority(),token={schema:schema.id,cursor};dbProposal.fetchToken=token;dbProposal.pickerNotice='';dbProposalSync();
+ const current=()=>{dbProposalSync();return dbProposal.fetchToken===token&&authority===dbProposalAuthority()&&dbProposal.schema===schema.id&&!dbReason();};
+ try{
+  const params=new URLSearchParams({limit:'100'});if(cursor)params.set('cursor',cursor);
+  const response=await fetch('/api/v1/schemas/'+encodeURIComponent(schema.id)+'/objects?'+params,{headers:{'X-Shirokuma-Role':context.selected_role}}),data=await response.json();if(!current())return;if(!response.ok||!Array.isArray(data.items)||(data.next_cursor!==null&&data.next_cursor!==undefined&&typeof data.next_cursor!=='string'))throw Error('SOURCE_UNAVAILABLE');
+  const objects=data.items.filter(o=>dbProposalObject(o,schema,context)).map(o=>({ref:o.ref,schema:schema.sql_name,name:o.physical_name,kind:o.kind}));
+  // Refresh may invalidate a selected identity, but must never restamp its original ref.
+  const changed=dbProposal.sources.filter(source=>source.ref.schema_id===schema.id&&data.items.some(object=>(object.id===source.ref.object_id||object.physical_name===source.name)&&(!dbProposalObject(object,schema,context)||Object.keys(source.ref).some(key=>source.ref[key]!==object.ref[key]))));
+  if(changed.length){dbProposal.sources=dbProposal.sources.filter(source=>!changed.includes(source));++dbProposal.version;dbProposalStoreForm();}
+  dbProposal.objects=cursor?[...dbProposal.objects,...objects]:objects;dbProposal.cursor=data.next_cursor||null;dbProposal.pickerNotice=dbProposal.objects.length?'':'No eligible sources. Choose another query-enabled schema.';
+ }catch{if(current()){dbProposal.objects=[];dbProposal.cursor=null;dbProposal.pickerNotice='Source objects unavailable. Refresh context and load the chosen schema again.';}}
+ finally{if(dbProposal.fetchToken===token){dbProposal.fetchToken=null;dbProposalSync();}}
+}
+function dbProposalAdd(){
+ dbProposalSync();if(dbReason()||$('proposal-object').value===''||dbProposal.sources.length>=8)return;
+ const source=dbProposal.objects[Number($('proposal-object').value)];if(!source||dbProposal.sources.some(s=>s.ref.database_id===source.ref.database_id&&s.ref.schema_id===source.ref.schema_id&&s.ref.object_id===source.ref.object_id))return;
+ Object.freeze(source.ref);dbProposal.sources.push(source);dbProposalChanged();
+}
+const dbProposalCodes=new Set(['AI_OUTPUT_INVALID','AI_INPUT_INVALID','AI_CONTEXT_CHANGED','AI_METADATA_CHANGED','AI_ACCESS_REVOKED','AI_UNAVAILABLE','AI_MODEL_UNAVAILABLE','AI_PROVIDER_UNAVAILABLE','AI_PROVIDER_TIMEOUT','AI_PROVIDER_OUTCOME_UNKNOWN','AI_METADATA_UNAVAILABLE','AI_INFERENCE_FAILED','AI_OWNER_LOST','AI_CANCELED','AI_REQUEST_UNKNOWN','DB_ACCESS_REVOKED','CONTEXT_MISMATCH','AUTHENTICATION_REQUIRED','ROLE_FORBIDDEN','SQL_PERMISSION_DENIED','UNKNOWN_CONTEXT','STALE_BINDING']);
+function dbProposalRecord(data,context,intent=null){
+ const r=data?.explanation,nonempty=v=>dbProposalText(v,65536),date=v=>typeof v==='string'&&Number.isFinite(Date.parse(v));
+ const keys=['id','kind','state','actor','context','input','model','metadata','sql','text','error_code','cancel_requested','inference_state','sql_status','created_at','updated_at'];
+ let principal;try{principal=JSON.parse(dbPrincipal);}catch{throw Error('CONTEXT_MISMATCH');}
+ if(!dbSavedExact(r,keys)||!dbExplanationSameContext(data.context,context)||!dbExplanationSameContext(r.context,context)||!dbSavedUUID(r.id)||r.kind!=='sql_proposal'||principal?.[1]!==true||r.actor!==principal[0]||!nonempty(r.actor)||!['QUEUED','RUNNING','SUCCEEDED','FAILED','CANCELED','UNKNOWN'].includes(r.state)||r.sql_status!=='NOT_EXECUTED'||typeof r.cancel_requested!=='boolean'||!['NOT_STARTED','RUNNING','SUCCEEDED','FAILED','CANCELED','UNKNOWN'].includes(r.inference_state)||!date(r.created_at)||!date(r.updated_at)||!dbSavedExact(r.input,['request','relations','language'])||!dbProposalBody({context:r.context,...r.input})||!dbSavedExact(r.model,['provider','name'])||r.model.provider!=='local-openai'||!nonempty(r.model.name)||!dbSavedExact(r.metadata,['captured_at','relations'])||!date(r.metadata.captured_at)||!Array.isArray(r.metadata.relations)||r.metadata.relations.length!==r.input.relations.length||(r.error_code!==null&&!dbProposalCodes.has(r.error_code)))throw Error('CONTEXT_MISMATCH');
+ if(intent&&(intent.id&&intent.id!==r.id||!dbProposalMatches(intent.body,r)))throw Error('CONTEXT_MISMATCH');
+ for(const relation of r.metadata.relations){if(!dbSavedExact(relation,['schema','table','kind','columns'])||!nonempty(relation.schema)||!nonempty(relation.table)||!['TABLE','VIEW'].includes(relation.kind)||!Array.isArray(relation.columns)||relation.columns.some(c=>!dbSavedExact(c,['name','type'])||!nonempty(c.name)||!nonempty(c.type)))throw Error('CONTEXT_MISMATCH');}
+ if(new Set(r.metadata.relations.map(x=>JSON.stringify([x.schema,x.table]))).size!==r.metadata.relations.length)throw Error('CONTEXT_MISMATCH');
+ if(r.state==='SUCCEEDED'){
+  if(r.inference_state!=='SUCCEEDED'||r.error_code!==null||!dbProposalText(r.sql,16384)||!dbProposalText(r.text,4096))throw Error('CONTEXT_MISMATCH');
+ }else if(r.sql!==null||r.text!==null||r.state==='QUEUED'&&r.inference_state!=='NOT_STARTED'||r.state==='RUNNING'&&!['NOT_STARTED','RUNNING'].includes(r.inference_state)||r.state==='FAILED'&&r.inference_state!=='FAILED'||r.state==='UNKNOWN'&&r.inference_state!=='UNKNOWN'||r.state==='CANCELED'&&!['CANCELED','NOT_STARTED','RUNNING','UNKNOWN'].includes(r.inference_state))throw Error('CONTEXT_MISMATCH');
+ return structuredClone(r);
+}
+async function dbProposalFetch(path,intent,post=false){
+ const headers={'X-Shirokuma-Role':intent.body.context.selected_role};
+ const response=await fetch(path,post?{method:'POST',headers:{...headers,'Content-Type':'application/json','Idempotency-Key':intent.key},body:JSON.stringify(intent.body)}:{headers}),data=await response.json();
+ if(!response.ok){
+  // Only these unique original-POST rejections prove that no proposal was accepted.
+  const codes=dbExplanationObject(data)?[data.code,dbExplanationObject(data.error)?data.error.code:null].filter(code=>typeof code==='string'):[];
+  const code=codes[0],contradictory=dbExplanationObject(data)&&(['id','explanation','request_id','query_id','state','kind'].some(key=>data[key]!==undefined&&data[key]!==null)||[data,data.error,data.explanation].some(value=>dbExplanationObject(value)&&['id','explanation_id','request_id','query_id'].some(key=>value[key]!==undefined&&value[key]!==null)));
+  if(post&&path===dbProposalEndpoint&&!intent.id&&!contradictory&&codes.length&&codes.every(value=>value===code)&&(response.status===400&&code==='AI_INPUT_INVALID'||response.status===409&&code==='AI_METADATA_CHANGED'))return {rejection:code};
+  throw Error('PROPOSAL_UNAVAILABLE');
+ }
+ return {record:dbProposalRecord(data,intent.body.context,intent)};
+}
+async function dbProposalSubmit(source='create'){
+ dbProposalSync();if(dbReason()||dbProposal.busy)return;
+ let intent;
+ if(source==='recover')intent=dbProposalHeld().find(i=>i.key===dbProposal.selection);
+ else if(source==='poll'){
+  if(!['current','recovered'].includes(dbProposal.origin)||!['QUEUED','RUNNING'].includes(dbProposal.record?.state))return;
+  intent=dbProposal.intents.find(i=>dbProposalSame(i)&&i.id===dbProposal.record.id);if(!intent?.id)return;
+ }else if(source==='create'){
+  if(dbProposalHeld().length)return;
+  const body={context:structuredClone(dbContext(dbCurrent())),request:$('copilot-request').value,relations:dbProposal.sources.map(s=>s.ref),language};
+  if(!dbProposalBody(body)){dbProposal.notice='Request must contain 1–4096 UTF-8 bytes and 1–8 current sources.';dbProposalSync();return;}
+  intent=dbProposalFreeze({kind:'sql_proposal',key:crypto.randomUUID(),id:null,capture:{principal:dbPrincipal,worksheet:worksheetId,context:structuredClone(body.context)},body});
+  dbProposal.intents.push(intent);
+  if(!dbProposalPersist()){dbProposal.intents.pop();dbProposal.notice='Could not save the original proposal. No request was sent. Restore browser storage and try again.';dbProposalSync();return;}
+ }else return;
+ if(!intent)return;
+ // Only explicit recovery may replay a frozen request whose acceptance ID is unknown.
+ if(!intent.id&&source!=='create'&&source!=='recover')return;
+ const token={},authority=dbProposalAuthority(),view=dbProposalView(),origin=source==='poll'?dbProposal.origin:source==='recover'?'recovered':'current';dbProposal.busy=token;dbProposal.notice='SQL draft request in progress.';dbProposalSync();
+ const current=()=>{dbProposalSync();return dbProposal.busy===token&&authority===dbProposalAuthority()&&view===dbProposalView()&&!dbReason();};
+ try{
+  const result=await dbProposalFetch(intent.id?dbProposalEndpoint+'/'+encodeURIComponent(intent.id)+'?'+new URLSearchParams({context:JSON.stringify(intent.body.context)}):dbProposalEndpoint,intent,!intent.id);
+  if(!current())return;
+  if(result.rejection){
+   if(intent.id||!dbProposalSame(intent))return;
+   dbProposal.proofs.set(intent,{authority,key:intent.key,body:intent.body,id:null,terminal:true});
+   dbProposal.record=null;dbProposal.origin=null;
+   dbProposal.notice=result.rejection==='AI_INPUT_INVALID'?'Request rejected before acceptance. Review the request and selected sources, then explicitly request a new SQL draft.':'Source metadata changed before acceptance. Reload source objects, remove and re-add changed sources, then explicitly request a new SQL draft.';
+   return;
+  }
+  const record=result.record;intent.id=record.id;dbProposalPersist();dbProposalObserve(record);dbProposal.record=record;dbProposal.origin=origin;dbProposal.notice='';
+ }catch{if(current())dbProposal.notice=dbProposalUnknown;}
+ finally{if(dbProposal.busy===token){dbProposal.busy=null;dbProposalSync();}}
+}
+async function dbProposalHistory(index=null){
+ dbProposalSync();if(dbReason()||dbProposal.busy)return;
+ const context=structuredClone(dbContext(dbCurrent())),record=index===null?null:dbProposal.history[index];if(index!==null&&!record)return;
+ ++dbProposal.version;dbProposalSync();const token={},authority=dbProposalAuthority(),view=dbProposalView();dbProposal.busy=token;dbProposal.notice='SQL draft request in progress.';dbProposalSync();
+ const current=()=>{dbProposalSync();return dbProposal.busy===token&&authority===dbProposalAuthority()&&view===dbProposalView()&&!dbReason();};
+ try{
+  const response=await fetch(dbProposalEndpoint+(record?'/'+encodeURIComponent(record.id):'')+'?'+new URLSearchParams({context:JSON.stringify(context)}),{headers:{'X-Shirokuma-Role':context.selected_role}}),data=await response.json();if(!current())return;if(!response.ok||!dbExplanationSameContext(data.context,context))throw Error('PROPOSAL_UNAVAILABLE');
+  if(record){const checked=dbProposalRecord(data,context,{id:record.id,body:{context,...record.input}});dbProposalObserve(checked);dbProposal.record=checked;dbProposal.origin='history';dbProposal.notice='';}
+  else{
+   if(!Array.isArray(data.explanations))throw Error('CONTEXT_MISMATCH');
+   dbProposal.history=data.explanations.map(r=>dbProposalRecord({context,explanation:r},context));dbProposal.history.forEach(dbProposalObserve);dbProposal.notice=dbProposal.history.length?'':'No saved SQL drafts in this context.';
+  }
+ }catch{if(current())dbProposal.notice='SQL draft unavailable. Refresh context and recover the original request or load history.';}
+ finally{if(dbProposal.busy===token){dbProposal.busy=null;dbProposalSync();}}
+}
+async function dbProposalCancel(){
+ dbProposalSync();const shown=dbProposal.record;if(dbReason()||dbProposal.busy||!shown||!['QUEUED','RUNNING'].includes(shown.state)||shown.cancel_requested)return;
+ const token={},authority=dbProposalAuthority(),view=dbProposalView();dbProposal.busy=token;dbProposalSync();
+ const current=()=>{dbProposalSync();return dbProposal.busy===token&&authority===dbProposalAuthority()&&view===dbProposalView()&&!dbReason();};
+ try{
+  const response=await fetch(dbProposalEndpoint+'/'+encodeURIComponent(shown.id)+'/cancel',{method:'POST',headers:{'X-Shirokuma-Role':shown.context.selected_role,'Content-Type':'application/json'},body:JSON.stringify({context:shown.context})}),data=await response.json();if(!current())return;if(!response.ok)throw Error('PROPOSAL_UNAVAILABLE');
+  const record=dbProposalRecord(data,shown.context,{id:shown.id,body:{context:shown.context,...shown.input}});dbProposalObserve(record);dbProposal.record=record;dbProposal.notice='';
+ }catch{if(current())dbProposal.notice='Cancellation unavailable. Refresh the original request to check its outcome.';}
+ finally{if(dbProposal.busy===token){dbProposal.busy=null;dbProposalSync();}}
+}
+function dbProposalRender(){
+ const node=$('proposal-output'),record=dbProposal.record;node.replaceChildren();
+ const p=text=>{const n=document.createElement('p');n.textContent=text;node.append(n);};
+ if(record){
+  if(record.state==='SUCCEEDED'){const sql=document.createElement('pre');sql.textContent=record.sql;sql.setAttribute('aria-label',t('SQL draft (read only)'));node.append(sql);p(record.text);}
+  else p(t(record.state==='UNKNOWN'?dbProposalUnknown:record.state==='FAILED'?dbProposalFailed:record.state==='CANCELED'?'SQL draft canceled. You may explicitly request a new draft after confirmed closure.':'SQL draft request in progress.'));
+  p(t(dbProposal.origin==='recovered'?'Recovered SQL draft (read only)':dbProposal.origin==='history'?'Historical SQL draft (read only)':'SQL draft (read only)'));
+  p(t('Original request (read only)'));const request=document.createElement('pre');request.textContent=record.input.request;node.append(request);
+  p(t('LOCAL · SQL not executed')+' · '+record.model.name+' · '+dbExplanationStateLabel(record.state)+' · '+t('Local explanation')+': '+dbExplanationStateLabel(record.inference_state));
+  p(record.context.sql_catalog+'.'+record.context.sql_schema+' · '+record.context.selected_role);
+  p(t('Captured at')+': '+record.metadata.captured_at);
+  for(const relation of record.metadata.relations)p(relation.schema+'.'+relation.table+' · '+relation.kind+' · '+t('{count} columns',{count:relation.columns.length}));
+  if(record.state==='SUCCEEDED')p(t('Syntax, selected references and read-only policy checked by the server. Review before any future use.'));
+  if(record.error_code)p(record.error_code);
+  if(record.cancel_requested&&record.state!=='SUCCEEDED')p(t('Model result will be discarded. Physical model stoppage is not confirmed.'));
+ }else p(t(dbProposalEmpty));
+ if(dbProposal.notice)p(t(dbProposal.notice));
+}
+function dbProposalInstall(){
+ $('proposal-panel').hidden=false;dbProposal.installed=true;dbProposal.busy=null;dbProposal.fetchToken=null;dbProposal.proofs.clear();dbProposal.record=null;dbProposal.origin=null;dbProposal.history=[];dbProposal.authority='';dbProposal.view='';
+ const saved=readStorage(dbProposalKey,[]);dbProposal.intents=Array.isArray(saved)?saved.flatMap(item=>{try{return [dbProposalFreeze(item)];}catch{return [];}}):[];
+ if(!$('proposal-panel').dataset.installed){
+  const panel=$('proposal-panel');panel.dataset.installed='true';panel.setAttribute('aria-label',t('SQL draft (read only)'));
+  const help=document.createElement('p');ui(help,dbProposalHelp);panel.append(help);
+  const picker=document.createElement('div');picker.className='toolbar';
+  for(const [id,key] of [['proposal-schema','Schema'],['proposal-object','Choose source object']]){const field=document.createElement('span'),label=document.createElement('label'),select=document.createElement('select');field.className='field';label.htmlFor=id;ui(label,key);select.id=id;field.append(label,select);picker.append(field);}
+  for(const [id,key,task] of [['proposal-load','Load source objects',()=>dbProposalLoad()],['proposal-more','More objects',()=>dbProposalLoad(dbProposal.cursor)],['proposal-add','Add source',dbProposalAdd]]){const button=document.createElement('button');button.id=id;button.type='button';ui(button,key);button.onclick=task;picker.append(button);}
+  const count=document.createElement('span');count.id='proposal-count';picker.append(count);panel.append(picker);
+  for(const [id,tag] of [['proposal-picker-status','p'],['proposal-sources','ul']]){const n=document.createElement(tag);n.id=id;panel.append(n);}
+  const toolbar=document.createElement('div');toolbar.className='toolbar';
+  for(const [id,key] of [['proposal-original','Choose original proposal'],['proposal-saved','Choose saved SQL draft']]){const label=document.createElement('label'),select=document.createElement('select');label.htmlFor=id;ui(label,key);select.id=id;toolbar.append(label,select);}
+  for(const [id,key,task] of [['proposal-recover','Recover original proposal',()=>dbProposalSubmit('recover')],['proposal-history','Load SQL draft history',()=>dbProposalHistory()],['proposal-cancel','Discard SQL draft result',dbProposalCancel]]){const button=document.createElement('button');button.id=id;button.type='button';ui(button,key);button.onclick=task;toolbar.append(button);}
+  panel.append(toolbar);const output=document.createElement('div');output.id='proposal-output';output.setAttribute('aria-live','polite');panel.append(output);$('copilot-result').before(panel);
+  $('copilot-request').addEventListener('input',dbProposalChanged);
+  for(const id of ['sql','bear-query-sql'])$(id).addEventListener('input',()=>dbProposalSync());
+  $('proposal-schema').onchange=()=>{dbProposal.schema=$('proposal-schema').value;dbProposal.fetchToken=null;dbProposal.objects=[];dbProposal.cursor=null;dbProposal.pickerNotice='';dbProposalChanged();};
+  $('proposal-object').onchange=()=>{++dbProposal.version;dbProposalSync();};
+  $('proposal-original').onchange=()=>{dbProposal.selection=$('proposal-original').value;++dbProposal.version;dbProposalSync();};
+  $('proposal-saved').onchange=()=>{if($('proposal-saved').value!=='')return dbProposalHistory(Number($('proposal-saved').value));};
+ }
+ $('copilot-generate').onclick=()=>dbProposalSubmit('create');dbProposalSync();
 }
 // Saved-plan inference has its own receipt and never changes the source's query proof.
 function dbSavedExact(value,keys){return dbExplanationObject(value)&&JSON.stringify(Object.keys(value).sort())===JSON.stringify([...keys].sort());}
@@ -3295,7 +3558,7 @@ function dbReason(w=dbCurrent()){
  return '';
 }
 function dbControls(){
- dbExplanationSync();
+ dbExplanationSync();dbProposalSync();
  if(dbRuntime.installed)dbRuntimeSync();
  if(dbAudit.installed)dbAuditValidate();
  const w=dbCurrent();if(!w)return;
@@ -4081,7 +4344,7 @@ async function initializeDatabaseUI(session){
  ],
  [
   "bears",
-  "Only SQL explanation is available in Database mode. Other Bear actions, SQL generation and AI settings are unavailable."
+  "SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable."
  ],
  [
   "pawprints",
@@ -4101,13 +4364,13 @@ async function initializeDatabaseUI(session){
  for(const [controls,key] of [
   [['quick-wake','quick-chill','wake','chill'].map(id=>$(id)),'Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.'],
   [[$('ai-settings-button')],'AI settings are unavailable in Database mode. Use SQL or Manual WAP.'],
-  [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'Only SQL explanation is available in Database mode. Other Bear actions, SQL generation and AI settings are unavailable.'],
+  [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.'],
   [['export-csv','export-json','copy-tsv'].map(id=>$(id)),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.'],
   [['clone-table-btn','drop-table-btn'].map(id=>$(id)),'Clone and drop are unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.'],
   [['run-dbt-build','run-dbt-test'].map(id=>$(id)),'Legacy dbt build/test is unavailable in Database mode. Use Manual WAP or Managed Marts with an authorized context.'],
   [[...document.querySelectorAll('[data-sample]')],'Fixed sample queries are unavailable in Database mode. Enter SQL for the selected database.']
  ])for(const node of controls){node.disabled=true;node.dataset.databaseUnavailable='true';node.setAttribute('title',t(key));uiAttributes.push({node,attribute:'title',key});}
- const copilot=$('copilot-result');ui(copilot,'Only SQL explanation is available in Database mode. Other Bear actions, SQL generation and AI settings are unavailable.');copilot.hidden=false;
+ const copilot=$('copilot-result');ui(copilot,'SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.');copilot.hidden=false;
  const legacyRenderWorksheets=renderWorksheets,legacyRenderResults=renderResults,legacyAPI=api;
  saveWorksheet=dbSave;
  renderWorksheets=()=>{legacyRenderWorksheets();dbWorkspacePane='worksheet';dbWireWorkspaceTabs();dbControls();dbRenderRun();return dbRefreshContext();};
@@ -4124,7 +4387,7 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
@@ -4138,7 +4401,7 @@ async function initializeDatabaseUI(session){
  $('open-table-sql').onclick=dbOpenExplorerWorksheet;
  $('refresh-catalog').onclick=dbRefreshExplorer;
  $('refresh-table-details').onclick=()=>{dbDetails.clear();if(dbObject)dbDescribe(dbObject);};
- dbExplanationInstall();
+ dbExplanationInstall();dbProposalInstall();
  dbApplyRole();legacyRenderWorksheets();dbWireWorkspaceTabs();dbPersist();await dbRefreshContext();
  if(currentRole!==dbTabRole()){try{const items=await dbReadInventory(currentRole);dbApplyInventory(items,currentRole);}catch(error){if(error.code!=='AUTH_READ_STALE')message('catalog-error',error.message);}}
  // Seed once from explicit restored inputs. Worksheet switches never follow this.

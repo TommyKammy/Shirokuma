@@ -6,6 +6,7 @@ import db_ai
 import db_ai_plan
 import db_ai_sources
 import db_ai_reexplain
+import db_ai_sql_proposal
 from query_context import QueryError
 
 
@@ -23,13 +24,13 @@ def dispatch(handler, method, path, params, principal, role):
         source = db_ai_sources.latest(principal, context)
         handler.respond(dict(context=context.public_metadata(), source=source), 200)
         return True
-    match = re.fullmatch(r'/api/v1/bears/(explanations|plan-explanations|saved-plan-explanations)(?:/([0-9a-f-]{36})(/cancel)?)?', path)
+    match = re.fullmatch(r'/api/v1/bears/(explanations|plan-explanations|saved-plan-explanations|sql-proposals)(?:/([0-9a-f-]{36})(/cancel)?)?', path)
     if not match:
         raise QueryError('NOT_FOUND', 404)
     if '#' in handler.path or handler.headers.get('Transfer-Encoding'):
         raise ValueError('invalid framing')
     family, ident, cancel = match.groups()
-    service = (db_ai_reexplain if family == 'saved-plan-explanations' else
+    service = (db_ai_sql_proposal if family == 'sql-proposals' else db_ai_reexplain if family == 'saved-plan-explanations' else
         db_ai_plan if family == 'plan-explanations' else db_ai)
     if cancel and (service is db_ai or method != 'POST'):
         raise QueryError('NOT_FOUND', 404)
@@ -54,11 +55,12 @@ def dispatch(handler, method, path, params, principal, role):
             raise ValueError('invalid POST framing')
         key = common._key(handler)
         body = handler.database_body()
-        field = 'source_explanation_id' if service is db_ai_reexplain else 'sql'
-        common._keys(body, {'context', field, 'language'})
+        fields = ({'request', 'relations'} if service is db_ai_sql_proposal else
+            {'source_explanation_id'} if service is db_ai_reexplain else {'sql'})
+        common._keys(body, {'context', 'language'} | fields)
         context = common.context_value(body['context'], role)
         result = {'explanation': service.submit(principal, context, key=key,
-            language=body['language'], **{field: body[field]})}
+            language=body['language'], **{field: body[field] for field in fields})}
         status = 202
     else:
         raise QueryError('NOT_FOUND', 404)

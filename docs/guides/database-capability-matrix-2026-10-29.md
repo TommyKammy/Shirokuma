@@ -1,12 +1,14 @@
 # Databaseモードの機能一覧と利用条件
 
-2026年10月31日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)・[Query Doctorの最新SELECT読込](database-p6-4a4-latest-query-source-2026-10-31.md)・[保存済み計画の明示再説明](database-p6-4a5-saved-plan-explanation-2026-10-31.md)の実装を反映した。機能数は増やさず、現在のDatabase実装と未接続の旧操作を区別する。M1の本人受入は未完了である。
+2026年11月1日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)・[Query Doctorの最新SELECT読込](database-p6-4a4-latest-query-source-2026-10-31.md)・[保存済み計画の明示再説明](database-p6-4a5-saved-plan-explanation-2026-10-31.md)を反映した。[B1 SQL案生成](database-p6-4b1-sql-proposals-2026-11-01.md)も限定範囲を技術受入済みとした。生成物は未実行の下書きとして扱う。機能数は増やさず、M1の本人受入は未完了である。
 
 VIEW計画は`logical_v1`の対応するnative／外部登録INVOKER VIEWに限り、再帰依存先も同一DB・現在の全schema query権限を必要とする。保存済みVIEW定義内で整数snapshotを指定するTABLEは、そのsnapshotのschemaが現行列構成と一致する場合に扱う。利用者の直接入力に対するVERSION対応は広げない。DEFINER・他DB参照・履歴schemaの列構成差分・timestamp／tag／branch等の非整数time travelは未対応である。固定の非ANALYZE EXPLAINを実行し、元SQLは実行しない。
 
 最新SELECT読込はQuery Doctor入力だけを対象とし、本人と保存9項目contextが一致する対象の通常read-only queryを選ぶ。全参照schema権限と現在のidentityを再検査し、SQL・AI・Wake・catalogを呼ばない。元queryのID・時刻・状態は出典情報であり、UNKNOWN等の照合・取消・再実行は行わない。説明や計画取得は別の明示操作とする。
 
 保存済み計画の再説明は、元A2／A3のCOLLECTED証拠と、元queryの保存値・現在台帳がともにFINISHEDであることが条件。元の説明がSUCCEEDED／FAILED／CANCELED／UNKNOWNの場合に、取得時点の安全な計画とmetadataを使う。本人・保存9項目contextと、凍結した全依存schemaの現在権限を再検査する。catalogのhead再取得・Engine・Wake・admissionは行わず、元UNKNOWNの解消やA2の新規query受付の解除とは分ける。新しい説明には独立した履歴・復旧・取消を持ち、そのUNKNOWNを自動再推論しない。
+
+B1は明示選択した同一DBの1〜8件のTABLE／VIEWについて、現在の本人・保存9項目context・全source schema権限とResourceRefを検査し、依頼文の原文と許可された名前・列名・型だけをLOCALへ送る。VIEWは列metadataだけを扱い、A3の計画・実行条件を検証したとは表示しない。生成物は単一read-only SELECTの構文・参照範囲・policyを確認する下書きであり、列・型・業務上の正しさや実行可能性は保証しない。実行・editor書換え・WAP引渡しは含めない。B1を技術受入済みとした（全体回帰3,892成功・34 skip、2DB・3role実機・最終保全PASS）。
 
 ## 利用条件と表示の意味
 
@@ -57,7 +59,7 @@ VIEW計画は`logical_v1`の対応するnative／外部登録INVOKER VIEWに限�
 | SQL-07 | table／chart、filter、sort | 対応、許可された返却済み行 | U＋Q、失効後は消去 | 結果表示 |
 | SQL-08 | Worksheet結果CSV／JSON／TSV保存 | 未接続。Table全件Exportと別機能 | 結果保存の再認可は後続 | DB-P6-6 |
 | SQL-09 | 固定sample SQL shortcut | 未接続、旧catalogを仮定 | U、固定SQLを自動送信しない | 選択DBのSQLを明示入力 |
-| SQL-10 | Copilot SQL生成 | 未接続 | 将来はQに結び付く提案 | DB-P6-4 |
+| SQL-10 | Copilot SQL生成 | 条件付き対応（B1の未実行案） | V／E／A、有効contextと明示選択した同一DBの1〜8件の許可TABLE／VIEW。原文の依頼文・公開列metadataをLOCALへ送信。生成物は未実行のread-only下書き。editor書換え・Run・WAP引渡しは含めない | DB-P6-4B1、技術受入済み |
 | SQL-11 | Copilot Explain | SQL説明・TABLE／条件付きVIEW実行計画の説明・保存済み計画の明示再説明に対応 | V／E／A、有効なSQLワークシートcontext・再帰依存を含む全schemaの現在のquery権限・LOCAL AI。新規VIEW計画は`logical_v1`の対応INVOKER・同一DBに限定し、固定の非ANALYZE EXPLAINは通常受付・Wakeを利用。再説明は元A2／A3のCOLLECTED＋FINISHED証拠と凍結contextが条件で、Engine等を呼ばない。これらの説明操作で元SQLを実行しない | DB-P6-4A1／A2／A3／A5対応 |
 | SQL-12 | Copilot Stage and Audit | 未接続。手動WAPは対応 | 将来はWの明示実行 | 手動WAP、DB-P6-4 |
 | SQL-13 | Copilot Publish | 未接続。手動WAP公開は対応 | 将来もAによる明示WAP公開 | 手動WAP、DB-P6-4 |
@@ -110,7 +112,7 @@ VIEW計画は`logical_v1`の対応するnative／外部登録INVOKER VIEWに限�
 | JOB-10 | alert一覧・更新・確認 | 対応、E／A、元owner／context | T、確認と解消を区別 | alerts |
 | JOB-11 | native Stored Procedure／CALL／DAG／任意command | 別計画。Jobと同義にしない | Routineの意味を先に確定 | DB-P9-2 |
 | AI-01 | Query Doctor Bear | 明示SQL・TABLE／条件付きVIEW実行計画の説明、最新SELECTの入力読込、保存済み計画の明示再説明に対応 | V／E／A、現在のSQLワークシートcontext・全参照schemaのquery権限。説明にはLOCAL AIを使用。VIEW新規計画は`logical_v1`の対応INVOKERと再帰依存の同一DB権限が条件。最新読込は本人・保存9項目contextが一致する対象の通常read-only SELECTのみ。再説明は元A2／A3のCOLLECTED＋FINISHED証拠と全凍結依存schemaの現在権限が条件。読込から説明を自動送信せず、再説明で元SQL・planを再実行しない | DB-P6-4A1／A2／A3／A4／A5対応 |
-| AI-02 | Data Engineer Bear | 未接続。手動SQL／WAPは対応 | 提案と実実行を分離 | DB-P6-4 |
+| AI-02 | Data Engineer Bear | 旧Bear画面は未接続。CopilotのB1 SQL案生成は条件付き対応。WAP引渡しは未接続、手動SQL／WAPは対応 | 現在の本人・保存contextと明示sourceの許可metadataを使用し、提案と実実行を分離。B1のVIEWは列metadataのみ | DB-P6-4B1、引渡しはB2 |
 | AI-03 | Catalog Curator Bear | 未接続 | 許可metadata scopeが必要 | DB-P6-4 |
 | AI-04 | SRE Bear | 未接続 | DB／platform観測を分離 | DB-P6-4／5 |
 | AI-05 | Policy Gatekeeper Bear | 未接続 | 同上、AIへ管理権限を渡さない | DB-P6-4／5 |
