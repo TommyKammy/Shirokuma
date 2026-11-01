@@ -279,6 +279,8 @@ for(const locale of ['en','ja']){
  assert.equal(intro.textContent,locale==='en'?'Enter SQL or copy it from the active worksheet.':'SQL を入力するか、ワークシートからコピーしてください。');
  assert.doesNotMatch(lead.textContent,/five resident specialists|5 体の常駐スペシャリスト/);
  assert.match(lead.textContent,/Query Doctor/);
+ assert.match(lead.textContent,/SRE/);assert.match(lead.textContent,/Policy/);
+ for(const kind of ['sre','policy']){assert.equal($('bear-tab-'+kind).disabled,false);assert.equal($('bear-'+kind+'-run').disabled,true);assert.equal($('bear-'+kind+'-run').hidden,true);}
  assert.ok(lead.textContent.includes(locale==='en'?'Catalog Curator explains metadata with its own authorized context.':'Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。'));
  const helpers=$('bear-panel-query').descendants().filter(n=>n.textContent===t(dbExplanationHelp));assert.equal(helpers.length,1);
  assert.ok(helpers[0].textContent.includes(locale==='en'?'SQL is not executed.':'SQL は実行しません。'));
@@ -361,7 +363,8 @@ eval(''' + json.dumps(tab_handlers) + r''');
 assert.equal($('bear-panel-sre').hidden,false);await boot();
 assert.equal($('bear-panel-query').hidden,false);assert.equal($('bear-tab-query')['aria-selected'],'true');
 assert.equal($('bear-panel-sre').hidden,true);assert.equal(targetField.hidden,true);
-for(const bear of ['sre','data','policy'])assert.equal($('bear-tab-'+bear).disabled,true);
+assert.equal($('bear-tab-data').disabled,true);
+for(const bear of ['sre','policy']){assert.equal($('bear-tab-'+bear).disabled,false);assert.equal($('bear-'+bear+'-run').disabled,true);assert.equal($('bear-'+bear+'-run').hidden,true);}
 assert.equal($('bear-tab-catalog').disabled,false);
 ''')
 

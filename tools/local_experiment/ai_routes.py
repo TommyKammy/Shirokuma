@@ -1,5 +1,6 @@
 """Strict Database SQL explanation adapter for both HTTP surfaces."""
 import re
+from urllib.parse import unquote_to_bytes
 
 import dataops_routes as common
 import db_ai
@@ -9,12 +10,27 @@ import db_ai_reexplain
 import db_ai_sql_proposal
 import db_ai_catalog
 import db_ai_wap
+import db_bear_observations
 from query_context import QueryError
 
 
 def dispatch(handler, method, path, params, principal, role):
     if path != '/api/v1/bears' and not path.startswith('/api/v1/bears/'):
         return False
+    if path == '/api/v1/bears/context-observations':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        if ('#' in handler.path or handler.headers.get_all('Transfer-Encoding', [])
+                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])
+                or set(params) != {'context'} or len(params['context']) != 1):
+            raise QueryError('INVALID_INPUT', 400)
+        try:
+            unquote_to_bytes(handler.path).decode('utf-8')
+        except UnicodeError:
+            raise QueryError('INVALID_INPUT', 400) from None
+        context = db_bear_observations.parse_context(params['context'][0], role)
+        handler.respond(db_bear_observations.observe(principal, context), 200)
+        return True
     if path == '/api/v1/bears/query-sources/latest':
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)

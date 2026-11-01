@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-01
-version: "1.41"
+version: "1.42"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-01、[DB-P6-4C2A](../../guides/database-p6-4c2a-context-observations-2026-11-01.md)でSRE／PolicyのDB-only観測を実装した。現在の本人・保存9項目context・primary schema権限を新しいread-only snapshotでも再確認し、本人のquery／AI保存metadataを各20候補以内から限定表示する。21件目は古い候補の存在だけを示し、不正候補を省略しても補充走査しない。保存状態・時刻を現在healthへ変換せず、Policyの権限・SQL mode上限も個別statementの承認にはしない。platform能力flagは現在認可で計算するが、Pを含む全roleでplatform sourceを読まない。SQL・LLM・既存get／履歴／lease・照合・書込みを呼ばない。重点backend335件・UI889件、実API・admin実画面と復元を確認し、最終8ファイルで全体回帰を完了した。C2Aの限定範囲を技術受入済みとした（全体回帰4,073成功・34 skip、2DB・3実行ロールの実API、未付与権限の拒否、adminの実画面、最終保全PASS）。P専用platform観測と全体policy検査は別単位とし、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 2026-11-01、[DB-P6-4C1](../../guides/database-p6-4c1-catalog-proposals-2026-11-01.md)でCatalog Curatorの許可metadata説明・説明文案を実装した。ワークシートに依存しない明示contextと、同じprimary schemaのTABLE／VIEW 1件を対象に、現在の権限・Ref・UUID・列構造を検査してLOCAL推論だけを行う。入力は名前・列名・型へ限定し、VIEWの定義・依存や既存の説明文を転用しない。出力は推定の表説明と最大8列の部分的な説明文案であり、保存・適用・SQL実行を追加しない。既存AIの元key／受付ID・履歴・取消・UNKNOWN境界を保ち、metadataの直接読取りでregistryを更新しない。C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 skip、2DB・3roleの実API、adminの実画面、最終保全PASS）。SRE／PolicyのDBとplatformの観測、lineage・説明保存は後続に分け、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 

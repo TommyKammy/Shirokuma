@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-01
-version: "2.26.0"
+version: "2.27.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-11-01、[DB-P6-4C2A](../../guides/database-p6-4c2a-context-observations-2026-11-01.md)でSRE／PolicyのDB内保存metadata観測を実装した。各Bearの独立contextで、現在の本人・保存9項目context・primary schemaのquery権限を検査し、一致する本人のquery／AI記録を各最大20候補の窓から表示する。項目はID・kind・保存状態・保存時刻だけとし、取得時刻、候補の省略数、古い候補の有無を分ける。queryのFINISHEDとAIのSUCCEEDEDを保持し、UNKNOWNや進行中記録を照合・変更しない。Policyは現在権限とSQL modeの上限を示し、実行承認にはしない。全roleでplatform観測・SQL・LLM・書込みを行わない。重点backend335件・UI889件、実API・admin実画面と復元を確認し、最終8ファイルで全体回帰を完了した。C2Aの限定範囲を技術受入済みとした（全体回帰4,073成功・34 skip、2DB・3実行ロールの実API、未付与権限の拒否、adminの実画面、最終保全PASS）。P専用のplatform観測は後続とし、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 2026-11-01、[DB-P6-4C1](../../guides/database-p6-4c1-catalog-proposals-2026-11-01.md)でCatalog Curatorのmetadata説明と説明文案を実装した。SQLワークシートとは独立して、本人が選ぶ同一DB・primary schemaの安定したTABLE／VIEW 1件と保存9項目contextを検査する。現在の名前・列名・型だけをLOCALへ送り、要約・表の説明文案と最大8列の部分的な説明文案を未適用の推定として示す。VIEW定義・依存や行データをモデル入力や保存metadataへ含めず、SQL・Engine・Wake・catalog metadataの変更を行わない。元要求の復旧・履歴・取消を独立させ、UNKNOWNや別の選択を新keyで上書きしない。C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 skip、2DB・3roleの実API、adminの実画面、最終保全PASS）。SRE／PolicyのDB・platform観測やlineage・説明保存は別単位とし、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 

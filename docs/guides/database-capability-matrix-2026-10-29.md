@@ -1,6 +1,6 @@
 # Databaseモードの機能一覧と利用条件
 
-2026年11月1日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)・[Query Doctorの最新SELECT読込](database-p6-4a4-latest-query-source-2026-10-31.md)・[保存済み計画の明示再説明](database-p6-4a5-saved-plan-explanation-2026-10-31.md)を反映した。[B1 SQL案生成](database-p6-4b1-sql-proposals-2026-11-01.md)と[B2 Manual WAP下書き引渡し](database-p6-4b2-wap-handoff-2026-11-01.md)は限定範囲を技術受入済みであり、[C1 Catalog Curatorのmetadata説明・説明文案](database-p6-4c1-catalog-proposals-2026-11-01.md)は限定範囲を技術受入済みである。機能数は増やさず、M1の本人受入は未完了である。
+2026年11月1日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)・[Query Doctorの最新SELECT読込](database-p6-4a4-latest-query-source-2026-10-31.md)・[保存済み計画の明示再説明](database-p6-4a5-saved-plan-explanation-2026-10-31.md)を反映した。[B1 SQL案生成](database-p6-4b1-sql-proposals-2026-11-01.md)と[B2 Manual WAP下書き引渡し](database-p6-4b2-wap-handoff-2026-11-01.md)は限定範囲を技術受入済みであり、[C1 Catalog Curatorのmetadata説明・説明文案](database-p6-4c1-catalog-proposals-2026-11-01.md)は限定範囲を技術受入済みである。[C2AのDB内SRE／Policy観測](database-p6-4c2a-context-observations-2026-11-01.md)は限定範囲を技術受入済みである。機能数は増やさず、M1の本人受入は未完了である。
 
 VIEW計画は`logical_v1`の対応するnative／外部登録INVOKER VIEWに限り、再帰依存先も同一DB・現在の全schema query権限を必要とする。保存済みVIEW定義内で整数snapshotを指定するTABLEは、そのsnapshotのschemaが現行列構成と一致する場合に扱う。利用者の直接入力に対するVERSION対応は広げない。DEFINER・他DB参照・履歴schemaの列構成差分・timestamp／tag／branch等の非整数time travelは未対応である。固定の非ANALYZE EXPLAINを実行し、元SQLは実行しない。
 
@@ -13,6 +13,8 @@ B1は明示選択した同一DBの1〜8件のTABLE／VIEWについて、現在�
 B2は成功済みB1案から、元contextと同一DB・同一E／A roleのSANDBOX実行先contextを明示指定して、通常WAPの新規未保存下書きを準備する。全選択schema権限を検査し、SQLで使用する現在のTABLE識別情報・列を確認する。使用VIEW・不確かなnamespace変換は拒否し、未使用VIEWの定義や依存を取得しない。明示GETと空の新規フォームへの取込はAI・SQL・Wake・モデル保存を行わず、以後の編集・保存・build・audit・A公開は既存WAPへ委ねる。B2の限定範囲を技術受入済みとした（全体回帰3,944成功・34 skip、2DBの実機・画面・最終保全PASS）。
 
 C1はSQLワークシートから独立したcontextで、同じprimary schemaの安定したTABLE／VIEW 1件を明示選択する。現在の本人・保存9項目context・schema query権限とRef／UUID／列構造を確認し、名前・列名・型だけでLOCALの要約・表説明と最大8列の部分的な説明文案を作る。VIEWの定義・依存や既存コメントを入力へ含めず、A3の計画対応や業務上の意味を保証しない。元要求の復旧・履歴・取消を分離し、SQL・Wake・説明保存・catalog metadata変更は行わない。C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 skip、2DB・3roleの実API、adminの実画面、最終保全PASS）。P6-4全体／P6-5／P6-7／M1本人受入は継続する。
+
+C2Aは各Bearで明示する独立contextについて、現在の本人・保存9項目context・primary schemaのquery権限が一致する本人のquery／AI記録だけを各最大20候補の窓から取得する。項目はID・kind・保存状態・保存時刻の5項目だけとし、省略数と古い候補の有無を示す。queryのFINISHEDとAIのSUCCEEDEDは変換せず、UNKNOWNも照合しない。Policyは現在権限・SQL modeの上限とplatform能力flagだけを示し、個別SQLの承認にしない。全roleでplatform source・SQL・LLM・書込みを呼ばず、旧SRE／Policy検査は開放しない。重点backend335件・UI889件、実API・admin実画面と復元を確認し、最終8ファイルで全体回帰を完了した。C2Aの限定範囲を技術受入済みとした（全体回帰4,073成功・34 skip、2DB・3実行ロールの実API、未付与権限の拒否、adminの実画面、最終保全PASS）。P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 ## 利用条件と表示の意味
 
@@ -118,8 +120,8 @@ C1はSQLワークシートから独立したcontextで、同じprimary schemaの
 | AI-01 | Query Doctor Bear | 明示SQL・TABLE／条件付きVIEW実行計画の説明、最新SELECTの入力読込、保存済み計画の明示再説明に対応 | V／E／A、現在のSQLワークシートcontext・全参照schemaのquery権限。説明にはLOCAL AIを使用。VIEW新規計画は`logical_v1`の対応INVOKERと再帰依存の同一DB権限が条件。最新読込は本人・保存9項目contextが一致する対象の通常read-only SELECTのみ。再説明は元A2／A3のCOLLECTED＋FINISHED証拠と全凍結依存schemaの現在権限が条件。読込から説明を自動送信せず、再説明で元SQL・planを再実行しない | DB-P6-4A1／A2／A3／A4／A5対応 |
 | AI-02 | Data Engineer Bear | 旧Bear画面は未接続。CopilotのB1 SQL案生成は条件付き対応、B2の手動WAP下書き引渡しは限定技術受入済み | 原案とWAP実行先のcontextを分離し、B2は同一DB／同一E／A roleと使用TABLEが条件。AIへ実行権限を渡さず、保存以降は既存WAPを使用 | DB-P6-4B1、B2限定技術受入済み |
 | AI-03 | Catalog Curator Bear | C1のmetadata説明・説明文案に条件付き対応 | V／E／A、独立contextと同じprimary schemaの安定TABLE／VIEW 1件、現在のquery権限とLOCAL AI。名前・列名・型による推定で、列文案は最大8列。未適用の提案であり、旧検索／lineage・説明保存は対象外 | DB-P6-4C1限定技術受入済み |
-| AI-04 | SRE Bear | 未接続 | DB／platform観測を分離 | DB-P6-4／5 |
-| AI-05 | Policy Gatekeeper Bear | 未接続 | 同上、AIへ管理権限を渡さない | DB-P6-4／5 |
+| AI-04 | SRE Bear | C2AのDB内保存metadata観測に条件付き対応 | V／E／A、本人・保存full9・primary schema権限が条件。query／AI各最大20候補の保存状態・時刻だけ。runtime health・platform観測・旧SRE検査は対象外 | DB-P6-4C2A限定技術受入済み |
+| AI-05 | Policy Gatekeeper Bear | C2Aの現在context権限観測に条件付き対応 | 現在のschema権限・SQL mode上限・platform能力flagだけ。個別SQL承認やglobal policy検査ではなく、Pを含む全roleでplatform観測は後続 | DB-P6-4C2A限定技術受入済み |
 | AI-06 | AI provider／model／URL／key／timeout、接続test／保存 | 未接続 | 設定管理権限とDB閲覧権限を分離 | DB-P6-4 |
 | AUD-01 | Pawprints一覧・filter・status・更新 | 対応。P専用のglobal補助preview、最新100件以内 | Pが明示取得。DB／本人scopeへ帰属させず、耐久監査とは別表示 | DB-P6-1、旧API拒否は維持 |
 | AUD-02 | 旧runtime query／load履歴画面 | 未接続。個別query／Job履歴は対応 | 個別履歴へ案内 | SQL／Job／WAP |

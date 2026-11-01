@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-11-01
-version: "7.26.0"
+version: "7.27.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,13 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-01 — DB-P6-4C2A own-context SRE and Policy observations
+
+- [実装・検証記録](../../guides/database-p6-4c2a-context-observations-2026-11-01.md)：独立した各Bearのcontextで、現在の本人・保存9項目context・primary schema権限を検査し、本人のquery／AI保存metadataを各最大20候補の窓から取得する。
+- ID・kind・保存状態・保存時刻だけを表示し、省略数と古い候補の有無を示す。Policyは現在権限・SQL mode上限だけで、全roleにplatform未観測理由を示す。SQL・LLM・照合・書込みや他のdraft／未解決要求を変更しない。
+- 重点backend335件・UI889件、実API・admin実画面と復元を確認し、最終8ファイルで全体回帰を完了した。
+- C2Aの限定範囲を技術受入済みとした（全体回帰4,073成功・34 skip、2DB・3実行ロールの実API、未付与権限の拒否、adminの実画面、最終保全PASS）。P専用platform観測・global policy検査は後続とし、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 ### 2026-11-01 — DB-P6-4C1 authorized catalog explanation and description drafts
 

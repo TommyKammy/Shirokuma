@@ -33,7 +33,7 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
 | データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を技術受入済み。C2E1のnative VIEW graph構築・品質testを技術受入済み。C2E2のVIEW証拠付きTABLE公開・独立公開履歴を技術受入済み | 正式公開はTABLE。VIEW含有native graphのTABLE公開はC2E2の全VIEW・全品質条件を適用。incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
-| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。SQL・計画説明と保存済み計画再説明、Doctorの最新SELECT読込、B1 SQL案に条件付き対応。B2のManual WAP下書き引渡しは限定技術受入済み。C1のCatalog Curator metadata説明・説明文案は限定技術受入済み | B1／B2の既存条件を維持し、C1は独立contextの1件のTABLE／VIEWの公開列metadataから未適用の推定だけを生成する。DB観測とplatform管理権限を分ける |
+| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。SQL・計画説明と保存済み計画再説明、Doctorの最新SELECT読込、B1 SQL案に条件付き対応。B2のManual WAP下書き引渡しは限定技術受入済み。C1のCatalog Curator metadata説明・説明文案は限定技術受入済み。C2AのDB内SRE／Policy観測は限定技術受入済み | B1／B2の既存条件を維持し、C1は独立contextの1件のTABLE／VIEWの公開列metadataから未適用の推定だけを生成する。DB観測とplatform管理権限を分ける |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
 
@@ -282,7 +282,9 @@ DB-P6-0／1／2とDB-P6-3B／C1／C2A／C2B1／C2B2／C2B3／C2B4／C2B5／C2C�
 
 [C1](database-p6-4c1-catalog-proposals-2026-11-01.md)で、Catalog Curatorのmetadata説明と説明文案を実装した。SQLワークシートに依存しない本人の保存9項目contextと、primary schema内のTABLE／VIEW 1件のRef・現在権限・UUID・列構造を検査する。直接RESTから名前・列名・型だけを固定し、VIEW定義・依存・既存コメント・行データを公開metadataやモデル入力へ含めない。TABLEの通常appendや同一UUID・同一列のVIEW定義更新から意味の検証を推定せず、出力は未適用の要約・表説明文案と最大8列の部分的な説明文案に限る。元要求の受付ID／key・履歴・取消・UNKNOWNを分離し、SQL・Engine・Wake・admission・registry／catalog metadata変更は行わない。C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 skip、2DB・3roleの実API、adminの実画面、最終保全PASS）。
 
-C1に続くSRE／Policyの必須観測は、DB内情報とP専用platform情報・観測時刻を分けて統合する。lineage・profiling・説明の保存や適用は別単位とし、旧Curatorや任意manifest経路を開放しない。DEFINER・他DB参照のVIEW計画、現行列構成と異なる履歴schema、timestamp／tag／branch等の非整数time travelも後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、native graphのVIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目である。P6-6の残る探索操作とP6-7の縦断検証、P6-4全体／P6-5／DB-P6-3全体とM1本人受入は未完了である。
+[C2A](database-p6-4c2a-context-observations-2026-11-01.md)で、DB内保存metadataによるSRE／Policy観測を実装した。各Bearの独立contextで現在の本人・保存9項目context・primary schemaのquery権限を検査し、新しいread-only snapshotでも認可を再確認する。query／AIは一致する本人の固定20候補の窓からID・kind・保存状態・保存時刻だけを投影し、21件目で古い候補の存在、省略数で窓内の不正候補を示す。省略後の補充や全履歴のPython読込みを行わず、queryのFINISHEDとAIのSUCCEEDEDを保持する。Policyは現在権限・SQL mode上限と現在のplatform能力flagだけで、個別statementの承認やglobal policyの監査結果にはしない。Pを含む全roleでKubernetes・engine proof・policy file・blocker・telemetryを読まず、SQL・LLM・状態照合・書込みも呼ばない。重点backend335件・UI889件、実API・admin実画面と復元を確認し、最終8ファイルで全体回帰を完了した。C2Aの限定範囲を技術受入済みとした（全体回帰4,073成功・34 skip、2DB・3実行ロールの実API、未付与権限の拒否、adminの実画面、最終保全PASS）。
+
+C2Aに続くP専用の固定platform観測とglobal workload／policy検査は別単位とし、DB内保存情報と対象・観測時刻を分ける。lineage・profiling・説明の保存や適用は別単位とし、旧Curatorや任意manifest経路を開放しない。DEFINER・他DB参照のVIEW計画、現行列構成と異なる履歴schema、timestamp／tag／branch等の非整数time travelも後続単位である。AIの生成物は既存の認可／SQL guard／WAPを使い、新しい高権限経路を作らない。native候補の直接置換、正式VIEW公開、native graphのVIEW連鎖、incremental・並列実行、manual-WAP rollback統合は別の拡張項目である。P6-6の残る探索操作とP6-7の縦断検証、P6-4全体／P6-5／DB-P6-3全体とM1本人受入は未完了である。
 
 日付による完成約束はDB-P6-0の棚卸しとdbt先行実証の結果で具体化する。各unitは「未着手／設計確定／実装済み／技術受入済み／本人受入済み」を分けて追跡し、計画の記載を実装完了に変換しない。M1の残件を明示したまま、任意のP8／P9を先に進めて全面対応と表示しない。
 

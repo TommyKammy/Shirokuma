@@ -73,4 +73,4 @@ C1の限定範囲を技術受入済みとした（全体回帰4,020成功・34 s
 
 ## 後続
 
-[B2の限定技術受入](database-p6-4b2-wap-handoff-2026-11-01.md)を維持し、SRE／Policyの必須観測はDB内情報とP専用platform情報・観測時刻を分けて統合する。旧Curatorの検索／lineage経路、説明の保存・適用や任意manifest入力を開放しない。P6-4全体・P6-5・P6-7縦断検証・M1本人受入は継続する。
+[B2の限定技術受入](database-p6-4b2-wap-handoff-2026-11-01.md)と本ガイドのC1受入結果を維持し、[C2AのDB内SRE／Policy観測](database-p6-4c2a-context-observations-2026-11-01.md)を実装した。C2Aは本人・保存full9に一致するquery／AI保存metadataの有限窓と現在権限だけを読み、全roleでplatform観測・推論・実行・書込みを行わない。重点backend335件・UI889件、実API・admin実画面と復元を確認し、最終8ファイルで全体回帰を完了した。C2Aの限定範囲を技術受入済みとした（全体回帰4,073成功・34 skip、2DB・3実行ロールの実API、未付与権限の拒否、adminの実画面、最終保全PASS）。P専用platform観測は後続とし、旧Curatorの検索／lineage経路、説明の保存・適用や任意manifest入力を開放しない。P6-4全体・P6-5・P6-7縦断検証・M1本人受入は継続する。

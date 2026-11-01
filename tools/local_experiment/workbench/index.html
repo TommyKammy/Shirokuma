@@ -352,6 +352,9 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 
 /* AI Bears */
 .bear-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:14px;align-items:start}
+.bear-layout>*{min-width:0}
+:is(#observation-sre-panel,#observation-policy-panel) .field{min-width:0;max-width:100%}
+:is(#observation-sre-panel,#observation-policy-panel) .field select{width:100%;min-width:0;max-width:100%}
 .bear-list{display:grid;gap:2px;padding:6px}
 .bear-list button{display:grid;justify-items:start;justify-content:stretch;gap:2px;width:100%;min-height:0;padding:8px 10px;border:0;background:transparent;text-align:left;white-space:normal;font-weight:600}
 .bear-list button[aria-selected=true]{background:var(--accent-soft);color:var(--accent-ink)}
@@ -391,6 +394,7 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 /* Responsive */
 @media(max-width:1180px){.detail-grid{grid-template-columns:1fr}.detail-grid>*+*{border-left:0;border-top:1px solid var(--line)}}
 @media(max-width:1024px){.layout{grid-template-columns:184px minmax(0,1fr)}main{padding:16px 16px 40px}.sql-layout,.catalog-grid,.model-layout,.bear-layout{grid-template-columns:1fr}.explorer{position:static;max-height:none}.sql-main{display:contents}.sql-main .panel{margin-bottom:0}.editor-panel{order:1}.explorer{order:2}.results-panel{order:3}#worksheet-tree{max-height:260px;overflow:auto}#catalog-tree{max-height:300px}.environment{display:none}}
+@media(max-width:1024px){.bear-layout{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){
 .app-header{position:static;padding:8px 12px}.app-header .divider{display:none}.header-spacer{flex-basis:100%;order:1;height:0}
 .header-group,#role-controls,#lang-switcher,#ai-settings-button{order:2}
@@ -1533,7 +1537,7 @@ for(const bear of bears){
 $('bear-data-action').onchange=updateDataBearForm;updateDataBearForm();
 // wireTabs is declared later as a function, so it is available here.
 const bearTabs=[...bearList.children];
-wireTabs(bearTabs,selected=>bearTabs.forEach(b=>{const active=b===selected;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;$('bear-panel-'+b.dataset.bear).hidden=!active;}));
+wireTabs(bearTabs,selected=>{if(databaseMode&&selected.disabled)return;bearTabs.forEach(b=>{const active=b===selected;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;$('bear-panel-'+b.dataset.bear).hidden=!active;});if(databaseMode)dbObservationNavigate(selected.dataset.bear);});
 bearTabs[0].click();
 let auditEpoch=0,pawprintsPending=null,runtimePending=null;
 function resetAuditIdentity(){
@@ -2501,6 +2505,7 @@ function dbInvalidateReceipt(role,account=false){
  if(account){dbAdmin.platform=false;dbAdminClear();}
  if(dbAudit.installed)dbAuditValidate();
  if(dbCurator.installed)dbCuratorSync();
+ dbObservationsSync();
 }
 let dbAuthorizationVersion=0;
 const dbExplorer={database_id:'',schema_id:'',binding_revision:null,generation_id:null,grant_revision:null,schemas:[],schemaScope:'',invalid:false};
@@ -2590,11 +2595,11 @@ const dbSource={scope:'',version:0,token:null,origin:null,notice:''};
 const dbSourceInputEvents=new WeakSet();
 let dbPlanAuthorityStamp='',dbPlanAuthorityEpoch=0;
 const dbExplanationHelp='Explains SQL using authorized column names and types. Values and comments are omitted from model input. No execution plan or query results are collected. SQL is not executed.';
-const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Catalog Curator explains metadata with its own authorized context. Other Bears are unavailable.';
+const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Catalog Curator explains metadata with its own authorized context. SRE and Policy show read-only Database observations with separate contexts. Other Bear actions remain unavailable.';
 const dbExplanationInstruction='Enter SQL or copy it from the active worksheet.';
 const dbExplanationContextStep='Choose or confirm the database, schema and role in the SQL worksheet.';
 const dbExplanationStateLabel=state=>t({SUCCEEDED:'Completed',RUNNING:'Running',QUEUED:'Queued',FAILED:'Failed',UNKNOWN:'Outcome unknown',CANCELED:'Canceled',NOT_STARTED:'Not started',NOT_COLLECTED:'Not collected',COLLECTED:'Collected',NOT_SUBMITTED:'Not submitted',FINISHED:'Completed'}[state]);
-const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
+const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SRE and Policy provide read-only observations of your saved records and permission ceilings with separate Database contexts. Platform observations remain deferred. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
 Object.assign(i18n.ja,{
  [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE と対応する INVOKER VIEW を利用でき、すべての依存先への現在のクエリ権限が必要です。未対応の VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。取得時点の定義を確認します。変更を検出した場合は説明を確定しません。',
  'Acquire plan and explain':'実行計画を取得して説明','Acquire a new plan and explain':'新しい実行計画を取得して説明',
@@ -2627,7 +2632,7 @@ Object.assign(i18n.ja,{
  'Refresh explanation / recover request':'説明を更新／元の要求を復旧','Load explanation history':'説明履歴を読み込む',
  'Choose a saved explanation':'保存済みの説明を選択','Historical explanation (read only)':'過去の説明（表示のみ）',
  'Saved explanation (read only)':'保存された説明（表示のみ）',
- [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。他の Bears は利用できません。',
+ [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。SRE と Policy はそれぞれ独立したコンテキストで Database の読み取り専用観測を表示します。他の Bear 操作は利用できません。',
  [dbExplanationInstruction]:'SQL を入力するか、ワークシートからコピーしてください。',
  [dbExplanationContextStep]:'SQL ワークシートでデータベース・スキーマ・ロールを選択または確認してください。',
  'SQL not executed · Execution plan not collected':'SQL は未実行 · 実行計画は未取得',
@@ -2644,7 +2649,7 @@ Object.assign(i18n.ja,{
  'Load explanation history to recover the original request after access changes.':'アクセス変更後に元の要求を復旧するには、説明履歴を読み込んでください。',
  'SUCCEEDED':'完了',
  [dbExplanationHelp]:'SQL と許可されたカラム名・型に基づく説明です。値とコメントはモデル入力から除外します。実行計画・クエリ結果は取得せず、SQL は実行しません。',
- [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
+ [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SRE と Policy はそれぞれ独立した Database コンテキストで、本人の保存記録と権限の上限を読み取り専用で確認できます。プラットフォームの観測は未対応です。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
 });
 function dbExplanationCapture(){
  const w=dbCurrent();if(!w)return null;
@@ -3577,6 +3582,177 @@ function dbCuratorInstall(){
  }
  dbCuratorSync();
 }
+// Database observations are independent, memory-only read controllers; no AI intent or runtime action.
+const dbObservations=Object.fromEntries(['sre','policy'].map(kind=>[kind,{kind,installed:false,role:'',database:'',schema:'',databases:[],schemas:[],context:null,ceiling:null,inventoryAuth:'',auth:'',epoch:0,busy:null,record:null,notice:'',navigation:'',selected:false}]));
+Object.assign(i18n.ja,{
+ 'Fetch observation':'観測を取得',
+ 'Choose an execution role within the current role ceiling.':'現在のロール上限内で実行ロールを選んでください。',
+ 'Fetching saved Database observation.':'保存済み Database 観測を取得しています。',
+ 'Refreshing observation context.':'観測コンテキストを更新しています。',
+ 'Context verified. Select Fetch observation.':'コンテキストを確認しました。「観測を取得」を選んでください。',
+ 'Observation unavailable. Refresh context, then explicitly fetch again.':'観測を取得できません。コンテキストを更新してから、明示的に再取得してください。',
+ 'Saved own-context metadata; first 20 candidates per source only. Stored states are not current health.':'自身の一致コンテキストの保存済みメタデータです。各参照元の先頭20候補のみで、保存状態は現在の健全性を示しません。',
+ 'No displayable matching own records in this bounded window.':'この範囲に表示可能な自身の一致レコードはありません。',
+ 'Displayed query records':'表示中のクエリレコード',
+ 'Displayed AI records':'表示中の AI レコード',
+ 'Non-displayable records in this fetched window (first 20 time-eligible candidates) omitted: {count}. No diagnosis is provided.':'取得窓（時刻条件を満たす先頭20候補）で表示できない記録を省略: {count}件。原因の診断は含みません。',
+ 'Older candidate records exist; eligible older records are not guaranteed.':'古い候補レコードがあります。表示可能な古いレコードの存在を保証しません。',
+ 'Current schema permission ceiling; statement and resource guards still apply. This is not statement approval.':'現在のスキーマ権限の上限です。文とリソースのガードは引き続き適用され、個々の文の承認ではありません。',
+ 'Allowed SQL modes (ceiling)':'許可 SQL モード（上限）',
+ 'Shared LOCAL: these Database permissions do not imply dedicated compute or platform control.':'LOCAL は共有です。Database 権限は専用コンピュートやプラットフォーム操作権限を意味しません。',
+ 'Platform observations are deferred, including for platform administrators.':'プラットフォーム管理者を含め、プラットフォーム観測は未対応です。',
+ 'Platform administrator authority is required; platform observations remain deferred.':'プラットフォーム管理者権限が必要です。プラットフォーム観測は引き続き未対応です。',
+ 'Captured Database context':'取得時の Database コンテキスト',
+ 'Observed at':'観測日時',
+ 'Stored created at':'保存済み作成日時',
+ 'Stored updated at':'保存済み更新日時',
+ 'SRE shows your saved query and AI metadata in its own Database context.':'SRE は独立した Database コンテキストで自身の保存済みクエリと AI メタデータを表示します。',
+ 'Policy shows current permissions as a ceiling in its own Database context.':'Policy は独立した Database コンテキストで現在の権限の上限を表示します。'
+});
+// Observation labels are local: stored wire values and other panels' labels stay intact.
+const dbObservationLabels={
+ role:{bi_viewer:['BI Viewer','BI 閲覧者'],data_engineer:['Data Engineer','データエンジニア'],admin:['Admin','管理者']},
+ kind:{query:['Query','クエリ'],sql_explanation:['SQL explanation','SQL の説明'],sql_plan_explanation:['Execution plan explanation','実行計画の説明'],saved_plan_explanation:['Saved plan explanation','保存済みプランの説明'],sql_proposal:['SQL proposal','SQL 案'],catalog_proposal:['Catalog proposal','カタログの説明文案']},
+ state:{QUEUED:['Queued','待機中'],RUNNING:['Running','実行中'],FAILED:['Failed','失敗'],CANCELED:['Canceled','キャンセル済み'],UNKNOWN:['Outcome unknown','結果不明']},
+ queryState:{FINISHED:['Finished','完了']},aiState:{SUCCEEDED:['Succeeded','成功']},
+ permission:{browse:['Browse','参照'],query:['Query','クエリ'],write:['Write','書き込み']},
+ allowed:{true:['Allowed','許可'],false:['Not allowed','許可なし']},
+ mode:{'read-only':['Read only','読み取り専用'],'sandbox-write':['Sandbox write','サンドボックス書き込み'],'admin-write':['Admin write','管理者書き込み']},
+ field:{record:['Record ID','レコード ID']}
+};
+function dbObservationLabel(group,value){return (dbObservationLabels[group][value]||dbObservationLabels.state[value])[language==='ja'?1:0];}
+function dbObservationAuth(p){return JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbAdmin.platform,dbEpoch,dbAuthorizationVersion,dbRoleVersion(p.role)]);}
+function dbObservationPlatform(role){let actor;try{actor=JSON.parse(dbPrincipal);}catch{return false;}return actor?.[1]===true&&dbAdmin.platform===true&&currentRole==='admin'&&dbMaximumRole==='admin'&&role==='admin';}
+function dbObservationCeiling(p){
+ const c=p.context,d=p.databases.find(d=>d.id===p.database),s=p.schemas.find(s=>s.id===p.schema&&s.database_id===p.database);
+ if(!c||!d||!s||s.sql_name!==c.sql_schema||d.sql_catalog!==c.sql_catalog||d.binding_revision!==c.binding_revision||d.generation_id!==c.generation_id||d.grant_revision!==c.grant_revision||!Array.isArray(s.allowed_modes)||new Set(s.allowed_modes).size!==s.allowed_modes.length||!s.allowed_modes.every(mode=>['read-only','sandbox-write','admin-write'].includes(mode)))return null;
+ const purpose=String(s.purpose||s.sql_name).toUpperCase(),writable=['raw','sandbox'].includes(s.sql_name),write=s.capabilities?.write===true&&['data_engineer','admin'].includes(p.role)&&(p.role==='admin'||writable);
+ const permissions={browse:s.capabilities?.browse===true,query:s.capabilities?.query===true,write};
+ const modes=s.allowed_modes.filter(mode=>mode==='read-only'||mode==='sandbox-write'&&write&&writable||mode==='admin-write'&&write&&p.role==='admin');
+ return dataopsFreeze({permissions,modes,platform:dbObservationPlatform(p.role),source:{purpose,browse:s.capabilities?.browse,query:s.capabilities?.query,write:s.capabilities?.write,allowed_modes:[...s.allowed_modes]}});
+}
+function dbObservationSameCeiling(a,b){return !!a&&!!b&&JSON.stringify(a)===JSON.stringify(b);}
+function dbObservationAllowed(p){const c=p.context;return databaseMode&&dbRoleWithinHeader(p.role)&&p.inventoryAuth===dbObservationAuth(p)&&dbCuratorContext(c)&&c.selected_role===p.role&&c.database_id===p.database&&c.schema_id===p.schema&&dbObservationSameCeiling(p.ceiling,dbObservationCeiling(p));}
+function dbObservationClear(p,inventory=false){++p.epoch;p.busy=null;p.context=null;p.ceiling=null;p.inventoryAuth='';p.record=null;p.notice='';if(inventory){p.databases=[];p.schemas=[];}}
+function dbObservationsSync(){for(const p of Object.values(dbObservations))dbObservationSync(p);}
+function dbObservationSync(p){
+ if(!p.installed)return;
+ const auth=dbObservationAuth(p);if(auth!==p.auth){dbObservationClear(p,true);p.auth=auth;}
+ if(p.navigation!==activeTab){p.navigation=activeTab;++p.epoch;p.busy=null;p.notice='';}
+ if(p.context&&!dbObservationSameCeiling(p.ceiling,dbObservationCeiling(p)))dbObservationClear(p,true);
+ const id='observation-'+p.kind+'-',busy=!!p.busy;
+ dbSelectOptions(id+'role',['bi_viewer','data_engineer','admin'].map(value=>({value,label:dbObservationLabel('role',value),disabled:!dbRoleWithinHeader(value)})),p.role,'Execution role');
+ dbSelectOptions(id+'database',p.databases.map(d=>({value:d.id,label:d.display_name+' · '+d.sql_catalog})),p.database,'Choose database');
+ dbSelectOptions(id+'schema',p.schemas.map(s=>({value:s.id,label:s.display_name+' · '+s.sql_name})),p.schema,'Choose schema');
+ $(id+'refresh').disabled=busy||!dbRoleWithinHeader(p.role);$(id+'fetch').disabled=busy||!dbObservationAllowed(p);
+ dbObservationRender(p);
+}
+function dbObservationGuidance(p){
+ if(!dbRoleWithinHeader(p.role))return 'Choose an execution role within the current role ceiling.';
+ if(!p.databases.length)return 'Refresh context to load Databases for the selected role.';
+ if(!p.databases.some(d=>d.id===p.database))return 'Choose a Database, then refresh context to load its schemas.';
+ if(!p.schemas.length)return 'Refresh context to load schemas for the selected Database.';
+ if(!p.schemas.some(s=>s.database_id===p.database&&s.id===p.schema))return 'Choose a primary schema, then refresh context to verify it.';
+ if(!dbObservationAllowed(p))return 'Refresh context to verify the selected primary schema.';
+ return 'Context verified. Select Fetch observation.';
+}
+function dbObservationCapture(p){
+ const token={},epoch=p.epoch,auth=dbObservationAuth(p),role=p.role,database=p.database,schema=p.schema,context=p.context,ceiling=p.ceiling;
+ let databases=p.databases,schemas=p.schemas;p.busy=token;
+ return {role,context,ceiling,token,updated:()=>{databases=p.databases;schemas=p.schemas;},current:()=>{dbObservationSync(p);return p.busy===token&&p.epoch===epoch&&dbObservationAuth(p)===auth&&p.role===role&&p.database===database&&p.schema===schema&&p.context===context&&p.ceiling===ceiling&&p.databases===databases&&p.schemas===schemas;}};
+}
+function dbObservationFailure(p,error){
+ if([401,403,404].includes(error?.status)||['AUTHENTICATION_REQUIRED','DB_ACCESS_REVOKED','SQL_PERMISSION_DENIED','NOT_FOUND','STALE_BINDING','STALE_CONTEXT','CONTEXT_MISMATCH','UNKNOWN_CONTEXT'].includes(error?.code))dbObservationClear(p,true);
+ p.record=null;p.notice='Observation unavailable. Refresh context, then explicitly fetch again.';dbObservationSync(p);
+}
+async function dbObservationRefresh(p){
+ dbObservationSync(p);if(p.busy||!dbRoleWithinHeader(p.role))return;
+ dbObservationClear(p);const read=dbObservationCapture(p);p.notice='Refreshing observation context.';dbObservationSync(p);
+ try{
+  const items=await dbReadInventory(read.role,read.current);if(!read.current()||!dbInventoryCurrent(items))return;
+  p.databases=items.filter(d=>d.state==='READY'&&d.capabilities?.query&&d.allowed_roles?.includes(read.role));read.updated();
+  const d=p.databases.find(d=>d.id===p.database);if(!d){p.schemas=[];read.updated();return;}
+  const reply=await dbAPI('/api/v1/databases/'+encodeURIComponent(d.id)+'/schemas',read.role);if(!read.current())return;
+  if(!Array.isArray(reply.items))throw Error('INVALID_RESPONSE');p.schemas=reply.items.filter(s=>s.database_id===d.id&&s.capabilities?.query);read.updated();
+  const schema=p.schemas.find(s=>s.id===p.schema);if(!schema)return;
+  const context={database_id:d.id,schema_id:schema.id,warehouse_id:'LOCAL',sql_catalog:d.sql_catalog,sql_schema:schema.sql_name,selected_role:read.role,binding_revision:d.binding_revision,generation_id:d.generation_id,grant_revision:d.grant_revision};
+  if(!dbCuratorContext(context))throw Error('INVALID_RESPONSE');p.context=dataopsFreeze(context);p.ceiling=dbObservationCeiling(p);if(!p.ceiling){dbObservationClear(p,true);throw Error('INVALID_RESPONSE');}p.inventoryAuth=dbObservationAuth(p);
+ }catch(error){if(read.current())dbObservationFailure(p,error);}
+ finally{if(p.busy===read.token){p.busy=null;p.notice=p.notice==='Refreshing observation context.'?'':p.notice;dbObservationSync(p);}}
+}
+function dbObservationTime(value,utc=false){
+ if(typeof value!=='string'||value.length>64)return false;
+ const m=/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)$/.exec(value);if(!m)return false;
+ const year=Number(m[1]),month=Number(m[2]),day=Number(m[3]),days=[31,year%4===0&&(year%100!==0||year%400===0)?29:28,31,30,31,30,31,31,30,31,30,31];
+ return year>0&&month>=1&&month<=12&&day>=1&&day<=days[month-1]&&Number(m[4])<24&&Number(m[5])<60&&Number(m[6])<60&&(m[7]==='Z'||Number(m[7].slice(1,3))<24&&Number(m[7].slice(4,6))<60)&&(!utc||m[7]==='Z'||Number(m[7].slice(1,3))===0&&Number(m[7].slice(4,6))===0);
+}
+function dbObservationRecord(data,context,ceiling){
+ const exact=dbSavedExact,bool=v=>typeof v==='boolean',time=dbObservationTime;
+ const fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(!ceiling||!exact(data,['context','observed_at','coverage','sre','policy','platform'])||!dbCuratorContext(data.context)||!dbExplanationSameContext(data.context,context)||!time(data.observed_at,true))fail();
+ const c=data.coverage;if(!exact(c,['kind','limit_per_source','full_history','live_runtime'])||c.kind!=='latest_persisted_own_context'||c.limit_per_source!==20||c.full_history!==false||c.live_runtime!==false||!exact(data.sre,['queries','ai']))fail();
+ for(const kind of ['queries','ai']){
+  const window=data.sre[kind];if(!exact(window,['items','has_more','omitted'])||!Array.isArray(window.items)||!bool(window.has_more)||!Number.isSafeInteger(window.omitted)||window.omitted<0||window.omitted>20||window.items.length+window.omitted>20)fail();
+  for(const item of window.items){if(!exact(item,['id','kind','state','created_at','updated_at'])||typeof item.id!=='string'||[...item.id].length>256||!item.id.trim()||/[\p{C}\p{Zl}\p{Zp}]/u.test(item.id)||!time(item.created_at))fail();
+   if(kind==='queries'?(item.kind!=='query'||item.updated_at!==null||!['QUEUED','RUNNING','FINISHED','FAILED','CANCELED','UNKNOWN'].includes(item.state)):(!['sql_explanation','sql_plan_explanation','saved_plan_explanation','sql_proposal','catalog_proposal'].includes(item.kind)||!time(item.updated_at)||!['QUEUED','RUNNING','SUCCEEDED','FAILED','CANCELED','UNKNOWN'].includes(item.state)))fail();
+  }
+ }
+ const policy=data.policy,permissions=policy?.schema_permissions,modes=policy?.sql_modes;
+ if(!exact(policy,['context_authorized','schema_permissions','sql_modes','statement_approval','shared_local'])||policy.context_authorized!==true||policy.statement_approval!==false||policy.shared_local!==true||!exact(permissions,['browse','query','write'])||!Object.values(permissions).every(bool)||!Array.isArray(modes)||new Set(modes).size!==modes.length||!modes.every(mode=>['read-only','sandbox-write','admin-write'].includes(mode)))fail();
+ if(Object.keys(permissions).some(key=>permissions[key]&&!ceiling.permissions[key])||modes.some(mode=>!ceiling.modes.includes(mode)))fail();
+ if(!exact(data.platform,['allowed','code'])||!bool(data.platform.allowed)||data.platform.code!==(data.platform.allowed?'PLATFORM_OBSERVATION_DEFERRED':'PLATFORM_ADMIN_REQUIRED')||data.platform.allowed&&(!ceiling.platform||!dbObservationPlatform(context.selected_role)))fail();
+ return dataopsFreeze(structuredClone(data));
+}
+async function dbObservationFetch(p){
+ dbObservationSync(p);if(p.busy||!dbObservationAllowed(p))return;
+ ++p.epoch;p.record=null;const read=dbObservationCapture(p);p.notice='Fetching saved Database observation.';dbObservationSync(p);
+ try{const data=await dbAPI('/api/v1/bears/context-observations?'+new URLSearchParams({context:JSON.stringify(read.context)}),read.role);if(!read.current()||!dbObservationAllowed(p))return;p.record=dbObservationRecord(data,read.context,read.ceiling);p.notice='';}
+ catch(error){if(read.current())dbObservationFailure(p,error);}
+ finally{if(p.busy===read.token){p.busy=null;dbObservationSync(p);}}
+}
+function dbObservationRender(p){
+ const node=$('observation-'+p.kind+'-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
+ const r=dbObservationAllowed(p)?p.record:null;
+ if(!r){line(t(p.notice||dbObservationGuidance(p)));return;}
+ line(t('Captured Database context')+': '+r.context.sql_catalog+'.'+r.context.sql_schema+' · '+dbObservationLabel('role',r.context.selected_role)+' · LOCAL');
+ line(t('Observed at')+': '+r.observed_at);
+ if(p.kind==='sre'){
+  line(t('Saved own-context metadata; first 20 candidates per source only. Stored states are not current health.'));
+  for(const [key,label] of [['queries','Displayed query records'],['ai','Displayed AI records']]){const window=r.sre[key];line(t(label)+': '+window.items.length,'h3');
+   if(!window.items.length)line(t('No displayable matching own records in this bounded window.'));
+   for(const item of window.items){line(dbObservationLabel('kind',item.kind)+' · '+dbObservationLabel(key==='queries'?'queryState':'aiState',item.state));line(dbObservationLabel('field','record')+': '+item.id);line(t('Stored created at')+': '+item.created_at);if(key==='ai')line(t('Stored updated at')+': '+item.updated_at);}
+   if(window.omitted)line(t('Non-displayable records in this fetched window (first 20 time-eligible candidates) omitted: {count}. No diagnosis is provided.',{count:window.omitted}));
+   if(window.has_more)line(t('Older candidate records exist; eligible older records are not guaranteed.'));
+  }
+ }else{
+  line(t('Current schema permission ceiling; statement and resource guards still apply. This is not statement approval.'));
+  for(const key of ['browse','query','write'])line(dbObservationLabel('permission',key)+': '+dbObservationLabel('allowed',r.policy.schema_permissions[key]));
+  line(t('Allowed SQL modes (ceiling)')+': '+r.policy.sql_modes.map(mode=>dbObservationLabel('mode',mode)).join(', '));line(t('Shared LOCAL: these Database permissions do not imply dedicated compute or platform control.'));
+ }
+ line(t(r.platform.allowed?'Platform observations are deferred, including for platform administrators.':'Platform administrator authority is required; platform observations remain deferred.'));
+}
+function dbObservationNavigate(kind){for(const p of Object.values(dbObservations)){if(!p.installed)continue;if(p.selected&&kind!==p.kind){++p.epoch;p.busy=null;p.notice='';}p.selected=kind===p.kind;dbObservationSync(p);}}
+function dbObservationsInstall(){
+ for(const p of Object.values(dbObservations)){
+  if(p.installed)continue;p.installed=true;p.role=currentRole;
+  const host=$('bear-panel-'+p.kind),tab=$('bear-tab-'+p.kind);tab.disabled=false;tab.dataset.databaseUnavailable='false';tab.title='';
+  for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===tab&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
+  const description=host.querySelector('p');if(description)ui(description,p.kind==='sre'?'SRE shows your saved query and AI metadata in its own Database context.':'Policy shows current permissions as a ceiling in its own Database context.');
+  for(const name of ['run','action','manifest']){const n=$('bear-'+p.kind+'-'+name);if(n){n.disabled=true;n.hidden=true;if(n.parentElement)n.parentElement.hidden=true;}}
+  const id='observation-'+p.kind+'-';
+  if(!$(id+'panel')?.dataset.installed){
+   const panel=document.createElement('div');panel.id=id+'panel';panel.dataset.installed='true';panel.className='panel-body';host.append(panel);
+   const controls=document.createElement('div');controls.className='table-wrap';panel.append(controls);const toolbar=document.createElement('div');toolbar.className='toolbar';controls.append(toolbar);
+   for(const [name,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){const field=document.createElement('span'),l=document.createElement('label'),select=document.createElement('select');field.className='field';select.id=id+name;l.htmlFor=select.id;ui(l,label);field.append(l,select);toolbar.append(field);
+    select.onchange=()=>{p[name]=select.value;if(name==='role'){p.database='';p.schema='';p.databases=[];p.schemas=[];}if(name==='database'){p.schema='';p.schemas=[];}dbObservationClear(p);dbObservationSync(p);};
+   }
+   const local=document.createElement('span');local.textContent='LOCAL';toolbar.append(local);
+   for(const [name,label,task] of [['refresh','Refresh context',()=>dbObservationRefresh(p)],['fetch','Fetch observation',()=>dbObservationFetch(p)]]){const b=document.createElement('button');b.id=id+name;b.type='button';ui(b,label);b.onclick=task;toolbar.append(b);}
+   const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
+  }
+ }
+ dbObservationsSync();
+}
 // Saved-plan inference has its own receipt and never changes the source's query proof.
 function dbSavedExact(value,keys){return dbExplanationObject(value)&&JSON.stringify(Object.keys(value).sort())===JSON.stringify([...keys].sort());}
 function dbSavedUUID(value){return typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);}
@@ -3773,7 +3949,7 @@ function dbReason(w=dbCurrent()){
  return '';
 }
 function dbControls(){
- dbExplanationSync();dbProposalSync();dbCuratorSync();
+ dbExplanationSync();dbProposalSync();dbCuratorSync();dbObservationsSync();
  if(dbRuntime.installed)dbRuntimeSync();
  if(dbAudit.installed)dbAuditValidate();
  const w=dbCurrent();if(!w)return;
@@ -4602,7 +4778,7 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
@@ -4616,7 +4792,7 @@ async function initializeDatabaseUI(session){
  $('open-table-sql').onclick=dbOpenExplorerWorksheet;
  $('refresh-catalog').onclick=dbRefreshExplorer;
  $('refresh-table-details').onclick=()=>{dbDetails.clear();if(dbObject)dbDescribe(dbObject);};
- dbExplanationInstall();dbProposalInstall();dbCuratorInstall();
+ dbExplanationInstall();dbProposalInstall();dbCuratorInstall();dbObservationsInstall();
  dbApplyRole();legacyRenderWorksheets();dbWireWorkspaceTabs();dbPersist();await dbRefreshContext();
  if(currentRole!==dbTabRole()){try{const items=await dbReadInventory(currentRole);dbApplyInventory(items,currentRole);}catch(error){if(error.code!=='AUTH_READ_STALE')message('catalog-error',error.message);}}
  // Seed once from explicit restored inputs. Worksheet switches never follow this.
@@ -4691,7 +4867,7 @@ function dbAdminClear(){
 }
 function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
- if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();}
+ if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
  dbAdminGate();
 }
