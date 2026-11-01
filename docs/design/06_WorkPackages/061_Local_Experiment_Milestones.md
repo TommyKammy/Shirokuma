@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-11-02
-version: "7.30.0"
+version: "7.31.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,13 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-02 — DB-P6-5B configured LOCAL container resources
+
+- [実装・検証記録](../../guides/database-p6-5b-platform-resources-2026-11-02.md)：固定2 Deploymentの全ordinary／initコンテナ設定を、種類別ordinalと4つのliteral quantity／nullで扱う。
+- 独立した入力なしの明示GETとCompute専用panel・P cacheを対象とし、真P・上限admin・選択adminをsource読取り前後に検査する。既存C2Bを変更しない。
+- P5Bの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,166成功・34 skip、両HTTP面の実API・Workbenchの実画面、最終保全PASS）。 重点backend111件・UI113件・全Workbench事前回帰936件もそれぞれ成功した。
+- P6-4全体／P6-5全体／P6-7／M1本人受入はOPEN。C2C／global policy、usage／capacity／activity、resizingは別タスクとする。
 
 ### 2026-11-02 — DB-P6-4D1 saved AI audit metadata
 

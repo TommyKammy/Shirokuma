@@ -12,6 +12,7 @@ import db_ai_catalog
 import db_ai_wap
 import db_bear_observations
 import db_platform_observations
+import db_platform_resources
 from warehouse_operations import OperationError
 from query_context import QueryError
 
@@ -19,6 +20,19 @@ from query_context import QueryError
 def dispatch(handler, method, path, params, principal, role):
     if path != '/api/v1/bears' and not path.startswith('/api/v1/bears/'):
         return False
+    if path == '/api/v1/bears/platform-resources':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        if ('?' in handler.path or '#' in handler.path or params
+                or handler.headers.get_all('Transfer-Encoding', [])
+                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
+            raise QueryError('INVALID_INPUT', 400)
+        try:
+            result = db_platform_resources.observe(principal, role)
+        except OperationError as error:
+            raise QueryError(error.code, error.status) from None
+        handler.respond(result, 200)
+        return True
     if path == '/api/v1/bears/platform-observations':
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)

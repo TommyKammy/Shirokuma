@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+[DB-P6-5B](database-p6-5b-platform-resources-2026-11-02.md)はconfigured container resourcesだけの限定技術受入済みの単位であり、能力の一括完了を意味しない。P5Bの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,166成功・34 skip、両HTTP面の実API・Workbenchの実画面、最終保全PASS）。
+
 [DB-P6-4D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)は既存AUD-03へ保存済みAI要約metadataを追加した限定技術受入済みの単位である。`source=ai`と閉じた5種のaction、既存event形状・`links=[]`だけを使い、内容fieldを追加しない。最新保存要約であり、遷移監査ではない。現在のself／database認可を維持し、保存full9は内部整合を要するが現在revisionとの一致を要しない。platform scopeはAIを除外する。D1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,135成功・34 skip、Workbenchの実API・実画面、最終保全PASS）。 C2C／P5B・AI設定とP6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 
 2026年11月1日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)・[Query Doctorの最新SELECT読込](database-p6-4a4-latest-query-source-2026-10-31.md)・[保存済み計画の明示再説明](database-p6-4a5-saved-plan-explanation-2026-10-31.md)を反映した。[B1 SQL案生成](database-p6-4b1-sql-proposals-2026-11-01.md)と[B2 Manual WAP下書き引渡し](database-p6-4b2-wap-handoff-2026-11-01.md)は限定範囲を技術受入済みであり、[C1 Catalog Curatorのmetadata説明・説明文案](database-p6-4c1-catalog-proposals-2026-11-01.md)は限定範囲を技術受入済みである。[C2AのDB内SRE／Policy観測](database-p6-4c2a-context-observations-2026-11-01.md)は限定範囲を技術受入済みである。機能数は増やさず、M1の本人受入は未完了である。
@@ -136,7 +138,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | CMP-02 | Compute panelの共有状態・停止blocker・保存policy | logical_v1で対応、認証済みV／E／A。技術受入済み | 受付・処理中・SUCCEEDEDと物理状態／engine検証を区別。旧SRE／Policy検査は含まない | 共有LOCAL panel／runtime GET |
 | CMP-03 | quick／SQL／Computeの明示Wake／Chillと状態再検証 | logical_v1のP専用API／UI／HTTP CLIを実装。技術受入済み | 全DBへの影響を表示。元key／receipt保持、現在権限・admission／drain・全blockerを再確認。SQLは再送しない | runtime操作／operation照会。旧Database profileは未対応 |
 | CMP-04 | Auto-Chill設定と許可済みSQLのAuto-resume | logical_v1で設定CAS、server側休止、SQL共通経路の自動復帰を実装。技術受入済み、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 設定はP、0は無効。自動起動は元のDB／role／intentを認可し、同一初回POSTを再送しない。queued取消・UNKNOWN保護を維持 | Workbench／native／CLI、既存DataOps・Job・Stage・Mart・対応済みdbt・予定の共通SQL経路。AIは未接続 |
-| CMP-05 | ComputeのSRE check／Policy audit | P6-5AでP専用固定観測の読取り統合に条件付き対応。旧SRE check／Policy baselineは未接続 | C2Bの既存API・strict DTO・global P cacheを再利用。真P・選択admin、明示GETだけでDB context／grant不要。完全なglobal auditや操作許可を示さず、旧routeの拒否を維持 | DB-P6-5A限定技術受入済み／DB-P6-4・5全体は未完了 |
+| CMP-05 | ComputeのSRE check／Policy audit | P6-5AのP専用固定観測読取り統合は限定技術受入済み。P5Bの固定LOCALコンテナ設定資源も限定技術受入済み。旧SRE check／Policy baselineは未接続 | P5AはC2Bの既存API・strict DTO・global P cacheを再利用。P5Bは別の入力なし明示GET・Compute専用panel・独立P cacheで、真platform accountとprincipal・上限admin・選択adminを全source読取り前後に確認、DB／schema／grant不要。全ordinary／initの種類別ordinalと4つのliteral quantity／nullだけを扱い、usage・capacity・effective Pod budget・global audit・操作許可を示さず旧route拒否を維持 | DB-P6-5A限定技術受入済み／[DB-P6-5B](database-p6-5b-platform-resources-2026-11-02.md) pending／DB-P6-4・5全体は未完了 |
 | CMP-06 | XS／Sの実サイズ、Worker増減、用途別Warehouse | 未実装。休止・復帰の対応から伸縮完了を推定しない | 同一computeのaliasを維持し、容量・実資源・性能の計測後に採用 | DB-P7／8 |
 | ADM-01 | DB管理一覧・選択・revision／binding情報 | 対応、P | A、Worksheetと独立 | `/api/v1/admin/databases` |
 | ADM-02 | 論理DB作成、作成capability、初期access | 対応、P、logical_v1の準備条件 | A、root／actor／環境／key | admin database-creations |

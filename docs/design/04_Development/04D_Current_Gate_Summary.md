@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-02
-version: "2.30.0"
+version: "2.31.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-11-02、[DB-P6-5B](../../guides/database-p6-5b-platform-resources-2026-11-02.md)で固定LOCALコンテナ設定資源の読取り表示を実装した。独立した入力なしの明示GETで、真のplatform account・principal、上限admin・選択adminを全source読取り前後に確認し、DB／schema／grantを前提にしない。Computeの独立panel・P cacheで、coordinator／workerの全ordinary・initコンテナのCPU／memory requests・limitsをliteral文字列または未指定として扱う。既存C2B API・閉じたDTO・cache・requestは維持する。P5Bの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,166成功・34 skip、両HTTP面の実API・Workbenchの実画面、最終保全PASS）。 P6-4全体／P6-5全体／P6-7／M1本人受入はOPENのまま、C2C／global policy、usage／capacity／activity、resizingは別タスクとする。
 
 2026-11-02、[DB-P6-4D1](../../guides/database-p6-4d1-ai-audit-metadata-2026-11-01.md)で既存AUD-03へ保存済みAI要約metadataを統合した。`source=ai`と閉じた5種のactionを既存event形状へ投影し、`links=[]`、内容fieldの追加なしとする。最新の保存要約であり、状態遷移監査ではない。self／databaseの現在認可を維持し、保存full9の内部整合を現在revisionとの一致条件へ置き換えない。platform scopeにはAIを含めず、本文の表示・検索、AI取得・復旧や書込みを追加しない。D1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,135成功・34 skip、Workbenchの実API・実画面、最終保全PASS）。 C2C／P5B・AI設定とP6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 

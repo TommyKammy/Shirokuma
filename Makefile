@@ -19,6 +19,7 @@ test-resident-core:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_ai_sources.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_bear_observations.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_platform_observations.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_platform_resources.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_ai_plan.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_ai_plan_views.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_ai_reexplain.py'

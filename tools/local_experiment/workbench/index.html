@@ -540,11 +540,11 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #runtime-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 #runtime-panel .runtime-actions{margin-block:12px}
 #runtime-panel .help{color:var(--muted)}
-#observation-compute-panel{min-width:0;max-width:100%}
-#observation-compute-panel .panel-body,#observation-compute-output{min-width:0;max-width:100%}
-#observation-compute-output p{max-width:75ch;overflow-wrap:anywhere}
-#observation-compute-panel .toolbar{min-width:0;max-width:100%;flex-wrap:wrap}
-#observation-compute-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+#observation-compute-panel,#observation-resources-panel{min-width:0;max-width:100%}
+#observation-compute-panel .panel-body,#observation-compute-output,#observation-resources-panel .panel-body,#observation-resources-output{min-width:0;max-width:100%}
+#observation-compute-output p,#observation-resources-output p{max-width:75ch;overflow-wrap:anywhere}
+#observation-compute-panel .toolbar,#observation-resources-panel .toolbar{min-width:0;max-width:100%;flex-wrap:wrap}
+#observation-compute-panel button,#observation-resources-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wrap:anywhere}html[data-data-mode=database] #quick-warehouse-state{white-space:normal;overflow-wrap:anywhere}
 
 /* Database dbt uses the established operational toolbar and table vocabulary. */
@@ -3805,6 +3805,7 @@ function dbPlatformSync(){
   if(platform)dbPlatformRender(o);
  }
  dbPlatformComputeSync();
+ dbResourcesSync();
 }
 function dbPlatformComputeSync(){
  if(!$('observation-compute-panel')?.dataset.installed)return;
@@ -3898,6 +3899,114 @@ function dbPlatformRender(o){
   else{value('Active admissions',s.active);value('Unknown admissions',s.unknown);}
  }
 }
+
+// Configured resources are a separate explicit observation, never a C2B source.
+const dbResources={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
+Object.assign(i18n.ja,{
+ 'Configured LOCAL container resources (P-only, read-only)':'LOCAL コンテナの設定リソース（P のみ・読み取り専用）',
+ 'Fetch resource settings':'リソース設定を取得',
+ 'Resource authority verified. Select Fetch resource settings.':'権限を確認しました。「リソース設定を取得」を選んでください。',
+ 'Fetching resource settings.':'リソース設定を取得しています。',
+ 'Resource settings unavailable. Explicitly refresh authority or fetch again.':'リソース設定を取得できません。権限更新または再取得を明示的に行ってください。',
+ 'Deployment Pod-template settings for each container, including init containers, by ordinal.':'Deployment の Pod テンプレートに設定された各コンテナと init コンテナの値を、種別ごとの順番で表示します。',
+ 'These configured values do not measure live usage, effective Pod resources or capacity. Resizing is not provided here.':'設定値の表示であり、実使用量・実効 Pod リソース・容量の測定ではありません。この画面でリサイズはできません。',
+ 'Container':'コンテナ','Init container':'init コンテナ','CPU request':'CPU 要求','Memory request':'メモリ要求','CPU limit':'CPU 上限','Memory limit':'メモリ上限',
+ 'Not specified':'未指定','Resource configuration source unavailable.':'リソース設定の参照元を取得できません。'
+});
+function dbResourcesLeave(){++dbResources.epoch;dbResources.busy=null;dbResources.notice='';}
+function dbResourcesSync(){
+ const p=dbResources,auth=dbPlatformAuth();
+ if(auth!==p.auth){dbResourcesLeave();p.record=null;p.auth=auth;}
+ if(!dbObservationPlatform('admin'))p.record=null;
+ // Only navigation invalidates pending work. Completed same-authority data survives.
+ if(activeTab!==p.view){dbResourcesLeave();p.view=activeTab;}
+ if(!$('observation-resources-panel')?.dataset.installed)return;
+ $('observation-resources-auth').disabled=!!p.busy||!dbPlatformCanRefresh();
+ $('observation-resources-fetch').disabled=!!p.busy||!dbObservationPlatform('admin');
+ dbResourcesRender();
+}
+function dbResourcesInstall(){
+ if($('observation-resources-panel')?.dataset.installed)return;
+ const panel=dbAdminNode('section','observation-resources-panel',$('compute'));panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby','observation-resources-title');
+ const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2','observation-resources-title',head,'Configured LOCAL container resources (P-only, read-only)');
+ const body=dbAdminNode('div','',panel);body.className='panel-body';const toolbar=dbAdminNode('div','',body);toolbar.className='toolbar';
+ dbAdminButton(toolbar,'observation-resources-auth','Refresh platform authority',dbResourcesRefreshAuth);
+ dbAdminButton(toolbar,'observation-resources-fetch','Fetch resource settings',dbResourcesFetch);
+ const output=dbAdminNode('div','observation-resources-output',body);output.className='table-wrap';output.setAttribute('aria-live','polite');dbResourcesSync();
+}
+function dbResourcesCapture(){
+ const p=dbResources,token={},epoch=++p.epoch,auth=dbPlatformAuth();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbPlatformAuth()};
+}
+async function dbResourcesRefreshAuth(){
+ dbResourcesSync();if(dbResources.busy||!dbPlatformCanRefresh())return;
+ const read=dbResourcesCapture();dbResources.notice='Refreshing platform authority.';dbResourcesSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbResources.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const session=await response.json();if(!read.current())return;
+  dbAdminSession(response.ok?session:{});
+  if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  dbResources.notice=dbObservationPlatform('admin')?'Resource authority verified. Select Fetch resource settings.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current())dbResources.notice='Resource settings unavailable. Explicitly refresh authority or fetch again.';}
+ finally{if(dbResources.busy===read.token)dbResources.busy=null;dbResourcesSync();}
+}
+async function dbResourcesFetch(){
+ dbResourcesSync();if(dbResources.busy||!dbObservationPlatform('admin'))return;
+ const read=dbResourcesCapture();dbResources.notice='Fetching resource settings.';dbResourcesSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-resources',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbResources.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const body=await response.text();if(!read.current())return;
+  if(new TextEncoder().encode(body).length>65536)throw Error('INVALID_RESPONSE');const data=JSON.parse(body);
+  if(!response.ok)throw Error('UNAVAILABLE');dbResources.record=dbResourcesRecord(data);dbResources.notice='';
+ }catch{if(read.current()){dbResources.record=null;dbResources.notice='Resource settings unavailable. Explicitly refresh authority or fetch again.';}}
+ finally{if(dbResources.busy===read.token)dbResources.busy=null;dbResourcesSync();}
+}
+function dbResourcesRecord(d){
+ const exact=dbSavedExact,time=dbObservationTime,fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(new TextEncoder().encode(JSON.stringify(d)).length>65536)fail();
+ if(!exact(d,['scope','warehouse','selected_role','observed_at','coverage','resources'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin'||!time(d.observed_at,true))fail();
+ const c=d.coverage;if(!exact(c,['kind','pod_template','per_container','live_usage','effective_pod_resources','capacity'])||c.kind!=='deployment_container_resource_configuration'||c.pod_template!==true||c.per_container!==true||c.live_usage!==false||c.effective_pod_resources!==false||c.capacity!==false)fail();
+ const r=d.resources;if(!exact(r,['availability','code','observed_at','deployments'])||!time(r.observed_at,true)||!['available','unavailable'].includes(r.availability)||r.code!==(r.availability==='available'?null:'RESOURCE_CONFIGURATION_UNAVAILABLE'))fail();
+ if(r.availability==='unavailable'){if(r.deployments!==null)fail();}
+ else{
+  if(!Array.isArray(r.deployments)||r.deployments.length!==2)fail();
+  const quantity=v=>v===null||typeof v==='string'&&v.length<=64&&!/[^\x21-\x7e]/.test(v)&&/^\+?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[numkMGTPE]|[KMGTPE]i|[eE][+-]?[0-9]+)?$/.test(v);
+  for(const [i,row] of r.deployments.entries()){
+   if(!exact(row,['role','containers'])||row.role!==['coordinator','worker'][i]||!Array.isArray(row.containers)||row.containers.length<1||row.containers.length>16)fail();
+   const indices={container:new Set(),init:new Set()};
+   for(const item of row.containers){
+    if(!exact(item,['kind','index','requests','limits'])||!Object.hasOwn(indices,item.kind)||!Number.isSafeInteger(item.index)||item.index<1||indices[item.kind].has(item.index))fail();
+    indices[item.kind].add(item.index);
+    for(const key of ['requests','limits'])if(!exact(item[key],['cpu','memory'])||!quantity(item[key].cpu)||!quantity(item[key].memory))fail();
+   }
+   if(!indices.container.size)fail();
+   for(const set of Object.values(indices))if([...set].some(index=>index>set.size))fail();
+  }
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbResourcesRender(){
+ const node=$('observation-resources-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
+ const p=dbResources,r=dbObservationPlatform('admin')?p.record:null;
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ if(r)line(t('Observed at')+': '+r.observed_at);
+ line(t('Deployment Pod-template settings for each container, including init containers, by ordinal.'));
+ line(t('These configured values do not measure live usage, effective Pod resources or capacity. Resizing is not provided here.'));
+ if(p.notice)line(t(p.notice));
+ if(!r){if(!p.notice)line(t(dbObservationPlatform('admin')?'Resource authority verified. Select Fetch resource settings.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ line(t('Observed at')+': '+r.resources.observed_at);
+ if(r.resources.availability==='unavailable'){line(t('Resource configuration source unavailable.'));return;}
+ for(const row of r.resources.deployments){
+  line(t(row.role==='coordinator'?'Coordinator':'Worker'),'h3');
+  for(const item of [...row.containers].sort((a,b)=>(a.kind===b.kind?a.index-b.index:a.kind==='container'?-1:1))){
+   line(t(item.kind==='container'?'Container':'Init container')+' '+item.index,'h4');
+   for(const [key,title] of [['requests','request'],['limits','limit']])for(const field of ['cpu','memory'])line(t((field==='cpu'?'CPU':'Memory')+' '+title)+': '+(item[key][field]===null?t('Not specified'):item[key][field]));
+  }
+ }
+}
+
 // Saved-plan inference has its own receipt and never changes the source's query proof.
 function dbSavedExact(value,keys){return dbExplanationObject(value)&&JSON.stringify(Object.keys(value).sort())===JSON.stringify([...keys].sort());}
 function dbSavedUUID(value){return typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);}
@@ -8494,7 +8603,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

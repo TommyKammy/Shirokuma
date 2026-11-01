@@ -70,3 +70,8 @@ AI各familyの取得・履歴回復・復旧処理を呼ばず、provider／cata
 [全機能計画](database-full-capability-and-compute-plan-2026-10-28.md)に従い、P6-4全体／P6-5全体／P6-7縦断検証／M1本人受入は継続する。D1の文書整備や限定実装を親gateの閉鎖へ読み替えない。
 
 次の優先候補はP5Bの固定LOCAL構成資源（設定済みrequests／limits）の読取り表示とする。C2C・AI設定は独立した後続単位として残す。
+
+
+## 後続の履歴参照（2026-11-02）
+
+[DB-P6-5B](database-p6-5b-platform-resources-2026-11-02.md)はComputeの固定LOCALコンテナ設定資源を扱う別の限定技術受入単位である。P5Bの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,166成功・34 skip、両HTTP面の実API・Workbenchの実画面、最終保全PASS）。 D1の受入範囲・結果は従前どおりとし、P6-4全体／P6-5全体／P6-7／M1本人受入はOPENのままである。
