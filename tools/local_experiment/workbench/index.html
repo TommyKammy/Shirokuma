@@ -2595,11 +2595,11 @@ const dbSource={scope:'',version:0,token:null,origin:null,notice:''};
 const dbSourceInputEvents=new WeakSet();
 let dbPlanAuthorityStamp='',dbPlanAuthorityEpoch=0;
 const dbExplanationHelp='Explains SQL using authorized column names and types. Values and comments are omitted from model input. No execution plan or query results are collected. SQL is not executed.';
-const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Catalog Curator explains metadata with its own authorized context. SRE and Policy show read-only Database observations with separate contexts. Other Bear actions remain unavailable.';
+const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Catalog Curator explains metadata with its own authorized context. SRE and Policy show read-only Database observations with separate contexts. A separate manual Platform (P-only) scope shows fixed LOCAL sources for platform administrators using the global Admin role. Other Bear actions remain unavailable.';
 const dbExplanationInstruction='Enter SQL or copy it from the active worksheet.';
 const dbExplanationContextStep='Choose or confirm the database, schema and role in the SQL worksheet.';
 const dbExplanationStateLabel=state=>t({SUCCEEDED:'Completed',RUNNING:'Running',QUEUED:'Queued',FAILED:'Failed',UNKNOWN:'Outcome unknown',CANCELED:'Canceled',NOT_STARTED:'Not started',NOT_COLLECTED:'Not collected',COLLECTED:'Collected',NOT_SUBMITTED:'Not submitted',FINISHED:'Completed'}[state]);
-const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SRE and Policy provide read-only observations of your saved records and permission ceilings with separate Database contexts. Platform observations remain deferred. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
+const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SRE and Policy provide read-only observations of your saved records and permission ceilings with separate Database contexts. A separate manual Platform (P-only) scope shows fixed LOCAL sources for platform administrators using the global Admin role. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
 Object.assign(i18n.ja,{
  [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE と対応する INVOKER VIEW を利用でき、すべての依存先への現在のクエリ権限が必要です。未対応の VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。取得時点の定義を確認します。変更を検出した場合は説明を確定しません。',
  'Acquire plan and explain':'実行計画を取得して説明','Acquire a new plan and explain':'新しい実行計画を取得して説明',
@@ -2632,7 +2632,7 @@ Object.assign(i18n.ja,{
  'Refresh explanation / recover request':'説明を更新／元の要求を復旧','Load explanation history':'説明履歴を読み込む',
  'Choose a saved explanation':'保存済みの説明を選択','Historical explanation (read only)':'過去の説明（表示のみ）',
  'Saved explanation (read only)':'保存された説明（表示のみ）',
- [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。SRE と Policy はそれぞれ独立したコンテキストで Database の読み取り専用観測を表示します。他の Bear 操作は利用できません。',
+ [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。SRE と Policy はそれぞれ独立したコンテキストで Database の読み取り専用観測を表示します。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定参照元を確認できます。他の Bear 操作は利用できません。',
  [dbExplanationInstruction]:'SQL を入力するか、ワークシートからコピーしてください。',
  [dbExplanationContextStep]:'SQL ワークシートでデータベース・スキーマ・ロールを選択または確認してください。',
  'SQL not executed · Execution plan not collected':'SQL は未実行 · 実行計画は未取得',
@@ -2649,7 +2649,7 @@ Object.assign(i18n.ja,{
  'Load explanation history to recover the original request after access changes.':'アクセス変更後に元の要求を復旧するには、説明履歴を読み込んでください。',
  'SUCCEEDED':'完了',
  [dbExplanationHelp]:'SQL と許可されたカラム名・型に基づく説明です。値とコメントはモデル入力から除外します。実行計画・クエリ結果は取得せず、SQL は実行しません。',
- [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SRE と Policy はそれぞれ独立した Database コンテキストで、本人の保存記録と権限の上限を読み取り専用で確認できます。プラットフォームの観測は未対応です。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
+ [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SRE と Policy はそれぞれ独立した Database コンテキストで、本人の保存記録と権限の上限を読み取り専用で確認できます。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定参照元を確認できます。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
 });
 function dbExplanationCapture(){
  const w=dbCurrent();if(!w)return null;
@@ -3600,14 +3600,14 @@ Object.assign(i18n.ja,{
  'Current schema permission ceiling; statement and resource guards still apply. This is not statement approval.':'現在のスキーマ権限の上限です。文とリソースのガードは引き続き適用され、個々の文の承認ではありません。',
  'Allowed SQL modes (ceiling)':'許可 SQL モード（上限）',
  'Shared LOCAL: these Database permissions do not imply dedicated compute or platform control.':'LOCAL は共有です。Database 権限は専用コンピュートやプラットフォーム操作権限を意味しません。',
- 'Platform observations are deferred, including for platform administrators.':'プラットフォーム管理者を含め、プラットフォーム観測は未対応です。',
- 'Platform administrator authority is required; platform observations remain deferred.':'プラットフォーム管理者権限が必要です。プラットフォーム観測は引き続き未対応です。',
+ 'This Database report omits platform sources. Use the separate Platform (P-only) scope with global Admin authority.':'この Database レポートにはプラットフォーム参照元を含みません。グローバル管理者権限で別の Platform（P のみ）スコープを利用してください。',
+ 'This Database report omits platform sources. The separate Platform (P-only) scope requires platform administrator and global Admin authority.':'この Database レポートにはプラットフォーム参照元を含みません。別の Platform（P のみ）スコープにはプラットフォーム管理者とグローバル管理者の権限が必要です。',
  'Captured Database context':'取得時の Database コンテキスト',
  'Observed at':'観測日時',
  'Stored created at':'保存済み作成日時',
  'Stored updated at':'保存済み更新日時',
- 'SRE shows your saved query and AI metadata in its own Database context.':'SRE は独立した Database コンテキストで自身の保存済みクエリと AI メタデータを表示します。',
- 'Policy shows current permissions as a ceiling in its own Database context.':'Policy は独立した Database コンテキストで現在の権限の上限を表示します。'
+ 'SRE shows saved own-context Database metadata or manual Platform (P-only) observations.':'SRE は自身の一致コンテキストの保存済み Database メタデータ、または手動 Platform（P のみ）観測を表示します。',
+ 'Policy shows Database permission ceilings or manual Platform (P-only) observations.':'Policy は Database 権限の上限、または手動 Platform（P のみ）観測を表示します。'
 });
 // Observation labels are local: stored wire values and other panels' labels stay intact.
 const dbObservationLabels={
@@ -3634,7 +3634,7 @@ function dbObservationCeiling(p){
 function dbObservationSameCeiling(a,b){return !!a&&!!b&&JSON.stringify(a)===JSON.stringify(b);}
 function dbObservationAllowed(p){const c=p.context;return databaseMode&&dbRoleWithinHeader(p.role)&&p.inventoryAuth===dbObservationAuth(p)&&dbCuratorContext(c)&&c.selected_role===p.role&&c.database_id===p.database&&c.schema_id===p.schema&&dbObservationSameCeiling(p.ceiling,dbObservationCeiling(p));}
 function dbObservationClear(p,inventory=false){++p.epoch;p.busy=null;p.context=null;p.ceiling=null;p.inventoryAuth='';p.record=null;p.notice='';if(inventory){p.databases=[];p.schemas=[];}}
-function dbObservationsSync(){for(const p of Object.values(dbObservations))dbObservationSync(p);}
+function dbObservationsSync(){for(const p of Object.values(dbObservations))dbObservationSync(p);dbPlatformSync();}
 function dbObservationSync(p){
  if(!p.installed)return;
  const auth=dbObservationAuth(p);if(auth!==p.auth){dbObservationClear(p,true);p.auth=auth;}
@@ -3711,6 +3711,7 @@ async function dbObservationFetch(p){
  finally{if(p.busy===read.token){p.busy=null;dbObservationSync(p);}}
 }
 function dbObservationRender(p){
+ if(p.scope==='platform'){dbPlatformRender(p);return;}
  const node=$('observation-'+p.kind+'-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
  const r=dbObservationAllowed(p)?p.record:null;
  if(!r){line(t(p.notice||dbObservationGuidance(p)));return;}
@@ -3729,20 +3730,26 @@ function dbObservationRender(p){
   for(const key of ['browse','query','write'])line(dbObservationLabel('permission',key)+': '+dbObservationLabel('allowed',r.policy.schema_permissions[key]));
   line(t('Allowed SQL modes (ceiling)')+': '+r.policy.sql_modes.map(mode=>dbObservationLabel('mode',mode)).join(', '));line(t('Shared LOCAL: these Database permissions do not imply dedicated compute or platform control.'));
  }
- line(t(r.platform.allowed?'Platform observations are deferred, including for platform administrators.':'Platform administrator authority is required; platform observations remain deferred.'));
+ line(t(r.platform.allowed?'This Database report omits platform sources. Use the separate Platform (P-only) scope with global Admin authority.':'This Database report omits platform sources. The separate Platform (P-only) scope requires platform administrator and global Admin authority.'));
 }
-function dbObservationNavigate(kind){for(const p of Object.values(dbObservations)){if(!p.installed)continue;if(p.selected&&kind!==p.kind){++p.epoch;p.busy=null;p.notice='';}p.selected=kind===p.kind;dbObservationSync(p);}}
+function dbObservationNavigate(kind){for(const p of Object.values(dbObservations)){if(!p.installed)continue;if(p.selected&&kind!==p.kind){++p.epoch;p.busy=null;p.notice='';}p.selected=kind===p.kind;dbObservationSync(p);}dbPlatformSync();}
 function dbObservationsInstall(){
  for(const p of Object.values(dbObservations)){
   if(p.installed)continue;p.installed=true;p.role=currentRole;
   const host=$('bear-panel-'+p.kind),tab=$('bear-tab-'+p.kind);tab.disabled=false;tab.dataset.databaseUnavailable='false';tab.title='';
   for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===tab&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
-  const description=host.querySelector('p');if(description)ui(description,p.kind==='sre'?'SRE shows your saved query and AI metadata in its own Database context.':'Policy shows current permissions as a ceiling in its own Database context.');
+  const description=host.querySelector('p');if(description)ui(description,p.kind==='sre'?'SRE shows saved own-context Database metadata or manual Platform (P-only) observations.':'Policy shows Database permission ceilings or manual Platform (P-only) observations.');
   for(const name of ['run','action','manifest']){const n=$('bear-'+p.kind+'-'+name);if(n){n.disabled=true;n.hidden=true;if(n.parentElement)n.parentElement.hidden=true;}}
   const id='observation-'+p.kind+'-';
   if(!$(id+'panel')?.dataset.installed){
    const panel=document.createElement('div');panel.id=id+'panel';panel.dataset.installed='true';panel.className='panel-body';host.append(panel);
-   const controls=document.createElement('div');controls.className='table-wrap';panel.append(controls);const toolbar=document.createElement('div');toolbar.className='toolbar';controls.append(toolbar);
+   p.scope='database';
+   const scopebar=document.createElement('div');scopebar.className='toolbar';panel.append(scopebar);
+   const scopeLabel=document.createElement('label'),scope=document.createElement('select');scope.id=id+'scope';scopeLabel.htmlFor=scope.id;ui(scopeLabel,'Observation scope');scopebar.append(scopeLabel,scope);
+   scope.onchange=()=>{p.scope=scope.value==='platform'?'platform':'database';++p.epoch;p.busy=null;p.notice='';dbPlatformLeave();dbObservationsSync();};
+   const platform=document.createElement('div');platform.id=id+'platform';platform.className='toolbar';panel.append(platform);
+   for(const [name,label,task] of [['auth','Refresh platform authority',dbPlatformRefreshAuth],['platform-fetch','Fetch platform observation',dbPlatformFetch]]){const b=document.createElement('button');b.id=id+name;b.type='button';ui(b,label);b.onclick=()=>task(p);platform.append(b);}
+   const controls=document.createElement('div');controls.id=id+'database-controls';controls.className='table-wrap';panel.append(controls);const toolbar=document.createElement('div');toolbar.className='toolbar';controls.append(toolbar);
    for(const [name,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){const field=document.createElement('span'),l=document.createElement('label'),select=document.createElement('select');field.className='field';select.id=id+name;l.htmlFor=select.id;ui(l,label);field.append(l,select);toolbar.append(field);
     select.onchange=()=>{p[name]=select.value;if(name==='role'){p.database='';p.schema='';p.databases=[];p.schemas=[];}if(name==='database'){p.schema='';p.schemas=[];}dbObservationClear(p);dbObservationSync(p);};
    }
@@ -3752,6 +3759,119 @@ function dbObservationsInstall(){
   }
  }
  dbObservationsSync();
+}
+// A single memory-only LOCAL capture shared by the two explicit Platform scopes.
+// Database grant/inventory epochs deliberately do not participate in this authority.
+const dbPlatform={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
+Object.assign(i18n.ja,{
+ 'Observation scope':'観測スコープ','Platform (P-only)':'Platform（P のみ）',
+ 'Refresh platform authority':'プラットフォーム権限を更新','Fetch platform observation':'プラットフォーム観測を取得',
+ 'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.':'Platform にはプラットフォーム管理者本人と、現在および上限がグローバル管理者のロールが必要です。プラットフォーム権限を明示的に更新してください。',
+ 'Platform authority verified. Select Fetch platform observation.':'プラットフォーム権限を確認しました。「プラットフォーム観測を取得」を選んでください。',
+ 'Refreshing platform authority.':'プラットフォーム権限を更新しています。','Fetching platform observation.':'プラットフォーム観測を取得しています。',
+ 'Platform observation unavailable. Explicitly refresh authority or fetch again.':'プラットフォーム観測を取得できません。権限更新または再取得を明示的に行ってください。',
+ 'Platform scope':'Platform スコープ','Global role':'グローバルロール',
+ 'Deployment desired/ready counts only; pod stoppage, released resources and current SQL health are not established.':'Deployment の希望数と Ready 数のみです。全 Pod の停止、リソース解放、現在の SQL の健全性は確認できません。',
+ 'Historical engine proof only; no live engine probe or current SQL health guarantee.':'エンジン証跡は過去の確認のみです。ライブ検査や現在の SQL の健全性の保証はありません。',
+ 'Saved admissions are incomplete blockers; this is not a security audit or permission to chill.':'保存済み受付は阻害要因の一部です。セキュリティ監査や休止可否の判定ではありません。',
+ 'Deployment summary':'Deployment 集計','Desired/ready both 0':'希望/Ready=0','Desired/ready equal':'希望/Ready 一致','Desired/ready transitioning':'希望/Ready 移行中',
+ 'Desired replicas':'希望レプリカ数','Ready replicas':'Ready レプリカ数','Coordinator':'コーディネーター','Worker':'ワーカー',
+ 'Saved engine proof':'保存済みエンジン証跡','Historically verified at':'過去の確認日時','Saved auto-chill policy':'保存済み自動休止設定',
+ 'Disabled (0 min)':'無効（0分）',
+ 'Counts exclude query admissions with verified execution closure; saved UNKNOWN history is unchanged.':'実行閉鎖を確認済みの SQL 受付は件数から除外します。履歴の UNKNOWN 状態は変更しません。',
+ 'Idle minutes':'アイドル時間（分）','Policy revision':'ポリシー改訂','Saved admissions':'保存済み受付','Active admissions':'処理中の受付','Unknown admissions':'状態不明の受付',
+ 'Deployment source unavailable.':'Deployment 参照元を取得できません。','Engine proof source unavailable.':'エンジン証跡の参照元を取得できません。',
+ 'Auto-chill policy source unavailable.':'自動休止設定の参照元を取得できません。','Saved admissions source unavailable.':'保存済み受付の参照元を取得できません。'
+});
+function dbPlatformAuth(){return JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbAdmin.platform]);}
+function dbPlatformLeave(){++dbPlatform.epoch;dbPlatform.busy=null;dbPlatform.notice='';}
+function dbPlatformSync(){
+ const p=dbPlatform,auth=dbPlatformAuth();
+ if(auth!==p.auth){dbPlatformLeave();p.record=null;p.auth=auth;}
+ if(!dbObservationPlatform('admin'))p.record=null;
+ const view=JSON.stringify([activeTab,...Object.values(dbObservations).map(o=>[o.kind,o.selected,o.scope])]);
+ if(view!==p.view){dbPlatformLeave();p.view=view;}
+ for(const o of Object.values(dbObservations)){
+  if(!o.installed)continue;const id='observation-'+o.kind+'-',platform=o.scope==='platform';
+  const scope=$(id+'scope');scope.replaceChildren(new Option(t('Database'),'database'),new Option(t('Platform (P-only)'),'platform'));scope.value=o.scope||'database';
+  $(id+'database-controls').hidden=platform;$(id+'platform').hidden=!platform;
+  $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'platform-fetch').disabled=!!p.busy||!dbObservationPlatform('admin');
+  if(platform)dbPlatformRender(o);
+ }
+}
+function dbPlatformCanRefresh(){let actor;try{actor=JSON.parse(dbPrincipal);}catch{return false;}return databaseMode&&actor?.[1]===true&&currentRole==='admin'&&dbMaximumRole==='admin';}
+function dbPlatformCapture(){
+ const p=dbPlatform,token={},epoch=++p.epoch,auth=dbPlatformAuth();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbPlatformAuth()};
+}
+async function dbPlatformRefreshAuth(){
+ dbPlatformSync();if(dbPlatform.busy||!dbPlatformCanRefresh())return;
+ const read=dbPlatformCapture();dbPlatform.notice='Refreshing platform authority.';dbPlatformSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbPlatform.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const session=await response.json();if(!read.current())return;
+  // Auth only: never load Database inventory, schemas, grants, or worksheet context.
+  dbAdminSession(response.ok?session:{});
+  if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  dbPlatform.notice=dbObservationPlatform('admin')?'Platform authority verified. Select Fetch platform observation.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current())dbPlatform.notice='Platform observation unavailable. Explicitly refresh authority or fetch again.';}
+ finally{if(dbPlatform.busy===read.token)dbPlatform.busy=null;dbPlatformSync();}
+}
+async function dbPlatformFetch(){
+ dbPlatformSync();if(dbPlatform.busy||!dbObservationPlatform('admin'))return;
+ const read=dbPlatformCapture();dbPlatform.notice='Fetching platform observation.';dbPlatformSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-observations',{headers:{'X-Shirokuma-Role':'admin'}});
+  if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbPlatform.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const data=await response.json();if(!read.current())return;
+  if(!response.ok)throw Error('UNAVAILABLE');dbPlatform.record=dbPlatformRecord(data);dbPlatform.notice='';
+ }catch{if(read.current()){dbPlatform.record=null;dbPlatform.notice='Platform observation unavailable. Explicitly refresh authority or fetch again.';}}
+ finally{if(dbPlatform.busy===read.token)dbPlatform.busy=null;dbPlatformSync();}
+}
+function dbPlatformRecord(d){
+ const exact=dbSavedExact,time=dbObservationTime,int=v=>Number.isSafeInteger(v)&&v>=0,fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(!exact(d,['scope','warehouse','selected_role','observed_at','coverage','physical','engine_evidence','auto_chill','saved_admissions'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin'||!time(d.observed_at,true))fail();
+ const c=d.coverage;if(!exact(c,['kind','live_engine_probe','policy_audit','complete_blocker_set'])||c.kind!=='fixed_platform_observations'||c.live_engine_probe!==false||c.policy_audit!==false||c.complete_blocker_set!==false)fail();
+ const sources={physical:['PHYSICAL_UNAVAILABLE',['state','replicas','ready_replicas','deployments']],engine_evidence:['ENGINE_EVIDENCE_UNAVAILABLE',['verified_at','live_probe']],auto_chill:['POLICY_UNAVAILABLE',['minutes','revision']],saved_admissions:['ADMISSIONS_UNAVAILABLE',['active','unknown']]};
+ for(const [name,[code,fields]] of Object.entries(sources)){
+  const s=d[name];if(!exact(s,['availability','code','observed_at',...fields])||!time(s.observed_at,true)||!['available','unavailable'].includes(s.availability)||s.code!==(s.availability==='available'?null:code)||name==='engine_evidence'&&s.live_probe!==false)fail();
+  if(s.availability==='unavailable'){if(fields.some(k=>k!=='live_probe'&&s[k]!==null))fail();continue;}
+  if(name==='physical'){
+   if(!['active','chilled','transitioning'].includes(s.state)||!int(s.replicas)||!int(s.ready_replicas)||!Array.isArray(s.deployments)||s.deployments.length!==2)fail();
+   for(const [i,r] of s.deployments.entries())if(!exact(r,['role','replicas','ready_replicas'])||r.role!==['coordinator','worker'][i]||!int(r.replicas)||!int(r.ready_replicas))fail();
+   if(s.replicas!==s.deployments.reduce((n,r)=>n+r.replicas,0)||s.ready_replicas!==s.deployments.reduce((n,r)=>n+r.ready_replicas,0))fail();
+   const zero=s.replicas===0&&s.ready_replicas===0,active=s.deployments.every(r=>r.replicas>0&&r.replicas===r.ready_replicas);
+   if(s.state==='chilled'&&!zero||s.state!=='chilled'&&zero||s.state==='active'&&!active)fail();
+  }else if(name==='engine_evidence'){if(!time(s.verified_at))fail();}
+  else if(name==='auto_chill'){if(!int(s.minutes)||s.minutes>1440||!int(s.revision))fail();}
+  else if(!int(s.active)||!int(s.unknown))fail();
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbPlatformRender(o){
+ const node=$('observation-'+o.kind+'-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ const p=dbPlatform,r=dbObservationPlatform('admin')?p.record:null;
+ if(r)line(t('Observed at')+': '+r.observed_at);
+ line(t('Deployment desired/ready counts only; pod stoppage, released resources and current SQL health are not established.'));
+ line(t('Historical engine proof only; no live engine probe or current SQL health guarantee.'));
+ line(t('Saved admissions are incomplete blockers; this is not a security audit or permission to chill.'));
+ if(p.notice)line(t(p.notice));
+ if(!r){if(!p.notice)line(t(dbObservationPlatform('admin')?'Platform authority verified. Select Fetch platform observation.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ for(const [key,title,failure] of [['physical','Deployment summary','Deployment source unavailable.'],['engine_evidence','Saved engine proof','Engine proof source unavailable.'],['auto_chill','Saved auto-chill policy','Auto-chill policy source unavailable.'],['saved_admissions','Saved admissions','Saved admissions source unavailable.']]){
+  const s=r[key];line(t(title),'h3');line(t('Observed at')+': '+s.observed_at);
+  if(key==='saved_admissions')line(t('Counts exclude query admissions with verified execution closure; saved UNKNOWN history is unchanged.'));
+  if(s.availability==='unavailable'){line(t(failure));continue;}
+  const value=(label,v)=>line(t(label)+': '+v);
+  if(key==='physical'){
+   line(t({active:'Desired/ready equal',chilled:'Desired/ready both 0',transitioning:'Desired/ready transitioning'}[s.state]));value('Desired replicas',s.replicas);value('Ready replicas',s.ready_replicas);
+   for(const row of s.deployments)line(t(row.role==='coordinator'?'Coordinator':'Worker')+' · '+t('Desired replicas')+': '+row.replicas+' · '+t('Ready replicas')+': '+row.ready_replicas);
+  }else if(key==='engine_evidence')value('Historically verified at',s.verified_at);
+  else if(key==='auto_chill'){if(s.minutes===0)line(t('Disabled (0 min)'));else value('Idle minutes',s.minutes);}
+  else{value('Active admissions',s.active);value('Unknown admissions',s.unknown);}
+ }
 }
 // Saved-plan inference has its own receipt and never changes the source's query proof.
 function dbSavedExact(value,keys){return dbExplanationObject(value)&&JSON.stringify(Object.keys(value).sort())===JSON.stringify([...keys].sort());}
@@ -4246,6 +4366,7 @@ function dbUpdateMaximumRole(maximum){
  $('role-selector').value=currentRole;
  if(dbAudit.installed)dbAuditValidate();
  if(typeof dbDbt!=='undefined')dbDbtValidate();
+ dbPlatformSync();
  if(changed&&$('query-database'))dbRenderRun();
 }
 function dbHistoryIdentity(){const w=dbCurrent();return JSON.stringify([dbTabIdentity(),w?.database_id,w?.binding_revision,w?.generation_id,dbTabItems().find(d=>d.id===w?.database_id)?.grant_revision??null,dbInventoryVersion]);}
@@ -4860,6 +4981,7 @@ function dbAdminGate(){
  return allowed;
 }
 function dbAdminClear(){
+ dbPlatformSync();
  dbCreationClear();
  dbAdmin.retirement=null;++dbAdmin.retireRead;
  ++dbAdmin.epoch;++dbAdmin.selection;++dbAdmin.request;dbAdmin.database='';dbAdmin.databases=[];dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.installed=false;dbAdmin.rendered=false;

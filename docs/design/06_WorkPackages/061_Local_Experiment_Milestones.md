@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-11-01
-version: "7.27.0"
+version: "7.28.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,13 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-01 — DB-P6-4C2B fixed P-only platform observations
+
+- [実装・検証記録](../../guides/database-p6-4c2b-platform-observations-2026-11-01.md)：現在のP account・principal・選択adminを前後で確認する独立GETを実装した。DB contextやgrantを前提にしない。
+- 固定2 Deploymentのdesired／ready要約、過去のengine検証日時、保存AutoChill設定、LOCALの保存admission件数だけを扱い、現在のSQL health・完全停止・全blocker検査を主張しない。
+- C2AのDB観測と各draftを維持し、重点回帰・実API・JA／ENの実画面・復元と最終保全を確認した。C2Bの限定範囲を技術受入済みとした（全体回帰4,109成功・34 skip、両HTTP面の実APIと権限拒否、Pの実画面、復元と最終保全PASS）。
+- global workload／policy検査と旧run／manifest・Compute検査は別単位とし、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 ### 2026-11-01 — DB-P6-4C2A own-context SRE and Policy observations
 

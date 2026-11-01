@@ -86,3 +86,7 @@ C2Aの限定範囲を技術受入済みとした（全体回帰4,073成功・34 
 ## 後続
 
 [C1の限定技術受入](database-p6-4c1-catalog-proposals-2026-11-01.md)を維持し、P専用で別に認可した固定sourceのplatform観測、global workload／policy検査、モデルによる説明は別単位とする。旧SRE／Policyのrun／manifest・Computeの旧検査を開放しない。P6-4全体・P6-5・P6-7縦断検証・M1本人受入は継続する。
+
+## 後続: P専用の固定LOCAL観測
+
+[C2B](database-p6-4c2b-platform-observations-2026-11-01.md)で、SRE／PolicyのP専用固定LOCAL観測を実装した。現在のaccountとprincipal双方のP権限、上限admin、選択adminをsource取得前後に確認し、DBやgrantを利用条件にしない。固定2 Deploymentのdesired／ready要約、過去のengine検証日時、保存AutoChill設定、LOCALの保存admission件数だけを扱う。desired／readyの一致や両方0をSQL health・完全停止・資源解放の証明にせず、保存日時を現在の稼働保証へ変換しない。明示GETだけで書込み・SQL・LLM・操作を行わず、C2AのDB観測はplatform sourceを読まないままとする。C2Bの限定範囲を技術受入済みとした（全体回帰4,109成功・34 skip、両HTTP面の実APIと権限拒否、Pの実画面、復元と最終保全PASS）。本ガイドのC2A受入結果は維持し、P6-4全体／P6-5／P6-7／M1本人受入は継続する。

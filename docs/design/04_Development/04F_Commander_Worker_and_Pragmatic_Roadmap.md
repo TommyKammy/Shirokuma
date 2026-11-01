@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-01
-version: "1.42"
+version: "1.43"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-01、[DB-P6-4C2B](../../guides/database-p6-4c2b-platform-observations-2026-11-01.md)でSRE／PolicyのP専用固定LOCAL観測を実装した。現在のaccountとprincipal双方のP権限、上限admin、選択adminをsource取得前後に確認し、DBやgrantを利用条件にしない。固定2 Deploymentのdesired／ready要約、過去のengine検証日時、保存AutoChill設定、LOCALの保存admission件数だけを扱う。desired／readyの一致や両方0をSQL health・完全停止・資源解放の証明にせず、保存日時を現在の稼働保証へ変換しない。明示GETだけで書込み・SQL・LLM・操作を行わず、C2AのDB観測はplatform sourceを読まないままとする。C2Bの限定範囲を技術受入済みとした（全体回帰4,109成功・34 skip、両HTTP面の実APIと権限拒否、Pの実画面、復元と最終保全PASS）。global workload／policy検査、旧SRE／Policyのrun／manifestとComputeの旧検査は開放せず、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
 2026-11-01、[DB-P6-4C2A](../../guides/database-p6-4c2a-context-observations-2026-11-01.md)でSRE／PolicyのDB-only観測を実装した。現在の本人・保存9項目context・primary schema権限を新しいread-only snapshotでも再確認し、本人のquery／AI保存metadataを各20候補以内から限定表示する。21件目は古い候補の存在だけを示し、不正候補を省略しても補充走査しない。保存状態・時刻を現在healthへ変換せず、Policyの権限・SQL mode上限も個別statementの承認にはしない。platform能力flagは現在認可で計算するが、Pを含む全roleでplatform sourceを読まない。SQL・LLM・既存get／履歴／lease・照合・書込みを呼ばない。重点backend335件・UI889件、実API・admin実画面と復元を確認し、最終8ファイルで全体回帰を完了した。C2Aの限定範囲を技術受入済みとした（全体回帰4,073成功・34 skip、2DB・3実行ロールの実API、未付与権限の拒否、adminの実画面、最終保全PASS）。P専用platform観測と全体policy検査は別単位とし、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 
