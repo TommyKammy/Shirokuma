@@ -53,3 +53,7 @@ CMP-01〜04の既存Warehouse状態・操作・設定の契約と、CMP-06の実
 初回canonicalは、既存UI testの無効化対象allowlistに新しい`observation-compute-panel`が未登録のため1件失敗した。正確な対象IDだけを追加するtest統合修正で対応し、product・backendは変更せず全体を再実行した。上表の全体件数と成功は、この再実行の確定結果である。
 
 実画面では同じ認可の観測操作中、runtime入力15分と元operation receipt、SRE／Policyの2 DB snapshot、4 draftを保全した。header roleを下げるとPの取得を禁止し、非表示中を含む3画面の元captureを消去した。adminへ戻しても自動取得せず、明示した2回目の取得で更新した。runtime editorの表示は既存の権限喪失時purgeに従い、最終入力を保存値0分へ戻した。これはserverのpolicy変更ではない。
+
+## 後続単位への参照（2026-11-01）
+
+上記はP6-5Aの限定技術受入時点の記録である。後続の[DB-P6-4D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)は既存AUD-03への保存AI要約metadata投影を扱い、P6-5Aの受入範囲へ合算しない。D1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,135成功・34 skip、Workbenchの実API・実画面、最終保全PASS）。 C2C／P5B・AI設定とP6-4全体／P6-5全体／P6-7／M1本人受入は継続する。

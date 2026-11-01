@@ -23,6 +23,8 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 
 ### 2.1 現行実装
 
+直近で限定技術受入済みとしたのは[DB-P6-4D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)の保存AI要約metadata統合である。既存AUD-03の最新保存要約へ`source=ai`と閉じた5種のactionを投影し、既存event形状・`links=[]`・内容field追加なしを契約とする。D1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,135成功・34 skip、Workbenchの実API・実画面、最終保全PASS）。 既存の受入結果とは分けて扱う。
+
 2026年11月1日の開発checkoutへ更新した。DB作成・SQL・実データ・Job・role切替は[本人の条件付き受入](database-logical-create-owner-acceptance-2026-10-28.md)まで進んでいる。DB-P6-0／1は技術受入済み、DB-P6-2の技術受入は完了（cold 30回: p50 26.44秒・p95 26.92秒（30回すべて成功））とする。DB作成待ち時間の[性能改善](database-logical-create-performance-2026-10-28.md)とM1の本人受入は独立して継続する。
 
 | 観点 | 現行実装 | 計画への反映 |
@@ -33,7 +35,7 @@ M1は単一Macのローカル実験版の完成条件であり、Snowflakeの全
 | Coordinator／Worker | 分離済み。ただし現在のfoundationはWorker数を0または1に制限し、資源設定も固定 | DB-P7で設定契約・検証・秘密参照配布まで拡張する |
 | ストレージ | SeaweedFSのデータとPolaris／PostgreSQLをTrinoから分離。catalog store・runtime秘密参照にも永続領域がある | compute停止試験とstorage／metadata保全を別々に確認 |
 | データ変換 | 手動WAP・管理Mart、SQL/WAP dbt、SANDBOX INVOKER VIEW、単一native TABLEと付属品質test・明示MARTS公開を提供。C2CでTABLE／EPHEMERAL全graphのRunTask／TestTaskを技術受入済み。C2Dでgraph内TABLE単位の明示MARTS公開を技術受入済み。C2E1のnative VIEW graph構築・品質testを技術受入済み。C2E2のVIEW証拠付きTABLE公開・独立公開履歴を技術受入済み | 正式公開はTABLE。VIEW含有native graphのTABLE公開はC2E2の全VIEW・全品質条件を適用。incremental・並列実行・VIEW連鎖／正式VIEW公開とDB-P6-3全体は残件 |
-| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。SQL・計画説明と保存済み計画再説明、Doctorの最新SELECT読込、B1 SQL案に条件付き対応。B2のManual WAP下書き引渡しは限定技術受入済み。C1のCatalog Curator metadata説明・説明文案は限定技術受入済み。C2AのDB内SRE／Policy観測は限定技術受入済み。C2BのP専用固定LOCAL観測は限定技術受入済み。P6-5AのComputeへの読取り統合は限定技術受入済み | B1／B2の既存条件を維持し、C1は独立contextの1件のTABLE／VIEWの公開列metadataから未適用の推定だけを生成する。DB観測とplatform管理権限を分ける |
+| AIと監査 | DB-P6-1の保存metadata監査は技術受入済み。Pawprintsは独立P専用preview。SQL・計画説明と保存済み計画再説明、Doctorの最新SELECT読込、B1 SQL案に条件付き対応。B2のManual WAP下書き引渡しは限定技術受入済み。C1のCatalog Curator metadata説明・説明文案は限定技術受入済み。C2AのDB内SRE／Policy観測は限定技術受入済み。C2BのP専用固定LOCAL観測は限定技術受入済み。P6-5AのComputeへの読取り統合は限定技術受入済み。D1の保存AI要約統合は限定技術受入済み | B1／B2の既存条件を維持し、C1は独立contextの1件のTABLE／VIEWの公開列metadataから未適用の推定だけを生成する。DB観測とplatform管理権限を分ける。D1は現在のself／database認可を維持し、保存full9の内部整合と現在revisionを区別する。platform scopeはAIを除外し、本文の表示・検索、元内容取得・復旧は追加しない |
 
 根拠は[Warehouse](../../tools/local_experiment/warehouse_resident.py)、[foundation生成](../../tools/local_experiment/logical_foundation.py)、[SQL共通実行](../../tools/local_experiment/query_service.py)、[Workbench server](../../tools/local_experiment/workbench_server.py)、[dbt pipeline](../../tools/local_experiment/lake_pipeline.py)、[Bears](../../tools/local_experiment/bears_resident.py)。旧PhaseのCompletedは、現在のDatabase対応を自動的に意味しない。
 
@@ -265,6 +267,8 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 既存環境、独立clean環境、故障用環境を区別し、同一のDB／材料を再登録して成功を増やさない。既存の未解決履歴、host-local設定、利用者のdraftは保持する。P6は新しい全体resetを必須にせず、必要なclean受入だけを独立した専用環境で行う。
 
 ## 9 実装の進め方と直近の着手単位
+
+[D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)の限定技術受入後は、P5Bの固定LOCAL構成資源（設定済みrequests／limits）の読取り表示を優先候補とする。使用量・空き容量・resizeや包括的なactivity bundleを同時に追加しない。C2Cのworkload baseline／global policy検査、P5B、AI設定は未完了の別単位として残す。P6-4全体／P6-5全体／P6-7／M1本人受入は閉じない。
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 

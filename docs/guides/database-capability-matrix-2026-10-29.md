@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+[DB-P6-4D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)は既存AUD-03へ保存済みAI要約metadataを追加した限定技術受入済みの単位である。`source=ai`と閉じた5種のaction、既存event形状・`links=[]`だけを使い、内容fieldを追加しない。最新保存要約であり、遷移監査ではない。現在のself／database認可を維持し、保存full9は内部整合を要するが現在revisionとの一致を要しない。platform scopeはAIを除外する。D1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,135成功・34 skip、Workbenchの実API・実画面、最終保全PASS）。 C2C／P5B・AI設定とP6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
+
 2026年11月1日。[DB-P6-0](database-full-capability-and-compute-plan-2026-10-28.md)で固定した89項目に、監査・共有LOCAL管理、SANDBOX VIEW・native TABLE・[LOCAL SQL説明](database-p6-4a1-local-sql-explanation-2026-10-31.md)・[TABLE／条件付きVIEW計画説明](database-p6-4a3-view-plan-explanation-2026-10-31.md)・[Query Doctorの最新SELECT読込](database-p6-4a4-latest-query-source-2026-10-31.md)・[保存済み計画の明示再説明](database-p6-4a5-saved-plan-explanation-2026-10-31.md)を反映した。[B1 SQL案生成](database-p6-4b1-sql-proposals-2026-11-01.md)と[B2 Manual WAP下書き引渡し](database-p6-4b2-wap-handoff-2026-11-01.md)は限定範囲を技術受入済みであり、[C1 Catalog Curatorのmetadata説明・説明文案](database-p6-4c1-catalog-proposals-2026-11-01.md)は限定範囲を技術受入済みである。[C2AのDB内SRE／Policy観測](database-p6-4c2a-context-observations-2026-11-01.md)は限定範囲を技術受入済みである。機能数は増やさず、M1の本人受入は未完了である。
 
 VIEW計画は`logical_v1`の対応するnative／外部登録INVOKER VIEWに限り、再帰依存先も同一DB・現在の全schema query権限を必要とする。保存済みVIEW定義内で整数snapshotを指定するTABLEは、そのsnapshotのschemaが現行列構成と一致する場合に扱う。利用者の直接入力に対するVERSION対応は広げない。DEFINER・他DB参照・履歴schemaの列構成差分・timestamp／tag／branch等の非整数time travelは未対応である。固定の非ANALYZE EXPLAINを実行し、元SQLは実行しない。
@@ -129,7 +131,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | AI-06 | AI provider／model／URL／key／timeout、接続test／保存 | 未接続 | 設定管理権限とDB閲覧権限を分離 | DB-P6-4 |
 | AUD-01 | Pawprints一覧・filter・status・更新 | 対応。P専用のglobal補助preview、最新100件以内 | Pが明示取得。DB／本人scopeへ帰属させず、耐久監査とは別表示 | DB-P6-1、旧API拒否は維持 |
 | AUD-02 | 旧runtime query／load履歴画面 | 未接続。個別query／Job履歴は対応 | 個別履歴へ案内 | SQL／Job／WAP |
-| AUD-03 | 統合Database監査の検索・詳細・download | 対応。保存metadataの検索・前後page・関連記録・JSON | V／Eは本人・保存role・許可Schema、Aは対象DB、Pは基盤管理記録。本文・全遷移は対象外 | DB-P6-1実装契約 |
+| AUD-03 | 統合Database監査の検索・詳細・download | 対応。保存metadataの検索・前後page・関連記録・JSON。D1のAI要約追加は限定技術受入済み | V／Eは本人・保存role・許可Schema、Aは対象DB。現在権限を再確認し、保存full9は内部整合のみ。Pのplatform scopeは基盤管理記録だけでAIを除外。本文・全遷移は対象外 | DB-P6-1実装契約、[D1保存AI要約](database-p6-4d1-ai-audit-metadata-2026-11-01.md)（既存event形状、source=ai、閉じた5種のaction、links=[]、内容field追加なし） |
 | CMP-01 | ヘッダー／SQLの共有Warehouse状態・更新 | logical_v1は共有runtime観測を実装。技術受入済み | 物理状態・観測時刻・engine検証を分離し、replica数だけでSQL準備完了にしない | `/api/v1/warehouses/LOCAL/runtime`。旧Database profileは従来の観測のみ |
 | CMP-02 | Compute panelの共有状態・停止blocker・保存policy | logical_v1で対応、認証済みV／E／A。技術受入済み | 受付・処理中・SUCCEEDEDと物理状態／engine検証を区別。旧SRE／Policy検査は含まない | 共有LOCAL panel／runtime GET |
 | CMP-03 | quick／SQL／Computeの明示Wake／Chillと状態再検証 | logical_v1のP専用API／UI／HTTP CLIを実装。技術受入済み | 全DBへの影響を表示。元key／receipt保持、現在権限・admission／drain・全blockerを再確認。SQLは再送しない | runtime操作／operation照会。旧Database profileは未対応 |

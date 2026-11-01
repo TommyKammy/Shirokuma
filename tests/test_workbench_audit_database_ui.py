@@ -1,5 +1,6 @@
 """DB-P6-1 audit tests execute the actual DATABASE source in the shared DOM adapter."""
 import unittest
+from unittest.mock import patch
 
 import test_workbench_database_ui as database_ui
 
@@ -48,7 +49,17 @@ const auditNoLegacy=()=>{assert.equal(calls.filter(c=>c.options?.method==='POST'
 
 
 class AuditDatabaseUI(unittest.TestCase):
-    javascript = database_ui.DatabaseUI.javascript
+    def javascript(self, source):
+        # Keep the shared fixture unchanged; Node 25 receives this suite via stdin.
+        run = database_ui.subprocess.run
+
+        def stdin_run(args, **kwargs):
+            if list(args[:2]) == ['node', '-e']:
+                return run(['node', '-'], input=args[2], **kwargs)
+            return run(args, **kwargs)
+
+        with patch.object(database_ui.subprocess, 'run', stdin_run):
+            database_ui.DatabaseUI.javascript(self, source)
 
     def run_audit(self, source):
         self.javascript(AUDIT + source)
@@ -436,6 +447,78 @@ const pending=dbAuditSearch();await tick();$('db-audit-state').value='FAILED';$(
 assert.equal(dbAudit.applied.state,'');assert.match($('db-audit-status').textContent,/pending/);
 assert.equal(auditRequests().at(-1).options.headers['X-Shirokuma-Role'],'bi_viewer');
 await exploreFinance();assert.equal(dbAudit.database,'db');assert.equal(dbAudit.role,'bi_viewer');assert.equal(dbAudit.items.length,1);auditNoLegacy();
+''')
+    def test_ai_fresh_capability_five_localized_kinds_and_wire_preserving_private_free_download(self):
+        self.run_audit(r'''
+await auditBoot();assert.equal($('db-audit-source').options.some(o=>o.value==='ai'),false);
+auditCapabilities=()=>({scopes:['self','database'],sources:['query','operation','ai'],platform_admin:false});
+assert.equal($('db-audit-source').options.some(o=>o.value==='ai'),false);await dbAuditOpen();
+const initialOption=$('db-audit-source').options.find(o=>o.value==='ai');assert.ok(initialOption);assert.equal(initialOption.disabled,false);$('db-audit-source').value='ai';$('db-audit-state').value='SUCCEEDED';$('db-audit-search').value='opaque /?#';
+const expected=[['sql_explanation','Saved SQL explanation'],['sql_plan_explanation','Saved SQL execution plan explanation'],['saved_plan_explanation','Saved-plan re-explanation'],['sql_proposal','Saved SQL proposal'],['catalog_proposal','Saved catalog description proposal']];
+const fields=['id','source','source_id','action','actor','database_id','schema_id','warehouse_id','saved_role','state','created_at','updated_at','finished_at','revision','committed','has_cleanup_error','links'];
+const blobs=[],revoked=[];URL.createObjectURL=b=>{blobs.push(b);return 'blob:ai-audit';};URL.revokeObjectURL=u=>revoked.push(u);const count=calls.length;
+for(const [action,label] of expected){
+ const event=auditEvent('opaque /?#',{source:'ai',action,state:'SUCCEEDED',links:[],saved_role:null,created_at:null,updated_at:null,finished_at:null,revision:null,committed:null,has_cleanup_error:null,request:'SECRET_REQUEST',generated_sql:'SECRET_GENERATED_SQL',text:'SECRET_AI_OUTPUT',plan:{sql:'SECRET_PLAN'},provider:'SECRET_PROVIDER',raw_error:'SECRET_ERROR',credentials:'SECRET_CREDENTIALS'});
+ auditList=(p,o)=>auditEnvelope(p,o,event);auditDetail=(p,o)=>auditEnvelope(p,o,event);auditDownload=(p,o)=>({...auditEnvelope(p,o,event),context:{...auditContext(p,o.headers['X-Shirokuma-Role']),private:'SECRET_CONTEXT'},debug:'SECRET_ENVELOPE'});
+ await dbAuditSearch();await dbAuditDetail(event.id);const option=$('db-audit-source').options.find(o=>o.value==='ai'),row=$('db-audit-rows').children[0],detail=$('db-audit-detail').children[0],requestCount=calls.length;
+ for(const locale of ['ja','en']){setLanguage(locale);assert.equal($('db-audit-source').options.find(o=>o.value==='ai'),option);assert.equal(option.textContent,t('Saved AI metadata'));assert.equal($('db-audit-source').value,'ai');assert.equal($('db-audit-rows').children[0],row);assert.equal($('db-audit-detail').children[0],detail);assert.ok(auditText(row).includes(t('Saved AI metadata')+' / '+t(label)));assert.ok(auditText(detail).includes(t(label)));assert.ok(auditText(detail).includes(t('Not recorded')));assert.doesNotMatch(auditText($('db-audit-panel')),/SECRET|sql_explanation|sql_plan_explanation|saved_plan_explanation|sql_proposal|catalog_proposal/);if(locale==='ja'){assert.notEqual(t(label),label);assert.notEqual(t('Saved AI metadata'),'Saved AI metadata');}assert.equal(calls.length,requestCount);}
+ assert.equal($('db-audit-detail').descendants().filter(n=>n.tagName==='BUTTON').length,1);await dbAuditDownload();
+ const payload=await blobs.at(-1).text(),saved=JSON.parse(payload);assert.doesNotMatch(payload,/SECRET|request|generated_sql|provider|credentials|raw_error/);assert.deepEqual(Object.keys(saved.event),fields);assert.equal(saved.event.source,'ai');assert.equal(saved.event.action,action);assert.equal(saved.event.state,'SUCCEEDED');assert.deepEqual(saved.event.links,[]);for(const key of ['saved_role','created_at','updated_at','finished_at','revision','committed','has_cleanup_error'])assert.equal(saved.event[key],null);assert.equal(saved.event.id,event.id);assert.equal(dbAudit.url,null);
+}
+assert.equal(blobs.length,5);assert.equal(revoked.length,5);
+for(const c of calls.slice(count)){assert.equal(c.options?.method,undefined);assert.equal(c.options?.body,undefined);assert.ok(['/api/session','/api/v1/databases','/api/v1/audit/capabilities'].includes(c.path)||c.path.startsWith('/api/v1/audit/events?')||c.path.startsWith('/api/v1/audit/events/'+encodeURIComponent('opaque /?#')));}
+for(const c of auditRequests()){const params=new URLSearchParams(c.path.split('?')[1]);assert.equal(params.get('source'),'ai');assert.equal(params.get('state'),'SUCCEEDED');assert.equal(params.get('search'),'opaque /?#');}
+setLanguage('en');assert.match(auditText($('db-audit-panel')),/AI records are latest saved metadata summaries only; AI success does not prove a SQL data commit/);setLanguage('ja');assert.match(auditText($('db-audit-panel')),/AI の成功は SQL によるデータのコミットを証明しません/);
+auditCapabilities=()=>({scopes:['self'],sources:['query']});await dbAuditOpen();assert.notEqual($('db-audit-source').options.find(o=>o.value==='ai')?.disabled,false);auditNoLegacy();
+''')
+
+    def test_ai_closed_action_state_and_empty_link_framing_without_broadening_legacy_projection(self):
+        self.run_audit(r'''
+const base=auditEvent('ai:opaque',{source:'ai',action:'sql_explanation',state:'UNKNOWN',links:[],committed:null});
+for(const action of ['sql_explanation','sql_plan_explanation','saved_plan_explanation','sql_proposal','catalog_proposal'])for(const state of ['QUEUED','RUNNING','SUCCEEDED','FAILED','CANCELED','UNKNOWN']){const clean=dbAuditEvent({...base,action,state});assert.equal(clean.source,'ai');assert.equal(clean.action,action);assert.equal(clean.state,state);assert.deepEqual(clean.links,[]);assert.equal(clean.committed,null);assert.equal(Object.keys(clean).length,17);}
+for(const action of ['execute','SQL_EXPLANATION','sql_explanation_extra','toString','__proto__','',null,{}, {toString:()=> 'sql_explanation'}])assert.throws(()=>dbAuditEvent({...base,action}));
+for(const state of ['FINISHED','SUCCESS','succeeded','SUCCEEDED_WITH_WARNINGS','',null,1,{}])assert.throws(()=>dbAuditEvent({...base,state}));
+for(const links of [undefined,null,{},'[]',[{}],[{relation:'ai',source:'ai',source_id:'content',event_id:'content',url:'/api/v1/bears/explanations/content'}]])assert.throws(()=>dbAuditEvent({...base,links}));
+const legacy=dbAuditEvent(auditEvent());assert.equal(legacy.action,'execute');assert.equal(legacy.links.length,2);assert.equal(legacy.links[0].event_id,'query:related');assert.equal(legacy.sql,undefined);assert.equal(legacy.links[0].url,undefined);
+await auditBoot();const blobs=[];URL.createObjectURL=b=>{blobs.push(b);return 'blob:invalid';};URL.revokeObjectURL=()=>{};
+for(const bad of [{...base,action:'execute'},{...base,state:'FINISHED'},{...base,links:[{}]}]){auditList=(p,o)=>auditEnvelope(p,o,bad);await dbAuditSearch();assert.equal(dbAudit.items.length,0);assert.equal(dbAudit.applied,null);assert.equal($('db-audit-status').role,'alert');assert.equal($('db-audit-rows').children.length,0);}
+auditList=(p,o)=>auditEnvelope(p,o,base);await dbAuditSearch();auditDetail=(p,o)=>auditEnvelope(p,o,{...base,state:'FINISHED'});await dbAuditDetail(base.id);assert.equal(dbAudit.detail,null);
+await dbAuditSearch();auditDetail=(p,o)=>auditEnvelope(p,o,base);await dbAuditDetail(base.id);auditDownload=(p,o)=>auditEnvelope(p,o,{...base,links:[{}]});await dbAuditDownload();assert.equal(blobs.length,0);assert.equal(dbAudit.detail,null);auditNoLegacy();
+''')
+
+    def test_ai_signed_cursor_pages_and_stale_denials_keep_current_metadata(self):
+        self.run_audit(r'''
+await auditBoot();auditCapabilities=()=>({scopes:['self'],sources:['ai']});await dbAuditOpen();$('db-audit-source').value='ai';
+const event=id=>auditEvent(id,{source:'ai',action:'catalog_proposal',state:'UNKNOWN',links:[],committed:null});const first=auditCursor(),next=auditCursor(['ai:second']);
+auditList=(p,o)=>{const cursor=new URLSearchParams(p.split('?')[1]).get('cursor');return {...auditEnvelope(p,o,event(cursor===next?'ai:second':'ai:first')),page_cursor:cursor||first,next_cursor:cursor===next?null:next};};
+await dbAuditSearch();await dbAuditSearch('next');assert.deepEqual(dbAudit.cursors,[first]);assert.equal(dbAudit.items[0].id,'ai:second');await dbAuditSearch('previous');assert.equal(dbAudit.items[0].id,'ai:first');assert.deepEqual(dbAudit.cursors,[]);assert.equal(new URLSearchParams(auditRequests().at(-1).path.split('?')[1]).get('cursor'),first);
+const old=deferred();auditList=()=>old.promise;const pending=dbAuditSearch();await tick();auditList=(p,o)=>auditEnvelope(p,o,event('ai:newer'));await dbAuditSearch();const items=dbAudit.items;
+old.resolve({http:403,body:{code:'DB_ACCESS_REVOKED',message:'SECRET'}});await pending;assert.equal(dbAudit.items,items);assert.equal(dbAudit.items[0].id,'ai:newer');assert.doesNotMatch(auditText($('db-audit-panel')),/SECRET/);auditNoLegacy();
+''')
+
+    def test_ai_download_final_authorization_loss_blocks_blob_and_old_context_detail(self):
+        self.run_audit(r'''
+await auditBoot(true);await auditChange('scope','platform');const event=auditEvent('ai:opaque',{source:'ai',action:'sql_proposal',state:'SUCCEEDED',links:[],committed:null});auditList=(p,o)=>auditEnvelope(p,o,event);auditDetail=(p,o)=>auditEnvelope(p,o,event);await dbAuditSearch();await dbAuditDetail(event.id);
+const blobs=[];URL.createObjectURL=b=>{blobs.push(b);return 'blob:ai';};URL.revokeObjectURL=()=>{};auditDownload=(p,o)=>{const reply=auditEnvelope(p,o,event);session.platform_admin=false;return reply;};await dbAuditDownload();assert.equal(blobs.length,0);assert.equal(dbAudit.detail,null);assert.equal(dbAudit.items.length,0);
+session.platform_admin=true;await dbReadInventory('admin');await dbAuditOpen();await auditChange('scope','self');await dbAuditSearch();const old=deferred();let reply;auditDetail=(p,o)=>{reply=auditEnvelope(p,o,event);return old.promise;};const pending=dbAuditDetail(event.id);await tick();await auditChange('database','finance');old.resolve(reply);await pending;assert.equal(dbAudit.detail,null);assert.equal($('db-audit-detail').children.length,0);auditNoLegacy();
+''')
+
+    def test_ai_reads_preserve_same_auth_bears_platform_sql_drafts_unknown_and_runtime_receipt(self):
+        import test_workbench_bears_database_ui as bears_ui
+        import test_workbench_sre_policy_database_ui as observations_ui
+        import test_workbench_platform_observations_database_ui as platform_ui
+        import test_workbench_warehouse_runtime_ui as runtime_ui
+
+        self.run_audit(bears_ui.COMMON + observations_ui.OBSERVATIONS + platform_ui.PLATFORM + runtime_ui.SETUP.replace('const posts=', 'const runtimePosts=') + r'''
+const runtimeFixtureRoute=route;await auditBoot(true);const auditFixtureRoute=route;
+await readyObservation('sre');await readyObservation('policy','admin','finance','finance-marts');await fetchObservation('sre');await fetchObservation('policy');const sre=dbObservations.sre.record,policy=dbObservations.policy.record;
+dbPlatform.record=dbPlatformRecord(platformReply());dbPlatformSync();const platform=dbPlatform.record;
+route=async()=>envelope(dbRuns.get(worksheetId),{state:'UNKNOWN'});await dbRunQuery();assert.equal(dbRuns.get(worksheetId).state,'UNKNOWN');editSQL('SELECT kept SQL');editDoctor('SELECT kept Doctor');$('copilot-request').value='kept Copilot';$('p35-wap-sql').value='SELECT kept WAP';
+route=runtimeFixtureRoute;await refreshStatus();$('runtime-minutes').value='47';$('runtime-minutes').oninput();actionRoute=async()=>{throw Error('lost ACK');};await dbRuntimeAct('wake');assert.ok(dbRuntime.intent);const receipt=dbRuntime.intent;
+route=auditFixtureRoute;await dbAuditOpen();const event=auditEvent('ai:metadata',{source:'ai',action:'saved_plan_explanation',state:'UNKNOWN',links:[],committed:null});auditList=(p,o)=>auditEnvelope(p,o,event);auditDetail=(p,o)=>auditEnvelope(p,o,event);auditDownload=(p,o)=>auditEnvelope(p,o,event);
+URL.createObjectURL=()=> 'blob:ai';URL.revokeObjectURL=()=>{};const before=otherState(),runtimeBefore=JSON.stringify(dbRuntime),count=calls.length;
+await dbAuditSearch();await dbAuditDetail(event.id);await dbAuditDownload();assert.equal(otherState(),before);assert.equal(JSON.stringify(dbRuntime),runtimeBefore);assert.equal(dbRuntime.intent,receipt);assert.equal(dbObservations.sre.record,sre);assert.equal(dbObservations.policy.record,policy);assert.equal(dbPlatform.record,platform);assert.equal(dbRuns.get(worksheetId).state,'UNKNOWN');assert.equal($('sql').value,'SELECT kept SQL');assert.equal($('bear-query-sql').value,'SELECT kept Doctor');assert.equal($('copilot-request').value,'kept Copilot');assert.equal($('p35-wap-sql').value,'SELECT kept WAP');
+assert.ok(calls.slice(count).every(c=>['/api/session','/api/v1/databases','/api/v1/audit/capabilities'].includes(c.path)||c.path.startsWith('/api/v1/audit/events')));assert.ok(calls.slice(count).every(c=>!c.options?.method&&!c.options?.body));
 ''')
 
 

@@ -4,13 +4,15 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-11-01
-version: "1.44"
+updated: 2026-11-02
+version: "1.45"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-02、[DB-P6-4D1](../../guides/database-p6-4d1-ai-audit-metadata-2026-11-01.md)で既存AUD-03へ保存済みAI要約metadataを統合した。`source=ai`と閉じた5種のactionを既存event形状へ投影し、`links=[]`、内容fieldの追加なしとする。最新の保存要約であり、状態遷移監査ではない。self／databaseの現在認可を維持し、保存full9の内部整合を現在revisionとの一致条件へ置き換えない。platform scopeにはAIを含めず、本文の表示・検索、AI取得・復旧や書込みを追加しない。D1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,135成功・34 skip、Workbenchの実API・実画面、最終保全PASS）。 C2C／P5B・AI設定とP6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 
 2026-11-01、[DB-P6-5A](../../guides/database-p6-5a-compute-observations-2026-11-01.md)でCompute画面へのP専用固定LOCAL観測の読取り統合を実装した。受入済みC2Bの明示GET・strict DTO・global P cacheを再利用し、新しいAPIやDB context／grantの前提を追加しない。現在の真P・上限admin・選択adminを条件とし、完了snapshotと観測時刻をSRE／Policy／Computeで共有する。画面を開くだけでplatform観測を取得せず、既存Warehouse操作へも接続しない。desired／ready要約・過去のengine証拠・保存AutoChill設定・限定admission件数を現在healthや完全なPolicy監査へ読み替えない。P6-5Aの限定範囲を技術受入済みとした（全体回帰4,122成功・34 skip、両HTTP面の実APIと権限拒否、Computeの実画面、最終保全PASS）。C2Cのworkload baselineは独立後続とし、旧SRE check／Policy baseline・global auditは閉じたまま、P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 

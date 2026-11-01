@@ -4,8 +4,8 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-11-01
-version: "7.29.0"
+updated: 2026-11-02
+version: "7.30.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,13 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-02 — DB-P6-4D1 saved AI audit metadata
+
+- [実装・検証記録](../../guides/database-p6-4d1-ai-audit-metadata-2026-11-01.md)：既存AUD-03へ`source=ai`と閉じた5種のactionを追加した。既存event形状・`links=[]`を使い、内容fieldを増やさない。
+- 最新保存要約だけを投影し、現在のself／database認可と保存full9の内部整合を検査する。platform scopeはAIを除外し、本文の表示・検索、AI取得・復旧、書込みを含めない。
+- D1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,135成功・34 skip、Workbenchの実API・実画面、最終保全PASS）。 重点backend32件・重点UI32件・全Workbench923件はそれぞれ成功した。
+- C2C／P5B・AI設定とP6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 
 ### 2026-11-01 — DB-P6-5A read-only Compute platform observations
 

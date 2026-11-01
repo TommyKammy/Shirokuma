@@ -250,7 +250,8 @@ def _stamp(name):
 _add('management', 'operations', actor='r.actor', action='r.action', database_id=_MANAGEMENT_DB,
      state='r.state', created_at=_stamp('created_at'), updated_at=_stamp('updated_at'),
      finished_at=_stamp('finished_at'), revision='r.expected_revision')
-SOURCES = tuple(re.findall(r"SELECT '([^']+)' AS source", '\n'.join(_PROJECTIONS)))
+SOURCES = tuple(re.findall(r"SELECT '([^']+)' AS source", '\n'.join(_PROJECTIONS))) + ('ai',)
+_TABLES.add('ai_explanations')
 MANAGEMENT = ('management', 'database_creation', 'database_request', 'logical_request')
 _SQL = ' UNION ALL '.join(_PROJECTIONS)
 
@@ -284,6 +285,8 @@ MAX_LINKS = 24
 
 def _relations(db, row):
     """One hop of authored FKs only; never read JSON payloads or inspect services."""
+    if row['source'] == 'ai':
+        return []
     links = []
 
     def add(relation, source, identifier, event=True, *, database_id=row['database_id']):
@@ -457,6 +460,7 @@ def events(principal, role, *, event_id=None, cursor=None, **parameters):
         clauses.append('sequence <= CASE origin ' + ' '.join('WHEN ? THEN ?' for _ in ceilings) + ' END')
         for table, ceiling in ceilings.items():
             args.extend((table, ceiling))
+        detail_source, detail_id = None, None
         if event_id:
             try:
                 source, source_id = json.loads(_decode(event_id))
@@ -466,14 +470,22 @@ def events(principal, role, *, event_id=None, cursor=None, **parameters):
                 fail()
             clauses.extend(['source=?', 'source_id=?'])
             args.extend((source, source_id))
+            detail_source, detail_id = source, source_id
         key = "(coalesce(julianday(created_at),-1),source,source_id)"
         if saved:
             for name, op in (('upper', '<='), ('last', '<')):
                 if saved[name] is not None:
                     clauses.append(key + op + '(?,?,?)')
                     args.extend(saved[name])
-        sql = 'WITH metadata AS (' + _SQL + ') SELECT *,coalesce(julianday(created_at),-1) AS time_key FROM metadata WHERE ' + ' AND '.join(clauses) + ' ORDER BY coalesce(julianday(created_at),-1) DESC,source DESC,source_id DESC LIMIT ?'
-        rows = db.execute(sql, (*args, 1 if event_id else f['limit'] + 1)).fetchall()
+        prefix, projection, ai_args = '', _SQL, []
+        if (f['scope'] != 'platform' and f['source'] in ('', 'ai') and
+                detail_source in (None, 'ai')):
+            import audit_ai
+            prefix, ai_sql, ai_args = audit_ai.branch(db, context, ceilings['ai_explanations'],
+                                                     _COLUMNS, event_id=detail_id)
+            projection += ' UNION ALL ' + ai_sql
+        sql = 'WITH ' + prefix + 'metadata AS (' + projection + ') SELECT *,coalesce(julianday(created_at),-1) AS time_key FROM metadata WHERE ' + ' AND '.join(clauses) + ' ORDER BY coalesce(julianday(created_at),-1) DESC,source DESC,source_id DESC LIMIT ?'
+        rows = db.execute(sql, (*ai_args, *args, 1 if event_id else f['limit'] + 1)).fetchall()
         if event_id and not rows:
             fail()
         page = rows[:f['limit']]

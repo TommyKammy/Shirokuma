@@ -7949,6 +7949,7 @@ if(typeof document.addEventListener==='function')document.addEventListener('visi
 const dbAudit={installed:false,scope:'self',role:'',database:'',epoch:0,list:0,selection:0,detailRequest:0,auth:0,
  draft:{},applied:null,cursors:[],cursor:'',next:null,items:[],selected:'',detail:null,proof:null,capabilities:null,url:null,preview:null,previewStamp:null};
 Object.assign(i18n.ja,{
+ 'Saved AI metadata':'AI の保存済みメタデータ','Saved SQL explanation':'保存済み SQL の説明','Saved SQL execution plan explanation':'保存済み SQL 実行計画の説明','Saved-plan re-explanation':'保存済み計画の再説明','Saved SQL proposal':'保存済み SQL 案','Saved catalog description proposal':'保存済みカタログ説明文案',
  'Saved metadata audit':'保存済みメタデータの監査','Scope':'参照範囲','My DB records':'自分の DB 記録','DB administration':'DB 管理情報','Platform management':'基盤管理記録',
  'Reference role':'参照ロール','Start UTC':'開始 UTC','End UTC':'終了 UTC','Source':'記録元','State':'保存状態','Search':'検索','Page size':'取得件数','Search / Refresh':'検索／更新',
  'All sources':'すべての記録元','Filters pending. Search to apply.':'条件は未適用です。検索で適用します。',
@@ -7958,7 +7959,7 @@ Object.assign(i18n.ja,{
  'Choose a currently available database and permitted reference role.':'現在利用可能な DB と許可された参照ロールを選択してください。',
  'DB administration requires the selected admin role.':'DB 管理情報には admin 参照ロールが必要です。',
  'Platform management requires current platform authority and the selected admin role.':'基盤管理記録には現在の基盤管理権限と admin 参照ロールが必要です。',
- 'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters.':'作成時刻と最新の保存状態です。全状態遷移の履歴ではありません。時刻未記録の行は末尾に表示し、期間指定時は除外します。',
+ 'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters. AI records are latest saved metadata summaries only; AI success does not prove a SQL data commit.':'作成時刻と最新の保存状態です。全状態遷移の履歴ではありません。時刻未記録の行は末尾に表示し、期間指定時は除外します。AI 記録は最新の保存済みメタデータの要約のみです。AI の成功は SQL によるデータのコミットを証明しません。',
  'Metadata only. SQL, prompts, results, definitions and raw payloads are excluded. Existing retention is unchanged. Related IDs do not grant content access.':'メタデータのみです。SQL・プロンプト・結果・定義・生の payload は含みません。既存の保持方針は変更しません。関連 ID は内容へのアクセス権限を与えません。',
  'Applied scope: {scope} · role: {role} · DB: {database} · filters: {filters}':'適用範囲: {scope} · ロール: {role} · DB: {database} · 条件: {filters}',
  'Time UTC':'時刻 UTC','Source / action':'記録元／操作','Target IDs':'対象 ID','Actor':'実行者','Not recorded':'未記録',
@@ -7980,12 +7981,14 @@ Object.assign(i18n.ja,{
 });
 for(const key of Object.keys(i18n.ja))if(!(key in i18n.en))i18n.en[key]=key;
 const dbAuditFields=['id','source','source_id','action','actor','database_id','schema_id','warehouse_id','saved_role','state','created_at','updated_at','finished_at','revision','committed','has_cleanup_error'];
+const dbAuditAIKinds={sql_explanation:'Saved SQL explanation',sql_plan_explanation:'Saved SQL execution plan explanation',saved_plan_explanation:'Saved-plan re-explanation',sql_proposal:'Saved SQL proposal',catalog_proposal:'Saved catalog description proposal'};
 const dbAuditTelemetryFields=['event_id','timestamp','agent_id','action_type','target_system','status','trace_id','duration_ms'];
 const dbAuditContextFields=['scope','principal_id','selected_role','database_id','binding_revision','generation_id','grant_revision','platform_admin'];
 const dbAuditScalar=v=>typeof v==='string'||typeof v==='number'||typeof v==='boolean';
 function dbAuditTime(value){if(value==null||value==='')return null;const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString():null;}
 function dbAuditEvent(event){
  if(!event||typeof event.id!=='string'||!event.id||typeof event.source!=='string')throw Error('AUDIT_RESPONSE');
+ if(event.source==='ai'&&(typeof event.action!=='string'||!Object.hasOwn(dbAuditAIKinds,event.action)||!['QUEUED','RUNNING','SUCCEEDED','FAILED','CANCELED','UNKNOWN'].includes(event.state)||!Array.isArray(event.links)||event.links.length!==0))throw Error('AUDIT_RESPONSE');
  const clean=Object.fromEntries(dbAuditFields.map(key=>[key,dbAuditScalar(event[key])?event[key]:null]));
  // Copy only the frozen relation DTO; IDs never become URLs or content routes.
  clean.links=(Array.isArray(event.links)?event.links:[]).filter(link=>link&&
@@ -8113,7 +8116,7 @@ async function dbAuditSearch(direction='search'){
   const items=data.items.map(dbAuditEvent);
   dbAudit.items=items;dbAudit.applied={...filters};dbAudit.cursor=data.page_cursor;dbAudit.cursors=stack;dbAudit.next=data.next_cursor||null;
   const source=$('db-audit-source'),value=source.value;
-  dbAuditSelectOptions('db-audit-source',(dbAudit.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value})),value,'All sources');
+  dbAuditSelectOptions('db-audit-source',(dbAudit.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value,labelKey:value==='ai'?'Saved AI metadata':undefined})),value,'All sources');
   ui($('db-audit-context'),'Applied scope: {scope} · role: {role} · DB: {database} · filters: {filters}',{scope:t({self:'My DB records',database:'DB administration',platform:'Platform management'}[dbAudit.scope]),role:dbAudit.role,database:dbAudit.scope==='platform'?t('Platform management'):dbAudit.database,filters:JSON.stringify(filters)});
   dbAuditRenderRows();dbAuditPaging();
   let pending=true;try{pending=JSON.stringify(dbAuditFilters())!==JSON.stringify(filters);}catch{}
@@ -8126,7 +8129,7 @@ function dbAuditRenderRows(){
  const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');
  for(const key of ['Time UTC','Source / action','Target IDs','Actor','State','Details']){const th=document.createElement('th');th.scope='col';ui(th,key);hr.append(th);}head.append(hr);table.append(head,body);host.append(table);
  for(const event of dbAudit.items){const row=document.createElement('tr');
-  for(const value of [dbAuditTime(event.created_at),[event.source,event.action].filter(Boolean).join(' / '),[event.database_id,event.schema_id,event.warehouse_id,event.source_id].filter(Boolean).join(' · '),event.actor,event.state]){const cell=document.createElement('td');dbAuditValue(cell,value);row.append(cell);}
+  for(const [i,value] of [dbAuditTime(event.created_at),[event.source,event.action].filter(Boolean).join(' / '),[event.database_id,event.schema_id,event.warehouse_id,event.source_id].filter(Boolean).join(' · '),event.actor,event.state].entries()){const cell=document.createElement('td');if(i===1&&event.source==='ai')ui(cell,'{source} / {action}',()=>({source:t('Saved AI metadata'),action:t(dbAuditAIKinds[event.action])}));else dbAuditValue(cell,value);row.append(cell);}
   const cell=document.createElement('td');dbAdminButton(cell,'','Details',()=>dbAuditDetail(event.id));row.append(cell);body.append(row);
  }
 }
@@ -8141,7 +8144,7 @@ async function dbAuditDetail(id){
 function dbAuditRenderDetail(event){
  const host=$('db-audit-detail');host.replaceChildren();const list=document.createElement('dl');host.append(list);
  const labels=['Event ID','Source','Source ID','Action','Actor','Database','Schema','Warehouse','Saved role','State','Created UTC','Updated UTC','Finished UTC','Revision','Committed','Cleanup failure'];
- dbAuditFields.forEach((key,i)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,labels[i]);dbAuditValue(dd,key.endsWith('_at')?dbAuditTime(event[key]):event[key]);list.append(dt,dd);});
+ dbAuditFields.forEach((key,i)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,labels[i]);if(event.source==='ai'&&['source','action'].includes(key))ui(dd,key==='source'?'Saved AI metadata':dbAuditAIKinds[event.action]);else dbAuditValue(dd,key.endsWith('_at')?dbAuditTime(event[key]):event[key]);list.append(dt,dd);});
  const dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,'Related IDs');list.append(dt,dd);
  const stamp=dbAuditStamp(),selection=dbAudit.selection,serial=dbAudit.detailRequest;
  if(!event.links.length)dbAuditValue(dd,null);
@@ -8212,7 +8215,7 @@ async function dbAuditOpen(){
  const reason=dbAuditReason();if(reason){dbAuditPurge();ui($('db-audit-status'),reason);return;}
  const stamp=dbAuditStamp();try{const p=await dbAuditAuthorize(stamp,undefined,true);if(!p||stamp!==dbAuditStamp())return;
   dbAudit.proof=p;dbAudit.capabilities=p.capabilities;dbAuditChoices(p.items);
-  dbAuditSelectOptions('db-audit-source',(p.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value})),$('db-audit-source').value,'All sources');
+  dbAuditSelectOptions('db-audit-source',(p.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value,labelKey:value==='ai'?'Saved AI metadata':undefined})),$('db-audit-source').value,'All sources');
  }catch(error){if(stamp===dbAuditStamp()){
   // A missing selected DB does not hide other DBs from this fresh inventory.
   const items=error.auditChoices&&dbInventoryCurrent(error.auditChoices)?error.auditChoices:[];
@@ -8226,7 +8229,7 @@ function dbAuditInstall(){
  dbAdminNode('h2','',panel,'Saved metadata audit');
  dbAdminNode('p','database-pawprints-notice',panel,'Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.');
  dbAdminNode('p','',panel,'Metadata only. SQL, prompts, results, definitions and raw payloads are excluded. Existing retention is unchanged. Related IDs do not grant content access.');
- dbAdminNode('p','',panel,'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters.');
+ dbAdminNode('p','',panel,'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters. AI records are latest saved metadata summaries only; AI success does not prove a SQL data commit.');
  const form=dbAdminNode('form','db-audit-form',panel);form.className='toolbar';
  for(const [key,label,tag] of [['scope','Scope','select'],['role','Reference role','select'],['database','Database','select'],['from','Start UTC','input'],['to','End UTC','input'],['source','Source','select'],['state','State','input'],['search','Search','input'],['limit','Page size','input']]){
   const field=dbAdminNode('div','',form);field.className='field';const l=dbAdminNode('label','',field,label);l.htmlFor='db-audit-'+key;

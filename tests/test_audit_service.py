@@ -422,6 +422,12 @@ class AuditTests(unittest.TestCase):
             self.insert(table, id=table, database_id=self.sales, model_id='same', version=1, operation_id='d', record=record)
         self.insert('db_job_operations', run_id='run', position=1, operation_id='d')
         self.insert('dataops_queries', operation_id='d', step='query', query_id='q-own', action='read')
+        ai_context = c | {'warehouse_id': 'LOCAL'}
+        self.insert('ai_explanations', id='ai', actor='alice', idempotency_key='ai',
+                    payload={'sql': SECRET}, pins={'private': SECRET}, context=ai_context,
+                    record=dict(id='ai', actor='alice', context=ai_context, kind='sql_explanation',
+                                state='SUCCEEDED', created_at=NOW, updated_at=NOW,
+                                input={'sql': SECRET}, output=SECRET))
         path = self.f.root / 'state/jobs.sqlite3'
         before = path.read_bytes()
         result = self.listing(limit=100)
