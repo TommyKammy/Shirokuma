@@ -5,14 +5,16 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-01
-version: "1.39"
+version: "1.40"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
 
-2026-11-01、[DB-P6-4B1](../../guides/database-p6-4b1-sql-proposals-2026-11-01.md)で、許可metadataに基づくSQL案生成を実装した。入力は依頼文・明示的な1〜8件の同一DB ResourceRef・保存9項目contextへ限定し、全参照の現在権限とregistry identityをREST取得前に検査する。原文の依頼文とTABLE／VIEWの公開列metadataだけをLOCALモデルへ渡し、VIEW定義や再帰依存、行データを生成metadataへ含めない。単一read-only SELECTと選択した参照範囲を検査し、実行しない下書きとして表示する。独立した元key復旧・履歴・取消を持ち、未知の結果を自動再推論しない。B1を技術受入済みとした（全体回帰3,892成功・34 skip、2DB・3role実機・最終保全PASS）。次はB2の既存WAPへの明示引渡しとし、P6-4全体／P6-7／M1本人受入は継続する。
+2026-11-01、[DB-P6-4B2](../../guides/database-p6-4b2-wap-handoff-2026-11-01.md)でB1案から既存Manual WAPへの明示引渡しを実装し、限定範囲の技術受入を完了した。元案の本人・保存9項目contextと全source schema権限を保ち、利用者が選んだ同一DB・同一E／A roleのSANDBOX実行先9項目contextを別に検査する。保存済み元SQLの使用TABLEだけを現在の識別情報・列で確認し、scopeに従うalias変換と既存WAP compilerを通す。使用VIEWを拡張せず、未使用VIEWはschema権限だけを確認する。明示GETはmetadata読取りだけで、新しい未保存WAP下書きへ取り込んだ後のSQL・source・target・品質編集と版保存／build／audit／A公開は既存WAPの責務とする。B2の限定範囲を技術受入済みとした（全体回帰3,944成功・34 skip、2DBの実機・画面・最終保全PASS）。次は他Bearsの必須導線を統合し、P6-4全体／P6-7／M1本人受入は継続する。
+
+2026-11-01、[DB-P6-4B1](../../guides/database-p6-4b1-sql-proposals-2026-11-01.md)で、許可metadataに基づくSQL案生成を実装した。入力は依頼文・明示的な1〜8件の同一DB ResourceRef・保存9項目contextへ限定し、全参照の現在権限とregistry identityをREST取得前に検査する。原文の依頼文とTABLE／VIEWの公開列metadataだけをLOCALモデルへ渡し、VIEW定義や再帰依存、行データを生成metadataへ含めない。単一read-only SELECTと選択した参照範囲を検査し、実行しない下書きとして表示する。独立した元key復旧・履歴・取消を持ち、未知の結果を自動再推論しない。B1を技術受入済みとした（全体回帰3,892成功・34 skip、2DB・3role実機・最終保全PASS）。B1受入時点の後続B2は上記で受入済みであり、P6-4全体／P6-7／M1本人受入は継続する。
 
 2026-10-31、[DB-P6-4A5](../../guides/database-p6-4a5-saved-plan-explanation-2026-10-31.md)で保存済み計画の明示再説明を実装した。元A2／A3のCOLLECTED証拠と、保存値・現在台帳の両方でFINISHEDの元queryを検証し、安全な取得時点の計画とmetadataを別kindの推論要求へ原子的に固定する。元親がSUCCEEDED／FAILED／CANCELED／UNKNOWNでも条件が合えば扱い、元UNKNOWNやA2の新規query guardを変更しない。保存9項目contextと全凍結依存schemaの現在権限を検査し、catalog・Engine・Wake・admissionを呼ばずにLOCAL推論だけを行う。新要求の元key復旧・履歴・取消を分離し、UNKNOWNを自動再推論しない。重点backend198件・UI190件、全体回帰3,824成功・34 skip、2DB・3roleの休止中実機確認と最終保全照合を完了した。次はSQL案生成、その後に既存WAPへの明示引渡し・他Bearsを扱う。P6-4全体／P6-7／M1本人受入は継続する。
 

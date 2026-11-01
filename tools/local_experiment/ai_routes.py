@@ -7,6 +7,7 @@ import db_ai_plan
 import db_ai_sources
 import db_ai_reexplain
 import db_ai_sql_proposal
+import db_ai_wap
 from query_context import QueryError
 
 
@@ -23,6 +24,21 @@ def dispatch(handler, method, path, params, principal, role):
         context = common.context_value(common._json_context(params['context'][0]), role)
         source = db_ai_sources.latest(principal, context)
         handler.respond(dict(context=context.public_metadata(), source=source), 200)
+        return True
+    draft = re.fullmatch(r'/api/v1/bears/sql-proposals/([0-9a-f-]{36})/wap-draft', path)
+    if draft:
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        if ('#' in handler.path or handler.headers.get_all('Transfer-Encoding', [])
+                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])
+                or handler.headers.get_all('Idempotency-Key', [])
+                or set(params) != {'context', 'destination_context'}
+                or any(len(params[k]) != 1 for k in params)):
+            raise ValueError('exact source and destination contexts required')
+        context = common.context_value(common._json_context(params['context'][0]), role)
+        destination = common.context_value(common._json_context(params['destination_context'][0]), role)
+        result = db_ai_wap.prepare(principal, context, destination, draft[1])
+        handler.respond(dict(context=context.public_metadata(), draft=result), 200)
         return True
     match = re.fullmatch(r'/api/v1/bears/(explanations|plan-explanations|saved-plan-explanations|sql-proposals)(?:/([0-9a-f-]{36})(/cancel)?)?', path)
     if not match:

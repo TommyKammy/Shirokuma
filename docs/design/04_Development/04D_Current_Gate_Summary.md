@@ -5,14 +5,16 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-01
-version: "2.24.0"
+version: "2.25.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
 
-2026-11-01、[DB-P6-4B1](../../guides/database-p6-4b1-sql-proposals-2026-11-01.md)のSQL下書き生成を実装した。本人・保存9項目contextと、明示選択した同一DBの1〜8件のTABLE／VIEW参照を検査し、依頼文と許可された名前・列名・型だけをLOCALモデルへ渡す。依頼文は原文を送信することを画面で示し、VIEWは列metadataだけを扱う。生成物は単一read-only SELECTの構文・参照範囲・既存policyを検査するが、列・型・業務上の正しさや実行可能性を保証しない。SQL実行・Engine・Wake・WAP、editor／結果の書換えは行わない。B1を技術受入済みとした（全体回帰3,892成功・34 skip、2DB・3role実機・最終保全PASS）。次はB2の既存WAPへの明示引渡しであり、P6-4全体／P6-7／M1本人受入は未完了である。
+2026-11-01、[DB-P6-4B2](../../guides/database-p6-4b2-wap-handoff-2026-11-01.md)のManual WAP下書き引渡しを実装し、限定範囲の技術受入を完了した。本人の成功済みB1案の保存SQLを元contextで解釈し、使用するTABLEの現在識別情報・列を検査して通常WAPのsource aliasへ変換する。実行先は利用者が選ぶ同一DB・同一E／A roleのSANDBOX contextとし、元contextと実行先contextを別々に検査・表示する。metadataだけの明示GETと未保存の新規WAPフォームへの取込に限り、AI推論・SQL・Wakeや保存／build／audit／publishを自動実行しない。編集中の案や未解決WAP操作を上書きせず、確認・編集後は既存の版保存・実行・品質・A公開の認可を使う。B2の限定範囲を技術受入済みとした（全体回帰3,944成功・34 skip、2DBの実機・画面・最終保全PASS）。後続は他Bearsの必須導線の統合とし、P6-4全体／P6-7／M1本人受入は未完了である。
+
+2026-11-01、[DB-P6-4B1](../../guides/database-p6-4b1-sql-proposals-2026-11-01.md)のSQL下書き生成を実装した。本人・保存9項目contextと、明示選択した同一DBの1〜8件のTABLE／VIEW参照を検査し、依頼文と許可された名前・列名・型だけをLOCALモデルへ渡す。依頼文は原文を送信することを画面で示し、VIEWは列metadataだけを扱う。生成物は単一read-only SELECTの構文・参照範囲・既存policyを検査するが、列・型・業務上の正しさや実行可能性を保証しない。SQL実行・Engine・Wake・WAP、editor／結果の書換えは行わない。B1を技術受入済みとした（全体回帰3,892成功・34 skip、2DB・3role実機・最終保全PASS）。B1受入時点の後続B2は上記で受入済みであり、P6-4全体／P6-7／M1本人受入は未完了である。
 
 2026-10-31、[DB-P6-4A5](../../guides/database-p6-4a5-saved-plan-explanation-2026-10-31.md)で、Query Doctor／Copilotへ保存済み計画だけを使う明示的な再説明を実装した。元A2／A3がCOLLECTEDで、元queryの保存値・現在台帳がともにFINISHEDの場合に、取得時点の安全な演算子・metadataを新しい説明要求へ固定する。元の説明がFAILED・CANCELED・UNKNOWNでも対象になり得るが、元状態を変更せず、A2の新規query受付も解除しない。本人・保存9項目context・凍結した全依存schemaの現在権限を検査し、catalog再取得・Engine・Wake・admissionを使わない。取消は新しい説明だけへ作用し、そのUNKNOWNを自動再送しない。重点backend198件・UI190件、全体回帰3,824成功・34 skip、2DB・3roleの休止中実機確認と最終保全照合を完了した。次はSQL案生成、既存WAPへの明示引渡し・他Bearsを扱う。P6-4全体／DB-P6-3全体／P6-7／M1本人受入は未完了である。
 

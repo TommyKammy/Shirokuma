@@ -3185,7 +3185,7 @@ function dbProposalSync(){
   dbProposal.sources=form.sourceAuthority===dbProposal.sourceAuthority?(form.sources||[]):[];
   $('copilot-request').value=dbProposal.request;
  }
- const view=dbProposalView();if(view!==dbProposal.view){dbProposal.view=view;dbProposal.busy=null;dbProposal.record=null;dbProposal.origin=null;}
+ const view=dbProposalView();if(view!==dbProposal.view){dbProposal.view=view;dbProposal.busy=null;dbProposal.record=null;dbProposal.wapRecord=null;dbProposal.origin=null;}
  const reason=!!dbReason(),busy=!!dbProposal.busy,held=dbProposalHeld(),eligible=dbSchemasFor(w).filter(s=>s.database_id===w.database_id&&s.capabilities?.query);
  dbSelectOptions('proposal-schema',eligible.map(s=>({value:s.id,label:s.sql_name})),dbProposal.schema,'Choose schema');
  const chosen=eligible.some(s=>s.id===dbProposal.schema),objectValue=$('proposal-object').value;
@@ -3209,6 +3209,7 @@ function dbProposalSync(){
  $('proposal-cancel').disabled=reason||busy||!dbProposal.record||!['QUEUED','RUNNING'].includes(dbProposal.record.state)||dbProposal.record.cancel_requested;
  ui($('proposal-picker-status'),dbProposal.fetchToken?'Loading source objects…':dbProposal.pickerNotice||(!dbProposal.objects.length?'Load source objects for the chosen schema.':''));
  dbProposalRender();
+ const wap=dataopsPanels.get('p35-wap');if(wap)dataopsAiRender(wap);
 }
 function dbProposalChanged(){dbProposal.request=$('copilot-request').value;++dbProposal.version;dbProposalStoreForm();dbProposalSync();}
 function dbProposalObject(object,schema,context){
@@ -3259,7 +3260,7 @@ async function dbProposalFetch(path,intent,post=false){
   if(post&&path===dbProposalEndpoint&&!intent.id&&!contradictory&&codes.length&&codes.every(value=>value===code)&&(response.status===400&&code==='AI_INPUT_INVALID'||response.status===409&&code==='AI_METADATA_CHANGED'))return {rejection:code};
   throw Error('PROPOSAL_UNAVAILABLE');
  }
- return {record:dbProposalRecord(data,intent.body.context,intent)};
+ return {record:dbProposalRecord(data,intent.body.context,intent),fresh:!post};
 }
 async function dbProposalSubmit(source='create'){
  dbProposalSync();if(dbReason()||dbProposal.busy)return;
@@ -3291,7 +3292,7 @@ async function dbProposalSubmit(source='create'){
    dbProposal.notice=result.rejection==='AI_INPUT_INVALID'?'Request rejected before acceptance. Review the request and selected sources, then explicitly request a new SQL draft.':'Source metadata changed before acceptance. Reload source objects, remove and re-add changed sources, then explicitly request a new SQL draft.';
    return;
   }
-  const record=result.record;intent.id=record.id;dbProposalPersist();dbProposalObserve(record);dbProposal.record=record;dbProposal.origin=origin;dbProposal.notice='';
+  const record=result.record;intent.id=record.id;dbProposalPersist();dbProposalObserve(record);dbProposal.record=record;dbProposal.origin=origin;dbProposal.wapRecord=result.fresh?record:null;dbProposal.notice='';
  }catch{if(current())dbProposal.notice=dbProposalUnknown;}
  finally{if(dbProposal.busy===token){dbProposal.busy=null;dbProposalSync();}}
 }
@@ -3302,7 +3303,7 @@ async function dbProposalHistory(index=null){
  const current=()=>{dbProposalSync();return dbProposal.busy===token&&authority===dbProposalAuthority()&&view===dbProposalView()&&!dbReason();};
  try{
   const response=await fetch(dbProposalEndpoint+(record?'/'+encodeURIComponent(record.id):'')+'?'+new URLSearchParams({context:JSON.stringify(context)}),{headers:{'X-Shirokuma-Role':context.selected_role}}),data=await response.json();if(!current())return;if(!response.ok||!dbExplanationSameContext(data.context,context))throw Error('PROPOSAL_UNAVAILABLE');
-  if(record){const checked=dbProposalRecord(data,context,{id:record.id,body:{context,...record.input}});dbProposalObserve(checked);dbProposal.record=checked;dbProposal.origin='history';dbProposal.notice='';}
+  if(record){const checked=dbProposalRecord(data,context,{id:record.id,body:{context,...record.input}});dbProposalObserve(checked);dbProposal.record=checked;dbProposal.wapRecord=checked;dbProposal.origin='history';dbProposal.notice='';}
   else{
    if(!Array.isArray(data.explanations))throw Error('CONTEXT_MISMATCH');
    dbProposal.history=data.explanations.map(r=>dbProposalRecord({context,explanation:r},context));dbProposal.history.forEach(dbProposalObserve);dbProposal.notice=dbProposal.history.length?'':'No saved SQL drafts in this context.';
@@ -3333,13 +3334,14 @@ function dbProposalRender(){
   p(t('Captured at')+': '+record.metadata.captured_at);
   for(const relation of record.metadata.relations)p(relation.schema+'.'+relation.table+' · '+relation.kind+' · '+t('{count} columns',{count:relation.columns.length}));
   if(record.state==='SUCCEEDED')p(t('Syntax, selected references and read-only policy checked by the server. Review before any future use.'));
+  if(record.state==='SUCCEEDED'&&dbProposal.wapRecord===record&&['data_engineer','admin'].includes(record.context.selected_role)&&!dbReason())dataopsButton(node,'proposal-wap','Edit in Manual WAP',dataopsAiSelect);
   if(record.error_code)p(record.error_code);
   if(record.cancel_requested&&record.state!=='SUCCEEDED')p(t('Model result will be discarded. Physical model stoppage is not confirmed.'));
  }else p(t(dbProposalEmpty));
  if(dbProposal.notice)p(t(dbProposal.notice));
 }
 function dbProposalInstall(){
- $('proposal-panel').hidden=false;dbProposal.installed=true;dbProposal.busy=null;dbProposal.fetchToken=null;dbProposal.proofs.clear();dbProposal.record=null;dbProposal.origin=null;dbProposal.history=[];dbProposal.authority='';dbProposal.view='';
+ $('proposal-panel').hidden=false;dbProposal.installed=true;dbProposal.busy=null;dbProposal.fetchToken=null;dbProposal.proofs.clear();dbProposal.record=null;dbProposal.wapRecord=null;dbProposal.origin=null;dbProposal.history=[];dbProposal.authority='';dbProposal.view='';
  const saved=readStorage(dbProposalKey,[]);dbProposal.intents=Array.isArray(saved)?saved.flatMap(item=>{try{return [dbProposalFreeze(item)];}catch{return [];}}):[];
  if(!$('proposal-panel').dataset.installed){
   const panel=$('proposal-panel');panel.dataset.installed='true';panel.setAttribute('aria-label',t('SQL draft (read only)'));
@@ -4751,6 +4753,20 @@ Object.assign(i18n.ja,{
  'Operation ID':'操作 ID','Committed':'コミット済み','Cleanup error':'清掃エラー',
  'Idempotency key':'冪等性キー','Accepted context':'受理済みコンテキスト',
  'Input rows: {count}':'入力行数: {count}', 'Choose a supported file.':'対応ファイルを選択してください。',
+ "Edit in Manual WAP":"Manual WAP で編集",
+ "Original proposal context":"元の提案のコンテキスト",
+ "Current Manual WAP context":"現在の Manual WAP コンテキスト",
+ "Original proposal":"元の提案",
+ "Created at":"作成日時",
+ "Choose the same database and execution role, select a writable SANDBOX schema, and refresh this panel. Use New model to clear an existing draft before loading.":"同じデータベースと実行ロール、書込可能な SANDBOX スキーマを選び、このパネルを更新してください。既存の下書きは「新しいモデル」で消去してから読み込みます。",
+ "Load proposal draft":"提案の下書きを読込",
+ "Clear selection":"選択を解除",
+ "Original proposal (read only). Review the saved model version using the normal Manual WAP actions.":"元の提案（読取専用）。保存済みのモデルの版を、通常の Manual WAP の操作で確認してください。",
+ "Imported as an unsaved draft. Review and edit, then explicitly save a model version before building.":"未保存の下書きとして読み込みました。確認・編集後、ビルド前にモデルの版を明示的に保存してください。",
+ "Original request and SQL (read only)":"元の依頼と SQL（読取専用）",
+ "This proposal cannot be imported into Manual WAP. Used sources must be supported tables.":"この提案は Manual WAP に読み込めません。使用するソースは対応するテーブルである必要があります。",
+ "Source metadata changed. Refresh the inventory and select a new proposal.":"ソースのメタデータが変わりました。一覧を更新し、新しい提案を選択してください。",
+ "Proposal draft unavailable. Check both contexts and permissions, then explicitly retry.":"提案の下書きを取得できません。両方のコンテキストと権限を確認し、明示的に再試行してください。",
  'Model ID':'モデル名','Saved models':'保存済みモデル','New model':'新しいモデル',
  'Save model version':'モデルの版を保存','Build saved version':'保存済みの版をビルド',
  'Audit build':'ビルドを監査','Publish audited build (admin)':'監査済みビルドを公開（管理者）',
@@ -4786,6 +4802,118 @@ Object.assign(i18n.ja,{
  'Null counts':'NULL 件数','Quality':'品質','Passed':'合格','Failed':'不合格','REJECTED':'受付拒否'
 });
 for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
+// The pending proposal survives B1 navigation; it never follows the active worksheet.
+function dataopsAiAuth(context){return JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbEpoch,dbAuthorizationVersion,dbRoleVersion(context.selected_role)]);}
+function dataopsAiAuthorized(origin){
+ if(!origin||origin.auth!==dataopsAiAuth(origin.context)||!dbRoleWithinHeader(origin.context.selected_role))return false;
+ let actor;try{actor=JSON.parse(dbPrincipal);}catch{return false;}
+ if(actor?.[1]!==true||actor[0]!==origin.actor)return false;
+ const c=origin.context,d=dbRoleItems(c.selected_role).find(d=>d.id===c.database_id);
+ return !!d&&d.state==='READY'&&d.allowed_roles?.includes(c.selected_role)&&d.sql_catalog===c.sql_catalog&&d.binding_revision===c.binding_revision&&d.generation_id===c.generation_id&&(d.grant_revision??null)===c.grant_revision;
+}
+function dataopsAiSelect(){
+ dbProposalSync();const r=dbProposal.record,p=dataopsPanels.get('p35-wap');
+ if(!p||r!==dbProposal.wapRecord||r?.state!=='SUCCEEDED'||!['data_engineer','admin'].includes(r.context.selected_role)||dbReason()||dbProposal.busy)return;
+ // Validate again without consulting the mutable request, picker or either SQL editor.
+ try{dbProposalRecord({context:r.context,explanation:r},r.context);}catch{return;}
+ const origin=dataopsFreeze(dataopsClone({id:r.id,actor:r.actor,context:r.context,original_sql:r.sql,request:r.input.request,refs:r.input.relations,labels:r.metadata.relations,created_at:r.created_at,auth:dataopsAiAuth(r.context)}));
+ if(!dataopsAiAuthorized(origin))return;
+ p.aiPending=origin;p.aiToken=null;p.aiNotice='';
+ activate($('tab-transformation'));
+ dataopsAiRender(p);
+}
+function dataopsAiClear(p){p.aiPending=null;p.aiToken=null;p.aiNotice='';dataopsAiRender(p);}
+function dataopsAiPristine(p){
+ const value=k=>$(p.id+'-'+k).value;
+ if(p.model||p.pending||p.trackingPending||p.inventoryLoading||!p.inventoryReady||p.invalid||!dataopsSameContext(p.inventoryContext,p.context)||dataopsUnresolved(p.op)||p.metadata)return false;
+ for(const records of [p.requests,p.actions])for(const record of records?.values()||[])if(dataopsUnresolved(record.operation))return false;
+ if(['models','model-id','name','target','not-null','metadata-id','build','audit','publication'].some(k=>value(k)!==''))return false;
+ return value('target-schema')===p.schema&&value('sql')==='SELECT * FROM source'&&String(value('min'))==='1'&&p.sources.length===1&&p.sources[0].alias.value==='source'&&p.sources[0].table.value==='';
+}
+function dataopsAiDestination(p,origin){
+ if(!dataopsAiAuthorized(origin)||!dataopsAllowed(p,'wap_models')||p.principal!==dbPrincipal)return false;
+ const a=origin.context,b=p.context,s=p.schemas.find(s=>s.id===p.schema),primary=p.schemas.find(s=>s.id===a.schema_id&&s.database_id===a.database_id&&s.sql_name===a.sql_schema);
+ if(primary?.capabilities?.query!==true||s?.capabilities?.query!==true)return false;
+ if(!dbExplanationSameContext(b,b)||!dataopsSameContext(b,dataopsContext(p))||a.warehouse_id!=='LOCAL'||b.warehouse_id!=='LOCAL'||s?.capabilities?.write!==true||String(s.purpose||s.sql_name).toUpperCase()!=='SANDBOX')return false;
+ return origin.refs.every(r=>p.schemas.some(s=>s.id===r.schema_id&&s.database_id===a.database_id&&s.capabilities?.query===true))&&dbExplanationContextKeys.every(k=>['schema_id','sql_schema'].includes(k)||a[k]===b[k]);
+}
+function dataopsAiFingerprint(p){
+ return JSON.stringify([p.epoch,dbPrincipal,currentRole,dbMaximumRole,dbEpoch,dbAuthorizationVersion,dbRoleVersion(p.role),p.role,p.database,p.schema,p.context,p.inventoryContext,p.inventoryLoading,p.inventoryReady,p.invalid,p.pending,p.trackingPending,p.tables,p.schemas,p.models,p.model,p.metadata,p.op,[...(p.requests?.values()||[])],[...(p.actions?.values()||[])],
+ ['role','database','schema','models','model-id','sql','target-schema','name','target','min','not-null','metadata-id','metadata-kind','build','audit','publication'].map(k=>$(p.id+'-'+k).value),p.sources.map(s=>[s.alias.value,s.table.value]),dbProposalView(),dbSelectionGeneration,dbExplorer]);
+}
+function dataopsAiRender(p){
+ if(!p.aiBar)return;
+ if(p.aiOrigin&&!dataopsSameContext(p.aiOrigin.destination_context,p.context))p.aiOrigin=null;
+ for(const key of ['aiPending','aiOrigin'])if(p[key]&&!dataopsAiAuthorized(p[key])){p[key]=null;p.aiToken=null;p.aiNotice='';}
+ const fingerprint=dataopsAiFingerprint(p);
+ if(p.aiFingerprint!==fingerprint){p.aiFingerprint=fingerprint;++p.aiRevision;p.aiToken=null;}
+ const origin=p.aiPending||p.aiOrigin,bar=p.aiBar;bar.replaceChildren();bar.hidden=!origin;if(!origin){p.aiDetails=null;p.aiDetailsKey='';return;}
+ const line=(label,text)=>{const n=dataopsNode('p','',bar);dataopsNode('strong','',n,label);n.append(': '+text);};
+ const context=c=>[c.sql_catalog,c.sql_schema,c.selected_role,c.warehouse_id].join(' / ');
+ line('Original proposal context',context(origin.context));line('Current Manual WAP context',p.context&&!p.invalid?context(p.context):t('Choose an authorized context.'));
+ line('Original proposal',origin.id);line('Created at',origin.created_at);
+ if(p.aiPending){
+  dataopsNode('p','',bar,'Choose the same database and execution role, select a writable SANDBOX schema, and refresh this panel. Use New model to clear an existing draft before loading.');
+  const load=dataopsButton(bar,p.id+'-ai-load','Load proposal draft',()=>dataopsAiLoad(p));
+  let allowed=false;try{allowed=dataopsAiDestination(p,origin)&&dataopsAiPristine(p);}catch{/* Context is not ready. */}
+  load.disabled=!!p.aiToken||!allowed;
+  dataopsButton(bar,p.id+'-ai-clear','Clear selection',()=>dataopsAiClear(p));
+ }else dataopsNode('p','',bar,p.model&&!p.modelDirty?'Original proposal (read only). Review the saved model version using the normal Manual WAP actions.':'Imported as an unsaved draft. Review and edit, then explicitly save a model version before building.');
+ const detailsKey=JSON.stringify([origin.id,origin.context,origin.auth,origin.request,origin.original_sql,origin.created_at,origin.destination_context||p.context]);
+ if(!p.aiDetails||p.aiDetailsKey!==detailsKey){
+  p.aiDetailsKey=detailsKey;p.aiDetails=dataopsNode('details');dataopsNode('summary','',p.aiDetails,'Original request and SQL (read only)');
+  for(const text of [origin.request,origin.original_sql])dataopsNode('pre','',p.aiDetails).textContent=text;
+ }
+ bar.append(p.aiDetails);
+ if(p.aiNotice)dataopsNode('p','',bar,p.aiNotice);
+}
+function dataopsAiDraft(data,origin,destination,p){
+ const d=data?.draft,fail=()=>{throw Error('AI_WAP_UNAVAILABLE');};
+ const date=v=>typeof v==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(v)&&Number.isFinite(Date.parse(v));
+ if(!dbSavedExact(data,['context','draft'])||!dbExplanationSameContext(data.context,origin.context)||!dbSavedExact(d,['version','proposal_id','source_context','destination_context','original_sql','sql','sources','request','proposal_created_at','prepared_at'])||d.version!==1||d.proposal_id!==origin.id||!dbExplanationSameContext(d.source_context,origin.context)||!dbExplanationSameContext(d.destination_context,destination)||d.original_sql!==origin.original_sql||d.request!==origin.request||d.proposal_created_at!==origin.created_at||!date(d.proposal_created_at)||!date(d.prepared_at)||!dbProposalText(d.sql,65536)||!Array.isArray(d.sources)||d.sources.length<1||d.sources.length>8)fail();
+ const aliases=new Set(),refs=new Set();
+ for(const source of d.sources){
+  if(!dbSavedExact(source,['alias','ref','schema','table'])||typeof source.alias!=='string'||!/^[a-z_][a-z0-9_]*$/.test(source.alias)||!dbProposalRef(source.ref)||!dbProposalText(source.schema,4096)||!dbProposalText(source.table,4096))fail();
+  const key=JSON.stringify(['database_id','schema_id','object_id','incarnation','binding_revision','generation_id'].map(k=>source.ref[k]));
+  if(aliases.has(source.alias)||refs.has(key)||!origin.refs.some(r=>Object.keys(r).every(k=>r[k]===source.ref[k])))fail();aliases.add(source.alias);refs.add(key);
+  const label=origin.labels.find(l=>l.schema===source.schema&&l.table===source.table);
+  if(label?.kind==='VIEW')throw Error('AI_WAP_UNSUPPORTED');
+  const matches=p.tables.filter(o=>dataopsRefKey(dataopsRef(o))===dataopsRefKey(source.ref)),object=matches[0];
+  if(!label||label.kind!=='TABLE'||matches.length!==1||object.kind!=='TABLE'||object.capabilities?.resolve!==true||!dbProposalRef(object.ref)||!Object.keys(source.ref).every(k=>source.ref[k]===object.ref[k])||object.physical_name!==source.table||!p.schemas.some(s=>s.id===object.ref.schema_id&&s.database_id===destination.database_id&&s.sql_name===source.schema&&s.capabilities?.query===true))throw Error('AI_METADATA_CHANGED');
+ }
+ return dataopsClone(d);
+}
+async function dataopsAiLoad(p){
+ dataopsAiRender(p);const origin=p.aiPending;
+ try{if(!origin||p.aiToken||!dataopsAiPristine(p)||!dataopsAiDestination(p,origin))return;}catch{return;}
+ const destination=dataopsFreeze(dataopsClone(p.context)),tables=p.tables,schemas=p.schemas,sources=p.sources,fingerprint=dataopsAiFingerprint(p),revision=p.aiRevision,token={};p.aiToken=token;p.aiNotice='';
+ // Render without changing the request fingerprint. A changed field cancels this token permanently.
+ dataopsAiRender(p);
+ const current=()=>{dataopsAiRender(p);return p.aiToken===token&&p.aiPending===origin&&p.tables===tables&&p.schemas===schemas&&p.sources===sources&&revision===p.aiRevision&&fingerprint===dataopsAiFingerprint(p)&&dataopsAiPristine(p)&&dataopsAiDestination(p,origin);};
+ try{
+  const params=new URLSearchParams({context:JSON.stringify(origin.context),destination_context:JSON.stringify(destination)});
+  const response=await fetch(dbProposalEndpoint+'/'+encodeURIComponent(origin.id)+'/wap-draft?'+params,{headers:{'X-Shirokuma-Role':origin.context.selected_role}});
+  let data;try{data=await response.json();}catch{const error=Error('AI_WAP_UNAVAILABLE');error.status=response.status;throw error;}
+  if(!current())return;
+  if(!response.ok){const code=data?.code||data?.error?.code,error=Error('AI_WAP_UNAVAILABLE');error.code=code;error.status=response.status;
+   if(['AI_WAP_UNAVAILABLE','AI_WAP_UNSUPPORTED','AI_METADATA_CHANGED','AI_WAP_CONTEXT_MISMATCH'].includes(code))error.message=code;throw error;}
+  const draft=dataopsAiDraft(data,origin,destination,p);if(!current())return;
+  // All validation precedes the first form mutation. The normal explicit Save remains mandatory.
+  $(p.id+'-sql').value=draft.sql;$(p.id+'-sources').replaceChildren();p.sources=[];
+  for(const source of draft.sources)dataopsAddSource(p,source.alias,source.ref);
+  p.model=null;p.modelDirty=true;p.aiOrigin=dataopsFreeze({...origin,destination_context:destination});p.aiPending=null;p.aiToken=null;p.aiNotice='';++p.epoch;
+  ui(p.status,'Save or load a model version before building.');dataopsRender(p);
+ }catch(error){
+  if(!current())return;
+  const code=error.message;
+  if(dataopsAuthError(error)||['ROLE_FORBIDDEN','AI_ACCESS_REVOKED','SQL_PERMISSION_DENIED'].includes(error.code)){
+   for(const key of ['aiPending','aiOrigin'])if(p[key]?.id===origin.id&&dbExplanationSameContext(p[key].context,origin.context))p[key]=null;
+   p.aiNotice='';return;
+  }
+  p.aiNotice=code==='AI_WAP_UNSUPPORTED'?'This proposal cannot be imported into Manual WAP. Used sources must be supported tables.':code==='AI_METADATA_CHANGED'?'Source metadata changed. Refresh the inventory and select a new proposal.':'Proposal draft unavailable. Check both contexts and permissions, then explicitly retry.';
+ }finally{if(p.aiToken===token){p.aiToken=null;dataopsAiRender(p);}}
+}
+
 const dataopsClone=value=>JSON.parse(JSON.stringify(value));
 function dataopsFreeze(value){if(value&&typeof value==='object'){Object.values(value).forEach(dataopsFreeze);Object.freeze(value);}return value;}
 function dataopsRef(object){const r=object?.ref;return r&&['database_id','schema_id','object_id','incarnation'].every(k=>r[k]!=null)?Object.fromEntries(['database_id','schema_id','object_id','incarnation'].map(k=>[k,r[k]])):null;}
@@ -4836,6 +4964,7 @@ function dataopsPurgeLoadedModel(p){
  for(const source of p.sources||[]){source.alias.value='';source.table.replaceChildren();}
 }
 function dataopsInvalidate(p){
+ p.aiPending=null;p.aiOrigin=null;p.aiToken=null;
  dataopsPurgeLoadedModel(p);
  ++p.epoch;p.preview=null;p.model=null;p.models=[];p.objects=[];p.tables=[];p.invalid=true;
  for(const id of ['sample','models','target','target-schema','build','audit','publication']){const n=$(p.id+'-'+id);if(n)n.replaceChildren();}
@@ -4849,6 +4978,7 @@ function dataopsValidate(){
  for(const p of dataopsPanels.values()){
   if(p.context&&!p.invalid&&!dataopsAllowed(p,p.id==='p35-ingest'?'manual_ingest':'wap_models'))dataopsInvalidate(p);
   else dataopsRenderAvailability(p);
+  if(p.id==='p35-wap')dataopsAiRender(p);
  }
  if(dataopsExport&&!dataopsExport.invalid&&!dataopsExportAuthorized(dataopsExport)){dataopsExport.invalid=true;dataopsExport.receipt=null;dataopsExport.operation=null;dataopsExportRender();}
  dataopsExportControls();
@@ -4862,7 +4992,7 @@ async function dataopsRefreshAuthorization(){
  }
  dataopsValidate();
 }
-function dataopsOpen(target){const p=dataopsPanels.get(target==='ingestion'?'p35-ingest':target==='transformation'?'p35-wap':'');if(p&&!p.started){p.started=true;dataopsRefresh(p);}}
+function dataopsOpen(target){const p=dataopsPanels.get(target==='ingestion'?'p35-ingest':target==='transformation'?'p35-wap':'');if(p&&!p.started&&!p.aiPending){p.started=true;dataopsRefresh(p);}}
 function dataopsChanged(p){++p.epoch;p.preview=null;p.modelDirty=true;$(p.id+'-sample')?.replaceChildren();ui(p.status,p.id==='p35-ingest'?'Preview required after every input change.':'Save or load a model version before building.');dataopsRender(p);}
 const dataopsSameContext=(a,b)=>JSON.stringify(Object.keys(a||{}).sort().map(k=>[k,a[k]]))===JSON.stringify(Object.keys(b||{}).sort().map(k=>[k,b[k]]));
 async function dataopsRequest(path,context,body,key){
@@ -4882,7 +5012,7 @@ async function dataopsTask(p,task){
  finally{p.pending=false;dataopsRender(p);}
 }
 async function dataopsRefresh(p){
- ++p.epoch;const epoch=p.epoch,role=p.role,database=p.database,schema=p.schema,principal=dbPrincipal;
+ p.started=true;++p.epoch;p.inventoryLoading=true;p.inventoryReady=false;p.aiOrigin=null;const epoch=p.epoch,role=p.role,database=p.database,schema=p.schema,principal=dbPrincipal;
  dataopsPurgeLoadedModel(p);
  p.metadata=null;if(p.op){p.op.protected=false;p.op.operation=null;}
  for(const key of ['build','audit','publication'])$(p.id+'-'+key)?.replaceChildren();
@@ -4908,8 +5038,8 @@ async function dataopsRefresh(p){
    p.tables=tables;p.objects=tables.filter(o=>o.ref.schema_id===schema);
    if(p.id==='p35-wap'&&dataopsAllowed(p,'wap_models')){const reply=await dataopsRequest('/api/v1/wap/models',p.context);if(!current())return;p.models=reply.items||[];}
   }else{p.context=null;p.schemas=result.items||[];}
-  if(current()){ui(p.status,p.invalid?'Choose an authorized context.':'Ready');dataopsRender(p,true);}
- }catch(error){if(current()){dataopsInvalidate(p);ui(p.status,error.message);}}
+  if(current()){p.inventoryLoading=false;p.inventoryReady=!p.invalid;p.inventoryContext=p.context;ui(p.status,p.invalid?'Choose an authorized context.':'Ready');dataopsRender(p,true);}
+ }catch(error){if(current()){p.inventoryLoading=false;dataopsInvalidate(p);ui(p.status,error.message);}}
 }
 function dataopsPanel(id,title,parent){
  const root=dataopsNode('section',id,parent);root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,title);
@@ -4995,6 +5125,7 @@ function dataopsRender(p,inventory=false){
   }
  }
  dataopsRenderOperation(p);
+ if(id==='p35-wap')dataopsAiRender(p);
 }
 async function dataopsSubmit(p,path,body,record){
  // A record owns one immutable payload and key, including an ambiguous response.
@@ -5090,8 +5221,8 @@ function dataopsWapPayload(p){
  const min=Number($(id+'-min').value);if(!Number.isSafeInteger(min)||min<0)throw Error(t('Minimum rows'));
  return {model_id:$(id+'-model-id').value.trim(),sql:$(id+'-sql').value,sources,target,expected_version:p.model?.version??null,min_rows:min,not_null:$(id+'-not-null').value.split(',').map(v=>v.trim()).filter(Boolean)};
 }
-function dataopsLoadModel(p,model){
- p.model=model||null;p.modelDirty=!model;const id=p.id;
+function dataopsLoadModel(p,model,{preserveOrigin=false}={}){
+ if(!preserveOrigin){p.aiOrigin=null;p.aiDetails=null;p.aiDetailsKey='';}p.aiToken=null;++p.epoch;p.model=model||null;p.modelDirty=!model;const id=p.id;
  $(id+'-model-id').value=model?.model_id||'';$(id+'-model-id').readOnly=!!model;$(id+'-sql').value=model?.sql||'SELECT * FROM source';
  $(id+'-min').value=model?.min_rows??1;$(id+'-not-null').value=(model?.not_null||[]).join(', ');
  $(id+'-sources').replaceChildren();p.sources=[];for(const [alias,ref] of Object.entries(model?.sources||{source:null}))dataopsAddSource(p,alias,ref);
@@ -5100,13 +5231,14 @@ function dataopsLoadModel(p,model){
  ui(p.status,model?'Saved version {version}':'Save or load a model version before building.',{version:model?.version});dataopsRender(p);
 }
 function dataopsInstallWap(){
- const p=dataopsPanel('p35-wap','Manual WAP',$('transformation')),id=p.id;p.sources=[];$('transformation').prepend(p.root);
+ const p=dataopsPanel('p35-wap','Manual WAP',$('transformation')),id=p.id;p.sources=[];p.aiRevision=0;$('transformation').prepend(p.root);
+ p.aiBar=dataopsNode('div',id+'-ai-import',p.body);p.aiBar.className='help';p.aiBar.setAttribute('aria-live','polite');p.body.prepend(p.aiBar);
  dataopsField(p.fields,id+'-models','Saved models','select').onchange=()=>{dataopsChanged(p);const n=$(id+'-models').value;dataopsLoadModel(p,n===''?null:p.models[Number(n)]);};
  dataopsField(p.fields,id+'-model-id','Model ID');dataopsField(p.fields,id+'-sql','SQL','textarea').value='SELECT * FROM source';
  dataopsField(p.fields,id+'-target-schema','Target schema','select');dataopsField(p.fields,id+'-name','Target table name');dataopsField(p.fields,id+'-target','Existing table','select');
  const min=dataopsField(p.fields,id+'-min','Minimum rows');min.type='number';min.min='0';min.value='1';dataopsField(p.fields,id+'-not-null','Not-null columns');
  dataopsNode('div',id+'-sources',p.form);dataopsButton(p.form,id+'-add-source','Add source',()=>{dataopsAddSource(p);dataopsChanged(p);});dataopsAddSource(p,'source');
- dataopsButton(p.form,id+'-save','Save model version',()=>dataopsTask(p,async current=>{if(!dataopsAllowed(p,'wap_models'))return;const payload=dataopsWapPayload(p),reply=await dataopsRequest('/api/v1/wap/models',p.context,payload);if(!current())return;p.models=[...p.models.filter(m=>m.model_id!==reply.model.model_id),reply.model];dataopsLoadModel(p,reply.model);dataopsRender(p,true);}));
+ dataopsButton(p.form,id+'-save','Save model version',()=>dataopsTask(p,async current=>{if(!dataopsAllowed(p,'wap_models'))return;const payload=dataopsWapPayload(p),reply=await dataopsRequest('/api/v1/wap/models',p.context,payload);if(!current())return;p.models=[...p.models.filter(m=>m.model_id!==reply.model.model_id),reply.model];dataopsLoadModel(p,reply.model,{preserveOrigin:true});dataopsRender(p,true);}));
  for(const [kind,label] of [['build','Build'],['audit','Audit'],['publication','Publication']])dataopsField(p.fields,id+'-'+kind,label,'select').onchange=()=>dataopsRender(p);
  dataopsField(p.fields,id+'-metadata-id','Metadata ID (optional, from another authorized session)');
  dataopsField(p.fields,id+'-metadata-kind','Type','select',[['build','Build'],['audit','Audit'],['publication','Publication']]);
@@ -5124,6 +5256,7 @@ function dataopsInstallWap(){
    return dataopsSubmit(p,'/api/v1/wap/'+path,body,p.actions.get(signature));
   });
  }
+ for(const event of ['input','change'])p.form.addEventListener(event,()=>dataopsAiRender(p));
  p.form.onsubmit=e=>e.preventDefault();
  for(const key of ['model-id','sql','target-schema','name','target','min','not-null'])$(id+'-'+key).oninput=$(id+'-'+key).onchange=()=>dataopsChanged(p);
  return p;
