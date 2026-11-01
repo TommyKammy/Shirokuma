@@ -60,3 +60,7 @@ C2AのAPI応答と`PLATFORM_OBSERVATION_DEFERRED`等の既存codeは変更せず
 実APIのP accountには2件の明示DB grantがあるため、実機結果は「DB contextなし」の証拠とする。「DB grantなしでも認可できる」条件は、DB／grantを持たない重点テストの証拠として区別する。
 
 既存の[C2A受入実績](database-p6-4c2a-context-observations-2026-11-01.md)を維持する。global workload／policy検査、raw telemetryやモデルによる説明、変更操作は後続の独立単位とし、P6-4全体／P6-5／P6-7縦断検証／M1本人受入は継続する。
+
+## 後続: Compute画面への限定読取り統合
+
+[P6-5A](database-p6-5a-compute-observations-2026-11-01.md)で、Compute画面へのP専用固定LOCAL観測の読取り統合を実装した。受入済みC2Bの明示GET・strict DTO・global P cacheを再利用し、新しいAPIやDB context／grantの前提を追加しない。現在の真P・上限admin・選択adminを条件とし、完了snapshotと観測時刻をSRE／Policy／Computeで共有する。画面を開くだけでplatform観測を取得せず、既存Warehouse操作へも接続しない。desired／ready要約・過去のengine証拠・保存AutoChill設定・限定admission件数を現在healthや完全なPolicy監査へ読み替えない。P6-5Aの限定範囲を技術受入済みとした（全体回帰4,122成功・34 skip、両HTTP面の実APIと権限拒否、Computeの実画面、最終保全PASS）。本ガイドのC2B受入範囲と実績を維持し、C2Cのbaseline、旧SRE check／Policy baseline・global auditは独立後続とする。P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。

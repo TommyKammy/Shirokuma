@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-01
-version: "2.28.0"
+version: "2.29.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-11-01、[DB-P6-5A](../../guides/database-p6-5a-compute-observations-2026-11-01.md)でCompute画面へのP専用固定LOCAL観測の読取り統合を実装した。受入済みC2Bの明示GET・strict DTO・global P cacheを再利用し、新しいAPIやDB context／grantの前提を追加しない。現在の真P・上限admin・選択adminを条件とし、完了snapshotと観測時刻をSRE／Policy／Computeで共有する。画面を開くだけでplatform観測を取得せず、既存Warehouse操作へも接続しない。desired／ready要約・過去のengine証拠・保存AutoChill設定・限定admission件数を現在healthや完全なPolicy監査へ読み替えない。P6-5Aの限定範囲を技術受入済みとした（全体回帰4,122成功・34 skip、両HTTP面の実APIと権限拒否、Computeの実画面、最終保全PASS）。C2Cのworkload baselineは独立後続とし、旧SRE check／Policy baseline・global auditは閉じたまま、P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 
 2026-11-01、[DB-P6-4C2B](../../guides/database-p6-4c2b-platform-observations-2026-11-01.md)でSRE／PolicyのP専用固定LOCAL観測を実装した。現在のaccountとprincipal双方のP権限、上限admin、選択adminをsource取得前後に確認し、DBやgrantを利用条件にしない。固定2 Deploymentのdesired／ready要約、過去のengine検証日時、保存AutoChill設定、LOCALの保存admission件数だけを扱う。desired／readyの一致や両方0をSQL health・完全停止・資源解放の証明にせず、保存日時を現在の稼働保証へ変換しない。明示GETだけで書込み・SQL・LLM・操作を行わず、C2AのDB観測はplatform sourceを読まないままとする。C2Bの限定範囲を技術受入済みとした（全体回帰4,109成功・34 skip、両HTTP面の実APIと権限拒否、Pの実画面、復元と最終保全PASS）。global workload／policy検査、旧SRE／Policyのrun／manifestとComputeの旧検査は開放せず、P6-4全体／P6-5／P6-7／M1本人受入は継続する。
 

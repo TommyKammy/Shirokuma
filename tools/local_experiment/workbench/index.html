@@ -540,6 +540,11 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #runtime-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 #runtime-panel .runtime-actions{margin-block:12px}
 #runtime-panel .help{color:var(--muted)}
+#observation-compute-panel{min-width:0;max-width:100%}
+#observation-compute-panel .panel-body,#observation-compute-output{min-width:0;max-width:100%}
+#observation-compute-output p{max-width:75ch;overflow-wrap:anywhere}
+#observation-compute-panel .toolbar{min-width:0;max-width:100%;flex-wrap:wrap}
+#observation-compute-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wrap:anywhere}html[data-data-mode=database] #quick-warehouse-state{white-space:normal;overflow-wrap:anywhere}
 
 /* Database dbt uses the established operational toolbar and table vocabulary. */
@@ -3771,6 +3776,7 @@ Object.assign(i18n.ja,{
  'Refreshing platform authority.':'プラットフォーム権限を更新しています。','Fetching platform observation.':'プラットフォーム観測を取得しています。',
  'Platform observation unavailable. Explicitly refresh authority or fetch again.':'プラットフォーム観測を取得できません。権限更新または再取得を明示的に行ってください。',
  'Platform scope':'Platform スコープ','Global role':'グローバルロール',
+ 'Platform observations (P-only, read-only)':'プラットフォーム観測（P のみ・読み取り専用）',
  'Deployment desired/ready counts only; pod stoppage, released resources and current SQL health are not established.':'Deployment の希望数と Ready 数のみです。全 Pod の停止、リソース解放、現在の SQL の健全性は確認できません。',
  'Historical engine proof only; no live engine probe or current SQL health guarantee.':'エンジン証跡は過去の確認のみです。ライブ検査や現在の SQL の健全性の保証はありません。',
  'Saved admissions are incomplete blockers; this is not a security audit or permission to chill.':'保存済み受付は阻害要因の一部です。セキュリティ監査や休止可否の判定ではありません。',
@@ -3798,6 +3804,25 @@ function dbPlatformSync(){
   $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'platform-fetch').disabled=!!p.busy||!dbObservationPlatform('admin');
   if(platform)dbPlatformRender(o);
  }
+ dbPlatformComputeSync();
+}
+function dbPlatformComputeSync(){
+ if(!$('observation-compute-panel')?.dataset.installed)return;
+ $('observation-compute-auth').disabled=!!dbPlatform.busy||!dbPlatformCanRefresh();
+ $('observation-compute-platform-fetch').disabled=!!dbPlatform.busy||!dbObservationPlatform('admin');
+ // Refresh even when hidden so authority loss removes every protected rendered value.
+ dbPlatformRender({kind:'compute'});
+}
+function dbPlatformComputeInstall(){
+ if($('observation-compute-panel')?.dataset.installed)return;
+ const panel=dbAdminNode('section','observation-compute-panel',$('compute'));panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby','observation-compute-title');
+ const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2','observation-compute-title',head,'Platform observations (P-only, read-only)');
+ const body=dbAdminNode('div','',panel);body.className='panel-body';
+ const toolbar=dbAdminNode('div','',body);toolbar.className='toolbar';
+ dbAdminButton(toolbar,'observation-compute-auth','Refresh platform authority',dbPlatformRefreshAuth);
+ dbAdminButton(toolbar,'observation-compute-platform-fetch','Fetch platform observation',dbPlatformFetch);
+ const output=dbAdminNode('div','observation-compute-output',body);output.className='table-wrap';output.setAttribute('aria-live','polite');
+ dbPlatformSync();
 }
 function dbPlatformCanRefresh(){let actor;try{actor=JSON.parse(dbPrincipal);}catch{return false;}return databaseMode&&actor?.[1]===true&&currentRole==='admin'&&dbMaximumRole==='admin';}
 function dbPlatformCapture(){
@@ -8250,7 +8275,7 @@ Object.assign(i18n.ja,{
  'Operation {id}':'操作 {id}',
  '{guidance} All databases share this compute; storage and catalog remain.':'{guidance} 全 DB がこのコンピュートを共有します。ストレージとカタログは保持されます。',
  'All databases share this compute. Wake and Chill affect all databases; data storage and catalog remain.':'全 DB がこのコンピュートを共有します。起動・休止は全 DB に影響します。データストレージとカタログは保持されます。',
- 'SRE, Policy and Bears actions remain unavailable in this phase.':'SRE・Policy・Bears の操作はこの段階では未対応です。',
+ 'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.':'P のみの読み取り専用プラットフォーム観測を利用できます。従来のワークロード検査、ポリシー監査、その他の Bear 操作は未対応です。',
  'Physical {state} · observed {time}':'物理状態 {state} · 観測 {time}',
  'Engine verified at {time}':'エンジン検証済み {time}',
  'Engine readiness is unverified. Ready replicas alone do not prove SQL readiness.':'エンジンの準備は未検証です。ready replica 数だけでは SQL の準備完了を証明しません。',
@@ -8424,7 +8449,7 @@ async function dbRuntimeObserve(){
 }
 function dbRuntimeInstall(){
  const p=dbRuntime;if(p.installed)return;p.installed=true;
- for(const id of ['compute-sre-check','compute-policy-check']){$(id).disabled=true;$(id).dataset.databaseUnavailable='true';const key='SRE, Policy and Bears actions remain unavailable in this phase.';$(id).title=t(key);uiAttributes.push({node:$(id),attribute:'title',key});}
+ for(const id of ['compute-sre-check','compute-policy-check']){$(id).disabled=true;$(id).dataset.databaseUnavailable='true';const key='P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.';$(id).title=t(key);uiAttributes.push({node:$(id),attribute:'title',key});}
  const panel=dbAdminNode('div','runtime-panel',$('compute'));panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby','runtime-title');
  const head=dbAdminNode('div','runtime-heading',panel);head.className='panel-head';
  dbAdminNode('h2','runtime-title',head,'Shared LOCAL compute');
@@ -8465,8 +8490,8 @@ function dbRuntimeInstall(){
  for(const id of ['compute-refresh','compute-sre-check','compute-policy-check'])$(id).hidden=true;
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
- ui($('database-compute-notice'),'SRE, Policy and Bears actions remain unavailable in this phase.');
- dbRuntimeSync();
+ ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
+ dbPlatformComputeInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

@@ -324,7 +324,7 @@ runtime.physical_state='arbitrary';await refreshStatus();assert.equal($('quick-w
 const legacyStatus=$('compute-legacy-status'),legacyPolicy=$('compute-legacy-auto-chill');legacyStatus.append($('compute-summary'),$('compute-warehouse'),$('compute-components'));legacyPolicy.append($('auto-chill-minutes'),$('save-auto-chill'),$('auto-chill-state'));$('compute').append(legacyStatus,legacyPolicy);
 assert.equal(legacyStatus.hidden,false);assert.equal(legacyPolicy.hidden,false);await start();
 assert.equal(legacyStatus.hidden,true);assert.equal(legacyPolicy.hidden,true);assert.equal($('compute-warehouse').parentElement,legacyStatus);assert.equal($('auto-chill-minutes').parentElement,legacyPolicy);assert.equal($('runtime-panel').hidden,false);
-for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();const notice=t('SRE, Policy and Bears actions remain unavailable in this phase.');assert.equal($('database-compute-notice').textContent,notice);assert.equal($('compute').descendants().filter(n=>n.textContent===notice).length,1);assert.equal(legacyStatus.hidden,true);assert.equal(legacyPolicy.hidden,true);}
+for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();const notice=t('P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');assert.equal($('database-compute-notice').textContent,notice);assert.equal($('compute').descendants().filter(n=>n.textContent===notice).length,1);assert.equal(legacyStatus.hidden,true);assert.equal(legacyPolicy.hidden,true);}
 assert.equal($('compute-sre-check').disabled,true);assert.equal($('compute-policy-check').disabled,true);assert.equal($('copilot-generate').disabled,true);assert.equal($('runtime-minutes').disabled,false);
 """)
 
@@ -381,7 +381,7 @@ const overview=$('compute-legacy-overview'),legacyRefresh=$('compute-refresh'),s
 assert.equal(overview.hidden,false);assert.equal(legacyRefresh.hidden,false);assert.equal(sre.hidden,false);assert.equal(policy.hidden,false);
 await start();assert.equal(overview.hidden,true);for(const node of [legacyRefresh,sre,policy])assert.equal(node.hidden,true);assert.equal(sre.disabled,true);assert.equal(policy.disabled,true);assert.equal($('runtime-refresh').hidden,false);
 assert.equal($('compute-refresh'),legacyRefresh);assert.equal($('compute-sre-check'),sre);assert.equal($('compute-policy-check'),policy);
-for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();assert.equal(overview.hidden,true);assert.equal($('runtime-refresh').hidden,false);assert.equal($('database-compute-notice').textContent,t('SRE, Policy and Bears actions remain unavailable in this phase.'));}
+for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();assert.equal(overview.hidden,true);assert.equal($('runtime-refresh').hidden,false);assert.equal($('database-compute-notice').textContent,t('P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.'));}
 """)
 
     def test_grouped_receipt_recovery_stays_hidden_until_uncertain_post(self):

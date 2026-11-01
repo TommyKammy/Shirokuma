@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-11-01
-version: "7.28.0"
+version: "7.29.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,13 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-01 — DB-P6-5A read-only Compute platform observations
+
+- [実装・検証記録](../../guides/database-p6-5a-compute-observations-2026-11-01.md)：Compute画面へ受入済みC2BのP専用固定LOCAL観測を統合した。既存API・strict DTO・global P cacheを再利用し、DB contextやgrantを前提にしない。
+- 明示GETだけでsourceを読み、SRE／Policy／Compute間のsnapshot・観測時刻を共有する。既存Warehouse操作や旧SRE check／Policy baselineを開放しない。
+- 重点回帰・両HTTP面・実画面、同じ認可でのdraft保全と権限喪失時の保護表示消去、最終保全を確認した。P6-5Aの限定範囲を技術受入済みとした（全体回帰4,122成功・34 skip、両HTTP面の実APIと権限拒否、Computeの実画面、最終保全PASS）。
+- C2Cのbaselineは独立後続とし、P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 
 ### 2026-11-01 — DB-P6-4C2B fixed P-only platform observations
 
