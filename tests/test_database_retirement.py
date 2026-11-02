@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import uuid
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
@@ -297,6 +298,124 @@ class ClosureAwareRetirementTests(unittest.TestCase):
                         self.assertTrue(any(b['id'] in (self.query_id,a['id']) for b in blockers))
                     finally:
                         db.execute('ROLLBACK TO negative'); db.execute('RELEASE negative')
+
+
+class TableDropClosureTests(unittest.TestCase):
+    """Actual typed ACK, with retirement preview only and no runtime retirement."""
+    def setUp(self):
+        import test_manual_table_drop as drop_boundary
+        self.f = drop_boundary.DropTests()
+        self.f.setUp()
+        self.addCleanup(self.f.doCleanups)
+
+    def observation(self, ident):
+        owner = self.f.b.fixture.principal('owner')
+        value = retirement.preview(owner, 'admin', self.f.context.database_id)
+        return next((b for b in value['blockers'] if b['kind'] == 'dataops' and b['id'] == ident), None)
+
+    def test_actual_drop_ack_zero_query_closure_historical_after_grant_binding_recreation(self):
+        import manual_table_drop as drop
+        result = self.f.submit()
+        self.assertIsNone(self.observation(result['id']))
+        with store.connect() as db:
+            before = db.total_changes
+            db.execute('PRAGMA query_only=ON')
+            with patch.object(drop, '_access', side_effect=AssertionError('current auth')):
+                self.assertTrue(drop.pure_closed_proof(db, result['id']))
+            self.assertEqual(db.total_changes, before)
+        with store.connect() as db:
+            dm.update_grant(db, 'alice', self.f.context.database_id, 2, 'revoked')
+            db.execute('UPDATE catalog_bindings SET desired_revision=desired_revision+1 WHERE database_id=?', (self.f.context.database_id,))
+            dm.observe_object(db, self.f.source.schema_id, self.f.name, 'TABLE', str(uuid.uuid4()), self.f.name)
+        self.assertIsNone(self.observation(result['id']))
+
+    def test_malformed_ack_and_unknown_remain_blockers(self):
+        result = self.f.submit()
+        with store.connect() as db:
+            saved = dict(db.execute('SELECT * FROM dataops_operations WHERE id=?', (result['id'],)).fetchone())
+        for field, value in (('result', '{}'), ('state', 'UNKNOWN'), ('committed', 0), ('route', 'other')):
+            with store.connect() as db:
+                db.execute('UPDATE dataops_operations SET '+field+'=? WHERE id=?', (value, result['id']))
+            self.assertIsNotNone(self.observation(result['id']), field)
+            with store.connect() as db:
+                db.execute('UPDATE dataops_operations SET '+field+'=? WHERE id=?', (saved[field], result['id']))
+
+    def test_platform_null_ack_historical_closure_after_current_authority_changes(self):
+        import manual_table_drop as drop
+        self.f.principal=self.f.b.fixture.principal('owner')
+        self.f.context=self.f.b.context(principal=self.f.principal,role='admin')
+        self.assertIsNone(self.f.context.grant_revision)
+        result=self.f.submit()
+        self.assertIsNone(self.observation(result['id']))
+        self.f.b.fixture.users['owner']['platform_admin']=False;self.f.b.fixture.save()
+        with store.connect() as db:
+            dm.create_grant(db,'owner',self.f.context.database_id,'admin')
+            dm.update_grant(db,'owner',self.f.context.database_id,1,'revoked')
+            db.execute('UPDATE catalog_bindings SET desired_revision=desired_revision+1 WHERE database_id=?',(self.f.context.database_id,))
+            dm.observe_object(db,self.f.source.schema_id,self.f.name,'TABLE',str(uuid.uuid4()),self.f.name)
+            before=db.total_changes
+            with patch.object(drop,'_access',side_effect=AssertionError('current auth')):
+                self.assertTrue(drop.pure_closed_proof(db,result['id']))
+            self.assertEqual(db.total_changes,before)
+        # Preview still requires its own current management authority; another
+        # real platform account reads the historical operation's closure.
+        self.f.b.fixture.users['reviewer']=dict(self.f.b.fixture.users['owner'],platform_admin=True)
+        self.f.b.fixture.save()
+        reviewer=self.f.b.fixture.principal('reviewer')
+        value=retirement.preview(reviewer,'admin',self.f.context.database_id)
+        self.assertFalse(any(b['kind']=='dataops' and b['id']==result['id'] for b in value['blockers']))
+
+    def test_valid_foreign_db_drop_native_membership_cannot_prove_inventory_db_closure(self):
+        import manual_table_drop as drop
+        result = self.f.submit()
+        foreign_inventory = self.f.b.databases[1]
+        with store.connect() as db:
+            self.assertTrue(drop.pure_closed_proof(db, result['id']))
+            db.execute('INSERT INTO wap_models (database_id,model_id,version,operation_id) VALUES (?,?,1,?)',
+                (foreign_inventory, 'foreign-drop-membership', result['id']))
+        owner = self.f.b.fixture.principal('owner')
+        value = retirement.preview(owner, 'admin', foreign_inventory)
+        self.assertTrue(any(d['kind'] == 'dataops' and d['id'] == result['id'] for d in value['dependencies']))
+        blocker = next(b for b in value['blockers'] if b['kind'] == 'dataops' and b['id'] == result['id'])
+        self.assertEqual(blocker['code'], 'CLOSURE_UNPROVEN')
+        self.assertIsNone(self.observation(result['id']))
+
+    def test_orphan_query_context_or_any_child_admission_cannot_use_generic_fallback(self):
+        import manual_table_drop as drop
+        result = self.f.submit(); ident = result['id']; c = self.f.context
+        with store.connect() as db:
+            dm.record_query(db, dm.QueryRecord('orphan-drop-query', 'alice',
+                dm.QueryContext(c.database_id, c.schema_id, c.warehouse_id, c.generation_id), 'FINISHED', 'now'))
+            db.execute('''INSERT INTO query_execution_contexts
+                (query_id,selected_role,mode,sql_catalog,sql_schema,binding_revision,grant_revision,
+                backend_username,credential_snapshot_ref,request_id,worksheet_id,sql)
+                VALUES (?,'admin','read','sales','raw',1,2,'private','private',?,'orphan','SELECT 1')''',
+                ('orphan-drop-query', ident))
+            self.assertFalse(drop.pure_closed_proof(db, ident))
+        self.assertEqual(self.observation(ident)['code'], 'CLOSURE_UNPROVEN')
+        with store.connect() as db:
+            # Even a complete, settled SQL child cannot turn this typed route
+            # into a generic SQL closure operation.
+            db.execute('BEGIN IMMEDIATE')
+            parent = db.execute("SELECT id FROM warehouse_admissions WHERE kind='dataops' AND subject_id=?", (ident,)).fetchone()[0]
+            sql_child = admission.admit(db, warehouse_id=c.warehouse_id,actor='alice',kind='query',
+                subject_id='orphan-drop-query',generation_id=c.generation_id,database_id=c.database_id)
+            admission.finish(db,sql_child,state='FINISHED')
+            db.execute('UPDATE warehouse_admissions SET parent_id=? WHERE id=?',(parent,sql_child.id))
+            db.execute("INSERT INTO dataops_queries VALUES (?,'orphan',?,'read',NULL)",(ident,'orphan-drop-query'))
+            self.assertFalse(drop.pure_closed_proof(db,ident))
+        self.assertEqual(self.observation(ident)['code'],'CLOSURE_UNPROVEN')
+        with store.connect() as db:
+            db.execute('DELETE FROM dataops_queries WHERE operation_id=?',(ident,))
+            db.execute('DELETE FROM warehouse_admissions WHERE id=?',(sql_child.id,))
+            db.execute('DELETE FROM query_execution_contexts WHERE query_id=?', ('orphan-drop-query',))
+            parent = db.execute("SELECT id FROM warehouse_admissions WHERE kind='dataops' AND subject_id=?", (ident,)).fetchone()[0]
+            child = admission.admit(db, warehouse_id=c.warehouse_id, actor='alice', kind='dataops',
+                subject_id='unlinked-child', generation_id=c.generation_id, database_id=c.database_id)
+            admission.finish(db, child, state='FINISHED')
+            db.execute('UPDATE warehouse_admissions SET parent_id=? WHERE id=?', (parent, child.id))
+            self.assertFalse(drop.pure_closed_proof(db, ident))
+        self.assertEqual(self.observation(ident)['code'], 'CLOSURE_UNPROVEN')
 
 
 class RetirementTests(unittest.TestCase):

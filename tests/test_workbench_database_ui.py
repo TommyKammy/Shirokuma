@@ -163,12 +163,14 @@ for(const lang of ['ja','en']){
  session.maximum_role='bi_viewer';await dbRefreshContext();await dbRefreshExplorer();
  assert.equal(document.activeElement,$('sql'));assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);
  assert.equal($('ai-settings-button').disabled,true);assert.notEqual($('ai-settings-button').dataset.databaseUnavailable,'true');
- for(const id of ['wake','chill','quick-wake','quick-chill','copilot-generate','drop-table-btn','run-dbt-build','run-dbt-test']){
+ for(const id of ['wake','chill','quick-wake','quick-chill','copilot-generate','run-dbt-build','run-dbt-test']){
   assert.equal($(id).disabled,true,id);assert.equal($(id).dataset.databaseUnavailable,'true',id);
   const binding=uiAttributes.find(b=>b.node===$(id)&&b.attribute==='title');assert.ok(binding,id);assert.equal($(id).title,t(binding.key));
  }
  assert.equal($('clone-table-btn').disabled,true);assert.equal($('clone-table-btn').dataset.databaseUnavailable,'false');
  assert.equal($('clone-table-btn').title,t('Clone requires an engineer or administrator and a readable TABLE.'));
+ assert.equal($('drop-table-btn').disabled,true);assert.equal($('drop-table-btn').dataset.databaseUnavailable,'false');
+ assert.equal($('drop-table-btn').title,t('Catalog removal requires current Admin, an explicit database grant, and a readable, writable TABLE in raw, sandbox, staging or marts.'));
  for(const format of ['csv','json','tsv']){assert.equal($('export-'+format).disabled,true);assert.equal($('export-'+format).dataset.databaseUnavailable,'true');assert.equal($('export-'+format)['aria-describedby'],'result-action-state');}
  assert.equal($('copy-tsv').hidden,true);
  assert.equal($('result-action-state').textContent,t('Result saving unavailable. Received page receipts or cached results are unavailable; SQL is not rerun.'));

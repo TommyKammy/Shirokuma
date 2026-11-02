@@ -578,6 +578,9 @@ html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wr
 html[data-data-mode="database"] #table-lineage{grid-template-columns:minmax(0,1fr);min-width:0;overflow-wrap:anywhere}
 html[data-data-mode="database"] #table-lineage>*{min-width:0;overflow-wrap:anywhere}
 .lineage-fact{overflow-wrap:anywhere;min-width:0}.lineage section{min-width:0}.lineage ul{padding-inline-start:1.25rem}
+#db-drop-panel{min-width:0;max-width:100%;padding:16px;border-top:1px solid var(--line)}
+#db-drop-panel :is(p,div,label,button){overflow-wrap:anywhere;word-break:normal;min-width:0;max-width:100%}#db-drop-panel input{box-sizing:border-box;max-width:100%}#db-drop-panel .toolbar{flex-wrap:wrap}
+html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inline-block!important}
 </style>
 </head>
 <body>
@@ -4461,7 +4464,7 @@ function dbHideRows(predicate=()=>true){
  if(!current?.authorized||!dbRoleWithinHeader(current.origin.role)){queryResult=null;$('query-results').replaceChildren();$('query-chart').replaceChildren();}
 }
 function dbClearExplorer(){
- dbProfileInvalidate();dbLineageInvalidate();
+ dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();
  ++dbObjectEpoch;dbDetails.clear();dbPending.clear();dbObjects=[];dbObject=null;
  ++dbListRequest;
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
@@ -4912,7 +4915,7 @@ function dbExplorerControls(){
  ui($('use-explorer-schema'),'Use this schema in {worksheet}',{worksheet:dbCurrent()?worksheetName(dbCurrent()):t('Worksheet')});
  if($('catalog-context-reselect'))$('catalog-context-reselect').hidden=!dbExplorerReason();
  dbRenderBreadcrumb();dbRenderTree();
- if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();dbProfileControls();dbLineageControls();}
+ if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();dbProfileControls();dbLineageControls();dbDropControls();}
 }
 function dbRenderBreadcrumb(){
  const crumb=$('database-breadcrumb');if(!crumb)return;
@@ -5078,7 +5081,7 @@ function dbSyncWorkspaceNavigation(){
  }
 }
 function dbShowWorkspace(pane){
- if(pane!==dbWorkspacePane){dbProfileInvalidate();dbLineageInvalidate();}
+ if(pane!==dbWorkspacePane){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}
  if(dbWorkspacePane!==pane)++dbExportRevision;
  dbWorkspacePane=pane;
  dbSyncWorkspaceNavigation();
@@ -5201,7 +5204,7 @@ async function dbLoadObjects(cursor=null){
  }catch(error){if(current()){dbExplorerDenied(error);message('catalog-error',error.message);}}
 }
 async function dbDescribe(object,section=activeInspector,snapshot){
- dbProfileInvalidate();dbLineageInvalidate();
+ dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();
  const scope=dbCatalogScope(),epoch=++dbObjectEpoch,identity=dbIdentity(),role=currentRole;
  dbObject=object;$('table-title').textContent=object.display_name;
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
@@ -5338,7 +5341,6 @@ async function initializeDatabaseUI(session){
  for(const [controls,key] of [
   [['quick-wake','quick-chill','wake','chill'].map(id=>$(id)),'Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.'],
   [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.'],
-  [['drop-table-btn'].map(id=>$(id)),'Drop is unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.'],
   [['run-dbt-build','run-dbt-test'].map(id=>$(id)),'Legacy dbt build/test is unavailable in Database mode. Use Manual WAP or Managed Marts with an authorized context.'],
   [[...document.querySelectorAll('[data-sample]')],'Fixed sample queries are unavailable in Database mode. Enter SQL for the selected database.']
  ])for(const node of controls){node.disabled=true;node.dataset.databaseUnavailable='true';node.setAttribute('title',t(key));uiAttributes.push({node,attribute:'title',key});}
@@ -5361,7 +5363,7 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
@@ -6316,7 +6318,7 @@ function dataopsInstall(){
  const area=dataopsNode('section','p35-table-export',$('database-details'));dataopsNode('h3','',area,'Export receipt');const receipt=dataopsNode('div','p35-export-receipt',area);receipt.setAttribute('aria-live','polite');
  dataopsButton(area,'p35-export-observe','Observe operation',()=>dataopsObserveExport());dataopsButton(area,'p35-export-cancel','Cancel operation',()=>dataopsObserveExport(true));
  dataopsButton(area,'p35-export-new','New export',()=>{if(dataopsExport&&!dataopsExport.pending&&!dataopsExport.trackingPending&&dataopsTerminal(dataopsExport)){dataopsExport=null;dataopsExportRender();dataopsExportControls();$('export-table-btn').focus();}});
- dataopsExportRender();dataopsExportControls();dbCloneInstall();
+ dataopsExportRender();dataopsExportControls();dbCloneInstall();dbDropInstall();
 }
 
 // Profiling owns only opaque recovery handles; statistics stay in memory.
@@ -6797,6 +6799,238 @@ function dbCloneInstall(){
  $('clone-table-btn').onclick=()=>{p.opened=true;dbCloneControls();$('db-clone-name').focus();return dbCloneRefresh();};
  for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===$('clone-table-btn')&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
  dbCloneControls();
+}
+
+// Whole TABLE unregister owns its preview and recovery handle independently.
+const dbDropKey='shirokuma.table-drop.v1',dbDropMode='CATALOG_UNREGISTER_KEEP_DATA';
+const dbDrop={revision:0,owner:null,handles:new Map(),op:null,preview:null,context:null,source:null,scope:'',busy:null,opened:false,notice:''};
+Object.assign(i18n.ja,{
+ 'Remove from catalog (keep data)':'カタログから登録解除（データ保持）',
+ 'Removes the whole TABLE registration, including all snapshots. Data files and metadata files are retained. There is no automatic Undrop. VIEW, SQL and Job references are not rewritten. Dependency completeness is not established.':'全スナップショットを含む TABLE 全体の登録を解除します。データファイルとメタデータファイルは保持されます。自動 Undrop はありません。VIEW・SQL・Job の参照は書き換えません。依存関係の網羅性は確認できていません。',
+ 'Catalog removal requires current Admin, an explicit database grant, and a readable, writable TABLE in raw, sandbox, staging or marts.':'登録解除には現在の Admin データベースアクセスと raw・sandbox・staging・marts 内の読取・書込可能な TABLE が必要です。',
+ 'VIEW catalog removal is unavailable. Select a TABLE.':'VIEW の登録解除は利用できません。TABLE を選択してください。',
+ 'Refresh removal preview':'登録解除のプレビューを更新',
+ 'Type the exact physical table name':'物理テーブル名を大文字・小文字も含めて正確に入力',
+ 'I understand: remove registration and keep data':'登録を解除し、データを保持することを確認しました',
+ 'New removal intent':'新しい登録解除要求',
+ 'Refresh the preview before confirming removal.':'登録解除の確認前にプレビューを更新してください。',
+ 'Cancellation can prevent dispatch only. Once sent, the outcome remains uncertain until an acknowledgement; it cannot roll back removal.':'取消で送信前の処理を停止できます。送信後は応答を受け取るまで結果不明のままで、登録解除は元に戻せません。',
+ 'Removal details are hidden until current owner and Admin access are verified. Observe the saved request even if the source is gone or unselected.':'現在の所有者と Admin 権限を確認するまで詳細を表示しません。参照元が消失・未選択でも保存された元の要求を照会できます。',
+ 'Removal request could not be saved. No request was sent.':'登録解除要求を保存できません。要求は送信していません。',
+ 'Whole TABLE / all snapshots':'TABLE 全体／全スナップショット',
+ 'No current snapshot':'現在のスナップショットなし',
+ 'Preview digest':'プレビューのダイジェスト',
+ 'Identification details':'識別情報',
+ 'Before removing this registration, pause other applications and tools that could create or replace a TABLE with the same name. Catalog removal cannot atomically check the UUID or current snapshot.':'登録解除の前に、同名の TABLE を作成・置換する可能性がある他のアプリやツールを一時停止してください。カタログの登録解除では UUID や現在のスナップショットを不可分に照合できません。',
+ 'Acknowledged':'応答確認済み',
+ 'ACKNOWLEDGED':'登録解除の応答確認済み','PREPARED':'送信準備済み','SENT':'送信済み・応答未確認',
+ 'OUTCOME_UNKNOWN':'結果不明','POST_ACK_OBSERVATION_UNAVAILABLE':'登録解除済み・事後確認未完了',
+ 'REMOVAL_NOT_SENT_OR_REJECTED':'未送信または登録解除拒否'
+ ,'CATALOG_REMOVED_RETIREMENT_UNPROVEN':'登録解除済み・元の登録行の退役確認未完了',
+ 'Original source Ref':'元の参照元 Ref','Table registration removed':'テーブルの登録を解除しました',
+ 'Removal is preparing. Observe manually; cancellation can prevent dispatch only.':'登録解除を準備しています。手動で照会してください。取消で停止できるのは送信前だけです。',
+ 'Removal was sent. Observe the original request; cancellation cannot establish stoppage or undo removal.':'登録解除を送信しました。元の要求を照会してください。取消で停止を証明したり登録解除を元に戻したりすることはできません。'
+});
+for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
+function dbDropScope(){return JSON.stringify([dbDrop.revision,dbPrincipal,currentRole,dbMaximumRole,dbAdmin.platform,dbAdmin.epoch,dbRoleVersion(currentRole),dbAuthorizationVersion,dbEpoch,dbCatalogScope(),dbSelectionGeneration,dbObjectEpoch,dataopsRef(dbObject),dbObject?.head,dbObject?.current_snapshot_id,activeTab,dbWorkspacePane]);}
+function dbDropAdminAccess(revision){return Number.isInteger(revision)&&revision>0||revision===null&&dbAdmin.platform===true&&dbMaximumRole==='admin'&&dbRoleWithinHeader('admin');}
+function dbDropReason(){
+ if(dbObject?.kind==='VIEW')return 'VIEW catalog removal is unavailable. Select a TABLE.';
+ const s=dbExplorer.schemas.find(s=>s.id===dbExplorer.schema_id),d=dbDatabases.find(d=>d.id===dbExplorer.database_id);
+ if(currentRole!=='admin'||!dbRoleWithinHeader('admin')||!dbExplorerCanOpen()||dbObject?.kind!=='TABLE'||
+   !s?.capabilities?.write||!['raw','sandbox','staging','marts'].includes(s.sql_name)||s.purpose!==s.sql_name||!dbDropAdminAccess(d?.grant_revision))
+  return 'Catalog removal requires current Admin, an explicit database grant, and a readable, writable TABLE in raw, sandbox, staging or marts.';
+ return '';
+}
+function dbDropContext(){
+ if(dbDropReason())return null;
+ const d=dbDatabases.find(d=>d.id===dbExplorer.database_id),s=dbExplorer.schemas.find(s=>s.id===dbExplorer.schema_id);
+ return {database_id:d.id,schema_id:s.id,warehouse_id:'LOCAL',sql_catalog:d.sql_catalog,sql_schema:s.sql_name,selected_role:'admin',binding_revision:d.binding_revision,generation_id:d.generation_id,grant_revision:d.grant_revision};
+}
+function dbDropInvalidate(){
+ const p=dbDrop;++p.revision;p.preview=null;p.context=null;p.source=null;p.scope='';p.notice='';
+ if($('db-drop-name')){$('db-drop-name').value='';$('db-drop-ack').checked=false;$('db-drop-preview').textContent='';}
+ if(p.op)p.op.operation=null;
+ if(!p.op?.pending)p.busy=null;
+ if(p.installed)dbDropControls();
+}
+function dbDropSaved(){return readStorage(dbDropKey,{})?.owners||{};}
+function dbDropSync(){
+ const p=dbDrop;if(p.owner===dbPrincipal)return;
+ if(p.op){p.op.operation=null;p.handles.set(p.op.principal,p.op);}
+ p.owner=dbPrincipal;
+ const live=p.handles.get(dbPrincipal),saved=live||dbDropSaved()[dbPrincipal];
+ p.op=saved?.principal===dbPrincipal&&typeof saved.key==='string'&&saved.key&&saved.path==='/api/v1/table-drops'&&saved.payload?.context?.selected_role==='admin'&&saved.payload?.mode===dbDropMode&&saved.payload?.source?
+  live||{...saved,payload:dataopsFreeze(saved.payload),context:dataopsFreeze(saved.payload.context),operation:null}:null;
+ if(p.op)p.handles.set(dbPrincipal,p.op);
+ p.busy=p.op?.pending||null;p.opened=false;p.preview=null;p.context=null;p.source=null;p.scope='';p.notice='';++p.revision;
+ $('db-drop-name').value='';$('db-drop-ack').checked=false;
+}
+function dbDropPersist(op=dbDrop.op){
+ try{
+  const owners=dbDropSaved();
+  if(op){owners[op.principal]={principal:op.principal,key:op.key,id:op.id||null,path:op.path,payload:op.payload,state:op.state,ambiguous:!!op.ambiguous,phase:op.phase,sequence:op.sequence||0};dbDrop.handles.set(op.principal,op);}
+  else{delete owners[dbPrincipal];dbDrop.handles.delete(dbPrincipal);}
+  localStorage.setItem(dbDropKey,JSON.stringify({owners}));return true;
+ }catch{return false;}
+}
+function dbDropHeld(op){return !!op&&(op.ambiguous||!['FINISHED','FAILED','CANCELED','REJECTED'].includes(op.state));}
+function dbDropCanObserve(op){return !!op&&op.principal===dbPrincipal&&currentRole==='admin'&&op.context.selected_role==='admin'&&dbDropAdminAccess(op.context.grant_revision)&&dataopsExportAuthorized(op);}
+function dbDropControls(){
+ if(!dbDrop.installed)return;
+ dbDropSync();const p=dbDrop,op=p.op,scope=dbDropScope(),reason=dbDropReason();
+ if(p.busy?.scope&&p.busy.scope!==scope&&!op?.pending)p.busy=null;
+ if(p.scope&&p.scope!==scope){p.preview=null;p.context=null;p.source=null;p.scope='';$('db-drop-name').value='';$('db-drop-ack').checked=false;}
+ if(op&&(op.receiptScope!==scope||!dbDropCanObserve(op)))op.operation=null;
+ const busy=!!p.busy||!!op?.pending,ready=!!p.preview&&p.scope===scope&&!reason;
+ const button=$('drop-table-btn');button.hidden=false;button.disabled=!!reason||busy||!!op;button.dataset.databaseUnavailable='false';button.title=t(reason);ui(button,'Remove from catalog (keep data)');
+ $('db-drop-panel').hidden=!p.opened&&!op;
+ $('db-drop-refresh').disabled=busy||!!op||!!reason;
+ $('db-drop-submit').disabled=busy||!!op||!ready||$('db-drop-name').value!==p.preview?.confirmation_name||!$('db-drop-ack').checked;
+ $('db-drop-name').disabled=busy||!!op||!ready;$('db-drop-ack').disabled=busy||!!op||!ready;
+ $('db-drop-observe').disabled=busy||!dbDropCanObserve(op);
+ $('db-drop-cancel').disabled=busy||!op?.id||!dbDropCanObserve(op)||op.phase==='SENT'||dbDropHeld(op)&&op.state==='UNKNOWN'||op?.ambiguous||['FINISHED','FAILED','CANCELED'].includes(op?.state);
+ $('db-drop-new').disabled=busy||!op||dbDropHeld(op);
+ const out=$('db-drop-preview');out.replaceChildren();
+ if(ready){
+  dataopsNode('p','',out,[p.context.sql_catalog,p.context.sql_schema,p.preview.label].join(' / '));
+  dataopsNode('p','',out,'Whole TABLE / all snapshots');
+  dataopsNode('p','',out,'Snapshot').append(': '+(p.preview.head??t('No current snapshot')));
+  const identity=dataopsNode('details','db-drop-identification',out);identity.open=false;
+  dataopsNode('summary','',identity,'Identification details');
+  dataopsNode('p','',identity,'Source').append(': '+JSON.stringify(p.preview.source));
+  dataopsNode('p','',identity,'Context').append(': '+JSON.stringify(p.context));
+  dataopsNode('p','',identity,'Preview digest').append(': '+p.preview.preview_fingerprint);
+ }
+ const status=$('db-drop-status');status.replaceChildren();
+ if(p.notice)dataopsNode('p','',status,p.notice);
+ if(!ready&&!op)dataopsNode('p','',status,reason||'Refresh the preview before confirming removal.');
+ if(op){
+  dataopsNode('p','',status,'Operation ID').append(': '+(op.id||'UNKNOWN'));
+  dataopsNode('p','',status,'Status').append(': '+t(op.state||'UNKNOWN'));
+  if(op.operation){const r=op.operation;
+   dataopsNode('p','',status,[(r.context||op.context).sql_catalog,(r.context||op.context).sql_schema,r.label].join(' / '));
+   const identity=dataopsNode('details','db-drop-receipt-identification',status);identity.open=false;
+   dataopsNode('summary','',identity,'Identification details');
+   dataopsNode('p','',identity,'Original source Ref').append(': '+JSON.stringify(r.source||op.payload.source));
+   dataopsNode('p','',identity,'Context').append(': '+JSON.stringify(r.context||op.context));
+   dataopsNode('p','',identity,'Preview digest').append(': '+op.payload.expected_preview_fingerprint);
+   for(const [label,value] of [['Committed',r.committed],['Acknowledged',r.acknowledged],['Status',t(r.phase)],['Warning',t(r.warning||'')]])dataopsNode('p','',status,label).append(': '+String(value));
+  }else dataopsNode('p','',status,'Removal details are hidden until current owner and Admin access are verified. Observe the saved request even if the source is gone or unselected.');
+  if(op.ambiguous||op.state==='UNKNOWN')dataopsNode('p','',status,'Outcome unknown. Observe with the saved key; do not submit again.');
+  else if(op.phase==='SENT')dataopsNode('p','',status,'Removal was sent. Observe the original request; cancellation cannot establish stoppage or undo removal.');
+  else if(dbDropHeld(op))dataopsNode('p','',status,'Removal is preparing. Observe manually; cancellation can prevent dispatch only.');
+ }
+}
+async function dbDropVerify(context,current){
+ const items=await dbReadInventory('admin',current);if(!current()||!dbInventoryCurrent(items))return false;
+ if(!dbDropAdminAccess(context.grant_revision)||!dbRunAllowed({origin:{context,role:'admin',principal:dbPrincipal}},items))throw Object.assign(Error('DB_ACCESS_REVOKED'),{code:'DB_ACCESS_REVOKED'});
+ const reply=await dbAPI('/api/v1/databases/'+encodeURIComponent(context.database_id)+'/schemas','admin');
+ if(!current()||!dbInventoryCurrent(items))return false;
+ if(!reply.items?.some(s=>s.id===context.schema_id&&s.database_id===context.database_id&&s.sql_name===context.sql_schema&&s.purpose===s.sql_name&&['raw','sandbox','staging','marts'].includes(s.sql_name)&&s.capabilities?.query===true&&s.capabilities?.write===true))throw Object.assign(Error('SQL_PERMISSION_DENIED'),{code:'SQL_PERMISSION_DENIED'});
+ dbApplyInventory(items,'admin');return current()&&dbInventoryCurrent(items)&&dbDropAdminAccess(context.grant_revision);
+}
+async function dbDropRefresh(){
+ dbDropControls();const p=dbDrop;if(p.busy||p.op||dbDropReason())return;
+ const scope=dbDropScope(),owner=dbPrincipal,context=dataopsFreeze(dbDropContext()),source=dataopsFreeze(dataopsClone(dataopsRef(dbObject))),token={scope};
+ const current=()=>scope===dbDropScope()&&owner===dbPrincipal&&p.busy===token;
+ p.busy=token;p.preview=null;p.context=null;p.source=null;p.scope='';$('db-drop-name').value='';$('db-drop-ack').checked=false;p.notice='';dbDropControls();
+ try{
+  if(!await dbDropVerify(context,current))return;
+  const reply=await dataopsRequest('/api/v1/table-drops/preview?source='+encodeURIComponent(JSON.stringify(source)),context);
+  if(!current()||!await dbDropVerify(context,current))return;
+  const v=reply.preview;
+  if(v?.mode!==dbDropMode||v.scope!=='ALL_SNAPSHOTS'||dataopsRefKey(v.source)!==dataopsRefKey(source)||typeof v.confirmation_name!=='string'||!/^[a-f0-9]{64}$/.test(v.preview_fingerprint))throw Error('PREVIEW_CHANGED');
+  p.preview=v;p.context=context;p.source=source;p.scope=scope;
+ }catch(error){if(current()){dbDropInvalidate();p.notice=error.message;if(dataopsAuthError(error))dbExplorerDenied(error);}}
+ finally{if(p.busy===token)p.busy=null;dbDropControls();}
+}
+function dbDropAccept(op,operation,visible){
+ if(!operation||typeof operation.id!=='string'||op.id&&op.id!==operation.id)return;
+ op.id=operation.id;op.state=operation.state;op.phase=operation.phase;
+ op.ambiguous=operation.state==='UNKNOWN'||operation.queries?.some(q=>q.state==='UNKNOWN')===true;
+ op.operation=visible?operation:null;op.receiptScope=visible?dbDropScope():null;
+}
+function dbDropEvict(op,operation){
+ if(op.principal!==dbPrincipal||operation?.id!==op.id||!operation.committed||!operation.acknowledged||operation.mode!==dbDropMode||dataopsRefKey(operation.source)!==dataopsRefKey(op.payload.source))return;
+ const ref=op.payload.source,key=dataopsRefKey(ref),same=o=>dataopsRefKey(dataopsRef(o))===key;
+ dbObjects=dbObjects.filter(o=>!same(o));
+ dbWorksheetObjects=dbWorksheetObjects.filter(o=>!same(o));
+ for(const record of dbTreeObjects.values())record.items=record.items.filter(o=>!same(o));
+ for(const cache of [dbDetails,dbPending])for(const [cacheKey,value] of cache){
+  let saved;try{saved=JSON.parse(cacheKey)[2];}catch{}
+  if(dataopsRefKey(saved)===key||dataopsRefKey(value?.ref)===key)cache.delete(cacheKey);
+ }
+ if(dbExplorer.database_id===ref.database_id&&dbExplorer.schema_id===ref.schema_id){
+  ++dbListRequest;const prefix=dbTreeObjectKey(ref.database_id,ref.schema_id)+':';
+  for(const pendingKey of dbTreePending.keys())if(pendingKey.startsWith(prefix))dbTreePending.delete(pendingKey);
+ }
+ const removedSelection=same(dbObject);
+ if(removedSelection){
+  ++dbObjectEpoch;++dbSelectionGeneration;dbObject=null;dbTreeSelection=null;
+  ui($('table-title'),'Table registration removed');$('database-object-meta').textContent='';
+  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
+  $('refresh-table-details').disabled=true;
+ }
+ const p=dbDrop;p.preview=null;p.context=null;p.source=null;p.scope='';$('db-drop-name').value='';$('db-drop-ack').checked=false;
+ dbExplorerControls();
+ if(removedSelection){$('open-table-sql').disabled=true;$('open-table-sql').title=t('Select a resolved object in a query-enabled Explorer context with read-only mode.');}
+}
+async function dbDropRun(observe=false,cancel=false){
+ dbDropControls();const p=dbDrop;if(p.busy||p.op?.pending)return;
+ if(!observe){
+  if($('db-drop-submit').disabled)return;
+  const payload=dataopsFreeze({context:dataopsClone(p.context),source:dataopsClone(p.source),mode:dbDropMode,expected_preview_fingerprint:p.preview.preview_fingerprint,confirm_name:$('db-drop-name').value});
+  p.op={principal:dbPrincipal,key:crypto.randomUUID(),id:null,path:'/api/v1/table-drops',payload,context:payload.context,state:'ACTIVE',phase:'PREPARED',ambiguous:false,sequence:0};
+ }
+ const op=p.op;if(!dbDropCanObserve(op)||cancel&&$('db-drop-cancel').disabled)return;
+ op.sequence=(op.sequence||0)+1;
+ if(!dbDropPersist(op)){if(!observe){p.op=null;p.handles.delete(dbPrincipal);}p.notice='Removal request could not be saved. No request was sent.';dbDropControls();return;}
+ const token={},scope=dbDropScope(),current=()=>p.op===op&&op.principal===dbPrincipal&&p.busy===token&&scope===dbDropScope();let dispatched=false;
+ op.pending=token;p.busy=token;op.operation=null;p.notice='';dbDropControls();
+ try{
+  if(!await dbDropVerify(op.context,current))return;
+  dispatched=true;
+  const reply=op.id?await dataopsRequest('/api/v1/dataops/'+encodeURIComponent(op.id)+(cancel?'/cancel':''),op.context,cancel?{}:undefined):observe?await dataopsRequest('/api/v1/table-drops/by-key?key='+encodeURIComponent(op.key),op.context):await dataopsRequest(op.path,op.context,op.payload,op.key);
+  dbDropAccept(op,reply.operation,false);
+  if(!current()){dbDropEvict(op,reply.operation);return;}
+  if(!await dbDropVerify(op.context,current))return;
+  dbDropEvict(op,reply.operation);
+  dbDropAccept(op,reply.operation,true);
+ }catch(error){
+  if(error.observation)dbDropAccept(op,error.observation,false);
+  else if(observe&&!op.id&&dbDropHeld(op)){op.state='UNKNOWN';op.ambiguous=true;}
+  else if(observe&&dbDropHeld(op))op.ambiguous=true;
+  else if(dispatched&&dbDropHeld(op)){if(!dataopsRejectBeforeAdmission(op,error))op.ambiguous=true;}
+  op.operation=null;
+  if(current()){p.notice=error.message;if(dataopsAuthError(error)){dbDropInvalidate();p.notice=error.message;dbInvalidateAccess(error,'admin',op.context.database_id);}}
+ }finally{
+  if(!observe&&!dispatched){op.state='REJECTED';op.ambiguous=false;}
+  if(op.pending===token)op.pending=null;if(p.busy===token)p.busy=null;
+  dbDropPersist(op);dbDropControls();
+ }
+}
+function dbDropInstall(){
+ const p=dbDrop;if(p.installed)return;p.installed=true;
+ i18n.en['Catalog removal requires current Admin, an explicit database grant, and a readable, writable TABLE in raw, sandbox, staging or marts.']='Catalog removal requires current Admin database access and a readable, writable TABLE in raw, sandbox, staging or marts.';
+ const button=$('drop-table-btn');button.parentElement.parentElement.append(button);button.dataset.action='catalog-unregister-keep-data';button.setAttribute('aria-controls','db-drop-panel');
+ for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===button)uiAttributes.splice(i,1);
+ const root=dataopsNode('section','db-drop-panel',$('database-details'));root.setAttribute('aria-label',t('Remove from catalog (keep data)'));
+ dataopsNode('h3','',root,'Remove from catalog (keep data)');
+ dataopsNode('p','',root,'Removes the whole TABLE registration, including all snapshots. Data files and metadata files are retained. There is no automatic Undrop. VIEW, SQL and Job references are not rewritten. Dependency completeness is not established.');
+ dataopsNode('p','db-drop-cooperation-help',root,'Before removing this registration, pause other applications and tools that could create or replace a TABLE with the same name. Catalog removal cannot atomically check the UUID or current snapshot.').className='help';
+ dataopsNode('div','db-drop-preview',root);
+ const name=dataopsField(root,'db-drop-name','Type the exact physical table name');name.autocomplete='off';name.oninput=dbDropControls;
+ const label=dataopsNode('label','',root),ack=dataopsNode('input','db-drop-ack',label);ack.type='checkbox';ack.onchange=dbDropControls;dataopsNode('span','',label,'I understand: remove registration and keep data');
+ dataopsButton(root,'db-drop-refresh','Refresh removal preview',dbDropRefresh);
+ dataopsButton(root,'db-drop-submit','Remove from catalog (keep data)',()=>dbDropRun()).className='small danger';
+ dataopsNode('p','',root,'Cancellation can prevent dispatch only. Once sent, the outcome remains uncertain until an acknowledgement; it cannot roll back removal.');
+ const status=dataopsNode('div','db-drop-status',root);status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+ dataopsButton(root,'db-drop-observe','Observe operation',()=>dbDropRun(true));
+ dataopsButton(root,'db-drop-cancel','Cancel operation',()=>dbDropRun(true,true));
+ dataopsButton(root,'db-drop-new','New removal intent',()=>{if(p.busy||!p.op||dbDropHeld(p.op))return;p.op=null;dbDropPersist();dbDropInvalidate();});
+ button.onclick=async()=>{p.opened=true;dbDropControls();await dbDropRefresh();if(p.preview)$('db-drop-name').focus();};
+ dbDropControls();
 }
 
 // Jobs owns its selectors, drafts and immutable accepted run independently of SQL.

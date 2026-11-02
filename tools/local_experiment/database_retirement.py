@@ -387,7 +387,13 @@ def _inventory(db, database_id):
         row = db.execute('SELECT state FROM query_records WHERE id=?', (query_id,)).fetchone()
         add('query', query_id, row['state'] if row else 'UNKNOWN',blocked=False if query_id in closed_queries else None)
     for operation_id in sorted(operation_ids):
-        row = db.execute('SELECT state,actor,context FROM dataops_operations WHERE id=?', (operation_id,)).fetchone()
+        row = db.execute('SELECT state,actor,context,route FROM dataops_operations WHERE id=?', (operation_id,)).fetchone()
+        if row and row['route'] == 'manual-table-drop' and row['state'] == 'FINISHED':
+            import manual_table_drop
+            closed = (json.loads(row['context']).get('database_id') == database_id
+                and manual_table_drop.pure_closed_proof(db, operation_id))
+            add('dataops', operation_id, row['state'], blocked=False if closed else 'CLOSURE_UNPROVEN')
+            continue
         context = json.loads(row['context']) if row else {}
         candidates = [a for a in admissions.values() if a['kind'] == 'dataops' and a['subject_id'] == operation_id
                       and a['warehouse_id'] == context.get('warehouse_id')]

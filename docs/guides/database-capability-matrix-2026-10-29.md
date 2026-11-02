@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+2026-11-03 JST、[DB-P6-6E](database-p6-6e-table-drop-2026-11-02.md)でEXP-11を「カタログ解除・データ保持」として通常Explorerへ接続し、限定技術受入を完了した。正規の現在A権限、full9、Ref / headの確認と元keyのGET復旧を維持し、4表のACK・同名再作成保全・旧22ファイル保持を確認した。全体112群と最終backend / retirement / Workbenchの影響群、実API・通常画面・元台帳 / 設定保全を検証した。次はComputeの観測・管理を限定して進め、P6全体とM1本人受入は継続する。
+
 [DB-P6-6D](database-p6-6d-table-lineage-2026-11-02.md)でEXP-13／14の保存WAP／dbt lineageをTableタブとExplorerの可視ヘッダーへ接続し、限定技術受入を完了した。確定証跡と版を固定しない定義、現在／過去、計画中モデルと物理Refを分離する。canonical 110群と最終Workbench 1,058件、両HTTP 40ケース、通常画面と台帳／設定保全を確認した。次はEXP-11のDrop導線を別単位で進め、P6全体とM1本人受入は継続する。
 
 [DB-P6-6C](database-p6-6c-table-profiling-2026-11-02.md)でEXP-12の全行・全列NULL統計を通常Explorerへ接続し、限定技術受入を完了した。現在query権限、固定Snapshot、正確な件数文字列・NULL率、元key回復・取消を実装した。全体回帰4,460成功・34 skip、実2DB×3roleの8件と通常画面3件、63行／過去3行／空0行、再送・拒否・再起動後GET・保全を確認した。次はTable／Explorer lineageを限定単位で進め、P6全体とM1本人受入は継続する。
@@ -101,7 +103,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | EXP-08 | Snapshot固定Table全件Export CSV／JSONL | 対応、読取可能な安定TABLE。許可Vも可 | X、元Snapshotと件数・内容 | `/api/v1/table-exports` |
 | EXP-09 | Export照会・取消・新規・receipt／download | 対応、本人と元context | X、同一operation／key、完全出力のみ | table export／dataops |
 | EXP-10 | 現在／過去Tableのsandbox clone | 対応。同DB・固定Snapshot→新規SANDBOX TABLEの物理コピー | E／A。source queryとtarget writeを分離。元key回復・単一CTAS。上書き／自動DROPなし、UNKNOWNは観測のみ | [DB-P6-6B限定技術受入](database-p6-6b-table-clone-2026-11-02.md)、Explorer→サンドボックスに複製 |
-| EXP-11 | 探索のDrop Table | 未接続。A選択だけで解除しない | 削除方式と認可を別途確定 | DB-P6-6 |
+| EXP-11 | 探索のDrop Table | 明示確認付きのTABLE全体のカタログ解除・データ保持。単一非purge要求、元Ref retirement、ACK／UNKNOWNとID未受領時のGET復旧を分離 | 現在Aの実効DB管理権限（既存P例外を含む）、full9・登録済みraw／sandbox／staging／marts（sql_name == purpose）のquery／write／admin・Ref／headを検査。owned stage／backup／VIEW、物理purge・cascade・Undropは対象外 | [DB-P6-6E](database-p6-6e-table-drop-2026-11-02.md) |
 | EXP-12 | profiling／NULL統計 | 対応。固定Snapshotの全行・全トップレベル列の実COUNT | V／E／Aの現在query権限。既存ViewerのMARTS制約維持。件数文字列・NULL率、0行は率—。VIEW未対応。元key回復と失効後消去 | [DB-P6-6C限定技術受入](database-p6-6c-table-profiling-2026-11-02.md)、Explorer→プロファイル & NULL統計 |
 | EXP-13 | Table lineage | Tableタブ／Explorerヘッダーから、保存WAP／dbtの直接upstream・downstreamを読取り表示。確認済み証跡と定義、Snapshot／VIEW版の現在・過去を分離 | E／Aと全endpointの現在query権限。保存記録の限定範囲であり、clone・任意SQL推定・全catalog網羅は対象外 | [DB-P6-6D](database-p6-6d-table-lineage-2026-11-02.md) |
 | EXP-14 | dbtモデルlineage | 変換画面の保存planに加え、Explorer選択対象から関連する保存定義と確認済み証跡へ接続。計画中モデルと確定物理Refを区別 | Eは本人・保存role、Aは同DBの認可済みmetadata。定義は版を固定しない依存で、実行時固定版は確認済み証跡へ表示 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)、[DB-P6-6D](database-p6-6d-table-lineage-2026-11-02.md) |

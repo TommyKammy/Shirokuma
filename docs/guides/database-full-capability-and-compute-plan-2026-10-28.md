@@ -274,6 +274,8 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 ## 9 実装の進め方と直近の着手単位
 
+2026-11-03 JST、[DB-P6-6E（EXP-11）](database-p6-6e-table-drop-2026-11-02.md)の明示確認付きカタログ解除・データ保持を限定技術受入済みとした。通常SQLのDROP拒否を保ち、現在A／full9／Ref／head、単一非purge要求、ACK／UNKNOWNと元keyの読取り復旧を検査する。canonical 112群と最終影響群、実API／通常画面4 ACK・同名再作成保全・旧22ファイル保持、認可・DB隔離・元行／設定保全を確認した。次はComputeの使用量・容量・履歴・停止理由・現在権限を限定し、P6全必須行・M1本人受入とP7以降の採用条件は維持する。
+
 2026-11-02 JST、[DB-P6-6D（EXP-13／14）](database-p6-6d-table-lineage-2026-11-02.md)のTable／Explorer lineageを限定技術受入済みとした。保存記録の直接関係を読取り表示し、確定証跡・宣言依存、Snapshot／VIEW版の現在・過去、計画中モデルと物理Refを区別する。canonical 110群と最終Workbench 1,058件、実2DB／両HTTP 40ケース、通常画面・認可・元行／設定保全を確認した。次はEXP-11のDrop導線を限定し、P6全必須行・M1本人受入とP7以降の採用条件は維持する。
 
 2026-11-02 JST、[DB-P6-6C（EXP-12）](database-p6-6c-table-profiling-2026-11-02.md)のTable profiling／NULL統計を限定技術受入済みとした。現在query権限と固定Snapshotで全行・全列を集計し、件数精度、元key回復、取消と統計の非表示条件を維持する。全体回帰4,460成功・34 skip、実2DB×3roleと通常画面の計11集計、63行／過去3行／空0行、再送・拒否・再起動後GET・保全を確認した。次はTable／Explorer lineageを限定単位として進め、P6全必須行・M1本人受入とP7以降の採用条件は変更しない。

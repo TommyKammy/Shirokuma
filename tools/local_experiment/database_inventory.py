@@ -178,7 +178,7 @@ def _credentials(database, binding):
 
 
 @contextmanager
-def catalog_api(database, binding):
+def catalog_api(database, binding, *, _table_drop=False):
     entry = _credentials(database, binding)
     command = ['rtk', 'proxy', 'kubectl', '--context', 'colima-mac-studio-solo', '-n', 'shirokuma-dev']
     import logical_registry
@@ -232,7 +232,18 @@ def catalog_api(database, binding):
         def request(path):
             return _http(urllib.request.Request(base + path, headers={
                 'Authorization': 'Bearer ' + token, 'Polaris-Realm': entry['realm']}))
-        yield request
+        if _table_drop:
+            def unregister(schema, name):
+                # Only this typed capability can issue DELETE; never accept a URL,
+                # arbitrary method, purge option or redirect from a caller.
+                if schema.database_id != database.id or not isinstance(name, str) or not name:
+                    raise TableDropTransportError(False)
+                req = urllib.request.Request(base + _path(schema, 'TABLE', name) + '?purgeRequested=false',
+                    headers={'Authorization': 'Bearer ' + token, 'Polaris-Realm': entry['realm']}, method='DELETE')
+                return _delete_table_http(req)
+            yield request, unregister
+        else:
+            yield request
     except InventoryError:
         raise
     except Exception:
@@ -245,6 +256,37 @@ def catalog_api(database, binding):
             except subprocess.TimeoutExpired:
                 forward.kill()
                 forward.wait()
+
+
+class TableDropTransportError(InventoryError):
+    def __init__(self, possible_send):
+        super().__init__('CATALOG_DELETE_UNCERTAIN' if possible_send else 'CATALOG_DELETE_REJECTED',
+            502 if possible_send else 409, 'Catalog removal did not receive a confirmed acknowledgement')
+        self.possible_send = possible_send
+
+
+def _delete_table_http(request):
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+    except Exception:
+        raise TableDropTransportError(False) from None
+    try:
+        with opener.open(request, timeout=20) as response:
+            if response.status != 204:
+                raise TableDropTransportError(True)
+            return 204
+    except urllib.error.HTTPError as error:
+        raise TableDropTransportError(error.code not in (400, 401, 403, 404)) from None
+    except TableDropTransportError:
+        raise
+    except Exception:
+        raise TableDropTransportError(True) from None
+
+
+@contextmanager
+def table_drop_api(database, binding):
+    with catalog_api(database, binding, _table_drop=True) as transport:
+        yield transport
 
 
 def _path(schema, kind, name=None):

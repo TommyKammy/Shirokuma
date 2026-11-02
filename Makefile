@@ -84,6 +84,8 @@ test-resident-core:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_export.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_clone.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_table_profile.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_table_drop.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_drop_database_ui.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_profile_database_ui.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_clone_database_ui.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_data_management.py'

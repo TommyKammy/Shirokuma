@@ -10,6 +10,7 @@ import dataops_service as ds
 import manual_export
 import manual_clone
 import table_profile
+import manual_table_drop
 import manual_ingest
 import manual_wap
 import warehouse_admission as admission
@@ -122,16 +123,20 @@ def dispatch(handler, method, path, params, principal, role):
 def _dispatch(handler, method, path, params, principal, role):
     """Return False only for routes outside this adapter; otherwise respond once."""
     if not any(path == '/api/v1/' + prefix or path.startswith('/api/v1/' + prefix + '/')
-               for prefix in ('ingests', 'wap', 'table-exports', 'table-clones', 'table-profiles', 'dataops')):
+               for prefix in ('ingests', 'wap', 'table-exports', 'table-clones', 'table-profiles', 'table-drops', 'dataops')):
         return False
     if '#' in handler.path or handler.headers.get('Transfer-Encoding'):
         raise ValueError('invalid framing')
     if method == 'GET':
         if handler.headers.get_all('Content-Length', []) not in ([], ['0']):
             raise ValueError('GET body forbidden')
-        allowed = {'context', 'model_id', 'version'} if path == '/api/v1/wap/models' else {'context'}
+        allowed = ({'context', 'key'} if path == '/api/v1/table-drops/by-key' else
+            {'context', 'source'} if path == '/api/v1/table-drops/preview' else
+            {'context', 'model_id', 'version'} if path == '/api/v1/wap/models' else {'context'})
         if set(params) - allowed or 'context' not in params or any(len(v) != 1 for v in params.values()):
             raise ValueError('invalid context parameters')
+        if path in ('/api/v1/table-drops/preview', '/api/v1/table-drops/by-key') and set(params) != allowed:
+            raise ValueError('exact preview parameters required')
         body = {}
         context = context_value(_json_context(params['context'][0]), role)
     elif method == 'POST':
@@ -142,10 +147,33 @@ def _dispatch(handler, method, path, params, principal, role):
     else:
         raise QueryError('NOT_FOUND', 404)
     envelope = dict(context=context.public_metadata())
+    if path == '/api/v1/table-drops/by-key':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        envelope['operation'] = manual_table_drop.lookup_by_key(principal, context, params['key'][0])
+        handler.respond(envelope)
+        return True
     match = re.fullmatch(r'/api/v1/dataops/([A-Za-z0-9_-]{1,128})(/cancel)?', path)
+    drop_match = re.fullmatch(r'/api/v1/table-drops/([A-Za-z0-9_-]{1,128})(/cancel)?', path)
+    if drop_match and drop_match[1] != 'preview':
+        match = drop_match
     if match:
         execution = ds.Execution(principal, match[1])
         saved = _saved(execution, context)
+        if drop_match and saved.get('route') != manual_table_drop.ROUTE:
+            raise QueryError('NOT_FOUND', 404)
+        if saved.get('route') == manual_table_drop.ROUTE:
+            if method == 'POST' and match[2]:
+                _keys(body, {'context'})
+                manual_table_drop.inspect(execution, context)
+                operation = manual_table_drop.DropExecution(principal, execution.id).cancel()
+            elif method == 'GET' and not match[2]:
+                operation = manual_table_drop.inspect(execution, context)
+            else:
+                raise QueryError('NOT_FOUND', 404)
+            envelope['operation'] = operation
+            handler.respond(envelope)
+            return True
         if method == 'POST' and match[2]:
             _keys(body, {'context'})
             context = _cancel_context(principal, context, json.loads(saved['context']))
@@ -176,7 +204,16 @@ def _dispatch(handler, method, path, params, principal, role):
         handler.respond(_public_fields(envelope))
         return True
     current_context(principal, context)
-    if method == 'POST' and path in ('/api/v1/ingests', '/api/v1/ingests/preview'):
+    if method == 'GET' and path == '/api/v1/table-drops/preview':
+        envelope['preview'] = manual_table_drop.preview(principal, context,
+            reference(_json_context(params['source'][0])))
+    elif method == 'POST' and path == '/api/v1/table-drops':
+        _keys(body, {'context', 'source', 'mode', 'expected_preview_fingerprint', 'confirm_name'})
+        key = _key(handler)
+        envelope['operation'] = _operation(principal, context, manual_table_drop.ROUTE, key,
+            lambda: manual_table_drop.submit(principal, context, key=key,
+                **{k: reference(v) if k == 'source' else v for k, v in body.items() if k != 'context'}))
+    elif method == 'POST' and path in ('/api/v1/ingests', '/api/v1/ingests/preview'):
         _keys(body, {'context', 'filename', 'content_base64', 'mode'},
             {'destination', 'target', 'format', 'encoding', 'delimiter', 'schema_hints', 'key_columns',
              'batch_size', 'atomic_append', 'expected_preview_fingerprint'})
@@ -286,7 +323,9 @@ def _operation(principal, context, route, key, run):
             if row:
                 execution = ds.Execution(principal, row[0])
                 _saved(execution, context)
-                if route == table_profile.ROUTE:
+                if route == manual_table_drop.ROUTE:
+                    observation = manual_table_drop.inspect(execution, context)
+                elif route == table_profile.ROUTE:
                     # Never fall back to a context-only persisted profile receipt.
                     if isinstance(error, PermissionError) or isinstance(error, QueryError) and (
                             error.status in (401, 403) or error.code in ('CONTEXT_MISMATCH', 'UNKNOWN_CONTEXT',
@@ -302,14 +341,14 @@ def _operation(principal, context, route, key, run):
                     observation = execution.inspect()
                 details = dict(context=context.public_metadata(), operation=observation)
                 if isinstance(error, QueryError):
-                    error.details = (details if route == table_profile.ROUTE else
+                    error.details = (details if route in (table_profile.ROUTE, manual_table_drop.ROUTE) else
                         dict(error.details, context=context.public_metadata(), operation=observation))
                 elif isinstance(error, ValueError):
                     raise QueryError('INVALID_INPUT', 400, details=details) from None
                 else:
                     raise QueryError('SERVICE_UNAVAILABLE', 502, details=details) from None
         except QueryError as observed:
-            if route == table_profile.ROUTE:
+            if route in (table_profile.ROUTE, manual_table_drop.ROUTE):
                 raise observed from None
             if observed.code in ('INVALID_INPUT', 'SERVICE_UNAVAILABLE') and 'operation' in observed.details:
                 raise
