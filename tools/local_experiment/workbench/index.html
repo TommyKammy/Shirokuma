@@ -635,7 +635,7 @@ html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wr
 <details class="copilot"><summary>AI Bear Copilot</summary><div class="copilot-body"><label for="copilot-request">Describe the SQL you need</label><textarea id="copilot-request" rows="2" placeholder="Revenue by nation"></textarea><div class="toolbar"><button id="copilot-generate">Generate SQL</button><button id="copilot-explain">Explain Plan</button><span class="divider"></span><label for="copilot-stage-table">WAP table</label><input id="copilot-stage-table" placeholder="nation_summary"><button id="copilot-stage">Stage &amp; Audit</button><button id="copilot-publish">Publish</button></div><section id="proposal-panel" hidden></section><pre id="copilot-result" role="status" hidden></pre></div></details>
 </div>
 <div class="panel results-panel"><div class="panel-head"><h2>Results</h2><span id="query-meta" class="status-line" role="status">Ready</span></div>
-<div class="results-tools"><div class="segmented" role="group" aria-label="Result view"><button id="result-view-table" aria-pressed="true">Table View</button><button id="result-view-chart" aria-pressed="false">Chart View</button></div><label for="result-filter">Filter rows</label><input id="result-filter" type="search" placeholder="Search returned rows"><span class="header-spacer"></span><button id="export-csv" class="small" disabled>Download CSV</button><button id="export-json" class="small" disabled>Download JSON</button><button id="copy-tsv" class="small" disabled>Copy TSV</button><small id="result-action-state" role="status"></small></div>
+<div class="results-tools"><div class="segmented" role="group" aria-label="Result view"><button id="result-view-table" aria-pressed="true">Table View</button><button id="result-view-chart" aria-pressed="false">Chart View</button></div><label for="result-filter">Filter rows</label><input id="result-filter" type="search" placeholder="Search returned rows"><span class="header-spacer"></span><button id="export-csv" class="small" disabled>Download CSV</button><button id="export-json" class="small" disabled>Download JSON</button><button id="export-tsv" class="small" disabled hidden>Download TSV</button><button id="copy-tsv" class="small" disabled>Copy TSV</button><small id="result-action-state" role="status"></small></div>
 <div id="chart-tools" class="results-tools chart-tools" hidden><label for="chart-type">Chart type</label><select id="chart-type"><option value="bar">Bar Chart</option><option value="line">Line Chart</option></select><label for="chart-x-col">X column</label><select id="chart-x-col"></select><label for="chart-y-col">Y column</label><select id="chart-y-col"></select></div>
 <div id="query-chart" hidden></div><div id="query-error" class="error" role="alert" hidden></div><div id="query-results" class="table-wrap"><div class="empty">Run a query to inspect rows and column types. Chilled warehouses wake automatically.</div></div></div>
 </div></div>
@@ -4443,8 +4443,8 @@ function dbControls(){
  message('database-context-state',reason);
  $('run-query').disabled=!!reason||dbRunBlocked(run);
  $('cancel-query').disabled=!dbCanCancel(run)||!!run?.canceling;
- for(const id of ['export-csv','export-json','copy-tsv','export-table-btn','export-table-format','clone-table-btn','drop-table-btn'])$(id).disabled=true;
- ui($('result-action-state'),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.');
+ for(const id of ['export-table-btn','export-table-format','clone-table-btn','drop-table-btn'])$(id).disabled=true;
+ dbExportControls();
  dbExplorerControls();
  if(typeof dataopsPanels!=='undefined')dataopsValidate();
  if(typeof dbJobs!=='undefined')dbJobsValidate();
@@ -4453,7 +4453,7 @@ function dbControls(){
 if(typeof dbDbt!=='undefined')dbDbtValidate();
 }
 function dbHideRows(predicate=()=>true){
- for(const run of dbRuns.values())if(predicate(run)){run.authorized=false;run.rows=[];run.columns=[];run.rowsPurged=true;}
+ for(const run of dbRuns.values())if(predicate(run)){run.authorized=false;run.rows=[];run.columns=[];run.rowsPurged=true;delete run.receivedPages;delete run.receivedPageSet;delete run.exportUnavailable;delete run.saveBusy;delete run.saveNotice;}
  const current=dbRuns.get(worksheetId);
  if(!current?.authorized||!dbRoleWithinHeader(current.origin.role)){queryResult=null;$('query-results').replaceChildren();$('query-chart').replaceChildren();}
 }
@@ -4619,6 +4619,7 @@ function dbRenderRun(){
  const c=run.origin.context;
  const differs=JSON.stringify(dbInput(w))!==JSON.stringify(run.origin.input)||w.sql!==run.origin.sql;
  $('query-meta').textContent=[t(run.state),run.truncated?t('Row limit reached'):'',run.state==='QUEUED'&&!run.backend_query_id?t('Waiting for shared LOCAL startup. Cancel affects only this SQL request.'):run.state!=='FINISHED'?t('Partial results'):'',c.sql_catalog||c.database_id,c.sql_schema||c.schema_id,c.warehouse_id,run.origin.role,differs?t('Current inputs differ'):''].filter(Boolean).join(' · ');
+ const help=document.createElement('p');ui(help,dbExportHelp);$('request-provenance').append(help);
  const details=document.createElement('pre');details.textContent=JSON.stringify({request_id:run.origin.request_id,worksheet_id:run.origin.saved_worksheet_id||run.origin.worksheet_id,query_id:run.id,role:run.origin.role,mode:run.origin.input?.mode,context:c,sql:run.origin.sql},null,2);$('request-provenance').append(details);
  if(run.authorized&&!run.rowsPurged&&dbRoleWithinHeader(run.origin.role)&&run.origin.principal===dbPrincipal){
   queryResult={columns:run.columns,rows:run.rows};populateChartColumns();renderResults();
@@ -4648,11 +4649,106 @@ function dbAcceptPage(run,page){
  const c=run.origin.context;
  if(['database_id','schema_id','warehouse_id','sql_catalog','sql_schema','binding_revision','generation_id','selected_role','grant_revision'].some(k=>(page.context?.[k]??null)!==(c[k]??null)))throw Error('CONTEXT_MISMATCH');
  if(!['QUEUED','RUNNING','FINISHED','FAILED','CANCELED','UNKNOWN'].includes(page.state)||!Array.isArray(page.data)||!Array.isArray(page.columns))throw Error('UNKNOWN_CONTEXT');
- if(!run.rowsPurged){if(page.columns?.length)run.columns=page.columns;run.rows.push(...page.data);}run.state=page.state;run.truncated=run.truncated||page.truncated===true;
+ if(!run.rowsPurged){
+  const receipt=page.result_page_id,validReceipt=typeof receipt==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(receipt),ordinary=validReceipt||!!page.backend_query_id||page.columns.length>0||page.data.length>0||dbTerminal(page.state);
+  if(ordinary){
+   run.receivedPages??=[];run.receivedPageSet??=new Set();
+   if(!validReceipt)run.exportUnavailable=true;
+   const replay=typeof receipt==='string'&&run.receivedPageSet.has(receipt);
+   if(!replay){if(page.columns.length)run.columns=page.columns;run.rows.push(...page.data);if(validReceipt){run.receivedPages.push(receipt);run.receivedPageSet.add(receipt);}}
+  }
+ }run.state=page.state;run.truncated=run.truncated||page.truncated===true;
  run.settled=dbTerminal(page.state);
  if(!page.next_uri&&!run.settled&&page.state!=='UNKNOWN'){run.state='UNKNOWN';run.error=t('Query response is incomplete.');}
  if(page.error)run.error=dbError(page,200).message;
  return page.next_uri?dbQueryURI(page.next_uri,run.id,'page'):null;
+}
+// Saving uses only server bytes for the exact pages received by this worksheet.
+let dbExportView='',dbExportRevision=0;
+const dbExportTypes={csv:'text/csv; charset=utf-8',json:'application/json; charset=utf-8',tsv:'text/tab-separated-values; charset=utf-8'};
+const dbExportHelp='Save all received rows in original order; display filter and sort do not change the saved range. CSV/TSV: unquoted \\N is NULL; all non-NULL values are quoted. JSON encodes every integer cell, including nested values, as a decimal string.';
+Object.assign(i18n.ja,{
+ 'Download TSV':'TSV を保存',
+ 'Save all received rows in original order; display filter and sort do not change the saved range. CSV/TSV: unquoted \\N is NULL; all non-NULL values are quoted. JSON encodes every integer cell, including nested values, as a decimal string.':'受領済みの全行を元の順序で保存します。表示の絞り込み・並べ替えは保存範囲を変えません。CSV／TSV は引用符なしの \\N が NULL、非 NULL 値はすべて引用符付きです。JSON はネストした値を含むすべての整数セルを10進文字列で保存します。',
+ 'Result saving unavailable. Received page receipts or cached results are unavailable; SQL is not rerun.':'受領ページの識別情報またはキャッシュがなく、結果を保存できません。SQL は再実行しません。',
+ 'Saving received rows…':'受領済みの行を保存中…',
+ 'Received {rows} rows · {state} · partial: {partial} · truncated: {truncated}.':'受領 {rows} 行 · {state} · 部分結果: {partial} · 上限到達: {truncated}。',
+ 'Saved {rows} rows · {state} · partial: {partial} · truncated: {truncated}.':'保存 {rows} 行 · {state} · 部分結果: {partial} · 上限到達: {truncated}。',
+ 'Result saving unavailable. Refresh context and check access; SQL is not rerun.':'結果を保存できません。コンテキストとアクセス権を確認してください。SQL は再実行しません。'
+});
+function dbExportScope(){
+ const w=dbCurrent(),stamp=JSON.stringify([activeTab,dbWorkspacePane,worksheetId,w&&dbInput(w),currentRole,dbMaximumRole,dbPrincipal,dbEpoch,dbAuthorizationVersion,dbRoleVersion(w?.selected_role)]);
+ if(stamp!==dbExportView){dbExportView=stamp;++dbExportRevision;}
+ return JSON.stringify([stamp,dbExportRevision]);
+}
+function dbExportReady(run){
+ const w=dbCurrent();
+ return activeTab==='warehouse'&&dbWorkspacePane==='worksheet'&&!!run&&dbLive(run)&&worksheetId===run.origin.worksheet_id&&run.authorized&&!run.rowsPurged&&!run.restored&&!run.exportUnavailable&&!!run.id&&!!run.receivedPages?.length&&run.origin.principal===dbPrincipal&&dbRoleWithinHeader(run.origin.role)&&w?.selected_role===run.origin.role&&JSON.stringify(dbContext(w))===JSON.stringify(run.origin.context)&&!dbReason(w);
+}
+function dbExportControls(){
+ dbExportScope();const run=dbRuns.get(worksheetId),ready=dbExportReady(run);
+ for(const format of Object.keys(dbExportTypes)){
+  const button=$('export-'+format);button.disabled=!ready||!!run?.saveBusy;button.dataset.databaseUnavailable=ready?'false':'true';
+  button.setAttribute('aria-busy',String(!!run?.saveBusy));button.setAttribute('aria-describedby','result-action-state');
+ }
+ $('copy-tsv').disabled=true;
+ if(run?.saveBusy)ui($('result-action-state'),'Saving received rows…');
+ else if(run?.saveNotice){
+  const {key,values}=run.saveNotice;
+  ui($('result-action-state'),key,values?()=>({...values,state:t(values.state)}):{});
+ }
+ else if(ready)ui($('result-action-state'),'Received {rows} rows · {state} · partial: {partial} · truncated: {truncated}.',{rows:run.rows.length,state:t(run.state),partial:String(run.state!=='FINISHED'||!!run.truncated),truncated:String(!!run.truncated)});
+ else ui($('result-action-state'),'Result saving unavailable. Received page receipts or cached results are unavailable; SQL is not rerun.');
+}
+function dbExportCapture(run){
+ return JSON.stringify([dbExportScope(),run.token,run.id,run.origin.request_id,run.origin.saved_worksheet_id||run.origin.worksheet_id,run.origin.context,run.origin.role,run.origin.principal,run.receivedPages,run.rows.length,run.state,!!run.truncated]);
+}
+function dbExportReply(data,format,run){
+ const keys=['format','filename','content_type','content_base64','query_id','request_id','worksheet_id','context','returned_rows','saved_rows','state','partial','truncated'];
+ const contextKeys=['database_id','schema_id','warehouse_id','sql_catalog','sql_schema','selected_role','binding_revision','generation_id','grant_revision'];
+ if(!dbSavedExact(data,keys)||data.format!==format||data.filename!=='query-result-'+run.id+'.'+format||!/^query-result-[A-Za-z0-9_-]+\.(csv|json|tsv)$/.test(data.filename)||data.content_type!==dbExportTypes[format]||data.query_id!==run.id||data.request_id!==run.origin.request_id||data.worksheet_id!==(run.origin.saved_worksheet_id||run.origin.worksheet_id)||!dbSavedExact(data.context,contextKeys)||contextKeys.some(k=>data.context[k]!==run.origin.context[k])||data.returned_rows!==run.rows.length||data.saved_rows!==run.rows.length||!['QUEUED','RUNNING','FINISHED','FAILED','CANCELED','UNKNOWN'].includes(data.state)||typeof data.partial!=='boolean'||(run.state!=='FINISHED'||data.state!=='FINISHED'||!!run.truncated)&&!data.partial||data.truncated!==!!run.truncated||typeof data.content_base64!=='string'||data.content_base64.length>Math.ceil(16777216/3)*4||data.content_base64.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(data.content_base64))throw Error('INVALID_RESULT_EXPORT');
+ const binary=atob(data.content_base64);if(binary.length>16777216)throw Error('INVALID_RESULT_EXPORT');return Uint8Array.from(binary,c=>c.charCodeAt(0));
+}
+async function dbExportResults(format){
+ const run=dbRuns.get(worksheetId);if(!dbExportTypes[format]||!dbExportReady(run)||run.saveBusy)return;
+ const capture=dbExportCapture(run),token={};run.saveBusy=token;delete run.saveNotice;dbExportControls();
+ const current=()=>run.saveBusy===token&&dbExportReady(run)&&capture===dbExportCapture(run);
+ const authorize=async()=>{
+  const revision=dbExportRevision;
+  let items;try{items=await dbReadInventory(run.origin.role,current);}catch(error){if(run.saveBusy===token&&dbLive(run)&&revision===dbExportRevision&&activeTab==='warehouse'&&dbWorkspacePane==='worksheet'&&worksheetId===run.origin.worksheet_id&&['DB_ACCESS_REVOKED','AUTHENTICATION_REQUIRED','STALE_BINDING','STALE_CONTEXT','CONTEXT_MISMATCH','UNKNOWN_CONTEXT'].includes(error.code))dbInvalidateAccess(error,run.origin.role,run.origin.context.database_id);throw error;}
+  if(!current())return false;
+  dbCheckAuthorization(dbAuthorizationReads.get(items));dbApplyInventory(items,run.origin.role);
+  if(!dbRunAllowed(run,items)){dbHideRows(r=>r===run);return false;}
+  if(!current())return false;
+  // Inspect the primary binding and schema without advancing query pages.
+  const response=await fetch('/api/v1/queries/'+encodeURIComponent(run.id),{headers:{'X-Shirokuma-Role':run.origin.role}});
+  if(!current())return false;
+  if([401,403].includes(response.status))throw Object.assign(Error('DB_ACCESS_REVOKED'),{code:response.status===401?'AUTHENTICATION_REQUIRED':'DB_ACCESS_REVOKED'});
+  const detail=await response.json();if(!current())return false;
+  if(!response.ok)throw dbError(detail,response.status);
+  const keys=['database_id','schema_id','warehouse_id','sql_catalog','sql_schema','selected_role','binding_revision','generation_id','grant_revision'];
+  if(detail?.id!==run.id||detail.request_id!==run.origin.request_id||detail.worksheet_id!==(run.origin.saved_worksheet_id||run.origin.worksheet_id)||!dbSavedExact(detail.context,keys)||keys.some(key=>detail.context[key]!==run.origin.context[key])||!['QUEUED','RUNNING','FINISHED','FAILED','CANCELED','UNKNOWN'].includes(detail.state)||detail.execution_closure)throw Object.assign(Error('CONTEXT_MISMATCH'),{code:'CONTEXT_MISMATCH'});
+  return current();
+ };
+ try{
+  if(!await authorize())return;
+  const response=await fetch('/api/v1/queries/'+encodeURIComponent(run.id)+'/results/export',{method:'POST',headers:{'X-Shirokuma-Role':run.origin.role,'Content-Type':'application/json'},body:JSON.stringify({format,request_id:run.origin.request_id,worksheet_id:run.origin.saved_worksheet_id||run.origin.worksheet_id,received_pages:[...run.receivedPages]})});
+  if(!current())return;
+  const data=await response.json();if(!current())return;
+  if(!response.ok)throw dbError(data,response.status);
+  const bytes=dbExportReply(data,format,run);
+  if(!await authorize()||!current())return;
+  const url=URL.createObjectURL(new Blob([bytes],{type:data.content_type})),link=document.createElement('a');
+  try{link.href=url;link.download=data.filename;document.body.append(link);if(current())link.click();}finally{link.remove();URL.revokeObjectURL(url);}
+  if(current())run.saveNotice={key:'Saved {rows} rows · {state} · partial: {partial} · truncated: {truncated}.',values:{rows:data.saved_rows,state:data.state,partial:String(data.partial),truncated:String(data.truncated)}};
+ }catch(error){
+  if(current()){
+   if(!dbInvalidateAccess(error,run.origin.role,run.origin.context.database_id)){
+    run.saveNotice={key:error.code==='RESULT_EXPORT_UNAVAILABLE'?'Result saving unavailable. Received page receipts or cached results are unavailable; SQL is not rerun.':'Result saving unavailable. Refresh context and check access; SQL is not rerun.'};
+    if(error.code==='RESULT_EXPORT_UNAVAILABLE')run.exportUnavailable=true;
+   }
+  }
+ }finally{if(run.saveBusy===token){delete run.saveBusy;if(worksheetId===run.origin.worksheet_id)dbExportControls();}}
 }
 async function dbPoll(run,page){
  const seen=new Set();
@@ -4978,6 +5074,7 @@ function dbSyncWorkspaceNavigation(){
  }
 }
 function dbShowWorkspace(pane){
+ if(dbWorkspacePane!==pane)++dbExportRevision;
  dbWorkspacePane=pane;
  dbSyncWorkspaceNavigation();
  $('database-details').hidden=pane!=='details';
@@ -5234,7 +5331,6 @@ async function initializeDatabaseUI(session){
  for(const [controls,key] of [
   [['quick-wake','quick-chill','wake','chill'].map(id=>$(id)),'Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.'],
   [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.'],
-  [['export-csv','export-json','copy-tsv'].map(id=>$(id)),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.'],
   [['clone-table-btn','drop-table-btn'].map(id=>$(id)),'Clone and drop are unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.'],
   [['run-dbt-build','run-dbt-test'].map(id=>$(id)),'Legacy dbt build/test is unavailable in Database mode. Use Manual WAP or Managed Marts with an authorized context.'],
   [[...document.querySelectorAll('[data-sample]')],'Fixed sample queries are unavailable in Database mode. Enter SQL for the selected database.']
@@ -5244,9 +5340,11 @@ async function initializeDatabaseUI(session){
  saveWorksheet=dbSave;
  renderWorksheets=()=>{legacyRenderWorksheets();dbWorkspacePane='worksheet';dbWireWorkspaceTabs();dbControls();dbRenderRun();return dbRefreshContext();};
  addWorksheet=(sql=samples.orders)=>{dbSave();const inherited=dbInput(dbCurrent()),number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={...inherited,id:crypto.randomUUID(),name:'Worksheet '+number,sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;dbPersist();renderWorksheets();};
- renderResults=()=>{legacyRenderResults();for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=true;};
- download=()=>ui($('result-action-state'),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.');
- $('copy-tsv').onclick=download;
+ renderResults=()=>{legacyRenderResults();dbExportControls();};
+ download=dbExportResults;
+ $('copy-tsv').hidden=true;$('copy-tsv').disabled=true;$('copy-tsv').onclick=()=>{};$('export-tsv').hidden=false;
+ $('export-tsv').onclick=()=>dbExportResults('tsv');
+ ui($('export-tsv'),'Download TSV');
  // This gate also prevents programmatic or timer-driven v1 actions.
  api=(path,body)=>path==='/api/status'&&body===undefined?legacyAPI(path):Promise.reject(Error(t('Unavailable in Database mode in this phase.')));
  let logicalWarehouseStatus=false;
@@ -5256,7 +5354,7 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};

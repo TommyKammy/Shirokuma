@@ -448,7 +448,7 @@ def _page(query_id, page):
         next_uri = None
     else:
         _state(query_id, state, backend_id)
-    result = dict(id=query_id, backend_query_id=backend_id, request_id=row['request_id'],
+    result = dict(id=query_id, result_page_id=secrets.token_urlsafe(24), backend_query_id=backend_id, request_id=row['request_id'],
         worksheet_id=row['worksheet_id'], context=_metadata(row), columns=deepcopy(pin.columns),
         data=data, stats={key: value for key, value in stats.items() if key in {
             'state', 'queued', 'scheduled', 'nodes', 'totalSplits', 'queuedSplits', 'runningSplits',
@@ -700,6 +700,7 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
             with _pins[query_id].lock:
                 _owned(principal, query_id, context.selected_role, cleanup=True)
                 response = _receive(query_id, origin.rstrip('/') + '/v1/statement', 'POST', backend_sql.encode('utf-8'))
+                _pins[query_id].initial_response = deepcopy(response)
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as error:
         _initial_failure(query_id, error)
         raise QueryError(error.code, error.status) from None

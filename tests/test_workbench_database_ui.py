@@ -163,11 +163,13 @@ for(const lang of ['ja','en']){
  session.maximum_role='bi_viewer';await dbRefreshContext();await dbRefreshExplorer();
  assert.equal(document.activeElement,$('sql'));assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);
  assert.equal($('ai-settings-button').disabled,true);assert.notEqual($('ai-settings-button').dataset.databaseUnavailable,'true');
- for(const id of ['wake','chill','quick-wake','quick-chill','copilot-generate','export-csv','export-json','copy-tsv','clone-table-btn','drop-table-btn','run-dbt-build','run-dbt-test']){
+ for(const id of ['wake','chill','quick-wake','quick-chill','copilot-generate','clone-table-btn','drop-table-btn','run-dbt-build','run-dbt-test']){
   assert.equal($(id).disabled,true,id);assert.equal($(id).dataset.databaseUnavailable,'true',id);
   const binding=uiAttributes.find(b=>b.node===$(id)&&b.attribute==='title');assert.ok(binding,id);assert.equal($(id).title,t(binding.key));
  }
- assert.equal($('result-action-state').textContent,lang==='ja'?'Database モードではワークシート結果の保存は未対応です。データ探索で許可されたテーブルを選び、「テーブルをエクスポート」を利用してください。':'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.');
+ for(const format of ['csv','json','tsv']){assert.equal($('export-'+format).disabled,true);assert.equal($('export-'+format).dataset.databaseUnavailable,'true');assert.equal($('export-'+format)['aria-describedby'],'result-action-state');}
+ assert.equal($('copy-tsv').hidden,true);
+ assert.equal($('result-action-state').textContent,t('Result saving unavailable. Received page receipts or cached results are unavailable; SQL is not rerun.'));
  for(const button of inspectorTabs.filter(b=>['profile','lineage'].includes(b.dataset.inspect))){assert.equal(button.disabled,true);assert.match(button.title,lang==='ja'?/プロファイリングとリネージュ/:/profiling and lineage/);}
  session.maximum_role='admin';await dbRefreshContext();
 }

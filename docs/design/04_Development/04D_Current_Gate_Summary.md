@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-02
-version: "2.34.0"
+version: "2.35.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-11-02、[DB-P6-6A](../../guides/database-p6-6a-result-save-contract-2026-11-02.md)でSQL-08の返却済みWorksheet結果保存を接続し、限定技術受入を完了した。元queryの本人・保存role・現在context・受領page列を検査し、サーバーの保持値からCSV／JSON／TSVを生成する。全体回帰4,328成功・34 skip、実2DB×3role・22成果物／72要求、ブラウザー実ファイル・cache喪失拒否と保全を確認した。次はEXP-10の固定Snapshotから新規SANDBOX TABLEへの物理コピーを進め、P6全必須行の閉鎖とM1本人受入は継続する。
 
 2026-11-02、[DB-P6-4E](../../guides/database-p6-4e-ai-settings-2026-11-02.md)でAI-06の共有AI設定をDatabaseモードの通常画面へ接続し、限定技術受入を完了した。現在の真P・上限admin・選択global adminをDB grantと独立して検査し、active設定・key保護・明示接続test・保存・遅着応答の無効化を実装した。既存LOCAL推論条件を維持し、全体回帰4,264成功・34 skip、両HTTP面84要求・実LOCAL疎通・ブラウザーと原設定／既存データの保全を確認した。次は[SQL-08／DB-P6-6A設計案](../../guides/database-p6-6a-result-save-contract-2026-11-02.md)に沿って結果保存を進め、P6全必須行とM1本人受入は継続する。
 

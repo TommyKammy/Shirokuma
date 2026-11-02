@@ -178,6 +178,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 raise ValueError('One valid explicit role is required')
             role = headers[0]
             path = url.path
+            import query_result_exports
+            if query_result_exports.dispatch(self, method, url, principal, role):
+                return
             import ai_routes
             if ai_routes.dispatch(self, method, path, params, principal, role):
                 return

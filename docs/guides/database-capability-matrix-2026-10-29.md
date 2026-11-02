@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+[DB-P6-6A](database-p6-6a-result-save-contract-2026-11-02.md)でSQL-08のWorksheet返却済み結果のCSV／JSON／TSVファイル保存を実装し、限定技術受入を完了した（全体回帰4,328成功・34 skip、両HTTP面72要求・22成果物、ブラウザー実ファイルとcache喪失拒否、元行と設定の保全）。本人・保存role・現在contextと受領page列を照合し、JSON整数文字列とNULL-aware CSV／TSVで精度・NULLを保持する。表示filter／sortを保存範囲へ反映せず、Table全件Exportとは区別する。次はEXP-10であり、P6全体とM1本人受入は継続する。
+
 [DB-P6-4E](database-p6-4e-ai-settings-2026-11-02.md)でAI-06の共有設定・明示接続test・保存を通常Workbenchへ接続し、限定技術受入を完了した（全体回帰4,264成功・34 skip、両HTTP面84要求、実LOCAL疎通・日英ブラウザー、原設定と既存データの保全）。現在の真P・上限admin・選択global adminを検査し、DB閲覧・管理権限と分離する。共有設定の接続成功はDatabase推論の準備完了を意味せず、既存LOCAL推論の対応条件を維持する。次はSQL-08と残る探索操作であり、89項目全体とM1本人受入は継続する。
 
 [DB-P6-4C2C1](database-p6-4c2c1-workload-baseline-2026-11-02.md)はAI-04／AI-05／CMP-05へP専用の固定LOCAL宣言基準レビューを加えた限定技術受入単位である。旧4項目をmet／not_metで示す範囲に限定し、8 admission policyやglobal policy全体、実行許可にはしない。C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。
@@ -77,7 +79,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | SQL-05 | query取消 | 対応、元本人のcleanup契約 | Q、失効後の取消と結果閲覧を区別 | query cancel |
 | SQL-06 | 最近の履歴・詳細・復元 | 対応、本人と許可context | Q、復元だけでは実行しない | query history／inspect |
 | SQL-07 | table／chart、filter、sort | 対応、許可された返却済み行 | U＋Q、失効後は消去 | 結果表示 |
-| SQL-08 | Worksheet結果CSV／JSON／TSV保存 | 未接続。Table全件Exportと別機能 | 結果保存の再認可は後続 | DB-P6-6 |
+| SQL-08 | Worksheet結果CSV／JSON／TSV保存 | 対応、受領済み連続pageの全行。Table全件Export／clipboardとは別 | 本人・元role・現在full9とpage列を保存前後に検査。最大4096 page／16 MiB。JSON整数文字列・NULL-aware CSV／TSV。cache消失は拒否し再実行しない | [DB-P6-6A限定技術受入](database-p6-6a-result-save-contract-2026-11-02.md)、`/api/v1/queries/{id}/results/export` |
 | SQL-09 | 固定sample SQL shortcut | 未接続、旧catalogを仮定 | U、固定SQLを自動送信しない | 選択DBのSQLを明示入力 |
 | SQL-10 | Copilot SQL生成 | B1の未実行案に条件付き対応。B2のWAP下書き引渡しは限定技術受入済み | V／E／Aで許可metadataによるLOCAL案を生成。B2は成功済み本人案・元contextと同一DB／同一E／A roleのSANDBOX実行先・使用TABLEが条件。worksheet／Doctor本文や結果を変更せず、取込後は通常WAPで明示編集・保存する | DB-P6-4B1技術受入済み、B2限定技術受入済み |
 | SQL-11 | Copilot Explain | SQL説明・TABLE／条件付きVIEW実行計画の説明・保存済み計画の明示再説明に対応 | V／E／A、有効なSQLワークシートcontext・再帰依存を含む全schemaの現在のquery権限・LOCAL AI。新規VIEW計画は`logical_v1`の対応INVOKER・同一DBに限定し、固定の非ANALYZE EXPLAINは通常受付・Wakeを利用。再説明は元A2／A3のCOLLECTED＋FINISHED証拠と凍結contextが条件で、Engine等を呼ばない。これらの説明操作で元SQLを実行しない | DB-P6-4A1／A2／A3／A5対応 |
