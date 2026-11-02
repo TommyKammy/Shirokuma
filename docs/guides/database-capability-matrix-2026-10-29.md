@@ -1,6 +1,8 @@
 # Databaseモードの機能一覧と利用条件
 
-[DB-P6-6B](database-p6-6b-table-clone-2026-11-02.md)でEXP-10を通常Explorerへ接続し、限定技術受入を完了した。新しいSANDBOXへの単一CTAS・現在／過去Snapshot・元key回復・認可分離を実装し、全体回帰4,385成功・34 skip、実5コピーと値照合、拒否・reload回復・保全を確認した。次はEXP-12であり、P6全体とM1本人受入は継続する。
+[DB-P6-6C](database-p6-6c-table-profiling-2026-11-02.md)でEXP-12の全行・全列NULL統計を通常Explorerへ接続し、限定技術受入を完了した。現在query権限、固定Snapshot、正確な件数文字列・NULL率、元key回復・取消を実装した。全体回帰4,460成功・34 skip、実2DB×3roleの8件と通常画面3件、63行／過去3行／空0行、再送・拒否・再起動後GET・保全を確認した。次はTable／Explorer lineageを限定単位で進め、P6全体とM1本人受入は継続する。
+
+[DB-P6-6B](database-p6-6b-table-clone-2026-11-02.md)でEXP-10を通常Explorerへ接続し、限定技術受入を完了した。新しいSANDBOXへの単一CTAS・現在／過去Snapshot・元key回復・認可分離を実装し、全体回帰4,385成功・34 skip、実5コピーと値照合、拒否・reload回復・保全を確認した。EXP-10の後続にEXP-12を選定した。P6全体とM1本人受入は継続する。
 
 [DB-P6-6A](database-p6-6a-result-save-contract-2026-11-02.md)でSQL-08のWorksheet返却済み結果のCSV／JSON／TSVファイル保存を実装し、限定技術受入を完了した（全体回帰4,328成功・34 skip、両HTTP面72要求・22成果物、ブラウザー実ファイルとcache喪失拒否、元行と設定の保全）。本人・保存role・現在contextと受領page列を照合し、JSON整数文字列とNULL-aware CSV／TSVで精度・NULLを保持する。表示filter／sortを保存範囲へ反映せず、Table全件Exportとは区別する。SQL-08の後続にEXP-10を選定した。P6全体とM1本人受入は継続する。
 
@@ -98,7 +100,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | EXP-09 | Export照会・取消・新規・receipt／download | 対応、本人と元context | X、同一operation／key、完全出力のみ | table export／dataops |
 | EXP-10 | 現在／過去Tableのsandbox clone | 対応。同DB・固定Snapshot→新規SANDBOX TABLEの物理コピー | E／A。source queryとtarget writeを分離。元key回復・単一CTAS。上書き／自動DROPなし、UNKNOWNは観測のみ | [DB-P6-6B限定技術受入](database-p6-6b-table-clone-2026-11-02.md)、Explorer→サンドボックスに複製 |
 | EXP-11 | 探索のDrop Table | 未接続。A選択だけで解除しない | 削除方式と認可を別途確定 | DB-P6-6 |
-| EXP-12 | profiling／NULL統計 | 未接続。columns／previewは対応 | 将来はXの集計範囲と再認可 | DB-P6-6 |
+| EXP-12 | profiling／NULL統計 | 対応。固定Snapshotの全行・全トップレベル列の実COUNT | V／E／Aの現在query権限。既存ViewerのMARTS制約維持。件数文字列・NULL率、0行は率—。VIEW未対応。元key回復と失効後消去 | [DB-P6-6C限定技術受入](database-p6-6c-table-profiling-2026-11-02.md)、Explorer→プロファイル & NULL統計 |
 | EXP-13 | Table lineage | 未接続。WAP metadataと別機能 | 将来は許可source／target | DB-P6-6 |
 | EXP-14 | dbtモデルlineage | 変換画面の保存planでmodels／sources／refs、TABLE候補SnapshotとVIEW UUID／versionを区別して表示 | Eは本人、Aは同DBの認可済みmetadata。Explorerの旧lineage入口は未接続 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)、残るExplorerはDB-P6-6 |
 | ING-01 | browser file／drop、型・delimiter等、preview | 対応、E／AかつRAW／SANDBOXのwrite | I、入力と設定のfingerprint | ファイル取り込み |
@@ -166,7 +168,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 
 安定したIDの案内をパネルへ置き、手動WAP等の追加順序によって説明対象が変わらないようにする。取り込みと変換、保存metadata監査は対応済み操作へ案内する。logical_v1の共有LOCAL管理は、旧Database profileの非対応と一時的な観測失敗を区別する。dbt、AI Bears、SRE／Policy検査は未接続のまま、理由と利用できる確認先を示す。
 
-Worksheet結果保存の案内は「結果保存が未対応」とし、対応済みTable全件Exportを否定しない。profilingとlineageは機能名を示し、対象identity未確認・対象／roleのcapability不足とは説明を分ける。未接続機能は管理者への変更を解決策にしない。
+Worksheet結果保存とTable全件Exportの対象範囲・権限・cache条件を分けて案内する。profilingはTABLE・現在query権限・Snapshot条件と全行集計の範囲を示し、lineageの未接続案内とは分ける。対象identity未確認・対象／roleのcapability不足も区別し、未接続機能は管理者への変更を解決策にしない。
 
 実装上の根拠は[認可](../../tools/local_experiment/request_auth.py)、[inventoryのcapability](../../tools/local_experiment/database_inventory.py)、[HTTP routeの拒否](../../tools/local_experiment/workbench_server.py)、[Workbench](../../tools/local_experiment/workbench/index.html)、[WAPのDB共有metadata](../../tools/local_experiment/manual_wap.py)、[Jobs](../../tools/local_experiment/db_jobs.py)、[Stages](../../tools/local_experiment/db_stages.py)、[Marts](../../tools/local_experiment/db_marts.py)、[予定とalert](../../tools/local_experiment/db_schedules.py)である。
 

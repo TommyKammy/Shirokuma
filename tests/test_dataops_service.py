@@ -29,6 +29,16 @@ import warehouse_admission as admission
 
 class DataOpsTests(unittest.TestCase):
 
+    def test_private_replay_inspection_optout_keeps_default_inspection(self):
+        execution = self.begin()
+        with patch.object(ds.Execution, 'inspect', side_effect=QueryError('DB_ACCESS_REVOKED', 403)) as inspect:
+            with self.assertRaises(QueryError):
+                self.begin()
+            replay = self.begin(_inspect_replay=False)
+            self.assertTrue(replay.replayed)
+            self.assertEqual(replay.id, execution.id)
+            self.assertEqual(inspect.call_count, 1)
+
     def test_native_publication_typed_methods_require_private_accepted_scope(self):
         execution = self.begin()
         for method in (execution._dbt_native_audit, execution._dbt_native_publish):

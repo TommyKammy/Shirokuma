@@ -1587,7 +1587,7 @@ function renderCatalogTrees(){for(const [target,filter,insert] of [['catalog-tre
 $('catalog-filter').oninput=renderCatalogTrees;$('worksheet-tree-filter').oninput=renderCatalogTrees;
 $('open-table-sql').onclick=()=>openWorksheet('SELECT * FROM '+selectedTable+' LIMIT 50');
 $('drop-table-btn').onclick=()=>busy($('drop-table-btn'),async()=>{const selected=selectedTable;if(!selected||!confirm(t('Drop {table}? This deletes the table.',{table:selected})))return;try{await api('/api/catalog/drop',{table:selected});if(selectedTable===selected){++columnRequest;selectedTable=null;$('refresh-table-details').disabled=true;$('clone-table-btn').disabled=true;$('export-table-btn').disabled=true;ui($('table-title'),'Table dropped');$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;for(const id of ['table-columns','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).replaceChildren();}await loadCatalog();}catch(e){message('catalog-error',e.message);}});
-function wireTabs(buttons,select){buttons.forEach((b,i)=>{b.onclick=()=>select(b);b.onkeydown=e=>{let n;if(['ArrowRight','ArrowDown'].includes(e.key))n=(i+1)%buttons.length;else if(['ArrowLeft','ArrowUp'].includes(e.key))n=(i+buttons.length-1)%buttons.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=buttons.length-1;if(n!==undefined){e.preventDefault();select(buttons[n]);buttons[n].focus();}};});}
+function wireTabs(buttons,select){buttons.forEach(b=>{b.onclick=()=>select(b);b.onkeydown=e=>{const available=buttons.filter(button=>!button.disabled&&!button.hidden),i=available.indexOf(b);if(i<0)return;let n;if(['ArrowRight','ArrowDown'].includes(e.key))n=(i+1)%available.length;else if(['ArrowLeft','ArrowUp'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();select(available[n]);available[n].focus();}};});}
 // Views inside a page (for example Jobs → Run history) share the same tab behaviour.
 function showView(id){const button=$(id);if(button&&!button.hidden)button.click();}
 function selectView(button){
@@ -4458,10 +4458,11 @@ function dbHideRows(predicate=()=>true){
  if(!current?.authorized||!dbRoleWithinHeader(current.origin.role)){queryResult=null;$('query-results').replaceChildren();$('query-chart').replaceChildren();}
 }
 function dbClearExplorer(){
+ dbProfileInvalidate();
  ++dbObjectEpoch;dbDetails.clear();dbPending.clear();dbObjects=[];dbObject=null;
  ++dbListRequest;
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
- for(const id of ['inspect-profile','table-lineage'])ui($(id),'Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.');
+ ui($('table-lineage'),'Lineage is unavailable in Database mode.');
  $('refresh-table-details').disabled=true;
  dbExplorerControls();
 }
@@ -4908,7 +4909,7 @@ function dbExplorerControls(){
  ui($('use-explorer-schema'),'Use this schema in {worksheet}',{worksheet:dbCurrent()?worksheetName(dbCurrent()):t('Worksheet')});
  if($('catalog-context-reselect'))$('catalog-context-reselect').hidden=!dbExplorerReason();
  dbRenderBreadcrumb();dbRenderTree();
- if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();}
+ if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();dbProfileControls();}
 }
 function dbRenderBreadcrumb(){
  const crumb=$('database-breadcrumb');if(!crumb)return;
@@ -5074,6 +5075,7 @@ function dbSyncWorkspaceNavigation(){
  }
 }
 function dbShowWorkspace(pane){
+ if(pane!==dbWorkspacePane)dbProfileInvalidate();
  if(dbWorkspacePane!==pane)++dbExportRevision;
  dbWorkspacePane=pane;
  dbSyncWorkspaceNavigation();
@@ -5195,6 +5197,7 @@ async function dbLoadObjects(cursor=null){
  }catch(error){if(current()){dbExplorerDenied(error);message('catalog-error',error.message);}}
 }
 async function dbDescribe(object,section=activeInspector,snapshot){
+ dbProfileInvalidate();
  const scope=dbCatalogScope(),epoch=++dbObjectEpoch,identity=dbIdentity(),role=currentRole;
  dbObject=object;$('table-title').textContent=object.display_name;
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
@@ -5202,7 +5205,8 @@ async function dbDescribe(object,section=activeInspector,snapshot){
  message('catalog-error','');dbControls();$('refresh-table-details').disabled=!object.id;
  if(dbExplorerReason()){ui($(target),dbExplorerReason());return;}
  if(!object.id||!object.ref){ui($(target),'Object identity is not verified. Refresh Explorer and select the object again.');return;}
- if(!['columns','preview','snapshots','ddl'].includes(section)){ui($(target),['profile','lineage'].includes(section)?'Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.':'This detail is unsupported in Database mode. Use columns, preview, snapshots or DDL.');return;}
+ if(section==='profile'){dbProfileControls();return;}
+ if(!['columns','preview','snapshots','ddl'].includes(section)){ui($(target),section==='lineage'?'Lineage is unavailable in Database mode.':'This detail is unsupported in Database mode. Use columns, preview, snapshots or DDL.');return;}
  if(!object.capabilities?.[section]){ui($(target),'This detail is not permitted for the current role or object. Choose another authorized object or role.');return;}
  const current=()=>identity===dbIdentity()&&scope===dbCatalogScope()&&epoch===dbObjectEpoch;
  try{
@@ -5254,7 +5258,7 @@ async function dbDetailPages(page,role,current){
  return {...first,columns:run.columns,data:run.rows,state:run.state,truncated:!!run.truncated,error:run.error?{message:run.error}:undefined};
 }
 function dbSelectInspector(button){
- if(button.disabled||!['columns','preview','snapshots','ddl'].includes(button.dataset.inspect))return;
+ if(button.disabled||!['columns','preview','snapshots','ddl','profile'].includes(button.dataset.inspect))return;
  activeInspector=button.dataset.inspect;
  inspectorTabs.forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$('inspect-'+b.dataset.inspect).hidden=!selected;});
  if(dbObject)return dbDescribe(dbObject);
@@ -5287,11 +5291,11 @@ async function initializeDatabaseUI(session){
  const reselect=document.createElement('button');reselect.id='catalog-context-reselect';reselect.type='button';ui(reselect,'Reselect context');reselect.onclick=dbReselectExplorer;
  const explorerStatus=document.createElement('span');explorerStatus.id='catalog-context-state';explorerStatus.setAttribute('role','status');explorerTools.append(reselect,explorerStatus);$('catalog-error').before(explorerTools);
  dbInstallWorkspace(explorerTools);
- for(const section of ['profile','lineage']){
-  const button=inspectorTabs.find(b=>b.dataset.inspect===section);button.disabled=true;const key='Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.';button.title=t(key);uiAttributes.push({node:button,attribute:'title',key});ui($(inspectorTargets[section]),key);
+ for(const section of ['lineage']){
+  const button=inspectorTabs.find(b=>b.dataset.inspect===section);button.disabled=true;const key='Lineage is unavailable in Database mode.';button.title=t(key);uiAttributes.push({node:button,attribute:'title',key});ui($(inspectorTargets[section]),key);
  }
- wireTabs(inspectorTabs.filter(button=>!button.disabled),dbSelectInspector);
- ui($('lineage'),'Table profiling and lineage are unavailable in Database mode. Use columns, preview, snapshots or DDL.');
+ wireTabs(inspectorTabs,dbSelectInspector);
+ ui($('lineage'),'Lineage is unavailable in Database mode.');
  const bar=document.createElement('div'),contextActions=document.createElement('div');bar.id='database-context-bar';bar.setAttribute('role','group');bar.setAttribute('aria-label',t('Execution context'));uiAttributes.push({node:bar,attribute:'aria-label',key:'Execution context'});contextActions.className='context-actions';
  for(const id of ['query-database','query-schema','query-execution-role','query-mode','query-warehouse','max-rows']){const field=$(id)?.parentElement;if(field)bar.append(field);}
  const buttons={};for(const [id,key,task] of [['database-context-refresh','Refresh context',dbRefreshContext],['database-context-reselect','Reselect context',dbReselect],['cancel-query','Cancel query',dbCancelQuery]]){const button=document.createElement('button');button.id=id;button.type='button';ui(button,key);button.onclick=task;buttons[id]=button;}
@@ -5354,7 +5358,7 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if(next!==activeTab)dbProfileInvalidate();if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
@@ -6310,6 +6314,193 @@ function dataopsInstall(){
  dataopsButton(area,'p35-export-observe','Observe operation',()=>dataopsObserveExport());dataopsButton(area,'p35-export-cancel','Cancel operation',()=>dataopsObserveExport(true));
  dataopsButton(area,'p35-export-new','New export',()=>{if(dataopsExport&&!dataopsExport.pending&&!dataopsExport.trackingPending&&dataopsTerminal(dataopsExport)){dataopsExport=null;dataopsExportRender();dataopsExportControls();$('export-table-btn').focus();}});
  dataopsExportRender();dataopsExportControls();dbCloneInstall();
+}
+
+// Profiling owns only opaque recovery handles; statistics stay in memory.
+const dbProfileKey='shirokuma.table-profile.v1';
+const dbProfile={revision:0,owner:null,handles:new Map(),op:null,busy:null,context:null,source:null,scope:'',snapshots:[],snapshot:'',notice:''};
+Object.assign(i18n.ja,{
+ 'Lineage is unavailable in Database mode.':'Database モードではリネージュを利用できません。',
+ 'Aggregate all rows and all top-level columns in one frozen snapshot. Only top-level NULLs are counted, including nested types. A full scan can take several minutes.':'固定したスナップショットの全行・全トップレベル列を集計します。ネスト型を含め、トップレベルの NULL だけを数えます。全件走査には数分かかる場合があります。',
+ 'Refresh profile context and snapshots':'集計用コンテキストとスナップショットを更新',
+ 'Aggregate full snapshot':'スナップショット全体を集計',
+ 'New profile intent':'新しい集計要求',
+ 'Refresh profile context after selecting a readable TABLE.':'読取可能な TABLE を選択し、集計用コンテキストを更新してください。',
+ 'Reselect the original source TABLE and role, then Observe operation. Recovery uses the original key and immutable inputs; it never creates a new aggregation intent.':'元の参照元 TABLE とロールを選び直して「操作を照会」を選択してください。復旧には元のキーと固定済みの入力を使い、新しい集計要求は作成しません。',
+ 'Profile request could not be saved. No request was sent.':'集計要求を保存できません。要求は送信していません。',
+ 'Statistics are hidden until the original source and current access are verified.':'元の参照元と現在のアクセス権を確認するまで統計を表示しません。',
+ 'Full scan accepted. Observe manually or cancel using its operation ID.':'全件走査を受け付けました。操作 ID を使って手動で照会・取消できます。',
+ 'No snapshot yet: CURRENT will count the empty TABLE and verify that it remains empty.':'まだスナップショットがありません。CURRENT で空 TABLE を数え、空のままであることを確認します。',
+ 'Row count':'行数','Column count':'列数','NULL count':'NULL 数','NULL %':'NULL %'
+});
+for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
+function dbProfileScope(){return JSON.stringify([dbProfile.revision,dbPrincipal,currentRole,dbRoleVersion(currentRole),dbAuthorizationVersion,dbCatalogScope(),dbSelectionGeneration,dbObjectEpoch,dataopsRef(dbObject),activeTab,dbWorkspacePane]);}
+function dbProfileEligible(){return dbExplorerCanOpen()&&dbObject?.kind==='TABLE'&&dbRoleWithinHeader(currentRole);}
+function dbProfileContext(){
+ const e=dbExplorer,d=dbDatabases.find(d=>d.id===e.database_id),s=e.schemas.find(s=>s.id===e.schema_id);
+ if(!dbProfileEligible()||!d||!s)return null;
+ return {database_id:d.id,schema_id:s.id,warehouse_id:'LOCAL',sql_catalog:d.sql_catalog,sql_schema:s.sql_name,selected_role:currentRole,binding_revision:d.binding_revision,generation_id:d.generation_id,grant_revision:d.grant_revision??null};
+}
+function dbProfileSaved(){return readStorage(dbProfileKey,{})?.owners||{};}
+function dbProfileSync(){
+ const p=dbProfile;if(p.owner===dbPrincipal)return;
+ if(p.op){p.op.operation=null;p.op.protected=false;p.handles.set(p.op.principal,p.op);}
+ p.owner=dbPrincipal;++p.revision;
+ const live=p.handles.get(dbPrincipal),saved=live||dbProfileSaved()[dbPrincipal];
+ p.op=saved?.key&&saved.path==='/api/v1/table-profiles'&&saved.payload?.source&&saved.payload?.context?
+  live||{...saved,context:dataopsFreeze(saved.payload.context),payload:dataopsFreeze(saved.payload),operation:null,protected:false}:null;
+ if(p.op){p.op.operation=null;p.op.protected=false;p.handles.set(dbPrincipal,p.op);}
+ p.busy=null;p.context=null;p.source=null;p.scope='';p.snapshot=p.op?.payload.snapshot_id||'';p.snapshots=[];p.notice='';
+}
+function dbProfilePersist(op=dbProfile.op){
+ try{
+  const owners=dbProfileSaved();
+  if(op){owners[op.principal]={principal:op.principal,key:op.key,id:op.id||null,path:op.path,payload:op.payload,state:op.state,ambiguous:!!op.ambiguous,childUnknown:!!op.childUnknown,sequence:op.sequence||0};dbProfile.handles.set(op.principal,op);}
+  else {delete owners[dbPrincipal];dbProfile.handles.delete(dbPrincipal);}
+  localStorage.setItem(dbProfileKey,JSON.stringify({owners}));return true;
+ }catch{return false;}
+}
+function dbProfileHeld(op){return !!op&&(op.ambiguous||op.childUnknown||!dataopsTerminal(op));}
+function dbProfileAuthorized(op){return !!op&&op.principal===dbPrincipal&&dbProfileEligible()&&dataopsSameContext(op.context,dbProfileContext())&&dataopsRefKey(op.payload.source)===dataopsRefKey(dataopsRef(dbObject))&&dataopsExportAuthorized(op);}
+function dbProfileCanObserve(op){return !!op&&op.principal===dbPrincipal&&dbRoleWithinHeader(op.context.selected_role)&&dataopsExportAuthorized(op)&&dataopsCanObserve(op);}
+function dbProfileCanCancel(op){return !!op&&op.principal===dbPrincipal&&dbRoleWithinHeader(op.context.selected_role)&&!op.ambiguous&&!op.childUnknown&&dataopsCanCancel(op);}
+function dbProfileInvalidate(){
+ const p=dbProfile;++p.revision;p.context=null;p.source=null;p.scope='';p.snapshots=[];p.snapshot=p.op?.payload.snapshot_id||'';p.notice='';
+ if(p.op){p.op.operation=null;p.op.protected=false;}
+ $('table-profile-results')?.replaceChildren();
+}
+function dbProfileMount(){
+ if($('inspect-profile').children.length&&Array.from($('inspect-profile').children).includes($('table-profile-run')?.parentElement))return;
+ const root=$('inspect-profile');root.replaceChildren();
+ dataopsNode('p','',root,'Aggregate all rows and all top-level columns in one frozen snapshot. Only top-level NULLs are counted, including nested types. A full scan can take several minutes.').className='help';
+ dataopsNode('p','table-profile-source',root).className='status-line';
+ const fields=dataopsNode('div','',root);fields.className='job-fields';
+ const snapshot=dataopsField(fields,'table-profile-snapshot','Snapshot','select');
+ snapshot.onchange=()=>{dbProfile.snapshot=dbProfile.op?dbProfile.op.payload.snapshot_id||'':snapshot.value;dbProfileControls();};
+ const toolbar=dataopsNode('div','',root);toolbar.className='toolbar';
+ dataopsButton(toolbar,'table-profile-refresh','Refresh profile context and snapshots',dbProfileRefresh);
+ dataopsButton(toolbar,'table-profile-run','Aggregate full snapshot',()=>dbProfileRun());
+ dataopsButton(toolbar,'table-profile-observe','Observe operation',()=>dbProfileRun(true));
+ dataopsButton(toolbar,'table-profile-cancel','Cancel operation',()=>dbProfileRun(true,true));
+ dataopsButton(toolbar,'table-profile-new','New profile intent',()=>{
+  const p=dbProfile;if(p.busy||p.op?.pending||!p.op||dbProfileHeld(p.op))return;
+  p.op=null;dbProfilePersist();dbProfileInvalidate();dbProfileControls();
+ });
+ dataopsNode('div','table-profile-status',root).setAttribute('role','status');
+ dataopsNode('div','table-profile-results',root).setAttribute('aria-live','polite');
+}
+function dbProfileTypeText(type,depth=0){
+ if(typeof type==='string')return type;
+ if(!type||typeof type!=='object'||Array.isArray(type)||depth>=20)return 'Unknown type';
+ const nested=value=>dbProfileTypeText(value,depth+1);
+ if(type.type==='list'||type.type==='array')return type.type+'<'+nested(type.element??type.items)+'>';
+ if(type.type==='map')return 'map<'+nested(type.key)+', '+nested(type.value)+'>';
+ if(type.type==='struct'||type.type==='row'){
+  if(!Array.isArray(type.fields))return 'Unknown type';
+  return type.type+'<'+type.fields.map(field=>field&&typeof field.name==='string'?field.name+': '+nested(field.type):'Unknown field').join(', ')+'>';
+ }
+ return 'Unknown type';
+}
+function dbProfileControls(){
+ if(!$('catalog-database'))return;
+ dbProfileSync();dbProfileMount();
+ if(dbProfile.op&&dbProfile.snapshot!==(dbProfile.op.payload.snapshot_id||'')){
+  ++dbProfile.revision;dbProfile.snapshot=dbProfile.op.payload.snapshot_id||'';
+  dbProfile.op.operation=null;dbProfile.op.protected=false;
+ }
+ const p=dbProfile,op=p.op,scope=dbProfileScope(),eligible=dbProfileEligible(),held=dbProfileHeld(op),busy=!!p.busy||!!op?.pending;
+ const button=inspectorTabs.find(b=>b.dataset.inspect==='profile');button.disabled=!eligible;button.title=eligible?'':t('Refresh profile context after selecting a readable TABLE.');
+ wireTabs(inspectorTabs,dbSelectInspector);
+ if(p.scope&&p.scope!==scope){p.context=null;p.source=null;p.scope='';p.snapshots=[];p.snapshot='';p.notice='';}
+ const ready=eligible&&p.scope===scope&&!!p.context;
+ const visible=op?.protected&&op.receiptScope===scope&&op.receiptSnapshot===p.snapshot&&dbProfileAuthorized(op);
+ if(op&&!visible){op.operation=null;op.protected=false;}
+ if(op)p.snapshot=op.payload.snapshot_id||'';
+ dataopsOptions($('table-profile-snapshot'),ready?p.snapshots.map(id=>[id,id]):[],p.snapshot,'CURRENT (freeze at acceptance)');
+ $('table-profile-snapshot').value=p.snapshot;
+ $('table-profile-snapshot').disabled=busy||!!op||!ready;
+ $('table-profile-refresh').disabled=busy||!eligible;
+ $('table-profile-run').disabled=busy||!!op||!ready;
+ $('table-profile-observe').disabled=busy||!dbProfileCanObserve(op);
+ $('table-profile-cancel').disabled=busy||!dbProfileCanCancel(op);
+ $('table-profile-new').disabled=busy||!op||held;
+ $('table-profile-source').textContent=ready?[dbProfileContext().sql_catalog,dbProfileContext().sql_schema,dbObject.physical_name,currentRole].join(' / '):'';
+ const status=$('table-profile-status');status.replaceChildren();
+ if(op){dataopsNode('p','',status,'Operation ID').append(': '+(op.id||'UNKNOWN'));dataopsNode('p','',status,'Status').append(': '+t(op.state||'UNKNOWN'));dataopsNode('p','',status,'Idempotency key').append(': '+op.key);}
+ if(p.notice)status.append(t(p.notice));
+ if(!ready)dataopsNode('p','',status,'Refresh profile context after selecting a readable TABLE.');
+ if(held&&op.id)dataopsNode('p','',status,'Full scan accepted. Observe manually or cancel using its operation ID.');
+ if(op?.ambiguous||op?.childUnknown||op?.state==='UNKNOWN')dataopsNode('p','',status,'Outcome unknown. Observe with the saved key; do not submit again.');
+ if(op&&!visible)dataopsNode('p','',status,'Reselect the original source TABLE and role, then Observe operation. Recovery uses the original key and immutable inputs; it never creates a new aggregation intent.');
+ if(op&&!op.id)dataopsNode('p','',status,'Cancellation is unavailable until an acceptance ID is received. Recover the original request first.');
+ const out=$('table-profile-results');out.replaceChildren();
+ const result=visible?op.operation?.result:null;
+ if(result?.row_count!==undefined){
+  dataopsNode('p','',out,'Row count').append(': '+result.row_count);dataopsNode('p','',out,'Column count').append(': '+String(result.column_count));
+  dataopsNode('p','',out,'Snapshot').append(': '+(result.source?.snapshot??'CURRENT'));
+  const grid=dataopsNode('div','',out);grid.className='table-wrap';
+  table(grid,['Column','Type','NULL count','NULL %'],result.columns.map(c=>[c.name,dbProfileTypeText(c.type),c.null_count,c.null_percent===null?'—':c.null_percent+'%']),true);
+ }else if(op)dataopsNode('p','',out,'Statistics are hidden until the original source and current access are verified.');
+}
+async function dbProfileRefresh(){
+ dbProfileControls();const p=dbProfile;if(p.busy||!dbProfileEligible())return;
+ const source=dataopsFreeze(dataopsClone(dataopsRef(dbObject))),role=currentRole,owner=dbPrincipal,token={};let scope=dbProfileScope();
+ p.busy=token;p.context=null;p.scope='';p.notice='';if(p.op){p.op.operation=null;p.op.protected=false;}dbProfileControls();
+ try{
+  const items=await dbReadInventory(role);if(scope!==dbProfileScope()||owner!==dbPrincipal||!dbInventoryCurrent(items))return;
+  dbApplyInventory(items,role);scope=dbProfileScope();
+  const schemas=await dbAPI('/api/v1/databases/'+encodeURIComponent(source.database_id)+'/schemas',role);if(scope!==dbProfileScope())return;
+  const schema=schemas.items?.find(s=>s.id===source.schema_id&&s.capabilities?.query===true);
+  if(!schema)throw Error('Refresh profile context after selecting a readable TABLE.');
+  const reply=await dbAPI('/api/v1/objects/'+encodeURIComponent(source.object_id)+'?detail=snapshots',role);if(scope!==dbProfileScope())return;
+  const currentItems=await dbReadInventory(role);if(scope!==dbProfileScope()||!dbInventoryCurrent(currentItems))return;
+  dbApplyInventory(currentItems,role);if(scope!==dbProfileScope()||!dbProfileEligible())return;
+  p.source=source;p.context=dataopsFreeze(dbProfileContext());p.scope=scope;p.snapshot=p.op?.payload.snapshot_id||'';
+  p.snapshots=[...new Set((reply.snapshots||[]).map(s=>s.snapshot_id).filter(id=>typeof id==='string'&&/^[0-9]+$/.test(id)))];
+  if(!p.snapshots.length)p.notice='No snapshot yet: CURRENT will count the empty TABLE and verify that it remains empty.';
+ }catch(error){if(owner===dbPrincipal&&scope===dbProfileScope()){p.notice=error.message;dbProfileInvalidate();p.notice=error.message;if(dataopsAuthError(error))dbExplorerDenied(error);}}
+ finally{if(p.busy===token)p.busy=null;dbProfileControls();}
+}
+async function dbProfileRun(observe=false,cancel=false){
+ dbProfileControls();const p=dbProfile;if(p.busy||p.op?.pending)return;
+ if(!observe){
+  if($('table-profile-run').disabled)return;
+  const payload=dataopsFreeze({context:dataopsClone(p.context),source:dataopsClone(p.source),snapshot_id:p.snapshot||null});
+  p.op={principal:dbPrincipal,key:crypto.randomUUID(),id:null,path:'/api/v1/table-profiles',payload,context:payload.context,state:'ACTIVE',ambiguous:false,childUnknown:false,sequence:0};
+ }
+ const op=p.op;if(!op||!(cancel?dbProfileCanCancel(op):observe?dbProfileCanObserve(op):dbProfileAuthorized(op))||observe&&(cancel?$('table-profile-cancel').disabled:$('table-profile-observe').disabled))return;
+ op.sequence++;
+ if(!dbProfilePersist(op)){if(!observe)p.op=null;p.notice='Profile request could not be saved. No request was sent.';dbProfileControls();return;}
+ const token={},scope=dbProfileScope(),snapshot=p.snapshot;
+ const current=()=>p.op===op&&op.principal===dbPrincipal&&p.busy===token&&scope===dbProfileScope()&&snapshot===p.snapshot;
+ op.pending=token;p.busy=token;p.notice='';op.operation=null;op.protected=false;dbProfileControls();
+ const accept=operation=>{const visible=!cancel&&current()&&dbProfileAuthorized(op);dataopsAccept(op,operation,visible);op.childUnknown=typeof operation.child_unknown==='boolean'?operation.child_unknown:Array.isArray(operation.queries)?operation.queries.some(q=>q.state==='UNKNOWN'):op.childUnknown===true;op.ambiguous=op.ambiguous||op.childUnknown;op.receiptScope=visible?scope:null;op.receiptSnapshot=snapshot;};
+ try{
+  if(cancel){
+   const reply=await dataopsRequest('/api/v1/dataops/'+encodeURIComponent(op.id)+'/cancel',op.context,{});
+   accept(reply.operation);return;
+  }
+  // Recheck live authorization before every request, including cached inventory.
+  const items=await dbReadInventory(op.context.selected_role);if(!current()||!dbInventoryCurrent(items))return;
+  dbApplyInventory(items,op.context.selected_role);if(!current()||!(observe?dbProfileCanObserve(op):dbProfileAuthorized(op)))return;
+  const reply=op.id?await dataopsRequest('/api/v1/dataops/'+encodeURIComponent(op.id)+(cancel?'/cancel':''),op.context,cancel?{}:undefined):await dataopsRequest(op.path,op.context,op.payload,op.key);
+  accept(reply.operation);
+  if(current()){
+   const after=await dbReadInventory(op.context.selected_role);if(!current()||!dbInventoryCurrent(after)){op.operation=null;op.protected=false;return;}
+   dbApplyInventory(after,op.context.selected_role);if(!current()||!dbProfileAuthorized(op)){op.operation=null;op.protected=false;}
+  }
+ }catch(error){
+  const terminal=dataopsTerminal(op);
+  if(error.observation)accept(error.observation);
+  else if(!terminal&&!dataopsRejectBeforeAdmission(op,error))op.ambiguous=true;
+  if(cancel&&error.code==='UNKNOWN_RECONCILIATION_REQUIRED'){op.ambiguous=true;op.childUnknown=true;}
+  op.operation=null;op.protected=false;
+  if(current()){p.notice=error.message;if(dataopsAuthError(error)){dbProfileInvalidate();p.notice=error.message;dbExplorerDenied(error);}}
+ }finally{
+  if(op.pending===token)op.pending=null;
+  if(p.busy===token)p.busy=null;
+  dbProfilePersist(op);dbProfileControls();
+ }
 }
 
 // Clone owns its SANDBOX context and immutable saved intent, separate from SQL.

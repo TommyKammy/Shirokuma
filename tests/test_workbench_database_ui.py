@@ -140,10 +140,10 @@ await dbDescribe({...object,id:null,ref:null},'columns');
 assert.match($('table-columns').textContent,/identity is not verified/);
 await dbDescribe(object,'columns');
 assert.match($('table-columns').textContent,/current role or object/);
-for(const section of ['profile','lineage']){
- await dbDescribe(object,section);
- assert.match($(inspectorTargets[section]).textContent,/profiling and lineage are unavailable/);
-}
+await dbDescribe(object,'profile');
+assert.ok($('inspect-profile').descendants().some(n=>n.id==='table-profile-run'));
+await dbDescribe(object,'lineage');
+assert.match($('table-lineage').textContent,/Lineage is unavailable/);
 assert.equal(calls.length,before);assert.equal(dbPending.size,0);assert.equal(dbDetails.size,0);
 dbExplorer.invalid=true;
 await dbDescribe({...object,id:null,ref:null},'columns');
@@ -172,7 +172,7 @@ for(const lang of ['ja','en']){
  for(const format of ['csv','json','tsv']){assert.equal($('export-'+format).disabled,true);assert.equal($('export-'+format).dataset.databaseUnavailable,'true');assert.equal($('export-'+format)['aria-describedby'],'result-action-state');}
  assert.equal($('copy-tsv').hidden,true);
  assert.equal($('result-action-state').textContent,t('Result saving unavailable. Received page receipts or cached results are unavailable; SQL is not rerun.'));
- for(const button of inspectorTabs.filter(b=>['profile','lineage'].includes(b.dataset.inspect))){assert.equal(button.disabled,true);assert.match(button.title,lang==='ja'?/プロファイリングとリネージュ/:/profiling and lineage/);}
+ for(const button of inspectorTabs.filter(b=>['profile','lineage'].includes(b.dataset.inspect))){assert.equal(button.disabled,true);assert.equal(button.title,t(button.dataset.inspect==='profile'?'Refresh profile context after selecting a readable TABLE.':'Lineage is unavailable in Database mode.'));}
  session.maximum_role='admin';await dbRefreshContext();
 }
 const before=calls.length;
@@ -1031,19 +1031,17 @@ $('insert-table-sql').onclick();assert.equal($('sql').value,'SELECT "finance"."m
 assert.equal(dbCurrent().database_id,context.database_id);assert.equal(dbCurrent().schema_id,context.schema_id);assert.equal(dbExplorer.database_id,'finance');
 ''')
 
-    def test_database_unsupported_profile_lineage_are_disabled_and_explained(self):
+    def test_database_profile_requires_readable_table_lineage_remains_disabled(self):
         self.javascript(r'''
 await dualBoot();const inputs=JSON.stringify(dbInput(dbCurrent())),before=calls.length;
 const tab=section=>inspectorTabs.find(b=>b.dataset.inspect===section),key=key=>({key,preventDefault(){}});
 tab('columns').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'preview');
 tab('preview').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'ddl');assert.equal(document.activeElement,tab('ddl'));
 tab('ddl').onkeydown(key('Home'));assert.equal(activeInspector,'columns');
-for(const section of ['profile','lineage']){
- const button=inspectorTabs.find(b=>b.dataset.inspect===section);assert.equal(button.disabled,true);assert.match(button.title,/profiling and lineage are unavailable/);
- await dbSelectInspector(button);assert.equal(activeInspector,'columns');assert.match($(inspectorTargets[section]).textContent,/profiling and lineage are unavailable/);
-}
-assert.match($('lineage').textContent,/profiling and lineage are unavailable/);assert.ok(!$('lineage').textContent.includes('Loading'));
-setLanguage('ja');for(const section of ['profile','lineage'])assert.match(inspectorTabs.find(b=>b.dataset.inspect===section).title,/プロファイリングとリネージュは未対応/);
+assert.equal(tab('profile').disabled,true);assert.match(tab('profile').title,/readable TABLE/);
+assert.equal(tab('lineage').disabled,true);assert.match(tab('lineage').title,/Lineage is unavailable/);
+assert.match($('lineage').textContent,/Lineage is unavailable/);assert.ok(!$('lineage').textContent.includes('Loading'));
+setLanguage('ja');assert.match(tab('profile').title,/読取可能な TABLE/);assert.match(tab('lineage').title,/リネージュを利用できません/);
 assert.equal(JSON.stringify(dbInput(dbCurrent())),inputs);assert.equal(calls.length,before);
 ''')
 

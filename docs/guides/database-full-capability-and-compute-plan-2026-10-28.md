@@ -274,7 +274,9 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 ## 9 実装の進め方と直近の着手単位
 
-2026-11-02 JST、[DB-P6-6B（EXP-10）](database-p6-6b-table-clone-2026-11-02.md)の新規SANDBOX TABLEへの物理コピーを限定技術受入済みとした。同DB・固定Snapshot・source query／target write分離・元key・単一CTASを維持し、全体回帰4,385成功・34 skip、実2DB×Engineer／adminと通常画面の計5コピー、値照合・拒否・回復・保全を確認した。次はEXP-12のprofiling／NULL統計を限定unitで進める。M1の全必須行と本人受入、P7の実コンピュート伸縮は従来の条件を維持する。
+2026-11-02 JST、[DB-P6-6C（EXP-12）](database-p6-6c-table-profiling-2026-11-02.md)のTable profiling／NULL統計を限定技術受入済みとした。現在query権限と固定Snapshotで全行・全列を集計し、件数精度、元key回復、取消と統計の非表示条件を維持する。全体回帰4,460成功・34 skip、実2DB×3roleと通常画面の計11集計、63行／過去3行／空0行、再送・拒否・再起動後GET・保全を確認した。次はTable／Explorer lineageを限定単位として進め、P6全必須行・M1本人受入とP7以降の採用条件は変更しない。
+
+2026-11-02 JST、[DB-P6-6B（EXP-10）](database-p6-6b-table-clone-2026-11-02.md)の新規SANDBOX TABLEへの物理コピーを限定技術受入済みとした。同DB・固定Snapshot・source query／target write分離・元key・単一CTASを維持し、全体回帰4,385成功・34 skip、実2DB×Engineer／adminと通常画面の計5コピー、値照合・拒否・回復・保全を確認した。EXP-10の後続にEXP-12を選定した。M1の全必須行と本人受入、P7の実コンピュート伸縮は従来の条件を維持する。
 
 2026-11-02 JST、[DB-P6-6A（SQL-08）](database-p6-6a-result-save-contract-2026-11-02.md)の返却済み結果保存を限定技術受入済みとした。CSV／JSON／TSVをserver cacheの受領prefixから生成し、現在認可・数値精度・NULL区別・scope変更・cache喪失を検証した（全体回帰4,328成功・34 skip、2DB×3role、22成果物／72要求、実ブラウザーと保全）。SQL-08後のEXP-10は同DBの固定Snapshotから新しいSANDBOX TABLEへの物理コピーを限定unitとして選定し、他の探索操作とM1本人受入は継続する。
 

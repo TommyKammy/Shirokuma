@@ -184,7 +184,7 @@ def _validated_context(principal, context):
         raise QueryError('CONTEXT_MISMATCH', 409)
 
 
-def begin(principal, context, *, route, idempotency_key, payload, _admission_hook=None):
+def begin(principal, context, *, route, idempotency_key, payload, _admission_hook=None, _inspect_replay=True):
     """Persist normalized request and admission before creating any SQL intent."""
     if any(not isinstance(v, str) or not v or len(v) > 256 for v in (route, idempotency_key)):
         raise ValueError('route and idempotency key are required')
@@ -201,7 +201,8 @@ def begin(principal, context, *, route, idempotency_key, payload, _admission_hoo
             if row['payload'] != normalized:
                 raise QueryError('IDEMPOTENCY_CONFLICT', 409)
             execution = Execution(principal, row['id'], replayed=True)
-            execution.inspect()
+            if _inspect_replay:
+                execution.inspect()
             return execution
         _validated_context(principal, context)
         scan_scope = _stage_scan.get()
@@ -441,7 +442,7 @@ class Execution:
             return dict(triggered=page['data'][0][0])
         return dict(row_count=len(page['data']))
 
-    def export_measure(self, ref, captured=None, *, snapshot_id=None):
+    def export_measure(self, ref, captured=None, *, snapshot_id=None, allow_empty=False):
         """One REST measurement of UUID, schema identity and available snapshots.
 
         Project the captured snapshot's schema, as Trino time travel does.
@@ -473,15 +474,20 @@ class Execution:
             raise QueryError('STALE_RESOURCE', 409)
         if snapshot_id is not None and (type(snapshot_id) is not str or not re.fullmatch('[0-9]+', snapshot_id)):
             raise ValueError('ASCII decimal snapshot required')
-        if captured is None and snapshot_id is None and type(metadata.get('current-snapshot-id')) is not int:
+        empty = (allow_empty and snapshot_id is None and metadata.get('current-snapshot-id') in (None, -1)
+                 and not metadata.get('snapshots'))
+        if captured is None and snapshot_id is None and type(metadata.get('current-snapshot-id')) is not int and not empty:
             raise QueryError('EXPORT_SNAPSHOT_UNAVAILABLE', 409)
-        snapshot = captured['snapshot'] if captured else snapshot_id if snapshot_id is not None else str(metadata.get('current-snapshot-id'))
+        snapshot = captured['snapshot'] if captured else snapshot_id if snapshot_id is not None else None if empty else str(metadata.get('current-snapshot-id'))
         snapshots = [s for s in metadata.get('snapshots', [])
                      if type(s.get('snapshot-id')) is int and s['snapshot-id'] >= 0
                      and str(s['snapshot-id']) == snapshot]
-        if not re.fullmatch('[0-9]+', snapshot) or len(snapshots) != 1:
+        if snapshot is None and empty:
+            sid = metadata.get('current-schema-id')
+        elif type(snapshot) is not str or not re.fullmatch('[0-9]+', snapshot) or len(snapshots) != 1:
             raise QueryError('EXPORT_SNAPSHOT_UNAVAILABLE', 409)
-        sid = snapshots[0].get('schema-id')
+        else:
+            sid = snapshots[0].get('schema-id')
         schemas = [s for s in metadata.get('schemas', []) if s.get('schema-id') == sid]
         current_sid = metadata.get('current-schema-id')
         current_schemas = [s for s in metadata.get('schemas', []) if s.get('schema-id') == current_sid]

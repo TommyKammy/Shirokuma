@@ -9,6 +9,7 @@ import data_management as registry
 import dataops_service as ds
 import manual_export
 import manual_clone
+import table_profile
 import manual_ingest
 import manual_wap
 import warehouse_admission as admission
@@ -121,7 +122,7 @@ def dispatch(handler, method, path, params, principal, role):
 def _dispatch(handler, method, path, params, principal, role):
     """Return False only for routes outside this adapter; otherwise respond once."""
     if not any(path == '/api/v1/' + prefix or path.startswith('/api/v1/' + prefix + '/')
-               for prefix in ('ingests', 'wap', 'table-exports', 'table-clones', 'dataops')):
+               for prefix in ('ingests', 'wap', 'table-exports', 'table-clones', 'table-profiles', 'dataops')):
         return False
     if '#' in handler.path or handler.headers.get('Transfer-Encoding'):
         raise ValueError('invalid framing')
@@ -168,7 +169,8 @@ def _dispatch(handler, method, path, params, principal, role):
             envelope['operation'] = _cancel_observation(execution)
         elif method == 'GET' and not match[2]:
             current_context(principal, context)
-            envelope['operation'] = execution.inspect()
+            envelope['operation'] = (table_profile.inspect(execution, context)
+                if saved.get('route') == table_profile.ROUTE else execution.inspect())
         else:
             raise QueryError('NOT_FOUND', 404)
         handler.respond(_public_fields(envelope))
@@ -233,6 +235,12 @@ def _dispatch(handler, method, path, params, principal, role):
         kind, artifact_id = path.split('/')[-2:]
         name = {'builds': 'build', 'audits': 'audit', 'publications': 'publication'}[kind]
         envelope[name] = getattr(manual_wap, 'get_' + name)(principal, context, **{name + '_id': artifact_id})
+    elif method == 'POST' and path == '/api/v1/table-profiles':
+        _keys(body, {'context', 'source', 'snapshot_id'})
+        key = _key(handler)
+        envelope['operation'] = _operation(principal, context, table_profile.ROUTE, key,
+            lambda: table_profile.profile(principal, context, key=key,
+                source=reference(body['source']), snapshot_id=body['snapshot_id']))
     elif method == 'POST' and path == '/api/v1/table-clones':
         _keys(body, {'context', 'source', 'destination', 'snapshot_id'})
         key = _key(handler)
@@ -278,15 +286,31 @@ def _operation(principal, context, route, key, run):
             if row:
                 execution = ds.Execution(principal, row[0])
                 _saved(execution, context)
-                observation = execution.inspect()
+                if route == table_profile.ROUTE:
+                    # Never fall back to a context-only persisted profile receipt.
+                    if isinstance(error, PermissionError) or isinstance(error, QueryError) and (
+                            error.status in (401, 403) or error.code in ('CONTEXT_MISMATCH', 'UNKNOWN_CONTEXT',
+                            'STALE_CONTEXT', 'STALE_BINDING', 'DB_ACCESS_REVOKED')):
+                        raise error
+                    try:
+                        observation = table_profile.inspect(execution, context)
+                    except QueryError as source_error:
+                        if 'operation' not in source_error.details:
+                            raise
+                        observation = source_error.details['operation']
+                else:
+                    observation = execution.inspect()
                 details = dict(context=context.public_metadata(), operation=observation)
                 if isinstance(error, QueryError):
-                    error.details = dict(error.details, context=context.public_metadata(), operation=observation)
+                    error.details = (details if route == table_profile.ROUTE else
+                        dict(error.details, context=context.public_metadata(), operation=observation))
                 elif isinstance(error, ValueError):
                     raise QueryError('INVALID_INPUT', 400, details=details) from None
                 else:
                     raise QueryError('SERVICE_UNAVAILABLE', 502, details=details) from None
         except QueryError as observed:
+            if route == table_profile.ROUTE:
+                raise observed from None
             if observed.code in ('INVALID_INPUT', 'SERVICE_UNAVAILABLE') and 'operation' in observed.details:
                 raise
         raise error
