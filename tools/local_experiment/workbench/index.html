@@ -3902,7 +3902,7 @@ function dbPlatformSync(){
  }
  dbPlatformComputeSync();
  dbResourcesSync();
- dbUsageSync();
+ dbUsageSync();dbCapacitySync();
  dbActivitySync();
  dbBaselineSync();
  dbAISettingsSync();
@@ -4235,7 +4235,129 @@ function dbResourcesRender(){
  }
 }
 
-// Independent manual usage snapshot; DB selection never triggers a read.
+// Independent manual configured-node snapshot; DB selection never triggers a read.
+const dbCapacity={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
+Object.assign(i18n.ja,{
+ 'Shared configured node capacity (P-only, read-only)':'登録済み共有 Node の容量・利用可能量（P のみ・読み取り専用）',
+ 'Fetch node capacity':'Node 容量を取得',
+ 'Capacity authority verified. Select Fetch node capacity.':'権限を確認しました。「Node 容量を取得」を選んでください。',
+ 'Fetching node capacity.':'Node 容量を取得しています。',
+ 'Capacity unavailable. Explicitly refresh authority or fetch again.':'容量を取得できません。権限更新または再取得を明示的に行ってください。',
+ 'Shared Kubernetes VM node configured for LOCAL; not database dedicated or the Mac host.':'LOCAL の配置先として設定された共有 Kubernetes VM Node です。DB 専用割当や Mac ホスト全体ではありません。',
+ 'Allocatable is the scheduler Pod budget, not free capacity or admission headroom. No CPU free measurement.':'Allocatable はスケジューラの Pod 用予算であり、空き容量や実行許可の余力ではありません。CPU の空きは測定しません。',
+ 'Memory available is the kubelet limit-minus-workingSet estimate, not OS free memory or a LOCAL reservation.':'メモリ available は kubelet の limit−workingSet 推定値であり、OS の空きメモリや LOCAL の予約量ではありません。',
+ 'Filesystems may share an underlying disk. Never sum them. These are not data-volume, PVC, SeaweedFS or S3 quotas.':'各 filesystem は同じディスクを共有する場合があります。合算しないでください。データ volume・PVC・SeaweedFS・S3 の quota ではありません。',
+ 'Capacity source unavailable. No measured values.':'容量の参照元を確認できません。測定値はありません。',
+ 'Node root filesystem':'Node ルート filesystem','Image filesystem':'イメージ filesystem','Container filesystem':'コンテナ filesystem',
+ 'CPU capacity':'CPU 容量','CPU allocatable':'CPU allocatable（Pod 用予算）','Memory capacity':'メモリ容量','Memory allocatable':'メモリ allocatable（Pod 用予算）',
+ 'Memory available estimate':'メモリ available 推定値','Filesystem capacity':'Filesystem 容量','Filesystem available':'Filesystem available','Reported used':'報告された used','Node collection started at':'Node 収集開始時刻',
+ 'Optional source unavailable':'任意の参照元を確認できません'
+});
+function dbCapacityAuth(){return JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbAdmin.platform,dbAdmin.epoch,'X-Shirokuma-Role:admin']);}
+function dbCapacityLeave(){++dbCapacity.epoch;dbCapacity.busy=null;dbCapacity.notice='';}
+function dbCapacitySync(){
+ const p=dbCapacity,auth=dbCapacityAuth();
+ if(auth!==p.auth){dbCapacityLeave();p.record=null;p.auth=auth;}
+ if(!dbObservationPlatform('admin'))p.record=null;
+ // Only navigation invalidates pending work. Completed same-authority data survives.
+ if(activeTab!==p.view){dbCapacityLeave();p.view=activeTab;}
+ if(!$('observation-capacity-panel')?.dataset.installed)return;
+ $('observation-capacity-auth').disabled=!!p.busy||!dbPlatformCanRefresh();
+ $('observation-capacity-fetch').disabled=!!p.busy||!dbObservationPlatform('admin');
+ dbCapacityRender();
+}
+function dbCapacityInstall(){
+ if($('observation-capacity-panel')?.dataset.installed)return;
+ const panel=dbAdminNode('section','observation-capacity-panel',$('compute'));panel.dataset.installed='true';panel.className='panel';panel.setAttribute('style','min-width:0;overflow-wrap:anywhere');panel.setAttribute('role','region');panel.setAttribute('aria-labelledby','observation-capacity-title');
+ const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2','observation-capacity-title',head,'Shared configured node capacity (P-only, read-only)');
+ const body=dbAdminNode('div','',panel);body.className='panel-body';const toolbar=dbAdminNode('div','',body);toolbar.className='toolbar';toolbar.setAttribute('style','display:flex;flex-wrap:wrap;min-width:0');
+ dbAdminButton(toolbar,'observation-capacity-auth','Refresh platform authority',dbCapacityRefreshAuth);
+ dbAdminButton(toolbar,'observation-capacity-fetch','Fetch node capacity',dbCapacityFetch);
+ for(const button of toolbar.children)button.setAttribute('style','max-width:100%;white-space:normal;overflow-wrap:anywhere');
+ const output=dbAdminNode('div','observation-capacity-output',body);output.className='table-wrap';output.setAttribute('style','overflow-wrap:anywhere;min-width:0');output.setAttribute('aria-live','polite');dbCapacitySync();
+}
+function dbCapacityCapture(){
+ const p=dbCapacity,token={},epoch=++p.epoch,auth=dbCapacityAuth(),view=activeTab;p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbCapacityAuth()&&view===activeTab};
+}
+async function dbCapacityRefreshAuth(){
+ dbCapacitySync();if(dbCapacity.busy||!dbPlatformCanRefresh())return;
+ const read=dbCapacityCapture();dbCapacity.notice='Refreshing platform authority.';dbCapacitySync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbCapacity.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const session=await response.json();if(!read.current())return;
+  dbAdminSession(response.ok?session:{});
+  if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  dbCapacity.notice=dbObservationPlatform('admin')?'Capacity authority verified. Select Fetch node capacity.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current())dbCapacity.notice='Capacity unavailable. Explicitly refresh authority or fetch again.';}
+ finally{if(dbCapacity.busy===read.token)dbCapacity.busy=null;dbCapacitySync();}
+}
+async function dbCapacityFetch(){
+ dbCapacitySync();if(dbCapacity.busy||!dbObservationPlatform('admin'))return;
+ const read=dbCapacityCapture();dbCapacity.notice='Fetching node capacity.';dbCapacitySync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-capacity',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbCapacity.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const body=await response.text();if(!read.current())return;
+  if(new TextEncoder().encode(body).length>32768)throw Error('INVALID_RESPONSE');const data=JSON.parse(body);
+  if(!response.ok)throw Error('UNAVAILABLE');dbCapacity.record=dbCapacityRecord(data);dbCapacity.notice='';
+ }catch{if(read.current()){dbCapacity.record=null;dbCapacity.notice='Capacity unavailable. Explicitly refresh authority or fetch again.';}}
+ finally{if(dbCapacity.busy===read.token)dbCapacity.busy=null;dbCapacitySync();}
+}
+
+function dbCapacityUint(v){
+ if(typeof v!=='string'||v.length>20||!/^(0|[1-9][0-9]*)$/.test(v)||BigInt(v)>18446744073709551615n)throw Error('INVALID_RESPONSE');return BigInt(v);
+}
+function dbCapacityTime(v){
+ if(typeof v!=='string'||v.length>40||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(v)||!dbObservationTime(v,true))throw Error('INVALID_RESPONSE');
+ const [whole,fraction='']=v.slice(0,-1).split('.');return BigInt(Date.parse(whole+'Z'))*1000000n+BigInt(fraction.padEnd(9,'0'));
+}
+function dbCapacityRecord(d){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(new TextEncoder().encode(JSON.stringify(d)).length>32768||!exact(d,['scope','warehouse','selected_role','observed_at','coverage','availability','code','core','image_fs','container_fs'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin')fail();
+ const observed=dbCapacityTime(d.observed_at),now=BigInt(Date.now())*1000000n;
+ const fresh=v=>{if(now-v>120000000000n||v-now>5000000000n||observed-v>120000000000n||v-observed>5000000000n)fail();};fresh(observed);
+ const coverage={kind:'configured_shared_kubernetes_vm_node',cpu:'node_capacity_and_allocatable_cores',memory:'kubelet_limit_minus_working_set_estimate',allocatable:'scheduler_pod_budget_not_free',root_fs:'node_root_filesystem',runtime_fs:'independent_optional_filesystems_never_sum',database_dedicated:false,mac_host:false,admission:false};
+ if(!exact(d.coverage,Object.keys(coverage))||Object.entries(coverage).some(([k,v])=>d.coverage[k]!==v))fail();
+ if(!['available','unavailable'].includes(d.availability)||d.code!==(d.availability==='available'?null:'CAPACITY_UNAVAILABLE'))fail();
+ if(d.availability==='unavailable'){if(d.core!==null||d.image_fs!==null||d.container_fs!==null)fail();}
+ else{
+  const c=d.core;if(!exact(c,['cpu_capacity_cores','cpu_allocatable_cores','memory_capacity_bytes','memory_allocatable_bytes','memory_available_bytes','memory_sampled_at','node_started_at','root_fs']))fail();
+  const cpu=dbUsageDecimal(c.cpu_capacity_cores),alloc=dbUsageDecimal(c.cpu_allocatable_cores);
+  if(cpu.n===0n||alloc.n*10n**BigInt(cpu.scale)>cpu.n*10n**BigInt(alloc.scale))fail();
+  const cap=dbCapacityUint(c.memory_capacity_bytes),ram=dbCapacityUint(c.memory_allocatable_bytes),available=dbCapacityUint(c.memory_available_bytes);if(cap===0n||ram>cap||available>cap)fail();
+  const start=dbCapacityTime(c.node_started_at);if(start-now>5000000000n||start-observed>5000000000n)fail();
+  const sample=v=>{const time=dbCapacityTime(v);fresh(time);if(time<start)fail();};sample(c.memory_sampled_at);
+  const fs=v=>{if(!exact(v,['capacity_bytes','available_bytes','used_bytes','sampled_at']))fail();const total=dbCapacityUint(v.capacity_bytes),available=dbCapacityUint(v.available_bytes);if(total===0n||available>total)fail();if(v.used_bytes!==null)dbCapacityUint(v.used_bytes);sample(v.sampled_at);};
+  fs(c.root_fs);for(const v of [d.image_fs,d.container_fs])if(v!==null)fs(v);
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbCapacityBytes(v){
+ const n=dbCapacityUint(v),hundredths=(n*100n+536870912n)/1073741824n;
+ return (hundredths/100n).toString()+'.'+(hundredths%100n).toString().padStart(2,'0')+' GiB ('+v+' '+t('bytes')+')';
+}
+function dbCapacityRender(){
+ const node=$('observation-capacity-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
+ const p=dbCapacity,r=dbObservationPlatform('admin')?p.record:null;
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ if(r)line(t('Observed at')+': '+r.observed_at);
+ for(const key of ['Shared Kubernetes VM node configured for LOCAL; not database dedicated or the Mac host.','Allocatable is the scheduler Pod budget, not free capacity or admission headroom. No CPU free measurement.','Memory available is the kubelet limit-minus-workingSet estimate, not OS free memory or a LOCAL reservation.','Filesystems may share an underlying disk. Never sum them. These are not data-volume, PVC, SeaweedFS or S3 quotas.'])line(t(key));
+ if(p.notice)line(t(p.notice));
+ if(!r){if(!p.notice)line(t(dbObservationPlatform('admin')?'Capacity authority verified. Select Fetch node capacity.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ if(r.availability==='unavailable'){line(t('Capacity source unavailable. No measured values.'));return;}
+ const c=r.core;line(t('Node collection started at')+': '+c.node_started_at);
+ for(const [key,label] of [['cpu_capacity_cores','CPU capacity'],['cpu_allocatable_cores','CPU allocatable']])line(t(label)+': '+c[key]+' cores');
+ for(const [key,label] of [['memory_capacity_bytes','Memory capacity'],['memory_allocatable_bytes','Memory allocatable'],['memory_available_bytes','Memory available estimate']])line(t(label)+': '+dbCapacityBytes(c[key]));
+ line(t('Sampled at')+': '+c.memory_sampled_at);
+ for(const [fs,label] of [[c.root_fs,'Node root filesystem'],[r.image_fs,'Image filesystem'],[r.container_fs,'Container filesystem']]){
+  line(t(label),'h3');if(fs===null){line(t('Optional source unavailable'));continue;}
+  line(t('Sampled at')+': '+fs.sampled_at);
+  for(const [key,title] of [['capacity_bytes','Filesystem capacity'],['available_bytes','Filesystem available'],['used_bytes','Reported used']])line(t(title)+': '+(fs[key]===null?t('Not specified'):dbCapacityBytes(fs[key])));
+ }
+}
+
 const dbUsage={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
 Object.assign(i18n.ja,{
  'Shared LOCAL CPU and memory usage (P-only, read-only)':'共有 LOCAL の CPU・メモリ使用量（P のみ・読み取り専用）',
@@ -5567,7 +5689,7 @@ function dbAdminClear(){
  dbCreationClear();
  dbAdmin.retirement=null;++dbAdmin.retireRead;
  ++dbAdmin.epoch;++dbAdmin.selection;++dbAdmin.request;dbAdmin.database='';dbAdmin.databases=[];dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.installed=false;dbAdmin.rendered=false;
- $('db-admin-content').replaceChildren();message('db-admin-error','');dbAdminGate();dbUsageSync();
+ $('db-admin-content').replaceChildren();message('db-admin-error','');dbAdminGate();dbUsageSync();dbCapacitySync();
 }
 function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
@@ -9903,7 +10025,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbBaselineInstall();dbActivityInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbBaselineInstall();dbActivityInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

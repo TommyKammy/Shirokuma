@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-03、[DB-P6-5E](database-p6-5e-platform-capacity-2026-11-03.md)で登録Nodeの容量・利用可能量の限定技術受入を完了した。現在P認可と固定Nodeの対応を検査し、capacity／allocatable・メモリavailable推定・3種類のFSを独立表示する。116群4,663成功・34 skip、実API／日英・390px／実200%画面と保全を確認した。Mac全体・PVC／S3 quota・安全な伸縮予算は示さず、履歴／停止理由と現在の権限説明などの残件、P6全体／M1本人受入を継続する。DB-P7はM1後に扱う。
+
 2026-11-03、[DB-P6-5D](database-p6-5d-platform-usage-2026-11-03.md)で固定LOCALのCPU平均・メモリworking setを手動観測する機能の限定技術受入を完了した。P専用の現在認可、Pod／container incarnationとsample期間、設定資源との区別、114群と修正後Workbench 1,092件・実API／画面・保全を検証した。容量／空き容量・履歴／停止理由などの残件は別単位で扱い、DB-P6全体・M1本人受入とM1後のDB-P7という順序を維持する。
 
 2026-11-02、[DB-P6-4C2C1](database-p6-4c2c1-workload-baseline-2026-11-02.md)で固定LOCAL Pod-template宣言基準の読取りレビューを実装した。現在の真P・上限admin・選択adminを全source取得前後に検査し、DB／schema／grantを前提にしない。固定2 Deploymentの全ordinary／initをordinalで扱い、旧Policyの意図を限定した4項目のmet／not_metだけを返す。nonRoot=trueかつUID未指定は旧宣言ruleどおり許し、native-baselineの8 admission policyやglobal policy全体の検証にはしない。不正・部分sourceは全体を確認不可とし、aggregate PASS／allowや操作許可を返さない。SRE／PolicyのPlatform scopeとComputeに独立共有cacheを手動表示し、旧C2B・P5A／P5B／P5Cを変更しない。C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。usage・AI設定より先に進めた順序は今回のCommander判断であり、P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。

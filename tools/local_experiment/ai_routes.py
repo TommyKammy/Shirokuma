@@ -14,6 +14,7 @@ import db_bear_observations
 import db_platform_observations
 import db_platform_resources
 import db_platform_usage
+import db_platform_capacity
 import db_platform_workload_baseline
 import db_ai_settings
 from warehouse_operations import OperationError
@@ -68,6 +69,24 @@ def dispatch(handler, method, path, params, principal, role):
             raise QueryError('INVALID_INPUT', 400)
         try:
             result = db_platform_usage.observe(principal, role)
+        except OperationError as error:
+            raise QueryError(error.code, error.status) from None
+        handler.respond(result, 200)
+        return True
+    if path == '/api/v1/bears/platform-capacity':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        if ('?' in handler.path or '#' in handler.path or params
+                or handler.headers.defects
+                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
+                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
+                       for k, v in handler.headers.raw_items())
+                or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
+                or handler.headers.get_all('Transfer-Encoding', [])
+                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
+            raise QueryError('INVALID_INPUT', 400)
+        try:
+            result = db_platform_capacity.observe(principal, role)
         except OperationError as error:
             raise QueryError(error.code, error.status) from None
         handler.respond(result, 200)
