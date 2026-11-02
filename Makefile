@@ -80,6 +80,8 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_manual_ingest.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_wap.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_export.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_clone.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_clone_database_ui.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_data_management.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_wap_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_disaster_recovery.py'

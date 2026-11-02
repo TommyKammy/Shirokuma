@@ -441,7 +441,7 @@ class Execution:
             return dict(triggered=page['data'][0][0])
         return dict(row_count=len(page['data']))
 
-    def export_measure(self, ref, captured=None):
+    def export_measure(self, ref, captured=None, *, snapshot_id=None):
         """One REST measurement of UUID, schema identity and available snapshots.
 
         Project the captured snapshot's schema, as Trino time travel does.
@@ -471,9 +471,11 @@ class Execution:
             raise QueryError('STALE_RESOURCE', 409) from None
         if identity != obj.backend_identity:
             raise QueryError('STALE_RESOURCE', 409)
-        if captured is None and type(metadata.get('current-snapshot-id')) is not int:
+        if snapshot_id is not None and (type(snapshot_id) is not str or not re.fullmatch('[0-9]+', snapshot_id)):
+            raise ValueError('ASCII decimal snapshot required')
+        if captured is None and snapshot_id is None and type(metadata.get('current-snapshot-id')) is not int:
             raise QueryError('EXPORT_SNAPSHOT_UNAVAILABLE', 409)
-        snapshot = captured['snapshot'] if captured else str(metadata.get('current-snapshot-id'))
+        snapshot = captured['snapshot'] if captured else snapshot_id if snapshot_id is not None else str(metadata.get('current-snapshot-id'))
         snapshots = [s for s in metadata.get('snapshots', [])
                      if type(s.get('snapshot-id')) is int and s['snapshot-id'] >= 0
                      and str(s['snapshot-id']) == snapshot]

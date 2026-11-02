@@ -4908,7 +4908,7 @@ function dbExplorerControls(){
  ui($('use-explorer-schema'),'Use this schema in {worksheet}',{worksheet:dbCurrent()?worksheetName(dbCurrent()):t('Worksheet')});
  if($('catalog-context-reselect'))$('catalog-context-reselect').hidden=!dbExplorerReason();
  dbRenderBreadcrumb();dbRenderTree();
- if(typeof dataopsPanels!=='undefined')dataopsExportControls();
+ if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();}
 }
 function dbRenderBreadcrumb(){
  const crumb=$('database-breadcrumb');if(!crumb)return;
@@ -5331,7 +5331,7 @@ async function initializeDatabaseUI(session){
  for(const [controls,key] of [
   [['quick-wake','quick-chill','wake','chill'].map(id=>$(id)),'Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.'],
   [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.'],
-  [['clone-table-btn','drop-table-btn'].map(id=>$(id)),'Clone and drop are unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.'],
+  [['drop-table-btn'].map(id=>$(id)),'Drop is unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.'],
   [['run-dbt-build','run-dbt-test'].map(id=>$(id)),'Legacy dbt build/test is unavailable in Database mode. Use Manual WAP or Managed Marts with an authorized context.'],
   [[...document.querySelectorAll('[data-sample]')],'Fixed sample queries are unavailable in Database mode. Enter SQL for the selected database.']
  ])for(const node of controls){node.disabled=true;node.dataset.databaseUnavailable='true';node.setAttribute('title',t(key));uiAttributes.push({node,attribute:'title',key});}
@@ -6309,7 +6309,198 @@ function dataopsInstall(){
  const area=dataopsNode('section','p35-table-export',$('database-details'));dataopsNode('h3','',area,'Export receipt');const receipt=dataopsNode('div','p35-export-receipt',area);receipt.setAttribute('aria-live','polite');
  dataopsButton(area,'p35-export-observe','Observe operation',()=>dataopsObserveExport());dataopsButton(area,'p35-export-cancel','Cancel operation',()=>dataopsObserveExport(true));
  dataopsButton(area,'p35-export-new','New export',()=>{if(dataopsExport&&!dataopsExport.pending&&!dataopsExport.trackingPending&&dataopsTerminal(dataopsExport)){dataopsExport=null;dataopsExportRender();dataopsExportControls();$('export-table-btn').focus();}});
- dataopsExportRender();dataopsExportControls();
+ dataopsExportRender();dataopsExportControls();dbCloneInstall();
+}
+
+// Clone owns its SANDBOX context and immutable saved intent, separate from SQL.
+const dbCloneKey='shirokuma.table-clone.v1';
+const dbClone={opened:false,role:'',owner:null,handles:new Map(),source:null,context:null,scope:'',snapshots:[],op:null,busy:false,notice:''};
+Object.assign(i18n.ja,{
+ 'Physical snapshot copy':'スナップショットの物理コピー',
+ 'Copies snapshot rows into a NEW table. No overwrite, zero copy, history or partition/property copy.':'スナップショットの行を新しいテーブルに物理コピーします。上書き・ゼロコピー・履歴・パーティションやプロパティの複製は行いません。',
+ 'Refresh clone context and snapshots':'複製用コンテキストとスナップショットを更新',
+ 'Create snapshot copy':'スナップショットのコピーを作成',
+ 'New clone intent':'新しい複製要求',
+ 'Clone requires an engineer or administrator and a readable TABLE.':'複製にはデータ作成者または管理者ロールと、読取可能な TABLE が必要です。',
+ 'Clone requires a writable SANDBOX in the same Database.':'複製先には同じ Database の書込可能な SANDBOX が必要です。',
+ 'No integer snapshot is available. This source cannot be cloned.':'整数のスナップショットがありません。この参照元は複製できません。',
+ 'Refresh clone context after source or role changes.':'参照元またはロールを変更した後は複製用コンテキストを更新してください。',
+ 'Cancellation stops remaining work; it does not roll back a copied table.':'取消は残りの処理を停止します。コピー済みテーブルは元に戻りません。',
+ 'Clone request could not be saved. No request was sent.':'複製要求を保存できません。要求は送信していません。',
+ 'CURRENT (freeze at acceptance)':'CURRENT（受付時に固定）',
+ 'Use 1–31 characters: start with a lowercase letter, then lowercase letters, digits or underscores. Reserved names: system, information_schema, tpch, tpcds.':'1〜31文字で、先頭は英小文字、以降は英小文字・数字・アンダースコアを使用してください。予約名 system、information_schema、tpch、tpcds は使用できません。',
+ 'Enter a table name that follows the rule above.':'上記のルールに従ったテーブル名を入力してください。',
+ 'COPIED_UNVERIFIED':'コピー済み・未検証','VERIFIED':'検証済み','PENDING':'処理待ち',
+ 'Original clone request':'元の複製要求','Warning':'警告',
+ 'After reload or a selection change, reselect the original source TABLE in Explorer, then select Observe operation to recover the original request with its saved key and inputs.':'再読み込み後や選択を変更した後は、Explorer で元と同じ参照元 TABLE を選び直し、「操作を照会」を選択して、保存された元のキーと入力で要求を復旧してください。',
+ 'Cancellation is unavailable until an acceptance ID is received. Recover the original request first.':'受付 ID を受信するまで取消はできません。まず元の要求を復旧してください。',
+ 'Clone details are hidden until the original owner and current access are confirmed. After reload or a selection change, reselect the original source TABLE in Explorer, then select Observe operation to display the saved clone receipt.':'元の所有者と現在のアクセス権を確認するまで複製の詳細は表示されません。再読み込み後や選択を変更した後は、Explorer で元と同じ参照元 TABLE を選び直し、「操作を照会」を選択して保存済みの複製結果を表示してください。'
+ ,'Copying can take several minutes. Refresh the original operation manually; do not submit another copy.':'コピーには数分かかる場合があります。元の操作を手動で照会し、別のコピーを送信しないでください。'
+ ,'Drop is unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.':'Database モードでは削除できません。列・プレビュー・スナップショット・DDL で権限のあるテーブルを確認してください。'
+});
+for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
+function dbCloneScope(){return JSON.stringify([dbPrincipal,currentRole,dbClone.role,dbRoleVersion(dbClone.role),dbAuthorizationVersion,dbCatalogScope(),dataopsRef(dbObject)]);}
+function dbCloneEligible(){return dbExplorerCanOpen()&&dbObject?.kind==='TABLE'&&['data_engineer','admin'].includes(dbClone.role)&&dbRoleWithinHeader(dbClone.role);}
+// Persist only this feature's owner handles; never store protected result data.
+function dbCloneSaved(){
+ const saved=readStorage(dbCloneKey,null);
+ return saved?.owners||((saved?.principal&&saved?.payload)?{[saved.principal]:saved}:{});
+}
+function dbCloneRestore(saved){
+ if(!saved||typeof saved.key!=='string'||saved.path!=='/api/v1/table-clones'||!saved.payload?.context||!saved.payload?.source||!saved.payload?.destination)return null;
+ return {...saved,context:dataopsFreeze(saved.payload.context),payload:dataopsFreeze(saved.payload),operation:null,protected:false,
+  sequence:saved.sequence||0,ambiguous:saved.ambiguous===true||!['FINISHED','FAILED','CANCELED','REJECTED'].includes(saved.state)};
+}
+function dbCloneSync(){
+ const p=dbClone;if(p.owner===dbPrincipal)return;
+ if(p.op){p.op.operation=null;p.op.protected=false;p.handles.set(p.op.principal,p.op);}
+ p.owner=dbPrincipal;p.op=p.handles.get(dbPrincipal)||dbCloneRestore(dbCloneSaved()[dbPrincipal]);
+ if(p.op)p.handles.set(dbPrincipal,p.op);
+ p.busy=false;p.source=null;p.context=null;p.scope='';p.snapshots=[];p.notice='';
+ p.role=p.op?.context.selected_role||(['data_engineer','admin'].includes(currentRole)?currentRole:'data_engineer');
+ $('db-clone-name').value='';
+}
+function dbClonePersist(op=dbClone.op){
+ try{
+  const owners=dbCloneSaved();
+  if(op){owners[op.principal]={principal:op.principal,key:op.key,id:op.id||null,payload:op.payload,path:op.path,state:dataopsState(op)||'UNKNOWN',ambiguous:op.ambiguous===true,childUnknown:op.childUnknown===true,sequence:op.sequence||0};dbClone.handles.set(op.principal,op);}
+  else {delete owners[dbPrincipal];dbClone.handles.delete(dbPrincipal);}
+  localStorage.setItem(dbCloneKey,JSON.stringify({owners}));return true;
+ }catch{return false;}
+}
+function dbCloneUnknown(op){return !!op&&(op.ambiguous===true||op.childUnknown===true||dataopsState(op)==='UNKNOWN'||op.operation?.queries?.some(q=>q.state==='UNKNOWN'));}
+function dbCloneHeld(op){return !!op&&(dbCloneUnknown(op)||!dataopsTerminal(op));}
+function dbCloneCanObserve(op){return !!op&&op.principal===dbPrincipal&&dataopsExportAuthorized(op)&&dataopsCanObserve(op);}
+function dbCloneCanCancel(op){return dbCloneCanObserve(op)&&!dbCloneUnknown(op)&&dataopsCanCancel(op);}
+function dbCloneAuthorized(op){return dbCloneCanObserve(op)&&dbExplorerCanOpen()&&dataopsRefKey(dataopsRef(dbObject))===dataopsRefKey(op.payload.source);}
+function dbCloneAccept(op,operation,visible){
+ // Keep UNKNOWN child evidence even when protected query details are redacted.
+ const childUnknown=Array.isArray(operation.queries)?operation.queries.some(q=>q.state==='UNKNOWN'):op.childUnknown===true;
+ dataopsAccept(op,operation,visible);op.childUnknown=childUnknown;op.ambiguous=op.ambiguous||childUnknown;
+ op.receiptScope=visible?dbCloneScope():null;
+}
+function dbCloneControls(){
+ if(!$('db-clone-panel'))return;
+ dbCloneSync();
+ const p=dbClone,op=p.op,held=dbCloneHeld(op),busy=!!p.busy||!!op?.pending,ready=p.scope===dbCloneScope()&&!!p.context&&dbCloneEligible();
+ dataopsOptions($('db-clone-role'),['data_engineer','admin'].filter(dbRoleWithinHeader).map(r=>[r,r]),p.role,'Execution role');
+ if(!ready){p.source=null;p.context=null;p.snapshots=[];p.scope='';$('db-clone-source').textContent='';$('db-clone-context').textContent='';}
+ dataopsOptions($('db-clone-snapshot'),ready?p.snapshots.map(id=>[id,id]):[],$('db-clone-snapshot').value&&ready?$('db-clone-snapshot').value:'','CURRENT (freeze at acceptance)');
+ const protectedDisplay=!!op&&op.protected&&op.receiptScope===dbCloneScope()&&dbCloneAuthorized(op);
+ if(op&&!protectedDisplay){op.operation=null;op.protected=false;}
+ $('clone-table-btn').disabled=!dbCloneEligible()||busy||held;
+ $('clone-table-btn').dataset.databaseUnavailable='false';
+ $('clone-table-btn').title=dbCloneEligible()?'':t('Clone requires an engineer or administrator and a readable TABLE.');
+ $('db-clone-panel').hidden=!p.opened&&!op;
+ const name=$('db-clone-name').value,validName=/^[a-z][a-z0-9_]{0,30}$/.test(name)&&!['system','information_schema','tpch','tpcds'].includes(name);
+ $('db-clone-name').setAttribute('aria-invalid',String(!!name&&!validName));
+ $('db-clone-name-invalid').hidden=!name||validName;
+ ui($('db-clone-name-invalid'),'Enter a table name that follows the rule above.');
+ $('db-clone-submit').disabled=busy||!!op||!ready||!p.snapshots.length||!validName;
+ $('db-clone-refresh').disabled=busy||held||!dbCloneEligible();
+ $('db-clone-observe').disabled=busy||!dbCloneCanObserve(op);
+ $('db-clone-cancel').disabled=busy||!dbCloneCanCancel(op);
+ $('db-clone-new').disabled=busy||!op||held;
+ for(const id of ['db-clone-name','db-clone-snapshot','db-clone-role'])$(id).disabled=busy||held;
+ message('db-clone-notice',t((p.noticeScope===dbCloneScope()?p.notice:'')||(!ready?'Refresh clone context after source or role changes.':'')));
+ const out=$('db-clone-receipt');out.replaceChildren();
+ if(op){
+  const line=(key,value)=>{const n=dataopsNode('p','',out);dataopsNode('strong','',n,key);n.append(': '+String(value??''));};
+  if(protectedDisplay){
+   line('Operation ID',op.id||'UNKNOWN');line('Idempotency key',op.key);line('Status',t(dataopsState(op)||'PENDING'));
+   line('Accepted context',[op.context.sql_catalog,op.context.sql_schema,op.context.selected_role].join(' / '));
+   line('Target table name',op.payload.destination.physical_name);line('Source',JSON.stringify(op.payload.source));
+   if(op.operation){const r=op.operation.result;line('Committed',op.operation.committed);if(r){line('Status',t(r.phase));line('Snapshot',r.source?.snapshot);if(r.warning)line('Warning',r.warning);line('Target snapshot',r.target?.snapshot??'—');}}
+  }else dataopsNode('p','',out,'Clone details are hidden until the original owner and current access are confirmed. After reload or a selection change, reselect the original source TABLE in Explorer, then select Observe operation to display the saved clone receipt.');
+  if(held){
+   dataopsNode('p','',out,'Copying can take several minutes. Refresh the original operation manually; do not submit another copy.');
+   dataopsNode('p','',out,'After reload or a selection change, reselect the original source TABLE in Explorer, then select Observe operation to recover the original request with its saved key and inputs.');
+   if(!op.id)dataopsNode('p','',out,'Cancellation is unavailable until an acceptance ID is received. Recover the original request first.');
+  }
+  if(dbCloneUnknown(op))dataopsNode('p','',out,'Outcome unknown. Observe with the saved key; do not submit again.');
+ }
+}
+async function dbCloneRefresh(){
+ dbCloneControls();if(dbClone.busy||dbClone.op?.pending||dbCloneHeld(dbClone.op)||!dbCloneEligible())return;
+ const p=dbClone,source=dataopsFreeze(dataopsClone(dataopsRef(dbObject))),role=p.role,token={};let scope=dbCloneScope();
+ p.busy=token;p.context=null;p.snapshots=[];p.notice='';dbCloneControls();
+ try{
+  const items=await dbReadInventory(role);if(scope!==dbCloneScope()||!dbInventoryCurrent(items))return;
+  dbApplyInventory(items,role);scope=dbCloneScope();
+  const data=await dbAPI('/api/v1/databases/'+encodeURIComponent(source.database_id)+'/schemas',role);
+  if(scope!==dbCloneScope())return;
+  const s=data.items?.find(s=>s.sql_name==='sandbox'&&s.capabilities?.write===true),d=items.find(d=>d.id===source.database_id);
+  if(!s||!d)throw Error('Clone requires a writable SANDBOX in the same Database.');
+  if(!data.items?.some(s=>s.id===source.schema_id&&s.capabilities?.query===true))throw Error('Clone requires an engineer or administrator and a readable TABLE.');
+  const reply=await dbAPI('/api/v1/objects/'+encodeURIComponent(source.object_id)+'?detail=snapshots',role);
+  if(scope!==dbCloneScope())return;
+  // IDs remain decimal strings throughout; Number would round Iceberg IDs.
+  const snapshots=(reply.snapshots||[]).map(s=>s.snapshot_id).filter(id=>typeof id==='string'&&/^[0-9]+$/.test(id));
+  p.source=source;p.context=dataopsFreeze({database_id:d.id,schema_id:s.id,warehouse_id:'LOCAL',sql_catalog:d.sql_catalog,sql_schema:s.sql_name,selected_role:role,binding_revision:d.binding_revision,generation_id:d.generation_id,grant_revision:d.grant_revision??null});p.scope=scope;p.snapshots=snapshots;
+  dataopsOptions($('db-clone-snapshot'),snapshots.map(id=>[id,id]),'','CURRENT (freeze at acceptance)');
+  $('db-clone-source').textContent=[d.sql_catalog,dbExplorer.schemas.find(s=>s.id===source.schema_id)?.sql_name,dbObject.physical_name,JSON.stringify(source)].join(' / ');
+  $('db-clone-context').textContent=[p.context.sql_catalog,p.context.sql_schema,p.context.selected_role].join(' / ');
+  if(!snapshots.length){p.notice='No integer snapshot is available. This source cannot be cloned.';p.noticeScope=scope;}
+ }catch(error){if(scope===dbCloneScope()){p.notice=error.message;p.noticeScope=scope;}}
+ finally{if(p.busy===token)p.busy=false;dbCloneControls();}
+}
+async function dbCloneRun(observe=false,cancel=false){
+ dbCloneControls();const p=dbClone;if(p.busy||p.op?.pending)return;
+ if(!observe){
+  if($('db-clone-submit').disabled)return;
+  const payload=dataopsFreeze({context:dataopsClone(p.context),source:dataopsClone(p.source),destination:{database_id:p.context.database_id,schema_id:p.context.schema_id,physical_name:$('db-clone-name').value},snapshot_id:$('db-clone-snapshot').value||null});
+  p.op={principal:dbPrincipal,key:crypto.randomUUID(),context:payload.context,payload,path:'/api/v1/table-clones',id:null,state:'ACTIVE',operation:null,sequence:0,ambiguous:false};
+ }
+ const op=p.op;if(!op||op.principal!==dbPrincipal||observe&&!(cancel?dbCloneCanCancel(op):dbCloneCanObserve(op)))return;
+ op.sequence++;
+ if(!dbClonePersist(op)){p.notice='Clone request could not be saved. No request was sent.';p.noticeScope=dbCloneScope();if(!observe){p.op=null;p.handles.delete(dbPrincipal);}dbCloneControls();return;}
+ const token={},scope=dbCloneScope(),current=()=>p.op===op&&op.principal===dbPrincipal&&op.pending===token&&p.busy===token&&scope===dbCloneScope(),visible=()=>current()&&dbCloneAuthorized(op);
+ op.pending=token;p.busy=token;p.notice='';dbCloneControls();
+ try{
+  const reply=op.id?await dataopsRequest('/api/v1/dataops/'+encodeURIComponent(op.id)+(cancel?'/cancel':''),op.context,cancel?{}:undefined):await dataopsRequest(op.path,op.context,op.payload,op.key);
+  // A late reply may update only its original owner's saved handle.
+  dbCloneAccept(op,reply.operation,visible());
+ }catch(error){
+  if(error.observation)dbCloneAccept(op,error.observation,visible());
+  else if(!dataopsRejectBeforeAdmission(op,error))op.ambiguous=true;
+  if(dataopsAuthError(error)){
+   if(op.pending===token){op.operation=null;op.protected=false;}
+   if(current()){
+    dbInvalidateAccess(error,op.context.selected_role,op.context.database_id);
+    p.source=null;p.context=null;p.scope='';p.snapshots=[];$('db-clone-name').value='';
+   }
+  }
+  if(visible()){p.notice=error.message;p.noticeScope=scope;}
+ }finally{
+  if(op.pending===token)op.pending=null;
+  if(p.busy===token)p.busy=false;
+  dbClonePersist(op);dbCloneControls();
+ }
+}
+function dbCloneInstall(){
+ const p=dbClone,root=dataopsNode('section','db-clone-panel',$('database-details'));root.hidden=true;
+ dataopsNode('h3','',root,'Physical snapshot copy');dataopsNode('p','',root,'Copies snapshot rows into a NEW table. No overwrite, zero copy, history or partition/property copy.');
+ for(const id of ['source','context'])dataopsNode('p','db-clone-'+id,root).className='help';
+ const fields=dataopsNode('div','',root);fields.className='job-fields';
+ p.role=p.role||(['data_engineer','admin'].includes(currentRole)?currentRole:'data_engineer');
+ const role=dataopsField(fields,'db-clone-role','Execution role','select',['data_engineer','admin'].filter(dbRoleWithinHeader).map(r=>[r,r]));role.value=p.role;
+ role.onchange=()=>{p.role=role.value;p.scope='';p.context=null;dbCloneControls();};
+ const name=dataopsField(fields,'db-clone-name','Target table name');name.oninput=dbCloneControls;
+ name.setAttribute('maxlength','31');name.setAttribute('aria-describedby','db-clone-name-rule db-clone-name-invalid');
+ dataopsNode('p','db-clone-name-rule',fields,'Use 1–31 characters: start with a lowercase letter, then lowercase letters, digits or underscores. Reserved names: system, information_schema, tpch, tpcds.').className='help';
+ const invalid=dataopsNode('p','db-clone-name-invalid',fields);invalid.className='status-line';invalid.setAttribute('role','status');
+ dataopsField(fields,'db-clone-snapshot','Snapshot','select').onchange=dbCloneControls;
+ dataopsButton(root,'db-clone-refresh','Refresh clone context and snapshots',dbCloneRefresh);
+ dataopsButton(root,'db-clone-submit','Create snapshot copy',()=>dbCloneRun());
+ dataopsNode('p','',root,'Cancellation stops remaining work; it does not roll back a copied table.');
+ const notice=dataopsNode('p','db-clone-notice',root);notice.setAttribute('role','status');
+ const receipt=dataopsNode('div','db-clone-receipt',root);receipt.setAttribute('aria-live','polite');
+ dataopsButton(root,'db-clone-observe','Observe operation',()=>dbCloneRun(true));dataopsButton(root,'db-clone-cancel','Cancel operation',()=>dbCloneRun(true,true));
+ dataopsButton(root,'db-clone-new','New clone intent',()=>{if(p.busy||p.op?.pending||!p.op||dbCloneHeld(p.op)||p.op.principal!==dbPrincipal)return;p.op=null;dbClonePersist();p.context=null;p.scope='';dbCloneControls();});
+ p.owner=null;dbCloneSync();
+ $('clone-table-btn').onclick=()=>{p.opened=true;dbCloneControls();$('db-clone-name').focus();return dbCloneRefresh();};
+ for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===$('clone-table-btn')&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
+ dbCloneControls();
 }
 
 // Jobs owns its selectors, drafts and immutable accepted run independently of SQL.

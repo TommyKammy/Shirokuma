@@ -1,8 +1,10 @@
 # Databaseモードの機能一覧と利用条件
 
-[DB-P6-6A](database-p6-6a-result-save-contract-2026-11-02.md)でSQL-08のWorksheet返却済み結果のCSV／JSON／TSVファイル保存を実装し、限定技術受入を完了した（全体回帰4,328成功・34 skip、両HTTP面72要求・22成果物、ブラウザー実ファイルとcache喪失拒否、元行と設定の保全）。本人・保存role・現在contextと受領page列を照合し、JSON整数文字列とNULL-aware CSV／TSVで精度・NULLを保持する。表示filter／sortを保存範囲へ反映せず、Table全件Exportとは区別する。次はEXP-10であり、P6全体とM1本人受入は継続する。
+[DB-P6-6B](database-p6-6b-table-clone-2026-11-02.md)でEXP-10を通常Explorerへ接続し、限定技術受入を完了した。新しいSANDBOXへの単一CTAS・現在／過去Snapshot・元key回復・認可分離を実装し、全体回帰4,385成功・34 skip、実5コピーと値照合、拒否・reload回復・保全を確認した。次はEXP-12であり、P6全体とM1本人受入は継続する。
 
-[DB-P6-4E](database-p6-4e-ai-settings-2026-11-02.md)でAI-06の共有設定・明示接続test・保存を通常Workbenchへ接続し、限定技術受入を完了した（全体回帰4,264成功・34 skip、両HTTP面84要求、実LOCAL疎通・日英ブラウザー、原設定と既存データの保全）。現在の真P・上限admin・選択global adminを検査し、DB閲覧・管理権限と分離する。共有設定の接続成功はDatabase推論の準備完了を意味せず、既存LOCAL推論の対応条件を維持する。次はSQL-08と残る探索操作であり、89項目全体とM1本人受入は継続する。
+[DB-P6-6A](database-p6-6a-result-save-contract-2026-11-02.md)でSQL-08のWorksheet返却済み結果のCSV／JSON／TSVファイル保存を実装し、限定技術受入を完了した（全体回帰4,328成功・34 skip、両HTTP面72要求・22成果物、ブラウザー実ファイルとcache喪失拒否、元行と設定の保全）。本人・保存role・現在contextと受領page列を照合し、JSON整数文字列とNULL-aware CSV／TSVで精度・NULLを保持する。表示filter／sortを保存範囲へ反映せず、Table全件Exportとは区別する。SQL-08の後続にEXP-10を選定した。P6全体とM1本人受入は継続する。
+
+[DB-P6-4E](database-p6-4e-ai-settings-2026-11-02.md)でAI-06の共有設定・明示接続test・保存を通常Workbenchへ接続し、限定技術受入を完了した（全体回帰4,264成功・34 skip、両HTTP面84要求、実LOCAL疎通・日英ブラウザー、原設定と既存データの保全）。現在の真P・上限admin・選択global adminを検査し、DB閲覧・管理権限と分離する。共有設定の接続成功はDatabase推論の準備完了を意味せず、既存LOCAL推論の対応条件を維持する。AI-06の後続にSQL-08と残る探索操作を選定した。89項目全体とM1本人受入は継続する。
 
 [DB-P6-4C2C1](database-p6-4c2c1-workload-baseline-2026-11-02.md)はAI-04／AI-05／CMP-05へP専用の固定LOCAL宣言基準レビューを加えた限定技術受入単位である。旧4項目をmet／not_metで示す範囲に限定し、8 admission policyやglobal policy全体、実行許可にはしない。C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。
 
@@ -94,7 +96,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | EXP-07 | 新しいSQL、SQL名挿入、Explorer Schemaの明示適用 | 対応、許可context | U＋X、新しい／元Worksheetを区別 | 探索の明示ボタン |
 | EXP-08 | Snapshot固定Table全件Export CSV／JSONL | 対応、読取可能な安定TABLE。許可Vも可 | X、元Snapshotと件数・内容 | `/api/v1/table-exports` |
 | EXP-09 | Export照会・取消・新規・receipt／download | 対応、本人と元context | X、同一operation／key、完全出力のみ | table export／dataops |
-| EXP-10 | 現在／過去Tableのsandbox clone | 未接続 | 将来はsource／target identityを固定 | DB-P6-6 |
+| EXP-10 | 現在／過去Tableのsandbox clone | 対応。同DB・固定Snapshot→新規SANDBOX TABLEの物理コピー | E／A。source queryとtarget writeを分離。元key回復・単一CTAS。上書き／自動DROPなし、UNKNOWNは観測のみ | [DB-P6-6B限定技術受入](database-p6-6b-table-clone-2026-11-02.md)、Explorer→サンドボックスに複製 |
 | EXP-11 | 探索のDrop Table | 未接続。A選択だけで解除しない | 削除方式と認可を別途確定 | DB-P6-6 |
 | EXP-12 | profiling／NULL統計 | 未接続。columns／previewは対応 | 将来はXの集計範囲と再認可 | DB-P6-6 |
 | EXP-13 | Table lineage | 未接続。WAP metadataと別機能 | 将来は許可source／target | DB-P6-6 |

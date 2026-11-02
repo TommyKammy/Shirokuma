@@ -8,6 +8,7 @@ import control_store
 import data_management as registry
 import dataops_service as ds
 import manual_export
+import manual_clone
 import manual_ingest
 import manual_wap
 import warehouse_admission as admission
@@ -120,7 +121,7 @@ def dispatch(handler, method, path, params, principal, role):
 def _dispatch(handler, method, path, params, principal, role):
     """Return False only for routes outside this adapter; otherwise respond once."""
     if not any(path == '/api/v1/' + prefix or path.startswith('/api/v1/' + prefix + '/')
-               for prefix in ('ingests', 'wap', 'table-exports', 'dataops')):
+               for prefix in ('ingests', 'wap', 'table-exports', 'table-clones', 'dataops')):
         return False
     if '#' in handler.path or handler.headers.get('Transfer-Encoding'):
         raise ValueError('invalid framing')
@@ -232,6 +233,13 @@ def _dispatch(handler, method, path, params, principal, role):
         kind, artifact_id = path.split('/')[-2:]
         name = {'builds': 'build', 'audits': 'audit', 'publications': 'publication'}[kind]
         envelope[name] = getattr(manual_wap, 'get_' + name)(principal, context, **{name + '_id': artifact_id})
+    elif method == 'POST' and path == '/api/v1/table-clones':
+        _keys(body, {'context', 'source', 'destination', 'snapshot_id'})
+        key = _key(handler)
+        envelope['operation'] = _operation(principal, context, 'manual-table-clone', key,
+            lambda: manual_clone.clone_table(principal, context, key=key,
+                source=reference(body['source']), destination=reference(body['destination'], locator=True),
+                snapshot_id=body['snapshot_id']))
     elif method == 'POST' and path == '/api/v1/table-exports':
         _keys(body, {'context', 'source', 'format'})
         key = _key(handler)

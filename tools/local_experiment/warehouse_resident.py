@@ -1586,7 +1586,8 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             handle, attempted = None, False
             if native:
                 path = urllib.parse.urlsplit(self.path).path
-                if path == '/api/v1/queries' or path.startswith('/api/v1/queries/'):
+                if any(path == '/api/v1/' + name or path.startswith('/api/v1/' + name + '/')
+                       for name in ('queries', 'table-clones', 'dataops')):
                     from workbench_server import WorkbenchHandler
                     WorkbenchHandler.database_request(self, self.command)
                     return

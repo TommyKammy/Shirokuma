@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-02
-version: "2.35.0"
+version: "2.36.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-11-02、[DB-P6-6B](../../guides/database-p6-6b-table-clone-2026-11-02.md)でEXP-10の同DB・現在／過去Snapshotから新規SANDBOX TABLEへの物理コピーを接続し、限定技術受入を完了した。source queryとtarget writeを分離し、単一CTAS・元key回復・UNKNOWN・commit後確認未完了を保持する。全体回帰4,385成功・34 skip、実2DB×Engineer／adminの4コピーと通常画面の過去Snapshotコピー、値照合・拒否・reload回復・元行／設定保全を確認した。次はEXP-12のprofiling／NULL統計を限定して進め、P6全必須行とM1本人受入は継続する。
 
 2026-11-02、[DB-P6-6A](../../guides/database-p6-6a-result-save-contract-2026-11-02.md)でSQL-08の返却済みWorksheet結果保存を接続し、限定技術受入を完了した。元queryの本人・保存role・現在context・受領page列を検査し、サーバーの保持値からCSV／JSON／TSVを生成する。全体回帰4,328成功・34 skip、実2DB×3role・22成果物／72要求、ブラウザー実ファイル・cache喪失拒否と保全を確認した。次はEXP-10の固定Snapshotから新規SANDBOX TABLEへの物理コピーを進め、P6全必須行の閉鎖とM1本人受入は継続する。
 
