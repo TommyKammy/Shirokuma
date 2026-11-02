@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-11-02
-version: "7.31.0"
+version: "7.32.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,13 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-02 — DB-P6-5C Compute DB saved activity（限定技術受入）
+
+- [P5C契約](../../guides/database-p6-5c-contract-2026-11-02.md)：既存AUD-03のquery／job_runだけをCompute専用の手動一覧・前後pageで読む。live activity・詳細・実行／復旧は含めない。
+- 独立したrole／READY DB／self・database scope／filter・cacheを使い、既存の現在認可とeffective DB admin例外を維持する。backend・API・policyは変更しない。
+- P5Cの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,188成功・34 skip、既存AUD-03の実APIとWorkbenchの実画面、最終保全PASS）。既存行・UNKNOWN・設定を保持し、新規行0を確認した。
+- Auditのdraft／pageとP5A／P5Bを分離し、P6-4全体／P6-5全体／P6-7／M1本人受入、C2C・usage／capacity・AI設定は未完了のままとする。
 
 ### 2026-11-02 — DB-P6-5B configured LOCAL container resources
 

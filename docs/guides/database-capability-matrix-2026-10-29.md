@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+[DB-P6-5C](database-p6-5c-contract-2026-11-02.md)はCMP-02へDB保存activityの手動一覧を追加したUIのみの限定技術受入済み単位である。既存AUD-03のself／database認可とeffective DB admin例外を保ち、P専用のCMP-05とは別に扱う。P5Cの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,188成功・34 skip、既存AUD-03の実APIとWorkbenchの実画面、最終保全PASS）。
+
 [DB-P6-5B](database-p6-5b-platform-resources-2026-11-02.md)はconfigured container resourcesだけの限定技術受入済みの単位であり、能力の一括完了を意味しない。P5Bの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,166成功・34 skip、両HTTP面の実API・Workbenchの実画面、最終保全PASS）。
 
 [DB-P6-4D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)は既存AUD-03へ保存済みAI要約metadataを追加した限定技術受入済みの単位である。`source=ai`と閉じた5種のaction、既存event形状・`links=[]`だけを使い、内容fieldを追加しない。最新保存要約であり、遷移監査ではない。現在のself／database認可を維持し、保存full9は内部整合を要するが現在revisionとの一致を要しない。platform scopeはAIを除外する。D1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,135成功・34 skip、Workbenchの実API・実画面、最終保全PASS）。 C2C／P5B・AI設定とP6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
@@ -135,10 +137,10 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | AUD-02 | 旧runtime query／load履歴画面 | 未接続。個別query／Job履歴は対応 | 個別履歴へ案内 | SQL／Job／WAP |
 | AUD-03 | 統合Database監査の検索・詳細・download | 対応。保存metadataの検索・前後page・関連記録・JSON。D1のAI要約追加は限定技術受入済み | V／Eは本人・保存role・許可Schema、Aは対象DB。現在権限を再確認し、保存full9は内部整合のみ。Pのplatform scopeは基盤管理記録だけでAIを除外。本文・全遷移は対象外 | DB-P6-1実装契約、[D1保存AI要約](database-p6-4d1-ai-audit-metadata-2026-11-01.md)（既存event形状、source=ai、閉じた5種のaction、links=[]、内容field追加なし） |
 | CMP-01 | ヘッダー／SQLの共有Warehouse状態・更新 | logical_v1は共有runtime観測を実装。技術受入済み | 物理状態・観測時刻・engine検証を分離し、replica数だけでSQL準備完了にしない | `/api/v1/warehouses/LOCAL/runtime`。旧Database profileは従来の観測のみ |
-| CMP-02 | Compute panelの共有状態・停止blocker・保存policy | logical_v1で対応、認証済みV／E／A。技術受入済み | 受付・処理中・SUCCEEDEDと物理状態／engine検証を区別。旧SRE／Policy検査は含まない | 共有LOCAL panel／runtime GET |
+| CMP-02 | Compute panelの共有状態・停止blocker・保存policy・DB保存activity | 共有runtimeは認証済みV／E／Aで技術受入済み。P5Cのquery／job_run保存metadata一覧も限定技術受入済み | 共有状態と物理状態／engine検証を区別。P5Cは独立した手動self／database一覧で、本人・保存role・現在DB／Schema権限と既存effective DB admin例外を維持。live activity・SQL／結果・詳細／復旧・exportは含めず、CMP-05のP専用観測を開放しない | 共有LOCAL panel／runtime GET、[P5C契約・限定技術受入](database-p6-5c-contract-2026-11-02.md) |
 | CMP-03 | quick／SQL／Computeの明示Wake／Chillと状態再検証 | logical_v1のP専用API／UI／HTTP CLIを実装。技術受入済み | 全DBへの影響を表示。元key／receipt保持、現在権限・admission／drain・全blockerを再確認。SQLは再送しない | runtime操作／operation照会。旧Database profileは未対応 |
 | CMP-04 | Auto-Chill設定と許可済みSQLのAuto-resume | logical_v1で設定CAS、server側休止、SQL共通経路の自動復帰を実装。技術受入済み、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 設定はP、0は無効。自動起動は元のDB／role／intentを認可し、同一初回POSTを再送しない。queued取消・UNKNOWN保護を維持 | Workbench／native／CLI、既存DataOps・Job・Stage・Mart・対応済みdbt・予定の共通SQL経路。AIは未接続 |
-| CMP-05 | ComputeのSRE check／Policy audit | P6-5AのP専用固定観測読取り統合は限定技術受入済み。P5Bの固定LOCALコンテナ設定資源も限定技術受入済み。旧SRE check／Policy baselineは未接続 | P5AはC2Bの既存API・strict DTO・global P cacheを再利用。P5Bは別の入力なし明示GET・Compute専用panel・独立P cacheで、真platform accountとprincipal・上限admin・選択adminを全source読取り前後に確認、DB／schema／grant不要。全ordinary／initの種類別ordinalと4つのliteral quantity／nullだけを扱い、usage・capacity・effective Pod budget・global audit・操作許可を示さず旧route拒否を維持 | DB-P6-5A限定技術受入済み／[DB-P6-5B](database-p6-5b-platform-resources-2026-11-02.md) pending／DB-P6-4・5全体は未完了 |
+| CMP-05 | ComputeのSRE check／Policy audit | P6-5AのP専用固定観測読取り統合は限定技術受入済み。P5Bの固定LOCALコンテナ設定資源も限定技術受入済み。旧SRE check／Policy baselineは未接続 | P5AはC2Bの既存API・strict DTO・global P cacheを再利用。P5Bは別の入力なし明示GET・Compute専用panel・独立P cacheで、真platform accountとprincipal・上限admin・選択adminを全source読取り前後に確認、DB／schema／grant不要。全ordinary／initの種類別ordinalと4つのliteral quantity／nullだけを扱い、usage・capacity・effective Pod budget・global audit・操作許可を示さず旧route拒否を維持 | DB-P6-5A限定技術受入済み／[DB-P6-5B](database-p6-5b-platform-resources-2026-11-02.md)限定技術受入済み／DB-P6-4・5全体は未完了 |
 | CMP-06 | XS／Sの実サイズ、Worker増減、用途別Warehouse | 未実装。休止・復帰の対応から伸縮完了を推定しない | 同一computeのaliasを維持し、容量・実資源・性能の計測後に採用 | DB-P7／8 |
 | ADM-01 | DB管理一覧・選択・revision／binding情報 | 対応、P | A、Worksheetと独立 | `/api/v1/admin/databases` |
 | ADM-02 | 論理DB作成、作成capability、初期access | 対応、P、logical_v1の準備条件 | A、root／actor／環境／key | admin database-creations |

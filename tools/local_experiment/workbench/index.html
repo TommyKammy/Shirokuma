@@ -545,6 +545,12 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #observation-compute-output p,#observation-resources-output p{max-width:75ch;overflow-wrap:anywhere}
 #observation-compute-panel .toolbar,#observation-resources-panel .toolbar{min-width:0;max-width:100%;flex-wrap:wrap}
 #observation-compute-panel button,#observation-resources-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+#observation-activity-panel{min-width:0;max-width:100%}
+#observation-activity-panel .panel-body,#observation-activity-panel .field{min-width:0;max-width:100%}
+#observation-activity-panel .toolbar{flex-wrap:wrap;align-items:end;gap:12px}
+#observation-activity-panel :is(input,select,button){min-width:0;max-width:100%}
+#observation-activity-panel :is(p,td,th,button){white-space:normal;overflow-wrap:anywhere}
+#observation-activity-panel .table-wrap{max-width:100%;overflow-x:auto}
 html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wrap:anywhere}html[data-data-mode=database] #quick-warehouse-state{white-space:normal;overflow-wrap:anywhere}
 
 /* Database dbt uses the established operational toolbar and table vocabulary. */
@@ -2504,6 +2510,7 @@ const dbRoleAuthorizationVersions=new Map();
 const dbRoleVersion=role=>dbRoleAuthorizationVersions.get(role)||0;
 function dbInvalidateReceipt(role,account=false){
  if(dbAudit.installed&&(account||role===dbAudit.role&&dbAudit.scope!=='platform'))dbAuditPurge();
+ if(dbActivity.installed&&(account||role===dbActivity.role))dbActivityClear();
  if(account)++dbAuthorizationVersion;else dbRoleAuthorizationVersions.set(role,dbRoleVersion(role)+1);
  // Inventory revisions invalidate DB reads, not the separate platform-management capability.
  // Session/admin-route checks still clear management state on actual account or admin loss.
@@ -3806,6 +3813,7 @@ function dbPlatformSync(){
  }
  dbPlatformComputeSync();
  dbResourcesSync();
+ dbActivitySync();
 }
 function dbPlatformComputeSync(){
  if(!$('observation-compute-panel')?.dataset.installed)return;
@@ -4345,6 +4353,7 @@ async function dbRefreshAccess(){
   if(typeof dbMarts!=='undefined')await dbMartsRefreshAuthorization();
   if(typeof dbDbt!=='undefined')await dbDbtRefreshAuthorization();
   if(dbAudit.installed)await dbAuditRefreshAuthorization();
+  if(dbActivity.installed)await dbActivityRefresh();
  }catch(error){if(error.code==='AUTH_READ_STALE')return;if(identity===dbIdentity()){if(dbAudit.installed){dbAudit.scope='self';dbAuditPurge();}dbInvalidateReceipt(role,error.code==='AUTHENTICATION_REQUIRED');dbHideRows(run=>error.code==='AUTHENTICATION_REQUIRED'||run.origin.role===role);dbInventories.delete(role);dbDatabases=[];dbClearCatalog();if(role===dbTabRole())dbClearHistory();dbControls();message('database-context-state',error.message);}}
 }
 async function dbRefreshContext(){
@@ -8089,6 +8098,144 @@ Object.assign(i18n.ja,{
  'Enter valid UTC dates and a page size from 1 to 100.':'有効な UTC 日時と1〜100の取得件数を入力してください。'
 });
 for(const key of Object.keys(i18n.ja))if(!(key in i18n.en))i18n.en[key]=key;
+
+// Compute owns only this saved-summary list; Audit and Platform retain their own state.
+const dbActivity={installed:false,epoch:0,auth:'',view:'',busy:null,role:'',database:'',scope:'self',source:'query',state:'',search:'',limit:'20',databases:[],capabilities:null,proof:null,items:[],applied:null,cursor:'',cursors:[],next:null,notice:''};
+const dbActivityStates={query:['QUEUED','RUNNING','FINISHED','FAILED','CANCELED','UNKNOWN'],job_run:['queued','running','succeeded','failed','canceled','unknown']};
+Object.assign(i18n.ja,{
+ 'Database saved activity':'データベースの保存済みアクティビティ',
+ 'Saved queries':'保存済みクエリ','Saved job runs':'保存済みジョブ実行',
+ 'Saved state':'保存済み状態','Metadata search':'メタデータ検索','All states':'すべての状態','None':'なし',
+ 'Saved summaries only; coverage and retention depend on each source. This is not live activity, complete transition history, or SQL commit proof.':'保存済み要約のみです。収録範囲と保持期間は参照元ごとに異なります。ライブの稼働状況、完全な状態遷移履歴、SQL のコミット証明ではありません。',
+ 'Refresh context, choose a READY Database and search explicitly.':'コンテキストを更新し、READY のデータベースを選択して明示的に検索してください。',
+ 'Activity context refreshed. Search explicitly.':'アクティビティのコンテキストを更新しました。明示的に検索してください。',
+ 'Activity filters changed. Search again.':'アクティビティの条件が変わりました。再検索してください。',
+ 'Saved activity unavailable. Refresh context and search again.':'保存済みアクティビティを取得できません。コンテキストを更新して再検索してください。',
+ 'Choose one available source, a valid saved state, search up to 256 characters and page size 1–100.':'利用可能な参照元を1つ選び、有効な保存済み状態、256文字以内の検索条件、1〜100件のページ件数を指定してください。',
+ 'Applied activity: {scope} · source: {source} · role: {role} · DB: {database} · saved state: {state} · search: {search} · limit: {limit} · observed: {time}':'適用済みアクティビティ: {scope} · 参照元: {source} · ロール: {role} · DB: {database} · 保存済み状態: {state} · 検索: {search} · 件数: {limit} · 観測日時: {time}',
+ 'Loading saved activity…':'保存済みアクティビティを読み込んでいます…',
+ 'No saved activity matches these filters.':'この条件に一致する保存済みアクティビティはありません。',
+ 'Source ID':'参照元 ID','Created UTC':'作成日時 UTC','Finished UTC':'終了日時 UTC'
+});
+for(const key of Object.keys(i18n.ja))if(!(key in i18n.en))i18n.en[key]=key;
+function dbActivityAuth(){return JSON.stringify([databaseMode,dbPrincipal,dbEpoch,currentRole,dbMaximumRole,dbAuthorizationVersion,dbRoleVersion(dbActivity.role),dbAdmin.platform]);}
+function dbActivityClear(notice='',authority=false){
+ const p=dbActivity;if(authority){p.databases=[];p.capabilities=null;}++p.epoch;p.busy=null;p.items=[];p.applied=null;p.proof=null;p.cursor='';p.cursors=[];p.next=null;p.notice=notice;
+ if(p.installed)dbActivityRender();
+}
+function dbActivitySync(){
+ const p=dbActivity;if(!p.installed)return;
+ const auth=dbActivityAuth();
+ if(auth!==p.auth){p.auth=auth;p.databases=[];p.capabilities=null;dbActivityClear();}
+ if(activeTab!==p.view){p.view=activeTab;if(p.busy){++p.epoch;p.busy=null;p.notice='';}}
+ if(!databaseMode||!dbRoleWithinHeader(p.role))dbActivityClear();
+ dbActivityChoices();dbActivityRender();
+}
+function dbActivityOptions(name,items,placeholder){
+ const node=$('observation-activity-'+name),p=dbActivity,signature=JSON.stringify([items,placeholder]);
+ if(node.dataset.activityChoices!==signature){
+  node.replaceChildren(...(placeholder?[new Option(t(placeholder),'')]:[]),...items.map(item=>Object.assign(new Option(item.label,item.value),{disabled:!!item.disabled})));node.dataset.activityChoices=signature;
+  if(placeholder)ui(node.options[0],placeholder);items.forEach((item,i)=>{if(item.key)ui(node.options[i+(placeholder?1:0)],item.key);});}
+ node.value=items.some(item=>item.value===p[name])?p[name]:'';
+}
+function dbActivityChoices(){
+ const p=dbActivity;
+ dbActivityOptions('role',['bi_viewer','data_engineer','admin'].map(value=>({value,label:value,disabled:!dbRoleWithinHeader(value)})),'Reference role');
+ dbActivityOptions('database',p.databases.filter(d=>d.state==='READY'&&d.capabilities?.query===true&&d.allowed_roles?.includes(p.role)).map(d=>({value:d.id,label:d.display_name+' · '+d.id})),'Choose database');
+ dbActivityOptions('scope',[{value:'self',label:t('My DB records'),key:'My DB records'},{value:'database',label:t('DB administration'),key:'DB administration',disabled:p.role!=='admin'||!p.capabilities?.scopes?.includes('database')}]);
+ dbActivityOptions('source',Object.keys(dbActivityStates).map(value=>({value,label:t(value==='query'?'Saved queries':'Saved job runs'),key:value==='query'?'Saved queries':'Saved job runs',disabled:!p.capabilities?.sources?.includes(value)})));
+ dbActivityOptions('state',(dbActivityStates[p.source]||[]).map(value=>({value,label:value})),'All states');
+ $('observation-activity-refresh').disabled=!!p.busy||!dbRoleWithinHeader(p.role);
+ $('observation-activity-submit').disabled=!!p.busy||!dbRoleWithinHeader(p.role)||!p.databases.some(d=>d.id===p.database&&d.state==='READY'&&d.capabilities?.query===true&&d.allowed_roles?.includes(p.role)&&Number.isInteger(d.binding_revision)&&d.binding_revision>0&&!!d.generation_id)||!p.capabilities?.scopes?.includes(p.scope)||!p.capabilities?.sources?.includes(p.source)||!['self','database'].includes(p.scope)||p.scope==='database'&&p.role!=='admin';
+ $('observation-activity-previous').disabled=!!p.busy||!p.applied||!p.cursors.length;
+ $('observation-activity-next').disabled=!!p.busy||!p.applied||!p.next;
+}
+function dbActivityInstall(){
+ const p=dbActivity;if(p.installed)return;p.installed=true;p.role=currentRole;p.auth=dbActivityAuth();p.view=activeTab;
+ const panel=dbAdminNode('section','observation-activity-panel',$('compute'));panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby','observation-activity-title');
+ const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2','observation-activity-title',head,'Database saved activity');
+ const body=dbAdminNode('div','',panel);body.className='panel-body';
+ dbAdminNode('p','',body,'Saved summaries only; coverage and retention depend on each source. This is not live activity, complete transition history, or SQL commit proof.');
+ const bar=dbAdminNode('div','',body);bar.className='toolbar';
+ for(const [name,key] of [['role','Reference role'],['database','Database'],['scope','Scope'],['source','Source'],['state','Saved state'],['search','Metadata search'],['limit','Page size']]){
+  const field=dbAdminNode('span','',bar);field.className='field';const label=dbAdminNode('label','',field,key),node=dbAdminNode(['search','limit'].includes(name)?'input':'select','observation-activity-'+name,field);label.htmlFor=node.id;
+  if(name==='search'){node.type='search';node.maxLength=256;}if(name==='limit'){node.type='number';node.min='1';node.max='100';}node.value=p[name];
+  const edit=()=>{p[name]=node.value;if(name==='role'){p.database='';p.databases=[];p.capabilities=null;}if(name==='source')p.state='';dbActivityClear('Activity filters changed. Search again.');p.auth=dbActivityAuth();dbActivityChoices();};
+  node.onchange=edit;if(['search','limit'].includes(name))node.oninput=edit;
+ }
+ for(const [name,key,fn] of [['refresh','Refresh context',()=>dbActivityRefresh()],['submit','Search',()=>dbActivitySearch()],['previous','Previous page',()=>dbActivitySearch('previous')],['next','Next page',()=>dbActivitySearch('next')]])dbAdminButton(bar,'observation-activity-'+name,key,fn);
+ dbAdminNode('p','observation-activity-context',body);const status=dbAdminNode('p','observation-activity-status',body);status.setAttribute('aria-live','polite');
+ const rows=dbAdminNode('div','observation-activity-rows',body);rows.className='table-wrap';dbActivitySync();
+}
+function dbActivityCapture(){
+ const p=dbActivity,epoch=++p.epoch,auth=dbActivityAuth(),token={};p.busy=token;
+ return {token,current:()=>p.epoch===epoch&&p.busy===token&&auth===dbActivityAuth()};
+}
+async function dbActivityAuthorize(current,requireDatabase=true){
+ const p=dbActivity,role=p.role,scope=p.scope,database=p.database,source=p.source;
+ if(!dbRoleWithinHeader(role)||!['self','database'].includes(scope)||scope==='database'&&role!=='admin')throw Error('ACTIVITY_AUTH');
+ const items=await dbReadInventory(role,current);if(!current()||!dbInventoryCurrent(items))return null;
+ const capabilities=await dbAPI('/api/v1/audit/capabilities',role);if(!current()||!dbInventoryCurrent(items))return null;
+ p.databases=items;p.capabilities={scopes:capabilities.scopes,sources:capabilities.sources};
+ if(!capabilities.scopes?.includes(scope)||!capabilities.sources?.includes(source))throw Error('ACTIVITY_AUTH');
+ const d=items.find(d=>d.id===database);
+ if(requireDatabase&&(!database||!d||d.state!=='READY'||!d.allowed_roles?.includes(role)||d.capabilities?.query!==true||!Number.isInteger(d.binding_revision)||d.binding_revision<1||!d.generation_id))throw Error('ACTIVITY_AUTH');
+ return {scope,database,role,items,d,binding:dbAuditBinding(d)};
+}
+async function dbActivityRefresh(){
+ const p=dbActivity;dbActivitySync();
+ // Ordinary reauthorization must not replace the LIST's pre/post authorization token.
+ if(p.busy||!dbRoleWithinHeader(p.role))return;
+ const read=dbActivityCapture();
+ try{const proof=await dbActivityAuthorize(read.current,!!p.database);if(!proof||!read.current())return;
+  if(p.proof&&p.proof.binding!==proof.binding)dbActivityClear();
+  else p.notice='Activity context refreshed. Search explicitly.';
+ }catch(error){if(read.current())dbActivityClear('Saved activity unavailable. Refresh context and search again.',error.code!=='STALE_CURSOR'&&error.status!==409);}
+ finally{if(p.busy===read.token)p.busy=null;dbActivitySync();}
+}
+function dbActivityFilters(){
+ const p=dbActivity;
+ if(!dbActivityStates[p.source]||p.state&&!dbActivityStates[p.source].includes(p.state)||[...p.search].length>256||/[\x00-\x1f]/.test(p.search)||!/^\d+$/.test(p.limit)||+p.limit<1||+p.limit>100)throw Error('ACTIVITY_INPUT');
+ return {scope:p.scope,database_id:p.database,source:p.source,state:p.state,search:p.search,limit:+p.limit};
+}
+const dbActivityCursor=value=>typeof value==='string'&&value.length>0&&value.length<=24000&&!/[\x00-\x1f]/.test(value);
+async function dbActivitySearch(direction='search'){
+ const p=dbActivity;dbActivitySync();let filters;
+ try{filters=direction==='search'?dbActivityFilters():p.applied&&Object.fromEntries(['scope','database_id','source','state','search','limit'].map(key=>[key,p.applied[key]]));if(!filters)return;}catch{p.notice='Choose one available source, a valid saved state, search up to 256 characters and page size 1–100.';dbActivityRender();return;}
+ const cursor=direction==='next'?p.next:direction==='previous'?p.cursors.at(-1):'';
+ if(direction!=='search'&&!dbActivityCursor(cursor))return;
+ const stack=direction==='next'?[...p.cursors,p.cursor]:direction==='previous'?p.cursors.slice(0,-1):[];
+ const read=dbActivityCapture();p.notice='Loading saved activity…';dbActivityChoices();dbActivityRender();
+ try{
+  const before=await dbActivityAuthorize(read.current);if(!before||!read.current())return;
+  if(p.proof&&p.proof.binding!==before.binding)throw Error('ACTIVITY_CONTEXT');
+  const params=new URLSearchParams();for(const [key,value] of Object.entries(filters))if(value!=='')params.set(key,String(value));if(cursor)params.set('cursor',cursor);
+  const data=await dbAPI('/api/v1/audit/events?'+params,before.role);if(!read.current())return;
+  const expectedFilters={...filters,from:null,to:null};
+  if(!data.filters||Array.isArray(data.filters)||Object.keys(data.filters).length!==8||!Object.keys(expectedFilters).every(key=>Object.hasOwn(data.filters,key)&&data.filters[key]===expectedFilters[key]))throw Error('ACTIVITY_RESPONSE');
+  dbAuditContext(data.context,before);
+  const schemaIds=data.context.schema_ids;
+  if(!Array.isArray(schemaIds)||!schemaIds.every(id=>typeof id==='string')||!dbActivityCursor(data.page_cursor)||data.next_cursor!=null&&!dbActivityCursor(data.next_cursor)||!Array.isArray(data.items)||data.items.length>filters.limit||!dbAuditTime(data.observed_at))throw Error('ACTIVITY_RESPONSE');
+  const items=data.items.map(raw=>{
+   if(raw?.source!==filters.source||raw.database_id!==before.database||typeof raw.source_id!=='string'||!raw.source_id||!dbActivityStates[filters.source].includes(raw.state)||filters.state&&raw.state!==filters.state||raw.schema_id!=null&&!schemaIds.includes(raw.schema_id)||before.scope==='self'&&(raw.actor!==JSON.parse(dbPrincipal)[0]||raw.saved_role!==before.role||!schemaIds.includes(raw.schema_id)))throw Error('ACTIVITY_RESPONSE');
+   const event=dbAuditEvent(raw);
+   return Object.fromEntries(['source_id','actor','schema_id','saved_role','state','created_at','finished_at'].map(key=>[key,event[key]]));
+  });
+  const after=await dbActivityAuthorize(read.current);if(!after||!read.current())return;
+  if(before.binding!==after.binding)throw Error('ACTIVITY_CONTEXT');dbAuditContext(data.context,after);
+  p.items=items;p.proof=after;p.applied={...filters,role:after.role,observed_at:dbAuditTime(data.observed_at)};p.cursor=data.page_cursor;p.next=data.next_cursor||null;p.cursors=stack;p.notice=items.length?'':'No saved activity matches these filters.';
+ }catch(error){if(read.current())dbActivityClear(error.code==='STALE_CURSOR'||error.status===409?'Cursor expired. Search again.':'Saved activity unavailable. Refresh context and search again.',error.code!=='STALE_CURSOR'&&error.status!==409);}
+ finally{if(p.busy===read.token)p.busy=null;dbActivitySync();}
+}
+function dbActivityRender(){
+ const p=dbActivity,a=p.applied,context=$('observation-activity-context'),rows=$('observation-activity-rows');
+ ui(context,'');if(a)ui(context,'Applied activity: {scope} · source: {source} · role: {role} · DB: {database} · saved state: {state} · search: {search} · limit: {limit} · observed: {time}',{scope:t(a.scope==='self'?'My DB records':'DB administration'),source:t(a.source==='query'?'Saved queries':'Saved job runs'),role:a.role,database:a.database_id,state:a.state||t('All states'),search:a.search||t('None'),limit:a.limit,time:a.observed_at});
+ ui($('observation-activity-status'),p.notice||(!a?'Refresh context, choose a READY Database and search explicitly.':''));rows.replaceChildren();if(!a)return;
+ const table=dbAdminNode('table','',rows),head=dbAdminNode('thead','',table),hr=dbAdminNode('tr','',head),body=dbAdminNode('tbody','',table);
+ for(const key of ['Source ID','Actor','Schema','Saved role','Saved state','Created UTC','Finished UTC']){const th=dbAdminNode('th','',hr,key);th.scope='col';}
+ for(const item of p.items){const row=dbAdminNode('tr','',body);for(const key of ['source_id','actor','schema_id','saved_role','state','created_at','finished_at']){const td=dbAdminNode('td','',row);if(item[key]==null)ui(td,'Not recorded');else td.textContent=String(item[key]);}}
+}
+
 const dbAuditFields=['id','source','source_id','action','actor','database_id','schema_id','warehouse_id','saved_role','state','created_at','updated_at','finished_at','revision','committed','has_cleanup_error'];
 const dbAuditAIKinds={sql_explanation:'Saved SQL explanation',sql_plan_explanation:'Saved SQL execution plan explanation',saved_plan_explanation:'Saved-plan re-explanation',sql_proposal:'Saved SQL proposal',catalog_proposal:'Saved catalog description proposal'};
 const dbAuditTelemetryFields=['event_id','timestamp','agent_id','action_type','target_system','status','trace_id','duration_ms'];
@@ -8603,7 +8750,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbActivityInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

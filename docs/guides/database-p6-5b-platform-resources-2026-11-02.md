@@ -59,3 +59,10 @@ Compute専用のsibling `#observation-resources-panel`で明示操作によるGE
 ## 次の範囲と残る境界
 
 次の優先単位はDB-P6-5Cとする。既存AUD-03を再利用し、Compute専用の手動filter／cacheでquery／job_runのDB保存metadataだけを読む。V／Eは本人・保存roleと現在のDB／Schema権限、DBAは許可DB内に限り、P権限でDB閲覧を代用しない。SQL・結果・live／global activity・復旧・自動pollを追加せず、既存Auditのdraftを使い回さない。[全体計画](database-full-capability-and-compute-plan-2026-10-28.md)のP6-4全体／P6-5全体／P6-7／M1所有者本人受入はOPENを維持する。C2C／global policy、usage／capacity／activity、資源解放・resizing・size適用は独立した後続タスクとし、CMP-05の旧SRE check／Policy baseline routeを開放しない。能力の一括完了やowner2 YAML変更は含めない。
+
+
+## P5Cの限定技術受入と認可の明確化
+
+[DB-P6-5C](database-p6-5c-contract-2026-11-02.md)は既存AUD-03のquery／job_run保存metadataだけをComputeの独立した手動一覧・前後pageへ接続した限定技術受入単位である。P5Cの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,188成功・34 skip、既存AUD-03の実APIとWorkbenchの実画面、最終保全PASS）。P5Bの上記受入範囲・証拠と、P専用の資源観測API／cacheは変更しない。
+
+P5Cでいう既存AUD-03の現在認可は、現在のplatform_admin account・account role admin・選択adminに対するeffective DB admin例外も維持し、grant_revisionがnullとなる場合を含む。上記の次範囲にある「P権限でDB閲覧を代用しない」は新しい権限を付与しないという意味であり、既存例外を除くexplicit-grant-only制限ではない。明示READY DB・現在binding／generation・query可能Schemaを検査し、platform scopeのDB workload閲覧は作らない。SQL・結果・詳細・復旧・export・自動pollを追加せず、P6-4全体／P6-5全体／P6-7／M1本人受入は未完了を維持する。

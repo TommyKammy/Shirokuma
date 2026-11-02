@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-02
-version: "2.31.0"
+version: "2.32.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-11-02、[DB-P6-5C](../../guides/database-p6-5c-contract-2026-11-02.md)でCompute専用DB保存activity一覧の読取り統合を実装した。既存AUD-03のquery／job_runだけを、独立した参照role・READY DB・self／database scope・手動filter／cache／前後pageで読むUIのみの単位であり、新しいbackend・API・認可policyを作らない。本人・保存roleと現在のDB／Schema権限を検査し、現在のplatform admin account・account role admin・選択adminに対する既存effective DB admin例外も維持する。P5A／P5BのP専用観測とAuditの状態を使い回さず、SQL・結果・live activity・詳細・復旧・export・自動pollを追加しない。P5Cの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,188成功・34 skip、既存AUD-03の実APIとWorkbenchの実画面、最終保全PASS）。P6-4全体／P6-5全体／P6-7／M1本人受入、C2C／global policy・usage／capacity・AI設定は継続する。
 
 2026-11-02、[DB-P6-5B](../../guides/database-p6-5b-platform-resources-2026-11-02.md)で固定LOCALコンテナ設定資源の読取り表示を実装した。独立した入力なしの明示GETで、真のplatform account・principal、上限admin・選択adminを全source読取り前後に確認し、DB／schema／grantを前提にしない。Computeの独立panel・P cacheで、coordinator／workerの全ordinary・initコンテナのCPU／memory requests・limitsをliteral文字列または未指定として扱う。既存C2B API・閉じたDTO・cache・requestは維持する。P5Bの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,166成功・34 skip、両HTTP面の実API・Workbenchの実画面、最終保全PASS）。 P6-4全体／P6-5全体／P6-7／M1本人受入はOPENのまま、C2C／global policy、usage／capacity／activity、resizingは別タスクとする。
 

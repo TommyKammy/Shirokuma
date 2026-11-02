@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-02、[DB-P6-5C](database-p6-5c-contract-2026-11-02.md)でCompute専用DB保存activity一覧の読取り統合を実装した。既存AUD-03のquery／job_runだけを、独立した参照role・READY DB・self／database scope・手動filter／cache／前後pageで読むUIのみの単位であり、新しいbackend・API・認可policyを作らない。本人・保存roleと現在のDB／Schema権限を検査し、現在のplatform admin account・account role admin・選択adminに対する既存effective DB admin例外も維持する。P5A／P5BのP専用観測とAuditの状態を使い回さず、SQL・結果・live activity・詳細・復旧・export・自動pollを追加しない。P5Cの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,188成功・34 skip、既存AUD-03の実APIとWorkbenchの実画面、最終保全PASS）。P6-4全体／P6-5全体／P6-7／M1本人受入、C2C／global policy・usage／capacity・AI設定は継続する。
+
 2026-11-02、[DB-P6-5B](database-p6-5b-platform-resources-2026-11-02.md)で固定LOCALコンテナ設定資源の読取り表示を実装した。独立した入力なしの明示GETで、真のplatform account・principal、上限admin・選択adminを全source読取り前後に確認し、DB／schema／grantを前提にしない。Computeの独立panel・P cacheで、coordinator／workerの全ordinary・initコンテナのCPU／memory requests・limitsをliteral文字列または未指定として扱う。既存C2B API・閉じたDTO・cache・requestは維持する。P5Bの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,166成功・34 skip、両HTTP面の実API・Workbenchの実画面、最終保全PASS）。 P6-4全体／P6-5全体／P6-7／M1本人受入はOPENのまま、C2C／global policy、usage／capacity／activity、resizingは別タスクとする。 次はP5Bの限定検証とCommanderレビューであり、configured値を実使用量・利用可能容量・実サイズ適用へ読み替えない。
 
 2026年10月28日。状態は**実装計画案**。まず共有LOCAL WarehouseでDatabase対応のコア機能を揃え、その後に実サイズ変更とWorker増減へ進む。用途別Warehouse、外部S3、ストアドプロシージャは、それぞれの採用条件を満たした段階で追加する。
@@ -270,7 +272,7 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 ## 9 実装の進め方と直近の着手単位
 
-[D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)の限定技術受入後は、限定技術受入済みP5Bに続き、DB-P6-5CのCompute専用DB保存activity（初期sourceはquery／job_runのみ）の読取り統合を優先する。使用量・空き容量・resizeや包括的なactivity bundleを同時に追加しない。C2Cのworkload baseline／global policy検査、P5B、AI設定は未完了の別単位として残す。P6-4全体／P6-5全体／P6-7／M1本人受入は閉じない。
+[D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)と[P5B](database-p6-5b-platform-resources-2026-11-02.md)に続き、[DB-P6-5C](database-p6-5c-contract-2026-11-02.md)のCompute専用DB保存activity（query／job_runだけ）を限定技術受入済みとした。既存AUD-03を変更せず、self／databaseの現在認可とeffective DB admin例外を維持した独立した手動一覧・pageである。使用量・空き容量・resizeや包括的なactivity bundleは追加していない。C2Cのworkload baseline／global policy検査とAI設定は未完了の別単位として残し、P6-4全体／P6-5全体／P6-7／M1本人受入は閉じない。
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 
