@@ -12,6 +12,8 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
 
+2026-11-02、[DB-P6-6D](../../guides/database-p6-6d-table-lineage-2026-11-02.md)でEXP-13／14のTable・Explorer lineageを限定技術受入済みとした。保存WAP／dbtの確定証跡と版を固定しない定義、現在／過去、計画中モデルを分け、現在query権限とdbt本人／保存roleを検査する。canonical 110群（旧UI期待値修正後のWorkbench 1,058件再実行を含む）と実HTTP 40件、通常画面・Lineage領域の390px／200%・元台帳／設定保全を確認した。次はEXP-11のDrop導線を別単位で進め、P6全必須行とM1本人受入は継続する。
+
 2026-11-02、[DB-P6-6C](../../guides/database-p6-6c-table-profiling-2026-11-02.md)でEXP-12の全行・全列NULL統計を通常Explorerへ接続し、限定技術受入を完了した。現在query権限と固定Snapshotを検査し、正確な件数文字列・NULL率、元key回復・取消・遅着応答消去を実装した。全体回帰4,460成功・34 skip、実2DB×3roleの8件＋通常画面3件、再送・拒否・再起動GETと元行／設定保全を確認した。次はTable／Explorer lineageを限定して進め、P6全必須行とM1本人受入は継続する。
 
 2026-11-02、[DB-P6-6B](../../guides/database-p6-6b-table-clone-2026-11-02.md)でEXP-10の同DB・現在／過去Snapshotから新規SANDBOX TABLEへの物理コピーを接続し、限定技術受入を完了した。source queryとtarget writeを分離し、単一CTAS・元key回復・UNKNOWN・commit後確認未完了を保持する。全体回帰4,385成功・34 skip、実2DB×Engineer／adminの4コピーと通常画面の過去Snapshotコピー、値照合・拒否・reload回復・元行／設定保全を確認した。次はEXP-12のprofiling／NULL統計を限定して進め、P6全必須行とM1本人受入は継続する。

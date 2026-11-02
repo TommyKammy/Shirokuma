@@ -110,6 +110,15 @@ def _authorized(db, principal, context, ident, kind=None):
     return record
 
 
+def lineage_visible(principal, context, record):
+    """Saved metadata policy without write-only SANDBOX or lease observation."""
+    saved = record.get('context')
+    return (isinstance(saved, dict) and saved.get('database_id') == context.database_id
+        and (context.selected_role == 'admin' or
+            record.get('actor') == principal.principal_id
+            and saved.get('selected_role') == context.selected_role))
+
+
 def _public(db, record):
     result = {k: v for k, v in record.items() if not k.startswith('_') and k != 'views'}
     result.pop('execution_closure', None)
@@ -1633,7 +1642,7 @@ def _native_execution_intent(execution, phase):
     return publication
 
 
-def _native_child_saved(db, publication, phase):
+def _native_child_saved(db, publication, phase, *, settle=True):
     """Exact closed child/query lineage, independent of subsequent catalog heads."""
     from db_marts import _closed_child
     if (publication.get('origin') not in ('native_table', 'native_graph')
@@ -1653,7 +1662,7 @@ def _native_child_saved(db, publication, phase):
             or op['actor'] != publication['actor'] or json.loads(op['context']) != publication['context']
             or op['payload'] != payload or op['fingerprint'] != hashlib.sha256(payload.encode()).hexdigest()
             or child is None or child['parent_id'] != parent['admission_id'] or child['actor'] != publication['actor']
-            or child['state'] != 'FINISHED' or not _closed_child(db, op['id'])):
+            or child['state'] != 'FINISHED' or not _closed_child(db, op['id'], settle=settle)):
         return None
     rows = list(db.execute('SELECT d.step,d.action,d.commit_result,q.*,e.* FROM dataops_queries d '
         'JOIN query_records q ON q.id=d.query_id JOIN query_execution_contexts e ON e.query_id=q.id '
@@ -1695,9 +1704,9 @@ def _native_child_saved(db, publication, phase):
     return op, query, json.loads(op['result'] or '{}')
 
 
-def _native_audit_saved(db, publication):
+def _native_audit_saved(db, publication, *, settle=True):
     try:
-        saved = _native_child_saved(db, publication, 'audit')
+        saved = _native_child_saved(db, publication, 'audit', settle=settle)
         if saved is None:
             return None
         op, query, result = saved
@@ -1720,7 +1729,7 @@ def _native_has_views(db, publication):
         or any(m['materialized'] == 'view' for m in _check_plan(db, source)['models']))
 
 
-def _native_frozen_graph(db, publication):
+def _native_frozen_graph(db, publication, *, settle=True):
     import database_dbt_graph as graph
     source = _row(db, publication['parent_run_id'])[1]
     # Source observation may retire current build eligibility. Closed
@@ -1743,24 +1752,24 @@ def _native_frozen_graph(db, publication):
                 model.update(_measurement=entry['receipt']['candidate'],
                     candidate=_view_public(entry['receipt']['candidate']),
                     dependency_snapshots=entry['dependency_snapshots'])
-    _, proof = graph.publication_proof(db, source, publication['node_id'], historical=True)
+    _, proof = graph.publication_proof(db, source, publication['node_id'], historical=True, settle=settle)
     if ds._json(publication['_native_intent']) != ds._json(_native_intent(source, publication['node_id'], proof,
             publication['expected_target'], ResolvedQueryContext(**publication['context']), publication['actor'])):
         return None
     return source, proof
 
 
-def _native_publication_saved(db, publication):
+def _native_publication_saved(db, publication, *, settle=True):
     try:
         if publication.get('origin') == 'native_graph':
             import database_dbt_graph as graph
-            if _native_frozen_graph(db, publication) is None:
+            if _native_frozen_graph(db, publication, settle=settle) is None:
                 return None
         links = list(db.execute('SELECT phase,node_id FROM dbt_run_operations WHERE run_id=?', (publication['id'],)))
         if sorted((r['phase'], r['node_id']) for r in links) != [('audit', publication['node_id']), ('publish', publication['node_id'])]:
             return None
-        saved = _native_child_saved(db, publication, 'publish')
-        audit = _native_audit_saved(db, publication)
+        saved = _native_child_saved(db, publication, 'publish', settle=settle)
+        audit = _native_audit_saved(db, publication, settle=settle)
         if saved is None or audit is None:
             return None
         op, query, result = saved

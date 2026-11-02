@@ -383,7 +383,14 @@ def _execute(run_id):
         owner.close()
 
 
-def _closed_child(db, operation_id):
+def _closed_child(db, operation_id, *, settle=True):
+    if not settle:
+        saved_op = db.execute('SELECT context,state FROM dataops_operations WHERE id=?', (operation_id,)).fetchone()
+        try:
+            if saved_op is None or not isinstance(json.loads(saved_op['context'])['warehouse_id'], str):
+                return False
+        except (KeyError, TypeError, ValueError):
+            return False
     parent = admission.get_for_subject(db, kind='dataops', subject_id=operation_id,
         warehouse_id=json.loads(db.execute('SELECT context FROM dataops_operations WHERE id=?', (operation_id,)).fetchone()[0])['warehouse_id'])
     if parent is None:
@@ -411,6 +418,8 @@ def _closed_child(db, operation_id):
         return False
     state = 'FINISHED' if op['committed'] else 'FAILED'
     saved = db.execute('SELECT state FROM warehouse_admissions WHERE id=?', (parent.id,)).fetchone()[0]
+    if not settle:
+        return saved in admission.TERMINAL and op['state'] in admission.TERMINAL
     if saved not in admission.TERMINAL:
         admission.finish(db, parent, state=state, evidence_ref='mart-child-closure:' + operation_id)
     if op['state'] not in admission.TERMINAL:

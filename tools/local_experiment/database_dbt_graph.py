@@ -677,7 +677,7 @@ def _run_subprocess(artifacts, owner, tests):
 
 
 
-def child_proof(db, run, uid, phase, *, historical=False):
+def child_proof(db, run, uid, phase, *, historical=False, settle=True):
     """Exact persisted parent/child/query/identity and input proof, no live RPC."""
     try:
         from db_marts import _closed_child
@@ -700,7 +700,7 @@ def child_proof(db, run, uid, phase, *, historical=False):
                 or op['actor'] != run['actor'] or json.loads(op['context']) != run['context']
                 or op['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()
                 or child is None or child['parent_id'] != row['admission_id'] or child['actor'] != run['actor']
-                or child['state'] != 'FINISHED' or not _closed_child(db, op['id'])
+                or child['state'] != 'FINISHED' or not _closed_child(db, op['id'], settle=settle)
                 or not isinstance(receipt, dict) or any(receipt.get(k) != v for k, v in payload(run, phase, uid).items())
                 or receipt.get('native_verified' if phase == 'build' else 'test_verified') is not True):
             return None
@@ -833,7 +833,7 @@ def check_verified(db, run):
                 reject('DBT_GRAPH_DEPENDENCY_UNVERIFIED')
 
 
-def _failed_build_child(db, run, op):
+def _failed_build_child(db, run, op, *, settle=True):
     """A failed SDK node proves SQL failure only with a closed failed CREATE."""
     from db_marts import _closed_child
     check_operation(db, run, op, op)
@@ -875,10 +875,10 @@ def _failed_build_child(db, run, op):
     all_ops = db.execute('SELECT o.* FROM dbt_run_operations l JOIN dataops_operations o ON o.id=l.operation_id '
         'WHERE l.run_id=?', (run['id'],))
     return (not any(any(o[k] != op[k] for k in ('backend_username', 'credential_snapshot_ref')) for o in all_ops)
-        and _closed_child(db, op['id']))
+        and _closed_child(db, op['id'], settle=settle))
 
 
-def _task_completion_proof(db, run, phase, *, historical=False):
+def _task_completion_proof(db, run, phase, *, historical=False, settle=True):
     """Validate completion, including SDK error/skipped nodes, without claiming success."""
     try:
         plan = dbt._check_plan(db, run)
@@ -927,27 +927,27 @@ def _task_completion_proof(db, run, phase, *, historical=False):
                 else:
                     if len(links) != 1 or item['operation_ids'] != [links[0]['id']] or links[0]['state'] != 'FAILED':
                         return False
-                    if not _failed_build_child(db, run, links[0]):
+                    if not _failed_build_child(db, run, links[0], settle=settle):
                         return False
                 continue
             if item.get('materialized') == 'ephemeral':
                 if (item['state'] != 'EXPANDED' or results[uid]['status'] != 'success' or item['operation_ids']
                         or results[uid]['adapter_response'] != {} or results[uid]['failures'] is not None):
                     return False
-            elif child_proof(db, run, uid, phase, historical=historical) is None:
+            elif child_proof(db, run, uid, phase, historical=historical, settle=settle) is None:
                 return False
         return True
     except (KeyError, TypeError, ValueError, QueryError, compiler.DbtError):
         return False
 
 
-def task_proof(db, run, phase, *, historical=False):
-    return (_task_completion_proof(db, run, phase, historical=historical)
+def task_proof(db, run, phase, *, historical=False, settle=True):
+    return (_task_completion_proof(db, run, phase, historical=historical, settle=settle)
         and (phase != 'build' or run['task_receipts'][phase]['success']))
 
 
 
-def publication_proof(db, run, uid, publication=None, *, historical=False):
+def publication_proof(db, run, uid, publication=None, *, historical=False, settle=True):
     """Whole saved task and quality closure for one explicit TABLE publication."""
     forbidden = 'DBT_GRAPH_PUBLICATION_FORBIDDEN'
     try:
@@ -960,13 +960,13 @@ def publication_proof(db, run, uid, publication=None, *, historical=False):
                 or [t['unique_id'] for t in run['tests']] != [t['unique_id'] for t in plan['tests']]
                 or any(t['state'] != 'PASSED' or type(t['failure_count']) is not int
                     or t['failure_count'] != 0 for t in run['tests'])
-                or any(not task_proof(db, run, phase, historical=historical)
+                or any(not task_proof(db, run, phase, historical=historical, settle=settle)
                     or run['task_receipts'][phase]['success'] is not True for phase in ('build', 'test'))):
             reject(forbidden)
         model = next(m for m in run['models'] if m['unique_id'] == uid)
         if model['materialized'] != 'table':
             reject(forbidden)
-        proofs = {m['unique_id']: child_proof(db, run, m['unique_id'], 'build', historical=historical)
+        proofs = {m['unique_id']: child_proof(db, run, m['unique_id'], 'build', historical=historical, settle=settle)
             for m in run['models'] if m['materialized'] in ('table', 'view')}
         if any(p is None for p in proofs.values()) or uid not in proofs:
             reject(forbidden)

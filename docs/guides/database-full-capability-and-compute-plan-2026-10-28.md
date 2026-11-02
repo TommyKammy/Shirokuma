@@ -274,6 +274,8 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 ## 9 実装の進め方と直近の着手単位
 
+2026-11-02 JST、[DB-P6-6D（EXP-13／14）](database-p6-6d-table-lineage-2026-11-02.md)のTable／Explorer lineageを限定技術受入済みとした。保存記録の直接関係を読取り表示し、確定証跡・宣言依存、Snapshot／VIEW版の現在・過去、計画中モデルと物理Refを区別する。canonical 110群と最終Workbench 1,058件、実2DB／両HTTP 40ケース、通常画面・認可・元行／設定保全を確認した。次はEXP-11のDrop導線を限定し、P6全必須行・M1本人受入とP7以降の採用条件は維持する。
+
 2026-11-02 JST、[DB-P6-6C（EXP-12）](database-p6-6c-table-profiling-2026-11-02.md)のTable profiling／NULL統計を限定技術受入済みとした。現在query権限と固定Snapshotで全行・全列を集計し、件数精度、元key回復、取消と統計の非表示条件を維持する。全体回帰4,460成功・34 skip、実2DB×3roleと通常画面の計11集計、63行／過去3行／空0行、再送・拒否・再起動後GET・保全を確認した。次はTable／Explorer lineageを限定単位として進め、P6全必須行・M1本人受入とP7以降の採用条件は変更しない。
 
 2026-11-02 JST、[DB-P6-6B（EXP-10）](database-p6-6b-table-clone-2026-11-02.md)の新規SANDBOX TABLEへの物理コピーを限定技術受入済みとした。同DB・固定Snapshot・source query／target write分離・元key・単一CTASを維持し、全体回帰4,385成功・34 skip、実2DB×Engineer／adminと通常画面の計5コピー、値照合・拒否・回復・保全を確認した。EXP-10の後続にEXP-12を選定した。M1の全必須行と本人受入、P7の実コンピュート伸縮は従来の条件を維持する。

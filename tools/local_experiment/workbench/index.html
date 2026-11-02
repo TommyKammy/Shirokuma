@@ -575,6 +575,9 @@ html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wr
 :is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel){min-width:0;max-width:100%}
 :is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) :is(.panel-body,p,h3,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) .toolbar{flex-wrap:wrap}
+html[data-data-mode="database"] #table-lineage{grid-template-columns:minmax(0,1fr);min-width:0;overflow-wrap:anywhere}
+html[data-data-mode="database"] #table-lineage>*{min-width:0;overflow-wrap:anywhere}
+.lineage-fact{overflow-wrap:anywhere;min-width:0}.lineage section{min-width:0}.lineage ul{padding-inline-start:1.25rem}
 </style>
 </head>
 <body>
@@ -4458,11 +4461,11 @@ function dbHideRows(predicate=()=>true){
  if(!current?.authorized||!dbRoleWithinHeader(current.origin.role)){queryResult=null;$('query-results').replaceChildren();$('query-chart').replaceChildren();}
 }
 function dbClearExplorer(){
- dbProfileInvalidate();
+ dbProfileInvalidate();dbLineageInvalidate();
  ++dbObjectEpoch;dbDetails.clear();dbPending.clear();dbObjects=[];dbObject=null;
  ++dbListRequest;
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
- ui($('table-lineage'),'Lineage is unavailable in Database mode.');
+ dbLineageControls();
  $('refresh-table-details').disabled=true;
  dbExplorerControls();
 }
@@ -4909,7 +4912,7 @@ function dbExplorerControls(){
  ui($('use-explorer-schema'),'Use this schema in {worksheet}',{worksheet:dbCurrent()?worksheetName(dbCurrent()):t('Worksheet')});
  if($('catalog-context-reselect'))$('catalog-context-reselect').hidden=!dbExplorerReason();
  dbRenderBreadcrumb();dbRenderTree();
- if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();dbProfileControls();}
+ if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();dbProfileControls();dbLineageControls();}
 }
 function dbRenderBreadcrumb(){
  const crumb=$('database-breadcrumb');if(!crumb)return;
@@ -5075,7 +5078,7 @@ function dbSyncWorkspaceNavigation(){
  }
 }
 function dbShowWorkspace(pane){
- if(pane!==dbWorkspacePane)dbProfileInvalidate();
+ if(pane!==dbWorkspacePane){dbProfileInvalidate();dbLineageInvalidate();}
  if(dbWorkspacePane!==pane)++dbExportRevision;
  dbWorkspacePane=pane;
  dbSyncWorkspaceNavigation();
@@ -5151,9 +5154,10 @@ function dbInstallWorkspace(explorerTools){
  const unavailable=document.createElement('span');unavailable.className='unavailable-actions';
  for(const id of ['clone-table-btn','export-table-format','export-table-btn','drop-table-btn'])if($(id))unavailable.append($(id));actions.append(unavailable);
  // Explicit SQL actions sit with the selected object or schema, as in the mock's details header.
- for(const [id,key,task] of [['insert-table-sql','Insert SQL name',dbInsertSQLName],['use-explorer-schema','Use this schema',dbUseExplorerSchema]]){
+ for(const [id,key,task] of [['insert-table-sql','Insert SQL name',dbInsertSQLName],['use-explorer-schema','Use this schema',dbUseExplorerSchema],['explorer-open-lineage','Saved lineage',dbOpenLineage]]){
   const button=document.createElement('button');button.id=id;button.type='button';button.className='small';button.dataset.action=id;ui(button,key);button.onclick=task;actions.append(button);
  }
+ $('explorer-open-lineage').setAttribute('aria-controls','inspect-lineage');
  const crumb=document.createElement('div');crumb.id='database-breadcrumb';crumb.className='db-breadcrumb';crumb.setAttribute('role','navigation');crumb.setAttribute('aria-label',t('Breadcrumb'));uiAttributes.push({node:crumb,attribute:'aria-label',key:'Breadcrumb'});$('table-title').before(crumb);
  const overview=document.createElement('button');overview.id='explorer-schema-details';overview.type='button';ui(overview,'Schema');overview.onclick=()=>{if(!dbExplorerReason()){++dbSelectionGeneration;dbClearExplorer();dbShowMetadataOverview('schema');}};crumb.append(overview);
  const history=$('query-history').parentElement;if(history){const footer=document.createElement('div');footer.className='results-footer';footer.append(history);results.append(footer);}
@@ -5197,7 +5201,7 @@ async function dbLoadObjects(cursor=null){
  }catch(error){if(current()){dbExplorerDenied(error);message('catalog-error',error.message);}}
 }
 async function dbDescribe(object,section=activeInspector,snapshot){
- dbProfileInvalidate();
+ dbProfileInvalidate();dbLineageInvalidate();
  const scope=dbCatalogScope(),epoch=++dbObjectEpoch,identity=dbIdentity(),role=currentRole;
  dbObject=object;$('table-title').textContent=object.display_name;
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
@@ -5206,6 +5210,7 @@ async function dbDescribe(object,section=activeInspector,snapshot){
  if(dbExplorerReason()){ui($(target),dbExplorerReason());return;}
  if(!object.id||!object.ref){ui($(target),'Object identity is not verified. Refresh Explorer and select the object again.');return;}
  if(section==='profile'){dbProfileControls();return;}
+ if(section==='lineage'){dbLineageControls();return;}
  if(!['columns','preview','snapshots','ddl'].includes(section)){ui($(target),section==='lineage'?'Lineage is unavailable in Database mode.':'This detail is unsupported in Database mode. Use columns, preview, snapshots or DDL.');return;}
  if(!object.capabilities?.[section]){ui($(target),'This detail is not permitted for the current role or object. Choose another authorized object or role.');return;}
  const current=()=>identity===dbIdentity()&&scope===dbCatalogScope()&&epoch===dbObjectEpoch;
@@ -5258,7 +5263,8 @@ async function dbDetailPages(page,role,current){
  return {...first,columns:run.columns,data:run.rows,state:run.state,truncated:!!run.truncated,error:run.error?{message:run.error}:undefined};
 }
 function dbSelectInspector(button){
- if(button.disabled||!['columns','preview','snapshots','ddl','profile'].includes(button.dataset.inspect))return;
+ if(button.disabled||!['columns','preview','snapshots','ddl','profile','lineage'].includes(button.dataset.inspect))return;
+ if(activeInspector!==button.dataset.inspect)dbLineageInvalidate();
  activeInspector=button.dataset.inspect;
  inspectorTabs.forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$('inspect-'+b.dataset.inspect).hidden=!selected;});
  if(dbObject)return dbDescribe(dbObject);
@@ -5291,11 +5297,8 @@ async function initializeDatabaseUI(session){
  const reselect=document.createElement('button');reselect.id='catalog-context-reselect';reselect.type='button';ui(reselect,'Reselect context');reselect.onclick=dbReselectExplorer;
  const explorerStatus=document.createElement('span');explorerStatus.id='catalog-context-state';explorerStatus.setAttribute('role','status');explorerTools.append(reselect,explorerStatus);$('catalog-error').before(explorerTools);
  dbInstallWorkspace(explorerTools);
- for(const section of ['lineage']){
-  const button=inspectorTabs.find(b=>b.dataset.inspect===section);button.disabled=true;const key='Lineage is unavailable in Database mode.';button.title=t(key);uiAttributes.push({node:button,attribute:'title',key});ui($(inspectorTargets[section]),key);
- }
+ dbLineageControls();
  wireTabs(inspectorTabs,dbSelectInspector);
- ui($('lineage'),'Lineage is unavailable in Database mode.');
  const bar=document.createElement('div'),contextActions=document.createElement('div');bar.id='database-context-bar';bar.setAttribute('role','group');bar.setAttribute('aria-label',t('Execution context'));uiAttributes.push({node:bar,attribute:'aria-label',key:'Execution context'});contextActions.className='context-actions';
  for(const id of ['query-database','query-schema','query-execution-role','query-mode','query-warehouse','max-rows']){const field=$(id)?.parentElement;if(field)bar.append(field);}
  const buttons={};for(const [id,key,task] of [['database-context-refresh','Refresh context',dbRefreshContext],['database-context-reselect','Reselect context',dbReselect],['cancel-query','Cancel query',dbCancelQuery]]){const button=document.createElement('button');button.id=id;button.type='button';ui(button,key);button.onclick=task;buttons[id]=button;}
@@ -5358,13 +5361,13 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if(next!==activeTab)dbProfileInvalidate();if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
  $('query-schema').onchange=async()=>{dbCurrent().schema_id=$('query-schema').value;await dbReselect();dbSave();dbRenderRun();};
  for(const [id,key] of [['query-mode','mode'],['query-warehouse','warehouse'],['max-rows','max_rows']])$(id).onchange=()=>{dbCurrent()[key]=$(id).value;dbSave();dbRenderRun();};
- $('sql').addEventListener('input',()=>{dbSave();dbRenderRun();});
+ $('sql').addEventListener('input',()=>{dbLineageInvalidate();dbSave();dbRenderRun();});
  $('query-history').onchange=dbRestoreHistory;dbRenderHistory();
  $('catalog-filter').oninput=()=>dbExplorerReason()?dbRenderTree():dbLoadObjects();
  $('catalog-database').onchange=()=>{const d=dbDatabases.find(d=>d.id===$('catalog-database').value);if(d){dbTreeExpanded.add('database:'+d.id);return dbSelectTreeDatabase(d);}};
@@ -6317,6 +6320,108 @@ function dataopsInstall(){
 }
 
 // Profiling owns only opaque recovery handles; statistics stay in memory.
+const dbLineage={revision:0,scope:'',result:null,busy:null,notice:''};
+Object.assign(i18n.ja,{
+ 'Saved lineage':'保存済みリネージュ','Refresh saved lineage':'保存済みリネージュを更新',
+ 'Lineage requires data_engineer or admin.':'リネージュにはデータ作成者または管理者ロールが必要です。',
+ 'Select a readable TABLE or VIEW in Explorer.':'Explorer で読取可能な TABLE または VIEW を選択してください。',
+ 'Visible saved records only; catalog completeness is not established.':'表示権限のある保存記録のみです。カタログ全体の依存関係を示すものではありません。',
+ 'Confirmed saved evidence':'確認済みの保存証跡','Declared model references':'モデル定義の参照',
+ 'Model definitions describe dependencies between objects. Pinned runtime versions appear in Confirmed saved evidence.':'モデル定義はオブジェクト間の依存関係です。実行時の固定版は『確認済みの保存証跡』に表示します。',
+ 'Ref':'Ref','Object ID':'オブジェクト ID','Incarnation':'世代',
+ 'No visible saved evidence for this object.':'このオブジェクトに表示可能な保存証跡はありません。',
+ 'Refresh to read saved lineage for the selected object.':'更新すると、選択中のオブジェクトの保存済みリネージュを取得します。',
+ 'Bounded visible coverage':'表示可能な記録の一部を表示','Current version':'現在の版','Historical version':'過去の版',
+ 'Snapshot':'スナップショット','VIEW version':'VIEW の版','Model':'モデル',
+ 'Saved plan':'保存済みプラン','Planned model':'計画中のモデル','WAP version':'WAP の版',
+ 'WAP build':'WAP ビルド','WAP publication':'WAP 公開','Native dbt graph':'ネイティブ dbt グラフ',
+ 'Native dbt publication':'ネイティブ dbt 公開','Saved model definition':'保存済みモデル定義',
+ 'Reading saved lineage…':'保存済みリネージュを取得中…',
+ 'Saved lineage is unavailable. Refresh Explorer context and try again.':'保存済みリネージュを取得できません。Explorer のコンテキストを更新して再度お試しください。'
+});
+for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
+function dbLineageContext(){
+ const e=dbExplorer,d=dbDatabases.find(d=>d.id===e.database_id),s=e.schemas.find(s=>s.id===e.schema_id);
+ if(!dbExplorerCanOpen()||!d||!s)return null;
+ return {database_id:d.id,schema_id:s.id,warehouse_id:'LOCAL',sql_catalog:d.sql_catalog,sql_schema:s.sql_name,selected_role:currentRole,binding_revision:d.binding_revision,generation_id:d.generation_id,grant_revision:d.grant_revision??null};
+}
+function dbLineageScope(){return JSON.stringify([dbLineage.revision,dbPrincipal,currentRole,dbRoleVersion(currentRole),dbAuthorizationVersion,dbCatalogScope(),dbSelectionGeneration,dbObjectEpoch,dataopsRef(dbObject),dbLineageContext(),activeTab,dbWorkspacePane,activeInspector]);}
+function dbLineageReason(){
+ if(!['data_engineer','admin'].includes(currentRole))return 'Lineage requires data_engineer or admin.';
+ return dbExplorerCanOpen()&&['TABLE','VIEW'].includes(dbObject?.kind)&&dbRoleWithinHeader(currentRole)?'':'Select a readable TABLE or VIEW in Explorer.';
+}
+function dbLineageInvalidate(){
+ const p=dbLineage;++p.revision;p.scope='';p.result=null;p.notice='';p.busy=null;
+ if($('table-lineage'))$('table-lineage').replaceChildren();
+ dbLineageControls();
+}
+function dbLineageEndpoint(endpoint){
+ if(endpoint.kind==='LOGICAL')return endpoint.label+' · '+t('Planned model')+' · '+endpoint.materialization;
+ const version=endpoint.kind==='VIEW'?t('VIEW version')+' '+endpoint.view_version:t('Snapshot')+' '+(endpoint.snapshot_id??'—');
+ return endpoint.label+' · '+endpoint.kind+' · '+version;
+}
+function dbLineageDeclaredEndpoint(endpoint){
+ if(endpoint.kind==='LOGICAL')return dbLineageEndpoint(endpoint);
+ const ref=endpoint.ref;
+ return endpoint.label+' · '+endpoint.kind+(ref?.object_id!=null?' · '+t('Ref')+': '+t('Object ID')+' '+ref.object_id+(ref.incarnation!=null?' · '+t('Incarnation')+' '+ref.incarnation:''):'');
+}
+async function dbOpenLineage(){
+ if(dbLineageReason()||dbLineage.busy)return;
+ dbShowWorkspace('details');
+ const tab=inspectorTabs.find(b=>b.dataset.inspect==='lineage');
+ await dbSelectInspector(tab);tab.focus();
+ await dbLineageRefresh();
+}
+function dbLineageControls(){
+ if(!databaseMode||!$('catalog-database'))return;
+ const p=dbLineage,reason=dbLineageReason(),scope=dbLineageScope();
+ if(p.scope&&p.scope!==scope){p.result=null;p.scope='';p.notice='';}
+ const tab=inspectorTabs.find(b=>b.dataset.inspect==='lineage');tab.disabled=!!reason;tab.title=reason?t(reason):'';
+ wireTabs(inspectorTabs,dbSelectInspector);
+ const open=$('explorer-open-lineage');if(open){open.disabled=!!reason||!!p.busy;open.title=reason?t(reason):'';}
+ const root=$('table-lineage');root.replaceChildren();
+ const toolbar=dataopsNode('div','',root);toolbar.className='toolbar';
+ const button=dataopsButton(toolbar,'db-lineage-refresh','Refresh saved lineage',dbLineageRefresh);button.disabled=!!reason||!!p.busy;
+ if(reason){dataopsNode('p','',root,reason);return;}
+ const context=dbLineageContext();dataopsNode('p','',root,[context.sql_catalog,context.sql_schema,dbObject.physical_name,t({admin:'Admin',data_engineer:'Data Engineer',bi_viewer:'BI Viewer'}[currentRole])].join(' / '));
+ dataopsNode('p','',root,'Visible saved records only; catalog completeness is not established.');
+ const status=dataopsNode('p','',root,p.busy?'Reading saved lineage…':p.notice||(!p.result?'Refresh to read saved lineage for the selected object.':''));status.setAttribute('role','status');
+ if(!p.result)return;
+ const result=p.result;dataopsNode('p','',root,dbLineageEndpoint(result.focus));
+ if(result.coverage?.limited)dataopsNode('p','',root,'Bounded visible coverage');
+ if(!result.confirmed.length&&!result.declared.length)dataopsNode('p','',root,'No visible saved evidence for this object.');
+ for(const [key,heading] of [['confirmed','Confirmed saved evidence'],['declared','Declared model references']]){
+  const section=dataopsNode('section','',root);dataopsNode('h3','',section,heading);
+  if(key==='declared')dataopsNode('p','',section,'Model definitions describe dependencies between objects. Pinned runtime versions appear in Confirmed saved evidence.');
+  const endpoint=key==='declared'?dbLineageDeclaredEndpoint:dbLineageEndpoint;
+  const list=dataopsNode('ul','',section);
+  for(const fact of result[key]){
+   const row=dataopsNode('li','',list);row.className='lineage-fact';
+   dataopsNode('p','',row,t(({wap_build:'WAP build',wap_publication:'WAP publication',native_graph:'Native dbt graph',native_publication:'Native dbt publication',declared_model:'Saved model definition'})[fact.category])+(fact.temporal?' · '+t(fact.temporal==='current'?'Current version':'Historical version'):''));
+   dataopsNode('p','',row,endpoint(fact.source)+' → '+endpoint(fact.target));
+   if(fact.model)dataopsNode('p','',row,t('Model')+' '+fact.model.id+(fact.model.version?' · '+t('WAP version')+' '+fact.model.version:fact.model.plan_id?' · '+t('Saved plan')+' '+fact.model.plan_id:''));
+  }
+ }
+}
+async function dbLineageRefresh(){
+ dbLineageControls();if(dbLineageReason()||dbLineage.busy)return;
+ const p=dbLineage,token={},scope=dbLineageScope(),context=dataopsFreeze(dbLineageContext()),source=dataopsFreeze(dataopsClone(dataopsRef(dbObject))),role=currentRole,id=dbObject.id;
+ const current=()=>scope===dbLineageScope()&&p.busy===token;
+ const allowed=items=>dbRunAllowed({origin:{context,role,principal:dbPrincipal}},items);
+ const verify=async()=>{const items=await dbReadInventory(role,current);if(!current()||!dbInventoryCurrent(items))return false;if(!allowed(items)){throw Object.assign(Error('DB_ACCESS_REVOKED'),{code:'DB_ACCESS_REVOKED'});}const schemas=await dbAPI('/api/v1/databases/'+encodeURIComponent(context.database_id)+'/schemas',role);if(!current())return false;if(!schemas.items?.some(s=>s.id===source.schema_id&&s.database_id===context.database_id&&s.sql_name===context.sql_schema&&s.capabilities?.query===true))throw Object.assign(Error('DB_ACCESS_REVOKED'),{code:'DB_ACCESS_REVOKED'});dbApplyInventory(items,role);return current()&&dbInventoryCurrent(items)&&!dbLineageReason();};
+ p.busy=token;p.result=null;p.scope='';p.notice='';dbLineageControls();
+ try{
+  if(!await verify())return;
+  const result=await dbAPI('/api/v1/objects/'+encodeURIComponent(id)+'/lineage?context='+encodeURIComponent(JSON.stringify(context)),role);
+  if(!current())return;
+  if(!await verify())return;
+  if(dataopsRefKey(result.focus?.ref)!==dataopsRefKey(source))throw Error('STALE_RESOURCE');
+  p.result=result;p.scope=scope;
+ }catch(error){
+  if(scope===dbLineageScope()&&p.busy===token){p.result=null;p.scope='';p.notice='Saved lineage is unavailable. Refresh Explorer context and try again.';if(dataopsAuthError(error)){dbLineageInvalidate();dbExplorerDenied(error);}}
+ }finally{if(p.busy===token)p.busy=null;dbLineageControls();}
+}
+
 const dbProfileKey='shirokuma.table-profile.v1';
 const dbProfile={revision:0,owner:null,handles:new Map(),op:null,busy:null,context:null,source:null,scope:'',snapshots:[],snapshot:'',notice:''};
 Object.assign(i18n.ja,{

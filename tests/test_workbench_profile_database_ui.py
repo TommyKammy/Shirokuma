@@ -177,7 +177,7 @@ await profileReady();route=async()=>profileOperation(dbProfile.context,{state:'A
 await dbProfileRun();assert.equal(dbProfile.op.childUnknown,true);assert.equal($('table-profile-new').disabled,true);assert.equal($('table-profile-cancel').disabled,true);
 dbObject={...stable(),kind:'VIEW'};dbExplorerControls();assert.equal(inspectorTabs.find(b=>b.dataset.inspect==='profile').disabled,true);
 assert.equal($('table-profile-observe').disabled,false);assert.equal($('table-profile-run').disabled,true);
-assert.equal(inspectorTabs.find(b=>b.dataset.inspect==='lineage').disabled,true);
+assert.equal(inspectorTabs.find(b=>b.dataset.inspect==='lineage').disabled,false);
 ''')
 
     def test_late_scope_snapshot_revision_role_and_navigation_replies_hide_statistics(self):
@@ -230,8 +230,8 @@ dbObject={...stable('orders_view'),kind:'VIEW'};await dbDescribe(dbObject,'previ
 assert.equal(tab('profile').disabled,true);
 key('preview','ArrowRight','ddl');await tick();
 tab('snapshots').disabled=true;
-key('ddl','ArrowRight','columns');key('columns','ArrowLeft','ddl');
-key('preview','End','ddl');key('ddl','Home','columns');await tick();
+key('ddl','ArrowRight','lineage');key('columns','ArrowLeft','lineage');
+key('preview','End','lineage');key('ddl','Home','columns');await tick();
 for(const role of ['data_engineer','bi_viewer','admin']){
  currentRole=role;dbInventories.set(role,{items:structuredClone(inventory)});dbExplorer.schemaScope=dbSchemaKey(role,'db');dbDatabases=structuredClone(inventory);
  dbExplorerControls();assert.equal(tab('profile').disabled,true);
@@ -240,7 +240,7 @@ for(const role of ['data_engineer','bi_viewer','admin']){
  key('preview','ArrowRight','profile');await tick();
  dbObject={...stable('orders_view'),kind:'VIEW'};dbExplorerControls();
 }
-tab('ddl').hidden=true;key('preview','ArrowRight','columns');
+tab('ddl').hidden=true;key('preview','ArrowRight','lineage');
 const focused=document.activeElement;tab('profile').onkeydown({key:'Home',preventDefault(){throw Error('disabled key');}});
 assert.equal(document.activeElement,focused);
 assert.equal(submissions.filter(s=>s.path.includes('table-profiles')||s.path.includes('/queries')).length,0);

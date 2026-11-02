@@ -6,6 +6,8 @@ DATAOPS_PYTHON ?= tools/local_experiment/dataops/.venv/bin/python3
 verify-core: test-resident-core verify-go verify-design-context check-newlines check-trailing-whitespace check-no-secret-filenames
 
 test-resident-core:
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_object_lineage.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_lineage_database_ui.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_query_result_exports.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_result_exports_database_ui.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_audit*.py'
