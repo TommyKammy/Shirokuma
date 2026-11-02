@@ -571,6 +571,10 @@ html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wr
 #db-dbt-panel .db-dbt-compatibility h3{margin-bottom:8px}
 #db-dbt-panel .db-dbt-confirm{padding-block:12px;border-top:1px solid var(--line)}
 @media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}#db-dbt-panel select{width:100%}#db-dbt-panel .panel-body{padding:12px}}
+
+:is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel){min-width:0;max-width:100%}
+:is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) :is(.panel-body,p,h3,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) .toolbar{flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -2607,11 +2611,11 @@ const dbSource={scope:'',version:0,token:null,origin:null,notice:''};
 const dbSourceInputEvents=new WeakSet();
 let dbPlanAuthorityStamp='',dbPlanAuthorityEpoch=0;
 const dbExplanationHelp='Explains SQL using authorized column names and types. Values and comments are omitted from model input. No execution plan or query results are collected. SQL is not executed.';
-const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Catalog Curator explains metadata with its own authorized context. SRE and Policy show read-only Database observations with separate contexts. A separate manual Platform (P-only) scope shows fixed LOCAL sources for platform administrators using the global Admin role. Other Bear actions remain unavailable.';
+const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Catalog Curator explains metadata with its own authorized context. SRE and Policy show read-only Database observations with separate contexts. A separate manual Platform (P-only) scope shows fixed LOCAL observations and Pod-template declaration checks for platform administrators using the global Admin role. Other Bear actions remain unavailable.';
 const dbExplanationInstruction='Enter SQL or copy it from the active worksheet.';
 const dbExplanationContextStep='Choose or confirm the database, schema and role in the SQL worksheet.';
 const dbExplanationStateLabel=state=>t({SUCCEEDED:'Completed',RUNNING:'Running',QUEUED:'Queued',FAILED:'Failed',UNKNOWN:'Outcome unknown',CANCELED:'Canceled',NOT_STARTED:'Not started',NOT_COLLECTED:'Not collected',COLLECTED:'Collected',NOT_SUBMITTED:'Not submitted',FINISHED:'Completed'}[state]);
-const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SRE and Policy provide read-only observations of your saved records and permission ceilings with separate Database contexts. A separate manual Platform (P-only) scope shows fixed LOCAL sources for platform administrators using the global Admin role. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
+const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SRE and Policy provide read-only observations of your saved records and permission ceilings with separate Database contexts. A separate manual Platform (P-only) scope shows fixed LOCAL observations and Pod-template declaration checks for platform administrators using the global Admin role. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
 Object.assign(i18n.ja,{
  [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE と対応する INVOKER VIEW を利用でき、すべての依存先への現在のクエリ権限が必要です。未対応の VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。取得時点の定義を確認します。変更を検出した場合は説明を確定しません。',
  'Acquire plan and explain':'実行計画を取得して説明','Acquire a new plan and explain':'新しい実行計画を取得して説明',
@@ -2644,7 +2648,7 @@ Object.assign(i18n.ja,{
  'Refresh explanation / recover request':'説明を更新／元の要求を復旧','Load explanation history':'説明履歴を読み込む',
  'Choose a saved explanation':'保存済みの説明を選択','Historical explanation (read only)':'過去の説明（表示のみ）',
  'Saved explanation (read only)':'保存された説明（表示のみ）',
- [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。SRE と Policy はそれぞれ独立したコンテキストで Database の読み取り専用観測を表示します。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定参照元を確認できます。他の Bear 操作は利用できません。',
+ [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。SRE と Policy はそれぞれ独立したコンテキストで Database の読み取り専用観測を表示します。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定観測と Pod テンプレート宣言を確認できます。他の Bear 操作は利用できません。',
  [dbExplanationInstruction]:'SQL を入力するか、ワークシートからコピーしてください。',
  [dbExplanationContextStep]:'SQL ワークシートでデータベース・スキーマ・ロールを選択または確認してください。',
  'SQL not executed · Execution plan not collected':'SQL は未実行 · 実行計画は未取得',
@@ -2661,7 +2665,7 @@ Object.assign(i18n.ja,{
  'Load explanation history to recover the original request after access changes.':'アクセス変更後に元の要求を復旧するには、説明履歴を読み込んでください。',
  'SUCCEEDED':'完了',
  [dbExplanationHelp]:'SQL と許可されたカラム名・型に基づく説明です。値とコメントはモデル入力から除外します。実行計画・クエリ結果は取得せず、SQL は実行しません。',
- [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SRE と Policy はそれぞれ独立した Database コンテキストで、本人の保存記録と権限の上限を読み取り専用で確認できます。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定参照元を確認できます。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
+ [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SRE と Policy はそれぞれ独立した Database コンテキストで、本人の保存記録と権限の上限を読み取り専用で確認できます。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定観測と Pod テンプレート宣言を確認できます。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
 });
 function dbExplanationCapture(){
  const w=dbCurrent();if(!w)return null;
@@ -3618,8 +3622,8 @@ Object.assign(i18n.ja,{
  'Observed at':'観測日時',
  'Stored created at':'保存済み作成日時',
  'Stored updated at':'保存済み更新日時',
- 'SRE shows saved own-context Database metadata or manual Platform (P-only) observations.':'SRE は自身の一致コンテキストの保存済み Database メタデータ、または手動 Platform（P のみ）観測を表示します。',
- 'Policy shows Database permission ceilings or manual Platform (P-only) observations.':'Policy は Database 権限の上限、または手動 Platform（P のみ）観測を表示します。'
+ 'SRE shows saved own-context Database metadata or manual Platform (P-only) observations and Pod-template declaration checks.':'SRE は自身の一致コンテキストの保存済み Database メタデータ、または手動 Platform（P のみ）観測と Pod テンプレート宣言の確認結果を表示します。',
+ 'Policy shows Database permission ceilings or manual Platform (P-only) observations and Pod-template declaration checks.':'Policy は Database 権限の上限、または手動 Platform（P のみ）観測と Pod テンプレート宣言の確認結果を表示します。'
 });
 // Observation labels are local: stored wire values and other panels' labels stay intact.
 const dbObservationLabels={
@@ -3750,7 +3754,7 @@ function dbObservationsInstall(){
   if(p.installed)continue;p.installed=true;p.role=currentRole;
   const host=$('bear-panel-'+p.kind),tab=$('bear-tab-'+p.kind);tab.disabled=false;tab.dataset.databaseUnavailable='false';tab.title='';
   for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===tab&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
-  const description=host.querySelector('p');if(description)ui(description,p.kind==='sre'?'SRE shows saved own-context Database metadata or manual Platform (P-only) observations.':'Policy shows Database permission ceilings or manual Platform (P-only) observations.');
+  const description=host.querySelector('p');if(description)ui(description,p.kind==='sre'?'SRE shows saved own-context Database metadata or manual Platform (P-only) observations and Pod-template declaration checks.':'Policy shows Database permission ceilings or manual Platform (P-only) observations and Pod-template declaration checks.');
   for(const name of ['run','action','manifest']){const n=$('bear-'+p.kind+'-'+name);if(n){n.disabled=true;n.hidden=true;if(n.parentElement)n.parentElement.hidden=true;}}
   const id='observation-'+p.kind+'-';
   if(!$(id+'panel')?.dataset.installed){
@@ -3770,7 +3774,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbObservationsSync();
+ dbBaselineInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3814,6 +3818,7 @@ function dbPlatformSync(){
  dbPlatformComputeSync();
  dbResourcesSync();
  dbActivitySync();
+ dbBaselineSync();
 }
 function dbPlatformComputeSync(){
  if(!$('observation-compute-panel')?.dataset.installed)return;
@@ -3905,6 +3910,134 @@ function dbPlatformRender(o){
   }else if(key==='engine_evidence')value('Historically verified at',s.verified_at);
   else if(key==='auto_chill'){if(s.minutes===0)line(t('Disabled (0 min)'));else value('Idle minutes',s.minutes);}
   else{value('Active admissions',s.active);value('Unknown admissions',s.unknown);}
+ }
+}
+
+// Independent manual declaration snapshot. No Database grant or old observation busy state.
+const dbBaseline={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
+const dbBaselineChecks={
+ read_only_root_filesystem:'Read-only root filesystem: container declaration is true.',
+ non_root:'Non-root: effective runAsNonRoot is true and effective UID is not 0; an absent UID is allowed.',
+ drop_all_capabilities:'Drop capabilities: container drop list includes ALL.',
+ cpu_memory_limits:'Resource limits: CPU and memory limits both have positive coefficients.'
+};
+Object.assign(i18n.ja,{
+ 'LOCAL Pod-template declaration baseline':'LOCAL Pod テンプレートの宣言基準',
+ 'Fetch declaration baseline':'宣言基準を確認',
+ 'Baseline authority verified. Select Fetch declaration baseline.':'権限を確認しました。「宣言基準を確認」を選んでください。',
+ 'Fetching declaration baseline.':'宣言基準を確認しています。',
+ 'Declaration baseline unavailable. Refresh authority or fetch again.':'宣言基準を確認できません。権限更新または再取得を行ってください。',
+ 'Declaration matches':'宣言基準に一致','Declaration missing or mismatched':'宣言不足・不一致','Cannot verify':'確認不可',
+ 'Read-only root filesystem: container declaration is true.':'ルートを読み取り専用にする宣言がコンテナで true。',
+ 'Non-root: effective runAsNonRoot is true and effective UID is not 0; an absent UID is allowed.':'実効 runAsNonRoot が true、かつ実効 UID が 0 以外。UID 未指定でも true なら一致します。',
+ 'Drop capabilities: container drop list includes ALL.':'コンテナの capability drop に ALL を含む。',
+ 'Resource limits: CPU and memory limits both have positive coefficients.':'CPU・メモリ両方の上限に正の係数を指定。',
+ 'Fixed LOCAL coordinator and worker Deployment Pod-template declarations, including all ordinary and init containers (up to 32 total).':'固定 LOCAL の coordinator・worker Deployment の Pod テンプレート宣言を、通常・init コンテナすべて（合計32個まで）確認します。',
+ 'Declaration checks only; runtime Pods, global policy, admission decisions and runtime security are not verified. This grants no permission.':'宣言のみの確認です。稼働 Pod・全体ポリシー・受付判断・実行時のセキュリティは確認しません。操作権限は付与しません。',
+ 'The complete bounded declaration source is unavailable; no check results are shown.':'上限内の完全な宣言参照元を取得できないため、チェック結果は表示しません。'
+});
+function dbBaselineAuth(){return JSON.stringify([databaseMode,dbPlatformAuth()]);}
+function dbBaselineView(){return JSON.stringify([activeTab,...Object.values(dbObservations).map(o=>[o.kind,o.selected,o.scope,o.role])]);}
+function dbBaselineAllowed(){return databaseMode&&dbObservationPlatform('admin');}
+function dbBaselineLeave(){++dbBaseline.epoch;dbBaseline.busy=null;dbBaseline.notice='';}
+function dbBaselineSync(){
+ const p=dbBaseline,auth=dbBaselineAuth(),view=dbBaselineView();
+ if(auth!==p.auth){dbBaselineLeave();p.record=null;p.auth=auth;}
+ if(!dbBaselineAllowed())p.record=null;
+ if(view!==p.view){dbBaselineLeave();p.view=view;}
+ // Always render every installed output, including hidden Bear scopes and Compute.
+ for(const kind of ['sre','policy','compute']){
+  const id=kind==='compute'?'observation-baseline-':'observation-'+kind+'-baseline-',panel=$(id+'panel');
+  if(!panel?.dataset.installed)continue;
+  panel.hidden=kind!=='compute'&&dbObservations[kind].scope!=='platform';
+  $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'fetch').disabled=!!p.busy||!dbBaselineAllowed();
+  dbBaselineRender(id);
+ }
+}
+function dbBaselineInstall(){
+ for(const kind of ['sre','policy','compute']){
+  const id=kind==='compute'?'observation-baseline-':'observation-'+kind+'-baseline-';
+  if($(id+'panel')?.dataset.installed)continue;
+  const host=kind==='compute'?$('compute'):dbObservations[kind].installed?$('bear-panel-'+kind):null;
+  if(!host)continue;
+  const panel=dbAdminNode('section',id+'panel',host);panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby',id+'title');
+  const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2',id+'title',head,'LOCAL Pod-template declaration baseline');
+  const body=dbAdminNode('div','',panel);body.className='panel-body';
+  dbAdminNode('p','',body,'Fixed LOCAL coordinator and worker Deployment Pod-template declarations, including all ordinary and init containers (up to 32 total).');
+  dbAdminNode('p','',body,'Declaration checks only; runtime Pods, global policy, admission decisions and runtime security are not verified. This grants no permission.');
+  const bar=dbAdminNode('div','',body);bar.className='toolbar';
+  dbAdminButton(bar,id+'auth','Refresh platform authority',dbBaselineRefreshAuth);
+  dbAdminButton(bar,id+'fetch','Fetch declaration baseline',dbBaselineFetch);
+  const output=dbAdminNode('div',id+'output',body);output.setAttribute('aria-live','polite');
+ }
+ dbBaselineSync();
+}
+function dbBaselineCapture(){
+ const p=dbBaseline,token={},epoch=++p.epoch,auth=dbBaselineAuth(),view=dbBaselineView();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbBaselineAuth()&&view===dbBaselineView()};
+}
+async function dbBaselineRefreshAuth(){
+ dbBaselineSync();if(dbBaseline.busy||!dbPlatformCanRefresh())return;
+ const read=dbBaselineCapture();dbBaseline.notice='Refreshing platform authority.';dbBaselineSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const session=await response.json();if(!read.current())return;
+  if(!response.ok)throw Error('UNAVAILABLE');
+  dbAdminSession(session);
+  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  dbBaseline.notice=dbBaselineAllowed()?'Baseline authority verified. Select Fetch declaration baseline.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current()){dbBaseline.record=null;dbBaseline.notice='Declaration baseline unavailable. Refresh authority or fetch again.';}}
+ finally{if(dbBaseline.busy===read.token)dbBaseline.busy=null;dbBaselineSync();}
+}
+async function dbBaselineFetch(){
+ dbBaselineSync();if(dbBaseline.busy||!dbBaselineAllowed())return;
+ const read=dbBaselineCapture();dbBaseline.notice='Fetching declaration baseline.';dbBaselineSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-workload-baseline',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const text=await response.text();if(!read.current())return;
+  if(!response.ok||new TextEncoder().encode(text).length>65536)throw Error('UNAVAILABLE');
+  const data=JSON.parse(text);if(!read.current())return;
+  dbBaseline.record=dbBaselineRecord(data);dbBaseline.notice='';
+ }catch{if(read.current()){dbBaseline.record=null;dbBaseline.notice='Declaration baseline unavailable. Refresh authority or fetch again.';}}
+ finally{if(dbBaseline.busy===read.token)dbBaseline.busy=null;dbBaselineSync();}
+}
+function dbBaselineRecord(d){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(new TextEncoder().encode(JSON.stringify(d)).length>65536)fail();
+ if(!exact(d,['scope','warehouse','selected_role','observed_at','baseline_version','coverage','baseline'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin'||!dbObservationTime(d.observed_at,true)||d.baseline_version!=='local-container-declarations-v1')fail();
+ const c=d.coverage;if(!exact(c,['kind','pod_template','per_container','runtime_security','admission_decision','global_policy'])||c.kind!=='deployment_container_declarations'||c.pod_template!==true||c.per_container!==true||c.runtime_security!==false||c.admission_decision!==false||c.global_policy!==false)fail();
+ const b=d.baseline;if(!exact(b,['availability','code','observed_at','deployments'])||!dbObservationTime(b.observed_at,true)||!['available','unavailable'].includes(b.availability)||b.code!==(b.availability==='available'?null:'WORKLOAD_BASELINE_UNAVAILABLE'))fail();
+ if(b.availability==='unavailable'){if(b.deployments!==null)fail();}
+ else{
+  if(!Array.isArray(b.deployments)||b.deployments.length!==2)fail();
+  const components=new Set();let total=0;
+  for(const row of b.deployments){
+   if(!exact(row,['component','containers'])||!['coordinator','worker'].includes(row.component)||components.has(row.component)||!Array.isArray(row.containers))fail();
+   components.add(row.component);const ordinals={container:new Set(),init_container:new Set()};
+   for(const item of row.containers){
+    if(++total>32||!exact(item,['kind','ordinal','checks'])||!Object.hasOwn(ordinals,item.kind)||!Number.isSafeInteger(item.ordinal)||item.ordinal<1||ordinals[item.kind].has(item.ordinal))fail();
+    ordinals[item.kind].add(item.ordinal);
+    if(!exact(item.checks,Object.keys(dbBaselineChecks))||Object.values(item.checks).some(v=>!['met','not_met'].includes(v)))fail();
+   }
+   if(!ordinals.container.size)fail();
+   for(const set of Object.values(ordinals))if([...set].some(n=>n>set.size))fail();
+  }
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbBaselineRender(id){
+ const node=$(id+'output');node.replaceChildren();const line=(text,tag='p')=>dbAdminNode(tag,'',node).textContent=text;
+ const p=dbBaseline,r=dbBaselineAllowed()?p.record:null;
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ if(p.notice)line(t(p.notice));
+ if(!r){if(!p.notice)line(t(dbBaselineAllowed()?'Baseline authority verified. Select Fetch declaration baseline.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ line(t('Observed at')+': '+r.observed_at);line(t('Observed at')+' (Deployment): '+r.baseline.observed_at);
+ if(r.baseline.availability==='unavailable'){line(t('Cannot verify'));line(t('The complete bounded declaration source is unavailable; no check results are shown.'));return;}
+ for(const row of r.baseline.deployments)for(const item of row.containers){
+  line('LOCAL · '+row.component+' · '+t(item.kind==='container'?'Container':'Init container')+' '+item.ordinal,'h3');
+  for(const [key,label] of Object.entries(dbBaselineChecks))line(t(label)+' '+t(item.checks[key]==='met'?'Declaration matches':'Declaration missing or mismatched'));
  }
 }
 
@@ -5134,6 +5267,7 @@ function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
  if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
+ dbBaselineSync();
  dbAdminGate();
 }
 function dbAdminScope(){return JSON.stringify([dbIdentity(),dbAuthorizationVersion,dbRoleVersion('admin'),dbInventoryVersion,dbMaximumRole,dbAdmin.platform,dbAdmin.epoch,dbAdmin.selection,dbAdmin.database]);}
@@ -8750,7 +8884,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbActivityInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbBaselineInstall();dbActivityInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

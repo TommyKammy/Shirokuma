@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-11-02
-version: "7.32.0"
+version: "7.33.0"
 area: work-packages
 tags: [shirokuma, local, milestones]
 ---
@@ -19,6 +19,13 @@ tags: [shirokuma, local, milestones]
 ---
 
 ## Active Roadmap Milestones (Phase 0 – Phase 6)
+
+### 2026-11-02 — DB-P6-4C2C1 固定LOCAL宣言基準（限定技術受入）
+
+- [C2C1契約](../../guides/database-p6-4c2c1-workload-baseline-2026-11-02.md)：真P専用の固定2 Pod-template・全ordinary／initについて、旧4項目の宣言意図だけを手動確認する。native graphのDB-P6-3C2Cとは別単位である。
+- nonRoot=trueかつUID未指定を旧ruleどおり許し、met／not_metと原子的なsource確認不可を区別する。8 admission policy・global policy全体やaggregate PASS、操作許可を表さない。
+- C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。3面の明示共有、現在認可、既存状態と全旧行の保全・新規行0を確認した。
+- usage／AI設定より先に進めたのは今回のCommander判断であり、C2C全体・P6-4全体／P6-5全体／P6-7／M1本人受入は未完了を維持する。
 
 ### 2026-11-02 — DB-P6-5C Compute DB saved activity（限定技術受入）
 

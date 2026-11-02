@@ -64,3 +64,10 @@ C2AのAPI応答と`PLATFORM_OBSERVATION_DEFERRED`等の既存codeは変更せず
 ## 後続: Compute画面への限定読取り統合
 
 [P6-5A](database-p6-5a-compute-observations-2026-11-01.md)で、Compute画面へのP専用固定LOCAL観測の読取り統合を実装した。受入済みC2Bの明示GET・strict DTO・global P cacheを再利用し、新しいAPIやDB context／grantの前提を追加しない。現在の真P・上限admin・選択adminを条件とし、完了snapshotと観測時刻をSRE／Policy／Computeで共有する。画面を開くだけでplatform観測を取得せず、既存Warehouse操作へも接続しない。desired／ready要約・過去のengine証拠・保存AutoChill設定・限定admission件数を現在healthや完全なPolicy監査へ読み替えない。P6-5Aの限定範囲を技術受入済みとした（全体回帰4,122成功・34 skip、両HTTP面の実APIと権限拒否、Computeの実画面、最終保全PASS）。本ガイドのC2B受入範囲と実績を維持し、C2Cのbaseline、旧SRE check／Policy baseline・global auditは独立後続とする。P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
+
+
+## 後続: C2C1の限定宣言レビュー（限定技術受入）
+
+[DB-P6-4C2C1](database-p6-4c2c1-workload-baseline-2026-11-02.md)は固定LOCALの2 Deployment Pod-templateを、旧4項目の宣言意図だけで手動確認する限定技術受入単位である。C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。現在の真P・上限admin・選択adminを取得前後で検査し、DB／grantを前提にしない。SRE／Policy PlatformとComputeの3面で独立したsnapshotを共有し、本ガイドのC2B 4source DTO・cache・requestと受入結果は変更しない。
+
+nonRoot=trueかつUID未指定は旧宣言ruleどおり一致を許し、宣言欠落・不一致をnot_met、不正／部分sourceを全体確認不可にする。8 admission policyやglobal policy全体の検証、aggregate PASS／allow、実行・admission許可ではない。旧任意manifest・SRE check／Policy baseline routeは引き続き閉じ、C2C全体・P6-4全体／P6-5全体／P6-7／M1本人受入は未完了を維持する。

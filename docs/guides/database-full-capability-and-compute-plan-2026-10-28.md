@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-02、[DB-P6-4C2C1](database-p6-4c2c1-workload-baseline-2026-11-02.md)で固定LOCAL Pod-template宣言基準の読取りレビューを実装した。現在の真P・上限admin・選択adminを全source取得前後に検査し、DB／schema／grantを前提にしない。固定2 Deploymentの全ordinary／initをordinalで扱い、旧Policyの意図を限定した4項目のmet／not_metだけを返す。nonRoot=trueかつUID未指定は旧宣言ruleどおり許し、native-baselineの8 admission policyやglobal policy全体の検証にはしない。不正・部分sourceは全体を確認不可とし、aggregate PASS／allowや操作許可を返さない。SRE／PolicyのPlatform scopeとComputeに独立共有cacheを手動表示し、旧C2B・P5A／P5B／P5Cを変更しない。C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。usage・AI設定より先に進めた順序は今回のCommander判断であり、P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
+
 2026-11-02、[DB-P6-5C](database-p6-5c-contract-2026-11-02.md)でCompute専用DB保存activity一覧の読取り統合を実装した。既存AUD-03のquery／job_runだけを、独立した参照role・READY DB・self／database scope・手動filter／cache／前後pageで読むUIのみの単位であり、新しいbackend・API・認可policyを作らない。本人・保存roleと現在のDB／Schema権限を検査し、現在のplatform admin account・account role admin・選択adminに対する既存effective DB admin例外も維持する。P5A／P5BのP専用観測とAuditの状態を使い回さず、SQL・結果・live activity・詳細・復旧・export・自動pollを追加しない。P5Cの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,188成功・34 skip、既存AUD-03の実APIとWorkbenchの実画面、最終保全PASS）。P6-4全体／P6-5全体／P6-7／M1本人受入、C2C／global policy・usage／capacity・AI設定は継続する。
 
 2026-11-02、[DB-P6-5B](database-p6-5b-platform-resources-2026-11-02.md)で固定LOCALコンテナ設定資源の読取り表示を実装した。独立した入力なしの明示GETで、真のplatform account・principal、上限admin・選択adminを全source読取り前後に確認し、DB／schema／grantを前提にしない。Computeの独立panel・P cacheで、coordinator／workerの全ordinary・initコンテナのCPU／memory requests・limitsをliteral文字列または未指定として扱う。既存C2B API・閉じたDTO・cache・requestは維持する。P5Bの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,166成功・34 skip、両HTTP面の実API・Workbenchの実画面、最終保全PASS）。 P6-4全体／P6-5全体／P6-7／M1本人受入はOPENのまま、C2C／global policy、usage／capacity／activity、resizingは別タスクとする。 次はP5Bの限定検証とCommanderレビューであり、configured値を実使用量・利用可能容量・実サイズ適用へ読み替えない。
@@ -272,7 +274,7 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 ## 9 実装の進め方と直近の着手単位
 
-[D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)と[P5B](database-p6-5b-platform-resources-2026-11-02.md)に続き、[DB-P6-5C](database-p6-5c-contract-2026-11-02.md)のCompute専用DB保存activity（query／job_runだけ）を限定技術受入済みとした。既存AUD-03を変更せず、self／databaseの現在認可とeffective DB admin例外を維持した独立した手動一覧・pageである。使用量・空き容量・resizeや包括的なactivity bundleは追加していない。C2Cのworkload baseline／global policy検査とAI設定は未完了の別単位として残し、P6-4全体／P6-5全体／P6-7／M1本人受入は閉じない。
+[D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)と[P5B](database-p6-5b-platform-resources-2026-11-02.md)に続き、[DB-P6-5C](database-p6-5c-contract-2026-11-02.md)のCompute専用DB保存activity（query／job_runだけ）を限定技術受入済みとした。既存AUD-03を変更せず、self／databaseの現在認可とeffective DB admin例外を維持した独立した手動一覧・pageである。使用量・空き容量・resizeや包括的なactivity bundleは追加していない。その後続単位である[C2C1](database-p6-4c2c1-workload-baseline-2026-11-02.md)の固定LOCAL宣言基準レビューも限定技術受入済みとした。usageやAI設定より先に進めたのは今回のCommander判断である。C2C1の結果をC2C全体のglobal policy／admission検査へ広げず、AI設定・live usage／capacityは別単位に残し、P6-4全体／P6-5全体／P6-7／M1本人受入は閉じない。
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。
 
